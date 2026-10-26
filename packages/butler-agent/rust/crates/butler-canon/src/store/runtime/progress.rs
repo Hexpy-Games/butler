@@ -137,7 +137,7 @@ pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> R
     let reviewed = review["subject"] == "completion" && review["verdict"] == "accept";
     if disposition["disposition"] != "completed"
         || checkpoint["stage"] != "reporting"
-        || !(reviewed || delegated_completion(db, id)?)
+        || !(reviewed || delegated_completion(db, work, views)?)
     {
         return Ok(false);
     }
@@ -156,17 +156,36 @@ pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> R
 }
 
 /// A delegated parent's closeout belongs to its Steward's terminal result.
-fn delegated_completion(db: &Connection, work: &str) -> Result<bool> {
-    let Some(plan) = latest(db, Query::Plan, work)? else {
+fn delegated_completion(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
+    let id = text(work, "work_id")?;
+    let plan = if work["scope_kind"] == "project" {
+        views
+            .get(id)
+            .and_then(|view| view.get("currentPlan"))
+            .cloned()
+    } else {
+        latest(db, Query::Plan, id)?
+    };
+    let Some(plan) = plan else {
         return Ok(false);
     };
-    if plan["execution_mode"] != "steward" {
+    if plan
+        .get("executionMode")
+        .or_else(|| plan.get("execution_mode"))
+        .and_then(Value::as_str)
+        != Some("steward")
+    {
         return Ok(false);
     }
+    let plan_id = plan
+        .get("planRevisionId")
+        .or_else(|| plan.get("plan_revision_id"))
+        .and_then(Value::as_str)
+        .ok_or(Error::Invalid("delegated plan id"))?;
     Ok(db
         .query_row(
             Query::DelegatedCompletion.sql(),
-            params![work, text(&plan, "plan_revision_id")?],
+            params![id, plan_id],
             |_| Ok(()),
         )
         .optional()?

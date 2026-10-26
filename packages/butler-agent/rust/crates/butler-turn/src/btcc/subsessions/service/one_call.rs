@@ -9,10 +9,16 @@ impl SubsessionService {
         session: String,
         work: String,
     ) -> Result<Option<WorkView>, BtccError> {
-        self.repository
-            .parent_work(session, work)
+        let Some((turn, result, status)) = self
+            .repository
+            .settled_parent_source(session, work.clone())
             .await
-            .map_err(BtccError::from)
+            .map_err(BtccError::from)?
+        else {
+            return Ok(None);
+        };
+        let view = self.work.work_for_turn(turn, work).await?;
+        Ok(view.filter(|view| runtime_settled(view, &result, &status)))
     }
 
     /// Whether this Steward's own root Work currently has an accepting Plan review.
@@ -47,6 +53,7 @@ impl SubsessionService {
     pub async fn handoff_steward(
         &self,
         request: StewardDelegationRequest,
+        scope: WorkTurnScope,
         mutation_call_id: String,
         checks: Option<Vec<String>>,
         epic_ref: Option<String>,
@@ -68,11 +75,18 @@ impl SubsessionService {
         // Explicit handoff inputs replace legacy Plan content rather than being dropped.
         let reuse_reviewed = checks.is_none() && epic_ref.is_none();
         let now = (self.now)();
-        let scope = WorkTurnScope {
-            turn_id: request.parent_turn_id.clone(),
-            session_id: request.parent_session_id.clone(),
-            project_ref: None,
-        };
+        if scope.turn_id != request.parent_turn_id || scope.session_id != request.parent_session_id
+        {
+            return Err(BtccError::relayed(
+                "handoff_scope_mismatch",
+                "Handoff scope does not match its parent",
+            ));
+        }
+        if scope.project_ref.is_some() {
+            return self
+                .project_handoff(request, scope, mutation_call_id, checks, epic_ref)
+                .await;
+        }
         let call_id = mutation_call_id.clone();
         let stored = self
             .repository
@@ -114,7 +128,7 @@ impl SubsessionService {
     }
 }
 
-fn build(
+pub(super) fn build(
     request: &StewardDelegationRequest,
     parent: &crate::workspace::StoredSessionBinding,
     chat: String,
@@ -170,4 +184,23 @@ fn build(
         },
         now.into(),
     ))
+}
+
+fn runtime_settled(work: &WorkView, result: &str, status: &str) -> bool {
+    if work.status == crate::btcc::DurableWorkStatus::Abandoned {
+        return matches!(status, "cancelled" | "abandoned");
+    }
+    let id = match work.scope {
+        crate::btcc::WorkScope::Session { .. } => format!("steward-result-disposition:{result}"),
+        crate::btcc::WorkScope::Project { .. } => {
+            let mutation = crate::btcc::digest_identity(&format!("one-call-result\0{result}"));
+            let digest = crate::btcc::digest_identity(&format!(
+                "btcc-guided-work.v1\0disposition\0{mutation}"
+            ));
+            format!("guided-disposition-{digest}")
+        }
+    };
+    work.latest_disposition
+        .as_ref()
+        .is_some_and(|disposition| disposition.disposition_revision_id == id)
 }

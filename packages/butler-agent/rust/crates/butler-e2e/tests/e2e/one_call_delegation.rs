@@ -5,6 +5,8 @@
     clippy::panic,
     reason = "test fixture assertions"
 )]
+mod project;
+mod project_outcomes;
 mod stub;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::{Value, json};

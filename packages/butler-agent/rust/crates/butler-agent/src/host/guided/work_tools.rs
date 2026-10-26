@@ -39,6 +39,10 @@ impl GuidedWorkTools {
         self
     }
 
+    pub(crate) fn scope(&self) -> WorkTurnScope {
+        self.scope.clone()
+    }
+
     pub(crate) fn is_work_tool(name: &str) -> bool {
         matches!(
             ToolName::parse(name),
@@ -169,8 +173,12 @@ impl GuidedWorkTools {
     }
 
     pub(crate) fn settled_disposition(work: &WorkView) -> Result<Option<Value>, BtccError> {
-        Ok(settled_by_steward(work)?
-            .then(|| json!({"ok":true,"already_settled":true,"work":view::success(work)})))
+        let current = work.status == butler_turn::btcc::DurableWorkStatus::Abandoned
+            || work.latest_disposition.as_ref().is_some_and(|disposition| {
+                butler_turn::btcc::disposition_material_fingerprint(work)
+                    .is_ok_and(|fingerprint| fingerprint == disposition.material_fingerprint)
+            });
+        Ok(current.then(|| json!({"ok":true,"already_settled":true,"work":view::success(work)})))
     }
 
     pub(crate) async fn bound_work(&self) -> Result<Option<WorkView>, BtccError> {

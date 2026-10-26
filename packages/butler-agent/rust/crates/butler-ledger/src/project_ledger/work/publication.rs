@@ -222,9 +222,10 @@ fn observed_work(snapshot: Snapshot) -> Result<ProjectWorkObserveWork, BtccError
             .get("binding")
             .ok_or_else(|| invalid("project_work_managed_record_invalid"))?;
         let mut value = binding.clone();
-        let is_current = current_refs
-            .iter()
-            .any(|item| item.get("bindingRevisionId") == binding.get("bindingRevisionId"));
+        let is_current = binding_ref
+            .get("isCurrent")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
         crate::project_ledger::work_json::set_field(
             &mut value,
             "isCurrent",

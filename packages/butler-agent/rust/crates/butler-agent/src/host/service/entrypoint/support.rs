@@ -25,6 +25,16 @@ pub(super) async fn deliver_parent_results(
         if pending.route != butler_turn::btcc::ParentResultRoute::ButlerApp {
             continue;
         }
+        #[cfg(feature = "e2e-fixtures")]
+        super::result_hold::before_settlement().await?;
+        if let Err(error) = subsessions.settle_parent_result(&pending).await {
+            butler_core::diagnostic!(
+                "[native-btcc] Project parent settlement deferred code={}",
+                error.code()
+            );
+            retry_pending = true;
+            continue;
+        }
         let body = serde_json::to_string(&pending.input).map_err(|error| {
             failure("app_subsession_result_invalid", error.to_string()).with_source(error)
         })?;

@@ -3,8 +3,12 @@
 mod control;
 mod delegation;
 mod followup;
+#[cfg(feature = "e2e-fixtures")]
+mod handoff_hold;
 mod helpers;
 mod one_call;
+mod project_handoff;
+mod project_settlement;
 mod projection;
 mod result_delivery;
 mod selection;

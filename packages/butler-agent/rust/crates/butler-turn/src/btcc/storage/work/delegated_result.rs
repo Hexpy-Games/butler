@@ -22,6 +22,9 @@ pub(in crate::btcc::storage) fn settle(
         return Ok(());
     }
     let work = read::view(db, &parent.work_id)?;
+    if matches!(work.scope, crate::btcc::WorkScope::Project { .. }) {
+        return Ok(());
+    }
     if !matches!(
         work.status,
         crate::btcc::DurableWorkStatus::Open | crate::btcc::DurableWorkStatus::Blocked

@@ -7,10 +7,19 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
     reason = "stub-only non-HTTP loopback control"
 )]
 pub(super) async fn before_delivered() -> Result<(), BtccError> {
+    barrier("BUTLER_E2E_RESULT_DELIVERED_BARRIER").await
+}
+
+pub(super) async fn before_settlement() -> Result<(), BtccError> {
+    barrier("BUTLER_E2E_RESULT_SETTLEMENT_BARRIER").await
+}
+
+#[allow(clippy::disallowed_methods, reason = "stub-only loopback control")]
+async fn barrier(variable: &str) -> Result<(), BtccError> {
     if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub") {
         return Ok(());
     }
-    let Ok(address) = std::env::var("BUTLER_E2E_RESULT_DELIVERED_BARRIER") else {
+    let Ok(address) = std::env::var(variable) else {
         return Ok(());
     };
     let address: std::net::SocketAddr = address.parse().map_err(super::support::io)?;

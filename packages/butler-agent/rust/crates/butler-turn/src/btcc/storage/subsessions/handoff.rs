@@ -29,15 +29,13 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
 }
 
 impl SqliteSubsessionRepository {
-    pub(crate) async fn parent_work(
+    pub(crate) async fn settled_parent_source(
         &self,
         session: String,
         work: String,
-    ) -> StorageResult<Option<WorkView>> {
+    ) -> StorageResult<Option<(String, String, String)>> {
         self.storage.read(move |db| {
-            let owned: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_subsession_delegations d INDEXED BY idx_btcc_graph_work JOIN btcc_session_relations r USING(relation_id) WHERE json_extract(d.packet_json,'$.parent_work_ref.work_id')=?1 AND r.parent_session_id=?2 AND json_extract(d.packet_json,'$.child_role')='steward')", params![work,session], |row| row.get(0)).map_err(StorageError::sqlite)?;
-            if !owned { return Ok(None) }
-            super::super::work::hydrate_work_view(db, &work).map(Some)
+            db.query_row("SELECT r.parent_turn_id,x.result_id,x.status FROM btcc_subsession_delegations d INDEXED BY idx_btcc_graph_work JOIN btcc_session_relations r USING(relation_id) JOIN btcc_steward_results x USING(relation_id) WHERE json_extract(d.packet_json,'$.parent_work_ref.work_id')=?1 AND r.parent_session_id=?2 AND json_extract(d.packet_json,'$.child_role')='steward' ORDER BY x.created_at DESC,r.ordinal DESC LIMIT 1", params![work,session], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).optional().map_err(StorageError::sqlite)
         }).await
     }
 
@@ -127,4 +125,93 @@ fn link_canon(
         refs,
     )
     .map_err(super::super::canon::work_error)
+}
+
+impl SqliteSubsessionRepository {
+    pub(crate) async fn handoff_for_call(
+        &self,
+        scope: WorkTurnScope,
+        call: String,
+    ) -> StorageResult<Option<StoredSubsessionDelegation>> {
+        self.storage.read(move |db| {
+            let id: Option<String> = db.query_row("SELECT d.delegation_id FROM btcc_session_relations r JOIN btcc_subsession_delegations d USING(relation_id) WHERE r.parent_session_id=?1 AND r.parent_turn_id=?2 AND json_extract(d.packet_json,'$.source_tool_call_id')=?3", params![scope.session_id, scope.turn_id, call], |row| row.get(0)).optional().map_err(StorageError::sqlite)?;
+            id.map(|id| read(db, "d.delegation_id=?1", &id)).transpose().map(Option::flatten)
+        }).await
+    }
+
+    pub(crate) async fn precheck_handoff(
+        &self,
+        session: String,
+        work: Option<String>,
+        refs: Vec<String>,
+    ) -> StorageResult<()> {
+        self.storage
+            .canon_read(move |db| {
+                butler_canon::store::precheck_epic_link(db, &session, work.as_deref(), &refs)
+            })
+            .await
+            .map_err(|error| StorageError::Port {
+                code: "canon_precheck_failed",
+                message: error.message(),
+                source: None,
+            })?
+            .map_or(Ok(()), |rejection| {
+                Err(StorageError::Port {
+                    code: match rejection.get("code").and_then(Value::as_str) {
+                        Some("canon_epic_refs_multiple") => "canon_epic_refs_multiple",
+                        Some("canon_epic_link_conflict") => "canon_epic_link_conflict",
+                        _ => "canon_epic_not_bound",
+                    },
+                    message: rejection
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                    source: None,
+                })
+            })
+    }
+
+    pub(crate) async fn create_project_handoff(
+        &self,
+        input: SubsessionCreate,
+        work: WorkView,
+        now: String,
+    ) -> StorageResult<StoredSubsessionDelegation> {
+        self.storage
+            .execute(move |db| {
+                let tx = db
+                    .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                    .map_err(StorageError::sqlite)?;
+                let tx = butler_canon::store::Transaction::new(tx)
+                    .map_err(super::super::canon::work_error)?;
+                insert(&tx, &input)?;
+                link_canon(&tx, &work, &now)?;
+                let stored =
+                    read(&tx, "d.delegation_id=?1", &input.delegation_id)?.ok_or_else(|| {
+                        StorageError::new(
+                            StorageCode::SubsessionRelationMissing,
+                            "Stored handoff is missing",
+                        )
+                    })?;
+                tx.commit().map_err(StorageError::sqlite)?;
+                Ok(stored)
+            })
+            .await
+    }
+}
+
+impl SqliteSubsessionRepository {
+    pub(crate) async fn settlement_result(&self, result: String) -> StorageResult<Option<Value>> {
+        self.storage.read(move |db| {
+            let row: Option<(String,String,String,String)> = db.query_row(
+                "SELECT status,summary,acceptance_evidence_json,child_turn_id FROM btcc_steward_results WHERE result_id=?1", [result],
+                |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
+            ).optional().map_err(StorageError::sqlite)?;
+            row.map(|(status,summary,evidence,turn)| {
+                let evidence: Vec<String> = serde_json::from_str(&evidence).map_err(|error| StorageError::new(StorageCode::SubsessionResultInvalid, error.to_string()).with_source(error))?;
+                Ok(serde_json::json!({"status":status,"summary":summary,"acceptance_evidence":evidence,"child_turn_id":turn}))
+            }).transpose()
+        }).await
+    }
 }

@@ -66,14 +66,23 @@ async fn cb_02_15_one_call_parent_settles_from_steward_result() -> Result<(), Ha
         parent_calls, 0,
         "Butler hands off in one call and needs no closeout reviews"
     );
-    let (status, checks, packet): (String, String, String) = db.query_row(
-        "SELECT w.status,p.checks_json,d.packet_json FROM btcc_subsession_delegations d JOIN btcc_guided_works w ON w.work_id=json_extract(d.packet_json,'$.parent_work_ref.work_id') JOIN btcc_guided_work_plan_revisions p ON p.plan_revision_id=w.current_plan_revision_id WHERE json_extract(d.packet_json,'$.child_role')='steward'", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+    let (status, ledger, packet): (String, String, String) = db.query_row(
+        "SELECT w.status,w.ledger_project_id,d.packet_json FROM btcc_subsession_delegations d JOIN btcc_guided_works w ON w.work_id=json_extract(d.packet_json,'$.parent_work_ref.work_id') WHERE json_extract(d.packet_json,'$.child_role')='steward'", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
     assert_eq!(status, "completed");
     let packet: Value = serde_json::from_str(&packet)?;
-    assert_eq!(
-        serde_json::from_str::<Value>(&checks)?,
-        packet["acceptance_criteria"]
-    );
+    let plan_id = packet["parent_work_ref"]["plan_revision_id"]
+        .as_str()
+        .unwrap();
+    let plan = std::fs::read_to_string(
+        s.sandbox
+            .data
+            .join("project-ledger/projects")
+            .join(ledger)
+            .join("plans")
+            .join(format!("{plan_id}.md")),
+    )?;
+    let plan: Value = serde_json::from_str(plan.split_once("\n---\n").unwrap().1.trim())?;
+    assert_eq!(plan["plan"]["checks"], packet["acceptance_criteria"]);
     assert!(
         packet["parent_work_ref"]
             .get("review_revision_id")

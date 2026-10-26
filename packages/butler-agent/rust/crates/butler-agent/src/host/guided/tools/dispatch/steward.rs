@@ -40,6 +40,7 @@ pub(super) async fn execute(
                 access_mode: access_mode(owner),
                 schedule_run: owner.unattended_run(),
             },
+            owner.work.scope(),
             call_id.to_owned(),
             checks,
             epic_ref,

@@ -86,6 +86,27 @@ impl SessionWorkRepository {
 }
 
 impl DurableWorkRepository for SessionWorkRepository {
+    fn work_for_turn(&self, turn: String, work: String) -> PortFuture<'_, Option<WorkView>> {
+        Box::pin(async move {
+            self.read(move |db| {
+                let session: String = db
+                    .query_row(
+                        "SELECT session_id FROM btcc_turns WHERE turn_id=?1",
+                        [&turn],
+                        |row| row.get(0),
+                    )
+                    .map_err(StorageError::sqlite)?;
+                let Some(row) = common::work(db, &work)? else {
+                    return Ok(None);
+                };
+                if row.session_id != session {
+                    return Ok(None);
+                }
+                read::view(db, &work).map(Some)
+            })
+            .await
+        })
+    }
     fn steward_owns_work(&self, session: String, work: String) -> PortFuture<'_, bool> {
         Box::pin(async move {
             self.read(move |db| {

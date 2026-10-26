@@ -23,6 +23,8 @@ pub(super) struct Script {
     pub legacy_closeout: AtomicBool,
     pub legacy_plan: AtomicBool,
     pub parent_work: Mutex<String>,
+    pub epic: Mutex<Option<String>>,
+    pub blocked: AtomicBool,
 }
 
 pub(super) async fn start()
@@ -40,6 +42,8 @@ pub(super) async fn start()
         legacy_closeout: AtomicBool::new(false),
         legacy_plan: AtomicBool::new(false),
         parent_work: Mutex::default(),
+        epic: Mutex::default(),
+        blocked: AtomicBool::new(false),
     });
     let router = Router::new()
         .route("/v1/responses", post(reply))
@@ -65,7 +69,12 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         script.release.acquire().await.unwrap().forget();
     }
     let item = if child {
-        child_item(step, &body, &script.workspace.lock().unwrap())
+        child_item(
+            step,
+            &body,
+            &script.workspace.lock().unwrap(),
+            script.blocked.load(Ordering::SeqCst),
+        )
     } else if request == REQUEST && script.legacy_plan.load(Ordering::SeqCst) {
         legacy_parent_item(step)
     } else if (request == REQUEST || request == FOLLOWUP) && step == 0 {
@@ -74,6 +83,9 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         }
         let mut args =
             json!({"request":request,"checks":["Evidence verified"],"safe_title":"Evidence check"});
+        if let Some(epic) = script.epic.lock().unwrap().clone() {
+            args["epic_ref"] = epic.into();
+        }
         if request == FOLLOWUP {
             args["previous_relation_id"] = script.relation.lock().unwrap().clone().into();
         }
@@ -100,7 +112,7 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     ([("content-type", "text/event-stream")], wire_items(&[item]))
 }
 
-fn child_item(step: usize, body: &Value, workspace: &std::path::Path) -> Value {
+fn child_item(step: usize, body: &Value, workspace: &std::path::Path, blocked: bool) -> Value {
     let path = |name: &str| workspace.join(name).to_string_lossy().into_owned();
     let plan = || {
         json!({"objective":"Verify workspace evidence","execution_mode":"direct",
@@ -146,7 +158,7 @@ fn child_item(step: usize, body: &Value, workspace: &std::path::Path) -> Value {
             "settle",
             "record_work_disposition",
             &json!({"work_id":work_id(body),
-            "disposition":"completed","summary":ANSWER,"action_updates":[{"action_key":"verify","status":"done"}],
+            "disposition":if blocked {"blocked"} else {"completed"},"summary":ANSWER,"next_condition":if blocked {Some("Owner input is needed")} else {None},"action_updates":[{"action_key":"verify","status":if blocked {"blocked"} else {"done"}}],
             "remaining_actions":[],"followups":[]}),
         ),
         _ => message(ANSWER),

@@ -109,6 +109,8 @@ impl ProjectWorkRepository {
         }
         let mut view = fresh.view.clone();
         view.status = WorkStatus::Abandoned;
+        // The earlier disposition describes its old material and stays in history.
+        view.latest_disposition = None;
         view.updated_at = self.recorded_at(identity.clone()).await?;
         self.manifest_update(super::write::ManifestPublicationInput {
             prior: Some(&fresh),
