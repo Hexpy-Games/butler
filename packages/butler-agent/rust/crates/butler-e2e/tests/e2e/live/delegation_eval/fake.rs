@@ -26,7 +26,10 @@ impl Upstream {
         let headers = header_names.clone();
         let final_body = std::env::var("BUTLER_E2E_DELEGATION_WIRE").as_deref() == Ok("final");
         let delegate = case["label"] == "delegate";
+        let output = case["first_output"].as_array().cloned();
+        let final_body = final_body || case["final_body"] == true;
         let app = Router::new().fallback(move |req: Request<Body>| {
+            let output = output.clone();
             let seen = capture.clone();
             let headers = headers.clone();
             async move {
@@ -51,7 +54,7 @@ impl Upstream {
                 };
                 let model = body["model"].as_str().unwrap();
                 if first && !path.ends_with("/messages") {
-                    first_answer(call, model, final_body)
+                    first_answer(&output.unwrap_or_else(|| default_output(call)), model, final_body)
                 } else { wire::answer(&path, call, "Finished.", model) }
             }
         });
@@ -131,7 +134,7 @@ fn work_id(v: &Value) -> Option<String> {
     }
 }
 
-fn first_answer(call: Option<Value>, model: &str, final_body: bool) -> axum::http::Response<Body> {
+fn default_output(call: Option<Value>) -> Vec<Value> {
     let item = call
         .map(|mut call| {
             call["namespace"] = json!("butler");
@@ -141,22 +144,27 @@ fn first_answer(call: Option<Value>, model: &str, final_body: bool) -> axum::htt
         .unwrap_or_else(
             || json!({"type":"message","content":[{"type":"output_text","text":"Finished."}]}),
         );
+    vec![item]
+}
+
+fn first_answer(items: &[Value], model: &str, final_body: bool) -> axum::http::Response<Body> {
     if final_body {
         return axum::http::Response::builder()
             .header("content-type", "application/json")
             .body(Body::from(
-                json!({"model":model,"status":"completed","output":[item],
+                json!({"model":model,"status":"completed","output":items,
                 "usage":{"input_tokens":100,"output_tokens":41}})
                 .to_string(),
             ))
             .unwrap();
     }
-    let events = [
-        json!({"type":"response.output_item.added","output_index":0,"item":item}),
-        json!({"type":"response.output_item.done","output_index":0,"item":item}),
-        json!({"type":"response.completed","response":{"model":model,"status":"completed","output":[],
-            "usage":{"input_tokens":100,"output_tokens":41}}}),
-    ];
+    let mut events = Vec::new();
+    for (index, item) in items.iter().enumerate() {
+        events.push(json!({"type":"response.output_item.added","output_index":index,"item":item}));
+        events.push(json!({"type":"response.output_item.done","output_index":index,"item":item}));
+    }
+    events.push(json!({"type":"response.completed","response":{"model":model,"status":"completed","output":[],
+            "usage":{"input_tokens":100,"output_tokens":41}}}));
     let mut body = String::new();
     for event in events {
         write!(body, "data: {event}\n\n").unwrap();

@@ -13,6 +13,8 @@ mod contracts;
 mod db;
 #[path = "e2e/live/delegation_eval/fake.rs"]
 mod fake;
+#[path = "e2e/live/delegation_eval/first_shapes.rs"]
+mod first_shapes;
 #[path = "e2e/live/delegation_eval/fixture.rs"]
 mod fixture;
 #[path = "e2e/live/delegation_eval/local.rs"]
@@ -55,6 +57,7 @@ async fn delegation_contracts() -> Result<(), HarnessError> {
     contracts::anthropic_default();
     contracts::responses_output_items();
     contracts::anthropic_blocks();
+    first_shapes::verify().await?;
     contracts::forwarding().await?;
     contracts::round_limit().await
 }

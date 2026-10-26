@@ -15,6 +15,7 @@ pub struct Evaluation {
     pub samples: Mutex<Vec<Value>>,
     pub local_text: Mutex<String>,
     pub delegation: Mutex<std::collections::VecDeque<Value>>,
+    pub local_answers: AtomicUsize,
     pub local_calls: Mutex<Vec<String>>,
     pub inflight: AtomicUsize,
     pub armed: std::sync::atomic::AtomicBool,
@@ -52,6 +53,7 @@ impl Provider {
             samples: Mutex::new(vec![]),
             local_text: Mutex::new("Done.".into()),
             delegation: Mutex::new(std::collections::VecDeque::new()),
+            local_answers: AtomicUsize::new(0),
             local_calls: Mutex::new(vec![]),
             inflight: AtomicUsize::new(0),
             armed: false.into(),
@@ -124,6 +126,7 @@ impl Evaluation {
     }
 
     fn local_answer(&self, path: &str, value: &Value, parent: bool) -> Response<Body> {
+        self.local_answers.fetch_add(1, Ordering::SeqCst);
         let call = if parent {
             lock(&self.delegation).pop_front()
         } else {

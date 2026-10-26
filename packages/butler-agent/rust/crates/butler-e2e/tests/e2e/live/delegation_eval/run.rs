@@ -56,20 +56,31 @@ pub(super) async fn suite(live: Option<LiveProvider>) -> Result<(), HarnessError
     }
     Ok(())
 }
-async fn one(case: &Value, first: bool, live: Option<LiveProvider>) -> Result<(), HarnessError> {
+pub(super) async fn one(
+    case: &Value,
+    first: bool,
+    live: Option<LiveProvider>,
+) -> Result<(), HarnessError> {
     let fake = if live.is_none() {
-        Some(fake::Upstream::start(first, case).await?)
+        Some(
+            fake::Upstream::start(first, case)
+                .await
+                .map_err(|_| stage("fake_upstream_start"))?,
+        )
     } else {
         None
     };
-    let upstream = local::upstream(live.as_ref(), fake.as_ref().map(|f| f.base.as_str()))?;
+    let upstream = local::upstream(live.as_ref(), fake.as_ref().map(|f| f.base.as_str()))
+        .map_err(|_| stage("upstream_configuration"))?;
     let max = number("BUTLER_E2E_DELEGATION_MAX_ROUNDS", 80);
-    let (proxy, eval) = Provider::delegation_evaluation(upstream, !first, max).await?;
+    let (proxy, eval) = Provider::delegation_evaluation(upstream, !first, max)
+        .await
+        .map_err(|_| stage("proxy_start"))?;
     let model = live
         .as_ref()
         .map(|p| p.choice.clone())
         .unwrap_or_else(|| ModelChoice::parse("openai/gpt-6-luna").unwrap());
-    let setup = setup(case, live, &model, &proxy.base_url)?;
+    let setup = setup(case, live, &model, &proxy.base_url).map_err(|_| stage("sandbox_setup"))?;
     let (mut s, chat) = prepare(setup, case, first, &eval, &proxy.base_url).await?;
     *eval.local_text.lock().unwrap() = "Evaluation turn finished.".into();
     eval.armed.store(first, Ordering::SeqCst);
@@ -86,10 +97,14 @@ async fn one(case: &Value, first: bool, live: Option<LiveProvider>) -> Result<()
     let error = result.ok().and_then(Result::err).map(|e| e.to_string());
     // Stop before reading the case database; every case owns its child process.
     drop(s.agent);
-    let graph = snapshot(&s.sandbox.data, &s.sandbox.workspace, case, first).await?;
+    let graph = snapshot(&s.sandbox.data, &s.sandbox.workspace, case, first)
+        .await
+        .map_err(|_| stage("database_snapshot"))?;
     let samples = eval.snapshot();
     let local_calls = eval.local_calls.lock().unwrap().clone();
-    let artifacts = retain(&s.sandbox.workspace, case).await?;
+    let artifacts = retain(&s.sandbox.workspace, case)
+        .await
+        .map_err(|_| stage("retain_workspace"))?;
     let mut row = json!({"mode":if first {"first-decision"} else {"steward"},"model":model.label(),
         "variant":variant(),
         "repeat":number("BUTLER_E2E_DELEGATION_REPEAT",1),"case":case["id"],"label":case["label"],
@@ -97,7 +112,7 @@ async fn one(case: &Value, first: bool, live: Option<LiveProvider>) -> Result<()
         "artifacts":artifacts,"wall_ms":begin.elapsed().as_millis(),"timed_out":timed_out,"error":error,
         "round_limit":eval.limited.load(Ordering::SeqCst),"offline":fake.is_some(),
         "terminal_result":!timed_out && error.is_none() && !eval.limited.load(Ordering::SeqCst),
-        "upstream_rounds":eval.upstream_rounds(),"local_calls":local_calls});
+        "upstream_rounds":eval.upstream_rounds(),"local_answers":eval.local_answers.load(Ordering::SeqCst),"local_calls":local_calls});
     diagnostics(&mut row);
     if let Some(fake) = &fake {
         fake.verify(row["samples"].as_array().unwrap());
@@ -119,18 +134,26 @@ async fn prepare(
     let c = case.clone();
     tokio::task::spawn_blocking(move || fixture::files(&root, &c, first))
         .await
-        .unwrap()?;
-    let s = setup.start().await?;
-    fixture::register_model(&s, proxy).await?;
+        .map_err(|_| stage("fixture_task"))?
+        .map_err(|_| stage("fixture_files"))?;
+    let s = setup.start().await.map_err(|_| stage("agent_start"))?;
+    fixture::register_model(&s, proxy)
+        .await
+        .map_err(|_| stage("register_model"))?;
     if !first {
-        fixture::workers(&s).await?;
+        fixture::workers(&s)
+            .await
+            .map_err(|_| stage("worker_setup"))?;
     }
-    let chat = fixture::chat(&s).await?;
+    let chat = fixture::chat(&s).await.map_err(|_| stage("chat_setup"))?;
     for prior in case["history"].as_array().into_iter().flatten() {
         *eval.local_text.lock().unwrap() = prior["butler"].as_str().unwrap().into();
-        let (_, turn) = s.turn(&chat, prior["user"].as_str().unwrap()).await?;
+        let (_, turn) = s
+            .turn(&chat, prior["user"].as_str().unwrap())
+            .await
+            .map_err(|_| stage("history_turn_wait"))?;
         if turn_state(&turn) != "delivered" {
-            return Err(HarnessError("seeded history turn did not deliver".into()));
+            return Err(stage("history_turn_not_delivered"));
         }
     }
     Ok((s, chat))
@@ -204,6 +227,11 @@ pub(super) fn diagnostics(row: &mut Value) {
         .first()
         .map(|s| s["first_output_item"].clone())
         .unwrap_or(Value::Null);
+    row["harness_error_reason"] = if reason == Some("harness_error") {
+        row["error"].clone()
+    } else {
+        Value::Null
+    };
     row["extraction_mismatch"] = json!(mismatch);
     row["invalid_reason"] = json!(reason);
     row["outcome"] = json!(if reason.is_some() {
@@ -223,16 +251,23 @@ async fn execute(
     first: bool,
 ) -> Result<(), HarnessError> {
     if first {
-        let (_, turn) = s.turn(chat, case["request"].as_str().unwrap()).await?;
+        let (_, turn) = s
+            .turn(chat, case["request"].as_str().unwrap())
+            .await
+            .map_err(|_| stage("evaluation_turn_wait"))?;
         if turn_state(&turn) != "delivered" {
-            return Err(HarnessError(format!(
-                "evaluation turn ended {}",
-                turn_state(&turn)
-            )));
+            return Err(stage(match turn_state(&turn) {
+                "failed" => "evaluation_turn_failed",
+                "runtime_fault" => "evaluation_turn_runtime_fault",
+                "cancelled" => "evaluation_turn_cancelled",
+                _ => "evaluation_turn_not_delivered",
+            }));
         }
         return Ok(());
     }
-    s.gw.say(chat, case["request"].as_str().unwrap()).await?;
+    s.gw.say(chat, case["request"].as_str().unwrap())
+        .await
+        .map_err(|_| stage("evaluation_admission"))?;
     loop {
         if eval.limited.load(Ordering::SeqCst) {
             // A concurrent Worker request may still be collecting its last sample.
@@ -244,9 +279,13 @@ async fn execute(
         let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
         let settled = tokio::task::spawn_blocking(move || db::settled(&path))
             .await
-            .unwrap()?;
+            .map_err(|_| stage("settled_task"))?
+            .map_err(|_| stage("settled_database"))?;
         if settled {
-            let turns = s.gw.turns(chat).await?;
+            let turns =
+                s.gw.turns(chat)
+                    .await
+                    .map_err(|_| stage("evaluation_turns"))?;
             if turns.last().is_some_and(|turn| {
                 butler_e2e::e2e::gateway::TERMINAL.contains(&turn_state(turn))
                     && turn["execution_controls"]["subsession_result"].is_object()
@@ -293,4 +332,8 @@ async fn retain(workspace: &std::path::Path, case: &Value) -> Result<String, Har
     })
     .await
     .unwrap()
+}
+
+fn stage(reason: &str) -> HarnessError {
+    HarnessError(reason.into())
 }

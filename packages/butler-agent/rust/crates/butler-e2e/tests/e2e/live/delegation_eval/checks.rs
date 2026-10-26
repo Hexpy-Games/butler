@@ -105,7 +105,22 @@ pub(super) fn verify(case: &Value, first: bool, row: &Value, workspace: &Path) {
     assert_eq!(row["outcome"], "completed", "{row}");
     if first {
         assert_eq!(samples.len(), 1);
-        if case["label"] == "delegate" {
+        if let Some(output) = case["first_output"].as_array() {
+            let expected: Vec<_> = output
+                .iter()
+                .filter(|v| v["type"] == "function_call")
+                .map(|v| v["name"].as_str().unwrap().trim_start_matches("butler."))
+                .collect();
+            let actual: Vec<_> = samples[0]["calls"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v["name"].as_str().unwrap())
+                .collect();
+            assert_eq!(actual, expected);
+            assert_eq!(row["upstream_rounds"], 1);
+            assert!(row["harness_error_reason"].is_null());
+        } else if case["label"] == "delegate" {
             assert_eq!(samples[0]["calls"][0]["name"], "delegate_to_steward");
         } else {
             assert_eq!(samples[0]["calls"], json!([]));

@@ -59,7 +59,7 @@ def invalid_reason(row):
     if row.get('timed_out'):
         return 'timeout'
     if row.get('error'):
-        return 'harness_error: ' + row['error']
+        return 'harness_error: ' + (row.get('harness_error_reason') or 'unspecified')
     samples = row['samples']
     if not samples:
         return 'no_upstream_samples'

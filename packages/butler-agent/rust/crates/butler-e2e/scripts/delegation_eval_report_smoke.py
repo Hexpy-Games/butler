@@ -37,7 +37,9 @@ def runner_variants(runner=None):
 
 def failures(base):
     scenarios = [({'timed_out': True}, 'timeout'),
-                 ({'error': 'db unavailable'}, 'harness_error: db unavailable'),
+                 ({'error': 'private tool arguments'}, 'harness_error: unspecified'),
+                 ({'error': 'private tool arguments', 'harness_error_reason': 'database_snapshot'},
+                  'harness_error: database_snapshot'),
                  ({'samples': []}, 'no_upstream_samples'),
                  ({'terminal_result': False}, 'missing_agent_terminal_result')]
     for fields, reason in scenarios:
