@@ -106,7 +106,7 @@ async function layout(page: Page, screen: string) {
       return [{ tag: node.tagName, slot: node.dataset.slot, text: node.textContent!.slice(0, 80),
         x: node.scrollWidth - node.clientWidth, y: node.scrollHeight - node.clientHeight }];
     });
-    return { width: innerWidth, height: innerHeight, overflow: document.documentElement.scrollWidth - innerWidth, clipped };
+    return { width: innerWidth, height: innerHeight, clientWidth: document.documentElement.clientWidth, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, clipped };
   });
   console.log(JSON.stringify({ screen, ...result }));
 
@@ -203,7 +203,10 @@ try {
   await layout(page, 'appearance-130');
   await click(page, copy.settings.back);
   await layout(page, 'new-chat-130');
+  await click(page, copy.space.recent, '[role="radio"]');
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-test-class="app-sidebar"] [data-tree-item]')].length >= 30);
   await layout(page, 'many-sidebar-items-130');
+  await click(page, copy.space.all, '[role="radio"]');
   await page.clickSelector('[data-slot="composer-compact-preview"]');
   await page.waitForFunction(() => document.activeElement?.getAttribute('contenteditable') === 'true');
   await page.insertText('긴 답변을 보여 주세요.');
