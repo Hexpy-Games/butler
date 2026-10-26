@@ -54,6 +54,14 @@ export async function routeReturnKeepsPage(app: ShellApp, id: string, icon: stri
     await app.click(copy.settings.back); await back();
     await pageShown(app, id, icon, `Settings round trip ${round + 1}`);
   }
+  // The media stops while the user is away (a media key, headphones, the video ending): the page throttles again.
+  const contents = `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).view.webContents`;
+  await app.click(copy.sidebar.settings);
+  await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=settings-page]'))"), "Settings shown");
+  await app.main(`${contents}.executeJavaScript("document.querySelector('video').pause()")`);
+  await waitBrowser(() => app.main(`${contents}.getBackgroundThrottling() === true`), "paused page throttles again");
+  await app.click(copy.settings.back); await back();
+  await pageShown(app, id, icon, "media paused while away");
   await app.call("reload", { id });
   await waitBrowser(async () => (await app.call<{ tabs: Array<{ id: string; status: string; favicon: string }> }>("state")).tabs.some((tab) => tab.id === id && tab.status === "idle" && tab.favicon === icon), "reloaded page idle with its favicon");
   await pageShown(app, id, icon, "after reload");

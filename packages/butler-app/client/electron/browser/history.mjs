@@ -24,18 +24,15 @@ export function createVisitQueue(send) {
 }
 export function wireHistory(browser, tab) {
   const contents = tab.view.webContents;
-  let intent, pending = [], startIcon = null;
+  let intent, pending = [];
   const background = () => { const win = browser.getWindow(); return !win || !win.isVisible(); };
   const privateMode = () => browser.privateMode === true || tab.privateMode === true;
-  const begin = (_event, _url, inPlace, mainFrame) => {
+  const begin = (_event, _url, _inPlace, mainFrame) => {
     if (!mainFrame) return;
     intent = { private: privateMode(), background: background(),
       butlerDriven: tab.owner !== "mine" && tab.holder === "agent" && Boolean(tab.busy || tabInUse(browser, tab)),
       transition: tab.navigationIntent?.op === "navigate" ? "typed" : ["back", "forward"].includes(tab.navigationIntent?.op) ? "forward_back" : tab.navigationIntent?.op === "reload" ? "reload" : "link" };
     tab.navigationIntent = null;
-    // The tab keeps its favicon: page-favicon-updated reports only a changed icon list, so a reload or a
-    // page with the same icons sends none. A visit takes it only once the new page has reported its own.
-    if (!inPlace) startIcon = tab.favicon;
   };
   const commit = (url, inPage) => {
     const state = intent ?? { private: privateMode(), background: background(), butlerDriven: tab.owner !== "mine" && tab.holder === "agent" && Boolean(tab.busy || tabInUse(browser, tab)), transition: "link" };
@@ -55,7 +52,8 @@ export function wireHistory(browser, tab) {
   async function drain({ quitting = false } = {}) {
     if (privateMode()) { pending = []; return; }
     if (!pending.length) return;
-    let favicon = startIcon !== null && tab.favicon === startIcon ? "" : tab.favicon || "";
+    // The tab's icon counts once this document has reported or confirmed it (tab-events.mjs).
+    let favicon = tab.documentIcon === false ? "" : tab.favicon || "";
     if (!quitting) {
       try {
         const found = await contents.executeJavaScript("document.querySelector('link[rel~=icon]')?.href||''");

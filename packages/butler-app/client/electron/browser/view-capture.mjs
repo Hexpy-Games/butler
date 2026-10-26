@@ -6,26 +6,28 @@
  */
 export function capturePage(tab, rect, options = { stayHidden: true }, contents = tab.view.webContents) {
   const pending = contents.capturePage(rect, options);
-  const captures = tab.captures ??= new Set();
-  captures.add(pending);
+  // Each capture keeps how the page stood when it started: hidden out of a window (background
+  // throttling on) or visible there (off, as while media plays). The flag can flip while it runs.
+  const captures = tab.captures ??= new Map();
+  captures.set(pending, contents.getBackgroundThrottling());
   const settled = () => { captures.delete(pending); };
   pending.then(settled, settled);
   return pending;
 }
 
-/** Null when no capture of the tab is in flight; otherwise settles once every current one has. */
-export function capturesSettled(tab) {
-  return tab.captures?.size ? Promise.allSettled([...tab.captures]) : null;
+/** Null when no matching capture of the tab is in flight; otherwise settles once each current one has. */
+function capturesSettled(tab, match = () => true) {
+  const current = [...tab.captures?.entries() ?? []].filter(([, hidden]) => match(hidden)).map(([pending]) => pending);
+  return current.length ? Promise.allSettled(current) : null;
 }
 
 /**
  * Puts the tab's view in `win`; `place` sizes it there and `resync` lays the tab out again later.
- * With a capture in flight it depends on whether the page is hidden out of a window:
- * - A hidden page (background throttling on) captures without a window, so it is attached once its
- *   captures settle (the still stands in meanwhile).
- * - A page that stays visible (throttling off, as while media plays) has no compositor out of a
- *   window, so its captures finish only once it is attached again; waiting would keep it out for good.
- *   It is attached at once and keeps its last bounds until they settle, then `place` runs.
+ * A capture of a page that was hidden out of a window when it started, and still is, finishes
+ * without a window; adding the view while it runs strands it. So the view waits for those (the
+ * still stands in meanwhile). Any other capture in flight (the page was or now is visible, as while
+ * media plays) finishes only once the view is in a window, so waiting would keep the page out for
+ * good: the view is attached at once and keeps its last bounds until those captures settle.
  * Returns false while the attach waits.
  */
 export function attachView(tab, win, place, resync) {
@@ -33,19 +35,21 @@ export function attachView(tab, win, place, resync) {
     if (!tab.placeHold) place();
     return true;
   }
-  const settled = capturesSettled(tab);
-  if (settled && tab.view.webContents.getBackgroundThrottling()) {
-    tab.attachWait ??= settled.then(() => { tab.attachWait = null; resync(); });
+  const hiddenOut = tab.view.webContents.getBackgroundThrottling();
+  const hidden = hiddenOut ? capturesSettled(tab, (startedHidden) => startedHidden) : null;
+  if (hidden) {
+    tab.attachWait ??= hidden.then(() => { tab.attachWait = null; resync(); });
     return false;
   }
   win.contentView.addChildView(tab.view); tab.attached = win;
   const { width, height } = tab.view.getBounds();
   // A view that was never placed shows nothing until it is; it takes its place at once.
-  const hold = width && height ? settled?.then(() => {
+  const settled = width && height ? capturesSettled(tab) : null;
+  const hold = settled?.then(() => {
     if (tab.placeHold !== hold) return;
     tab.placeHold = null;
     if (tab.attached === win && tab.view) place();
-  }) ?? null : null;
+  }) ?? null;
   tab.placeHold = hold;
   if (!hold) place();
   return true;
