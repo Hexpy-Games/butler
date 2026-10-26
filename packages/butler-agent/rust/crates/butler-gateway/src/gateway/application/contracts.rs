@@ -236,6 +236,7 @@ pub struct VisualAdmissionRequest {
 }
 pub struct AppApplicationDependencies {
     /// User lifecycle hooks, absent for applications without the host dispatcher.
+    pub plugins: Option<Arc<dyn butler_core::plugins::PluginPort>>,
     pub hooks: Option<Arc<dyn butler_core::hooks::HookPort>>,
     pub data_reset: Option<Arc<dyn crate::gateway::AppDataResetPort>>,
     /// Process stop fences queue admission before active turns are interrupted.

@@ -191,6 +191,10 @@ pub trait GatewayApplication:
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     /// User lifecycle hook service; absent without a host implementation.
+    /// Host-owned plugin administration; never a model tool.
+    fn plugins(&self) -> Option<std::sync::Arc<dyn butler_core::plugins::PluginPort>> {
+        None
+    }
     fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
         None
     }

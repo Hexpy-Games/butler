@@ -15,6 +15,9 @@ impl GatewayApplication for AppApplication {
     fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
         self.library_owned(command)
     }
+    fn plugins(&self) -> Option<Arc<dyn butler_core::plugins::PluginPort>> {
+        self.dependencies.plugins.clone()
+    }
     fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
         self.dependencies.hooks.clone()
     }
@@ -280,17 +283,10 @@ impl GatewayApplication for AppApplication {
     fn list_mcp_capabilities(
         &self,
         shutdown: tokio_util::sync::CancellationToken,
-    ) -> ApplicationFuture<serde_json::Value> {
-        let client = self.dependencies.mcp_client.clone();
-        Box::pin(async move {
-            Box::pin(client.list_capabilities(true, &shutdown))
-                .await
-                .map_err(|error| {
-                    GatewayApplicationError::public(500, error.code, error.message)
-                        .with_source(error)
-                })
-        })
+    ) -> ApplicationFuture<Value> {
+        self.list_mcp_capabilities_owned(shutdown)
     }
+
     fn create_mcp_server(&self, input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
         self.create_mcp_server_owned(input)
     }
@@ -314,7 +310,7 @@ impl GatewayApplication for AppApplication {
             client
                 .delete_server(id)
                 .await
-                .map_err(GatewayApplicationError::internal_from)
+                .map_err(super::mcp_servers::delete_error)
         })
     }
     fn send_message(&self, command: SendMessageCommand) -> ApplicationFuture<MessageSendResult> {

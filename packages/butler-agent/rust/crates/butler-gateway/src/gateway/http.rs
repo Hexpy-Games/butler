@@ -297,7 +297,7 @@ async fn route(
     let uri = request.uri().clone();
     let accepts_html = static_ui::accepts_html(request.headers());
     match (method.clone(), handler) {
-        (Method::GET, router::Handler::Health) => health(),
+        (Method::GET, router::Handler::Health) => health(&state),
         (Method::GET, router::Handler::ProviderQuota) => {
             monitors::provider_quota(state, &uri).await
         }
@@ -402,3 +402,5 @@ async fn post_message(
         },
     )
 }
+
+mod plugins;

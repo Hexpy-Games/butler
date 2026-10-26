@@ -28,6 +28,7 @@ impl Launch {
     /// the App-only variables; CLI commands run with [`Launch::command`].
     pub(super) fn service_command(&self) -> Command {
         let mut command = self.command();
+        command.args(&self.service_args);
         // Every harness-started service logs its startup phase timings, so a
         // readiness timeout names the slow phase. CLI output stays unchanged.
         if !self.env.iter().any(|(key, _)| key == STARTUP_TRACE) {

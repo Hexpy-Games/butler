@@ -59,6 +59,7 @@ fn mcp_save_error(
 ) -> GatewayApplicationError {
     use butler_models::mcp_client::McpRegistryError;
     let code = match &error {
+        McpRegistryError::PluginReadOnly => "mcp_plugin_read_only",
         McpRegistryError::ServerIdRequired => "mcp_server_id_required",
         McpRegistryError::CommandRequired => "mcp_command_required",
         McpRegistryError::UrlRequired(_) => "mcp_url_required",
@@ -90,5 +91,35 @@ impl super::AppApplication {
                 .with_source(source)
             })
         })
+    }
+}
+
+impl AppApplication {
+    pub(super) fn list_mcp_capabilities_owned(
+        &self,
+        shutdown: tokio_util::sync::CancellationToken,
+    ) -> ApplicationFuture<serde_json::Value> {
+        let client = self.dependencies.mcp_client.clone();
+        Box::pin(async move {
+            Box::pin(client.list_capabilities(true, &shutdown))
+                .await
+                .map_err(|error| {
+                    GatewayApplicationError::public(500, error.code, error.message)
+                        .with_source(error)
+                })
+        })
+    }
+}
+
+pub(super) fn delete_error(
+    error: butler_models::mcp_client::McpRegistryError,
+) -> GatewayApplicationError {
+    if matches!(
+        error,
+        butler_models::mcp_client::McpRegistryError::PluginReadOnly
+    ) {
+        mcp_save_error(error, "mcp_plugin_read_only")
+    } else {
+        GatewayApplicationError::internal_from(error)
     }
 }

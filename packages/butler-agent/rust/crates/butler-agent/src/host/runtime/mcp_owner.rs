@@ -7,13 +7,15 @@ pub(super) fn for_runtime(
     paths: &super::RuntimePaths,
     host_environment: &Arc<HashMap<String, String>>,
     registry_writes: Arc<ConfigurationWrites>,
+    plugins: Arc<crate::host::plugins::Plugins>,
 ) -> Arc<McpClient> {
-    new(
+    let client = new(
         paths.data_root.clone(),
         paths.installation_root.clone(),
         host_environment,
         registry_writes,
-    )
+    );
+    Arc::new((*client).clone().with_overlay(plugins))
 }
 
 pub(super) fn new(
@@ -49,4 +51,37 @@ pub(super) fn new(
         registry_writes,
         path_guard,
     ))
+}
+
+pub(super) async fn open(
+    paths: &super::RuntimePaths,
+    env: &Arc<HashMap<String, String>>,
+    writes: &Arc<ConfigurationWrites>,
+    startup: &mut super::startup_trace::Trace,
+) -> Result<(Arc<crate::host::plugins::Plugins>, Arc<McpClient>), butler_turn::btcc::BtccError> {
+    let plugins = crate::host::plugins::Plugins::open(
+        paths.data_root.clone(),
+        std::env::args_os().any(|s| s == "--safe-mode"),
+        writes.clone(),
+    )
+    .await
+    .map_err(super::boundary::setup)?;
+    startup.phase("plugins_registry");
+    let mcp = for_runtime(paths, env, writes.clone(), plugins.clone());
+    Ok((plugins, mcp))
+}
+pub(super) fn authority(
+    plugins: &crate::host::plugins::Plugins,
+    stores: &super::RuntimeStores,
+    collation: &Arc<butler_core::locale::LocaleCollation>,
+    now: Arc<dyn Fn() -> String + Send + Sync>,
+) -> Arc<butler_turn::btcc::PrincipalAuthority> {
+    let authority = Arc::new(butler_turn::btcc::PrincipalAuthority::new(
+        stores.btcc.clone(),
+        collation.clone(),
+        now,
+        Arc::new(|| uuid::Uuid::new_v4().to_string()),
+    ));
+    plugins.set_authority(authority.clone());
+    authority
 }
