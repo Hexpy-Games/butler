@@ -97,3 +97,5 @@ mod process_table;
 pub mod hook_process;
 
 pub mod preview_process;
+
+pub mod plugin_files;

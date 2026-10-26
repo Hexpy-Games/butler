@@ -27,6 +27,9 @@ pub(super) async fn dependencies(
     let (monitoring, context_read) = usage_ports(runtime, data_root).await?;
     let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready);
     Ok(AppApplicationDependencies {
+        plugins: Some(Arc::new(crate::host::plugins::Admin(
+            runtime.plugins.clone(),
+        ))),
         hooks: Some(runtime.hooks.clone()),
         data_reset: Some(Arc::new(AppDataReset(runtime.data_reset.clone()))),
         service_shutdown: runtime.service_shutdown.clone(),

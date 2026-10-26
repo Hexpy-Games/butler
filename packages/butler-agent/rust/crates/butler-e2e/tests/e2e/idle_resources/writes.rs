@@ -120,6 +120,30 @@ impl Watch {
         }
     }
 
+    pub(crate) fn assert_subtree_unchanged(&self, relative: &Path) -> Result<(), HarnessError> {
+        let changes = self.changes.lock().unwrap();
+        let relevant = changes
+            .iter()
+            .filter(|p| Path::new(p).starts_with(relative) || p.starts_with("watch failed:"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            relevant,
+            Vec::<&String>::new(),
+            "filesystem mutations under {}",
+            relative.display()
+        );
+        let root = self.data.join(relative);
+        let before = self
+            .before
+            .iter()
+            .filter(|(p, _)| p.starts_with(&root))
+            .map(|(p, v)| (p.clone(), *v))
+            .collect::<BTreeMap<_, _>>();
+        let after = snapshot(&root)?;
+        assert_eq!(before, after, "idle subtree metadata changed");
+        Ok(())
+    }
+
     pub(crate) fn assert_unchanged(&mut self) {
         let changes = self.changes.lock().unwrap();
         eprintln!(

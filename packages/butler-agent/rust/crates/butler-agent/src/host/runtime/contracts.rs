@@ -26,6 +26,7 @@ pub(crate) struct RuntimePaths {
 
 /// Ingress holds this owner, admits via BTCC, then awaits close before process exit.
 pub(crate) struct AgentRuntime {
+    pub plugins: Arc<crate::host::plugins::Plugins>,
     pub hooks: Arc<dyn butler_core::hooks::HookPort>,
     pub data_reset: Arc<crate::host::service::data_reset::Control>,
     pub memory_acquisition: Arc<crate::host::embedding::worker::assets::Acquisition>,

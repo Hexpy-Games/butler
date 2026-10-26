@@ -31,7 +31,10 @@ pub struct Skills {
     inner: Arc<Inner>,
 }
 
+/// On-demand plugin revision and namespaced skill paths. It must not perform I/O.
+pub type PluginSkillProvider = dyn Fn() -> (u64, Vec<(String, PathBuf)>) + Send + Sync;
 struct Inner {
+    plugin_provider: std::sync::RwLock<Option<Arc<PluginSkillProvider>>>,
     resource_root: PathBuf,
     data_root: PathBuf,
     native_executable: Option<PathBuf>,
@@ -42,6 +45,7 @@ struct Inner {
 }
 
 struct CachedCatalog {
+    plugin_revision: u64,
     fingerprint: Vec<(PathBuf, Option<SystemTime>)>,
     skills: Vec<SkillDefinition>,
 }
@@ -102,6 +106,7 @@ impl Skills {
     ) -> Self {
         Self {
             inner: Arc::new(Inner {
+                plugin_provider: std::sync::RwLock::new(None),
                 resource_root,
                 data_root,
                 native_executable,
@@ -110,6 +115,13 @@ impl Skills {
                 catalog_cache: Mutex::new(HashMap::new()),
                 projection_index: Arc::default(),
             }),
+        }
+    }
+
+    /// Attach package skills before admitting turns.
+    pub fn set_plugin_provider(&self, provider: Arc<PluginSkillProvider>) {
+        if let Ok(mut slot) = self.inner.plugin_provider.write() {
+            *slot = Some(provider);
         }
     }
 
@@ -123,8 +135,15 @@ impl Skills {
         let native_executable = self.inner.native_executable.clone();
         let inner = self.inner.clone();
         blocking(permit, move || {
+            let (plugin_revision, plugin_roots) = inner
+                .plugin_provider
+                .read()
+                .ok()
+                .and_then(|p| p.as_ref().map(|p| p()))
+                .unwrap_or_default();
             let cached = lock_catalog_cache(&inner.catalog_cache)
                 .get(&project_id)
+                .filter(|entry| entry.plugin_revision == plugin_revision)
                 .map(|entry| (entry.fingerprint.clone(), entry.skills.clone()));
             if let Some((stamps, skills)) = cached
                 && stamps == catalog::refresh_fingerprint(&stamps)?
@@ -132,7 +151,12 @@ impl Skills {
                 return Ok(skills);
             }
             let fingerprint = catalog::fingerprint(&resources, &data, project_id.as_deref())?;
-            let mut skills = catalog::runtime(&resources, &data, project_id.as_deref())?;
+            let mut skills = catalog::runtime_with_plugins(
+                &resources,
+                &data,
+                project_id.as_deref(),
+                &plugin_roots,
+            )?;
             if let Some(executable) = native_executable.as_deref() {
                 for skill in &mut skills {
                     let command = match skill.file_path.strip_prefix(resources.join("skills")) {
@@ -155,6 +179,7 @@ impl Skills {
             lock_catalog_cache(&inner.catalog_cache).insert(
                 project_id,
                 CachedCatalog {
+                    plugin_revision,
                     fingerprint,
                     skills: skills.clone(),
                 },
@@ -171,8 +196,17 @@ impl Skills {
         let permit = self.permit().await?;
         let resources = self.inner.resource_root.clone();
         let data = self.inner.data_root.clone();
+        let (_, roots) = self
+            .inner
+            .plugin_provider
+            .read()
+            .ok()
+            .and_then(|p| p.as_ref().map(|p| p()))
+            .unwrap_or_default();
         blocking(permit, move || {
-            catalog::settings(&resources, &data, projects)
+            let mut view = catalog::settings(&resources, &data, projects)?;
+            view.plugin = catalog::plugin_summaries(&roots)?;
+            Ok(view)
         })
         .await
     }
