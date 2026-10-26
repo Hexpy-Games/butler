@@ -7,15 +7,7 @@ use std::{path::PathBuf, sync::Arc};
 type RegistryRequest = (Value, Option<Value>, Option<String>, Option<String>);
 type ResolvedSource = (PathBuf, Option<SourcePin>, Option<Value>, Option<String>);
 impl Plugins {
-    pub(super) fn inspect(&self, input: &Value) -> Result<Value> {
-        let _mutation = self.mutation.lock();
-        let mut state = self.state.lock().clone();
-        self.clear_unclaimed_staging(&mut state)?;
-        let result = self.inspect_into(&mut state, input);
-        *self.state.lock() = state;
-        result
-    }
-    fn clear_unclaimed_staging(&self, state: &mut State) -> Result<()> {
+    pub(super) fn clear_unclaimed_staging(&self, state: &mut State) -> Result<()> {
         let stale = state
             .staging
             .keys()
@@ -27,10 +19,15 @@ impl Plugins {
         }
         Ok(())
     }
-    pub(super) fn inspect_into(&self, state: &mut State, input: &Value) -> Result<Value> {
-        let (source, pin, listed_in, expected) = self.resolve_source(state, input)?;
+    pub(super) fn inspect_into(
+        &self,
+        state: &mut State,
+        input: &Value,
+        work: &std::path::Path,
+    ) -> Result<Value> {
+        let (source, pin, listed_in, expected) = self.resolve_source(state, input, work)?;
         let id = uuid::Uuid::new_v4().to_string();
-        let stage = self.root.join("staging").join(&id);
+        let stage = work.join("staging").join(&id);
         let result = (|| {
             let mut files = inspect::snapshot(&source, &stage, inspect::Limits::default())?;
             if pin.is_some() {
@@ -101,7 +98,12 @@ impl Plugins {
         }
         Ok(source)
     }
-    fn resolve_source(&self, state: &State, input: &Value) -> Result<ResolvedSource> {
+    fn resolve_source(
+        &self,
+        state: &State,
+        input: &Value,
+        work: &std::path::Path,
+    ) -> Result<ResolvedSource> {
         let kinds = ["path", "git", "registry"]
             .iter()
             .filter(|k| input.get(**k).is_some())
@@ -129,7 +131,7 @@ impl Plugins {
             .and_then(Value::as_str)
             .map(str::to_owned);
         let (source, commit) = sources::checkout(
-            &self.root,
+            work,
             &remote,
             reference.as_deref(),
             requested_commit.as_deref(),

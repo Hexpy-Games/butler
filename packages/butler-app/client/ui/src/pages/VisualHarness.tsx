@@ -181,19 +181,19 @@ export function VisualHarness() {
       setLeftOpen(false);
     }
     setView(initialDocumentView());
-    setActiveChatId("butler-client");
+    setActiveChatId(fixture?.sessionView?.session_id ?? "butler-client");
     setNavigation(harnessNavigation);
     setMessages(fixture?.messages ?? HARNESS_MESSAGES);
     setSettings(harnessSettings);
     setModelCatalog(harnessCatalog);
-    setSummary(harnessSummary);
+    setSummary(fixture?.sessionView ? null : harnessSummary);
     if (fixture?.sessionView) setSessionView(fixture.sessionView);
     if (ss03Surface) {
       setSessionView(HARNESS_SS03_OBSERVER_VIEW);
       openSessionObserver(HARNESS_SS03_OBSERVER_VIEW.session_id);
     }
     setTurnProgress(
-      harnessSummary.latest_progress?.turn_id
+      !fixture?.sessionView && harnessSummary.latest_progress?.turn_id
         ? {
             [harnessSummary.latest_progress.turn_id]: {
               ...harnessSummary.latest_progress,

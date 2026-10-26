@@ -39,6 +39,14 @@ pub fn text_for_part(part: &ConversationPart) -> Option<String> {
         ConversationPartKind::Text => object_string(object, "text"),
         ConversationPartKind::MessageContent => message_content_references(&part.content_json),
         ConversationPartKind::AttachmentRef => {
+            if object_string(object, "kind").as_deref() == Some("doc") {
+                let id = object_string(object, "id")?;
+                let title = object_string(object, "title")?;
+                return Some(format!(
+                    "[document:{id} {}]",
+                    serde_json::to_string(&title).ok()?
+                ));
+            }
             let file_name =
                 object_string(object, "fileName").or_else(|| object_string(object, "filename"));
             let id = object_string(object, "id");

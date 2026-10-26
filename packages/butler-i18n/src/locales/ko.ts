@@ -602,6 +602,7 @@ export const koKrCopy: AppCopy = {
     emptyLane: label => `${label} 항목이 없습니다.`,
     contextMetric: (kind, value) => ({ full: `${value}% 사용`, used: `${value} 사용`, budget: `${value} 한도`, available: `압축 전 ${value} 사용 가능`, compact: `${value}에서 자동 압축` })[kind],
     activityHistory: (live, label, count) => `${live ? "현재" : "활동"} · ${label} · ${count}개 기록`,
+    chatActivity: (tool, count) => `${tool} 중${count > 1 ? ` · ${count}개` : ""}`,
     grantedItems: count => `허용한 항목 ${count}개`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {

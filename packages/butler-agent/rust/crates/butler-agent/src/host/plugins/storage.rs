@@ -12,6 +12,8 @@ pub(super) fn clear_staging(root: &Path) -> Result<()> {
 }
 /// Reclaim abandoned snapshots once at startup, when no operation holds a lease.
 pub(super) fn recover(root: &Path, registry: &Registry) -> Result<()> {
+    butler_platform::plugin_files::remove(&root.join("work"))
+        .map_err(|_| error("plugin_staging_cleanup_failed"))?;
     let mut stores = std::collections::BTreeSet::new();
     let mut stages = std::collections::BTreeSet::new();
     for plugin in registry.plugins.values() {
