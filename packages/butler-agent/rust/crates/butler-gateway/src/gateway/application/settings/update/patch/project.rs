@@ -60,7 +60,7 @@ pub(super) fn project(
         json!(requested_context.min(new_max).max(1_000)),
     );
 
-    project_worker_profiles(&mut output, &patch, current, facts, previous_model);
+    project_worker_profiles(&mut output, &patch, facts, previous_model);
 
     let current_fallback = current
         .get("model_fallback")
@@ -204,7 +204,6 @@ fn project_simple_fields(
 ) {
     for key in [
         "update_previews",
-        "background_model",
         "recall_mode",
         "recall_judge_model",
         "server_url",
@@ -244,7 +243,6 @@ fn default_model(facts: &AppSettingsFacts) -> &str {
 fn project_worker_profiles(
     output: &mut serde_json::Map<String, Value>,
     patch: &serde_json::Map<String, Value>,
-    current: &Value,
     facts: &AppSettingsFacts,
     previous_model: &str,
 ) {
@@ -256,9 +254,6 @@ fn project_worker_profiles(
                 .cloned()
                 .unwrap_or_else(|| json!([])),
         );
-    }
-    if patch.contains_key("worker_profiles") {
-        super::super::super::background_model::mark_worker_choices(output, current);
     }
     let mut stored = output.clone();
     worker_profiles::canonicalize(

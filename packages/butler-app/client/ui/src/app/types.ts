@@ -77,7 +77,6 @@ export interface WorkerProfile {
   job: WorkerProfileJob;
   domain?: string;
   model: string;
-  model_explicit?: boolean;
   reasoning_effort: ReasoningEffort;
   prompt?: string;
 }
@@ -525,8 +524,6 @@ export interface SettingsView {
   recall_mode: "faster" | "accurate";
   recall_judge_model: string;
   consolidation_time: string;
-  background_model?: string | null;
-  effective_background_model?: string;
   consolidation_model: string;
   consolidation_reasoning_effort: ReasoningEffort;
   effective_consolidation_model: string;

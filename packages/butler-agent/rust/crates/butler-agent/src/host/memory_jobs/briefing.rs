@@ -208,8 +208,12 @@ fn settings(
     catalog: &butler_models::models::ModelCatalogSnapshot,
 ) -> BriefingSettings {
     let locale = locale_preference(config, app_settings);
-    let selected = background_model_preference(config, app_settings, catalog);
-    let Some(selected) = selected.map(str::trim).filter(|value| !value.is_empty()) else {
+    let selected = model_preference(config, app_settings);
+    let Some(selected) = selected
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
         return unavailable(locale, "missing_model");
     };
     let selected = butler_models::models::parse_model_ref(selected);
@@ -325,35 +329,4 @@ fn is_default_model_sentinel(value: &Value) -> bool {
 
 fn unavailable(locale: String, reason: &'static str) -> BriefingSettings {
     BriefingSettings::Unavailable { locale, reason }
-}
-
-fn background_model_preference<'a>(
-    config: &'a Value,
-    app_settings: Option<&'a Value>,
-    catalog: &butler_models::models::ModelCatalogSnapshot,
-) -> Option<&'a str> {
-    let fallback = model_preference(config, app_settings).and_then(Value::as_str);
-    let explicit = first_non_null([
-        config.pointer("/personalization/profiling/extractorModel"),
-        config.get("consolidation_model"),
-        app_settings.and_then(|settings| settings.get("consolidation_model")),
-    ])
-    .and_then(Value::as_str);
-    butler_core::configuration::resolve_background_model(
-        explicit,
-        config
-            .pointer("/system/backgroundModel")
-            .and_then(Value::as_str),
-        fallback,
-        |value| {
-            catalog
-                .find_model_metadata(Some(value))
-                .is_some_and(|model| {
-                    model.runtime_supported
-                        && model.enabled != Some(false)
-                        && model.registered != Some(false)
-                        && !model.is_image_output()
-                })
-        },
-    )
 }

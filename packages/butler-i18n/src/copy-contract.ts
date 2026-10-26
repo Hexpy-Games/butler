@@ -1523,8 +1523,6 @@ export interface AppCopy {
       searchPlanningEnabled: string;
       searchDefaultDepth: string;
       butlerModel: string;
-      backgroundModel: string;
-      backgroundModelUnset: string;
       butlerReasoning: string;
       consolidationModel: string;
       consolidationTime: string;
@@ -1632,7 +1630,6 @@ export interface AppCopy {
       timezoneEmpty: string;
     };
     descriptions: {
-      backgroundModel: string;
       runtimeSupportedModelsOnly: string;
       chatAccess: string;
       scheduleAccess: string;

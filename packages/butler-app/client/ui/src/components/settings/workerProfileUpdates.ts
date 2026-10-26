@@ -66,7 +66,6 @@ export function createWorkerProfileInNextSlot(
     label: slot.label,
     enabled: true,
     job: { kind: "builtin", job: "coding" },
-    model_explicit: false,
     model: defaultProfile?.model ?? fallbackModel?.model_ref ?? "",
     reasoning_effort:
       defaultProfile?.reasoning_effort ??
@@ -106,9 +105,10 @@ interface WorkerProfileJobSelection {
   persistent: boolean;
 }
 
-type WorkerProfileModelSelection = Pick<
-  WorkerProfile, "model" | "model_explicit" | "reasoning_effort"
->;
+interface WorkerProfileModelSelection {
+  model: string;
+  reasoning_effort: ReasoningEffort;
+}
 
 function isBuiltinJobName(value: string): value is WorkerProfileBuiltinJobName {
   return (WORKER_PROFILE_BUILTIN_JOBS as string[]).includes(value);
@@ -152,7 +152,6 @@ export function selectWorkerProfileModel(
   );
   return {
     model: modelRef,
-    model_explicit: true,
     reasoning_effort: keepsEffort
       ? currentEffort
       : (nextModel?.default_reasoning_effort ?? "medium"),

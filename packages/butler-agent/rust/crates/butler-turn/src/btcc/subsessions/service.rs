@@ -86,10 +86,6 @@ pub trait WorkerProfileReader: Send + Sync {
     fn max_simultaneous_workers(&self) -> PortFuture<'_, u64> {
         Box::pin(async { Ok(10) })
     }
-    /// Resolve the inherited model for a background child before its binding is built.
-    fn background_model(&self, fallback: String) -> PortFuture<'_, String> {
-        Box::pin(async move { Ok(fallback) })
-    }
     /// Every configured profile.
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>>;
     /// The profile with `profile_id`, or the default profile.
@@ -208,7 +204,7 @@ impl SubsessionService {
     /// delegation is idempotent: a repeated request replays the stored one.
     pub async fn delegate_steward(
         &self,
-        mut request: StewardDelegationRequest,
+        request: StewardDelegationRequest,
         reviewed: &WorkView,
     ) -> Result<Value, BtccError> {
         let parent = self
@@ -230,7 +226,6 @@ impl SubsessionService {
             .find(|binding| binding.transport == "app" && !binding.peer_id.trim().is_empty())
             .map(|binding| binding.peer_id.clone())
             .ok_or_else(|| error(BtccCode::ParentAppBindingRequired))?;
-        request.model_ref = self.profiles.background_model(request.model_ref).await?;
         let identity = packets::steward_identity(&request, reviewed, accepted);
         let delegation_id = delegation::delegation_id(&delegation::STEWARD, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {

@@ -64,32 +64,26 @@ test("transition helpers cover job selection and model reasoning rules", () => {
 
   expect(selectWorkerProfileModel([m1], m1.model_ref, "low")).toEqual({
     model: m1.model_ref,
-    model_explicit: true,
     reasoning_effort: "low",
   });
   expect(selectWorkerProfileModel([m1], m1.model_ref, "none")).toEqual({
     model: m1.model_ref,
-    model_explicit: true,
     reasoning_effort: "none",
   });
   expect(selectWorkerProfileModel([m2], m2.model_ref, "medium")).toEqual({
     model: m2.model_ref,
-    model_explicit: true,
     reasoning_effort: "medium",
   });
   expect(selectWorkerProfileModel([m2], m2.model_ref, "low")).toEqual({
     model: m2.model_ref,
-    model_explicit: true,
     reasoning_effort: "high",
   });
   expect(selectWorkerProfileModel([localBudgeted], localBudgeted.model_ref, "none")).toEqual({
     model: localBudgeted.model_ref,
-    model_explicit: true,
     reasoning_effort: "low",
   });
   expect(selectWorkerProfileModel([localPlain], localPlain.model_ref, "none")).toEqual({
     model: localPlain.model_ref,
-    model_explicit: true,
     reasoning_effort: "none",
   });
 });

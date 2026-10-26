@@ -134,7 +134,6 @@ async fn load(
     let model_display_names =
         display_names(catalog.models.iter().chain(&catalog.registered_models));
     let native_settings = serde_json::json!({
-        "background_model": read.config.pointer("/system/backgroundModel"),
         "model_display_names": model_display_names,
         "browsing_auto": read.catalog.browsing_auto(),
         "routine_default": {"model": catalog.default_model_ref, "effort": catalog.default_reasoning_effort},

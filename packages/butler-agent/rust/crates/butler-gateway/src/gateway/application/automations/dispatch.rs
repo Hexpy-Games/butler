@@ -264,18 +264,7 @@ impl AppApplication {
     /// Without a snapshot or a selectable model the run follows the chat's model.
     fn automation_model_override(&self, model: Option<&str>) -> Option<Value> {
         let facts = self.dependencies.settings_facts.snapshot().ok()?;
-        let background = facts
-            .native_settings
-            .get("background_model")
-            .and_then(Value::as_str);
-        let explicit = model.and_then(|value| settings::selectable_model_ref(&facts, value));
-        butler_core::configuration::resolve_background_model(
-            explicit.as_deref(),
-            background,
-            None,
-            |value| settings::selectable_background_model_ref(&facts, value).is_some(),
-        )
-        .map(|value| Value::String(value.to_owned()))
+        settings::selectable_model_ref(&facts, model?).map(Value::String)
     }
 
     async fn complete_fresh_run(

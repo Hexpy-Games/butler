@@ -26,7 +26,6 @@ mod attachment_types;
 mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
-mod background_model;
 mod briefing_effort;
 mod briefing_shutdown;
 mod browse_executor;
@@ -85,6 +84,7 @@ mod durable_files;
 mod embed_download;
 mod error_library;
 mod favicons;
+mod feature_models;
 mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]

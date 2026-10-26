@@ -1734,8 +1734,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       searchPlanningEnabled: "Use smart search planning",
       searchDefaultDepth: "Default search depth",
       butlerModel: "Model",
-      backgroundModel: "Background model",
-      backgroundModelUnset: "Same as main model",
       butlerReasoning: "Reasoning",
       consolidationModel: "Chat memory model",
       consolidationTime: "Time",
@@ -1844,7 +1842,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       timezoneEmpty: "No matching time zones",
     },
     descriptions: {
-      backgroundModel: "Schedules, memory upkeep and background work run on this model.",
       runtimeSupportedModelsOnly:
         "Only models from currently runnable providers are shown.",
       scheduleAccess: "New schedules run with this permission.",

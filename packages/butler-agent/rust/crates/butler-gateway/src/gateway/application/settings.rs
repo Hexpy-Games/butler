@@ -12,7 +12,6 @@ mod command_sandbox;
 mod logging;
 pub use command_sandbox::command_sandbox_enabled;
 pub use logging::{producer_config as producer_log_config, startup_config as startup_log_config};
-mod background_model;
 mod background_sources;
 mod composer_decoration;
 mod controls;
@@ -35,7 +34,6 @@ mod worker_profiles;
 use super::wallpapers::{self, WallpaperOrigin};
 use super::{AppSettingsFacts, EventSubscribers, events, storage::AppStorageError};
 use crate::gateway::{AppWallpaperScope, MessageSendRequest};
-pub(super) use background_model::selectable_background_model_ref;
 use butler_core::public_text::trim_js_whitespace;
 use butler_turn::btcc::{ControlResolution, ControlSource};
 use controls::{

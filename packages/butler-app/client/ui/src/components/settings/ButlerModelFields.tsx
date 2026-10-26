@@ -10,7 +10,6 @@ import { ReasoningSelect } from "./ReasoningSelect";
 import { ratioToPercent } from "./settingsUtils";
 import { useLocalReasoningBudget } from "./hooks/useLocalReasoningBudget";
 import { useButlerModels } from "./hooks/useButlerModels";
-import { BackgroundModelSelect } from "./BackgroundModelSelect";
 import { ButlerPrimaryModelSelect } from "./ButlerPrimaryModelSelect";
 
 /** Butler model section: primary model (with Manage models), reasoning, context limit, local budget. */
@@ -106,7 +105,6 @@ export function ButlerModelFields() {
           }
         />
       )}
-      <BackgroundModelSelect models={models} draft={draft} onUpdate={updateSettings} />
     </>
   );
 }

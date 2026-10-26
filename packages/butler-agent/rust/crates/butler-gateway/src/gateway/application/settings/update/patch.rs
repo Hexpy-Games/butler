@@ -18,9 +18,6 @@ pub(super) fn project(
         output["consolidation_time"] = value.clone();
     }
     super::super::browsing::project(current, patch, facts, &mut output);
-    if let Some(output) = output.as_object_mut() {
-        super::super::background_model::project(output, facts);
-    }
     output
 }
 

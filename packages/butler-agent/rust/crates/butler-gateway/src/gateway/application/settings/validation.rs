@@ -10,7 +10,6 @@ const UPDATE_KEYS: &[&str] = &[
     "recall_mode",
     "recall_judge_model",
     "consolidation_model",
-    "background_model",
     "consolidation_time",
     "consolidation_reasoning_effort",
     "context_window_tokens",
@@ -84,7 +83,9 @@ pub(super) fn is_request(value: &Value) -> bool {
         || input
             .get("timezone")
             .is_some_and(|value| !is_iana_timezone(value))
-        || !valid_background_models(input)
+        || input
+            .get("consolidation_model")
+            .is_some_and(|value| !value.is_string())
         || input
             .get("consolidation_reasoning_effort")
             .is_some_and(|value| !is_reasoning(value))
@@ -224,18 +225,11 @@ fn is_worker_profiles(value: &Value) -> bool {
                     | "enabled"
                     | "job"
                     | "domain"
-                    | "model_explicit"
                     | "model"
                     | "reasoning_effort"
                     | "prompt"
             )
         }) {
-            return false;
-        }
-        if profile
-            .get("model_explicit")
-            .is_some_and(|v| !v.is_boolean())
-        {
             return false;
         }
         let Some(id) = profile.get("id").and_then(Value::as_str) else {
@@ -323,13 +317,4 @@ fn valid_time_of_day(value: &str) -> bool {
         && b[3..5].iter().all(u8::is_ascii_digit)
         && &b[0..2] <= b"23".as_slice()
         && &b[3..5] <= b"59".as_slice()
-}
-
-fn valid_background_models(input: &serde_json::Map<String, Value>) -> bool {
-    input
-        .get("background_model")
-        .is_none_or(|v| v.is_null() || v.is_string())
-        && input
-            .get("consolidation_model")
-            .is_none_or(Value::is_string)
 }
