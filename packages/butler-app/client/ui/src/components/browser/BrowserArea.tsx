@@ -43,9 +43,9 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
     void browserCall("scope", { value: false, owner: sessionId ? `conversation:${sessionId}` : "mine" });
   }, [sessionId]);
   const paneOwner = sessionId ? `conversation:${sessionId}` : "mine";
-  // Groups are keyed by their tabs' owner, so a group's + opens its tab with that owner.
-  const create = (owner: string, placeholder = false) => browserCall("create", owner === "mine"
-    ? { placeholder } : { owner, profile: "signed_out", placeholder });
+  // Groups are keyed by their tabs' owner, so a group's + opens its tab with that owner. A tab the user
+  // opens is the user's own browsing in every group: it keeps the user's sign-ins (main's default).
+  const create = (owner: string, placeholder = false) => browserCall("create", { owner, placeholder });
   // Opened with no tabs, the pane opens a new tab at once (its in-app new-tab page, address focused).
   // It is a placeholder: a page that opens in or moves into the group (Butler's, a link's) takes its place.
   useEffect(() => {
