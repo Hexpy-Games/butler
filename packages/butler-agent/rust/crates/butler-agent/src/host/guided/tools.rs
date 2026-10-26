@@ -183,6 +183,7 @@ pub(crate) struct GuidedTools {
     authority_consumed: Mutex<bool>,
     turn_taint: Mutex<butler_turn::btcc::TurnTaint>,
     attention_sent: Mutex<bool>,
+    instruction_run: Mutex<Option<butler_turn::btcc::ScheduleRunContext>>,
 }
 
 /// A guided tool invocation that violated its contract; becomes a BTCC error.
@@ -251,7 +252,6 @@ impl GuidedTools {
         binding: GuidedToolBinding,
     ) -> Result<Self, BtccError> {
         binding.validate_surface()?;
-        let described_ids = resume::restored_descriptions(restored);
         turn_guard::restore_web(&web_session, &binding.current_user_message, restored);
         Ok(Self {
             capabilities,
@@ -284,17 +284,9 @@ impl GuidedTools {
             browser_http: OnceCell::new(),
             turn_taint: Mutex::new(binding.turn_guard.initial_taint),
             attention_sent: Mutex::new(false),
+            instruction_run: Mutex::new(None),
             binding,
-            state: Mutex::new(State {
-                described_ids,
-                has_other_tool_result: restored.is_some_and(|saved| {
-                    saved
-                        .tool_results
-                        .iter()
-                        .any(|result| result.name != "resolve_ask")
-                }),
-                ..State::default()
-            }),
+            state: Mutex::new(resume::restored_state(restored)),
             resume: OnceCell::new(),
             authority_consumed: Mutex::new(false),
         })
@@ -370,7 +362,10 @@ impl ToolPort for GuidedTools {
                 + 'a,
         >,
     > {
-        Box::pin(async move { Box::pin(execute::execute(self, invocation, call)).await })
+        Box::pin(async move {
+            self.refresh_instruction_context().await?;
+            Box::pin(execute::execute(self, invocation, call)).await
+        })
     }
 
     fn record_unexecuted<'a>(

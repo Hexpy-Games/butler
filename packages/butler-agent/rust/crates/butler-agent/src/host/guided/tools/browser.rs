@@ -89,6 +89,7 @@ async fn execute_client(
     client: client::Client,
     mut args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    owner.refresh_instruction_context().await?;
     if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
         return preview::execute(owner, invocation, call, occurrence, client).await;
     }
