@@ -1843,7 +1843,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       timezoneEmpty: "No matching time zones",
     },
     descriptions: {
-      backgroundModel: "Runs schedules, memory upkeep and background work.",
+      backgroundModel: "Schedules, memory upkeep and background work run on this model.",
       runtimeSupportedModelsOnly:
         "Only models from currently runnable providers are shown.",
       scheduleAccess: "New schedules run with this permission.",

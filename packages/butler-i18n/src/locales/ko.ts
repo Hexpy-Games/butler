@@ -1847,7 +1847,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       timezoneEmpty: "일치하는 시간대가 없습니다",
     },
     descriptions: {
-      backgroundModel: "예약 작업, 기억 정리, 작업을 이 모델로 실행해요.",
+      backgroundModel: "예약 작업, 기억 정리, 작업을 이 모델로 실행합니다.",
       runtimeSupportedModelsOnly:
         "현재 실행 가능한 제공자의 모델만 표시합니다.",
       scheduleAccess: "새 예약 작업이 이 권한으로 실행됩니다.",

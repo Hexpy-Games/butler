@@ -20,7 +20,6 @@ export function BackgroundModelSelect({ models, draft, onUpdate }: BackgroundMod
       triggerTestClass="settings-background-model-select"
       value={draft.background_model ?? "default"}
       description={appCopy.settings.descriptions.backgroundModel}
-      controlWidth="full"
       onChange={(value) => { void onUpdate({ background_model: value }); }}
       options={[
         { value: "default", label: appCopy.settings.fields.backgroundModelUnset },
