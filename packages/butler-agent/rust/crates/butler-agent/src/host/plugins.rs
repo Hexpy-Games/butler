@@ -1,5 +1,7 @@
 //! Consent-bound local packages. No discovery, background jobs or startup spawns.
 mod capabilities;
+mod connector_manifest;
+mod connectors;
 mod coverage;
 mod inspect;
 mod inspection;
@@ -39,6 +41,7 @@ struct State {
     source_users: BTreeMap<String, BTreeSet<String>>,
 }
 pub(crate) struct Plugins {
+    connectors: Arc<connectors::Connectors>,
     authority: std::sync::OnceLock<Arc<butler_turn::btcc::PrincipalAuthority>>,
     root: PathBuf,
     safe_mode: bool,
@@ -79,7 +82,8 @@ impl Plugins {
             } else {
                 butler_platform::secrets::SecretStore::file(data.join("secrets/plugins.json"))
             };
-            Ok(Arc::new(Self {
+            Ok(Arc::new_cyclic(|weak| Self {
+                connectors: connectors::Connectors::new(weak.clone()),
                 authority: std::sync::OnceLock::new(),
                 root,
                 safe_mode,
@@ -158,6 +162,9 @@ impl Plugins {
 }
 pub(crate) struct Admin(pub Arc<Plugins>);
 impl PluginPort for Admin {
+    fn bind_connector_store(&self, store: butler_core::plugins::ConnectorStoreRef) {
+        self.0.connectors.bind(store);
+    }
     fn safe_mode(&self) -> bool {
         self.0.safe_mode
     }
@@ -167,11 +174,18 @@ impl PluginPort for Admin {
     fn execute(&self, action: String, id: Option<String>, input: Value) -> PluginFuture<'_> {
         let owner = self.0.clone();
         Box::pin(async move {
+            if action.starts_with("connector") {
+                return owner.connectors.admin(&action, id, input).await;
+            }
             let _permit = owner.writes.acquire_owned().await;
             if action == "uninstall" {
                 owner.revoke_grants(id.as_deref(), &input).await?;
+                owner.connectors.stop_plugin(id.as_deref()).await;
             }
-            tokio::task::spawn_blocking(move || match action.as_str() {
+            let runtime = owner.connectors.clone();
+            let changed_action = action.clone();
+            let changed_id = id.clone();
+            let result = tokio::task::spawn_blocking(move || match action.as_str() {
                 "inspect" => owner.inspect(&input),
                 "install" => owner.install(&input),
                 "check" => owner.check(id.as_deref(), &input),
@@ -185,7 +199,14 @@ impl PluginPort for Admin {
                 _ => Err(error("plugin_action_invalid")),
             })
             .await
-            .map_err(|_| error("plugin_task_failed"))?
+            .map_err(|_| error("plugin_task_failed"))?;
+            if result.is_ok() {
+                runtime
+                    .plugin_changed(&changed_action, changed_id.as_deref())
+                    .await;
+                runtime.reconcile().await;
+            }
+            result
         })
     }
 }

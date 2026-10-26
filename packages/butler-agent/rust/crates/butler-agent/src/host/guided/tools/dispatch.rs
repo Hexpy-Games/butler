@@ -285,6 +285,26 @@ async fn domain_tool(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
+    if matches!(
+        call.name.as_str(),
+        "connector_fetch"
+            | "connector_rule_list"
+            | "connector_rule_remove"
+            | "connector_rule_set"
+            | "connector_triage"
+    ) {
+        let result = owner
+            .mcp_client
+            .connector_tool(
+                call.name.clone(),
+                Value::Object(call.arguments.clone()),
+                owner.binding.access_mode == butler_turn::btcc::AccessMode::ReadOnly,
+            )
+            .await;
+        return Some(encoded(
+            &result.unwrap_or_else(|e| json!({"ok":false,"error":{"code":e.code}})),
+        ));
+    }
     if super::documents::supports(&call.name) {
         return Some(super::documents::execute(owner, call, invocation).await);
     }

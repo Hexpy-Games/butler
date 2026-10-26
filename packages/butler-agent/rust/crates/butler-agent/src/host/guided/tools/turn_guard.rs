@@ -67,7 +67,7 @@ fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) 
         .get("attachments")
         .and_then(Value::as_array)
         .is_some_and(|items| !items.is_empty());
-    if resumed || attached {
+    if resumed || attached || context["messageOrigin"] == "connector" {
         TurnTaint::External
     } else {
         TurnTaint::Clean
@@ -100,6 +100,7 @@ fn reads_external(name: &str, args: &Value) -> bool {
                 | "web_read"
                 | "call_mcp_tool"
                 | "read_mcp_resource"
+                | "connector_fetch"
                 | "browser_open"
                 | "browser_observe"
                 | "browser_act"

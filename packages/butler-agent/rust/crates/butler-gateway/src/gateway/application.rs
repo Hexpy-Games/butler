@@ -14,6 +14,7 @@ mod authority_permissions;
 mod authority_recovery;
 mod automations;
 mod briefing_snapshot;
+mod connectors;
 mod context_details;
 mod contracts;
 mod errors;
@@ -394,6 +395,11 @@ impl AppApplication {
     }
 
     pub async fn close(&self) -> Result<(), GatewayApplicationError> {
+        if let Some(port) = &self.dependencies.plugins {
+            port.execute("connector_stop".into(), None, serde_json::json!({}))
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
         self.cancel_updates();
         self.session_titles.close().await;
         self.smart_groups.close().await;

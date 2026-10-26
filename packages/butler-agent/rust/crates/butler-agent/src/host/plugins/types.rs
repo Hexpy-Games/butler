@@ -10,6 +10,8 @@ pub(crate) struct CapabilitySet {
     pub hooks: BTreeSet<HookCapability>,
     pub secrets: BTreeSet<SecretField>,
     pub skills: BTreeSet<String>,
+    #[serde(default)]
+    pub connectors: BTreeMap<String, butler_core::plugins::ConnectorDefinition>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Executable {
@@ -50,6 +52,8 @@ pub(crate) struct Package {
     pub hooks: Vec<butler_core::hooks::HookDefinition>,
     pub declared: CapabilitySet,
     pub compatibility: Vec<Compatibility>,
+    #[serde(default)]
+    pub connectors: Vec<butler_core::plugins::ConnectorDefinition>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Server {
@@ -111,6 +115,8 @@ pub(crate) struct Installed {
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Registry {
     pub revision: u64,
+    #[serde(default)]
+    pub accounts: BTreeMap<String, butler_core::plugins::ConnectorAccount>,
     pub plugins: BTreeMap<String, Installed>,
     #[serde(default)]
     pub registries: BTreeMap<String, TeamRegistry>,

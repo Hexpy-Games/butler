@@ -5,6 +5,7 @@ mod assets;
 pub(in crate::gateway::application) mod canon;
 pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
+mod connectors;
 mod core;
 mod documents;
 mod library;
@@ -191,6 +192,7 @@ fn migrate_app_features(
     session_reads::create(connection)?;
     monitoring::migrate(connection)?;
     pending_asks::create(connection)?;
+    connectors::create(connection)?;
     library::recover(connection, butler_data)?;
     Ok(())
 }

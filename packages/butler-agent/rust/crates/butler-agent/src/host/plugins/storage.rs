@@ -227,6 +227,7 @@ impl Plugins {
             .plugins
             .remove(id)
             .ok_or_else(|| error("plugin_not_found"))?;
+        next.accounts.retain(|_, account| account.plugin != id);
         next.revision += 1;
         self.save(&next)?;
         state.registry = next;
