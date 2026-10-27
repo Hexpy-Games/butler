@@ -90,7 +90,9 @@
   inset: calc(var(--page-card-top) - var(--border-hairline))
     calc(var(--border-hairline) * -1)
     calc(var(--page-card-note, 0px) - var(--border-hairline));
-  border-radius: calc(var(--page-card-radius) + var(--border-hairline));
+  border-radius: calc(
+    var(--page-card-radius) + var(--border-hairline) / var(--ui-scale)
+  );
   content: "";
   pointer-events: none;
 }
@@ -214,7 +216,7 @@
   overflow: hidden;
   --page-card-content-radius: max(
     0px,
-    var(--page-card-radius) - var(--border-hairline)
+    var(--page-card-radius) - var(--border-hairline) / var(--ui-scale)
   );
 
   border-radius: var(--page-card-content-radius) var(--page-card-content-radius)

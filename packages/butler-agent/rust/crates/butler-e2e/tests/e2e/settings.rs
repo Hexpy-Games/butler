@@ -375,3 +375,25 @@ async fn set_05_concurrent_settings_edits_keep_every_write() -> Result<(), Harne
     check(&s.gw.settings().await?);
     s.finish().await
 }
+
+/// Text size defaults, every supported value persists, and malformed values are refused.
+#[tokio::test]
+async fn text_size_round_trip() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("SET-TEXT-SIZE")?.start().await?;
+    assert_eq!(s.gw.settings().await?["text_size"], "default");
+    for value in ["large", "larger", "default"] {
+        let reply = s.gw.patch("/settings", json!({"text_size": value})).await?;
+        assert_eq!(reply.status, 200, "{}", reply.text);
+        assert_eq!(reply.data()["text_size"], value);
+        assert_eq!(s.gw.settings().await?["text_size"], value);
+        s.restart().await?;
+        assert_eq!(s.gw.settings().await?["text_size"], value);
+    }
+    for value in [json!("huge"), json!(1.3), Value::Null] {
+        let reply = s.gw.patch("/settings", json!({"text_size": value})).await?;
+        assert_eq!(reply.status, 400, "{}", reply.text);
+        assert_eq!(s.gw.settings().await?["text_size"], "default");
+    }
+    s.finish().await
+}
