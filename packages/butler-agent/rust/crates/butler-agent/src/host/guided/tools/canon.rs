@@ -13,7 +13,7 @@ pub(super) async fn execute(
     let decision = super::access::for_kind(
         owner,
         if writing {
-            CapabilityKind::ProjectRecord
+            CapabilityKind::CanonProposal
         } else {
             CapabilityKind::InternalRead
         },

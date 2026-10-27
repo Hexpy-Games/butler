@@ -11,6 +11,7 @@ export function CanonProposalChanges({ changes, ko }: { changes: CanonProposal["
     <Typo.Caption tone="secondary">{labels[change.op]}</Typo.Caption>
     {!change.op.startsWith("epic.") && change.title && <Typo.PanelTitle wrap="anywhere">{change.title}</Typo.PanelTitle>}
     {!change.op.startsWith("epic.") && (change.body ?? change.description) && <EpicMarkdown epicId="" description={change.body ?? change.description ?? ""} density="compact" />}
+    {change.op === "epic.move" && <KeyValueRow label={ko ? "대상 계획" : "Destination plan"} value={change.destination_plan_title ?? (ko ? "백로그" : "Backlog")} />}
     {change.status && <KeyValueRow label={appCopy.canon.status} value={appCopy.canon.statuses[change.status as keyof typeof appCopy.canon.statuses] ?? (change.status === "closed" ? ko ? "닫힘" : "Closed" : ko ? "열림" : "Open")} />}
     {change.assignee !== undefined && <KeyValueRow label={appCopy.canon.assignee} value={change.assignee === "app-user" ? appCopy.canon.me : change.assignee ?? appCopy.canon.none} />}
     {change.due_on !== undefined && <KeyValueRow label={appCopy.canon.dueOn} value={change.due_on ?? appCopy.canon.none} />}

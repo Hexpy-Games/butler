@@ -1,3 +1,4 @@
+import { captureDestinationVariants } from "../support/canon-registration-destinations.ts";
 // test-category: race
 import { auditCanonCardFocus, captureRegistrationVariants } from "../support/canon-registration-cards.ts";
 import { strict as assert } from "node:assert";
@@ -108,7 +109,8 @@ try {
       await page.screenshot({ path: join(shots, `${baseline ? "before" : "after"}-1440-${theme}-sidebar.png`) });
     }
     await captureRegistrationVariants(page, server, pending.asks[0]!, projectId, shots, baseline);
-    console.log(JSON.stringify({ result: "PASS", phase: baseline ? "before" : "after", screenshots: baseline ? 16 : 17, draftSelect: !baseline, registerAndOpen: !baseline }));
+    await captureDestinationVariants(page, server, pending.asks[0]!, projectId, shots, baseline);
+    console.log(JSON.stringify({ result: "PASS", phase: baseline ? "before" : "after", screenshots: baseline ? 32 : 33, draftSelect: !baseline, registerAndOpen: !baseline }));
   } catch (error) {
     console.error(JSON.stringify({ modelCalls: server.stubModelCalls.length, diagnostics: server.diagnostics() }));
     throw error;

@@ -1,7 +1,7 @@
 //! Keyed live projection for transcript cards and independent ask consumers.
 use super::*;
 
-pub fn detail(db: &Connection, id: &str) -> Result<Value> {
+pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
     let row = get(db, id)?;
     let document = &row["document"];
     let mut changes = document["changes"]
@@ -21,6 +21,13 @@ pub fn detail(db: &Connection, id: &str) -> Result<Value> {
         }
     }
     for change in &mut changes {
+        if change["op"] == "epic.move" {
+            change["destination_plan_title"] = change["plan_id"]
+                .as_str()
+                .map(|id| read_plan(db, id).map(|p| p["title"].clone()))
+                .transpose()?
+                .unwrap_or(Value::Null);
+        }
         if let Some(ids) = change["work_ids"].as_array() {
             change["order_titles"] = json!(
                 ids.iter()
@@ -47,7 +54,7 @@ pub fn detail(db: &Connection, id: &str) -> Result<Value> {
         .transpose()?;
     Ok(
         json!({"proposal_id":row["id"],"session_id":row["session_id"],"state":row["state"],
-        "summary":row["summary"],"target_label":target(document,plan.as_ref()),
+        "summary":row["summary"],"target_label":super::target::label(document, &changes, plan.as_ref(), language),
         "project":if row["project_id"].is_null() || (row["state"]!="applied" && document["new_name"].is_string()){json!({"new_name":document["new_name"].as_str().unwrap_or_default()})}else{json!({"id":row["project_id"],"name":""})},
         "plan":plan,"changes":changes,"epics":epics,"created_at":row["created_at"],
         "resolved_at":row["resolved_at"],"resolved_by":row["resolved_by"]}),
@@ -92,31 +99,12 @@ fn epic(db: &Connection, change: &Value) -> Result<Value> {
         "tags":tags,"attachments":attachments}),
     )
 }
-pub fn target(document: &Value, plan: Option<&Value>) -> String {
-    if !document["changes"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .any(|c| c["op"] == "epic.create")
-    {
-        return document["summary"].as_str().unwrap_or_default().to_owned();
-    }
-    if let Some(name) = document["new_name"].as_str() {
-        return format!("새 프로젝트 ‘{name}’ 만들고 과제 등록");
-    }
-    if let Some(plan) = plan {
-        return format!(
-            "‘{}’에 과제 등록",
-            plan["title"].as_str().unwrap_or_default()
-        );
-    }
-    "백로그에 과제 등록".into()
-}
 pub fn open(
     db: &Connection,
     session: Option<&str>,
     limit: usize,
     before: Option<&str>,
+    language: &str,
 ) -> Result<Vec<Value>> {
     let limit = i64::try_from(limit).map_err(|_| Error::Invalid("limit too large"))?;
     let records = if let Some(session) = session {
@@ -127,7 +115,7 @@ pub fn open(
         rows(db, queries::OPEN_PAGE, [limit])?
     };
     records.into_iter().map(|r| {
-        let detail = detail(db,text(&r,"id")?)?;
+        let detail = detail(db,text(&r,"id")?,language)?;
         Ok(json!({"ask_id":format!("canon:{}",text(&r,"id")?),"kind":"canon_proposal",
             "session_id":r["session_id"],"source_session_id":r["session_id"],"source_turn_id":r["source_turn_id"],
             "source_message_id":null,"source_call_id":r["source_call_id"],"deferred":false,

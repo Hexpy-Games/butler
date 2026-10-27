@@ -5745,7 +5745,7 @@
       "definition": {
         "type": "function",
         "name": "resolve_ask",
-        "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers or drops a question listed under Open asks, before acting on the reply. quote must be the user's own words from the current message; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here.",
+        "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers or drops a question listed under Open asks, before acting on the reply. quote must be the user's own words from the current message; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here. For a canon_proposal, use accepted or declined without answer.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5758,7 +5758,9 @@
               "type": "string",
               "enum": [
                 "answered",
-                "dropped"
+                "dropped",
+                "accepted",
+                "declined"
               ],
               "description": "answered when the user answered the question; dropped when they no longer want it."
             },
@@ -13196,7 +13198,7 @@
     "resolve_ask": {
       "type": "function",
       "name": "resolve_ask",
-      "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers or drops a question listed under Open asks, before acting on the reply. quote must be the user's own words from the current message; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here.",
+      "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers or drops a question listed under Open asks, before acting on the reply. quote must be the user's own words from the current message; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here. For a canon_proposal, use accepted or declined without answer.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -13209,7 +13211,9 @@
             "type": "string",
             "enum": [
               "answered",
-              "dropped"
+              "dropped",
+              "accepted",
+              "declined"
             ],
             "description": "answered when the user answered the question; dropped when they no longer want it."
           },

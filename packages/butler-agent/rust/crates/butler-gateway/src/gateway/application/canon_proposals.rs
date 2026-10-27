@@ -3,6 +3,7 @@ mod projects;
 pub(super) use projects::recover;
 mod read;
 use super::*;
+pub(super) use read::language;
 use serde_json::json;
 
 pub(super) async fn execute(
@@ -127,7 +128,12 @@ pub(super) async fn resolve(
             json!({"id":id,"project_id":project,"by":by}),
         )
         .await;
-    projects::finish(app, &id, result.as_ref().is_ok_and(|r| r["ok"] == true)).await?;
+    let applied = result.as_ref().is_ok_and(|r| r["ok"] == true);
+    #[cfg(feature = "e2e-fixtures")]
+    if applied {
+        super::canon::hold(app, "canon_project_publish").await?;
+    }
+    projects::finish(app, &id, applied).await?;
     result
 }
 fn field(input: &Value, key: &str) -> Result<String, GatewayApplicationError> {

@@ -11,7 +11,7 @@ mod requires_e2e_fixtures {
         let release = s.sandbox.data.join("canon-release");
         s.agent
             .launch
-            .set_env("BUTLER_E2E_HOLD_POINT", "canon_write");
+            .set_env("BUTLER_E2E_HOLD_POINT", "canon_project_publish");
         s.agent
             .launch
             .set_env("BUTLER_E2E_HOLD_RELEASE", release.to_string_lossy());
@@ -33,6 +33,11 @@ mod requires_e2e_fixtures {
         }
         let projects = data(s.gw.get("/projects").await?, 200);
         assert!(!projects.to_string().contains("복구 프로젝트"));
+        let committed = read(&s, &id).await?;
+        assert_eq!(
+            committed["state"], "applied",
+            "apply must commit before the crash"
+        );
         s.agent.kill9()?;
         let _ = accepting.await;
         std::fs::write(&release, b"continue")?;

@@ -26,12 +26,13 @@ impl AppApplication {
         let mut asks = self
             .authority_ask_page(owner.clone(), limit + 1, before.clone())
             .await?;
+        let language = super::canon_proposals::language(self).await?;
         let canon = self
             .dependencies
             .canon
             .proposal(
                 "open".into(),
-                json!({"session_id":owner,"limit":limit+1,"before":before}),
+                json!({"session_id":owner,"limit":limit+1,"before":before,"language":language}),
             )
             .await?;
         let canon: Vec<PendingAsk> =

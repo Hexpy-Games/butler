@@ -153,7 +153,7 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         btcc.execute("INSERT INTO canon_intents(op_id,kind,payload_json,state,revision,created_at) VALUES(?1,'canon_conversation',?2,'pending',0,0)", rusqlite::params![op,payload.to_string()])?;
     }
     btcc.execute(
-        "INSERT OR IGNORE INTO canon_session_epics(session_id,epic_id,bound_at,bound_by,origin) VALUES(?1,?2,0,'{}','user')",
+        "INSERT OR IGNORE INTO canon_session_epics(session_id,epic_id,bound_at,bound_by,origin,is_home) VALUES(?1,?2,0,'{}','user',1)",
         rusqlite::params![owner, other["id"].as_str()],
     )?;
     drop(btcc);

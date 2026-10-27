@@ -156,6 +156,15 @@ pub fn edit_work(
     read_work(tx, id)
 }
 pub fn bind_session(tx: &Transaction<'_>, ctx: &Context, id: &str, session: &str) -> Result<()> {
+    bind_session_with_home(tx, ctx, id, session, true)
+}
+pub(super) fn bind_session_with_home(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    id: &str,
+    session: &str,
+    home: bool,
+) -> Result<()> {
     read_work(tx, id)?;
     let origin = if ctx.actor["via"] == "butler" {
         "butler"
@@ -164,7 +173,7 @@ pub fn bind_session(tx: &Transaction<'_>, ctx: &Context, id: &str, session: &str
     };
     if tx.execute(
         sql::BIND_SESSION,
-        params![session, id, ctx.now, ctx.actor.to_string(), origin],
+        params![session, id, ctx.now, ctx.actor.to_string(), origin, home],
     )? > 0
     {
         event(

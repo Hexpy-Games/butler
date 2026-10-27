@@ -36,7 +36,7 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
     let has_home: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('canon_session_epics') WHERE name='is_home')", [], |r|r.get(0))?;
     if !has_home {
         connection.execute_batch("ALTER TABLE canon_session_epics ADD COLUMN is_home INTEGER NOT NULL DEFAULT 0 CHECK(is_home IN (0,1));
-            UPDATE canon_session_epics SET is_home=1 WHERE rowid IN (SELECT MIN(rowid) FROM canon_session_epics GROUP BY epic_id)")?;
+            UPDATE canon_session_epics SET is_home=1")?;
     }
     connection.execute_batch(include_str!("work_schema/indexes.sql"))
 }

@@ -27,11 +27,7 @@ impl Reminders {
             self.entries.push(entry);
         }
     }
-    pub(in crate::host::guided) fn has_canon(&self) -> bool {
-        self.entries
-            .iter()
-            .any(|v| v["kind"] == "canon_proposal" && v["resolved_at"].is_null())
-    }
+
     pub(in crate::host::guided) fn remove(&mut self, ask_id: &str) {
         self.entries.retain(|v| v["ask_id"] != ask_id);
     }

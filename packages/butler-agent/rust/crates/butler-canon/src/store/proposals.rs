@@ -3,6 +3,7 @@ mod apply;
 mod operations;
 pub mod queries;
 pub mod specs;
+mod target;
 pub mod view;
 use super::*;
 pub use apply::apply;
@@ -83,8 +84,7 @@ pub fn transition(
 }
 
 pub fn bind(tx: &Transaction<'_>, ctx: &Context, epic: &str, session: &str) -> Result<()> {
-    // bind_session only inserts canon_session_epics. It never elects a home.
-    super::bind_session(tx, ctx, epic, session)
+    super::entities::bind_session_with_home(tx, ctx, epic, session, false)
 }
 
 fn iso(db: &Connection, now: i64) -> Result<String> {

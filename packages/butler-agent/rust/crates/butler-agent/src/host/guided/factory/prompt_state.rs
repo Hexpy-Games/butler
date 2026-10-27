@@ -28,11 +28,8 @@ pub(super) async fn surface(
     ),
     BtccError,
 > {
-    let mut tools = factory.tool_surface(phase).await?;
+    let tools = factory.tool_surface(phase).await?;
     let reminders = reminders(factory, turn, &phase.execution_policy.role).await?;
-    if reminders.lock().has_canon() {
-        super::surface::with_canon_settlements(&mut phase.provider_tools, &mut tools);
-    }
     Ok((tools, reminders))
 }
 async fn reminders(
@@ -53,7 +50,7 @@ async fn reminders(
         .documents
         .canon_storage()
         .canon_read(move |db| {
-            butler_canon::store::open_canon_proposals(db, Some(&owner), 201, None)
+            butler_canon::store::open_canon_proposals(db, Some(&owner), 201, None, "en")
         })
         .await
         .map_err(|e| BtccError::relayed(e.code(), e.message()))?;

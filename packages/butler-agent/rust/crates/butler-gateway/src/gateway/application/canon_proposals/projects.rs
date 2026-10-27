@@ -31,12 +31,13 @@ pub(super) async fn prepare(
         project.clone(),
         workspace.to_string_lossy().into_owned(),
     );
+    let reservation = id.clone();
     let by = by.map(str::to_owned);
     let now = app.dependencies.identity_clock.now_iso();
     app.storage
         .execute(move |db| {
             db.execute(
-                "INSERT OR IGNORE INTO app_canon_proposal_projects VALUES(?1,?2,?3,?4,?5,?6)",
+                "INSERT OR IGNORE INTO app_canon_proposal_projects(proposal_id,project_id,name,workspace,created_at,resolved_by) VALUES(?1,?2,?3,?4,?5,?6)",
                 params![id, project_copy, name, workspace_text, now, by],
             )
             .map_err(AppStorageError::sqlite)?;
@@ -44,10 +45,26 @@ pub(super) async fn prepare(
         })
         .await
         .map_err(app_error)?;
-    tokio::task::spawn_blocking(move || std::fs::create_dir_all(workspace))
-        .await
-        .map_err(GatewayApplicationError::internal_from)?
-        .map_err(GatewayApplicationError::internal_from)?;
+    let created = tokio::task::spawn_blocking(move || {
+        if let Some(parent) = workspace.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        match std::fs::create_dir(workspace) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(error) => Err(error),
+        }
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?
+    .map_err(GatewayApplicationError::internal_from)?;
+    if created {
+        let id = reservation;
+        app.storage.execute(move |db| {
+            db.execute("UPDATE app_canon_proposal_projects SET workspace_created=1 WHERE proposal_id=?1", [id]).map_err(AppStorageError::sqlite)?;
+            Ok(())
+        }).await.map_err(app_error)?;
+    }
     Ok(project)
 }
 pub(super) async fn finish(
@@ -58,20 +75,41 @@ pub(super) async fn finish(
     let id = id.to_owned();
     let clock = app.dependencies.identity_clock.clone();
     let subs = app.subscribers.clone();
-    app.storage.execute(move |db| {
+    let cleanup = app.storage.execute(move |db| {
+        let mut cleanup = None;
         let tx=db.savepoint().map_err(AppStorageError::sqlite)?;
-        let row:Option<(String,String,String,String)>=tx.query_row("SELECT project_id,name,workspace,created_at FROM app_canon_proposal_projects WHERE proposal_id=?1",[&id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(AppStorageError::sqlite)?;
-        if let Some((project,name,workspace,created))=row {
+        let row:Option<(String,String,String,String,bool)>=tx.query_row("SELECT project_id,name,workspace,created_at,workspace_created FROM app_canon_proposal_projects WHERE proposal_id=?1",[&id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).optional().map_err(AppStorageError::sqlite)?;
+        if let Some((project,name,workspace,created,workspace_created))=row {
             if success {
                 tx.execute("INSERT OR IGNORE INTO projects(id,display_name,status,workspace_path,workspace_label,safe_path_label,ledger_project_id,created_at,updated_at) VALUES(?1,?2,'active',?3,?2,?2,?1,?4,?4)",params![project,name,workspace,created]).map_err(AppStorageError::sqlite)?;
                 let row=super::super::projects::rows::active_by_id(&tx,&project)?.ok_or_else(||AppStorageError::new(super::super::storage::AppStorageCode::ProjectCreationFailed,"Project missing"))?;
                 let summary=super::super::projects::rows::summary(row,None);
                 events::append(&tx,&subs,"project.created",None,service::map(&json!({"project":summary}))?,&clock.now_iso())?;
             }
+            if !success && workspace_created { cleanup = Some(workspace); }
             tx.execute("DELETE FROM app_canon_proposal_projects WHERE proposal_id=?1",[id]).map_err(AppStorageError::sqlite)?;
         }
-        tx.commit().map_err(AppStorageError::sqlite)
-    }).await.map_err(app_error)
+        tx.commit().map_err(AppStorageError::sqlite)?;
+        Ok(cleanup)
+    }).await.map_err(app_error)?;
+    if let Some(workspace) = cleanup {
+        tokio::task::spawn_blocking(move || match std::fs::remove_dir(workspace) {
+            Ok(()) => Ok(()),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+                ) =>
+            {
+                Ok(())
+            }
+            Err(error) => Err(error),
+        })
+        .await
+        .map_err(GatewayApplicationError::internal_from)?
+        .map_err(GatewayApplicationError::internal_from)?;
+    }
+    Ok(())
 }
 pub(in crate::gateway::application) async fn recover(
     app: &AppApplication,
@@ -89,6 +127,10 @@ pub(in crate::gateway::application) async fn recover(
         .await
         .map_err(app_error)?;
     for (id, by) in ids {
+        let serial = app
+            .canon_projection_locks
+            .acquire(format!("proposal:{id}"))
+            .await;
         let row = app
             .dependencies
             .canon
@@ -97,6 +139,7 @@ pub(in crate::gateway::application) async fn recover(
         if row["state"] == "applied" {
             finish(app, &id, true).await?;
         } else if row["state"] == "open" {
+            drop(serial);
             super::resolve(app, json!({"id":id,"outcome":"accepted","by":by})).await?;
         } else {
             finish(app, &id, false).await?;

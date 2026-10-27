@@ -4,10 +4,11 @@ pub(super) async fn detail(
     app: &AppApplication,
     id: String,
 ) -> Result<Value, GatewayApplicationError> {
+    let language = language(app).await?;
     let mut value = app
         .dependencies
         .canon
-        .proposal("get".into(), json!({"id":id}))
+        .proposal("get".into(), json!({"id":id,"language":language}))
         .await?;
     app.storage
         .read(move |db| {
@@ -47,11 +48,17 @@ pub(super) async fn target_project(
     app.storage.read(move |db| {
         let chat:Option<String>=db.query_row("SELECT project_id FROM chats WHERE id=?1",[session],|r|r.get(0)).map_err(AppStorageError::sqlite)?;
         if let Some(id)=requested.or(chat) {
-            if super::super::projects::rows::active_by_id(db,&id)?.is_none() { return Ok(None); }
+            if super::super::projects::rows::active_by_id(db,&id)?.is_none() {
+                return Err(AppStorageError::new(super::super::storage::AppStorageCode::ProjectNotFound, id));
+            }
             return Ok(Some(id));
         }
         db.query_row("SELECT id FROM projects INDEXED BY projects_recent_canon WHERE archived=0 ORDER BY updated_at DESC LIMIT 1",[],|r|r.get(0)).optional().map_err(AppStorageError::sqlite)
-    }).await.map_err(app_error)
+    }).await.map_err(|error| {
+        if error.code() == "project_not_found" {
+            public(404, "canon_project_not_found", &format!("Project {} doesn't exist or is archived. Call canon_read (view projects) to pick one, or omit project_id to use this conversation's project.", error.message()))
+        } else { app_error(error) }
+    })
 }
 pub(super) async fn attachments(
     app: &AppApplication,
@@ -198,4 +205,19 @@ async fn shared_view(
             .await?;
     }
     Ok(value)
+}
+
+pub(in crate::gateway::application) async fn language(
+    app: &AppApplication,
+) -> Result<&'static str, GatewayApplicationError> {
+    let facts = app.dependencies.settings_facts.snapshot()?;
+    app.storage
+        .read(move |db| {
+            super::super::settings::ui_language(db, &facts).map(|language| match language {
+                crate::gateway::ui_language::UiLanguage::Korean => "ko",
+                crate::gateway::ui_language::UiLanguage::English => "en",
+            })
+        })
+        .await
+        .map_err(app_error)
 }

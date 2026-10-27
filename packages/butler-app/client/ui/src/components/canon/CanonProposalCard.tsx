@@ -25,11 +25,14 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
   const [busy, setBusy] = useState(false);
   const [target, setTarget] = useState("new_name" in p.project ? "@new" : p.project.id ?? "@new");
   const [name, setName] = useState("new_name" in p.project ? p.project.new_name : "");
+  const projects = useButlerStore(state => state.navigation.projects);
+  const chooseProject = !projectId || !("id" in p.project) || p.project.id !== projectId;
+  const projectName = target === "@new" ? `${copy.newProject}: ${name}` : projects.find(project => project.id === target)?.display_name ?? ("name" in p.project ? p.project.name : "");
   const creates = p.changes.some(change => change.op === "epic.create");
   const apply = async (outcome: "accepted" | "declined") => {
     setBusy(true);
     try {
-      await resolveCanonProposal(p.proposal_id, outcome, projectId ? undefined : target === "@new" ? { new_name: name } : { project_id: target });
+      await resolveCanonProposal(p.proposal_id, outcome, !chooseProject ? undefined : target === "@new" ? { new_name: name } : { project_id: target });
       await refresh();
     } catch (error) { notifyError(error, appCopy.interfaceFeedback.requestFailed); }
     finally { setBusy(false); }
@@ -49,19 +52,20 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
       {p.state === "applied" && <ButtonContainer size="sm" justify="end"><Button size="sm" variant="link" onClick={open}>{copy.open}</Button></ButtonContainer>}
     </Stack>
   </Card>;
-  const empty = !projectId && target === "@new" && !name.trim();
+  const empty = chooseProject && target === "@new" && !name.trim();
   return <Card radius="lg" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
     <Stack gap="md">
       <Typo.Caption tone="tertiary">{creates ? copy.draft : copy.changes}</Typo.Caption>
-      <Typo.Caption>{creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.summary}</Typo.Caption>
+      <Typo.Caption>{creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.target_label}</Typo.Caption>
       {p.epics.map((epic, index) => <Stack key={index} gap="sm">
         <Typo.PanelTitle wrap="anywhere">{epic.title}</Typo.PanelTitle>
         <EpicMarkdown epicId="" description={epic.description.replace(/!?\[[^\]]*\]\(attachment:[^)]+\)/giu, "")} density="compact" />
         <Stack align="row" gap="xs" wrap>{epic.tags.map((tag, index) => <Tag key={tag.id ?? index} tone={tag.color} size="sm">{tag.name}</Tag>)}</Stack>
         <MessageAttachments attachments={epic.attachments} sessionId={sessionId} />
       </Stack>)}
+      <Typo.Caption>{projectName}</Typo.Caption>
       <CanonProposalChanges changes={p.changes} ko={ko} />
-      {!projectId && <CanonProposalProject value={target} name={name} busy={busy} ko={ko} onSelect={setTarget} onName={setName} />}
+      {chooseProject && <CanonProposalProject value={target} name={name} busy={busy} ko={ko} onSelect={setTarget} onName={setName} />}
       <ButtonContainer size="sm" justify="end">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => void apply("declined")}>{copy.cancel}</Button>
         <Tooltip wrap label={empty ? copy.name : undefined}><Button size="sm" disabled={busy} aria-disabled={empty || undefined} onClick={() => void apply("accepted")}>{creates ? copy.add : copy.apply}</Button></Tooltip>

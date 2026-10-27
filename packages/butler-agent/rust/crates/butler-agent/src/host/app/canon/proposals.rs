@@ -32,14 +32,15 @@ fn read(db: &rusqlite::Connection, action: &str, input: &Value) -> store::Result
     match action {
         "spec" => store::read_canon_spec(db, id),
         "specs" => store::canon_project_spec_nodes(db, id),
-        "get" => store::canon_proposal_detail(db, id),
+        "get" => store::canon_proposal_detail(db, id, input["language"].as_str().unwrap_or("en")),
         "raw" => store::get_canon_proposal(db, id),
         "open" => Ok(json!(store::open_canon_proposals(
             db,
             input["session_id"].as_str(),
             usize::try_from(input["limit"].as_u64().unwrap_or(201))
                 .map_err(|_| store::Error::Invalid("limit too large"))?,
-            input["before"].as_str()
+            input["before"].as_str(),
+            input["language"].as_str().unwrap_or("en")
         )?)),
         "attention" => {
             let mut owners = Vec::new();

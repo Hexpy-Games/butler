@@ -86,28 +86,3 @@ pub(super) fn available(
         })
         .collect()
 }
-
-/// Canon settlements are available only while that independent ask kind is open.
-pub(super) fn with_canon_settlements(
-    definitions: &mut [serde_json::Value],
-    tools: &mut [ModelRoundTool],
-) {
-    let outcomes = serde_json::json!(["answered", "dropped", "accepted", "declined"]);
-    for tool in tools.iter_mut().filter(|t| t.name == "resolve_ask") {
-        tool.parameters["properties"]["outcome"]["enum"] = outcomes.clone();
-        tool.description
-            .push_str(" For a canon_proposal, use accepted or declined without answer.");
-    }
-    for definition in definitions
-        .iter_mut()
-        .filter(|t| t["name"] == "resolve_ask")
-    {
-        definition["parameters"]["properties"]["outcome"]["enum"] = outcomes.clone();
-        if let Some(description) = definition["description"].as_str() {
-            definition["description"] = format!(
-                "{description} For a canon_proposal, use accepted or declined without answer."
-            )
-            .into();
-        }
-    }
-}

@@ -6,9 +6,12 @@
     reason = "E2E assertions"
 )]
 mod attachments;
+mod cleanup;
+mod migration;
 mod operations;
 mod queries;
 mod recovery;
+mod review;
 mod stub;
 mod variants;
 use butler_e2e::e2e::{

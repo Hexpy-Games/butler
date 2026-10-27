@@ -24,6 +24,7 @@ pub enum CapabilityKind {
     Schedule,
     SettingsWrite,
     ProjectRecord,
+    CanonProposal,
     CrossConversation,
     ButlerOutput,
     DeliverFiles,
@@ -137,6 +138,10 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         {
             Allow
         }
+        CapabilityKind::CanonProposal if auto && request.taint == TurnTaint::Clean => Allow,
+        CapabilityKind::CanonProposal if request.taint == TurnTaint::External => {
+            Ask(GrantUse::Ignore)
+        }
         CapabilityKind::ImageModelCall | ProjectRecord if auto => Allow,
         CapabilityKind::ImageModelCall => Ask(GrantUse::Ignore),
         Network | Connector if request.taint == TurnTaint::External => Ask(GrantUse::Ignore),
@@ -181,7 +186,7 @@ impl CapabilityKind {
             return Self::Exempt(action);
         }
         if name == ToolName::CanonPropose {
-            return Self::ProjectRecord;
+            return Self::CanonProposal;
         }
         if ledger_effect {
             return Self::ProjectRecord;

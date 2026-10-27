@@ -99,11 +99,15 @@ pub fn guard(turn: &TurnRecord, has_other_tool_result: bool, input: &ResolveAsk)
             "quote is not in the user's current message. Quote their own words, or ask if the reply is unclear.",
         ));
     }
-    if input.ask_id.starts_with("canon:")
-        && matches!(input.outcome.as_str(), "accepted" | "declined" | "dropped")
-        && input.answer.is_none()
-    {
-        return None;
+    if input.ask_id.starts_with("canon:") {
+        return (!(matches!(input.outcome.as_str(), "accepted" | "declined")
+            && input.answer.is_none()))
+        .then(|| {
+            refusal(
+                "invalid_outcome",
+                "Use accepted or declined without answer.",
+            )
+        });
     }
     if !matches!(
         (
