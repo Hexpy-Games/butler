@@ -36,9 +36,15 @@ export function visibleClipping() {
         x: clips(css.overflowX), y: clips(css.overflowY), scroll: ["auto", "scroll"].includes(css.overflowY) && parent.scrollHeight > parent.clientHeight });
     }
     bounds.push({ node: null, left: 0, right: innerWidth, top: 0, bottom: innerHeight, x: true, y: true, scroll: false });
-    let top = rect.top, bottom = rect.bottom;
+    let top = rect.top, bottom = rect.bottom, left = rect.left, right = rect.right;
     for (const box of bounds) {
-      const cuts = { left: box.x ? box.left - rect.left : 0, right: box.x ? rect.right - box.right : 0,
+      const css = box.node && getComputedStyle(box.node);
+      // Inline descendants paint inside their ancestor's intentional ellipsis.
+      // Only its inline-axis cut is disclosed; vertical clipping still fails.
+      if (css && css.textOverflow === "ellipsis" && css.whiteSpace === "nowrap" && box.x) {
+        left = Math.max(left, box.left); right = Math.min(right, box.right);
+      }
+      const cuts = { left: box.x ? box.left - left : 0, right: box.x ? right - box.right : 0,
         top: box.y ? box.top - top : 0, bottom: box.y ? bottom - box.bottom : 0 };
       const onlyBlock = cuts.left <= 1 && cuts.right <= 1;
       // A scroller exposes only this block-axis slice to its outer ancestors.

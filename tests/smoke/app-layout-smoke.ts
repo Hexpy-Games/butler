@@ -43,6 +43,25 @@ const turnActivityTimeoutMs = 5_000;
 const NEW_CHAT_CARD_HEIGHT_PX = 186;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
+async function assertWrappingSuggestions(page: Page, columns: number) {
+  const layout = await page.locator(testClass("new-chat-empty-state")).evaluate(element => {
+    const header = element.querySelector("header")!.getBoundingClientRect();
+    const rail = element.querySelector<HTMLElement>('[data-test-class~="new-chat-suggestion-rail"]')!;
+    const grid = element.querySelector<HTMLElement>('[data-test-class~="new-chat-suggestions"]')!;
+    const cards = [...element.querySelectorAll('[data-test-class~="new-chat-suggestion"]')].map(card => card.getBoundingClientRect());
+    return { count: cards.length, columns: new Set(cards.map(card => Math.round(card.left))).size,
+      rows: new Set(cards.map(card => Math.round(card.top))).size,
+      aligned: Math.abs(Math.min(...cards.map(card => card.left)) - header.left) <= 1 &&
+        Math.abs(Math.max(...cards.map(card => card.right)) - header.right) <= 1,
+      fits: cards.every(card => card.left >= -1 && card.right <= innerWidth + 1),
+      railOverflow: rail.scrollWidth - rail.clientWidth, gridOverflow: grid.scrollWidth - grid.clientWidth };
+  });
+  console.log(JSON.stringify({ wrappingSuggestions: layout }));
+  assert(layout.count === 4 && layout.columns === columns && layout.rows === 4 / columns &&
+    layout.aligned && layout.fits && layout.railOverflow <= 1 && layout.gridOverflow <= 1,
+  `suggestions wrap in the header column: ${JSON.stringify(layout)}`);
+}
+
 /**
  * Visible sidebar width: the docked sidebar keeps its full width and slides
  * out with a transform, so collapsed means its right edge is at the frame edge.
@@ -2844,9 +2863,9 @@ try {
         scrollClientHeight: scroll?.clientHeight ?? 0,
         scrollHeight: scroll?.scrollHeight ?? 0,
         scrollOverflowY: scrollStyle?.overflowY ?? "",
-        railViewportAligned: railViewportRect
-          ? Math.abs(railViewportRect.left - emptyRect.left) <= 1 &&
-            Math.abs(railViewportRect.right - emptyRect.right) <= 1
+        railViewportAligned: railViewportRect && element.querySelector("header")
+          ? Math.abs(railViewportRect.left - element.querySelector("header")!.getBoundingClientRect().left) <= 1 &&
+            Math.abs(railViewportRect.right - element.querySelector("header")!.getBoundingClientRect().right) <= 1
           : false,
         cardDescriptionBelowTitle:
           firstTitleRect && firstDescriptionRect
@@ -2925,16 +2944,11 @@ try {
           : false,
       };
     });
+  await assertWrappingSuggestions(page, 4);
   assert(
     emptyStateLayout.cardCount === 4 &&
       emptyStateLayout.emptyWidth >= 900 &&
       emptyStateLayout.railViewportAligned &&
-      emptyStateLayout.railViewportWidth >= emptyStateLayout.emptyWidth - 2 &&
-      emptyStateLayout.railScrollWidth > emptyStateLayout.railViewportWidth &&
-      emptyStateLayout.railGridWidth > emptyStateLayout.railViewportWidth &&
-      emptyStateLayout.scrollOverflowY === "hidden" &&
-      emptyStateLayout.scrollHeight <=
-        emptyStateLayout.scrollClientHeight + 1 &&
       emptyStateLayout.fluidCovers &&
       emptyStateLayout.fluidPainted &&
       emptyStateLayout.cardHasTintedGlass &&
@@ -3116,6 +3130,7 @@ try {
   await compactTextarea.fill("");
   await compactTextarea.evaluate((element) => element.blur());
   await page.waitForTimeout(260);
+  await assertWrappingSuggestions(page, 2);
   const narrowNewChatState = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate((element) => {

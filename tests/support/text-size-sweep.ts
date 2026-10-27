@@ -22,6 +22,10 @@ export async function textSizeSweep({ page, main, win, evidence, click, server }
     await page.clickSelector(selector);
   };
   const findings: unknown[] = [];
+  const baselines = new Map<string, ReturnType<typeof visibleClipping>>();
+  const zoomOnly: unknown[] = [];
+  const preExisting: unknown[] = [];
+  const findingKey = (clip: ReturnType<typeof visibleClipping>[number]) => JSON.stringify([clip.selector, clip.side]);
   for (const [width, height] of [[1280, 800], [1440, 900]]) {
     for (const [size, scale] of [["default", 1], ["large", 1.15], ["larger", 1.3]] as const) {
       await page.expression(`window.butlerApp.setTextSize(${JSON.stringify(size)})`);
@@ -32,7 +36,17 @@ export async function textSizeSweep({ page, main, win, evidence, click, server }
         await page.waitForFunction(() => document.getAnimations().every(animation =>
           !(animation.timeline instanceof DocumentTimeline) || animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
         const clips = await page.evaluate(visibleClipping);
-        const row = { screen, scale, window: `${width}x${height}`, findings: clips };
+        const window = `${width}x${height}`;
+        const key = JSON.stringify([screen, window]);
+        if (scale === 1) baselines.set(key, clips);
+        const baseline = baselines.get(key);
+        assert(baseline, `100% baseline required before ${screen}/${window}/${scale}`);
+        const baselineKeys = new Set(baseline.map(findingKey));
+        const classified = clips.map(clip => ({ screen, scale, window, ...clip,
+          status: scale === 1 || baselineKeys.has(findingKey(clip)) ? "pre-existing" : "zoom-only" }));
+        preExisting.push(...classified.filter(clip => clip.status === "pre-existing"));
+        zoomOnly.push(...classified.filter(clip => clip.status === "zoom-only"));
+        const row = { screen, scale, window, findings: classified };
         console.log(JSON.stringify(row)); findings.push(row);
         writeFileSync(join(evidence, "visible-clipping.json"), JSON.stringify(findings, null, 2));
         writeFileSync(join(evidence, `${screen}-${width}-${scale}.png`), await page.screenshot());
@@ -53,6 +67,10 @@ export async function textSizeSweep({ page, main, win, evidence, click, server }
       await page.insertText("긴 답변을 보여 주세요.");
       await select('[data-test-class="composer-send-button"]');
       await page.waitForFunction(() => document.body.textContent?.includes("30번째 문단: 읽기 쉬운 긴 답변입니다."));
+      // Persisted panel visibility must not make later scales a different screen.
+      if (!await page.expression("document.querySelector('[data-test-class=\"session-info-toggle\"]')?.getAttribute('aria-pressed')==='true'"))
+        await select('[data-test-class="session-info-toggle"]');
+      await page.waitForFunction(() => Boolean(document.querySelector('[data-slot="disclosure-row-title"]')));
       await audit("long-chat");
       if (await page.expression("Boolean(document.querySelector('[data-slot=\"composer-compact-preview\"]'))")) await select('[data-slot="composer-compact-preview"]');
       await select('[data-test-class="model-button"]');
@@ -111,5 +129,7 @@ export async function textSizeSweep({ page, main, win, evidence, click, server }
     }
   }
   writeFileSync(join(evidence, "visible-clipping.json"), JSON.stringify(findings, null, 2));
+  console.log(JSON.stringify({ preExisting, zoomOnly }));
+  assert.deepEqual(zoomOnly, [], `Text size introduced clipping: ${JSON.stringify(zoomOnly)}`);
   return findings;
 }
