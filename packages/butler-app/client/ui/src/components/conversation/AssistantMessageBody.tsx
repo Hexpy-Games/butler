@@ -99,6 +99,7 @@ function AssistantAttachments({ message, children }: { message: MessageRecord; c
         </Tag>
       </div>
     )}
+    {message.failure_notice && <AssistantFailureNotice message={message.failure_notice} />}
     {children}
     {message.limitation_codes?.includes("message_file_unavailable") && (
       <Tag ariaLabel={appCopy.conversation.attachmentUnavailable}>

@@ -314,23 +314,9 @@ pub(in crate::gateway::application::projection) fn fail_unanswered(
     code: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let metadata = Map::from_iter([("safeErrorCode".into(), Value::from(code))]);
-    super::operations::project_failed(
-        db,
-        subscribers,
-        chat,
-        turn,
-        super::operations::FailedProjection {
-            metadata: &metadata,
-            message: &Map::new(),
-            retryable: false,
-        },
-        now,
-        &super::ProjectionIds {
-            event_id: uuid::Uuid::new_v4().to_string(),
-            message_id: format!("message-{}", uuid::Uuid::new_v4()),
-        },
-    )
+    let _ = code;
+    // Final projection owns the terminal turn events. Only settle the draft here.
+    incomplete(db, subscribers, chat, turn, now)
 }
 
 fn open(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {

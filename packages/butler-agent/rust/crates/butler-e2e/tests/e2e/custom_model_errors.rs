@@ -242,3 +242,6 @@ async fn custom_05_fallback_answers_when_tools_are_refused() -> Result<(), Harne
     );
     s.finish().await
 }
+
+#[path = "custom_model_errors/stops.rs"]
+mod stops;

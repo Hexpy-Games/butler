@@ -886,6 +886,8 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  /** Terminal failure grouped with this turn's retained partial answer. */
+  failure_notice?: MessageRecord;
   initiated?: import("./initiatedTypes").InitiatedOrigin;
   question_answer?: AnsweredUserQuestions;
   question_summary?: UserQuestion[];

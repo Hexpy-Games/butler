@@ -4,7 +4,7 @@ use super::*;
 async fn chat_optional_finish_reasons_deliver() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let fixture = fixtures().remove(3);
-    for reason in [Some("stop"), None, Some("eos_token")] {
+    for reason in [Some("stop"), None] {
         let content = json!({"choices":[{"delta":{"content":"Answer"},"finish_reason":reason}]});
         let trailing = json!({"choices":[{"delta":{},"finish_reason":null}]});
         let response = ResponseRecord {

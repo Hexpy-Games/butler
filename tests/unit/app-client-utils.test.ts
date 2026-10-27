@@ -3110,10 +3110,10 @@ test("work blocks ignore opening decisions and acknowledged receipt rows", () =>
   expect(JSON.stringify(blocks)).not.toContain("app-client readmodel");
 });
 
-test("retry eligibility includes an unrecognized model stop", () => {
+test("retry eligibility follows the runtime flag", () => {
   expect(isRetryableFailureMessage({ retryable: true, safe_error_code: "provider_stop_unrecognized" })).toBe(true);
   for (const code of ["provider_response_refused", "provider_safety_error"]) {
-    expect(isRetryableFailureMessage({ retryable: true, safe_error_code: code })).toBe(false);
+    expect(isRetryableFailureMessage({ retryable: true, safe_error_code: code })).toBe(true);
   }
   expect(
     isRetryableFailureMessage({
@@ -3132,8 +3132,8 @@ test("retry eligibility includes an unrecognized model stop", () => {
       retryable: true,
       safe_error_code: "tool_invalid_arguments",
     }),
-  ).toBe(false);
-  expect(isRetryableFailureMessage({ retryable: true })).toBe(false);
+  ).toBe(true);
+  expect(isRetryableFailureMessage({ retryable: true })).toBe(true);
   expect(
     isRetryableFailureMessage({
       retryable: false,

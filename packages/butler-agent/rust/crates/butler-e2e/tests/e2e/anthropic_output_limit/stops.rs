@@ -2,7 +2,7 @@ use super::*;
 use butler_e2e::e2e::scenario::turn_timeout;
 use std::time::Duration;
 
-fn response(text: &str, reason: &str) -> String {
+pub(super) fn response(text: &str, reason: &str) -> String {
     message_start()
         + &start(0, &json!({"type":"text","text":""}))
         + &delta(0, &json!({"type":"text_delta","text":text}))
@@ -38,9 +38,19 @@ async fn refusal_keeps_partial_and_fails_without_continuation() -> Result<(), Ha
 }
 
 #[tokio::test]
-async fn context_window_cut_continues_and_joins() -> Result<(), HarnessError> {
+async fn context_window_cut_fails_without_continuation() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    resumes("model_context_window_exceeded").await
+    let (s, stub, server) = setup(false).await?;
+    *stub.responses.lock().unwrap() = vec![response(PARTIAL, "model_context_window_exceeded")];
+    let (id, turn) = s.turn("general", "Explain the design.").await?;
+    assert_eq!(turn_state(&turn), "failed", "{turn}");
+    assert_eq!(turn["safe_error_code"], "provider_context_limit_exceeded");
+    assert_eq!(turn["retryable"], false);
+    assert_eq!(answer(&s, &id).await?["text"], PARTIAL);
+    assert_eq!(rounds(&stub).len(), 1);
+    s.finish().await?;
+    server.abort();
+    Ok(())
 }
 
 #[tokio::test]
@@ -180,7 +190,16 @@ async fn repeated_cuts_stop_without_delivering_and_keep_partial() -> Result<(), 
             .iter()
             .find(|m| m["turn_id"] == id && m["status"] == "failed")
             .unwrap();
-        assert!(notice["text"].as_str().unwrap().contains("output limit"));
+        assert!(
+            notice["text"]
+                .as_str()
+                .unwrap()
+                .contains(if reason == "pause_turn" {
+                    "paused and did not resume"
+                } else {
+                    "output limit"
+                })
+        );
         assert!(!notice["text"].as_str().unwrap().contains(PARTIAL));
         assert_eq!(stub.requests.lock().unwrap().len(), 2);
         s.finish().await?;
@@ -194,7 +213,7 @@ async fn continuation_http_failure_keeps_joined_partial() -> Result<(), HarnessE
     butler_e2e::gate!();
     let (s, stub, server) = setup(false).await?;
     *stub.responses.lock().unwrap() = vec![
-        response(PARTIAL, "model_context_window_exceeded"),
+        response(PARTIAL, "max_tokens"),
         response(CONTINUED, "max_tokens"),
     ];
     *stub.fail_after.lock().unwrap() = Some(2);
@@ -252,21 +271,22 @@ async fn unrecognized_stop_offers_user_retry() -> Result<(), HarnessError> {
         .unwrap();
     assert_eq!(notice["retryable"], true, "{notice}");
     assert_eq!(notice["safe_error_code"], "provider_stop_unrecognized");
-    let retry = s.gw.post(&format!("/turns/{id}/retry"), json!({})).await?;
+    let rejected = s.gw.post(&format!("/turns/{id}/retry"), json!({})).await?;
+    assert_eq!(rejected.status, 409, "{}", rejected.text);
+    let retry =
+        s.gw.post(&format!("/turns/{id}/retry-current"), json!({}))
+            .await?;
     assert_eq!(retry.status, 202, "{}", retry.text);
-    let turn =
-        s.gw.wait_turn(
-            "general",
-            &id,
-            &["delivered", "failed"],
-            Duration::from_secs(turn_timeout()),
-        )
-        .await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    assert_eq!(answer(&s, &id).await?["text"], "Recovered.");
-    assert_eq!(stub.requests.lock().unwrap().len(), 2);
+    let next = butler_e2e::e2e::scenario::accepted_turn_id(retry.data())?;
+    assert_ne!(next, id);
+    let recovered =
+        s.gw.wait_terminal("general", &next, Duration::from_secs(turn_timeout()))
+            .await?;
+    assert_eq!(turn_state(&recovered), "delivered", "{recovered}");
+    assert_eq!(answer(&s, &next).await?["text"], "Recovered.");
+    assert_eq!(answer(&s, &id).await?["text"], PARTIAL);
     s.restart().await?;
-    assert_eq!(answer(&s, &id).await?["text"], "Recovered.");
+    assert_eq!(answer(&s, &next).await?["text"], "Recovered.");
     assert_eq!(stub.requests.lock().unwrap().len(), 2);
     s.finish().await?;
     server.abort();
@@ -285,3 +305,6 @@ async fn complete_round_trims_public_text() -> Result<(), HarnessError> {
     server.abort();
     Ok(())
 }
+
+#[path = "review2.rs"]
+mod review2;

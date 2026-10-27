@@ -26,9 +26,10 @@ pub(in crate::models::provider) fn classify(
         return ModelStop::Complete;
     }
     match (carrier, reason) {
-        (Carrier::Anthropic, Some("max_tokens" | "model_context_window_exceeded"))
+        (Carrier::Anthropic, Some("max_tokens"))
         | (Carrier::Chat { .. }, Some("length"))
         | (Carrier::Gemini, Some("MAX_TOKENS")) => ModelStop::Truncated,
+        (Carrier::Anthropic, Some("model_context_window_exceeded")) => ModelStop::ContextLimit,
         (Carrier::Anthropic, Some("pause_turn")) => ModelStop::Paused,
         (Carrier::Anthropic, Some("refusal")) => ModelStop::Refused,
         (Carrier::Chat { .. }, Some("content_filter"))
@@ -50,7 +51,9 @@ pub(in crate::models::provider) fn classify(
         (Carrier::Anthropic, Some("end_turn" | "tool_use" | "stop_sequence"))
         | (Carrier::Gemini, Some("STOP"))
         | (Carrier::Responses, Some("completed"))
-        | (Carrier::Chat { .. }, _) => ModelStop::Complete,
+        | (Carrier::Chat { .. }, Some("stop" | "tool_calls" | "function_call") | None) => {
+            ModelStop::Complete
+        }
         _ => ModelStop::Unrecognized(diagnostic(response, carrier)),
     }
 }
@@ -92,6 +95,7 @@ pub(in crate::models::provider) fn error(
         ModelStop::Complete => return None,
         ModelStop::Truncated | ModelStop::Paused if !prompt => return None,
         ModelStop::Truncated | ModelStop::Paused => "provider_output_truncated",
+        ModelStop::ContextLimit => "provider_context_limit_exceeded",
         ModelStop::Refused => "provider_response_refused",
         ModelStop::Blocked => "provider_safety_error",
         ModelStop::Unrecognized(_) => "provider_stop_unrecognized",

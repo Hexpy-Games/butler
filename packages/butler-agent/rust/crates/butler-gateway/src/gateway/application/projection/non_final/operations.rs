@@ -41,9 +41,7 @@ pub(in crate::gateway::application) fn project_failed(
     let code = error_token(metadata.get("safeErrorCode"));
     // A turn interrupted by a crash is failed but always retryable: the retry
     // resumes it from its durable state.
-    let retryable = ((code == "runtime_fault" || code == "provider_stop_unrecognized")
-        && requested_retryable)
-        || code == INTERRUPTED_TURN_CODE;
+    let retryable = requested_retryable || code == INTERRUPTED_TURN_CODE;
     let label = if code == "internal_recovery_required" {
         "Butler could not complete this turn.".into()
     } else {

@@ -210,7 +210,7 @@ fn mark_retrying(
              safe_status_content_json=NULL,safe_error_code=NULL,retryable=0,\
              cancellable=?2,attempt=?3,updated_at=?4 \
              WHERE id=?5 AND retryable=1 AND attempt=?6 \
-             AND (state='runtime_fault' OR (state='failed' AND safe_error_code IN (?7,'provider_stop_unrecognized')))",
+             AND (state='runtime_fault' OR (state='failed' AND safe_error_code=?7))",
             params![
                 status_label,
                 cancellable,

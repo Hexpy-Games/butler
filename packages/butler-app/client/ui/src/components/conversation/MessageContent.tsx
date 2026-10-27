@@ -75,7 +75,7 @@ function MessageContentComponent({
           bubble={isGeneralChat(message.chat_id)}
           copied={copied}
           meta={footerMeta}
-          status={message.status}
+          status={message.failure_notice ? "failed" : message.status}
           suppressTerminalStatus={Boolean(stewardProgress)}
           onCopy={() => onCopyAssistantMessage(message)}
           actions={<><AssistantBranchActions message={message} /><MessageTraceMenu message={message} /></>}

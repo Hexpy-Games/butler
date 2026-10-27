@@ -32,7 +32,7 @@ pub(super) async fn load_or_admit(
         if let Some(fresh) = Fresh::of(&command) {
             assert_replay_identity(&existing, &fresh)?;
         }
-        return replay_existing(storage, &command, existing).await;
+        return Ok((existing, false));
     }
     if matches!(command, TurnCommand::Resume(_)) {
         return Err(error(
@@ -126,28 +126,4 @@ fn assert_replay_identity(turn: &TurnRecord, command: &Fresh<'_>) -> StorageResu
             ),
         ))
     }
-}
-
-async fn replay_existing(
-    storage: &BtccStorage,
-    command: &TurnCommand,
-    existing: TurnRecord,
-) -> StorageResult<(TurnRecord, bool)> {
-    let attempt = match command {
-        TurnCommand::Run(command) => command.recovery_attempt,
-        TurnCommand::Wake(command) => command.recovery_attempt,
-        TurnCommand::Resume(command) => command.recovery_attempt,
-    }
-    .unwrap_or(1);
-    if attempt > 1 {
-        return storage
-            .execute(move |connection| {
-                super::transitions::resume_failed(connection, &existing.turn_id, attempt)?;
-                let turn = hydration::find_turn(connection, &existing.turn_id)?
-                    .ok_or_else(|| error(StorageCode::TurnNotAdmitted, "BTCC Turn disappeared"))?;
-                Ok((turn, false))
-            })
-            .await;
-    }
-    Ok((existing, false))
 }

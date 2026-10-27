@@ -2,15 +2,31 @@ use crate::btcc::RuntimeFailure;
 
 /// The answer of a turn whose agent loop failed operationally.
 pub(super) fn runtime_failure_message(original: &str, failure: &RuntimeFailure) -> String {
-    runtime_failure_message_for_work(original, failure, None)
+    message(original, failure, None, None)
 }
 
 /// The failure answer in the user's language (Korean when the request is
 /// Korean), noting when the accepted Work already completed.
-pub(super) fn runtime_failure_message_for_work(
+pub(super) fn runtime_failure_message_for_turn(
+    turn: &super::contracts::TurnRecord,
+    failure: &RuntimeFailure,
+    accepted_work: Option<&crate::btcc::AcceptedWorkResult>,
+) -> String {
+    message(
+        &turn.original_message,
+        failure,
+        accepted_work,
+        turn.context
+            .get("language")
+            .and_then(serde_json::Value::as_str),
+    )
+}
+
+fn message(
     original: &str,
     failure: &RuntimeFailure,
     accepted_work: Option<&crate::btcc::AcceptedWorkResult>,
+    locale: Option<&str>,
 ) -> String {
     let work_completed =
         accepted_work.is_some_and(|value| value.status == crate::btcc::AcceptedWorkStatus::Success);
@@ -22,11 +38,21 @@ pub(super) fn runtime_failure_message_for_work(
             "This model server doesn't support tool calls.".into()
         };
     }
-    let short = match (failure.code.as_str(), korean) {
+    let short = match (failure.code.as_str(), locale == Some("ko")) {
         ("provider_output_truncated", true) => Some("답변이 출력 한도에 도달했습니다."),
         ("provider_output_truncated", false) => {
             Some("The answer reached the model's output limit.")
         }
+        ("provider_pause_not_resumed", true) => {
+            Some("모델이 일시 중지 후 이어서 답하지 않았습니다.")
+        }
+        ("provider_pause_not_resumed", false) => Some("The model paused and did not resume."),
+        ("provider_context_limit_exceeded", true) => Some(
+            "필요한 입력이 모델 컨텍스트에 들어가지 않습니다. 첨부를 줄이거나 요청을 나누어 주세요.",
+        ),
+        ("provider_context_limit_exceeded", false) => Some(
+            "The required input cannot fit the model context. Reduce the required attachments or split the request into smaller parts so I can continue.",
+        ),
         ("provider_stop_unrecognized", true) => Some("모델 응답이 중단되었습니다."),
         ("provider_stop_unrecognized", false) => Some("The model response stopped."),
         ("provider_response_refused", true) => Some("모델이 답변을 거절했습니다."),

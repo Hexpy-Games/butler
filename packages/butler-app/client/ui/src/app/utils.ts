@@ -971,14 +971,11 @@ function capTurnProgressSnapshots(
   );
 }
 
-/** A retryable runtime fault, or a reply a Butler crash interrupted. */
+/** Terminal failure rows carry the runtime's retry eligibility. */
 export function isRetryableFailureMessage(
   message: Pick<MessageRecord, "retryable" | "safe_error_code">,
 ): boolean {
-  return message.retryable === true &&
-    (message.safe_error_code === "runtime_fault" ||
-      message.safe_error_code === "turn_interrupted" ||
-      message.safe_error_code === "provider_stop_unrecognized");
+  return message.retryable === true;
 }
 
 /**
@@ -1064,8 +1061,21 @@ export function collapseAssistantAttempts(
   }
   // The input already has transcript order, including form answers inserted
   // by decision time. Their synthetic rows have no durable message cursor.
-  return messages.filter(message => message.role === "user" || !message.turn_id || message.status === "delivered" || message.status === "incomplete"
-    || latestByTurn.get(message.turn_id)?.id === message.id);
+  const partialByTurn = new Map<string, MessageRecord>();
+  for (const message of messages) {
+    if (message.role === "assistant" && message.status === "incomplete" && message.turn_id) {
+      partialByTurn.set(message.turn_id, message);
+    }
+  }
+  return messages.filter(message => {
+    if (isAssistantFailureNoticeMessage(message) && message.turn_id && partialByTurn.has(message.turn_id)) return false;
+    return message.role === "user" || !message.turn_id || message.status === "delivered" || message.status === "incomplete"
+      || latestByTurn.get(message.turn_id)?.id === message.id;
+  }).map(message => {
+    const failure = message.turn_id ? latestByTurn.get(message.turn_id) : undefined;
+    return failure && isAssistantFailureNoticeMessage(failure) && partialByTurn.get(message.turn_id!) === message
+      ? { ...message, failure_notice: failure } : message;
+  });
 }
 
 function messageCursor(message: MessageRecord): number {

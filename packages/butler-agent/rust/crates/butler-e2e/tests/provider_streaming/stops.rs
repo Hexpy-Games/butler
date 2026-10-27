@@ -69,7 +69,9 @@ async fn stop_allowlists_reject_unknown_and_missing_reasons() -> Result<(), Harn
                     "SAFETY" | "RECITATION" | "BLOCKLIST" | "PROHIBITED_CONTENT" | "SPII"
                     | "IMAGE_SAFETY" | "content_filter",
                 ) => Some("provider_safety_error"),
-                Some("future_reason") | None if index != 3 => Some("provider_stop_unrecognized"),
+                Some("model_context_window_exceeded") => Some("provider_context_limit_exceeded"),
+                Some("future_reason") => Some("provider_stop_unrecognized"),
+                None if index != 3 => Some("provider_stop_unrecognized"),
                 _ => None,
             };
             if let Some(code) = error {
@@ -82,15 +84,7 @@ async fn stop_allowlists_reject_unknown_and_missing_reasons() -> Result<(), Harn
                 assert_eq!(result["raw"], value, "{index} {reason:?}");
                 assert_eq!(
                     result["outputTruncated"],
-                    matches!(
-                        reason,
-                        Some(
-                            "max_tokens"
-                                | "model_context_window_exceeded"
-                                | "MAX_TOKENS"
-                                | "length"
-                        )
-                    )
+                    matches!(reason, Some("max_tokens" | "MAX_TOKENS" | "length"))
                 );
             }
         }

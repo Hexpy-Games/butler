@@ -85,7 +85,7 @@ pub(super) fn retry_snapshot(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    ensure_retryable(db, turn_id, &turn.2, turn.3, turn.6.as_deref())?;
+    ensure_resume_retryable(db, turn_id, &turn.2, turn.3, turn.6.as_deref())?;
     let user_message_id = turn.1.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -285,22 +285,19 @@ fn source_subsession_result(
         .map_err(|source| execution_controls_error().with_source(source))
 }
 
-/// Refuses all but a retryable runtime fault or a turn interrupted by a
-/// service crash.
+/// Failed turns carry runtime retry eligibility on the row. Runtime faults
+/// retain their existing validated fault-event requirement.
 fn ensure_retryable(
     db: &Connection,
     turn_id: &str,
     state: &str,
     retryable: i64,
-    safe_error_code: Option<&str>,
+    _safe_error_code: Option<&str>,
 ) -> Result<(), AppStorageError> {
     let allowed = retryable == 1
         && match state {
             "runtime_fault" => runtime_fault_retryable(db, turn_id)?,
-            "failed" => matches!(
-                safe_error_code,
-                Some(super::INTERRUPTED_TURN_CODE | "provider_stop_unrecognized")
-            ),
+            "failed" => true,
             _ => false,
         };
     if allowed {
@@ -308,6 +305,21 @@ fn ensure_retryable(
     } else {
         Err(not_retryable_error())
     }
+}
+
+/// A durable resume is reserved for runtime faults and crash interruptions.
+fn ensure_resume_retryable(
+    db: &Connection,
+    turn_id: &str,
+    state: &str,
+    retryable: i64,
+    code: Option<&str>,
+) -> Result<(), AppStorageError> {
+    ensure_retryable(db, turn_id, state, retryable, code)?;
+    if state == "failed" && code != Some(super::INTERRUPTED_TURN_CODE) {
+        return Err(not_retryable_error());
+    }
+    Ok(())
 }
 
 /// `/retry-current` starts a fresh turn. A crash-interrupted turn may have run

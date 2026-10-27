@@ -17,7 +17,7 @@ pub(super) async fn settle_answer(
     if reply.paused || reply.truncated {
         return continue_cut(input, state, &reply).await;
     }
-    if reply.text.is_empty() || reply.nonfinal {
+    if (reply.text.is_empty() && state.cut_answer.is_empty()) || reply.nonfinal {
         let reason = if reply.nonfinal {
             "Your previous response only reported progress, not a final answer. Continue the request or provide its completed result."
         } else {
@@ -81,8 +81,7 @@ pub(super) async fn settle_answer(
     }
 }
 
-/// A continuation must add visible text beyond the joined prefix's tail. This
-/// applies to completed rounds too: empty completion is not recovery progress.
+/// Only repeated cuts must extend the answer; a Complete round may just close it.
 async fn advance_cut(
     input: &Invocation<'_>,
     state: &mut State,
@@ -94,8 +93,9 @@ async fn advance_cut(
         .strip_prefix(&state.cut_answer)
         .unwrap_or_default()
         .trim();
-    let no_progress =
-        state.answer_continuation && (added.is_empty() || state.cut_answer.ends_with(added));
+    let no_progress = state.answer_continuation
+        && (reply.truncated || reply.paused)
+        && (added.is_empty() || state.cut_answer.contains(added));
     state.answer_continuation = true;
     if !no_progress {
         state.cut_answer = joined;
@@ -106,11 +106,14 @@ async fn advance_cut(
     let limit = crate::btcc::continuation_budget::model_context_byte_limit(
         input.semantic.model.context_window_tokens,
     );
-    if no_progress || state.cut_answer.len() as u64 >= limit {
+    if no_progress || ((reply.truncated || reply.paused) && state.cut_answer.len() as u64 >= limit)
+    {
         return finish_limit(
             input,
             state,
-            if no_progress {
+            if no_progress && reply.paused {
+                "provider_pause_not_resumed"
+            } else if no_progress {
                 "answer_not_extended"
             } else {
                 "answer_context_limit"
@@ -212,27 +215,15 @@ pub(super) async fn finish_limit(
     reason: &str,
 ) -> Result<AgentLoopResult, AgentLoopError> {
     record_continuation(input, state, "turn.continuation.limit_reached", reason).await;
-    let korean = input
-        .turn
-        .original_message
-        .chars()
-        .any(|c| ('가'..='힣').contains(&c));
-    let input_limit = state.cut_answer.is_empty() && !state.answer_continuation;
-    let content: String = match (input_limit, korean) {
-        (false, true) => "답변이 출력 한도에 도달했습니다.".into(),
-        (false, false) => "The answer reached the model's output limit.".into(),
-        (true, true) => "필요한 입력이 모델 컨텍스트에 들어가지 않습니다. 첨부를 줄이거나 요청을 나누어 주세요.".into(),
-        (true, false) => "The required input cannot fit the model context. Reduce the required attachments or split the request into smaller parts so I can continue.".into(),
+    let code = if reason == "provider_pause_not_resumed" {
+        "provider_pause_not_resumed"
+    } else if state.cut_answer.is_empty() && !state.answer_continuation {
+        "provider_context_limit_exceeded"
+    } else {
+        "provider_output_truncated"
     };
-    let mut result = finish(input, state, Ending::Answer(&content)).await?;
-    result.runtime_failure = Some(crate::btcc::RuntimeFailure::new(
-        if input_limit {
-            "provider_context_limit_exceeded"
-        } else {
-            "provider_output_truncated"
-        },
-        false,
-    ));
+    let mut result = finish(input, state, Ending::Answer("")).await?;
+    result.runtime_failure = Some(crate::btcc::RuntimeFailure::new(code, false));
     result.terminal_outcome = Some(crate::btcc::TerminalOutcome::Failed);
     Ok(result)
 }

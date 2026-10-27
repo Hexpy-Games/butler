@@ -13,9 +13,7 @@ use crate::btcc::turn::{
 };
 
 mod records;
-mod retry;
 use records::*;
-pub(super) use retry::resume_failed;
 
 pub(super) fn commit(
     connection: &mut Connection,

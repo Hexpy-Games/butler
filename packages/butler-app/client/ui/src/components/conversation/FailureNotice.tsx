@@ -54,7 +54,10 @@ export function FailureNotice({
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    if (message.turn_id) onRetryTurn(message.turn_id);
+                    if (message.turn_id) {
+                      const resume = message.safe_error_code === "runtime_fault" || message.safe_error_code === "turn_interrupted";
+                      (resume ? onRetryTurn : onRetryTurnWithCurrentControls)(message.turn_id);
+                    }
                   }}
                   disabled={retrying}
                 >

@@ -284,3 +284,6 @@ pub(super) async fn setup_briefing(
     assert_eq!(settings.status, 200, "{}", settings.text);
     Ok((s, stub, server))
 }
+
+#[path = "anthropic_output_limit/replay.rs"]
+mod replay;

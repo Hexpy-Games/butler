@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum ModelStop {
     Complete,
     Truncated,
+    ContextLimit,
     Paused,
     Refused,
     Blocked,

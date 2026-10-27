@@ -5,6 +5,7 @@
 //! settles a final answer or runs the requested tool batch.
 
 use crate::btcc::BtccCode;
+use serde_json::Value;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -214,6 +215,10 @@ async fn run_iteration(
     }
     discard_round_text(prepared);
     state.cut_answer.clear();
+    state.answer_continuation = false;
+    if let Some(observer) = prepared.ports.stream_observer.as_deref() {
+        observer.round_text_continued("");
+    }
     run_tool_batch(
         input,
         state,
@@ -276,7 +281,20 @@ async fn obtain_reply(
     let mut text_call_names = result.text_tool_call_names;
     text_call_names.sort();
     text_call_names.dedup();
-    if !text.is_empty() || !calls.is_empty() || result.stop == crate::btcc::ModelStop::Paused {
+    // Preserve paused provider content (including server tool blocks), never an empty assistant.
+    let has_provider_content = result.stop == crate::btcc::ModelStop::Paused
+        && result.assistant_message.as_ref().is_some_and(|message| {
+            message
+                .provider_data
+                .as_ref()
+                .and_then(Value::as_array)
+                .is_some_and(|blocks| {
+                    blocks.iter().any(|b| {
+                        b["type"] != "text" || b["text"].as_str().is_some_and(|t| !t.is_empty())
+                    })
+                })
+        });
+    if !text.is_empty() || !calls.is_empty() || has_provider_content {
         let message = result
             .assistant_message
             .unwrap_or_else(|| assistant_message(text.clone(), calls.clone(), result.raw));
