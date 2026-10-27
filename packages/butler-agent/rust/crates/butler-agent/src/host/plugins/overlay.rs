@@ -76,6 +76,57 @@ fn config(
         "env":values(&env),"headers":values(&server.headers),"source":"plugin","plugin":plugin.package.name})
 }
 impl butler_models::mcp_client::McpOverlay for Plugins {
+    fn prepare_call(
+        &self,
+        id: &str,
+        args: &serde_json::Map<String, Value>,
+    ) -> std::result::Result<butler_models::mcp_client::PreparedOverlay, &'static str> {
+        let (plugin, server) = id.split_once('/').ok_or("plugin_mcp_id_invalid")?;
+        let account = {
+            let state = self.state.lock();
+            let accounts = state
+                .registry
+                .accounts
+                .values()
+                .filter(|a| {
+                    a.plugin == plugin
+                        && a.enabled
+                        && args
+                            .get("account")
+                            .and_then(Value::as_str)
+                            .is_none_or(|id| id == a.id)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            if accounts.len() > 1 {
+                return Err("connector_account_required");
+            }
+            accounts.into_iter().next()
+        };
+        if let Some(account) = account {
+            return self
+                .connectors
+                .prepared_blocking(&account, server)
+                .map_err(|e| e.code);
+        }
+        butler_models::mcp_client::McpOverlay::prepare_leased(self, id)
+    }
+    fn validate_tool(
+        &self,
+        server: &str,
+        tool: &str,
+        args: &serde_json::Map<String, Value>,
+    ) -> std::result::Result<(), &'static str> {
+        self.connectors.destination(server, tool, args)
+    }
+    fn connector_tool(
+        &self,
+        action: String,
+        input: Value,
+        read_only: bool,
+    ) -> butler_core::plugins::PluginFuture<'_> {
+        Box::pin(async move { self.connectors.tool(&action, input, read_only).await })
+    }
     fn servers(&self) -> Vec<Value> {
         if self.safe_mode {
             return Vec::new();
@@ -116,7 +167,10 @@ impl Plugins {
     fn prepare_server(&self, server_id: &str) -> Result<Value> {
         self.prepare_snapshot(server_id).map(|(config, _)| config)
     }
-    fn prepare_snapshot(&self, server_id: &str) -> Result<(Value, std::sync::Arc<Approval>)> {
+    pub(super) fn prepare_snapshot(
+        &self,
+        server_id: &str,
+    ) -> Result<(Value, std::sync::Arc<Approval>)> {
         let _mutation = self.mutation.lock();
         let (id, server_id) = server_id
             .split_once('/')
@@ -149,14 +203,17 @@ impl Plugins {
         ))
     }
     fn secret_values(&self, plugin: &Installed) -> Result<BTreeMap<String, String>> {
+        if plugin.approval.capabilities.secrets.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        let secrets = super::storage::secret_store()?;
         plugin
             .approval
             .capabilities
             .secrets
             .iter()
             .map(|s| {
-                let value = self
-                    .secrets
+                let value = secrets
                     .get(&super::storage::key(&plugin.package.name, &s.key)?)
                     .map_err(|_| error("plugin_secret_unavailable"))?
                     .ok_or_else(|| error("plugin_secret_unavailable"))?;

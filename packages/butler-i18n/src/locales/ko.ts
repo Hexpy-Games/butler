@@ -930,6 +930,13 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     failureReason: "실패 원인",
   },
   conversation: {
+    initiated: {
+      noThanks: "괜찮아요", soundsGood: "좋아요",
+      created: action => `만들었어요 · ${action}`, skipped: action => `안 만들었어요 · ${action}`,
+      continuing: action => `계속 받아요 · ${action}`, paused: action => `멈춰 뒀어요 · ${action}`, alreadyHandled: "이미 처리된 제안이에요", failed: "처리하지 못했어요. 다시 해 주세요.",
+      dailyAt: time => `매일 ${time}`, weekdaysAt: time => `평일 ${time}`, unopened: n => `${n}번 연속 안 열어보셨어요`,
+      action: (frequency, title, date) => ["예약 작업", frequency, title, ...(date ? [`${date}부터`] : []), "대화로 받아요"].join(" · "),
+    },
     chatsIntro: "이제 여기선 편하게 얘기해요. 길어지는 건 문서로 드릴게요.",
     messageActions: {
       showMore: "더보기",
@@ -2499,6 +2506,11 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       fullDiskAccess: "브라우저 폴더 접근 권한이 필요해요",
       failed: "가져오지 못했어요",
       needsKeychain: "시스템 암호 저장소가 있어야 가져올 수 있어요",
+      open: "브라우저 가져오기",
+      dataLabel: "브라우저 데이터",
+      chooseBrowser: "브라우저 선택",
+      steps: "가져오기 단계",
+      next: "다음", back: "이전", done: "완료",
     },
     agentImport: {
       purpose: "지침과 MCP 서버를 버틀러로 옮겨요",

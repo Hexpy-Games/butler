@@ -3,6 +3,13 @@
 use super::*;
 
 pub trait GatewayMutationCommands: Send + Sync + 'static {
+    fn composing(&self, _id: String) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn report_pause(&self, _id: String, _decision: String) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+
     fn upload_canon_file(
         &self,
         _project: String,

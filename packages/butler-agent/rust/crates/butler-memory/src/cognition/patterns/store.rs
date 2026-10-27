@@ -15,11 +15,20 @@ use tokio_util::sync::CancellationToken;
 pub struct PatternRepository {
     root: PathBuf,
     coordinator: Arc<CognitionWriteCoordinator>,
+    changed: Arc<tokio::sync::Notify>,
 }
 impl PatternRepository {
     /// Bind the repository to the data root and its write coordinator.
     pub fn new(root: PathBuf, coordinator: Arc<CognitionWriteCoordinator>) -> Self {
-        Self { root, coordinator }
+        Self {
+            root,
+            coordinator,
+            changed: Arc::new(tokio::sync::Notify::new()),
+        }
+    }
+    /// Cheap signal for a newly committed proposal bundle.
+    pub fn proposals_changed(&self) -> Arc<tokio::sync::Notify> {
+        self.changed.clone()
     }
     pub(super) async fn load(&self) -> Result<PatternStore, PatternError> {
         let path = self.path();
@@ -36,12 +45,25 @@ impl PatternRepository {
         expected: u64,
         cancellation: &CancellationToken,
     ) -> Result<(), PatternError> {
+        let new_bundle = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let committed = new_bundle.clone();
         self.mutate(expected, cancellation, move |current| {
+            committed.store(
+                store
+                    .bundles
+                    .iter()
+                    .any(|b| !current.bundles.iter().any(|old| old.id == b.id)),
+                std::sync::atomic::Ordering::Relaxed,
+            );
             store.revision = current.revision;
             *current = store;
             Ok(())
         })
-        .await
+        .await?;
+        if new_bundle.load(std::sync::atomic::Ordering::Relaxed) {
+            self.changed.notify_one();
+        }
+        Ok(())
     }
     async fn mutate(
         &self,

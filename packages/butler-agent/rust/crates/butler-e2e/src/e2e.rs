@@ -8,6 +8,7 @@ pub mod config;
 pub mod events;
 pub mod executable;
 pub mod fake_chatgpt;
+pub mod fake_imap;
 pub mod fake_servers;
 pub mod faults;
 pub mod fixtures;

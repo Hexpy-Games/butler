@@ -50,6 +50,15 @@ pub(super) fn uncovered(
             growth.push(json!({"kind":"hook","item":item,"new":true}));
         }
     }
+    for (id, item) in &next.connectors {
+        if !approved
+            .connectors
+            .get(id)
+            .is_some_and(|old| super::connector_manifest::covers(old, item))
+        {
+            growth.push(json!({"kind":"connector","item":item,"new":true}));
+        }
+    }
     growth
 }
 fn executable(argv: &[String]) -> Vec<String> {

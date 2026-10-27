@@ -23,7 +23,8 @@ export function AddressSuggestions({ editing, onChoose, field }: { editing: bool
   const version = useHistoryVersion(s => s.version), anchor = useRef<HTMLDivElement | null>(null);
   useEffect(() => { if (!editing) { setQuery(""); setItems([]); setIndex(-1); } }, [editing]);
   useEffect(() => {
-    let active = true; setItems([]); setIndex(-1); setDismissed(false);
+    let active = true; setIndex(-1); setDismissed(false);
+    if (!editing || !query.trim()) setItems([]);
     if (editing && query.trim()) void api<{ items: AddressSuggestion[] }>(`/browser-history/suggestions?${new URLSearchParams({ q: query })}`).then(page => { if (active) setItems(page.items); }, () => {});
     return () => { active = false; };
   }, [query, editing, version]);

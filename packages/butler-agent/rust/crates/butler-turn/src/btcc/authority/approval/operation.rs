@@ -55,7 +55,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
     if let Some(operation) = signed_in_operation(&facts).or_else(|| pay_operation(&facts)) {
         return operation;
     }
-    if facts.capability == "browser_act"
+    if matches!(facts.capability, "browser_act" | "browser_open")
         || matches!(facts.capability, "browser_close" | "browser_observe")
             && facts.input.get("dialog").is_some()
     {
@@ -146,28 +146,19 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
             .unwrap_or(facts.target)
             .to_owned(),
     ];
-    let browser_steps = facts.input["resolved_steps"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|step| {
-            let hit = &step["hit"];
-            BrowserApprovalStep {
-                action: step["action"].as_str().unwrap_or("").into(),
-                role: hit["role"].as_str().unwrap_or("").into(),
-                name: hit["name"].as_str().unwrap_or("").into(),
-                frame: hit["frame"].as_str().unwrap_or("").into(),
-                value_preview: step["value_preview"].as_str().map(str::to_owned),
-                addons: step["addons"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect(),
-            }
-        })
-        .collect();
+    if let Some(url) = facts.input["url"].as_str() {
+        targets.push(url.into());
+    }
+    targets.extend(
+        facts.input["urls"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned),
+    );
+    targets.dedup();
+    let browser_steps = browser_steps(facts.input);
     if let Some(dialog) = facts.input.get("dialog") {
         targets.push(format!(
             "{} · \"{}\"",
@@ -194,6 +185,43 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         wait_reason: None,
         image: None,
     }
+}
+
+fn browser_steps(input: &Value) -> Vec<BrowserApprovalStep> {
+    input["resolved_steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .map(|(index, step)| {
+            let hit = &step["hit"];
+            let declared = input
+                .get("steps")
+                .and_then(|steps| steps.get(index))
+                .unwrap_or(&Value::Null);
+            BrowserApprovalStep {
+                action: step["action"]
+                    .as_str()
+                    .or_else(|| declared["action"].as_str())
+                    .unwrap_or("")
+                    .into(),
+                role: hit["role"].as_str().unwrap_or("").into(),
+                name: hit["name"].as_str().unwrap_or("").into(),
+                frame: hit["frame"].as_str().unwrap_or("").into(),
+                value_preview: step["value_preview"]
+                    .as_str()
+                    .or_else(|| declared["value"].as_str())
+                    .map(str::to_owned),
+                addons: step["addons"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect(),
+            }
+        })
+        .collect()
 }
 
 /// Signed-in site grants, sign-in fills and the sign-in hand-back wait: one

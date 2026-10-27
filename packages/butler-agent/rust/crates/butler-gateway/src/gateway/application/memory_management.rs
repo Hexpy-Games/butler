@@ -76,6 +76,10 @@ pub type MemoryEventSink = Arc<dyn Fn(Value) -> ApplicationFuture<()> + Send + S
 
 /// Native memory owner adapter.
 pub trait AppMemoryPort: Send + Sync + 'static {
+    /// New bundle publication only; absent when the adapter has no proposals.
+    fn proposals_changed(&self) -> Option<Arc<tokio::sync::Notify>> {
+        None
+    }
     /// Executes a request. Start returns immediately; events carry progress/result.
     fn execute(
         &self,
@@ -91,14 +95,35 @@ impl super::AppApplication {
         command: AppMemoryCommand,
         cancellation: CancellationToken,
     ) -> Result<Value, GatewayApplicationError> {
+        if let AppMemoryCommand::DecidePattern {
+            bundle_id,
+            pattern_id,
+            decision,
+            expected_revision,
+        } = command
+        {
+            return self
+                .decide_proposal(
+                    bundle_id,
+                    pattern_id,
+                    decision,
+                    expected_revision,
+                    cancellation,
+                )
+                .await;
+        }
         let command = self.canonical_project_command(command).await?;
         let listing = matches!(&command, AppMemoryCommand::Instructions);
+        let proposals = matches!(&command, AppMemoryCommand::PatternProposals);
         let sink = self.memory_event_sink();
         let mut view = self
             .dependencies
             .memory_management
             .execute(command, sink, cancellation)
             .await?;
+        if proposals {
+            super::initiated::public_proposals(&mut view);
+        }
         if listing {
             view = self.storage.execute(move |db| {
                 if let Some(rows) = view["instructions"].as_array_mut() {

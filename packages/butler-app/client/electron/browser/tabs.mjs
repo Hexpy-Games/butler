@@ -108,14 +108,16 @@ class UserBrowser {
       tab.slot?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
     if (!visible || !tab.view) { this.detach(tab); backgroundTab(this, tab); return; }
     viewedTab(this, tab, true);
-    // Occlusion can clear while the floating preview moves. Reattaching the page
-    // above the overlay also cancels its native capture; wait for the real release.
-    if (this.pointer.captures(tab.id) && this.pointer.attached === win && tab.attached !== win) return;
+    // Occlusion can clear while a held drag goes on (its floating preview lifts in over the page).
+    // Adding the page above the overlay would cancel the overlay's native capture, so the page
+    // returns beneath it and stays on screen for the rest of the drag.
+    const held = this.pointer.captures(tab.id) && this.pointer.attached === win;
     if (tab.attached !== win) this.detach(tab);
     tab.bounds = tab.slot;
-    attachView(tab, win, () => {
+    attachView(tab, win, held ? win.contentView.children.indexOf(this.pointer.view) : -1, () => {
       const { x, y, width, height } = tab.bounds;
-      tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+      const left = Math.round(x), top = Math.round(y);
+      tab.view.setBounds({ x: left, y: top, width: Math.round(x + width) - left, height: Math.round(y + height) - top });
       tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
       emulation(tab); this.pointer.sync(tab);
     }, () => { if (this.tabs.get(tab.id) === tab) this.sync(tab); });
