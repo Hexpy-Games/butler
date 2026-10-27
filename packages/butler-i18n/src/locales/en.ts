@@ -947,6 +947,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   conversation: {
     initiated: {
+      workFailed: reason => `Couldn't deliver the work result · ${reason}`, unknownReason: "Unknown error",
       viewWork: "View work", needsApproval: "Needs your OK",
       noThanks: "No thanks", soundsGood: "Sounds good",
       created: action => `Created · ${action}`, skipped: action => `Skipped · ${action}`,

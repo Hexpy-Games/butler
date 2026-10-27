@@ -48,6 +48,7 @@ impl AppApplication {
         &self,
         session_id: String,
     ) -> Result<AppSessionReadResult, GatewayApplicationError> {
+        self.surface_work_failures(Some(session_id.clone())).await?;
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
         self.storage

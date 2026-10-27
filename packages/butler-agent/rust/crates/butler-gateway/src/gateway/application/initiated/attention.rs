@@ -43,7 +43,15 @@ pub(in crate::gateway::application) fn enqueue_attention(
     if let Some(work) = action.get("work_session_id").and_then(Value::as_str) {
         payload["work_session_id"] = json!(work);
     }
-    outbox::enqueue(db, &id, &source, "approval_needed", &text, &payload, now)
+    outbox::enqueue(
+        db,
+        (&id, "general"),
+        &source,
+        "approval_needed",
+        &text,
+        &payload,
+        now,
+    )
 }
 
 fn capability_label(kind: butler_turn::btcc::ApprovalActionKind, language: &str) -> &'static str {

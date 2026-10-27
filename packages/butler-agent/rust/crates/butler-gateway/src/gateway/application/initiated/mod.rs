@@ -2,6 +2,7 @@
 mod attention;
 pub(super) use attention::enqueue_attention;
 mod decisions;
+mod failures;
 mod gate;
 mod outbox;
 mod pause;
@@ -9,6 +10,7 @@ mod projection;
 mod proposals;
 mod retry;
 mod work;
+pub(super) use failures::save_reply_quiet;
 
 pub(super) use decisions::Decisions;
 pub(super) use gate::{Composing, Gate, Hold};

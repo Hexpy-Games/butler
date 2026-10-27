@@ -8,7 +8,7 @@ use butler_gateway::gateway::LocalAuthConfig;
 
 #[derive(Clone)]
 pub(crate) struct ActiveAppEndpoint {
-    changes: tokio::sync::watch::Sender<()>,
+    changes: tokio::sync::watch::Sender<(u64, bool)>,
     application:
         std::sync::Arc<RwLock<Option<std::sync::Arc<butler_gateway::gateway::AppApplication>>>>,
     current: std::sync::Arc<RwLock<Option<ActiveAppEndpointSnapshot>>>,
@@ -25,7 +25,7 @@ pub(crate) struct ActiveAppEndpointSnapshot {
 
 impl Default for ActiveAppEndpoint {
     fn default() -> Self {
-        let (changes, _) = tokio::sync::watch::channel(());
+        let (changes, _) = tokio::sync::watch::channel((0, false));
         Self {
             changes,
             application: Default::default(),
@@ -35,7 +35,7 @@ impl Default for ActiveAppEndpoint {
 }
 
 impl ActiveAppEndpoint {
-    pub(crate) fn subscribe_changes(&self) -> tokio::sync::watch::Receiver<()> {
+    pub(crate) fn subscribe_changes(&self) -> tokio::sync::watch::Receiver<(u64, bool)> {
         self.changes.subscribe()
     }
 
@@ -63,7 +63,7 @@ impl ActiveAppEndpoint {
             database_path: configuration.db_path.clone(),
         };
         *self.current.write() = Some(snapshot);
-        self.changes.send_replace(());
+        self.changes.send_modify(|state| state.1 = false);
     }
 
     pub(crate) fn publish_application(
@@ -71,14 +71,19 @@ impl ActiveAppEndpoint {
         application: std::sync::Arc<butler_gateway::gateway::AppApplication>,
     ) {
         *self.application.write() = Some(application);
-        self.changes.send_replace(());
+        self.changes.send_modify(|state| state.1 = false);
     }
 
     pub(crate) async fn application(
         &self,
     ) -> Option<std::sync::Arc<butler_gateway::gateway::AppApplication>> {
         let mut changes = self.subscribe_changes();
+        let generation = changes.borrow_and_update().0;
         loop {
+            let state = *changes.borrow_and_update();
+            if state.1 || state.0 != generation {
+                return None;
+            }
             if let Some(application) = self.application.read().clone() {
                 return Some(application);
             }
@@ -89,6 +94,9 @@ impl ActiveAppEndpoint {
     pub(crate) fn clear(&self) {
         *self.application.write() = None;
         *self.current.write() = None;
-        self.changes.send_replace(());
+        self.changes.send_modify(|state| {
+            state.0 += 1;
+            state.1 = true;
+        });
     }
 }

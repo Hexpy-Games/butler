@@ -12,6 +12,7 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 mod delivery;
+mod failures;
 mod quiet;
 mod recovery;
 mod schedule_tier;

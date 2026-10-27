@@ -86,10 +86,16 @@ async fn bad_held_results_fail_without_blocking_a_good_result() -> Result<(), Ha
     result(&s, "good", None).await?;
     held(&s, "work_result", 3).await?;
     clock(&address, "2026-10-27T12:00:11.000Z").await?;
-    let messages = wait_count(&s, "work_result", 1).await?;
-    assert_eq!(messages[0]["initiated"]["relation_id"], "good");
+    let messages = wait_count(&s, "work_result", 2).await?;
+    let mut relations: Vec<_> = messages
+        .iter()
+        .map(|m| m["initiated"]["relation_id"].as_str().unwrap())
+        .collect();
+    relations.sort_unstable();
+    assert_eq!(relations, ["bad-model", "good"]);
+    wait_count(&s, "work_failed", 1).await?;
     let failed: i64 = app(&s)?.query_row("SELECT count(*) FROM app_initiated_messages WHERE state='failed' AND reason IS NOT NULL AND length(reason)>0", [], |r| r.get(0))?;
-    assert_eq!(failed, 2);
+    assert_eq!(failed, 1);
     held(&s, "work_result", 0).await?;
     s.finish().await?;
     server.abort();

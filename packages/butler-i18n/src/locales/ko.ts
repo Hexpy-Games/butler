@@ -944,6 +944,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   conversation: {
     initiated: {
+      workFailed: reason => `작업 결과를 전달하지 못했어요 · ${reason}`, unknownReason: "알 수 없는 오류",
       viewWork: "작업 보기", needsApproval: "확인 필요",
       noThanks: "괜찮아요", soundsGood: "좋아요",
       created: action => `만들었어요 · ${action}`, skipped: action => `안 만들었어요 · ${action}`,

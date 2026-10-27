@@ -181,8 +181,11 @@ fn initiated_result_expired(
     let Some((status, message)) = row else {
         return Ok(None);
     };
-    if matches!(status.as_str(), "held" | "failed") {
+    if status == "held" {
         return Ok(Some(false));
+    }
+    if status == "failed" {
+        return Ok(Some(true));
     }
     let Some(message) = message else {
         return Ok(None);

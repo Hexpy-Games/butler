@@ -49,7 +49,7 @@ impl AppApplication {
                     redact(&mut panel);
                     outbox::enqueue(
                         db,
-                        &clock.new_uuid(),
+                        (&clock.new_uuid(), "general"),
                         &format!("pattern-bundle:{id}"),
                         "pattern_proposal",
                         text,

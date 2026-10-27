@@ -9,6 +9,16 @@ test("mask only credential values, preserving the exact action", () => {
     "TOKENIZER=value", "mysecret=value", "https://user@host/path", "notes/sk-example.txt",
   ];
   const masked = [
+    ["X-Api-Key: example", "X-Api-Key: ••••"],
+    ["X-Auth-Token: example", "X-Auth-Token: ••••"],
+    ["curl -H 'X-Api-Key: example' https://example.com", "curl -H 'X-Api-Key: ••••' https://example.com"],
+    ['curl -H "X-Auth-Token: example" https://example.com', 'curl -H "X-Auth-Token: ••••" https://example.com'],
+    ['{"password": "two words", "path": "notes/a.txt"}', '{"password": ••••, "path": "notes/a.txt"}'],
+    ["{'client_secret': 'example', 'name': 'report'}", "{'client_secret': ••••, 'name': 'report'}"],
+    ["{password: 'example', path: 'notes/a.txt'}", "{password: ••••, path: 'notes/a.txt'}"],
+    ["PGPASSWORD=example", "PGPASSWORD=••••"],
+    ["MYSQL_PWD=example", "MYSQL_PWD=••••"],
+    ["SERVICEAUTHSECRET=example", "SERVICEAUTHSECRET=••••"],
     ["Authorization: Bearer sample-value", "Authorization: Bearer ••••"],
     ["Authorization: Basic sample-value", "Authorization: Basic ••••"],
     ["OPENAI_API_KEY=sk-example", "OPENAI_API_KEY=••••"],
@@ -28,10 +38,14 @@ test("mask only credential values, preserving the exact action", () => {
   ];
   for (const input of unchanged) expect(maskActionSecrets(input)).toBe(input);
   for (const [input, expected] of masked) expect(maskActionSecrets(input!)).toBe(expected!);
-  for (const name of ["TOKEN", "SECRET", "PASSWORD", "PASSWD", "API_KEY", "APIKEY", "ACCESS_KEY", "PRIVATE_KEY", "CLIENT_SECRET"]) {
+  for (const name of ["TOKEN", "SECRET", "PASSWORD", "PASSWD", "PWD", "API_KEY", "APIKEY", "ACCESS_KEY", "PRIVATE_KEY", "CLIENT_SECRET"]) {
     for (const variant of [name, `service_${name.toLowerCase()}_value`, `service-${name.toLowerCase().replaceAll("_", "-")}-value`]) {
       expect(maskActionSecrets(`${variant}=example`)).toBe(`${variant}=••••`);
       expect(maskActionSecrets(`--${variant} example`)).toBe(`--${variant} ••••`);
+      expect(maskActionSecrets(`${variant}: example`)).toBe(`${variant}: ••••`);
+      for (const quote of ['"', "'"]) {
+        expect(maskActionSecrets(`${quote}${variant}${quote}: ${quote}example${quote}`)).toBe(`${quote}${variant}${quote}: ••••`);
+      }
     }
   }
 });

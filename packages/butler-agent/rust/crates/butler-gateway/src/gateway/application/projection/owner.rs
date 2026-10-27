@@ -84,6 +84,12 @@ impl ProjectionOwner {
         Ok(owner)
     }
 
+    /// A terminal result relinquishes its files without a consuming turn.
+    pub(in crate::gateway::application) fn handoffs_changed(&self) {
+        self.inner.pending.lock().handoffs = true;
+        let _ = self.inner.sender.try_send(Command::Events);
+    }
+
     pub(in crate::gateway::application) async fn active(
         &self,
     ) -> Result<(), GatewayApplicationError> {

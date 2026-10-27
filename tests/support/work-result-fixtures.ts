@@ -46,3 +46,11 @@ export function longPathApproval(): SessionView {
     approval: { action_kind: "edit_files", targets: [{ kind: "folder", path: longEditPath, label: longEditPath }],
       count: 1, examples: [], risk: "low", operation: { tool: "edit_files", access: "change", targets: [longEditPath] } } }] };
 }
+
+export function workFailed(en = false, retrying = false, chatId = "general"): MessageRecord {
+  const reason = retrying ? (en ? "Still retrying" : "계속 다시 시도하고 있어요")
+    : (en ? "Delivery blocked" : "전달이 차단됐어요");
+  return { ...workResult(en, false), id: `work-failed-${retrying}`, chat_id: chatId, text: "Stored notification text",
+    initiated: { kind: "work_failed", quiet: false, work_session_id: workSessionId, work_title: workTitle,
+      reason_code: retrying ? "delivery_retrying" : "hook_blocked", reason_label: reason } };
+}

@@ -392,7 +392,6 @@ pub(super) fn accept_turn(
         }
     }
     tx.execute("INSERT INTO turns(id,chat_id,state,safe_status_label,retryable,cancellable,attempt,execution_controls_json,created_at,updated_at) VALUES(?1,?2,'accepted','Accepted',0,0,1,?3,?4,?4)",params![turn_id,claim.chat_id,controls_json,now]).map_err(AppStorageError::sqlite)?;
-    tx.execute("UPDATE turns SET quiet=COALESCE((SELECT json_extract(control_resolution_json,'$.quiet') FROM session_queued_messages WHERE id=?1),0) WHERE id=?2", params![claim.queued_message_id,turn_id]).map_err(AppStorageError::sqlite)?;
     let content: Option<String> = tx
         .query_row(
             "SELECT content_parts_json FROM session_queued_messages WHERE id=?1",

@@ -191,7 +191,9 @@ impl AppGatewayLifecycle {
         };
         let listener = match listener {
             Some(listener) => listener,
-            None => AppServer::bind(&app_config.host, port).await?,
+            None => AppServer::bind(&app_config.host, port)
+                .await
+                .inspect_err(|_| self.endpoint.clear())?,
         };
         let mut server = AppServer::open(
             &self.runtime,
@@ -206,7 +208,8 @@ impl AppGatewayLifecycle {
             },
             listener,
         )
-        .await?;
+        .await
+        .inspect_err(|_| self.endpoint.clear())?;
         let address = server.local_addr();
         if app_config.port == 0 {
             self.allocated_port.store(address.port(), Ordering::Relaxed);
@@ -215,8 +218,6 @@ impl AppGatewayLifecycle {
         // HTTP probe can time out under load even while that listener is healthy;
         // status queries still probe it, but startup must not tear it down for that.
         self.endpoint.publish(address, app_config, local_auth);
-        self.endpoint
-            .publish_application(server.application.clone());
         if let Err(error) = self
             .persist(true, Some(format!("http://{address}")), app_config)
             .await
@@ -234,6 +235,8 @@ impl AppGatewayLifecycle {
                 error.to_string(),
             ));
         }
+        self.endpoint
+            .publish_application(server.application.clone());
         *current = Some(server);
         Ok(true)
     }

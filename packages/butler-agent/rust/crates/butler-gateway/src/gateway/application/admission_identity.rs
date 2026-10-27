@@ -149,10 +149,5 @@ pub(super) fn resolve_message(
             resolution.persisted["message_origin"] = "connector".into();
         }
     }
-    if request.subsession_result.is_some() || request.schedule_run.is_some() {
-        resolution.persisted["quiet"] = super::initiated::Gate::for_admission(db, facts, now)?
-            .quiet()?
-            .into();
-    }
     Ok(resolution)
 }

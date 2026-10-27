@@ -44,7 +44,8 @@ async fn queued_done(s: &Scenario) -> Result<(), HarnessError> {
 }
 
 #[tokio::test]
-async fn transient_send_twice_then_exactly_once_ahead_of_user_queue() -> Result<(), HarnessError> {
+async fn transient_send_twice_then_exactly_once_without_blocking_user_queue()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start(false, true).await?;
     script.delegated.store(true, Ordering::SeqCst);
@@ -58,7 +59,8 @@ async fn transient_send_twice_then_exactly_once_ahead_of_user_queue() -> Result<
     assert_eq!(response.status, 503, "{response:?}");
     attempts(&s, 1).await?;
     let queued = s.gw.say("general", "Continue after the evidence.").await?;
-    assert!(queued["accepted"].is_null(), "{queued:?}");
+    assert!(queued["accepted"].is_object(), "{queued:?}");
+    queued_done(&s).await?;
     let replay =
         s.gw.post("/internal/subsession-result", body.clone())
             .await?;
@@ -67,7 +69,14 @@ async fn transient_send_twice_then_exactly_once_ahead_of_user_queue() -> Result<
     clock(&address, "2026-10-27T12:00:01.000Z").await?;
     attempts(&s, 2).await?;
     held(&s, "work_result", 1).await?;
-    assert_eq!(s.gw.messages("general").await?, [] as [Value; 0]);
+    assert_eq!(
+        s.gw.messages("general")
+            .await?
+            .iter()
+            .filter(|m| m["initiated"]["kind"] == "work_result")
+            .count(),
+        0
+    );
     let started = Instant::now();
     clock(&address, "2026-10-27T12:00:03.000Z").await?;
     wait_count(&s, "work_result", 1).await?;
@@ -79,7 +88,7 @@ async fn transient_send_twice_then_exactly_once_ahead_of_user_queue() -> Result<
         .collect::<Result<_, _>>()?;
     assert_eq!(
         order,
-        ["Evidence is ready.", "Continue after the evidence."]
+        ["Continue after the evidence.", "Evidence is ready."]
     );
     assert_eq!(
         messages

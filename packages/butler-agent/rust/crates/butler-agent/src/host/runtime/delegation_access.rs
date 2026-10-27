@@ -19,7 +19,12 @@ pub(super) async fn current(
         return Ok(stored_binding_access_mode(&binding));
     }
     use butler_gateway::gateway::{GatewayApplication, GatewaySessionControls};
-    let application = endpoint.application().await.ok_or_else(invalid)?;
+    let application = endpoint.application().await.ok_or_else(|| {
+        BtccError::relayed(
+            "app_gateway_unavailable",
+            "App gateway stopped before becoming ready.",
+        )
+    })?;
     if let Some(run) = schedule {
         return application
             .get_automation(run.automation_id)

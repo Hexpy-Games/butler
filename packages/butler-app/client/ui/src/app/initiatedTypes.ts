@@ -8,6 +8,8 @@ export interface InitiatedOrigin {
   relation_id?: string;
   work_session_id?: string;
   work_title?: string;
+  reason_code?: string;
+  reason_label?: string;
   run_id?: string;
   /** Raw authority approval; narrowed by the shared approval normalizer. */
   approval?: unknown;

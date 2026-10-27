@@ -98,3 +98,36 @@ async fn schedule_work_steered_by_user_posts_immediately_and_quietly() -> Result
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn quiet_is_decided_when_reply_posts_after_admission() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start(false, true).await?;
+    script.delegated.store(true, Ordering::SeqCst);
+    script.parent_hold.store(true, Ordering::SeqCst);
+    let (s, address) = setup("SS6-POST-QUIET", &url).await?;
+    let response = s.gw.post("/internal/subsession-result", json!({"relation_id":"post-time","result_id":"post-time",
+        "safe_title":"Evidence","child_session_id":"child-post","parent_chat_id":"general","text":"Evidence ready.",
+        "model_ref":s.model.model,"reasoning_effort":"low","access_mode":"full_access"})).await?;
+    assert_eq!(response.status, 202, "{response:?}");
+    tokio::time::timeout(Duration::from_secs(30), script.parent_held.acquire())
+        .await
+        .unwrap()
+        .unwrap()
+        .forget();
+    clock(&address, "2026-10-27T22:00:00.000Z").await?;
+    script.parent_release.add_permits(1);
+    let messages = wait_count(&s, "work_result", 1).await?;
+    assert_eq!(messages[0]["quiet"], true);
+    assert_eq!(messages[0]["initiated"]["quiet"], true);
+    assert!(
+        s.gw.events_since(0)
+            .await?
+            .iter()
+            .any(|e| e["payload"]["message"]["id"] == messages[0]["id"]
+                && e["payload"]["message"]["quiet"] == true)
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

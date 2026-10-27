@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import type { Locator, Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { installInitiatedGateway, session } from "../support/initiated-fixtures";
-import { approvalNeeded, canonApproval, canonDescription, canonTitle, commandApproval, commandCredential, dueOn, longEditPath, longPathApproval, maskedCommand, planTitle, projectTitle, workResult, workSessionId, workTitle } from "../support/work-result-fixtures";
+import { approvalNeeded, canonApproval, canonDescription, canonTitle, commandApproval, commandCredential, dueOn, longEditPath, longPathApproval, maskedCommand, planTitle, projectTitle, workFailed, workResult, workSessionId, workTitle } from "../support/work-result-fixtures";
 import { probeFocusRingFrames } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser, smokeBrowserArgs } from "../support/smoke-browser";
 
@@ -18,16 +18,17 @@ const browser = await launchSmokeBrowser();
 let cells = 0;
 try {
   for (const [language, theme, width] of [
-    ["ko", "light", 1440], ["ko", "dark", 1440], ["ko", "light", 390], ["ko", "dark", 390], ["en", "light", 1440],
+    ["ko", "light", 1440], ["ko", "dark", 1440], ["ko", "light", 390], ["ko", "dark", 390], ["en", "light", 1440], ["en", "dark", 1440],
   ] as const) {
     const page = await browser.newPage({ viewport: { width, height: 960 }, deviceScaleFactor: 2, colorScheme: theme, reducedMotion: "reduce" });
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
-    const gateway = await installInitiatedGateway(page, language, theme, session([workResult(language === "en")]));
+    const gateway = await installInitiatedGateway(page, language, theme, session([workResult(language === "en")]), true);
     const copy = getAppCopy(language === "ko" ? "ko-KR" : "en-US");
     const capture = (region: Locator, name: string, caption: string) => captureRegion(page, region, name, caption, language, theme, width);
     await page.goto("http://127.0.0.1:43827/");
     await resultBubble(page, gateway, copy.conversation.initiated.viewWork, language === "en", capture);
+    await failedWorkLines(page, gateway, copy.conversation.initiated, language === "en", capture);
     await attentionLine(page, gateway, copy.conversation.initiated.needsApproval, language === "en" ? "Run command" : "명령 실행", capture);
     await gateway.showView(commandApproval());
     const commandCard = page.locator('[data-test-class="composer-authority-decision"]');
@@ -98,6 +99,32 @@ async function resultBubble(page: Page, gateway: Gateway, viewWork: string, en: 
   await page.waitForFunction(() => document.querySelector('[data-test-class="message-artifact-list"]')?.children.length === 1);
   assert.equal(await list.getByRole("button").count(), 1, "work link survives without documents");
   await opensObserver(page, link, true);
+}
+async function failedWorkLines(page: Page, gateway: Gateway, copy: ReturnType<typeof getAppCopy>["conversation"]["initiated"], en: boolean, capture: Capture) {
+  for (const chatId of ["general", "butler-client"]) {
+    for (const retrying of [false, true]) {
+      const message = workFailed(en, retrying, chatId);
+      const view = session([message], chatId);
+      if (chatId !== "general") { view.kind = "project"; view.project_id = "butler"; }
+      await gateway.showView(view);
+      const line = page.locator('[data-test-class="initiated-work-failed"]');
+      await line.getByText(copy.workFailed(message.initiated!.reason_label!), { exact: true }).waitFor();
+      const row = page.locator('[data-test-class~="message"][data-test-class~="assistant"]');
+      assert(!(await row.innerText()).includes("Stored notification text"));
+      assert.equal(await row.locator('[data-test-class="assistant-bubble"]').count(), chatId === "general" ? 1 : 0);
+      const list = row.locator('[data-test-class="message-artifact-list"]');
+      const link = list.getByRole("button", { name: workTitle, exact: true });
+      await link.getByText(copy.viewWork, { exact: true }).waitFor();
+      assert.equal(await list.getByRole("button").count(), 1);
+      await checkFooter(page);
+      assert.equal(await row.locator('[data-test-class~="assistant-footer"] button, [data-test-class~="assistant-footer"] [role="button"]').count(), 0);
+      assert.deepEqual(await probeFocusRingFrames(page, () => link.focus()), []);
+      await capture(row, `work-failed-${retrying ? "retrying" : "permanent"}-${chatId === "general" ? "chats" : "project"}`, `작업 결과 전달 실패 · ${retrying ? "재시도 중" : "영구 실패"} · ${chatId === "general" ? "대화" : "프로젝트 대화"}`);
+      await opensObserver(page, link, false);
+      await opensObserver(page, link, true);
+    }
+  }
+  await gateway.showView(session([]));
 }
 async function opensObserver(page: Page, row: Locator, keyboard: boolean) {
   const fetched = page.waitForRequest(request => new URL(request.url()).pathname === "/session-view"
@@ -179,9 +206,12 @@ async function quietWorkResult(page: Page, gateway: Gateway) {
   assert.equal(await count(), before + 1, "top-level quiet suppresses notifications without an initiated origin");
 }
 async function captureRegion(page: Page, region: Locator, name: string, caption: string, language: string, theme: string, width: number) {
-  if (!output || (width === 390 && theme === "dark") || name === "work-result" || name.startsWith("canon-")) return;
+  if (!output || !name.startsWith("work-failed-") || (width === 390 && theme === "dark") || name === "work-result" || name.startsWith("canon-")) return;
+  await page.mouse.move(-1, -1);
   await page.evaluate(() => { (document.activeElement as HTMLElement)?.blur(); return document.fonts.ready; });
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await page.waitForFunction(() => document.getAnimations().every(animation => animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+  assert.equal(await region.locator(':is(button, [role="button"]):is(:hover, :focus-within)').count(), 0, "review captures show resting controls");
   const box = await region.boundingBox(); assert(box);
   const x = Math.max(0, box.x - 12), y = Math.max(0, box.y - 12);
   const filename = `${name}-${language}-${theme}-${width}.jpg`;

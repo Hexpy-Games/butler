@@ -211,6 +211,7 @@ async fn project_final(
                 db,
                 &candidate,
                 final_result::FinalApply {
+                    facts: &facts,
                     language: super::settings::ui_language(db, &facts)?,
                     files,
                     reply_id: &reply_id,

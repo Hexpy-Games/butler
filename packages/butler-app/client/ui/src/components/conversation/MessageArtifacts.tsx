@@ -46,7 +46,7 @@ export function MessageArtifacts({
     document.getElementById(listId)?.querySelectorAll<HTMLElement>(':scope > [role="button"]')[promotedIndex]?.focus();
     usePromotedFile.setState({ fileId: undefined });
   }, [listId, promotedIndex]);
-  const workLink = origin?.kind === "work_result" && origin.work_session_id ? [{
+  const workLink = (origin?.kind === "work_result" || origin?.kind === "work_failed") && origin.work_session_id ? [{
     id: `work:${origin.relation_id ?? origin.work_session_id}`,
     title: origin.work_title ?? "",
     description: appCopy.conversation.initiated.viewWork,

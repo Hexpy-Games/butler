@@ -1,8 +1,14 @@
 /** Redact credential values while preserving the exact action and argument names. */
 export function maskActionSecrets(text: string): string {
-  const name = String.raw`(?:[\w-]*[_-])?(?:token|secret|password|passwd|api[_-]key|apikey|access[_-]key|private[_-]key|client[_-]secret)(?:[_-][\w-]*)?`;
+  const name = String.raw`(?:[\w-]*[_-])?(?:token|secret|password|passwd|pwd|api[_-]key|apikey|access[_-]key|private[_-]key|client[_-]secret)(?:[_-][\w-]*)?`;
   const value = String.raw`("[^"\n]*"|'[^'\n]*'|[^\s&;"'\x60]+)`;
+  const fieldValue = String.raw`("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|[^\s,}\]"'\x60]+)`;
+  // Uppercase environment names may join a prefix directly to the secret word.
+  const joinedName = String.raw`[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|PWD|APIKEY|ACCESSKEY|PRIVATEKEY)`;
   return text
+    .replace(new RegExp(String.raw`(^|[^\w/-])(${joinedName})(=)${value}`, "gu"), "$1$2$3••••")
+    .replace(new RegExp(String.raw`(["'])(${name})(\1\s*:\s*)${fieldValue}`, "giu"), "$1$2$3••••")
+    .replace(new RegExp(String.raw`(^|[^\w/-])(${name})(\s*:\s*)${fieldValue}`, "giu"), "$1$2$3••••")
     .replace(/(\bauthorization\s*:\s*(?:bearer\s+|basic\s+))[^\s"'`]+/giu, "$1••••")
     .replace(new RegExp(String.raw`(^|[^\w/-])(${name})(=)${value}`, "giu"), "$1$2$3••••")
     .replace(new RegExp(String.raw`(^|\s)(--${name})(=|\s+)${value}`, "giu"), "$1$2$3••••")

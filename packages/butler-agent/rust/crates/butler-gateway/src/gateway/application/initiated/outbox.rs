@@ -29,20 +29,21 @@ impl Entry {
 
 pub(super) fn enqueue(
     db: &Connection,
-    id: &str,
+    identity: (&str, &str),
     source: &str,
     kind: &str,
     text: &str,
     payload: &Value,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    db.execute("INSERT OR IGNORE INTO app_initiated_messages(id,chat_id,kind,source_key,text,payload_json,state,created_at) VALUES(?1,'general',?2,?3,?4,?5,'held',?6)",
-        params![id,kind,source,text,payload.to_string(),now]).map_err(AppStorageError::sqlite)?;
+    let (id, chat) = identity;
+    db.execute("INSERT OR IGNORE INTO app_initiated_messages(id,chat_id,kind,source_key,text,payload_json,state,created_at) VALUES(?1,?7,?2,?3,?4,?5,'held',?6)",
+        params![id,kind,source,text,payload.to_string(),now,chat]).map_err(AppStorageError::sqlite)?;
     Ok(())
 }
 
 fn held(db: &Connection) -> Result<Vec<Entry>, AppStorageError> {
-    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours,kind,next_attempt_at FROM app_initiated_messages WHERE state='held' ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours,kind,next_attempt_at FROM app_initiated_messages WHERE state='held' AND posting=0 ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |r| {
             Ok(Entry {
@@ -217,7 +218,15 @@ fn message_event(
     id: &str,
     now: &str,
 ) -> Result<crate::gateway::AppEventEnvelope, AppStorageError> {
-    let row = super::super::read_model::exact_message(db, "general", id)?.ok_or_else(|| {
+    let row = super::super::read_model::exact_message(
+        db,
+        &db.query_row("SELECT chat_id FROM messages WHERE id=?1", [id], |r| {
+            r.get::<_, String>(0)
+        })
+        .map_err(AppStorageError::sqlite)?,
+        id,
+    )?
+    .ok_or_else(|| {
         AppStorageError::new(
             super::super::storage::AppStorageCode::ProjectedMessageMissing,
             "Projected message missing.",

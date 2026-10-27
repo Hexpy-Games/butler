@@ -49,11 +49,6 @@ impl AppApplication {
             .request
             .schedule_run
             .filter(|r| r.unattended || r.connector_event);
-        if command.chat_id != "general" {
-            command.request.access_mode = Some(self.result_access(&command).await?);
-            return serde_json::to_value(self.send_message(command).await?)
-                .map_err(GatewayApplicationError::internal_from);
-        }
         let bypass = command.request.schedule_run.is_none();
         let context = command
             .request
@@ -70,11 +65,12 @@ impl AppApplication {
             butler_turn::btcc::digest_identity(&source)
         );
         let key = id.clone();
+        let chat = command.chat_id;
         self.storage
             .execute(move |db| {
-                outbox::enqueue(db, &key, &source, "work_result", &title, &payload, &now)?;
+                outbox::enqueue(db, (&key, &chat), &source, "work_result", &title, &payload, &now)?;
                 db.execute(
-                    "UPDATE app_initiated_messages SET bypass_quiet_hours=?1 WHERE id=?2",
+                    "UPDATE app_initiated_messages SET bypass_quiet_hours=?1 WHERE id=?2 AND state='held' AND bypass_quiet_hours<>?1",
                     params![bypass, key],
                 )
                 .map_err(AppStorageError::sqlite)?;
@@ -85,6 +81,10 @@ impl AppApplication {
         let result = self.deliver_work_result(id.clone()).await;
         if let Err(error) = &result {
             self.initiated_failure(id, error).await?;
+            if error.failure_class() == crate::gateway::error::FailureClass::Permanent {
+                self.deliver_initiated().await?;
+                return Ok(json!({"state":"failed"}));
+            }
         }
         self.automation_wake.notify_one();
         result
@@ -123,14 +123,17 @@ impl AppApplication {
         &self,
         id: String,
     ) -> Result<Value, GatewayApplicationError> {
-        let Some(request) = self.load_work_result(id.clone()).await? else {
-            return Ok(json!({"state":"posted"}));
-        };
+        let (chat, state, raw) = self.load_work_result(id.clone()).await?;
+        if state != "held" {
+            return Ok(json!({"state":state}));
+        }
+        let request: HeldResult = serde_json::from_str(&raw)
+            .map_err(|e| GatewayApplicationError::internal_from(e).permanent())?;
         if self.work_retry_pending(id.clone()).await? {
             return Ok(json!({"held":true}));
         }
         let mut command = SendMessageCommand {
-            chat_id: "general".into(),
+            chat_id: chat.clone(),
             request: request.into(),
         };
         command.request.schedule_run = command
@@ -138,55 +141,61 @@ impl AppApplication {
             .schedule_run
             .filter(|r| r.unattended || r.connector_event);
         command.request.access_mode = Some(self.result_access(&command).await?);
+        command.request.model = None;
+        command.request.reasoning_effort = None;
         let gate = self.initiated_gate().await?;
         if !matches!(
-            gate.work_hold("general", command.request.schedule_run.is_none())
+            gate.work_hold(&chat, command.request.schedule_run.is_none())
                 .map_err(app_error)?,
             Hold::Free
         ) {
             return Ok(json!({"held":true}));
         }
-        #[cfg(feature = "e2e-fixtures")]
-        self.work_send_fault(&id).await?;
-        let result = self.send_message(command).await?;
+        let key = id.clone();
+        let reserved = self.storage.execute(move |db| {
+            db.execute("UPDATE app_initiated_messages SET posting=1 WHERE id=?1 AND state='held' AND posting=0", [key]).map_err(AppStorageError::sqlite)
+        }).await.map_err(app_error)?;
+        if reserved == 0 {
+            return Ok(json!({"held":true}));
+        }
+        let result = self.send_work_result(&id, command).await?;
         let message = result.accepted.as_ref().map(|m| m.id.clone());
         let now = self.dependencies.identity_clock.now_iso();
         self.storage.execute(move |db| {
-            db.execute("UPDATE app_initiated_messages SET state='posted',reason=NULL,next_attempt_at=NULL,message_id=?1,posted_at=?2 WHERE id=?3 AND state='held'", params![message,now,id])
+            db.execute("UPDATE app_initiated_messages SET state='posted',posting=0,reason=NULL,next_attempt_at=NULL,message_id=?1,posted_at=?2 WHERE id=?3 AND state='held'", params![message,now,id])
                 .map_err(AppStorageError::sqlite)?;
             Ok(())
         }).await.map_err(app_error)?;
         serde_json::to_value(result).map_err(GatewayApplicationError::internal_from)
     }
+    async fn send_work_result(
+        &self,
+        _id: &str,
+        command: SendMessageCommand,
+    ) -> Result<crate::gateway::MessageSendResult, GatewayApplicationError> {
+        #[cfg(feature = "e2e-fixtures")]
+        self.work_send_fault(_id).await?;
+        self.send_message(command).await.map_err(|error| {
+            if matches!(&error, GatewayApplicationError::Public { code, .. } if code == "session_model_unavailable") {
+                error.permanent()
+            } else { error }
+        })
+    }
+
     async fn load_work_result(
         &self,
         id: String,
-    ) -> Result<Option<HeldResult>, GatewayApplicationError> {
-        let key = id.clone();
-        let (raw, state): (String, String) = self
-            .storage
+    ) -> Result<(String, String, String), GatewayApplicationError> {
+        self.storage
             .read(move |db| {
                 db.query_row(
-                    "SELECT payload_json,state FROM app_initiated_messages WHERE id=?1",
-                    [key],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
+                    "SELECT chat_id,state,payload_json FROM app_initiated_messages WHERE id=?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                 )
                 .map_err(AppStorageError::sqlite)
             })
             .await
-            .map_err(app_error)?;
-        if state == "posted" {
-            return Ok(None);
-        }
-        if state == "failed" {
-            let key = id.clone();
-            self.storage.execute(move |db| {
-                db.execute("UPDATE app_initiated_messages SET state='held',reason=NULL,next_attempt_at=NULL WHERE id=?1 AND state='failed'", [key]).map_err(AppStorageError::sqlite)?;
-                Ok(())
-            }).await.map_err(app_error)?;
-        }
-        serde_json::from_str(&raw)
-            .map(Some)
-            .map_err(|e| GatewayApplicationError::internal_from(e).permanent())
+            .map_err(app_error)
     }
 }

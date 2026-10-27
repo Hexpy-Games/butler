@@ -45,7 +45,7 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
         {bubble ? <>
           {message.initiated?.kind === "approval_needed" ? (
             <MessageBubble><InitiatedApprovalLine origin={message.initiated} /></MessageBubble>
-          ) : failureNotice ? <AssistantFailureNotice message={message} /> : message.text.trim() ? (
+          ) : failureNotice ? <AssistantFailureNotice message={message} /> : message.text.trim() || message.initiated?.kind === "work_failed" ? (
             <MessageBubble><AssistantReplyText message={message} refreshFileUrls={refreshFileUrls} /></MessageBubble>
           ) : null}
           {stewardProgress && <ErrorBoundary fallback={null}><StewardParentProgress progress={stewardProgress} /></ErrorBoundary>}
