@@ -49,8 +49,11 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
   {
     await open("browser", copy.settings.sections.browser);
     await section(page, "sign-ins").locator('[data-test-class="sign-in-row"]').waitFor();
-    await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
-    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), [...(!before ? ["browsing-agent"] : []), "browser-history", "browser-site-data", "sign-ins", "browser-import", "payment-methods", "profiles", "purchase-sites"]);
+    if (before) await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
+    else await section(page, "browser-import").getByRole("button", { name: copy.settings.browserImport.open, exact: true }).waitFor();
+    // Baseline (main) keeps import after sign-ins; this branch puts it last.
+    const lists = before ? ["browser-import", "payment-methods", "profiles", "purchase-sites"] : ["payment-methods", "profiles", "purchase-sites", "browser-import"];
+    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), ["browsing-agent", "browser-history", "browser-site-data", "sign-ins", ...lists]);
     if (!before) {
       const settings = await server.api<{ browser: { auto: { model: string; available: boolean } } }>("/settings");
       const catalog = await server.api<{ models: { model_ref: string; display_name: string }[]; registered_models: { model_ref: string; display_name: string }[] }>("/model-catalog");

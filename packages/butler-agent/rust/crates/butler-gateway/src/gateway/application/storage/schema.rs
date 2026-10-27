@@ -8,6 +8,7 @@ mod canon_sidebar;
 mod connectors;
 mod core;
 mod documents;
+mod initiated;
 mod library;
 mod message_ownership;
 mod migration;
@@ -62,6 +63,7 @@ pub(super) fn migrate(
     // database, the connected provider's routine preset for a new one.
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
+    initiated::create(connection)?;
     assets::create(connection)?;
     super::super::image_usage::create(connection)?;
     documents::create(connection)?;

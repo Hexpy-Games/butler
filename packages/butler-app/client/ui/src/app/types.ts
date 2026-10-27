@@ -886,6 +886,7 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  initiated?: import("./initiatedTypes").InitiatedOrigin;
   question_answer?: AnsweredUserQuestions;
   question_summary?: UserQuestion[];
   system_event_kind?: "context.compaction.started" | "context.compaction.completed";
@@ -1892,7 +1893,7 @@ export interface ApprovalSummary {
   operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
   /** What a reviewed schedule create sets up: its name, timing and run mode; never its id. */
-  schedule?: { title: string; scheduleType: "once" | "interval"; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };
+  schedule?: { title: string; scheduleType: "once" | "interval" | "daily" | "weekdays"; time?: string; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */
   targets: ApprovalTarget[];

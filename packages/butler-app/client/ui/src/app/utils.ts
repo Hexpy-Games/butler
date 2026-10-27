@@ -1429,6 +1429,7 @@ function messageRecordEqual(
     left.turn_id === right.turn_id &&
     left.role === right.role &&
     left.text === right.text &&
+    JSON.stringify(left.initiated) === JSON.stringify(right.initiated) &&
     left.status === right.status &&
     left.delivery_state === right.delivery_state &&
     stringArrayEqual(left.limitation_codes ?? [], right.limitation_codes ?? []) &&
