@@ -29,6 +29,7 @@ pub(super) fn subsession_binding() -> UpsertSessionBinding {
     value.metadata = Some(
         json!({"subsession":{
             "relation_id":"relation", "delegation_id":"delegation", "task_id":"task",
+            "parent_session_id":"session-1",
             "execution_mode":"read_only",
             "allowed_tools_and_effects":[
                 "grep_files:workspace", "list_files:workspace", "read_file:workspace",

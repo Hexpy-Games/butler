@@ -156,7 +156,8 @@ async fn completion(hold: &str, restart: bool) -> Result<(), HarnessError> {
         result["initiated"],
         json!({"kind":"work_result","quiet":hold == "quiet","relation_id":relation,"work_session_id":child,"work_title":title})
     );
-    assert_eq!(result["quiet"], hold == "quiet");
+    // Omitted when false: absent and false are the same contract value.
+    assert_eq!(result["quiet"].as_bool().unwrap_or(false), hold == "quiet");
     assert!(result.to_string().contains("report.md"), "{result}");
     assert_eq!(
         s.gw.messages("general")
