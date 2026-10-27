@@ -977,7 +977,8 @@ export function isRetryableFailureMessage(
 ): boolean {
   return message.retryable === true &&
     (message.safe_error_code === "runtime_fault" ||
-      message.safe_error_code === "turn_interrupted");
+      message.safe_error_code === "turn_interrupted" ||
+      message.safe_error_code === "provider_stop_unrecognized");
 }
 
 /**
@@ -1063,7 +1064,7 @@ export function collapseAssistantAttempts(
   }
   // The input already has transcript order, including form answers inserted
   // by decision time. Their synthetic rows have no durable message cursor.
-  return messages.filter(message => message.role === "user" || !message.turn_id || message.status === "delivered"
+  return messages.filter(message => message.role === "user" || !message.turn_id || message.status === "delivered" || message.status === "incomplete"
     || latestByTurn.get(message.turn_id)?.id === message.id);
 }
 

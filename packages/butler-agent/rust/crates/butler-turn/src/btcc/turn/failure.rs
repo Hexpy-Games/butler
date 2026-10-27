@@ -22,6 +22,22 @@ pub(super) fn runtime_failure_message_for_work(
             "This model server doesn't support tool calls.".into()
         };
     }
+    let short = match (failure.code.as_str(), korean) {
+        ("provider_output_truncated", true) => Some("답변이 출력 한도에 도달했습니다."),
+        ("provider_output_truncated", false) => {
+            Some("The answer reached the model's output limit.")
+        }
+        ("provider_stop_unrecognized", true) => Some("모델 응답이 중단되었습니다."),
+        ("provider_stop_unrecognized", false) => Some("The model response stopped."),
+        ("provider_response_refused", true) => Some("모델이 답변을 거절했습니다."),
+        ("provider_response_refused", false) => Some("Model refused the response."),
+        ("provider_safety_error", true) => Some("안전 필터에 걸렸습니다."),
+        ("provider_safety_error", false) => Some("Provider safety filter."),
+        _ => None,
+    };
+    if let Some(short) = short.filter(|_| !work_completed) {
+        return short.into();
+    }
     let cause = cause(failure, korean);
     if korean {
         if work_completed {

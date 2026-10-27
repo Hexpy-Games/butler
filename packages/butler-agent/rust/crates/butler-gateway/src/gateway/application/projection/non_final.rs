@@ -339,7 +339,7 @@ fn project_kind(
         FailedProjection {
             metadata: input.metadata,
             message: input.message,
-            retryable: false,
+            retryable: input.metadata.get("retryable").and_then(Value::as_bool) == Some(true),
         },
         input.now,
         &input.ids,

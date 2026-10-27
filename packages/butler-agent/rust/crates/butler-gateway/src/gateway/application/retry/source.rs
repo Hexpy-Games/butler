@@ -297,7 +297,10 @@ fn ensure_retryable(
     let allowed = retryable == 1
         && match state {
             "runtime_fault" => runtime_fault_retryable(db, turn_id)?,
-            "failed" => safe_error_code == Some(super::INTERRUPTED_TURN_CODE),
+            "failed" => matches!(
+                safe_error_code,
+                Some(super::INTERRUPTED_TURN_CODE | "provider_stop_unrecognized")
+            ),
             _ => false,
         };
     if allowed {

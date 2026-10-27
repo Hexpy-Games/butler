@@ -464,3 +464,6 @@ async fn invoke(
 mod followups;
 #[path = "provider_streaming/stops.rs"]
 mod stops;
+
+#[path = "provider_streaming/review.rs"]
+mod review;

@@ -1,3 +1,4 @@
+use super::super::answer_join::join_cut;
 use super::*;
 
 /// Only a visible final candidate can reach synthesis and Work review.
@@ -8,8 +9,13 @@ pub(super) async fn settle_answer(
     reply: Reply,
     iteration: u32,
 ) -> Result<Step, AgentLoopError> {
+    if (state.answer_continuation || reply.paused || reply.truncated)
+        && let Some(step) = advance_cut(input, state, prepared, &reply).await?
+    {
+        return Ok(step);
+    }
     if reply.paused || reply.truncated {
-        return continue_cut(input, state, prepared, &reply).await;
+        return continue_cut(input, state, &reply).await;
     }
     if reply.text.is_empty() || reply.nonfinal {
         let reason = if reply.nonfinal {
@@ -28,7 +34,12 @@ pub(super) async fn settle_answer(
             "Only progress/bookkeeping is recorded; the request may still be open. Check the original request against the results. Continue any unfinished work. If these records themselves satisfy the request, provide the substantive final answer now; otherwise progress is not completion."
         ).await;
     }
-    let mut text = join_cut(&std::mem::take(&mut state.cut_answer), &reply.text);
+    let mut text = if state.answer_continuation {
+        state.answer_continuation = false;
+        std::mem::take(&mut state.cut_answer)
+    } else {
+        reply.text.clone()
+    };
     if let Some(synthesized) = synthesize_answer(input, state, prepared, &text).await? {
         reject_round_text(prepared);
         text = synthesized;
@@ -70,16 +81,54 @@ pub(super) async fn settle_answer(
     }
 }
 
-/// Pauses resume with the assistant last; token cuts ask for the remaining text.
-async fn continue_cut(
+/// A continuation must add visible text beyond the joined prefix's tail. This
+/// applies to completed rounds too: empty completion is not recovery progress.
+async fn advance_cut(
     input: &Invocation<'_>,
     state: &mut State,
     prepared: &PreparedPolicy,
     reply: &Reply,
+) -> Result<Option<Step>, AgentLoopError> {
+    let joined = join_cut(&state.cut_answer, &reply.text);
+    let added = joined
+        .strip_prefix(&state.cut_answer)
+        .unwrap_or_default()
+        .trim();
+    let no_progress =
+        state.answer_continuation && (added.is_empty() || state.cut_answer.ends_with(added));
+    state.answer_continuation = true;
+    if !no_progress {
+        state.cut_answer = joined;
+    }
+    if let Some(observer) = prepared.ports.stream_observer.as_deref() {
+        observer.round_text_continued(&state.cut_answer);
+    }
+    let limit = crate::btcc::continuation_budget::model_context_byte_limit(
+        input.semantic.model.context_window_tokens,
+    );
+    if no_progress || state.cut_answer.len() as u64 >= limit {
+        return finish_limit(
+            input,
+            state,
+            if no_progress {
+                "answer_not_extended"
+            } else {
+                "answer_context_limit"
+            },
+        )
+        .await
+        .map(|result| Some(Step::finished(result)));
+    }
+    Ok(None)
+}
+
+/// Pauses resume with the assistant last; token cuts ask for the remaining text.
+async fn continue_cut(
+    input: &Invocation<'_>,
+    state: &mut State,
+    reply: &Reply,
 ) -> Result<Step, AgentLoopError> {
-    state.cut_answer = join_cut(&state.cut_answer, &reply.text);
     if reply.paused {
-        reject_round_text(prepared);
         state.automatic_continuations = state.automatic_continuations.saturating_add(1);
         record_continuation(
             input,
@@ -90,20 +139,9 @@ async fn continue_cut(
         .await;
         Ok(Step::Continue)
     } else {
-        continue_answer(input, state, prepared,
+        request_continuation(input, state,
             "Your previous response reached the output token limit and was cut off. Continue it from where it stopped: begin by repeating its last line exactly, then write the rest. Do not restart or summarize what you already wrote."
         ).await
-    }
-}
-
-/// Joins an answer cut off at the output limit with its continuation, which
-/// repeats the cut last line first; one that does not is appended as written.
-fn join_cut(cut: &str, next: &str) -> String {
-    let line = cut.rfind('\n').map_or(0, |index| index + 1);
-    if line < cut.len() && next.starts_with(&cut[line..]) {
-        format!("{}{next}", &cut[..line])
-    } else {
-        format!("{cut}{next}")
     }
 }
 
@@ -147,6 +185,14 @@ pub(super) async fn continue_answer(
     reason: &str,
 ) -> Result<Step, AgentLoopError> {
     reject_round_text(prepared);
+    request_continuation(input, state, reason).await
+}
+
+async fn request_continuation(
+    input: &Invocation<'_>,
+    state: &mut State,
+    reason: &str,
+) -> Result<Step, AgentLoopError> {
     state.automatic_continuations = state.automatic_continuations.saturating_add(1);
     // A report correction cannot reopen settled execution. Explicit user
     // steering reopens it through append_observations instead.
@@ -171,13 +217,22 @@ pub(super) async fn finish_limit(
         .original_message
         .chars()
         .any(|c| ('가'..='힣').contains(&c));
-    let content = match (state.cut_answer.is_empty(), korean) {
-        (false, true) => format!("{}\n\n답변이 출력 한도에 도달해 끝까지 작성하지 못했습니다.", state.cut_answer),
-        (false, false) => format!("{}\n\nThe answer reached the model's output limit and could not be finished.", state.cut_answer),
+    let input_limit = state.cut_answer.is_empty() && !state.answer_continuation;
+    let content: String = match (input_limit, korean) {
+        (false, true) => "답변이 출력 한도에 도달했습니다.".into(),
+        (false, false) => "The answer reached the model's output limit.".into(),
         (true, true) => "필요한 입력이 모델 컨텍스트에 들어가지 않습니다. 첨부를 줄이거나 요청을 나누어 주세요.".into(),
         (true, false) => "The required input cannot fit the model context. Reduce the required attachments or split the request into smaller parts so I can continue.".into(),
     };
     let mut result = finish(input, state, Ending::Answer(&content)).await?;
+    result.runtime_failure = Some(crate::btcc::RuntimeFailure::new(
+        if input_limit {
+            "provider_context_limit_exceeded"
+        } else {
+            "provider_output_truncated"
+        },
+        false,
+    ));
     result.terminal_outcome = Some(crate::btcc::TerminalOutcome::Failed);
     Ok(result)
 }

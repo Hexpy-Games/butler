@@ -189,6 +189,12 @@ impl ProviderStreamObserver for StreamWatch<'_> {
         }
     }
 
+    fn round_text_continued(&self, text: &str) {
+        if let Some(inner) = self.inner {
+            inner.round_text_continued(text);
+        }
+    }
+
     fn round_text_rejected(&self) {
         if let Some(inner) = self.inner {
             inner.round_text_rejected();

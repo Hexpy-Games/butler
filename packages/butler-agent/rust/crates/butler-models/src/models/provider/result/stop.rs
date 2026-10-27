@@ -3,13 +3,29 @@ use super::super::serialize::Carrier;
 use butler_turn::btcc::{ModelRoundToolCall, ModelStop, ProviderRequestError, ToolCallOrigin};
 use serde_json::Value;
 
-pub(in crate::models::provider) fn classify(response: &Value, carrier: Carrier) -> ModelStop {
+pub(in crate::models::provider) fn classify(
+    response: &Value,
+    carrier: Carrier,
+    usable_output: bool,
+) -> ModelStop {
+    if matches!(carrier, Carrier::Gemini)
+        && response
+            .pointer("/promptFeedback/blockReason")
+            .and_then(Value::as_str)
+            .is_some()
+    {
+        return ModelStop::Blocked;
+    }
     let reason = reason(response, carrier);
+    // These terminal reasons previously reached empty-response recovery. Keep
+    // that path only when there is neither visible text nor a function call.
+    if matches!(carrier, Carrier::Gemini)
+        && matches!(reason, Some("MALFORMED_FUNCTION_CALL" | "OTHER"))
+        && !usable_output
+    {
+        return ModelStop::Complete;
+    }
     match (carrier, reason) {
-        (Carrier::Anthropic, Some("end_turn" | "tool_use" | "stop_sequence"))
-        | (Carrier::Chat { .. }, Some("stop" | "tool_calls" | "function_call"))
-        | (Carrier::Gemini, Some("STOP"))
-        | (Carrier::Responses, Some("completed")) => ModelStop::Complete,
         (Carrier::Anthropic, Some("max_tokens" | "model_context_window_exceeded"))
         | (Carrier::Chat { .. }, Some("length"))
         | (Carrier::Gemini, Some("MAX_TOKENS")) => ModelStop::Truncated,
@@ -31,6 +47,10 @@ pub(in crate::models::provider) fn classify(response: &Value, carrier: Carrier) 
             Some("content_filter") => ModelStop::Blocked,
             _ => ModelStop::Unrecognized(diagnostic(response, carrier)),
         },
+        (Carrier::Anthropic, Some("end_turn" | "tool_use" | "stop_sequence"))
+        | (Carrier::Gemini, Some("STOP"))
+        | (Carrier::Responses, Some("completed"))
+        | (Carrier::Chat { .. }, _) => ModelStop::Complete,
         _ => ModelStop::Unrecognized(diagnostic(response, carrier)),
     }
 }
@@ -59,7 +79,7 @@ fn diagnostic(response: &Value, carrier: Carrier) -> String {
     }
 }
 
-/// Classification failures happen after transport recovery, so they cannot be retried.
+/// Unknown stops surface immediately but permit an explicit user retry.
 pub(in crate::models::provider) fn error(
     stop: &ModelStop,
     response: &Value,
@@ -77,6 +97,7 @@ pub(in crate::models::provider) fn error(
         ModelStop::Unrecognized(_) => "provider_stop_unrecognized",
     };
     let mut error = crate::models::diagnostics::protocol(provider, api, code);
+    error.retryable = matches!(stop, ModelStop::Unrecognized(_));
     error.cause = crate::models::diagnostics::safe_text(&diagnostic(response, carrier));
     Some(Box::new(error))
 }

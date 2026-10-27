@@ -63,6 +63,18 @@ async fn resumes(reason: &str) -> Result<(), HarnessError> {
     let bodies = rounds(&stub);
     assert_eq!(bodies.len(), 2);
     if reason == "pause_turn" {
+        let last = bodies[1]["messages"].as_array().unwrap().last().unwrap();
+        let text = last["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v["text"].as_str())
+            .collect::<String>();
+        assert_eq!(
+            text,
+            text.trim_end(),
+            "paused assistant has trailing whitespace"
+        );
         assert_eq!(
             bodies[1]["messages"].as_array().unwrap().last().unwrap()["role"],
             "assistant"
@@ -127,6 +139,148 @@ async fn two_cuts(schedule: bool) -> Result<(), HarnessError> {
         let runs = s.gw.get("/automations/design/runs").await?;
         assert_eq!(runs.data()["runs"][0]["turn_id"], id, "{}", runs.text);
     }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn final_continuation_can_repeat_an_earlier_line() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, stub, server) = setup(false).await?;
+    let partial = "Example:\n```\nfirst line\nlast line";
+    *stub.responses.lock().unwrap() = vec![
+        response(partial, "max_tokens"),
+        text_response("last line\n```"),
+    ];
+    let (id, turn) = s.turn("general", "Explain the example.").await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert_eq!(answer(&s, &id).await?["text"], format!("{partial}\n```"));
+    assert_eq!(rounds(&stub).len(), 2);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn repeated_cuts_stop_without_delivering_and_keep_partial() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    for reason in ["max_tokens", "pause_turn"] {
+        let (s, stub, server) = setup(false).await?;
+        *stub.repeat.lock().unwrap() = Some(response(PARTIAL, reason));
+        let (id, turn) = s.turn("general", "Explain the design.").await?;
+        assert_eq!(turn_state(&turn), "failed", "{turn}");
+        let messages = s.gw.messages("general").await?;
+        let partial = messages
+            .iter()
+            .find(|m| m["turn_id"] == id && m["status"] == "incomplete")
+            .unwrap();
+        assert_eq!(partial["text"], PARTIAL);
+        let notice = messages
+            .iter()
+            .find(|m| m["turn_id"] == id && m["status"] == "failed")
+            .unwrap();
+        assert!(notice["text"].as_str().unwrap().contains("output limit"));
+        assert!(!notice["text"].as_str().unwrap().contains(PARTIAL));
+        assert_eq!(stub.requests.lock().unwrap().len(), 2);
+        s.finish().await?;
+        server.abort();
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn continuation_http_failure_keeps_joined_partial() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, stub, server) = setup(false).await?;
+    *stub.responses.lock().unwrap() = vec![
+        response(PARTIAL, "model_context_window_exceeded"),
+        response(CONTINUED, "max_tokens"),
+    ];
+    *stub.fail_after.lock().unwrap() = Some(2);
+    let (id, turn) = s.turn("general", "Explain the design.").await?;
+    assert_eq!(turn_state(&turn), "failed", "{turn}");
+    let messages = s.gw.messages("general").await?;
+    let partial = messages
+        .iter()
+        .find(|m| m["turn_id"] == id && m["status"] == "incomplete")
+        .unwrap();
+    assert_eq!(partial["text"], COMPLETE);
+    assert_eq!(stub.requests.lock().unwrap().len(), 3);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn pause_preserves_join_spacing_but_trims_wire() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, stub, server) = setup(false).await?;
+    *stub.responses.lock().unwrap() =
+        vec![response("Hello ", "pause_turn"), text_response("world")];
+    let (id, turn) = s.turn("general", "Explain the design.").await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert_eq!(answer(&s, &id).await?["text"], "Hello world");
+    let bodies = rounds(&stub);
+    let content = &bodies[1]["messages"].as_array().unwrap().last().unwrap()["content"];
+    let text = content
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v["text"].as_str())
+        .collect::<String>();
+    assert_eq!(text, "Hello");
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn unrecognized_stop_offers_user_retry() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (mut s, stub, server) = setup(false).await?;
+    *stub.responses.lock().unwrap() = vec![
+        response(PARTIAL, "future_reason"),
+        text_response("Recovered."),
+    ];
+    let (id, turn) = s.turn("general", "Explain the design.").await?;
+    assert_eq!(turn_state(&turn), "failed", "{turn}");
+    let messages = s.gw.messages("general").await?;
+    let notice = messages
+        .iter()
+        .find(|m| m["turn_id"] == id && m["status"] == "failed")
+        .unwrap();
+    assert_eq!(notice["retryable"], true, "{notice}");
+    assert_eq!(notice["safe_error_code"], "provider_stop_unrecognized");
+    let retry = s.gw.post(&format!("/turns/{id}/retry"), json!({})).await?;
+    assert_eq!(retry.status, 202, "{}", retry.text);
+    let turn =
+        s.gw.wait_turn(
+            "general",
+            &id,
+            &["delivered", "failed"],
+            Duration::from_secs(turn_timeout()),
+        )
+        .await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert_eq!(answer(&s, &id).await?["text"], "Recovered.");
+    assert_eq!(stub.requests.lock().unwrap().len(), 2);
+    s.restart().await?;
+    assert_eq!(answer(&s, &id).await?["text"], "Recovered.");
+    assert_eq!(stub.requests.lock().unwrap().len(), 2);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn complete_round_trims_public_text() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, stub, server) = setup(false).await?;
+    *stub.responses.lock().unwrap() = vec![text_response("\u{feff}Ready.\u{feff}")];
+    let (id, turn) = s.turn("general", "Explain the design.").await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert_eq!(answer(&s, &id).await?["text"], "Ready.");
     s.finish().await?;
     server.abort();
     Ok(())

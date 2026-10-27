@@ -18,6 +18,7 @@ pub mod operation_result_replay;
 mod ports;
 mod progress;
 pub(crate) use progress::{authority_batch, authority_cancellation_events};
+mod answer_join;
 mod state;
 mod stream_relay;
 mod thinking_line;

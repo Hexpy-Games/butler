@@ -69,13 +69,13 @@ async fn stop_allowlists_reject_unknown_and_missing_reasons() -> Result<(), Harn
                     "SAFETY" | "RECITATION" | "BLOCKLIST" | "PROHIBITED_CONTENT" | "SPII"
                     | "IMAGE_SAFETY" | "content_filter",
                 ) => Some("provider_safety_error"),
-                Some("future_reason") | None => Some("provider_stop_unrecognized"),
+                Some("future_reason") | None if index != 3 => Some("provider_stop_unrecognized"),
                 _ => None,
             };
             if let Some(code) = error {
                 assert_eq!(
                     result,
-                    &json!({"error":code,"retryable":false}),
+                    &json!({"error":code,"retryable":code == "provider_stop_unrecognized"}),
                     "{index} {reason:?}"
                 );
             } else {

@@ -267,7 +267,7 @@ async fn obtain_reply(
             crate::btcc::ModelStop::Truncated | crate::btcc::ModelStop::Paused
         );
     let text = if continuing {
-        raw_text
+        result.continuation_text.as_deref().unwrap_or(raw_text)
     } else {
         raw_text.trim()
     }

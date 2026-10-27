@@ -27,6 +27,7 @@ pub enum MessageStatus {
     Failed,
     Retrying,
     Cancelled,
+    Incomplete,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

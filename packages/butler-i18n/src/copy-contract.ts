@@ -300,6 +300,7 @@ interface ConversationCopy {
     checked: (time: string) => string;
   };
   work: ConversationWorkCopy;
+  incompleteStatus: string;
   stoppedStatus: string;
   attachmentUnavailable: string;
   /** File-type label on an attachment tile whose extension is unknown. */

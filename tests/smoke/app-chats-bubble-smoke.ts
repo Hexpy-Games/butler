@@ -99,6 +99,26 @@ try {
       await page.close();
     }
   }
+  for (const kind of ["partial", "empty", "stopped"] as const) {
+    const before = process.env.BUTLER_STOP_REVIEW_BEFORE === "1";
+    const page = await browser.newPage({ viewport: { width: 1280, height: 960 }, colorScheme: theme, reducedMotion: "reduce" });
+    try {
+      await installFixture(page, failedTranscript(kind, before));
+      await page.goto(`http://chats-bubble.localhost/?visual=components&theme=${theme}&locale=ko`);
+      await page.getByText("검토 요청입니다.", { exact: true }).waitFor();
+      await page.evaluate(() => document.fonts.ready);
+      if (!before) {
+        if (kind === "partial") {
+          await page.getByText("미완료", { exact: true }).waitFor();
+          assert.equal(await page.locator('[role="alert"]').filter({ hasText: "검토 결과" }).count(), 0);
+          assert.equal(await page.locator("strong").filter({ hasText: "검토 결과" }).count(), 1);
+        }
+        if (kind === "stopped") await page.getByText("중지됨", { exact: true }).waitFor();
+        if (kind !== "stopped") await page.getByText("모델 응답 중단", { exact: true }).waitFor();
+      }
+      await page.screenshot({ path: join(shots, `${before ? "before" : "after"}-${kind}-${theme}.jpg`), type: "jpeg", quality: 80, animations: "disabled" });
+    } finally { await page.close(); }
+  }
   console.log(JSON.stringify({ result: "SS10_PASS", theme, cells: 10, screenshots: shots, modelCalls: 0 }));
 } finally {
   await browser.close();
@@ -195,4 +215,16 @@ async function measure(page: Page) {
       copyCount: footer.querySelectorAll('[aria-label="답변 복사"], [aria-label="Copy assistant response"]').length,
     };
   });
+}
+
+function failedTranscript(kind: "partial" | "empty" | "stopped", before: boolean): SessionView {
+  const view = transcript("general");
+  const partial = "## 검토 결과\n\n첫 번째 항목을 확인했습니다. **검토 결과**를 정리하는 중입니다.\n\n- 확인한 내용은 여기에 남습니다.\n- 다음 항목은 아직 작성 중입니다.";
+  const base = { chat_id: "general", role: "assistant" as const, turn_id: "review", created_at: "2026-10-25T09:00:03Z" };
+  const messages: MessageRecord[] = [{ ...view.messages[0], text: "검토 요청입니다." }];
+  if (kind === "stopped" || (kind === "partial" && !before)) messages.push({ ...base, id: "partial", cursor: 2,
+    status: kind === "stopped" ? "cancelled" : "incomplete", text: partial });
+  if (kind !== "stopped") messages.push({ ...base, id: "failure", cursor: 3, status: "failed", safe_error_code: "provider_invalid_request",
+    text: before && kind === "partial" ? `${partial}\n\n모델 응답 중단` : "모델 응답 중단" });
+  return { ...view, messages };
 }

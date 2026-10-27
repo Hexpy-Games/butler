@@ -188,6 +188,36 @@ pub(super) fn stop(
     turn: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
+    settle_partial(
+        db,
+        subscribers,
+        chat,
+        turn,
+        now,
+        "cancelled",
+        "turn_stopped",
+    )
+}
+
+pub(super) fn incomplete(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    settle_partial(db, subscribers, chat, turn, now, "incomplete", "")
+}
+
+fn settle_partial(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    now: &str,
+    partial_status: &str,
+    code: &str,
+) -> Result<(), AppStorageError> {
     let target = StreamTarget {
         db,
         subscribers,
@@ -207,9 +237,9 @@ pub(super) fn stop(
         .map_err(AppStorageError::sqlite)?;
     if answer {
         db.execute_cached(
-            "UPDATE messages SET status='cancelled',safe_error_code='turn_stopped',updated_at=?1 \
+            "UPDATE messages SET status=?3,safe_error_code=?4,updated_at=?1 \
              WHERE id=?2",
-            params![now, id],
+            params![now, id, partial_status, code],
         )
         .map_err(AppStorageError::sqlite)?;
         return updated(&target, &id, false);
@@ -284,27 +314,23 @@ pub(in crate::gateway::application::projection) fn fail_unanswered(
     code: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let target = StreamTarget {
+    let metadata = Map::from_iter([("safeErrorCode".into(), Value::from(code))]);
+    super::operations::project_failed(
         db,
         subscribers,
         chat,
         turn,
+        super::operations::FailedProjection {
+            metadata: &metadata,
+            message: &Map::new(),
+            retryable: false,
+        },
         now,
-    };
-    let Some((id, status)) = latest(db, chat, turn)? else {
-        return Ok(());
-    };
-    if status != "streaming" {
-        return Ok(());
-    }
-    db.execute_cached("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
-        .map_err(AppStorageError::sqlite)?;
-    db.execute_cached(
-        "UPDATE messages SET status='failed',safe_error_code=?1,updated_at=?2 WHERE id=?3",
-        params![code, now, id],
+        &super::ProjectionIds {
+            event_id: uuid::Uuid::new_v4().to_string(),
+            message_id: format!("message-{}", uuid::Uuid::new_v4()),
+        },
     )
-    .map_err(AppStorageError::sqlite)?;
-    updated(&target, &id, false)
 }
 
 fn open(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
@@ -338,7 +364,7 @@ fn latest(
     turn: &str,
 ) -> Result<Option<(String, String)>, AppStorageError> {
     db.query_row_cached(
-        "SELECT id,status FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
+        "SELECT id,status FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status NOT IN ('delivered','incomplete') \
          ORDER BY rowid DESC LIMIT 1",
         params![chat, turn],
         |row| Ok((row.get(0)?, row.get(1)?)),

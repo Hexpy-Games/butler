@@ -3110,7 +3110,11 @@ test("work blocks ignore opening decisions and acknowledged receipt rows", () =>
   expect(JSON.stringify(blocks)).not.toContain("app-client readmodel");
 });
 
-test("retry eligibility requires a runtime fault or crash interruption code", () => {
+test("retry eligibility includes an unrecognized model stop", () => {
+  expect(isRetryableFailureMessage({ retryable: true, safe_error_code: "provider_stop_unrecognized" })).toBe(true);
+  for (const code of ["provider_response_refused", "provider_safety_error"]) {
+    expect(isRetryableFailureMessage({ retryable: true, safe_error_code: code })).toBe(false);
+  }
   expect(
     isRetryableFailureMessage({
       retryable: true,

@@ -326,6 +326,9 @@ pub struct ModelRoundResult {
     /// Explicit provider termination classification.
     #[serde(default)]
     pub stop: ModelStop,
+    /// Untrimmed visible round text, only for joining cut answers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_text: Option<String>,
     /// The provider explicitly marked visible text as progress rather than a final answer.
     /// Providers without such a distinction leave this false; Work review still applies.
     #[serde(default)]

@@ -28,6 +28,8 @@ pub(super) struct Stub {
     pub(super) requests: Arc<Mutex<Vec<Value>>>,
     tool_cut: bool,
     responses: Arc<Mutex<Vec<String>>>,
+    repeat: Arc<Mutex<Option<String>>>,
+    fail_after: Arc<Mutex<Option<usize>>>,
 }
 
 fn frame(value: &Value) -> String {
@@ -112,12 +114,26 @@ async fn reply(State(stub): State<Stub>, Json(body): Json<Value>) -> Response {
         requests.push(body);
         requests.len()
     };
+    if stub
+        .fail_after
+        .lock()
+        .unwrap()
+        .is_some_and(|after| round > after)
+    {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({"error":{"type":"invalid_request_error","message":"Invalid request"}})),
+        )
+            .into_response();
+    }
     let scripted = stub.responses.lock().unwrap().get(round - 1).cloned();
-    let text = scripted.unwrap_or_else(|| match (round, stub.tool_cut) {
-        (1, tool) => cut_response(tool),
-        (_, false) => text_response(CONTINUED),
-        (_, true) => text_response("I will write the document in smaller parts."),
-    });
+    let text = scripted
+        .or_else(|| stub.repeat.lock().unwrap().clone())
+        .unwrap_or_else(|| match (round, stub.tool_cut) {
+            (1, tool) => cut_response(tool),
+            (_, false) => text_response(CONTINUED),
+            (_, true) => text_response("I will write the document in smaller parts."),
+        });
     ([("content-type", "text/event-stream")], Body::from(text)).into_response()
 }
 
@@ -137,6 +153,8 @@ async fn setup_with_memory(
         requests: Arc::default(),
         tool_cut,
         responses: Arc::default(),
+        repeat: Arc::default(),
+        fail_after: Arc::default(),
     };
     let app = Router::new()
         .route("/v1/messages", post(reply))

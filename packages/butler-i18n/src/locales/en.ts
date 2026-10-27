@@ -987,6 +987,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       imageCopied: "Image copied",
       checked: (time) => `Checked ${time}`,
     },
+    incompleteStatus: "Incomplete",
     stoppedStatus: "Stopped",
     attachmentUnavailable: "Attachment unavailable",
     attachmentFileType: "File",
