@@ -40,8 +40,8 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     title={decision.title}
     details={decision.details}
     renderText={(text) => approvalPathText(text, decision)}
-    detailsShowMoreLabel={appCopy.conversation.messageActions.showMore}
-    detailsShowLessLabel={appCopy.conversation.messageActions.showLess}
+    detailsShowMoreLabel={decision.actionKind === "manage_schedule" ? undefined : appCopy.conversation.messageActions.showMore}
+    detailsShowLessLabel={decision.actionKind === "manage_schedule" ? undefined : appCopy.conversation.messageActions.showLess}
     onOpen={decision.onOpenSource}
     error={decision.error}
     aside={<>
@@ -53,9 +53,13 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     data-test-class="composer-authority-decision"
     actions={(complete) => <ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{appCopy.interfaceDetails.deny}</Button>
-      <SplitButton size="sm" text={appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}
+      <SplitButton size="sm" text={decision.allowSite ? appCopy.interfaceDetails.allowInChat : appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}
         menuLabel={appCopy.interfaceDetails.allowScope} menuSide="top"
-        items={[{
+        items={decision.allowSite ? [{
+          key: "site", label: decision.allowSite === "payment" ? appCopy.interfaceDetails.allowPaymentSite : appCopy.interfaceDetails.allowSite,
+          description: decision.allowSite === "signed_in" ? appCopy.interfaceDetails.allowSiteDescription : undefined,
+          onSelect: () => complete(decision.onAllowSite ?? decision.onAllow),
+        }] : [{
           key: "conversation", label: appCopy.interfaceDetails.allowConversation, disabled: !decision.scope,
           description: [decision.conversationScope, appCopy.interfaceDetails.allowDescription], onSelect: () => complete(decision.onAllowConversation),
         }]} />

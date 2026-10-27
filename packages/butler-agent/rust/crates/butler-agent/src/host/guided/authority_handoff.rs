@@ -352,6 +352,11 @@ fn authority_error(error: AuthorityError) -> GatewayApplicationError {
             (400, error.code(), "Modify instruction is invalid.")
         }
         "browser_confirm_once_required" => (400, error.code(), "Allow this browser action once."),
+        "site_scope_invalid" => (
+            400,
+            error.code(),
+            "Site scope is unavailable for this action.",
+        ),
         "question_answer_invalid" => (
             400,
             "question_answer_invalid",
