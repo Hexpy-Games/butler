@@ -39,7 +39,7 @@ pub(in crate::gateway::application) fn enqueue_attention(
     } else {
         format!("Needs your OK · {label} · {title}")
     };
-    let mut payload = json!({"automation_id":automation,"automation_title":title,"run_id":run,"approval":approval});
+    let mut payload = json!({"automation_id":automation,"automation_title":title,"run_id":run,"approval":approval,"label":label});
     if let Some(work) = action.get("work_session_id").and_then(Value::as_str) {
         payload["work_session_id"] = json!(work);
     }

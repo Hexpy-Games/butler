@@ -9,6 +9,8 @@ use butler_gateway::gateway::LocalAuthConfig;
 #[derive(Clone)]
 pub(crate) struct ActiveAppEndpoint {
     changes: tokio::sync::watch::Sender<()>,
+    application:
+        std::sync::Arc<RwLock<Option<std::sync::Arc<butler_gateway::gateway::AppApplication>>>>,
     current: std::sync::Arc<RwLock<Option<ActiveAppEndpointSnapshot>>>,
 }
 
@@ -26,6 +28,7 @@ impl Default for ActiveAppEndpoint {
         let (changes, _) = tokio::sync::watch::channel(());
         Self {
             changes,
+            application: Default::default(),
             current: Default::default(),
         }
     }
@@ -63,7 +66,28 @@ impl ActiveAppEndpoint {
         self.changes.send_replace(());
     }
 
+    pub(crate) fn publish_application(
+        &self,
+        application: std::sync::Arc<butler_gateway::gateway::AppApplication>,
+    ) {
+        *self.application.write() = Some(application);
+        self.changes.send_replace(());
+    }
+
+    pub(crate) async fn application(
+        &self,
+    ) -> Option<std::sync::Arc<butler_gateway::gateway::AppApplication>> {
+        let mut changes = self.subscribe_changes();
+        loop {
+            if let Some(application) = self.application.read().clone() {
+                return Some(application);
+            }
+            changes.changed().await.ok()?;
+        }
+    }
+
     pub(crate) fn clear(&self) {
+        *self.application.write() = None;
         *self.current.write() = None;
         self.changes.send_replace(());
     }

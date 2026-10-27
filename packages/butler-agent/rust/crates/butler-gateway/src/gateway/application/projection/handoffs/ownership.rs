@@ -82,7 +82,7 @@ pub(super) fn resolve(data: &Path, owner: &Owner) -> io::Result<Option<Resolved>
                 );
                 (
                     parent_session,
-                    client,
+                    crate::gateway::application::admission_identity::canonical_client_id(&client),
                     status == "delivered",
                     format!("work-result:{relation}:{result}"),
                 )
@@ -181,7 +181,7 @@ fn initiated_result_expired(
     let Some((status, message)) = row else {
         return Ok(None);
     };
-    if status == "held" {
+    if matches!(status.as_str(), "held" | "failed") {
         return Ok(Some(false));
     }
     let Some(message) = message else {

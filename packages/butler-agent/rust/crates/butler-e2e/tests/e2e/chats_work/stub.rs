@@ -19,6 +19,9 @@ pub(crate) struct Script {
     pub child: bool,
     pub hold: AtomicBool,
     pub held: Semaphore,
+    pub parent_hold: AtomicBool,
+    pub parent_held: Semaphore,
+    pub parent_release: Semaphore,
     pub release: Semaphore,
     pub relation: Mutex<String>,
 }
@@ -40,6 +43,9 @@ pub(crate) async fn start(
         resume_probe: AtomicBool::new(false),
         hold: AtomicBool::new(!unattended),
         held: Semaphore::new(0),
+        parent_hold: AtomicBool::new(false),
+        parent_held: Semaphore::new(0),
+        parent_release: Semaphore::new(0),
         release: Semaphore::new(0),
         relation: Mutex::default(),
     });
@@ -79,6 +85,10 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     } else if functions.is_empty() {
         message("{}")
     } else if parent {
+        if step == 0 && script.parent_hold.swap(false, Ordering::SeqCst) {
+            script.parent_held.add_permits(1);
+            script.parent_release.acquire().await.unwrap().forget();
+        }
         parent_item(&script, step, &body)
     } else {
         if step == 2 && script.hold.swap(false, Ordering::SeqCst) {
@@ -118,7 +128,7 @@ fn parent_item(script: &Script, step: usize, body: &Value) -> Value {
             &json!({"request":"Prepare the evidence document.","checks":["Evidence prepared"],"safe_title":"Evidence document"}),
         );
     }
-    let relation = script.relation.lock().unwrap().clone();
+    let relation = std::mem::take(&mut *script.relation.lock().unwrap());
     if step == 0 && !relation.is_empty() {
         return call(
             "direction",

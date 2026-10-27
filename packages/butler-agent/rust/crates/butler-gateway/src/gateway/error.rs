@@ -6,6 +6,17 @@ use std::{future::Future, pin::Pin, sync::Arc};
 pub type ApplicationFuture<T> =
     Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
 
+/// Whether the stored request can succeed on a later attempt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureClass {
+    Permanent,
+    Transient,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("permanent request failure")]
+struct PermanentFailure(#[source] GatewayApplicationError);
+
 /// A gateway application failure as the HTTP layer reports it.
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum GatewayApplicationError {
@@ -30,6 +41,32 @@ pub enum GatewayApplicationError {
 }
 
 impl GatewayApplicationError {
+    /// Classifies invalid requests permanently; operational failures remain retryable.
+    pub fn failure_class(&self) -> FailureClass {
+        match self {
+            Self::Public {
+                status: 400 | 413 | 422,
+                ..
+            } => FailureClass::Permanent,
+            Self::Public {
+                source: Some(source),
+                ..
+            }
+            | Self::Internal {
+                source: Some(source),
+            } if source.downcast_ref::<PermanentFailure>().is_some() => FailureClass::Permanent,
+            _ => FailureClass::Transient,
+        }
+    }
+
+    pub(crate) fn permanent(mut self) -> Self {
+        let cause = Arc::new(PermanentFailure(self.clone()));
+        match &mut self {
+            Self::Public { source, .. } | Self::Internal { source } => *source = Some(cause),
+        }
+        self
+    }
+
     /// A failure shown to the client.
     pub(crate) fn public(status: u16, code: impl Into<String>, message: impl Into<String>) -> Self {
         Self::Public {

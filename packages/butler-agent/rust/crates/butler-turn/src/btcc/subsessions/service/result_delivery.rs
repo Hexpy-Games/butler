@@ -74,7 +74,8 @@ impl SubsessionService {
         let mut envelope = json!({"eventId":format!("worker-result:{}",pending.result_id),"transport":"app","accountId":"local","peer":{"kind":"dm","id":pending.parent_session_id},"sender":{"id":"butler-worker-result","displayName":"Worker"},"message":{"id":format!("worker-result-message:{}",pending.result_id),"text":text,"timestamp":timestamp},"routingHints":{"sessionId":pending.parent_session_id,"turnId":turn_id},"nativeStewardContext":{"version":1,"role":"steward","projectName":parent.project_id.unwrap_or_default(),"workspacePath":parent.workspace_path,"modelRef":parent.model_ref,"reasoningEffort":reasoning_effort},"raw":{"source":"btcc-worker-result","resultId":pending.result_id,"parentRelationId":delegation.relation_id}});
         // The steward of an unattended schedule run stays unattended (D8).
         if let (Some(run), Some(context)) = (
-            &delegation.packet.schedule_run,
+            self.instruction_run_context(&pending.parent_session_id)
+                .await?,
             envelope
                 .get_mut("nativeStewardContext")
                 .and_then(Value::as_object_mut),

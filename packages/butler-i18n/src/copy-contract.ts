@@ -198,7 +198,6 @@ export interface ApprovalRequestCopy {
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
   manageSchedule: { create: string; delete: string; run: string; change: string };
-  actionLabels: Record<string, string>;
   createCanon: { epic: string; plan: string };
   canonPlan: (plan: string) => string;
   canonTitle: (title: string) => string;

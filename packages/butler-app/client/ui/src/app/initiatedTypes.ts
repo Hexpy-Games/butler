@@ -1,6 +1,7 @@
 /** Open origin kind allows future initiated work and connector messages. */
 export interface InitiatedOrigin {
   kind: string;
+  label?: string;
   quiet: boolean;
   automation_id?: string;
   automation_title?: string;

@@ -17,7 +17,7 @@ export function InitiatedApprovalLine({ origin }: { origin: InitiatedOrigin }) {
   return <Clickable variant="text" onClick={open} data-test-class="initiated-approval-needed">
     <Stack align="row" cross="start" gap="xs">
       <Stack.Item shrink={false}><Tag>{appCopy.conversation.initiated.needsApproval}</Tag></Stack.Item>
-      <Typo.Body as="span" minWidth="0" wrap="anywhere">{[view.label, view.target, origin.automation_title].filter(Boolean).join(" · ")}</Typo.Body>
+      <Typo.Body as="span" minWidth="0" wrap="anywhere">{[origin.label || view.label, view.target, origin.automation_title].filter(Boolean).join(" · ")}</Typo.Body>
     </Stack>
   </Clickable>;
 }

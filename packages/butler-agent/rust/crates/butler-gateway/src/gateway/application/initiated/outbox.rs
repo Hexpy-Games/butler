@@ -11,6 +11,7 @@ pub(super) struct Entry {
     pub(super) id: String,
     pub(super) chat: String,
     pub(super) kind: String,
+    next_attempt_at: Option<String>,
     /// S5 connector items under an explicit user rule may bypass quiet hours.
     /// All S2 producers leave this false.
     pub(super) bypass_quiet_hours: bool,
@@ -41,13 +42,14 @@ pub(super) fn enqueue(
 }
 
 fn held(db: &Connection) -> Result<Vec<Entry>, AppStorageError> {
-    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours,kind FROM app_initiated_messages WHERE state='held' ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours,kind,next_attempt_at FROM app_initiated_messages WHERE state='held' ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |r| {
             Ok(Entry {
                 id: r.get(0)?,
                 chat: r.get(1)?,
                 kind: r.get(3)?,
+                next_attempt_at: r.get(4)?,
                 bypass_quiet_hours: r.get(2)?,
             })
         })
@@ -66,20 +68,7 @@ impl AppApplication {
         }
         for entry in rows {
             if let Err(error) = self.deliver_entry(&entry).await {
-                let reason = match &error {
-                    GatewayApplicationError::Public { code, .. } => code.clone(),
-                    GatewayApplicationError::Internal { .. } => "internal_error".into(),
-                };
-                butler_core::diagnostic!(
-                    "[initiated] Delivery failed id={} code={}",
-                    entry.id,
-                    reason
-                );
-                self.storage.execute(move |db| {
-                    db.execute("UPDATE app_initiated_messages SET state='failed',reason=?1 WHERE id=?2 AND state='held'", params![reason,entry.id])
-                        .map_err(AppStorageError::sqlite)?;
-                    Ok(())
-                }).await.map_err(app_error)?;
+                self.initiated_failure(entry.id.clone(), &error).await?;
             }
         }
         Ok(())
@@ -87,6 +76,13 @@ impl AppApplication {
 
     async fn deliver_entry(&self, entry: &Entry) -> Result<(), GatewayApplicationError> {
         let gate = self.initiated_gate().await?;
+        if entry
+            .next_attempt_at
+            .as_ref()
+            .is_some_and(|at| at > &gate.now)
+        {
+            return Ok(());
+        }
         let row = entry.clone();
         let free = self
             .storage
@@ -125,6 +121,7 @@ impl AppApplication {
             rows.push(Entry {
                 id: String::new(),
                 kind: String::new(),
+                next_attempt_at: None,
                 chat: "general".into(),
                 bypass_quiet_hours: false,
             });
@@ -144,6 +141,9 @@ impl AppApplication {
                         hold.until()
                     };
                     if let Some(at) = until {
+                        let at = entry
+                            .next_attempt_at
+                            .map_or(at.clone(), |retry| retry.max(at));
                         next = Some(next.map_or(at.clone(), |old: String| old.min(at)));
                     }
                 }

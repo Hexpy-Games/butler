@@ -12,6 +12,8 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 mod delivery;
+mod quiet;
+mod recovery;
 mod schedule_tier;
 pub(crate) mod stub;
 mod tier;
@@ -19,6 +21,14 @@ mod unattended;
 use crate::chats_initiated::support::clock;
 
 pub(crate) async fn setup(name: &str, url: &str) -> Result<(Scenario, String), HarnessError> {
+    setup_with_failures(name, url, "0").await
+}
+
+async fn setup_with_failures(
+    name: &str,
+    url: &str,
+    failures: &str,
+) -> Result<(Scenario, String), HarnessError> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?.to_string();
     drop(listener);
@@ -26,6 +36,7 @@ pub(crate) async fn setup(name: &str, url: &str) -> Result<(Scenario, String), H
         .cassette("TOOL-01")
         .access(Access::FullAccess)
         .env("TZ", "UTC")
+        .env("BUTLER_E2E_WORK_SEND_FAILURES", failures)
         .env("BUTLER_E2E_APP_NOW", "2026-10-27T12:00:00.000Z")
         .env("BUTLER_E2E_APP_CLOCK_ADDRESS", &address)
         .env("BUTLER_CHATGPT_API_BASE_URL", url);
@@ -144,6 +155,7 @@ async fn completion(hold: &str, restart: bool) -> Result<(), HarnessError> {
         result["initiated"],
         json!({"kind":"work_result","quiet":hold == "quiet","relation_id":relation,"work_session_id":child,"work_title":title})
     );
+    assert_eq!(result["quiet"], hold == "quiet");
     assert!(result.to_string().contains("report.md"), "{result}");
     assert_eq!(
         s.gw.messages("general")

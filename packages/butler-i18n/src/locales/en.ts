@@ -638,12 +638,6 @@ export const enUsCopy: AppCopy = {
       networkCommand: workspace => `Run a command that uses the internet ${inWorkspace(workspace)}?`,
       useConnector: (tool, server) => tool && server ? `Use ${tool} from ${server}?` : tool ? `Use ${tool}?` : "Use a connected tool?",
       manageSchedule: { create: "Create a schedule?", delete: "Delete a schedule?", run: "Run due schedules?", change: "Change a schedule?" },
-      actionLabels: {
-        edit_files: "Edit files", run_command: "Run command", network_command: "Run network command", web_request: "Web request",
-        use_connector: "Use connected tool", manage_schedule: "Manage schedule", create_canon: "Create project item",
-        update_project: "Update project records", start_conversation: "Start conversation", restart_service: "Restart Butler",
-        create_worktree: "Create worktree", switch_folder: "Move working folder", other: "Other action",
-      },
       createCanon: { epic: "Create this epic?", plan: "Create this plan?" },
       canonPlan: plan => `Plan: ${plan}`,
       canonTitle: title => `Title: ${title}`,

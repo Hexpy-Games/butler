@@ -381,3 +381,27 @@ async fn same_item_retry_in_one_run_replays_the_created_item() -> Result<(), Har
     assert_eq!(created[1]["project_id"], project);
     s.finish().await
 }
+
+#[tokio::test]
+async fn non_string_description_is_recoverable_without_a_card_or_created_item()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, _server, _, _) = setup("ask_first", "epic").await?;
+    script
+        .direct
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    script.args.lock().unwrap()["description"] = json!({"text":"Invalid details"});
+    let (_, turn) = propose(&s).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert_eq!(s.gw.approval_requests("general").await?, [] as [Value; 0]);
+    assert_eq!(epic_count(&s)?, 0);
+    let outputs = script.outputs.lock().unwrap().clone();
+    assert!(
+        outputs
+            .iter()
+            .any(|v| v["error"]["code"] == "canon_propose_invalid"
+                || v["output"]["error"]["code"] == "canon_propose_invalid"),
+        "{outputs:?}"
+    );
+    s.finish().await
+}

@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import type { Locator, Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { installInitiatedGateway, session } from "../support/initiated-fixtures";
-import { approvalNeeded, canonApproval, canonDescription, canonTitle, commandApproval, commandCredential, dueOn, maskedCommand, planTitle, projectTitle, workResult, workSessionId, workTitle } from "../support/work-result-fixtures";
+import { approvalNeeded, canonApproval, canonDescription, canonTitle, commandApproval, commandCredential, dueOn, longEditPath, longPathApproval, maskedCommand, planTitle, projectTitle, workResult, workSessionId, workTitle } from "../support/work-result-fixtures";
 import { probeFocusRingFrames } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser, smokeBrowserArgs } from "../support/smoke-browser";
 
@@ -28,11 +28,20 @@ try {
     const capture = (region: Locator, name: string, caption: string) => captureRegion(page, region, name, caption, language, theme, width);
     await page.goto("http://127.0.0.1:43827/");
     await resultBubble(page, gateway, copy.conversation.initiated.viewWork, language === "en", capture);
-    await attentionLine(page, gateway, copy.conversation.initiated.needsApproval, copy.guided.tools.run_command, capture);
+    await attentionLine(page, gateway, copy.conversation.initiated.needsApproval, language === "en" ? "Run command" : "명령 실행", capture);
     await gateway.showView(commandApproval());
     const commandCard = page.locator('[data-test-class="composer-authority-decision"]');
     await commandCard.getByText(maskedCommand, { exact: true }).waitFor();
     assert(!(await commandCard.innerHTML()).includes(commandCredential), "command credential is absent from text and titles");
+    await capture(commandCard, "command-approval", "명령 승인 카드 · 인증 값만 마스킹");
+    await gateway.showView(longPathApproval());
+    const pathCard = page.locator('[data-test-class="composer-authority-decision"]');
+    const pathTitle = pathCard.locator('[data-slot="composer-decision-subject"] [title]').first();
+    await pathTitle.waitFor();
+    assert((await pathTitle.getAttribute("title"))?.includes(longEditPath), "title tooltip retains the full absolute path");
+    await pathCard.locator(`[aria-label="${longEditPath}"]`).waitFor();
+    assert.equal(await pathCard.getByRole("button", { name: copy.conversation.messageActions.showMore, exact: true }).count(), 0, "one abbreviated absolute path never offers false expansion");
+    await capture(pathCard, "edit-files-long-path", "파일 수정 승인 카드 · 64자 초과 절대 경로, 더보기 없음, 제목 툴팁 유지");
     for (const kind of ["epic", "plan"] as const) {
       await gateway.showView(canonApproval(kind, ""));
       const shortCard = page.locator('[data-test-class="composer-authority-decision"]');
@@ -101,7 +110,7 @@ async function opensObserver(page: Page, row: Locator, keyboard: boolean) {
   await dialog.waitFor({ state: "hidden" });
 }
 async function attentionLine(page: Page, gateway: Gateway, label: string, toolLabel: string, capture: Capture) {
-  await gateway.show(approvalNeeded());
+  await gateway.show(approvalNeeded(false, toolLabel));
   const line = page.locator('[data-test-class="initiated-approval-needed"]');
   await line.getByText(label, { exact: true }).waitFor();
   const row = await line.evaluate(node => {
@@ -125,7 +134,11 @@ async function attentionLine(page: Page, gateway: Gateway, label: string, toolLa
   const opened = page.waitForRequest(request => request.url().endsWith("/automations/schedule-1/runs"));
   await line.click(); await opened;
   await page.locator('[data-test-class="automation-detail-view"]').waitFor();
+  const savedLabel = toolLabel === "Run command" ? "명령 실행" : "Run command";
+  await gateway.showView(session([approvalNeeded(true, savedLabel)]));
+  await line.getByText(`${savedLabel} · ${maskedCommand} · 환율·미국 증시 정리`, { exact: true }).waitFor();
   await gateway.showView(session([approvalNeeded(true)]));
+  await line.getByText(`${toolLabel} · ${maskedCommand} · 환율·미국 증시 정리`, { exact: true }).waitFor();
   await line.waitFor();
   await opensObserver(page, line, true);
 }
@@ -154,15 +167,19 @@ async function quietWorkResult(page: Page, gateway: Gateway) {
   await row.click(); await read;
   await showSidebar();
   await page.getByRole("button", { name: "다른 대화", exact: true }).click();
-  const quiet = { ...result, id: "quiet-work-result", initiated: { ...result.initiated!, quiet: true } };
+  const quiet = { ...result, id: "quiet-work-result", quiet: true, initiated: { ...result.initiated!, quiet: false } };
   const refreshed = page.waitForResponse(response => response.url().endsWith("/navigation"));
   await gateway.arrive(quiet); await refreshed;
   await showSidebar();
   await page.locator('[data-slot="unread-dot"]').waitFor();
   assert.equal(await count(), before + 1, "quiet work result marks unread without invoking the OS notification bridge");
+  const ordinary = { ...quiet, id: "quiet-assistant-message", initiated: undefined };
+  const ordinaryRefreshed = page.waitForResponse(response => response.url().endsWith("/navigation"));
+  await gateway.arrive(ordinary); await ordinaryRefreshed;
+  assert.equal(await count(), before + 1, "top-level quiet suppresses notifications without an initiated origin");
 }
 async function captureRegion(page: Page, region: Locator, name: string, caption: string, language: string, theme: string, width: number) {
-  if (!output || (width === 390 && theme === "dark")) return;
+  if (!output || (width === 390 && theme === "dark") || name === "work-result" || name.startsWith("canon-")) return;
   await page.evaluate(() => { (document.activeElement as HTMLElement)?.blur(); return document.fonts.ready; });
   await page.waitForFunction(() => document.getAnimations().every(animation => animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
   const box = await region.boundingBox(); assert(box);

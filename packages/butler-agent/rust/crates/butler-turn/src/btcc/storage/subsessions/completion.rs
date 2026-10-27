@@ -99,7 +99,7 @@ impl SqliteSubsessionRepository {
                     message_id: format!("subsession-result-message:{result_id}"),
                     safe_title: result_title(&delegation.safe_title), text: text.clone(), model_ref: model.into(),
                     reasoning_effort: reasoning.into(), access_mode: access.into(), timestamp: now.clone(),
-                    schedule_run: packet.schedule_run.clone(),
+                    schedule_run: super::instruction_context::current(&tx, &child_session, packet.schedule_run.clone())?,
                 })),
             };
             let input = serde_json::to_string(&input).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;

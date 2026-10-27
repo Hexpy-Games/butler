@@ -215,6 +215,8 @@ impl AppGatewayLifecycle {
         // HTTP probe can time out under load even while that listener is healthy;
         // status queries still probe it, but startup must not tear it down for that.
         self.endpoint.publish(address, app_config, local_auth);
+        self.endpoint
+            .publish_application(server.application.clone());
         if let Err(error) = self
             .persist(true, Some(format!("http://{address}")), app_config)
             .await

@@ -30,7 +30,6 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "queued_message_identity_conflict"
         | "project_source_scope_changed"
         | "session_relocating"
-        | "session_model_unavailable"
         | "authority_queue_immutable"
         | "queued_message_cas_conflict"
         | "turn_not_cancellable"
@@ -48,6 +47,7 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "library_item_not_found"
         | "library_tag_not_found"
         | "space_group_not_found" => public(404, error.code(), &error.detail()),
+        "session_model_unavailable" => public(409, error.code(), &error.detail()).permanent(),
         "turn_control_resolution_invalid" => public(500, error.code(), &error.detail()),
         _ => GatewayApplicationError::internal_from(error),
     }

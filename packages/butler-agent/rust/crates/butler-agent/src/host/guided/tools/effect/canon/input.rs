@@ -18,6 +18,9 @@ pub(super) async fn resolve(owner: &GuidedTools, args: &Value) -> Result<Value, 
         "project_title":project["display_name"]});
     let mut body = json!({"title":title});
     if let Some(description) = args.get("description") {
+        if !description.is_string() {
+            return Err(invalid("description must be a string."));
+        }
         body["description"] = description.clone();
         canon["description"] = description.clone();
     }

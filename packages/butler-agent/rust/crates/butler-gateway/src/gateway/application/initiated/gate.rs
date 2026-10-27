@@ -114,6 +114,22 @@ impl AppApplication {
 }
 
 impl Gate {
+    pub(in crate::gateway::application) fn for_admission(
+        db: &Connection,
+        facts: &super::super::AppSettingsFacts,
+        now: &str,
+    ) -> Result<Self, AppStorageError> {
+        let settings = &facts.native_settings["proactive_settings"];
+        Ok(Self {
+            now: now.into(),
+            tz: super::super::settings::effective_timezone(db, facts)?,
+            language: String::new(),
+            start: string(settings, "quiet_hours_start", "22:00"),
+            end: string(settings, "quiet_hours_end", "07:00"),
+            composing: Default::default(),
+        })
+    }
+
     pub(super) fn hold(
         &self,
         db: &Connection,
@@ -169,7 +185,7 @@ impl Gate {
             .ok_or_else(timing::invalid)
     }
 
-    pub(super) fn quiet(&self) -> Result<bool, AppStorageError> {
+    pub(in crate::gateway::application) fn quiet(&self) -> Result<bool, AppStorageError> {
         let minute = self.local(&self.now)?.time();
         let current = format!("{:02}:{:02}", minute.hour(), minute.minute());
         Ok(if self.start < self.end {

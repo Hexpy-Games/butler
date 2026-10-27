@@ -1,4 +1,4 @@
-//! Read current App controls only when a descendant admits a new turn.
+//! Read current controls through the in-process App owner at child admission.
 use butler_turn::{
     btcc::{AccessMode, BtccError, stored_binding_access_mode},
     workspace::StoredSessionBinding,
@@ -18,26 +18,23 @@ pub(super) async fn current(
     if schedule.is_none() && chat.is_none() {
         return Ok(stored_binding_access_mode(&binding));
     }
-    let client = crate::host::automation::client::ScheduleClient::active(&endpoint)
-        .map_err(|e| BtccError::relayed(e.code().to_owned(), e.message().to_owned()))?;
+    use butler_gateway::gateway::{GatewayApplication, GatewaySessionControls};
+    let application = endpoint.application().await.ok_or_else(invalid)?;
     if let Some(run) = schedule {
-        let value = client
-            .read(&run.automation_id)
+        return application
+            .get_automation(run.automation_id)
             .await
-            .map_err(|e| BtccError::relayed(e.code().to_owned(), e.message().to_owned()))?;
-        return parse(&value["automation"]["access_mode"]);
+            .map(|value| value.automation.summary.access_mode)
+            .map_err(|e| {
+                BtccError::relayed("delegation_parent_controls_unavailable", e.to_string())
+            });
     }
     let chat = chat.ok_or_else(invalid)?;
-    let id: String = url::form_urlencoded::byte_serialize(chat.peer_id.as_bytes()).collect();
-    let value = client
-        .request(
-            reqwest::Method::GET,
-            &format!("/sessions/{id}/controls"),
-            None,
-        )
+    let value = application
+        .get_session_controls_view(chat.peer_id.clone())
         .await
-        .map_err(|e| BtccError::relayed(e.code().to_owned(), e.message().to_owned()))?;
-    parse(&value["controls"]["access_mode"])
+        .map_err(|e| BtccError::relayed("delegation_parent_controls_unavailable", e.to_string()))?;
+    AccessMode::parse(&value.controls.access_mode).ok_or_else(invalid)
 }
 
 fn invalid() -> BtccError {
@@ -46,13 +43,6 @@ fn invalid() -> BtccError {
         "Parent controls are unavailable.",
     )
 }
-fn parse(value: &serde_json::Value) -> Result<AccessMode, BtccError> {
-    value
-        .as_str()
-        .and_then(AccessMode::parse)
-        .ok_or_else(invalid)
-}
-
 /// Assemble turn preparation with current parent controls resolved on demand.
 pub(super) fn preparation(
     stores: &super::stores::RuntimeStores,

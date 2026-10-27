@@ -295,6 +295,7 @@ fn message(
     let artifacts =
         (row.role == "assistant").then(|| files.iter().map(|file| artifact(&row, file)).collect());
     Ok(MessageRecord {
+        quiet: false,
         initiated: None,
         content_parts: parse_optional(row.content_parts_json.as_deref())?,
         id: row.id.clone(),

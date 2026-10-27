@@ -5,7 +5,7 @@ export const workSessionId = "work-research-42";
 // Synthetic credential, never a usable secret.
 export const commandCredential = "example-credential-value";
 export const exactCommand = `curl -H 'Authorization: Bearer ${commandCredential}' https://example.com/report`;
-export const maskedCommand = "curl -H 'Authorization: ••••' https://example.com/report";
+export const maskedCommand = "curl -H 'Authorization: Bearer ••••' https://example.com/report";
 export const canonDescription = "조사 내용을 모아 검토합니다.";
 export const workTitle = "주간 조사 정리";
 export const canonTitle = { epic: "조사 자료 정리", plan: "11월 조사 계획" };
@@ -19,9 +19,9 @@ export function workResult(en = false, documents = true): MessageRecord {
     artifacts: documents ? report.artifacts : [],
     initiated: { kind: "work_result", quiet: false, relation_id: "relation-42", work_session_id: workSessionId, work_title: workTitle } };
 }
-export function approvalNeeded(child = false): MessageRecord {
+export function approvalNeeded(child = false, label?: string): MessageRecord {
   return { ...initiatedMessage("report"), id: "approval-needed", artifacts: [], text: "Stored notification text",
-    initiated: { kind: "approval_needed", quiet: false, automation_id: "schedule-1", automation_title: "환율·미국 증시 정리", run_id: "run-42",
+    initiated: { kind: "approval_needed", quiet: false, label, automation_id: "schedule-1", automation_title: "환율·미국 증시 정리", run_id: "run-42",
       ...(child ? { work_session_id: workSessionId } : {}),
       approval: { action_kind: "run_command", targets: [{ kind: "folder", path: "research" }], count: 1,
         examples: [exactCommand], risk: "medium", operation: { tool: "exec_command", access: "change", targets: [], command: exactCommand } } } };
@@ -37,4 +37,12 @@ export function canonApproval(kind: "epic" | "plan", description = canonDescript
 export function commandApproval(): SessionView {
   return { ...session([]), authority_requests: [{ request_ref: "command-review", category: "reviewed_effect",
     reason: "Run command", executable: "exec_command", command_count: 1, approval: approvalNeeded().initiated!.approval }] };
+}
+
+export const longEditPath = "/workspace/projects/research/quarterly-reports/supporting-documents/source-material/notes.txt";
+export function longPathApproval(): SessionView {
+  return { ...session([]), authority_requests: [{ request_ref: "long-path-review", category: "reviewed_effect",
+    reason: "Edit file", executable: "edit_files", command_count: 1,
+    approval: { action_kind: "edit_files", targets: [{ kind: "folder", path: longEditPath, label: longEditPath }],
+      count: 1, examples: [], risk: "low", operation: { tool: "edit_files", access: "change", targets: [longEditPath] } } }] };
 }

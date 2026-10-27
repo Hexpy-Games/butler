@@ -169,7 +169,7 @@ export function approvalRequestView(
 export function approvalActionView(approval: ApprovalSummary, copy: ApprovalRequestCopy, toolLabels: Record<string, string>) {
   const kind = knownActionKind(approval);
   return {
-    label: (approval.operation && toolLabels[approval.operation.tool]) || toolLabels[approval.actionKind] || copy.actionLabels[kind],
+    label: (approval.operation && toolLabels[approval.operation.tool]) || toolLabels[approval.actionKind] || toolLabels.fallback,
     target: maskActionSecrets((COMMAND_KINDS.has(kind) ? approval.operation?.command ?? approval.examples[0] : undefined)
       ?? actionDetails(approval, kind, { reason: "" }, copy)[0] ?? ""),
   };

@@ -886,6 +886,7 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  quiet?: boolean;
   initiated?: import("./initiatedTypes").InitiatedOrigin;
   question_answer?: AnsweredUserQuestions;
   question_summary?: UserQuestion[];

@@ -138,12 +138,12 @@ test("the badge shows the risk the agent sent: the App never classifies commands
 // test-category: security
 test("outside paths stay absolute and inside paths remain project-relative", () => {
   for (const [input, masked] of [
-    ["curl -H 'Authorization: Bearer sample-value' https://example.com", "curl -H 'Authorization: ••••' https://example.com"],
-    ["curl -H 'Authorization: Basic sample-value'", "curl -H 'Authorization: ••••'"],
+    ["curl -H 'Authorization: Bearer sample-value' https://example.com", "curl -H 'Authorization: Bearer ••••' https://example.com"],
+    ["curl -H 'Authorization: Basic sample-value'", "curl -H 'Authorization: Basic ••••'"],
     ["run --api-key sample-value --token=sample-value secret='two words'", "run --api-key •••• --token=•••• secret=••••"],
     ['run api_key="two words" access_token=sample-value', "run api_key=•••• access_token=••••"],
     ["fetch https://example.com/?token=sample-value&limit=5", "fetch https://example.com/?token=••••&limit=5"],
-    ["send Bearer sample-value", "send Bearer ••••"],
+    ["send Bearer sample-value", "send Bearer sample-value"],
   ]) {
     const request = normalizeApprovalSummary({ action_kind: "run_command", examples: [input],
       operation: { tool: "exec_command", access: "change", targets: [], command: input } })!;

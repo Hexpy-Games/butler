@@ -46,7 +46,7 @@ pub(crate) struct AppServer {
     /// Bound address, kept after the listener stops.
     address: SocketAddr,
     listener_ready: Arc<AtomicBool>,
-    application: Arc<AppApplication>,
+    pub(super) application: Arc<AppApplication>,
     artifacts: Arc<AppMessageFiles>,
     setup: AppSetup,
 }

@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 pub(super) struct Script {
     pub args: Mutex<Value>,
     pub retry: std::sync::atomic::AtomicBool,
+    pub direct: std::sync::atomic::AtomicBool,
     pub outputs: Mutex<Vec<Value>>,
     pub offered: Mutex<Vec<String>>,
 }
@@ -83,8 +84,16 @@ async fn reply(
     } else if !done("propose-call") {
         Some((
             "propose-call",
-            "tool_call",
-            json!({"id":"native:canon_propose","arguments":*script.args.lock().unwrap()}),
+            if script.direct.load(std::sync::atomic::Ordering::SeqCst) {
+                "canon_propose"
+            } else {
+                "tool_call"
+            },
+            if script.direct.load(std::sync::atomic::Ordering::SeqCst) {
+                script.args.lock().unwrap().clone()
+            } else {
+                json!({"id":"native:canon_propose","arguments":*script.args.lock().unwrap()})
+            },
         ))
     } else if script.retry.load(std::sync::atomic::Ordering::SeqCst) && !done("propose-retry") {
         Some((

@@ -7,10 +7,11 @@ mod outbox;
 mod pause;
 mod projection;
 mod proposals;
+mod retry;
 mod work;
 
 pub(super) use decisions::Decisions;
-pub(super) use gate::{Composing, Hold};
-pub(super) use projection::origin;
+pub(super) use gate::{Composing, Gate, Hold};
+pub(super) use projection::{origin, quiet};
 
 pub(super) use proposals::public_proposals;

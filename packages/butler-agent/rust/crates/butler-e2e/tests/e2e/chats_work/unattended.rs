@@ -291,6 +291,9 @@ async fn skipped_browser_approval_matches_the_interactive_card() -> Result<(), H
     let rows = wait_count(&s, "approval_needed", 1).await?;
     assert_eq!(rows[0]["initiated"]["approval"], card["approval"]);
     assert!(!rows[0]["text"].as_str().unwrap().contains("browser_act"));
+    let label = rows[0]["initiated"]["label"].as_str().unwrap();
+    assert_ne!(label, "");
+    assert!(rows[0]["text"].as_str().unwrap().contains(label));
     assert_eq!(s.gw.approval_requests("general").await?, [] as [Value; 0]);
     s.finish().await
 }

@@ -635,12 +635,6 @@ export const koKrCopy: AppCopy = {
       networkCommand: workspace => `${workspaceName(workspace)}에서 인터넷을 쓰는 명령을 실행할까요?`,
       useConnector: (tool, server) => tool && server ? `${server}의 ${tool} 도구를 사용할까요?` : tool ? `${tool} 도구를 사용할까요?` : "연결된 도구를 사용할까요?",
       manageSchedule: { create: "예약 작업을 만들까요?", delete: "예약 작업을 삭제할까요?", run: "예정된 예약 작업을 실행할까요?", change: "예약 작업을 변경할까요?" },
-      actionLabels: {
-        edit_files: "파일 수정", run_command: "명령 실행", network_command: "네트워크 명령 실행", web_request: "웹 요청",
-        use_connector: "연결된 도구 사용", manage_schedule: "예약 작업 관리", create_canon: "프로젝트 항목 생성",
-        update_project: "프로젝트 기록 변경", start_conversation: "대화 시작", restart_service: "버틀러 다시 시작",
-        create_worktree: "워크트리 생성", switch_folder: "작업 폴더 이동", other: "기타 동작",
-      },
       createCanon: { epic: "과제를 만들까요?", plan: "계획을 만들까요?" },
       canonPlan: plan => `계획: ${plan}`,
       canonTitle: title => `제목: ${title}`,
