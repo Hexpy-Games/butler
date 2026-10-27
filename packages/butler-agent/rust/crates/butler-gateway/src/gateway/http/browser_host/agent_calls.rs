@@ -46,7 +46,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
-    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"]},"tab":frame["tab"],"turn_id":frame["turn_id"]});
+    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"],"payment_skip":frame["args"]["payment_skip"]},"tab":frame["tab"],"turn_id":frame["turn_id"],"schedule_browser":frame["schedule_browser"]});
     if let Some(refused) = dispatch_reserved(&state, frame, count, deadline, &id, sender).await? {
         return Ok(refused);
     }
@@ -111,7 +111,10 @@ async fn signed_in_call(
     if let Some(refused) = super::signed_in::admit(state, frame, op, session).await? {
         return Ok(Some(refused));
     }
-    if !op.starts_with("signin.") && !super::pay::VAULT_OPS.contains(&op) {
+    let needs_tab = op.starts_with("signin.")
+        || super::pay::VAULT_OPS.contains(&op)
+        || op == "tab.act" && frame["args"]["payment_skip"].is_object();
+    if !needs_tab {
         return Ok(None);
     }
     let tab = {
@@ -124,6 +127,9 @@ async fn signed_in_call(
             Err(reason) => return Ok(Some(json!({"status":"not_dispatched","reason":reason}))),
         }
     };
+    if op == "tab.act" {
+        return super::payment_scope::prepare(state, frame, &tab).await;
+    }
     if op == "signin.lookup" {
         return super::fill::lookup(state, &tab).await.map(Some);
     }

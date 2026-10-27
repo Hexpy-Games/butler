@@ -34,11 +34,13 @@
   align-items: center;
 }
 
-/* Control, then label and description: the control centers on the label's
-   line, never on the whole label + description block. */
+/* Row layout (the exception: a phone, or a list item inside a card): label
+   and description first, the control at the row end, centred on the label's
+   line, never on the whole label + description block. The default vertical
+   field stacks label, description, then the control, like an input. */
 .field[data-orientation="horizontal"]:has(> .content) {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   row-gap: 2px;
 }
@@ -48,10 +50,11 @@
 }
 
 .field[data-orientation="horizontal"] > .content > * {
-  grid-column: 2;
+  grid-column: 1;
 }
 
 .field[data-orientation="horizontal"] > :not(.content) {
+  grid-column: 2;
   grid-row: 1;
 }
 

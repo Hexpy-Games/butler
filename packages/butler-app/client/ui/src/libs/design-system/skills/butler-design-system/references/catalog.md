@@ -255,6 +255,7 @@
 | A suggestion list as wide as its field (width="anchor" with SuggestionList) | `Popover` |  |
 | A suggestion or briefing entry with its own action | `Card` |  |
 | A summary stat strip at the top of a section (variant="joined") | `MetricGrid` |  |
+| A switch and its label: the label above, the switch underneath (a stacked Field) | `Label` |  |
 | A system message that needs a visual marker | `MessageAvatarBlock` |  |
 | A tab dragged from the pane to the sidebar | `DragPreview` |  |
 | A tab's own working or waiting state | `LiveTabCard` | `ActivityGlow` |
@@ -383,7 +384,7 @@
 | Choosing a value for one field | `FilteredSelectPopover` | `CommandPanel` |
 | Choosing a value inside a form | `Select` | `ChoiceCard` |
 | Choosing among a few named colors | `SegmentedControl` | `ColorSwatchInput` |
-| Choosing among several modes | `SegmentedControl` | `Switch` |
+| Choosing among more than two states or modes | `SegmentedControl` | `Switch` |
 | Choosing between a few text options | `SegmentedControl` | `WallpaperPicker` |
 | Choosing from a fixed list | `Select` | `Input` |
 | Choosing one of a few labelled options | `SegmentedControl` | `Clickable` |
@@ -606,6 +607,7 @@
 | Saying what Butler is doing in words | `PageBand` | `AgentPointer` |
 | Search across many options | `FilteredSelectPopover` | `OptionMenu` |
 | Searching a long list | `FilteredSelectPopover` | `NativeSelect` |
+| Selecting items, or a choice confirmed with a submit button | `CheckCard` | `Switch` |
 | Separate rows of a list that is not a card list | `Separator` |  |
 | Settings navigation lists | `SettingsNav` | `SidebarShell` |
 | Settings pages | `SettingsShell` | `SplitBrowser` |
@@ -719,7 +721,7 @@
 | Top of the project dashboard or the automations page | `DashboardHeader` |  |
 | Totals as rows without a time axis | `UsageSummaryRows` | `UsageBars` |
 | Trace steps: affordance="none" with a count of child steps, an attention dot on problem rows and a SpanBar in `bar` | `DisclosureRow` |  |
-| Turn a setting on or off without a save step | `Switch` |  |
+| Turn a setting on or off; it applies as soon as it is flipped, without a save step | `Switch` |  |
 | Turn a title into a quiet text link that opens details | `Clickable` |  |
 | Two or three answer, scrap or document blocks read together | `BlockColumns` |  |
 | Two to five facts on one line | `MetaList` | `KeyValueRow` |
@@ -907,6 +909,7 @@ A single-line field for names, IDs, URLs, numbers and secrets. Use variant=defau
 Names one form control and makes its text a click target for it.
 
 - Use for: Name a lone control outside a Field
+- Use for: A switch and its label: the label above, the switch underneath (a stacked Field)
 - Not for: A label inside a form field → `FieldLabel`
 - Not for: A settings row → `SettingsField`
 - Tokens: `--typo-label-size`, `--font-weight-medium`
@@ -968,8 +971,9 @@ A controlled range input for choosing a number between bounds by feel.
 
 An on/off setting that takes effect immediately.
 
-- Use for: Turn a setting on or off without a save step
-- Not for: Choosing among several modes → `SegmentedControl`
+- Use for: Turn a setting on or off; it applies as soon as it is flipped, without a save step
+- Not for: Choosing among more than two states or modes → `SegmentedControl`
+- Not for: Selecting items, or a choice confirmed with a submit button → `CheckCard`
 - Not for: An action that runs once → `Button`
 - Tokens: `--switch-track-bg`, `--switch-thumb`, `--accent`, `--motion-ease-spring`, `--motion-base`
 
