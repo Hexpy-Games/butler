@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   executable TEXT NOT NULL,
   command_count INTEGER NOT NULL CHECK (command_count >= 1),
   decision TEXT NOT NULL CHECK (decision IN ('pending', 'allowed', 'denied', 'modified')),
-  allow_scope TEXT NOT NULL DEFAULT 'once' CHECK (allow_scope IN ('once', 'conversation')),
+  allow_scope TEXT NOT NULL DEFAULT 'once' CHECK (allow_scope IN ('once', 'conversation', 'site')),
   schedule_client_message_id TEXT NOT NULL UNIQUE,
   schedule_input_text TEXT NOT NULL,
   private_alternative_input TEXT,

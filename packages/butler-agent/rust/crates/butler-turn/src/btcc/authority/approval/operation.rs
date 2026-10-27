@@ -12,6 +12,8 @@ pub struct ApprovalOperation {
     pub command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_conversation: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_site: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     /// In-memory desktop media binding, never a display target.
     pub browser_tab: Option<String>,
@@ -112,6 +114,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             "web_read" | "web_search" | "generate_image" | "edit_image"
         )
         .then_some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: None,
         browser_mode: None,
         browser_steps: Vec::new(),
@@ -138,14 +141,14 @@ fn paths<'a>(input: &'a Value, key: &str) -> Vec<&'a str> {
 }
 
 fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
-    let mut targets = vec![
+    let site = facts.input["merchant_site"].as_str().unwrap_or_else(|| {
         facts
             .target
             .strip_prefix("browser:signed_out:")
             .or_else(|| facts.target.strip_prefix("browser:signed_in:"))
             .unwrap_or(facts.target)
-            .to_owned(),
-    ];
+    });
+    let mut targets = vec![site.to_owned()];
     if let Some(url) = facts.input["url"].as_str() {
         targets.push(url.into());
     }
@@ -178,6 +181,7 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         targets,
         command: None,
         allow_conversation: Some(facts.input["always_confirm"] != true),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: facts.input["mode"].as_str().map(str::to_owned),
         browser_steps,
@@ -250,6 +254,7 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         targets,
         command: None,
         allow_conversation: Some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: (access == "change").then(|| "signed_in".into()),
         sign_in_step: (tool == "browser_sign_in_wait")
@@ -310,6 +315,7 @@ fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         targets,
         command: None,
         allow_conversation: Some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: None,
         browser_steps: Vec::new(),
@@ -334,6 +340,7 @@ fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
             .collect(),
         command: None,
         allow_conversation: Some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: None,
         browser_steps: Vec::new(),

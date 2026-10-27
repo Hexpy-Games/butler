@@ -6,6 +6,7 @@ mod fill;
 mod hand_back;
 pub(super) mod hidden;
 mod pay;
+mod payment_scope;
 mod previews;
 pub(super) mod reader;
 mod report;
