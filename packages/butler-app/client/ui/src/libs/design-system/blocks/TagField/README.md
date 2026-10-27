@@ -26,6 +26,8 @@ The App passes the item's tags (`value`), every existing tag with its count
 The input is a combobox with a listbox; ArrowUp/ArrowDown move, Enter or a
 comma adds the highlighted row (or the typed text), Backspace on an empty
 field removes the last chip, Escape clears the typed text.
+The ring is drawn on the field, so the input carries the field's inset as its
+scroll margin: keyboard focus inside a fading scroller clears the whole ring.
 
 ## Responsive behavior
 Chips wrap inside the field; the field fills its container.
