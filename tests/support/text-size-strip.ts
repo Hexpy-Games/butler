@@ -73,10 +73,14 @@ export async function checkSuggestionStrips(page: ElectronPage, main: Main, win:
       let trackpad = await read();
       // A sequence of real native wheel inputs, with no synthetic DOM scroll events.
       for (let input = 0; input < 40 && !trackpad.lastInside; input++) {
-        await main.evaluate(`(async()=>{const wc=${win}.webContents;
-          const p=await wc.executeJavaScript('(()=>{const r=document.querySelector(\'[data-test-class="new-chat-suggestion-rail"]\').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()');
-          const z=wc.getZoomFactor();wc.sendInputEvent({type:'mouseMove',x:Math.round(p.x*z),y:Math.round(p.y*z)});
-          wc.sendInputEvent({type:'mouseWheel',x:Math.round(p.x*z),y:Math.round(p.y*z),deltaX:-120,deltaY:0,canScroll:true});})()`);
+        const point = await page.evaluate(() => {
+          const r = document.querySelector('[data-test-class="new-chat-suggestion-rail"]')!.getBoundingClientRect();
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        });
+        // DOM client coordinates times the App zoom are the window's DIPs.
+        await main.evaluate(`(()=>{const wc=${win}.webContents;const z=wc.getZoomFactor();
+          const x=Math.round(${point.x}*z),y=Math.round(${point.y}*z);wc.sendInputEvent({type:'mouseMove',x,y});
+          wc.sendInputEvent({type:'mouseWheel',x,y,deltaX:-120,deltaY:0,canScroll:true});})()`);
         trackpad = await read(); fade(trackpad); wheelPositions.push(trackpad.left);
       }
       assert(trackpad.left > 0 && trackpad.lastInside, `trackpad reaches last card: ${JSON.stringify(trackpad)}`);
