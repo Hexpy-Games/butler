@@ -1,6 +1,9 @@
 //! A real card writes the existing standing allow; other chats and schedules
 //! inherit it, while revocation fences live identity tabs and restores the card.
 mod payment;
+mod schedule_cards;
+mod schedule_migration;
+mod schedules;
 mod support;
 mod upgrade;
 use super::host::{admin, attach, call, snapshot, tab};
@@ -112,7 +115,7 @@ async fn standing_flow(access: Access) -> Result<(), HarnessError> {
         s.gw.post(
             "/automations",
             json!({"title":"Read account","prompt_body":ASK,
-        "target_session_id":scheduled,"interval_seconds":3600,"source_session_id":other}),
+        "target_session_id":scheduled,"interval_seconds":3600,"browser_signin":true,"source_session_id":other}),
         )
         .await?;
     assert_eq!(created.status, 201, "{}", created.text);

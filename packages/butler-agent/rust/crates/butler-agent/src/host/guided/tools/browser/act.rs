@@ -63,6 +63,9 @@ async fn run(
             .await;
         return finish_batch(&args, prepared);
     }
+    if let Some(refused) = schedule_payment_refusal(owner, call, &prepared).await {
+        return finish_batch(&args, refused);
+    }
     let scope = act_scope(&prepared);
     let input = approval_input(&args, &mut prepared, &scope, !client.approval_handoff);
     if client.approval_handoff
@@ -185,4 +188,29 @@ fn executor_refusal(args: &Value, prepared: Value) -> Result<JsonDocument, ToolE
     } else {
         finish_batch(args, prepared)
     }
+}
+
+async fn schedule_payment_refusal(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    prepared: &Value,
+) -> Option<Value> {
+    let run = owner.schedule_run()?;
+    if !prepared["steps"]
+        .as_array()
+        .is_some_and(|steps| steps.iter().any(authority::payment_step))
+    {
+        return None;
+    }
+    if !run.browser.payment {
+        return super::super::turn_guard::schedule_browser_feedback(owner, "schedule_payment_off")
+            .await;
+    }
+    if prepared["purchase_allowed"] != true {
+        return Some(
+            super::super::turn_guard::unattended_feedback(owner, &call.name, &act_scope(prepared))
+                .await,
+        );
+    }
+    None
 }

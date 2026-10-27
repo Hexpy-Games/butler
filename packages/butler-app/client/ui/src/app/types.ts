@@ -1729,6 +1729,8 @@ export interface TimelineEvent {
     line?: string | null;
     summary?: string;
     tainted?: boolean;
+    site?: string;
+    amount?: string;
     /** `automation.run`: the run's conversation and its safe error code. */
     target_session_id?: string;
     safe_error_code?: string;
@@ -1792,6 +1794,8 @@ export interface CommandPaletteResult {
 }
 
 export interface AutomationSummary {
+  browser_signin?: boolean;
+  browser_payment?: boolean;
   id: string;
   title: string;
   target_label: string;
@@ -1892,7 +1896,7 @@ export interface ApprovalSummary {
   operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; allow_site?: "signed_in" | "payment"; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
   /** What a reviewed schedule create sets up: its name, timing and run mode; never its id. */
-  schedule?: { title: string; scheduleType: "once" | "interval"; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };
+  schedule?: { title: string; scheduleType: "once" | "interval" | "update"; browserSignin?: boolean; browserPayment?: boolean; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */
   targets: ApprovalTarget[];

@@ -1,5 +1,6 @@
 //! A payment card grants the merchant, covering future saved-card fills and
 //! final clicks. Revocation returns both cards and fences the live site.
+mod schedules;
 use super::super::{
     host::{admin, attach, snapshot},
     vault::{CARD, CHECKOUT, Cleanup, tab, vault_scenario},

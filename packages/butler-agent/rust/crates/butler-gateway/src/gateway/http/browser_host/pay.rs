@@ -154,6 +154,11 @@ pub(super) async fn prepare(
     frame: &mut Value,
     tab: &Value,
 ) -> Result<Option<Value>, HttpError> {
+    if frame["op"] == "pay.fill" && frame["schedule_browser"]["payment"] == false {
+        return Ok(Some(
+            json!({"status":"not_dispatched","reason":"schedule_payment_off"}),
+        ));
+    }
     let kind = if frame["op"] == "pay.fill" {
         "card"
     } else {
@@ -371,7 +376,16 @@ pub(super) async fn admit(
         return Ok(Some(json!({"status":"ok","site":site})));
     }
     if op == "pay.lookup" {
-        return lookup(state, tab).await.map(Some);
+        let mut value = lookup(state, tab).await?;
+        if frame["schedule_browser"]["payment"] == false {
+            value["purchase_allowed"] = json!(false);
+            if let Some(cards) = value["cards"].as_array_mut() {
+                for card in cards {
+                    card["allowed"] = json!(false);
+                }
+            }
+        }
+        return Ok(Some(value));
     }
     prepare(state, frame, tab).await
 }
@@ -395,7 +409,10 @@ pub(super) async fn finish_call(
             hub.tabs.get(sent["tab"].as_str().unwrap_or("")).cloned()
         };
         if let Some(tab) = tab {
-            result["purchase_allowed"] = json!(purchase_allowed(state, &tab).await?);
+            result["purchase_allowed"] = json!(
+                sent["schedule_browser"]["payment"] != false
+                    && purchase_allowed(state, &tab).await?
+            );
             result["merchant_site"] = json!(merchant_site(state, &tab));
         }
     }

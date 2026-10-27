@@ -138,6 +138,8 @@ impl ScheduleClient {
                     "schedule_type": kind, "run_at": args.get("run_at"), "start_at": args.get("start_at"),
                     "interval_seconds": seconds,
                     "access_mode": args.get("access_mode"),
+                    "browser_signin": args.get("browser_signin"),
+                    "browser_payment": args.get("browser_payment"),
                     "source_session_id": session,
                 }))).await?
             }

@@ -40,6 +40,13 @@ pub(super) async fn prepare(
     frame: &mut Value,
     tab: &Value,
 ) -> Result<Option<Value>, HttpError> {
+    if frame["schedule_browser"]["payment"] == false
+        && (frame["op"] == "pay.fill" || frame["args"]["payment_skip"].is_object())
+    {
+        return Ok(Some(
+            json!({"status":"not_dispatched","reason":"schedule_payment_off"}),
+        ));
+    }
     if !frame["args"]["payment_skip"].is_object() {
         return Ok(None);
     }

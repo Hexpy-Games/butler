@@ -85,6 +85,8 @@ pub(super) fn request(
     approval.operation = Some(approval::exact_operation(facts));
     if record.capability == "create_automation" {
         approval.schedule = Some(approval::schedule(&input));
+    } else if record.capability == "update_automation" {
+        approval.schedule = Some(approval::schedule_update(&input));
     } else if record.capability == "delete_automation" {
         approval.schedule = input
             .get("schedule")

@@ -27,6 +27,14 @@ pub(super) async fn call(
 ) -> Result<Value, ToolExecutionError> {
     let (op, tab, args) = request;
     let result = client.call(op, tab, args, signal).await;
+    if let Some(refusal) = super::super::turn_guard::schedule_browser_feedback(
+        owner,
+        result["reason"].as_str().unwrap_or(""),
+    )
+    .await
+    {
+        return Ok(refusal);
+    }
     let Some(mut grant) = needed(&result) else {
         return Ok(result);
     };

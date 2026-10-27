@@ -34,6 +34,13 @@ pub(super) async fn execute(
     if call.name == "browser_sign_in" {
         return super::signin::execute(owner, invocation, call, occurrence, client, args).await;
     }
+    if call.name == "browser_pay_fill"
+        && owner.schedule_run().is_some_and(|run| !run.browser.payment)
+        && let Some(refused) =
+            super::super::turn_guard::schedule_browser_feedback(owner, "schedule_payment_off").await
+    {
+        return encoded(&refused);
+    }
     if owner.binding.access_mode == AccessMode::ReadOnly {
         return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
     }
@@ -94,6 +101,16 @@ async fn fill(
     kind: &str,
     targets: &Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if kind == "card" && this.owner.schedule_run().is_some() && looked["purchase_allowed"] != true {
+        return encoded(
+            &super::super::turn_guard::unattended_feedback(
+                this.owner,
+                &this.call.name,
+                looked["site"].as_str().unwrap_or(""),
+            )
+            .await,
+        );
+    }
     let mut approval = None;
     if item["allowed"] != true && !(kind == "card" && looked["purchase_allowed"] == true) {
         let input = approval_input(inspected, item, kind, this.tab);

@@ -88,11 +88,13 @@ function normalizeBrowserSteps(value: unknown): BrowserStep[] | undefined {
 
 function normalizeSchedule(value: unknown): ApprovalSummary["schedule"] {
   if (!isRecord(value) || typeof value.title !== "string"
-    || (value.schedule_type !== "once" && value.schedule_type !== "interval")) return undefined;
+    || (value.schedule_type !== "once" && value.schedule_type !== "interval" && value.schedule_type !== "update")) return undefined;
   const text = (key: string) => typeof value[key] === "string" && value[key].trim() ? value[key] : undefined;
   const runAt = text("run_at");
   const startAt = text("start_at");
   return { title: value.title.trim(), scheduleType: value.schedule_type,
+    ...(typeof value.browser_signin === "boolean" ? { browserSignin: value.browser_signin } : value.schedule_type !== "update" ? { browserSignin: false } : {}),
+    ...(typeof value.browser_payment === "boolean" ? { browserPayment: value.browser_payment } : value.schedule_type !== "update" ? { browserPayment: false } : {}),
     ...(runAt ? { runAt } : {}), ...(startAt ? { startAt } : {}),
     ...(typeof value.interval_seconds === "number" ? { intervalSeconds: value.interval_seconds } : {}),
     ...(isAccessMode(value.access_mode) ? { accessMode: value.access_mode } : {}) };
@@ -149,7 +151,7 @@ export function approvalRequestView(
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
-      ...(schedule ? [schedule.title, scheduleTiming(schedule), ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : [])].filter(Boolean)
+      ...(schedule ? [schedule.title, ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)] : []), ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : []), ...(typeof schedule.browserSignin === "boolean" ? [copy.scheduleSignin(schedule.browserSignin)] : []), ...(typeof schedule.browserPayment === "boolean" ? [copy.schedulePayment(schedule.browserPayment)] : [])].filter(Boolean)
         : actionKind === "manage_schedule" ? [copy.scheduleUnavailable]
           : operation ? operationDetails(operation, copy) : details(approval, actionKind, card, copy))],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),

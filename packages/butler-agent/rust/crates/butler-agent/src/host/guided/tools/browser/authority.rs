@@ -16,6 +16,11 @@ pub(super) async fn gate(
     input: &Value,
     target: &str,
 ) -> Result<Gate, ToolExecutionError> {
+    if owner.schedule_run().is_some() && input["grant"].is_object() {
+        return Ok(Gate::Pending(
+            super::super::turn_guard::unattended_feedback(owner, &call.name, target).await,
+        ));
+    }
     if let Some(reference) = resume_reference(owner, occurrence) {
         let stored = owner
             .authority

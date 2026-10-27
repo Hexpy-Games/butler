@@ -88,6 +88,13 @@ async fn execute_client(
     client: client::Client,
     mut args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if (call.name == "browser_sign_in" || call.name == "browser_open" && args["signed_in"] == true)
+        && owner.schedule_run().is_some_and(|run| !run.browser.signin)
+        && let Some(refused) =
+            super::turn_guard::schedule_browser_feedback(owner, "schedule_signin_off").await
+    {
+        return encoded(&refused);
+    }
     if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
         return preview::execute(owner, invocation, call, occurrence, client).await;
     }
