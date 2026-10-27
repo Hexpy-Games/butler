@@ -43,6 +43,7 @@ pub(super) async fn execute(
             owner,
             call,
             &args,
+            args["tab"].as_str().unwrap_or(""),
             "schedule_payment_off",
         )
         .await
@@ -114,6 +115,7 @@ async fn fill(
             this.owner,
             this.call,
             approval_input(inspected, item, kind, this.tab),
+            &format!("browser:pay:{}", looked["site"].as_str().unwrap_or("")),
             "schedule_permission_required",
         )
         .await;

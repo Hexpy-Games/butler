@@ -1,4 +1,5 @@
 import { normalizeApprovalCanon } from "./approvalCanon.ts";
+import { maskActionSecrets } from "./maskActionSecrets.ts";
 import { appCopy } from "./copy.ts";
 import type { AppCopy } from "./copy.ts";
 import { approvalTargetsFromTransport, isAbsolutePath } from "./approvalTargets.ts";
@@ -153,7 +154,7 @@ export function approvalRequestView(
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
-      ...actionDetails(approval, actionKind, card, copy)],
+      ...actionDetails(approval, actionKind, card, copy)].map(maskActionSecrets),
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -169,8 +170,8 @@ export function approvalActionView(approval: ApprovalSummary, copy: ApprovalRequ
   const kind = knownActionKind(approval);
   return {
     label: (approval.operation && toolLabels[approval.operation.tool]) || toolLabels[approval.actionKind] || copy.actionLabels[kind],
-    target: (COMMAND_KINDS.has(kind) ? approval.operation?.command ?? approval.examples[0] : undefined)
-      ?? actionDetails(approval, kind, { reason: "" }, copy)[0] ?? "",
+    target: maskActionSecrets((COMMAND_KINDS.has(kind) ? approval.operation?.command ?? approval.examples[0] : undefined)
+      ?? actionDetails(approval, kind, { reason: "" }, copy)[0] ?? ""),
   };
 }
 
@@ -182,8 +183,9 @@ function knownActionKind(approval: ApprovalSummary): ApprovalActionKind {
 function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
   card: Pick<AuthorityApprovalCard, "scope" | "reason">, copy: ApprovalRequestCopy): string[] {
   const { canon, schedule, operation } = approval;
-  if (kind === "create_canon" && canon) return [canon.title, canon.project_title,
-    ...(canon.plan_title ? [copy.canonPlan(canon.plan_title)] : []), ...(canon.due_on ? [copy.canonDue(canon.due_on)] : [])];
+  if (kind === "create_canon" && canon) return [copy.canonTitle(canon.title), copy.canonProject(canon.project_title),
+    ...(canon.plan_title ? [copy.canonPlan(canon.plan_title)] : []), ...(canon.due_on ? [copy.canonDue(canon.due_on)] : []),
+    ...(canon.description ? [copy.canonDescription(canon.description)] : [])];
   if (schedule) return [schedule.title,
     ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)]
       : !schedule.accessMode && typeof schedule.browserSignin !== "boolean" && typeof schedule.browserPayment !== "boolean" ? [copy.scheduleUnavailable] : []),

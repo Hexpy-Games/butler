@@ -10,7 +10,6 @@ struct HeldResult {
     client_message_id: Option<Value>,
     model: Option<Value>,
     reasoning_effort: Option<Value>,
-    access_mode: Option<Value>,
     subsession_result: Option<butler_turn::btcc::SubsessionResultContext>,
     schedule_run: Option<butler_turn::btcc::ScheduleRunContext>,
 }
@@ -21,7 +20,6 @@ impl From<MessageSendRequest> for HeldResult {
             client_message_id: r.client_message_id,
             model: r.model,
             reasoning_effort: r.reasoning_effort,
-            access_mode: r.access_mode,
             subsession_result: r.subsession_result,
             schedule_run: r.schedule_run,
         }
@@ -34,7 +32,6 @@ impl From<HeldResult> for MessageSendRequest {
             client_message_id: r.client_message_id,
             model: r.model,
             reasoning_effort: r.reasoning_effort,
-            access_mode: r.access_mode,
             subsession_result: r.subsession_result,
             schedule_run: r.schedule_run,
             ..Self::default()
@@ -47,20 +44,22 @@ impl AppApplication {
         &self,
         command: SendMessageCommand,
     ) -> Result<Value, GatewayApplicationError> {
+        let mut command = command;
+        command.request.schedule_run = command
+            .request
+            .schedule_run
+            .filter(|r| r.unattended || r.connector_event);
         if command.chat_id != "general" {
+            command.request.access_mode = Some(self.result_access(&command).await?);
             return serde_json::to_value(self.send_message(command).await?)
                 .map_err(GatewayApplicationError::internal_from);
         }
         let gate = self.initiated_gate().await?;
-        let held = self
-            .storage
-            .read(move |db| Ok(!matches!(gate.hold(db, "general", false)?, Hold::Free)))
-            .await
-            .map_err(app_error)?;
-        if !held {
-            return serde_json::to_value(self.send_message(command).await?)
-                .map_err(GatewayApplicationError::internal_from);
-        }
+        let bypass = command.request.schedule_run.is_none();
+        let held = !matches!(
+            gate.work_hold("general", bypass).map_err(app_error)?,
+            Hold::Free
+        );
         let context = command
             .request
             .subsession_result
@@ -75,47 +74,115 @@ impl AppApplication {
             "work-result-{}",
             butler_turn::btcc::digest_identity(&source)
         );
+        let key = id.clone();
         self.storage
             .execute(move |db| {
-                outbox::enqueue(db, &id, &source, "work_result", &title, &payload, &now)
+                outbox::enqueue(db, &key, &source, "work_result", &title, &payload, &now)?;
+                db.execute(
+                    "UPDATE app_initiated_messages SET bypass_quiet_hours=?1 WHERE id=?2",
+                    params![bypass, key],
+                )
+                .map_err(AppStorageError::sqlite)?;
+                Ok(())
             })
             .await
             .map_err(app_error)?;
+        if !held {
+            return self.deliver_work_result(id).await;
+        }
         self.automation_wake.notify_one();
         Ok(json!({"held":true}))
+    }
+
+    async fn result_access(
+        &self,
+        command: &SendMessageCommand,
+    ) -> Result<Value, GatewayApplicationError> {
+        let schedule = command
+            .request
+            .schedule_run
+            .as_ref()
+            .map(|r| r.automation_id.clone());
+        let chat = command.chat_id.clone();
+        self.storage
+            .read(move |db| {
+                if let Some(id) = schedule.filter(|id| !id.is_empty()) {
+                    return db
+                        .query_row(
+                            "SELECT access_mode FROM app_automations WHERE id=?1",
+                            [id],
+                            |r| r.get::<_, String>(0),
+                        )
+                        .map(Value::String)
+                        .map_err(AppStorageError::sqlite);
+                }
+                let access = super::super::settings::conversation_access_mode(db, &chat)?;
+                Ok(json!(super::super::settings::access_mode_name(&access)))
+            })
+            .await
+            .map_err(app_error)
     }
 
     pub(super) async fn deliver_work_result(
         &self,
         id: String,
-    ) -> Result<(), GatewayApplicationError> {
+    ) -> Result<Value, GatewayApplicationError> {
         let key = id.clone();
-        let raw: String = self
+        let (raw, state): (String, String) = self
             .storage
             .read(move |db| {
                 db.query_row(
-                    "SELECT payload_json FROM app_initiated_messages WHERE id=?1",
+                    "SELECT payload_json,state FROM app_initiated_messages WHERE id=?1",
                     [key],
-                    |r| r.get(0),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .map_err(AppStorageError::sqlite)
             })
             .await
             .map_err(app_error)?;
+        if state != "held" {
+            return Ok(json!({"state":state}));
+        }
         let request: HeldResult =
             serde_json::from_str(&raw).map_err(GatewayApplicationError::internal_from)?;
-        let result = self
-            .send_message(SendMessageCommand {
-                chat_id: "general".into(),
-                request: request.into(),
+        let mut command = SendMessageCommand {
+            chat_id: "general".into(),
+            request: request.into(),
+        };
+        command.request.schedule_run = command
+            .request
+            .schedule_run
+            .filter(|r| r.unattended || r.connector_event);
+        command.request.access_mode = Some(self.result_access(&command).await?);
+        let gate = self.initiated_gate().await?;
+        if !matches!(
+            gate.work_hold("general", command.request.schedule_run.is_none())
+                .map_err(app_error)?,
+            Hold::Free
+        ) {
+            return Ok(json!({"held":true}));
+        }
+        let quiet = gate.quiet().map_err(app_error)?;
+        let key = id.clone();
+        self.storage
+            .execute(move |db| {
+                db.execute(
+                    "UPDATE app_initiated_messages SET quiet=?1 WHERE id=?2 AND state='held'",
+                    params![quiet, key],
+                )
+                .map_err(AppStorageError::sqlite)?;
+                Ok(())
             })
-            .await?;
-        let message = result.accepted.map(|m| m.id);
+            .await
+            .map_err(app_error)?;
+        let result = self.send_message(command).await?;
+        let message = result.accepted.as_ref().map(|m| m.id.clone());
         let now = self.dependencies.identity_clock.now_iso();
         self.storage.execute(move |db| {
-            db.execute("UPDATE app_initiated_messages SET state='posted',message_id=?1,posted_at=?2,quiet=0 WHERE id=?3 AND state='held'", params![message,now,id])
+            db.execute("UPDATE app_initiated_messages SET state='posted',message_id=?1,posted_at=?2 WHERE id=?3 AND state='held'", params![message,now,id])
                 .map_err(AppStorageError::sqlite)?;
             Ok(())
-        }).await.map_err(app_error)
+        }).await.map_err(app_error)?;
+        serde_json::to_value(result).map_err(GatewayApplicationError::internal_from)
     }
 }

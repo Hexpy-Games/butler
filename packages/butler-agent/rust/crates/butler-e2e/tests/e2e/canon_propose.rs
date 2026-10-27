@@ -104,7 +104,7 @@ async fn ask_first_exact_epic_card_allow_and_replay_identity() -> Result<(), Har
     assert_eq!(
         request["approval"]["canon"],
         json!({"kind":"epic","title":"Requested item",
-        "project_id":project,"project_title":"Board","plan_id":plan,"plan_title":"Milestone"})
+        "project_id":project,"project_title":"Board","plan_id":plan,"plan_title":"Milestone","description":"Exact details"})
     );
     assert_eq!(epic_count(&s)?, 0);
     // Renaming a plan while approval is pending must not alter the reviewed identity.
@@ -253,7 +253,7 @@ async fn plan_due_date_and_project_id_reference() -> Result<(), HarnessError> {
     assert_eq!(
         requests[0]["approval"]["canon"],
         json!({"kind":"plan","title":"Requested item",
-        "project_id":project,"project_title":"Board","due_on":"2028-02-29"})
+        "project_id":project,"project_title":"Board","due_on":"2028-02-29","description":"Exact details"})
     );
     let reference = requests[0]["request_ref"].as_str().unwrap();
     let reply =
@@ -356,5 +356,28 @@ async fn project_lookup_is_indexed_and_cross_project_plan_is_rejected() -> Resul
     let exact = s.gw.get(&format!("/projects?project_ref={id}")).await?;
     assert_eq!(exact.status, 200, "{}", exact.text);
     assert_eq!(exact.data()["id"], id);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn same_item_retry_in_one_run_replays_the_created_item() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, _server, project, _) = setup("auto", "epic").await?;
+    script
+        .retry
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let (_, turn) = propose(&s).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert_eq!(epic_count(&s)?, 1);
+    let outputs = script.outputs.lock().unwrap().clone();
+    let created: Vec<_> = outputs
+        .iter()
+        .map(|v| v.get("output").unwrap_or(v))
+        .filter(|v| v.get("ref").is_some())
+        .collect();
+    assert_eq!(created.len(), 2, "{outputs:?}");
+    assert_eq!(created[0]["ref"], created[1]["ref"]);
+    assert_eq!(created[1]["effect_receipt"]["replayed"], true);
+    assert_eq!(created[1]["project_id"], project);
     s.finish().await
 }

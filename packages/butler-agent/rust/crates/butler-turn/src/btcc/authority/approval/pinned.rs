@@ -75,10 +75,13 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
             summary(
                 "canon_propose",
                 "canon:create:call",
-                &json!({"canon":{"project_id":"project"}}),
+                &json!({"canon":{"kind":"plan","project_id":"project","project_title":"Board",
+                    "title":"Milestone","due_on":"2028-02-29","description":"Exact details"}}),
             ),
             json!({"action_kind":"create_canon", "count":1, "examples":[], "risk":"low",
-                "targets":[{"kind":"project", "path":"project"}]}),
+                "targets":[{"kind":"project", "path":"project"}],
+                "canon":{"kind":"plan","project_id":"project","project_title":"Board",
+                    "title":"Milestone","due_on":"2028-02-29","description":"Exact details"}}),
         ),
         (
             summary("project_ledger_attempt_start", "ledger:work", &json!({})),

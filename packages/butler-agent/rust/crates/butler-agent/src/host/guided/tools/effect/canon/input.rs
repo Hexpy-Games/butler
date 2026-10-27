@@ -19,6 +19,7 @@ pub(super) async fn resolve(owner: &GuidedTools, args: &Value) -> Result<Value, 
     let mut body = json!({"title":title});
     if let Some(description) = args.get("description") {
         body["description"] = description.clone();
+        canon["description"] = description.clone();
     }
     if let Some(id) = args.get("plan_id").and_then(Value::as_str) {
         if kind != "epic" {

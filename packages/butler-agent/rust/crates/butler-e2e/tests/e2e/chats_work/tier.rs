@@ -180,3 +180,34 @@ async fn nested_worker_inherits_steward_and_parent_ceiling() -> Result<(), Harne
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn pending_children_restart_with_current_parent_controls() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (mut s, script, server) = crate::worker_cap::setup("SS6-QUEUED-RESTART", 4).await?;
+    set_mode(&s, "ask_except_reads").await?;
+    s.gw.say("general", "Verify batch red").await?;
+    crate::worker_cap::workers(&s, "general", 3).await?;
+    crate::worker_cap::started(&script, 2).await;
+    script.fourth.add_permits(1);
+    let (_, rows) = crate::worker_cap::workers(&s, "general", 4).await?;
+    assert_eq!(rows[2]["status"], "waiting");
+    assert_eq!(rows[3]["status"], "waiting");
+    set_mode(&s, "ask_first").await?;
+    s.agent.kill9()?;
+    s.gw = s.agent.start_again().await?;
+    crate::worker_cap::started(&script, 4).await;
+    for row in &rows[2..] {
+        assert_eq!(
+            child_mode(&s, row["session_id"].as_str().unwrap())?,
+            "ask_first"
+        );
+    }
+    script.release("red-2");
+    script.release("red-3");
+    crate::worker_cap::closed(&s, rows[2]["session_id"].as_str().unwrap()).await?;
+    crate::worker_cap::closed(&s, rows[3]["session_id"].as_str().unwrap()).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

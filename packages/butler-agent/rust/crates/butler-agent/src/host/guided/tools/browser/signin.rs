@@ -120,6 +120,10 @@ pub(super) async fn schedule_refusal(
             owner,
             call,
             args,
+            args["tab"]
+                .as_str()
+                .or_else(|| args["url"].as_str())
+                .unwrap_or(""),
             "schedule_signin_off",
         )
         .await

@@ -91,7 +91,6 @@ async fn research(batched: bool) -> Result<Run, HarnessError> {
     } else {
         "DELEG-BATCH-SERIAL"
     })?
-    .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
     .stub_cassette(Cassette::load("TOOL-01")?)
     .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
     .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key")

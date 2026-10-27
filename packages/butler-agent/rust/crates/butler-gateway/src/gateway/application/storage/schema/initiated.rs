@@ -20,5 +20,9 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
          CREATE UNIQUE INDEX IF NOT EXISTS initiated_message_idx
          ON app_initiated_messages(message_id) WHERE message_id IS NOT NULL;",
     )
-    .map_err(AppStorageError::sqlite)
+    .map_err(AppStorageError::sqlite)?;
+    migration::ensure_column(db, "app_initiated_messages", "reason", "TEXT")?;
+    db.execute("UPDATE app_initiated_messages SET payload_json=json_remove(payload_json,'$.access_mode'),bypass_quiet_hours=NOT (COALESCE(json_extract(payload_json,'$.schedule_run.unattended'),0) OR COALESCE(json_extract(payload_json,'$.schedule_run.connector_event'),0)) WHERE state='held' AND kind='work_result' AND json_valid(payload_json)", [])
+        .map_err(AppStorageError::sqlite)?;
+    Ok(())
 }

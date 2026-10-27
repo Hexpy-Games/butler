@@ -130,6 +130,13 @@ impl Gate {
         if queued {
             return Ok(Hold::Busy);
         }
+        self.work_hold(chat, bypass)
+    }
+
+    pub(super) fn work_hold(&self, chat: &str, bypass: bool) -> Result<Hold, AppStorageError> {
+        if chat != "general" {
+            return Ok(Hold::Free);
+        }
         let lease = self.composing.lock().get(chat).cloned();
         if let Some(until) = lease.filter(|at| at.as_str() > self.now.as_str()) {
             return Ok(Hold::Typing(until));

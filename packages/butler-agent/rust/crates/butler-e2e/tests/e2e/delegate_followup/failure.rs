@@ -9,7 +9,6 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
     let (url, script, server) = stub::start(false).await?;
     script.failing.store(true, Ordering::SeqCst);
     let mut s = Setup::new("DELEGATION-FAILURE-FEEDBACK")?
-        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()

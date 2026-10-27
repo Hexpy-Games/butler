@@ -201,6 +201,9 @@ export interface ApprovalRequestCopy {
   actionLabels: Record<string, string>;
   createCanon: { epic: string; plan: string };
   canonPlan: (plan: string) => string;
+  canonTitle: (title: string) => string;
+  canonProject: (project: string) => string;
+  canonDescription: (description: string) => string;
   canonDue: (date: string) => string;
   updateProject: string;
   startConversation: string;

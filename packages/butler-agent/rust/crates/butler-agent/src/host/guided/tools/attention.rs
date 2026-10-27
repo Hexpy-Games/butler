@@ -20,33 +20,31 @@ pub(super) async fn admit(
 }
 
 pub(super) async fn skipped_call(owner: &GuidedTools, call: &ModelRoundToolCall) {
-    let input = Value::Object(call.arguments.clone());
-    skipped_input(owner, call, input, "schedule_permission_required").await;
+    let prepared = if super::direct_approval::supports(call) {
+        Ok((call.name.clone(), Value::Object(call.arguments.clone())))
+    } else {
+        super::effect::attention_facts(owner, call).await
+    };
+    if let Ok((target, input)) = prepared {
+        skipped_input(owner, call, input, &target, "schedule_permission_required").await;
+    }
 }
 
 pub(super) async fn skipped_input(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     input: Value,
+    target: &str,
     code: &str,
 ) {
-    let target = [
-        "path",
-        "url",
-        "tool",
-        "project_ref",
-        "title",
-        "command",
-        "tab",
-    ]
-    .into_iter()
-    .find_map(|key| input[key].as_str())
-    .unwrap_or(&call.name);
+    let occurrence = butler_turn::btcc::digest_identity(
+        &json!({"capability":call.name,"target":target,"input":input}).to_string(),
+    );
     let facts = AuthorityAdmissionInput {
         owner_session_id: owner.binding.owner_session_id.clone(),
         source_session_id: owner.binding.source_session_id.clone(),
         source_turn_id: owner.binding.turn_id.clone(),
-        operation_occurrence_id: None,
+        operation_occurrence_id: Some(occurrence),
         source_work_id: String::new(),
         workspace_path: owner.active_workspace_path().to_string_lossy().into_owned(),
         plan_revision_id: String::new(),

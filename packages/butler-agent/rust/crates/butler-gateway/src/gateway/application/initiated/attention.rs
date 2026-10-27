@@ -33,11 +33,11 @@ pub(in crate::gateway::application) fn enqueue_attention(
         "approval-needed-{}",
         butler_turn::btcc::digest_identity(&source)
     );
-    let exact = exact_action(&serde_json::to_value(&approval).map_err(outbox::json_error)?);
+    let label = capability_label(approval.action_kind, language);
     let text = if language.starts_with("ko") {
-        format!("확인 필요 · {exact} · {title}")
+        format!("확인 필요 · {label} · {title}")
     } else {
-        format!("Needs your OK · {exact} · {title}")
+        format!("Needs your OK · {label} · {title}")
     };
     let mut payload = json!({"automation_id":automation,"automation_title":title,"run_id":run,"approval":approval});
     if let Some(work) = action.get("work_session_id").and_then(Value::as_str) {
@@ -46,15 +46,28 @@ pub(in crate::gateway::application) fn enqueue_attention(
     outbox::enqueue(db, &id, &source, "approval_needed", &text, &payload, now)
 }
 
-fn exact_action(approval: &Value) -> String {
-    let operation = &approval["operation"];
-    if let Some(command) = operation.get("command").and_then(Value::as_str) {
-        return command.to_owned();
-    }
-    let target = operation["targets"][0]
-        .as_str()
-        .or_else(|| approval["targets"][0]["path"].as_str())
-        .unwrap_or("");
-    let tool = operation["tool"].as_str().unwrap_or("");
-    format!("{tool} {target}").trim().to_owned()
+fn capability_label(kind: butler_turn::btcc::ApprovalActionKind, language: &str) -> &'static str {
+    use butler_turn::btcc::ApprovalActionKind::{
+        CreateCanon, CreateWorktree, EditFiles, EditImage, GenerateImage, ManageSchedule,
+        NetworkCommand, Other, RestartService, RunCommand, StartConversation, SwitchFolder,
+        UpdateProject, UseConnector, WebRequest,
+    };
+    let (ko, en) = match kind {
+        EditFiles => ("파일 수정", "Edit files"),
+        RunCommand => ("명령 실행", "Run command"),
+        NetworkCommand => ("네트워크 명령 실행", "Run network command"),
+        WebRequest => ("웹 요청", "Web request"),
+        UseConnector => ("연결된 도구 사용", "Use connected tool"),
+        GenerateImage => ("이미지 생성", "Generate image"),
+        EditImage => ("이미지 편집", "Edit image"),
+        ManageSchedule => ("예약 작업 관리", "Manage schedule"),
+        CreateCanon => ("프로젝트 항목 생성", "Create project item"),
+        UpdateProject => ("프로젝트 기록 변경", "Update project records"),
+        StartConversation => ("대화 시작", "Start conversation"),
+        RestartService => ("버틀러 다시 시작", "Restart Butler"),
+        CreateWorktree => ("워크트리 생성", "Create worktree"),
+        SwitchFolder => ("작업 폴더 이동", "Move working folder"),
+        Other => ("기타 동작", "Other action"),
+    };
+    if language.starts_with("ko") { ko } else { en }
 }

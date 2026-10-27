@@ -11,6 +11,8 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
+mod delivery;
+mod schedule_tier;
 pub(crate) mod stub;
 mod tier;
 mod unattended;
@@ -125,17 +127,9 @@ async fn completion(hold: &str, restart: bool) -> Result<(), HarnessError> {
         clock(&address, "2026-10-28T06:59:59.000Z").await?;
     }
     script.release.add_permits(1);
-    if !hold.is_empty() {
+    if hold == "typing" {
         held(&s, "work_result", 1).await?;
         assert_eq!(s.gw.messages("general").await?, before);
-        if restart {
-            s.agent
-                .launch
-                .set_env("BUTLER_E2E_APP_NOW", "2026-10-28T06:59:59.000Z");
-            s.crash_and_restart().await?;
-            held(&s, "work_result", 1).await?;
-            assert_eq!(s.gw.messages("general").await?, before);
-        }
         clock(&address, "2026-10-28T12:00:00.000Z").await?;
     }
     let messages = wait_count(&s, "work_result", 1).await?;
@@ -148,7 +142,7 @@ async fn completion(hold: &str, restart: bool) -> Result<(), HarnessError> {
     assert_eq!(status, "success");
     assert_eq!(
         result["initiated"],
-        json!({"kind":"work_result","quiet":false,"relation_id":relation,"work_session_id":child,"work_title":title})
+        json!({"kind":"work_result","quiet":hold == "quiet","relation_id":relation,"work_session_id":child,"work_title":title})
     );
     assert!(result.to_string().contains("report.md"), "{result}");
     assert_eq!(
@@ -171,6 +165,16 @@ async fn completion(hold: &str, restart: bool) -> Result<(), HarnessError> {
             .iter()
             .any(|e| e["payload"]["message"]["initiated"] == result["initiated"])
     );
+    if restart {
+        s.agent
+            .launch
+            .set_env("BUTLER_E2E_APP_NOW", "2026-10-28T06:59:59.000Z");
+        s.crash_and_restart().await?;
+        assert_eq!(
+            wait_count(&s, "work_result", 1).await?[0]["initiated"],
+            result["initiated"]
+        );
+    }
     s.finish().await?;
     server.abort();
     Ok(())
@@ -186,7 +190,8 @@ async fn composing_holds_work_result() -> Result<(), HarnessError> {
     completion("typing", false).await
 }
 #[tokio::test]
-async fn quiet_work_result_survives_restart() -> Result<(), HarnessError> {
+async fn user_work_result_in_quiet_hours_is_delivered_and_stays_quiet_after_restart()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     completion("quiet", true).await
 }

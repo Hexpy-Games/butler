@@ -21,7 +21,17 @@ pub(super) async fn prepare(
     if !super::automation::restore_reviewed_input(owner, occurrence, &mut input).await? {
         input = input::resolve(owner, &input).await?;
     }
-    let target = format!("canon:create:{occurrence}");
+    let item = json!({"kind":input["canon"]["kind"],
+        "project_id":input["canon"]["project_id"],"plan_id":input["body"]["plan_id"],
+        "title":input["body"]["title"],"description":input["body"]["description"],
+        "due_on":input["body"]["due_on"]});
+    let digest = butler_turn::btcc::effect_input_sha256(&item)
+        .map_err(|e| BtccError::relayed(e.code().to_owned(), e.message().to_owned()))?;
+    let run = owner.inherited_run();
+    let scope = run
+        .as_ref()
+        .map_or(owner.binding.turn_id.as_str(), |r| r.run_id.as_str());
+    let target = format!("canon:create:{scope}:{digest}");
     let adapter = CanonEffect {
         endpoint: owner.app_endpoint.clone(),
         target: target.clone(),

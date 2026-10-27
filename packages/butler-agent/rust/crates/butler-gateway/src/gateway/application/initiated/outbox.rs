@@ -6,6 +6,7 @@ use super::{
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
+#[derive(Clone)]
 pub(super) struct Entry {
     pub(super) id: String,
     pub(super) chat: String,
@@ -13,6 +14,16 @@ pub(super) struct Entry {
     /// S5 connector items under an explicit user rule may bypass quiet hours.
     /// All S2 producers leave this false.
     pub(super) bypass_quiet_hours: bool,
+}
+
+impl Entry {
+    fn hold(&self, gate: &super::gate::Gate, db: &Connection) -> Result<Hold, AppStorageError> {
+        if self.kind == "work_result" {
+            gate.work_hold(&self.chat, self.bypass_quiet_hours)
+        } else {
+            gate.hold(db, &self.chat, self.bypass_quiet_hours)
+        }
+    }
 }
 
 pub(super) fn enqueue(
@@ -54,37 +65,53 @@ impl AppApplication {
             return Ok(());
         }
         for entry in rows {
-            let gate = self.initiated_gate().await?;
-            let chat = entry.chat.clone();
-            let bypass = entry.bypass_quiet_hours;
-            let free = self
-                .storage
-                .read(move |db| Ok(matches!(gate.hold(db, &chat, bypass)?, Hold::Free)))
-                .await
-                .map_err(app_error)?;
-            if !free {
-                continue;
-            }
-            if entry.kind == "work_result" {
-                self.deliver_work_result(entry.id).await?;
-                continue;
-            }
-            let gate = self.initiated_gate().await?;
-            let subscribers = self.subscribers.clone();
-            self.storage
-                .execute(move |db| {
-                    if matches!(
-                        gate.hold(db, &entry.chat, entry.bypass_quiet_hours)?,
-                        Hold::Free
-                    ) {
-                        post(db, &subscribers, &entry, &gate.now, gate.quiet()?)?;
-                    }
+            if let Err(error) = self.deliver_entry(&entry).await {
+                let reason = match &error {
+                    GatewayApplicationError::Public { code, .. } => code.clone(),
+                    GatewayApplicationError::Internal { .. } => "internal_error".into(),
+                };
+                butler_core::diagnostic!(
+                    "[initiated] Delivery failed id={} code={}",
+                    entry.id,
+                    reason
+                );
+                self.storage.execute(move |db| {
+                    db.execute("UPDATE app_initiated_messages SET state='failed',reason=?1 WHERE id=?2 AND state='held'", params![reason,entry.id])
+                        .map_err(AppStorageError::sqlite)?;
                     Ok(())
-                })
-                .await
-                .map_err(app_error)?;
+                }).await.map_err(app_error)?;
+            }
         }
         Ok(())
+    }
+
+    async fn deliver_entry(&self, entry: &Entry) -> Result<(), GatewayApplicationError> {
+        let gate = self.initiated_gate().await?;
+        let row = entry.clone();
+        let free = self
+            .storage
+            .read(move |db| Ok(matches!(row.hold(&gate, db)?, Hold::Free)))
+            .await
+            .map_err(app_error)?;
+        if !free {
+            return Ok(());
+        }
+        if entry.kind == "work_result" {
+            self.deliver_work_result(entry.id.clone()).await?;
+            return Ok(());
+        }
+        let gate = self.initiated_gate().await?;
+        let subscribers = self.subscribers.clone();
+        let entry = entry.clone();
+        self.storage
+            .execute(move |db| {
+                if matches!(entry.hold(&gate, db)?, Hold::Free) {
+                    post(db, &subscribers, &entry, &gate.now, gate.quiet()?)?;
+                }
+                Ok(())
+            })
+            .await
+            .map_err(app_error)
     }
 
     pub(in crate::gateway::application) async fn next_initiated_due(
@@ -110,7 +137,7 @@ impl AppApplication {
             .read(move |db| {
                 let mut next = None;
                 for entry in rows {
-                    let hold = gate.hold(db, &entry.chat, entry.bypass_quiet_hours)?;
+                    let hold = entry.hold(&gate, db)?;
                     let until = if matches!(hold, Hold::Free) {
                         Some(gate.now.clone())
                     } else {

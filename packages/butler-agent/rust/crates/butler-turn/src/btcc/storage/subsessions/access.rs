@@ -16,7 +16,17 @@ impl crate::btcc::storage::BtccRepositories {
         &self,
         session: String,
     ) -> Result<Option<crate::btcc::ScheduleRunContext>, BtccError> {
-        SqliteSubsessionRepository::new(self.storage.clone())
+        let repository = SqliteSubsessionRepository::new(self.storage.clone());
+        let initial = repository
+            .by_child(session.clone())
+            .await
+            .map_err(BtccError::from)?
+            .and_then(|r| r.packet.schedule_run)
+            .filter(|r| !r.automation_id.is_empty());
+        if initial.is_some() {
+            return Ok(initial);
+        }
+        repository
             .instruction_run_context(session)
             .await
             .map_err(BtccError::from)

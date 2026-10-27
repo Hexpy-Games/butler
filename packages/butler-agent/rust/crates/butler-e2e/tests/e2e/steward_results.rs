@@ -51,7 +51,6 @@ async fn start() -> Result<Scenario, HarnessError> {
     let s = Setup::new("STEWARD-RESULT")?
         .cassette("Q-02-CANCEL")
         .env("TZ", "UTC")
-        .clock_after_daily_jobs("2026-10-27T12:00:00.000Z")?
         .replay_only()
         .start()
         .await?;
@@ -192,7 +191,7 @@ async fn a_result_queued_behind_a_running_turn_keeps_its_marker() -> Result<(), 
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let queued = deliver_result(&s, "steward-result-2").await?;
-    assert_eq!(queued["held"], true, "not held: {queued}");
+    assert!(queued["queued"].is_object(), "not queued: {queued}");
 
     let queue = s.gw.get(&format!("/session-queue?chat_id={CHAT}")).await?;
     assert_eq!(queue.status, 200, "{}", queue.text);
@@ -205,9 +204,9 @@ async fn a_result_queued_behind_a_running_turn_keeps_its_marker() -> Result<(), 
         let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
         let mut statement = db
             .prepare(
-                "SELECT json_extract(payload_json,'$.subsession_result.result_id') \
-                 FROM app_initiated_messages WHERE chat_id=?1 \
-                 AND kind='work_result' AND state='held'",
+                "SELECT json_extract(control_resolution_json,'$.subsession_result.result_id') \
+                 FROM session_queued_messages WHERE chat_id=?1 \
+                 AND json_extract(control_resolution_json,'$.subsession_result') IS NOT NULL",
             )
             .unwrap();
         statement
@@ -216,7 +215,7 @@ async fn a_result_queued_behind_a_running_turn_keeps_its_marker() -> Result<(), 
             .collect::<Result<_, _>>()
             .unwrap()
     };
-    assert_eq!(stored, ["steward-result-2"], "marker not held durably");
+    assert_eq!(stored, ["steward-result-2"], "marker not queued");
 
     assert_result_is_hidden(&s, "steward-result-2").await?;
     s.finish().await

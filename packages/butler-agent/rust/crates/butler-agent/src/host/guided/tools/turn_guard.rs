@@ -259,6 +259,7 @@ pub(super) async fn schedule_browser_feedback(
     owner: &GuidedTools,
     call: &butler_turn::btcc::ModelRoundToolCall,
     input: &Value,
+    target: &str,
     code: &str,
 ) -> Option<Value> {
     let message = match code {
@@ -270,7 +271,7 @@ pub(super) async fn schedule_browser_feedback(
         }
         _ => return None,
     };
-    super::attention::skipped_input(owner, call, input.clone(), code).await;
+    super::attention::skipped_input(owner, call, input.clone(), target, code).await;
     Some(
         json!({"ok":false,"status":"not_dispatched","reason":code,"error":{
             "code":code,"message":message,"recoverable":true,"next_action":super::feedback::repair(code)

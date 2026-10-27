@@ -273,7 +273,9 @@ pub(super) fn legacy_visible<'a>(
     }
     if policy.role == PolicyRole::Butler {
         names.extend(STEWARD_PARENT.iter().copied());
-        names.insert("canon_propose");
+        if policy.access_mode != AccessMode::ReadOnly {
+            names.insert("canon_propose");
+        }
     }
     if policy.role == PolicyRole::Steward {
         names.extend(WORKER_DELEGATION.iter().copied());

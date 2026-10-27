@@ -130,10 +130,30 @@ async fn unattended(child: bool, quiet: bool, files: bool) -> Result<(), Harness
         assert_eq!(origin["automation_title"], "Evidence schedule");
         assert_eq!(origin["quiet"], false);
         assert!(row["text"].as_str().unwrap().starts_with(if files {
-            "Needs your OK · write_file "
+            "Needs your OK · Edit files · "
         } else {
-            "확인 필요 · printf "
+            "확인 필요 · 네트워크 명령 실행 · "
         }));
+        assert_eq!(
+            origin["approval"]["action_kind"],
+            if files {
+                "edit_files"
+            } else {
+                "network_command"
+            }
+        );
+        let text = row["text"].as_str().unwrap();
+        let operation = &origin["approval"]["operation"];
+        assert!(
+            !text.contains(operation["tool"].as_str().unwrap()),
+            "{text}"
+        );
+        if let Some(command) = operation["command"].as_str() {
+            assert!(!text.contains(command), "{text}");
+        }
+        for target in operation["targets"].as_array().unwrap() {
+            assert!(!text.contains(target.as_str().unwrap()), "{text}");
+        }
         assert_eq!(origin["work_session_id"].is_string(), child);
         if child {
             let session: String = runtime(&s)?.query_row(
@@ -186,4 +206,91 @@ async fn unattended_child_attention_is_held_in_quiet_hours() -> Result<(), Harne
 async fn same_target_distinct_inputs_remain_distinct_actions() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     unattended(false, false, true).await
+}
+
+fn browser_cassette() -> Result<butler_e2e::e2e::cassette::Cassette, HarnessError> {
+    use butler_e2e::e2e::cassette::Cassette;
+    let template = Cassette::load("TOOL-01")?;
+    let mut cassette = Cassette::load("TOOL-01")?;
+    cassette.exchanges.clear();
+    for request in ["Review this browser action.", "Check the browser action."] {
+        let mut round = Vec::new();
+        for (index, (name, args)) in [
+            ("tool_describe", json!({"ids":["native:browser_act"]})),
+            ("tool_call", json!({"id":"native:browser_act","arguments":{
+                "tab":"pub","observation":"obs-1","steps":[{"action":"click","ref":"e9","commits":true}]}})),
+        ].into_iter().enumerate() {
+            let mut exchange = template.exchanges[0].clone();
+            exchange.request.key.user_request = request.into();
+            exchange.request.key.round = round.clone();
+            exchange.response = crate::browser_usage::stub::response(&json!({
+                "type":"function_call","id":format!("browser-{index}"),"call_id":format!("browser-{index}"),
+                "name":name,"arguments":args.to_string(),"status":"completed"}));
+            cassette.exchanges.push(exchange);
+            round.extend(["function_call".into(), "function_call_output".into()]);
+        }
+        let mut exchange = template.exchanges[1].clone();
+        exchange.request.key.user_request = request.into();
+        exchange.request.key.round = round;
+        exchange.response = crate::browser_usage::stub::response(
+            &json!({"type":"message","id":"done",
+            "role":"assistant","status":"completed","content":[{"type":"output_text","text":"Handled.","annotations":[]}]}),
+        );
+        cassette.exchanges.push(exchange);
+    }
+    Ok(cassette)
+}
+
+#[tokio::test]
+async fn skipped_browser_approval_matches_the_interactive_card() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("SS6-BROWSER-ATTENTION")?
+        .access(Access::AskExceptReads)
+        .stub_cassette(browser_cassette()?)
+        .clock_after_daily_jobs("2026-10-27T12:00:00.000Z")?
+        .start()
+        .await?;
+    s.patch_settings(
+        json!({"timezone":"UTC","quiet_hours_start":"01:00","quiet_hours_end":"02:00"}),
+        "clock",
+    )
+    .await?;
+    let _host = crate::browser_approval::host::Host::attach(&s).await?;
+    let id = accepted_turn_id(&s.gw.say("general", "Review this browser action.").await?)?;
+    s.gw.wait_turn(
+        "general",
+        &id,
+        &["waiting_for_form"],
+        Duration::from_secs(30),
+    )
+    .await?;
+    let cards = s.gw.approval_requests("general").await?;
+    assert_eq!(cards.len(), 1);
+    let card = &cards[0];
+    let reference = card["request_ref"].as_str().unwrap();
+    assert_eq!(
+        s.gw.post(
+            &format!("/authority-requests/{reference}/deny?session_id=general"),
+            json!({})
+        )
+        .await?
+        .status,
+        202
+    );
+    s.gw.wait_terminal("general", &id, Duration::from_secs(30))
+        .await?;
+    let created = s.gw.post("/automations", json!({"title":"Browser check","prompt_body":"Check the browser action.",
+        "target_session_id":"general","schedule_type":"once","run_at":"2000-01-01T00:00:00Z","access_mode":"ask_first","browser_payment":true})).await?;
+    assert_eq!(created.status, 201, "{created:?}");
+    assert_eq!(
+        s.gw.post("/automations/dispatch-due", json!({}))
+            .await?
+            .status,
+        202
+    );
+    let rows = wait_count(&s, "approval_needed", 1).await?;
+    assert_eq!(rows[0]["initiated"]["approval"], card["approval"]);
+    assert!(!rows[0]["text"].as_str().unwrap().contains("browser_act"));
+    assert_eq!(s.gw.approval_requests("general").await?, [] as [Value; 0]);
+    s.finish().await
 }

@@ -208,6 +208,7 @@ async fn schedule_payment_refusal(
             owner,
             call,
             input,
+            &act_scope(prepared),
             "schedule_payment_off",
         )
         .await;
@@ -217,6 +218,7 @@ async fn schedule_payment_refusal(
             owner,
             call,
             input.clone(),
+            &act_scope(prepared),
             "schedule_permission_required",
         )
         .await;

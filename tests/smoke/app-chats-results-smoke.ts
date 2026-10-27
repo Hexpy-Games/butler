@@ -3,10 +3,11 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import type { Locator, Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { installInitiatedGateway, session } from "../support/initiated-fixtures";
-import { approvalNeeded, canonApproval, canonTitle, dueOn, exactCommand, planTitle, projectTitle, workResult, workSessionId, workTitle } from "../support/work-result-fixtures";
+import { approvalNeeded, canonApproval, canonDescription, canonTitle, commandApproval, commandCredential, dueOn, maskedCommand, planTitle, projectTitle, workResult, workSessionId, workTitle } from "../support/work-result-fixtures";
 import { probeFocusRingFrames } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser, smokeBrowserArgs } from "../support/smoke-browser";
 
@@ -19,7 +20,7 @@ try {
   for (const [language, theme, width] of [
     ["ko", "light", 1440], ["ko", "dark", 1440], ["ko", "light", 390], ["ko", "dark", 390], ["en", "light", 1440],
   ] as const) {
-    const page = await browser.newPage({ viewport: { width, height: 960 }, deviceScaleFactor: 1, colorScheme: theme, reducedMotion: "reduce" });
+    const page = await browser.newPage({ viewport: { width, height: 960 }, deviceScaleFactor: 2, colorScheme: theme, reducedMotion: "reduce" });
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     const gateway = await installInitiatedGateway(page, language, theme, session([workResult(language === "en")]));
@@ -28,12 +29,20 @@ try {
     await page.goto("http://127.0.0.1:43827/");
     await resultBubble(page, gateway, copy.conversation.initiated.viewWork, language === "en", capture);
     await attentionLine(page, gateway, copy.conversation.initiated.needsApproval, copy.guided.tools.run_command, capture);
+    await gateway.showView(commandApproval());
+    const commandCard = page.locator('[data-test-class="composer-authority-decision"]');
+    await commandCard.getByText(maskedCommand, { exact: true }).waitFor();
+    assert(!(await commandCard.innerHTML()).includes(commandCredential), "command credential is absent from text and titles");
     for (const kind of ["epic", "plan"] as const) {
+      await gateway.showView(canonApproval(kind, ""));
+      const shortCard = page.locator('[data-test-class="composer-authority-decision"]');
+      await shortCard.getByText(copy.interfaceTemplates.approvalRequest.canonTitle(canonTitle[kind]), { exact: true }).waitFor();
+      assert.equal(await shortCard.getByRole("button", { name: copy.conversation.messageActions.showMore, exact: true }).count(), 0, "three short canon lines never offer expansion");
       await gateway.showView(canonApproval(kind));
       const card = page.locator('[data-test-class="composer-authority-decision"]');
       const labels = copy.interfaceTemplates.approvalRequest;
       await card.getByText(labels.createCanon[kind], { exact: true }).waitFor();
-      for (const text of [canonTitle[kind], projectTitle, kind === "epic" ? labels.canonPlan(planTitle) : labels.canonDue(dueOn)]) {
+      for (const text of [labels.canonTitle(canonTitle[kind]), labels.canonProject(projectTitle), labels.canonDescription(canonDescription), kind === "epic" ? labels.canonPlan(planTitle) : labels.canonDue(dueOn)]) {
         await card.getByText(text, { exact: true }).waitFor();
       }
       const buttons = card.getByRole("button");
@@ -41,15 +50,23 @@ try {
       assert(names.includes(copy.interfaceDetails.deny));
       assert(names.includes(copy.interfaceDetails.allowOnce));
       for (const button of await buttons.all()) assert.deepEqual(await probeFocusRingFrames(page, () => button.focus()), []);
-      if (language === "ko") await capture(card, `canon-${kind}`, kind === "epic" ? "과제 승인 카드 · 제목, 프로젝트, 계획" : "계획 승인 카드 · 제목, 프로젝트, 마감일");
+      await capture(card, `canon-${kind}`, kind === "epic" ? "과제 승인 카드 · 제목, 프로젝트, 계획, 설명" : "계획 승인 카드 · 제목, 프로젝트, 마감일, 설명");
     }
+    await gateway.showView(canonApproval("epic", canonDescription.repeat(50)));
+    const longCard = page.locator('[data-test-class="composer-authority-decision"]');
+    const more = longCard.getByRole("button", { name: copy.conversation.messageActions.showMore, exact: true });
+    await more.waitFor();
+    assert(await longCard.locator('[data-slot="composer-decision-details"] > div').evaluate(node => node.scrollHeight > node.clientHeight + 1));
+    await more.click();
+    await longCard.getByText(copy.interfaceTemplates.approvalRequest.canonDescription(canonDescription.repeat(50)), { exact: true }).waitFor();
+    await quietWorkResult(page, gateway);
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ language, theme, width, result: "PASS" }));
     await page.close(); cells++;
   }
   if (output) writeFileSync(join(output, "captions.txt"), captions.join("\n") + "\n");
   console.log(JSON.stringify({ result: "PASS", cells, captures: captions.filter(line => !line.startsWith("##")).length,
-    modelCalls: 0, headless: true, browser: "Chromium", args: smokeBrowserArgs(), scale: 1, quality: 80, longestSideMax: 1600 }));
+    modelCalls: 0, headless: true, browser: "Chromium", args: smokeBrowserArgs(), scale: 2, quality: 80, longestSideMax: 1600 }));
 } finally { await browser.close(); }
 
 type Gateway = Awaited<ReturnType<typeof installInitiatedGateway>>;
@@ -95,8 +112,9 @@ async function attentionLine(page: Page, gateway: Gateway, label: string, toolLa
   const badge = await line.getByText(label, { exact: true }).boundingBox();
   assert(badge && row.actionLeft >= badge.x + badge.width, "tag label never overlaps the exact action");
   const text = await line.innerText();
-  assert(text.includes(exactCommand), "line names the exact command");
-  await line.getByText(`${toolLabel} · ${exactCommand} · 환율·미국 증시 정리`, { exact: true }).waitFor();
+  assert(text.includes(maskedCommand), "line names the command with its credential masked");
+  assert(!(await line.innerHTML()).includes(commandCredential));
+  await line.getByText(`${toolLabel} · ${maskedCommand} · 환율·미국 증시 정리`, { exact: true }).waitFor();
   assert(!text.includes("?"), "skipped action is a statement, never the approval question");
   assert(text.includes("환율·미국 증시 정리"), "line names the schedule");
   assert(!text.includes("Stored notification text"), "renderer uses the localized approval facts");
@@ -116,8 +134,35 @@ async function checkFooter(page: Page) {
   assert.equal(await page.locator('[data-test-class~="assistant-footer"] time').count(), 1);
   assert.equal(await page.locator('[data-test-class~="message"][data-test-class~="user"]').count(), 0);
 }
+async function quietWorkResult(page: Page, gateway: Gateway) {
+  await gateway.showView(session([]));
+  const sidebar = page.locator('[data-test-class="app-sidebar"]');
+  const showSidebar = async () => {
+    if (await sidebar.getAttribute("data-collapsed") === "true") await page.getByRole("button", { name: /^(사이드바 보기|Show sidebar)$/u }).click();
+  };
+  await showSidebar();
+  await page.getByRole("button", { name: "다른 대화", exact: true }).click();
+  const count = () => page.evaluate(() => (window as unknown as { __notifications: unknown[] }).__notifications.length);
+  const before = await count();
+  const result = workResult(); result.created_at = "2026-10-26T21:00:00Z";
+  await gateway.arrive(result);
+  await page.waitForFunction(n => (window as unknown as { __notifications: unknown[] }).__notifications.length === n + 1, before);
+  await showSidebar();
+  await page.locator('[data-slot="unread-dot"]').waitFor();
+  const row = sidebar.locator('[data-test-class="tree-row"]').filter({ has: page.locator('[data-slot="unread-dot"]') });
+  const read = page.waitForResponse(response => response.url().endsWith("/sessions/general/read"));
+  await row.click(); await read;
+  await showSidebar();
+  await page.getByRole("button", { name: "다른 대화", exact: true }).click();
+  const quiet = { ...result, id: "quiet-work-result", initiated: { ...result.initiated!, quiet: true } };
+  const refreshed = page.waitForResponse(response => response.url().endsWith("/navigation"));
+  await gateway.arrive(quiet); await refreshed;
+  await showSidebar();
+  await page.locator('[data-slot="unread-dot"]').waitFor();
+  assert.equal(await count(), before + 1, "quiet work result marks unread without invoking the OS notification bridge");
+}
 async function captureRegion(page: Page, region: Locator, name: string, caption: string, language: string, theme: string, width: number) {
-  if (!output) return;
+  if (!output || (width === 390 && theme === "dark")) return;
   await page.evaluate(() => { (document.activeElement as HTMLElement)?.blur(); return document.fonts.ready; });
   await page.waitForFunction(() => document.getAnimations().every(animation => animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
   const box = await region.boundingBox(); assert(box);
@@ -125,6 +170,7 @@ async function captureRegion(page: Page, region: Locator, name: string, caption:
   const filename = `${name}-${language}-${theme}-${width}.jpg`;
   await page.screenshot({ path: join(output!, filename), type: "jpeg", quality: 80, animations: "disabled",
     clip: { x, y, width: Math.min(1600, width - x, box.width + 24), height: Math.min(1600, 960 - y, box.height + 24) } });
+  execFileSync("sips", ["--resampleHeightWidthMax", "1600", join(output, filename)], { stdio: "ignore" });
   const section = `## ${language} · ${theme} · ${width}`;
   if (!captions.includes(section)) captions.push(section);
   captions.push(`${filename}\t${caption}`);

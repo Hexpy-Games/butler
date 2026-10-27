@@ -14,6 +14,8 @@ pub(crate) struct Script {
     pub unattended: bool,
     pub tier: AtomicBool,
     pub file_actions: AtomicBool,
+    pub result_mutation: AtomicBool,
+    pub resume_probe: AtomicBool,
     pub child: bool,
     pub hold: AtomicBool,
     pub held: Semaphore,
@@ -34,6 +36,8 @@ pub(crate) async fn start(
         child,
         tier: AtomicBool::new(false),
         file_actions: AtomicBool::new(false),
+        result_mutation: AtomicBool::new(false),
+        resume_probe: AtomicBool::new(false),
         hold: AtomicBool::new(!unattended),
         held: Semaphore::new(0),
         release: Semaphore::new(0),
@@ -62,7 +66,17 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     });
     let outputs = outputs(&body);
     let step = outputs.len();
-    let item = if functions.is_empty() {
+    let item = if script.result_mutation.load(Ordering::SeqCst) {
+        if step == 0 {
+            call(
+                "result-write",
+                "write_file",
+                &json!({"path":"notice.txt","content":"changed"}),
+            )
+        } else {
+            message("Evidence ready.")
+        }
+    } else if functions.is_empty() {
         message("{}")
     } else if parent {
         parent_item(&script, step, &body)
@@ -71,12 +85,20 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
             script.held.add_permits(1);
             script.release.acquire().await.unwrap().forget();
         }
-        child_item(
-            &body,
-            step,
-            script.unattended,
-            script.tier.load(Ordering::SeqCst),
-        )
+        if script.resume_probe.load(Ordering::SeqCst) && step == 3 {
+            call(
+                "tier-next",
+                "run_command",
+                &json!({"command":"printf next","state_effect":"remote_observation","summary":"Check evidence"}),
+            )
+        } else {
+            child_item(
+                &body,
+                step - usize::from(script.resume_probe.load(Ordering::SeqCst) && step > 3),
+                script.unattended,
+                script.tier.load(Ordering::SeqCst),
+            )
+        }
     };
     ([("content-type", "text/event-stream")], wire_items(&[item]))
 }

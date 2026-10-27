@@ -7,6 +7,7 @@ export interface ApprovalCanon {
   plan_id?: string;
   plan_title?: string;
   due_on?: string;
+  description?: string;
 }
 
 export function normalizeApprovalCanon(value: unknown): ApprovalCanon | undefined {
@@ -17,5 +18,6 @@ export function normalizeApprovalCanon(value: unknown): ApprovalCanon | undefine
   return { kind: canon.kind, title: canon.title, project_id: canon.project_id, project_title: canon.project_title,
     ...(typeof canon.plan_id === "string" ? { plan_id: canon.plan_id } : {}),
     ...(typeof canon.plan_title === "string" ? { plan_title: canon.plan_title } : {}),
+    ...(typeof canon.description === "string" ? { description: canon.description } : {}),
     ...(typeof canon.due_on === "string" ? { due_on: canon.due_on } : {}) };
 }

@@ -2,7 +2,11 @@ import type { MessageRecord, SessionView } from "../../packages/butler-app/clien
 import { initiatedMessage, session } from "./initiated-fixtures";
 
 export const workSessionId = "work-research-42";
-export const exactCommand = "mkdir -p reports/weekly";
+// Synthetic credential, never a usable secret.
+export const commandCredential = "example-credential-value";
+export const exactCommand = `curl -H 'Authorization: Bearer ${commandCredential}' https://example.com/report`;
+export const maskedCommand = "curl -H 'Authorization: ••••' https://example.com/report";
+export const canonDescription = "조사 내용을 모아 검토합니다.";
 export const workTitle = "주간 조사 정리";
 export const canonTitle = { epic: "조사 자료 정리", plan: "11월 조사 계획" };
 export const projectTitle = "연구 프로젝트";
@@ -22,10 +26,15 @@ export function approvalNeeded(child = false): MessageRecord {
       approval: { action_kind: "run_command", targets: [{ kind: "folder", path: "research" }], count: 1,
         examples: [exactCommand], risk: "medium", operation: { tool: "exec_command", access: "change", targets: [], command: exactCommand } } } };
 }
-export function canonApproval(kind: "epic" | "plan"): SessionView {
+export function canonApproval(kind: "epic" | "plan", description = canonDescription): SessionView {
   return { ...session([]), authority_requests: [{ request_ref: `canon-${kind}`, category: "reviewed_effect", reason: "Create a board item", executable: "canon_propose", command_count: 1,
     approval: { action_kind: "create_canon", targets: [{ kind: "project", path: "project-research" }], count: 1, examples: [], risk: "low",
       operation: { tool: "canon_propose", access: "change", targets: ["project-research"] },
-      canon: { kind, title: canonTitle[kind], project_id: "project-research", project_title: projectTitle,
+      canon: { kind, description, title: canonTitle[kind], project_id: "project-research", project_title: projectTitle,
         ...(kind === "epic" ? { plan_id: "plan-autumn", plan_title: planTitle } : { due_on: dueOn }) } } }] };
+}
+
+export function commandApproval(): SessionView {
+  return { ...session([]), authority_requests: [{ request_ref: "command-review", category: "reviewed_effect",
+    reason: "Run command", executable: "exec_command", command_count: 1, approval: approvalNeeded().initiated!.approval }] };
 }

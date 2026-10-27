@@ -22,6 +22,7 @@ pub(super) async fn gate(
             owner,
             call,
             input.clone(),
+            target,
             "schedule_permission_required",
         )
         .await;
