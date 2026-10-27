@@ -887,7 +887,8 @@ const butlerApp = Object.freeze({
       (method === "POST" && /^\/memory\/pattern-proposals\/[A-Za-z0-9_-]+$/.test(path));
     if (proposals) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
     const consolidation = path === "/memory/consolidation" && ["GET", "POST"].includes(method);
-    if (!existing && !reset && !patterns && !consolidation) throw new Error("Invalid memory path");
+    if (consolidation) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
+    if (!existing && !reset && !patterns) throw new Error("Invalid memory path");
     return requestJson(path, { method, ...(body && method !== "GET" && method !== "HEAD" ? { body: JSON.stringify(body) } : {}) });
   },
   listProjects: ({ includeSessions = false } = {}) => {
@@ -1524,7 +1525,7 @@ const butlerApp = Object.freeze({
     return requestBridgeResult(`/message-files/${encodeURIComponent(fileId)}/view`);
   },
   getPreviewView: ({ previewId, query = "" } = {}) => {
-    if (typeof previewId !== "string" || !previewId || /[/\\?#]/u.test(previewId)) throw new Error("Invalid preview");
+    if (typeof previewId !== "string" || !/^p-[a-f0-9]{64}$/u.test(previewId)) throw new Error("Invalid preview");
     const path = `/previews/${encodeURIComponent(previewId)}/view`;
     const url = new URL(path + String(query), "http://local");
     if (url.pathname !== path) throw new Error("Unsupported preview route.");

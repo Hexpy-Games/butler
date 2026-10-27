@@ -317,9 +317,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       ...(options.body == null ? {} : { body: parseBody(options.body) }) }));
   }
   const previewView = method === "GET" ? url.pathname.match(/^\/previews\/([^/]+)\/view$/u) : null;
-  if (previewView) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getPreviewView", {
-    previewId: decodeURIComponent(previewView[1]!), query: url.search,
-  }));
+  if (previewView) {
+    let previewId: string;
+    try { previewId = decodeURIComponent(previewView[1]!); }
+    catch { throw new Error("Invalid preview"); }
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getPreviewView", { previewId, query: url.search }));
+  }
   if (url.pathname === "/library" && method === "POST") return callBridge<T>(bridge,"saveLibrary",parseBody(options.body));
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
@@ -607,7 +610,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       path: url.pathname, method,
       ...(options.body == null ? {} : { body: parseBody(options.body) }),
     });
-    return /^\/memory\/pattern-proposals(?:\/[^/]+)?$/u.test(url.pathname) ? unwrapBridgeResult<T>(result) : result as T;
+    return /^\/memory\/(?:pattern-proposals(?:\/[^/]+)?|consolidation)$/u.test(url.pathname) ? unwrapBridgeResult<T>(result) : result as T;
   }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);
   if (projectMatch && method === "PATCH") {
