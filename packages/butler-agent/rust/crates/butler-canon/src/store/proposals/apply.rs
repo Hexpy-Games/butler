@@ -33,11 +33,7 @@ pub fn apply(
             tx.execute_batch("ROLLBACK TO proposal_apply; RELEASE proposal_apply")?;
             if let Error::Conflict { current } = error {
                 transition(tx, ctx, id, "stale", by)?;
-                return Ok(
-                    json!({"ok":false,"error":{"code":"canon_conflict","message":format!(
-                    "'{}' changed before this was applied (now revision {}). Nothing was applied. Tell the user in one sentence; read it again before proposing.",
-                    current["title"].as_str().unwrap_or("Spec"),current["revision"].as_i64().unwrap_or(0))}}),
-                );
+                return Ok(conflict_result(&current));
             }
             return Err(error);
         }

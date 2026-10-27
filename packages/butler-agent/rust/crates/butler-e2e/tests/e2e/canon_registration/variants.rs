@@ -132,7 +132,7 @@ async fn cp_08_stale_cas_rolls_back_every_operation_and_marks_draft() -> Result<
         201,
     );
     let args = json!({"project_id":project,"summary":"관련 변경","changes":[{"op":"epic.create","title":"롤백 대상"},{"op":"epic.edit","id":epic["id"],"title":"수정 제안","expected_revision":epic["revision"]}]});
-    let id = draft(&s, &script, &chat, args).await?;
+    let id = draft(&s, &script, &chat, args.clone()).await?;
     data(
         s.gw.patch(
             &format!("/canon/epics/{}", epic["id"].as_str().unwrap()),
@@ -147,6 +147,38 @@ async fn cp_08_stale_cas_rolls_back_every_operation_and_marks_draft() -> Result<
     let board = data(s.gw.get(&format!("/projects/{project}/canon")).await?, 200);
     assert_eq!(board["backlog"].as_array().unwrap().len(), 1);
     assert_eq!(board["backlog"][0]["title"], "보드에서 수정");
+    data(
+        s.gw.patch(
+            &format!("/sessions/{chat}/controls"),
+            json!({"access_mode":"auto"}),
+        )
+        .await?,
+        200,
+    );
+    run(
+        &s,
+        &script,
+        &chat,
+        "최신 내용으로 반영해",
+        vec![("canon_propose", args)],
+    )
+    .await?;
+    let results = stub::results(&script);
+    let refusal = results
+        .iter()
+        .rev()
+        .find(|r| r["error"].is_object())
+        .unwrap();
+    assert_eq!(refusal["error"]["code"], "canon_conflict", "{refusal}");
+    assert_eq!(
+        refusal["error"]["message"],
+        format!(
+            "'보드에서 수정' changed before this was applied (now revision {}). Nothing was applied. Tell the user in one sentence; read it again before proposing.",
+            board["backlog"][0]["revision"]
+        )
+    );
+    let board = data(s.gw.get(&format!("/projects/{project}/canon")).await?, 200);
+    assert_eq!(board["backlog"].as_array().unwrap().len(), 1);
     server.abort();
     s.finish().await
 }

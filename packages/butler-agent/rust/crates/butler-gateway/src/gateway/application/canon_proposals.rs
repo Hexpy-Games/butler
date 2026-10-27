@@ -51,7 +51,7 @@ async fn propose(app: &AppApplication, input: Value) -> Result<Value, GatewayApp
         "summary":summary,"document":args,"created_at":app.dependencies.identity_clock.now_iso()}),
         )
         .await?;
-    if input["apply"] == true {
+    if input["apply"] == true && result["ok"] == true {
         drop(files);
         return resolve(app, json!({"id":id,"outcome":"accepted","by":null})).await;
     }

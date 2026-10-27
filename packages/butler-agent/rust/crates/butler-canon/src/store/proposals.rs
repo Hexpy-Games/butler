@@ -32,7 +32,12 @@ pub fn create(tx: &Transaction<'_>, ctx: &Context, row: &Value) -> Result<Value>
     } else {
         row["project_id"].as_str().unwrap_or("@new")
     };
-    apply::validate(tx, ctx, project, changes)?;
+    if let Err(error) = apply::validate(tx, ctx, project, changes) {
+        return match error {
+            Error::Conflict { current } => Ok(conflict_result(&current)),
+            other => Err(other),
+        };
+    }
     for old in rows(tx, queries::OPEN_SESSION, [session])? {
         transition(tx, ctx, text(&old, "id")?, "superseded", None)?;
     }
@@ -52,6 +57,12 @@ pub fn create(tx: &Transaction<'_>, ctx: &Context, row: &Value) -> Result<Value>
     notify(tx, ctx, &get(tx, id)?)?;
     Ok(json!({"ok":true,"state":"draft",
         "ask_id":format!("canon:{id}"),"message":DRAFT_MESSAGE}))
+}
+
+fn conflict_result(current: &Value) -> Value {
+    json!({"ok":false,"error":{"code":"canon_conflict","message":format!(
+        "'{}' changed before this was applied (now revision {}). Nothing was applied. Tell the user in one sentence; read it again before proposing.",
+        current["title"].as_str().unwrap_or("Spec"), current["revision"].as_i64().unwrap_or(0))}})
 }
 
 pub fn transition(
