@@ -115,7 +115,8 @@ class UserBrowser {
     tab.bounds = tab.slot;
     attachView(tab, win, () => {
       const { x, y, width, height } = tab.bounds;
-      tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+      const left = Math.round(x), top = Math.round(y);
+      tab.view.setBounds({ x: left, y: top, width: Math.round(x + width) - left, height: Math.round(y + height) - top });
       tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
       emulation(tab); this.pointer.sync(tab);
     }, () => { if (this.tabs.get(tab.id) === tab) this.sync(tab); });
