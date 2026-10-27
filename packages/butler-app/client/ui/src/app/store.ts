@@ -264,7 +264,7 @@ interface ButlerStore {
   allowAuthorityRequest: (
     requestRef: string,
     sessionId?: string,
-    scope?: "once" | "conversation",
+    scope?: "once" | "conversation" | "site",
   ) => Promise<boolean>;
   revokeConversationPermission: (grantRef: string, sessionId?: string) => Promise<boolean>;
   denyAuthorityRequest: (
@@ -799,7 +799,7 @@ function normalizedAuthorityAlternative(value: string): string | null {
 
 async function submitAuthorityDecision(input: {
   action: AuthorityDecisionAction;
-  scope?: "once" | "conversation";
+  scope?: "once" | "conversation" | "site";
   alternative?: string;
   decision: AuthorityDecisionKind;
   requestRef: string;

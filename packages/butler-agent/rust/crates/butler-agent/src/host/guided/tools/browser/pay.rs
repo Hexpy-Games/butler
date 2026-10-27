@@ -95,12 +95,27 @@ async fn fill(
     targets: &Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut approval = None;
-    if item["allowed"] != true {
+    if item["allowed"] != true && !(kind == "card" && looked["purchase_allowed"] == true) {
         let input = approval_input(inspected, item, kind, this.tab);
         let target = format!("browser:pay:{}", looked["site"].as_str().unwrap_or(""));
         match authority::gate(this.owner, this.call, this.occurrence, &input, &target).await? {
             authority::Gate::Pending(pending) => return encoded(&pending),
-            authority::Gate::Allowed(reference) => approval = reference,
+            authority::Gate::Allowed(reference, scope) => {
+                approval = reference;
+                if scope.as_deref() == Some("site") {
+                    let result = allow_site(
+                        this.client,
+                        this.tab,
+                        &looked["site"],
+                        this.invocation.cancellation,
+                    )
+                    .await;
+                    if result["status"] != "ok" {
+                        settle(this.owner, approval, "failed").await?;
+                        return encoded(&result);
+                    }
+                }
+            }
         }
     }
     let op = if kind == "card" {
@@ -109,7 +124,8 @@ async fn fill(
         "autofill.fill"
     };
     let args = json!({"item_id": item["id"], "top_origin": inspected["top_origin"],
-        "frame_origins": inspected["frame_origins"], "targets": targets});
+        "frame_origins": inspected["frame_origins"], "targets": targets,
+        "payment_skip": if kind == "card" && looked["purchase_allowed"] == true { Some(json!({"amount":inspected["amount"]})) } else { None }});
     let result = this
         .client
         .call(op, this.tab, &args, this.invocation.cancellation)
@@ -198,7 +214,8 @@ fn approval_input(inspected: &Value, item: &Value, kind: &str, tab: &Value) -> V
     json!({"pay": {"kind": kind, "item": item["id"], "label": label,
         "merchant": inspected["merchant_origin"], "top": inspected["top_origin"],
         "fields": if kind == "profile" { inspected["fields"].clone() } else { Value::Null }, "frames": inspected["frame_origins"], "amount": inspected["amount"]},
-        "tab": tab, "always_confirm": true})
+        "tab": tab, "always_confirm": true,
+        "allow_site": if kind == "card" { Some("payment") } else { None }})
 }
 
 /// Main already gave the tab to the user; wait durably for the hand-back.
@@ -226,9 +243,21 @@ async fn hand_over(
             );
             encoded(&pending)
         }
-        authority::Gate::Allowed(reference) => {
+        authority::Gate::Allowed(reference, _) => {
             settle(this.owner, reference, "ok").await?;
             encoded(&json!({"status":"ready","observe_required":true}))
         }
     }
+}
+
+/// The gateway binds this write to the tab's current merchant site.
+pub(super) async fn allow_site(
+    client: &client::Client,
+    tab: &Value,
+    site: &Value,
+    signal: &tokio_util::sync::CancellationToken,
+) -> Value {
+    client
+        .call("pay.allow_site", tab, &json!({"site":site}), signal)
+        .await
 }

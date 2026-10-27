@@ -79,7 +79,7 @@ fn origin_of(raw: &str) -> Option<String> {
 }
 
 /// The merchant's site: the tab's own, or its opener's for a pop-up payment window.
-fn merchant_site(state: &HttpState, tab: &Value) -> String {
+pub(super) fn merchant_site(state: &HttpState, tab: &Value) -> String {
     let opener = tab["opener"].as_str().and_then(|id| {
         let hub = state.browser.0.lock().ok()?;
         hub.tabs
@@ -122,7 +122,9 @@ pub(super) async fn lookup(state: &Arc<HttpState>, tab: &Value) -> Result<Value,
         .application
         .vault(AppVaultCommand::ForSite { site: site.clone() })
         .await?;
-    Ok(json!({"status":"ok","site":site,"cards":list["cards"],"profiles":list["profiles"]}))
+    Ok(
+        json!({"status":"ok","site":site,"cards":list["cards"],"profiles":list["profiles"],"purchase_allowed":purchase_allowed(state, tab).await?}),
+    )
 }
 
 fn expired(card: &Value) -> bool {
@@ -181,6 +183,9 @@ pub(super) async fn prepare(
     if origin_of(tab["url"].as_str().unwrap_or("")).as_deref() != Some(top.as_str()) {
         return Ok(Some(json!({"status":"origin_mismatch","tab":frame["tab"]})));
     }
+    if let Some(refused) = super::payment_scope::prepare(state, frame, tab).await? {
+        return Ok(Some(refused));
+    }
     let frames: Vec<String> = args["frame_origins"]
         .as_array()
         .into_iter()
@@ -207,7 +212,7 @@ pub(super) async fn prepare(
     }
     frame["args"] = json!({
         "kind": kind, "item_id": id, "fill_token": token, "top_origin": top, "frame_origins": frames,
-        "meta": meta(kind, &item), "targets": args["targets"], "section_ref": args["section_ref"], "policy": args["policy"],
+        "payment_skip": frame["args"]["payment_skip"], "meta": meta(kind, &item), "targets": args["targets"], "section_ref": args["section_ref"], "policy": args["policy"],
     });
     Ok(None)
 }
@@ -341,7 +346,8 @@ pub(super) async fn secrets(
 }
 
 /// Vault ops Rust answers or prepares before native dispatch.
-pub(super) const VAULT_OPS: &[&str] = &["pay.lookup", "pay.fill", "autofill.fill"];
+pub(super) const VAULT_OPS: &[&str] =
+    &["pay.lookup", "pay.allow_site", "pay.fill", "autofill.fill"];
 
 /// `pay.lookup` answers here; `pay.fill` / `autofill.fill` mint their token first.
 pub(super) async fn admit(
@@ -350,6 +356,20 @@ pub(super) async fn admit(
     op: &str,
     tab: &Value,
 ) -> Result<Option<Value>, HttpError> {
+    if op == "pay.allow_site" {
+        let site = merchant_site(state, tab);
+        if site.is_empty() || frame["args"]["site"].as_str() != Some(site.as_str()) {
+            return Err(error(400, "invalid_site"));
+        }
+        state
+            .application
+            .vault(AppVaultCommand::PurchaseSite {
+                site: site.clone(),
+                allow: true,
+            })
+            .await?;
+        return Ok(Some(json!({"status":"ok","site":site})));
+    }
     if op == "pay.lookup" {
         return lookup(state, tab).await.map(Some);
     }
@@ -376,7 +396,8 @@ pub(super) async fn finish_call(
         };
         if let Some(tab) = tab {
             result["purchase_allowed"] = json!(purchase_allowed(state, &tab).await?);
+            result["merchant_site"] = json!(merchant_site(state, &tab));
         }
     }
-    Ok(())
+    super::payment_scope::finish(state, op, sent, session, result).await
 }

@@ -42,7 +42,7 @@ pub(super) async fn execute(
         let target = butler_runtime::browser::signed_in_scope(site);
         match authority::gate(owner, call, occurrence, &input, &target).await? {
             authority::Gate::Pending(pending) => return encoded(&pending),
-            authority::Gate::Allowed(reference) => approval = reference,
+            authority::Gate::Allowed(reference, _) => approval = reference,
         }
     }
     let result = client
@@ -97,7 +97,7 @@ async fn hand_over(
             );
             encoded(&pending)
         }
-        authority::Gate::Allowed(reference) => {
+        authority::Gate::Allowed(reference, _) => {
             settle(owner, reference, "ok").await?;
             encoded(&json!({"status":"ready","observe_required":true}))
         }

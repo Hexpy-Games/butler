@@ -110,6 +110,7 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
     ...(typeof value.sign_in_step === "string" ? { sign_in_step: value.sign_in_step } : {}),
     ...(typeof value.wait_reason === "string" ? { wait_reason: value.wait_reason } : {}),
     ...((value.browser_mode === "signed_out" || value.browser_mode === "signed_in") ? { browser_mode: value.browser_mode } : {}),
+    ...(value.allow_site === "signed_in" || value.allow_site === "payment" ? { allow_site: value.allow_site } : {}),
     ...(typeof value.allow_conversation === "boolean" ? { allow_conversation: value.allow_conversation } : {}),
     ...(typeof value.command === "string" && value.command.trim() ? { command: value.command } : {}) };
 }

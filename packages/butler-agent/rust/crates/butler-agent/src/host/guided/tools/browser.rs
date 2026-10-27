@@ -291,17 +291,14 @@ fn approval_input(
     // A purchase step asks every time unless the user lets this merchant site
     // skip the final card in Settings; uploads always ask.
     let purchase = !honor_purchase_permission || prepared["purchase_allowed"] != true;
-    let always = prepared["steps"].as_array().is_some_and(|steps| {
-        steps.iter().any(|s| {
-            s["upload"] == true
-                || purchase
-                    && (s["payment"] == true && s["submit"] == true
-                        || s["frame_payment"] == true
-                        || s["hit"]["frame"]
-                            .as_str()
-                            .is_some_and(butler_runtime::browser::payment_host))
-        })
-    });
+    let steps = prepared["steps"].as_array();
+    let upload = steps.is_some_and(|steps| steps.iter().any(|s| s["upload"] == true));
+    let payment = steps.is_some_and(|steps| steps.iter().any(authority::payment_step));
+    let always = upload || purchase && payment;
+    let payment_site_allowed = !purchase
+        && !upload
+        && payment
+        && steps.is_some_and(|steps| steps.iter().all(authority::payment_step));
     if let Some(steps) = prepared["steps"].as_array_mut() {
         for step in steps {
             if let Some(map) = step.as_object_mut() {
@@ -310,13 +307,14 @@ fn approval_input(
             }
         }
     }
+    let allow_site = always && !upload;
     let mode = if prepared["profile"] == "signed_in" {
         "signed_in"
     } else {
         "signed_out"
     };
     let commit = authority::commits(args, prepared);
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always,"commit":commit})
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always,"merchant_site":prepared["merchant_site"],"commit":commit,"payment_site_allowed":payment_site_allowed,"review_commit":authority::review_commit(args, prepared, !purchase),"allow_site":if allow_site { Some("payment") } else { None }})
 }
 /// The act's authority target: the page's site under its tab profile.
 fn act_scope(prepared: &Value) -> String {
@@ -355,6 +353,21 @@ async fn dispatch_effect(
         .unwrap_or_else(|| super::effect::runtime_work::untracked(owner));
     let mut dispatch_args = args.clone();
     dispatch_args["prepared_steps"] = prepared["steps"].clone();
+    if prepared["purchase_allowed"] == true
+        && prepared["steps"]
+            .as_array()
+            .is_some_and(|s| s.iter().any(authority::payment_step))
+    {
+        let inspected = client
+            .call(
+                "pay.inspect",
+                &args["tab"],
+                &json!({"kind":"card"}),
+                invocation.cancellation,
+            )
+            .await;
+        dispatch_args["payment_skip"] = json!({"amount":inspected["amount"]});
+    }
     dispatch_args["commit_cleared"] = json!(authority::commit_cleared(
         &owner.binding.access_mode,
         &input
@@ -425,7 +438,7 @@ async fn wait(
                 .await;
             encoded(&value)
         }
-        authority::Gate::Allowed(reference) => {
+        authority::Gate::Allowed(reference, _) => {
             settle(owner, reference, "ok").await?;
             encoded(&json!({"status":"ready","observe_required":true}))
         }

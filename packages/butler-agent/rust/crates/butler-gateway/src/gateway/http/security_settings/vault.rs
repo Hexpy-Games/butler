@@ -59,8 +59,16 @@ pub(super) async fn route(
             let allow = body["allow"].as_bool().ok_or_else(|| invalid("allow"))?;
             state
                 .application
-                .vault(AppVaultCommand::PurchaseSite { site, allow })
-                .await?
+                .vault(AppVaultCommand::PurchaseSite {
+                    site: site.clone(),
+                    allow,
+                })
+                .await
+                .inspect(|_| {
+                    if !allow {
+                        super::super::browser_host::signed_in::fence_site(&state, &site);
+                    }
+                })?
         }
         (&Method::POST, "/security/vault/cards") => cards::add(&state, body).await?,
         (&Method::POST, "/security/vault/profiles") => profiles::save(&state, None, body).await?,

@@ -142,6 +142,18 @@ fn list(db: &Connection) -> Result<Value> {
         "SELECT site FROM browser_purchase_sites ORDER BY site LIMIT 500",
         &[]
     )?);
+    let mut statement = db
+        .prepare("SELECT site,created_at FROM browser_purchase_sites ORDER BY site")
+        .map_err(sql)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(json!({"site":row.get::<_,String>(0)?,"since":row.get::<_,String>(1)?}))
+        })
+        .map_err(sql)?;
+    view["purchase_site_grants"] = json!(
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql)?
+    );
     Ok(view)
 }
 

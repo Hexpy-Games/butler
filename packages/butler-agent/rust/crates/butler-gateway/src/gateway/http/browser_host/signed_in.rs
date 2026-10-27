@@ -132,10 +132,17 @@ pub(super) async fn grant(
     }
     state
         .application
-        .signins(AppSignInCommand::Grant {
-            session: session.into(),
-            site: site.into(),
-            source: "approval".into(),
+        .signins(if args["always"] == true {
+            AppSignInCommand::SetAllConversations {
+                site: site.into(),
+                value: true,
+            }
+        } else {
+            AppSignInCommand::Grant {
+                session: session.into(),
+                site: site.into(),
+                source: "approval".into(),
+            }
         })
         .await?;
     Ok(json!({"status":"ok","site":site}))

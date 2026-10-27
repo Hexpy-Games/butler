@@ -72,19 +72,20 @@ async fn run(
     {
         return encoded(&handoff(&args, "approval_required"));
     }
-    let approval = match authority::act_gate(owner, call, occurrence, &input, &scope).await? {
-        authority::Gate::Pending(value) => {
-            client
-                .waiting(
-                    &args["tab"],
-                    value["authority_pending"] == true,
-                    invocation.cancellation,
-                )
-                .await;
-            return finish_batch(&args, value);
-        }
-        authority::Gate::Allowed(reference) => reference,
-    };
+    let (approval, allow_scope) =
+        match authority::act_gate(owner, call, occurrence, &input, &scope).await? {
+            authority::Gate::Pending(value) => {
+                client
+                    .waiting(
+                        &args["tab"],
+                        value["authority_pending"] == true,
+                        invocation.cancellation,
+                    )
+                    .await;
+                return finish_batch(&args, value);
+            }
+            authority::Gate::Allowed(reference, scope) => (reference, scope),
+        };
     apply(
         owner,
         invocation,
@@ -97,6 +98,7 @@ async fn run(
             input,
             scope,
             approval,
+            allow_scope,
         },
     )
     .await
@@ -107,6 +109,7 @@ struct PreparedAction {
     input: Value,
     scope: String,
     approval: Option<String>,
+    allow_scope: Option<String>,
 }
 
 async fn apply(
@@ -123,7 +126,21 @@ async fn apply(
         input,
         scope,
         approval,
+        allow_scope,
     } = batch;
+    if allow_scope.as_deref() == Some("site") {
+        let recorded = pay::allow_site(
+            &client,
+            &args["tab"],
+            &prepared["merchant_site"],
+            invocation.cancellation,
+        )
+        .await;
+        if recorded["status"] != "ok" {
+            settle(owner, approval, "failed").await?;
+            return finish_batch(args, recorded);
+        }
+    }
     client
         .waiting(&args["tab"], false, invocation.cancellation)
         .await;
