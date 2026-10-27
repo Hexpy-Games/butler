@@ -61,6 +61,7 @@ export const guidance: ShowcaseGuidance = {
   accessibility: [
     "The pane is a labelled region; the toolbar row has role toolbar; tabs control the page card (TabStrip panelId = PageCard panelId).",
     "Every toolbar control is an IconButton with a label and tooltip.",
+    "While Butler controls the tab (PageCard holder=\"butler\") the pane edge turns to the riso inks; the PageBand says so in words, so the edge is never the only signal.",
   ],
-  tokens: ["--browser-pane-bg", "--browser-pane-radius", "--browser-card-inset", "--browser-band-height", "--space-xs", "--menu-item-height", "--page-card-radius", "--shell-card-radius"],
+  tokens: ["--browser-pane-bg", "--browser-pane-radius", "--browser-card-inset", "--browser-band-height", "--space-xs", "--menu-item-height", "--page-card-radius", "--shell-card-radius", "--butler-ink-blue", "--butler-ink-purple", "--butler-ink-pink", "--motion-agent-edge"],
 };

@@ -76,11 +76,11 @@ export interface ConversationFrameDemoProps extends Omit<BrowserDemoProps, "plac
 }
 
 /** The standalone Browser view: its title bar names the conversation that owns the tab (auto-sized leading). */
-export function StandaloneFrameDemo({ width, height, ...browser }: Omit<ConversationFrameDemoProps, "sidebar" | "paneOpen">) {
+export function StandaloneFrameDemo({ width, height, frame: shellFrame = "flat", ...browser }: Omit<ConversationFrameDemoProps, "sidebar" | "paneOpen">) {
   const demo = BROWSER_DEMO_COPY[browser.locale];
   return (
     <ScaledFrame width={width} height={height}>
-      <AdaptiveShell leftOpen rightOpen={false} UNSAFE_style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) }}>
+      <AdaptiveShell frame={shellFrame} leftOpen rightOpen={false} UNSAFE_style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) }}>
         <AdaptiveShellSidebar open><DemoSidebar locale={browser.locale} /></AdaptiveShellSidebar>
         <AdaptiveShellWorkspace>
           <TitlebarShell title={demo.browser} dragRegion leadingSize="auto" dataTestClass="custom-titlebar"

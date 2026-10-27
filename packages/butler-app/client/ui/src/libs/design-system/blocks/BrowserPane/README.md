@@ -41,6 +41,15 @@ and `trailing`; standalone with `onNewTabInGroup`, so each group pill has its ow
 The region is labelled; the toolbar row is `role="toolbar"`. Tabs control the
 page card through `panelId`.
 
+## Controlled state
+While Butler controls the tab (the `PageCard` has `holder="butler"`), the
+sheet's own hairline takes the riso inks (`--butler-ink-blue`, `-purple`,
+`-pink`) on all four edges and turns slowly (`--motion-agent-edge`; static
+under reduced motion). It replaces the page card's own Butler edge and glow,
+which a flush page could only show along its top. Only paint changes: the
+edge keeps its width, so nothing moves and the page is never inset. The
+`user` and `waiting` edges stay on the page card.
+
 ## Responsive behavior
 The pane fills the split pane (or the workspace row) and never sets a width;
 the toolbar's address takes the remaining width and truncates. Below a 520px

@@ -97,14 +97,20 @@
 
 /* Butler holds the tab: a slowly turning riso edge and a soft glow. The
    loop runs on --motion-agent-edge and --motion-loop-count, both 0 under
-   reduced motion, which leaves a static edge at 135deg. */
+   reduced motion, which leaves a static edge at 135deg. A container that
+   draws Butler's edge itself (BrowserPane, whose page card is flush with its
+   edges) sets --page-card-butler-edge: none and --page-card-butler-glow to
+   the card's plain shadow. */
 .card[data-holder="butler"]::before {
-  box-shadow:
+  box-shadow: var(
+    --page-card-butler-glow,
     0 0 0 4px color-mix(in srgb, var(--butler-ink-purple) 10%, transparent),
-    0 8px 32px color-mix(in srgb, var(--butler-ink-blue) 22%, transparent);
+    0 8px 32px color-mix(in srgb, var(--butler-ink-blue) 22%, transparent)
+  );
 }
 
 .card[data-holder="butler"]::after {
+  display: var(--page-card-butler-edge, block);
   padding: var(--border-width-strong);
   background: conic-gradient(
     from var(--page-card-edge-angle),

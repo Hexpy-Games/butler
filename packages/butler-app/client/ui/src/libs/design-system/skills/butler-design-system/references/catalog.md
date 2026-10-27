@@ -1787,7 +1787,7 @@ The browser sheet: tab row and toolbar on a tinted pane, and the page card filli
 - Use for: The standalone Browser view under its title bar
 - Not for: A preview of a Butler output inside the chat → `ArtifactPreview`
 - Not for: A page frame inside a dashboard or settings → `SurfacePanel`
-- Tokens: `--browser-pane-bg`, `--browser-pane-radius`, `--browser-card-inset`, `--browser-band-height`, `--space-xs`, `--menu-item-height`, `--page-card-radius`, `--shell-card-radius`
+- Tokens: `--browser-pane-bg`, `--browser-pane-radius`, `--browser-card-inset`, `--browser-band-height`, `--space-xs`, `--menu-item-height`, `--page-card-radius`, `--shell-card-radius`, `--butler-ink-blue`, `--butler-ink-purple`, `--butler-ink-pink`, `--motion-agent-edge`
 
 ### DragPreview
 

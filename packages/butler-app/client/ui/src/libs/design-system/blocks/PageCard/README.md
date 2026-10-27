@@ -30,8 +30,11 @@ The card corners are `--page-card-radius` (the popover radius, 12px, by
 default). `BrowserPane` lays the card flush with its own edges and sets the
 radius to its own bottom corners: 0 beside the window frame, the shell card
 radius in the cards frame. There the card's hairline and the holder edges
-outside it sit under the pane's edges, so a holder edge shows only along the
-page's top, under the toolbar.
+outside it sit under the pane's edges, so the `user` and `waiting` edges show
+only along the page's top, under the toolbar. Butler's edge moves to the pane:
+`BrowserPane` sets `--page-card-butler-edge: none` and
+`--page-card-butler-glow` to the plain card shadow, and draws the riso inks on
+its own edge.
 
 ## Container vs Presenter
 The App forwards `onBoundsChange` (x, y, width, height, visible, scale,

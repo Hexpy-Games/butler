@@ -114,6 +114,50 @@
   }
 }
 
+/* Butler controls the tab (its page card holds holder="butler"): the
+   sheet's own edge takes the riso inks on all its edges, turning slowly like
+   the page card's edge did, in place of that edge. Only paint changes: the
+   hairline keeps its width, so nothing moves. The loop runs on
+   --motion-agent-edge and --motion-loop-count (0 under reduced motion: a
+   static edge at 135deg). */
+@property --browser-pane-edge-angle {
+  inherits: false;
+  initial-value: 135deg;
+  syntax: "<angle>";
+}
+
+.pane:has(.stage [data-slot="page-card"][data-holder="butler"]) {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--browser-pane-bg), var(--browser-pane-bg)) padding-box,
+    conic-gradient(
+        from var(--browser-pane-edge-angle),
+        var(--butler-ink-blue),
+        var(--butler-ink-purple),
+        var(--butler-ink-pink),
+        var(--butler-ink-blue)
+      )
+      border-box;
+  animation: browser-pane-edge var(--motion-agent-edge)
+    var(--motion-ease-linear) var(--motion-loop-count);
+}
+
+@keyframes browser-pane-edge {
+  from {
+    --browser-pane-edge-angle: 135deg;
+  }
+
+  to {
+    --browser-pane-edge-angle: 495deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane:has(.stage [data-slot="page-card"][data-holder="butler"]) {
+    animation: none;
+  }
+}
+
 /* The page fills the sheet edge to edge, under the toolbar. The page card's
    transparent hairline border sits under the sheet's own edges (the sheet
    clips it), so the native view starts right inside the sheet's hairline:
@@ -122,6 +166,8 @@
    meets the sheet), the shell card radius in the cards frame. */
 .stage {
   --page-card-radius: 0px;
+  --page-card-butler-edge: none;
+  --page-card-butler-glow: var(--browser-card-shadow);
 
   display: flex;
   min-width: 0;
