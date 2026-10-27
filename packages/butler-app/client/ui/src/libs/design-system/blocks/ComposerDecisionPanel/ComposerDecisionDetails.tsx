@@ -3,9 +3,6 @@ import { Button } from "../../components/Button";
 import { Typo } from "../../components/Typo";
 import styles from "./ComposerDecisionPanel.module.css";
 
-/** Lines shown before "Show more" when the owner passes both labels. */
-const CLAMP_LINES = 4;
-
 /**
  * The detail lines under a decision's title. Every line wraps, so nothing is
  * cut; with `showMoreLabel` and `showLessLabel` a long block clamps and an
@@ -26,8 +23,15 @@ export function ComposerDecisionDetails({ lines, showMoreLabel, showLessLabel, r
     const node = ref.current;
     if (!clamp || !node) return;
     const measure = () => {
-      const lineHeight = Number.parseFloat(window.getComputedStyle(node).lineHeight);
-      setOverflowing(Number.isFinite(lineHeight) && node.scrollHeight > lineHeight * CLAMP_LINES + 1);
+      const clamped = node.getAttribute("data-clamped");
+      if (clamped !== "true") return;
+      const visibleHeight = node.clientHeight;
+      // A multi-paragraph line clamp can hide entire later blocks from scrollHeight.
+      // Compare actual heights, restoring the clamp synchronously before paint.
+      node.removeAttribute("data-clamped");
+      const fullHeight = node.scrollHeight;
+      node.setAttribute("data-clamped", clamped);
+      setOverflowing(fullHeight > visibleHeight + 1);
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;

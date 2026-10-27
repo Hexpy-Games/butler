@@ -22,6 +22,7 @@ pub(crate) const QUEUED_REPLY: &str = "Status noted.";
 #[derive(Default)]
 pub(crate) struct Script {
     pub(crate) answer_blocks: AtomicBool,
+    pub(crate) direction_effect: Mutex<Option<Value>>,
     pub(crate) deliverables: AtomicBool,
     answer_step: Mutex<usize>,
     pub(crate) browser: AtomicBool,
@@ -64,6 +65,15 @@ async fn reply(
     let key = matching::key("/v1/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
     let child = child_lane(&body);
+    if !child && crate::connectors::stub::find_spec(&body["input"]).is_some() {
+        let response = crate::connectors::stub::run(&body).unwrap();
+        let wire = response
+            .chunks
+            .into_iter()
+            .map(|c| c.text)
+            .collect::<String>();
+        return ([("content-type", "text/event-stream")], wire).into_response();
+    }
     if child
         && script.hold_direction.load(Ordering::SeqCst)
         && key.user_request.starts_with(DIRECTION)
@@ -189,6 +199,16 @@ fn parent_item(step: usize, presented: bool) -> Value {
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
+    if step == 4
+        && let Some(effect) = script.direction_effect.lock().unwrap().clone()
+    {
+        return call("direction-effect", "run_command", &effect);
+    }
+    let directed = script.direction_effect.lock().unwrap().is_some();
+    if directed && step == 6 {
+        return call("direction-plan-review", "record_work_review", &review());
+    }
+    let step = if directed && step > 6 { step - 1 } else { step };
     // Only the butler answers the user; a steward reports to it.
     let offered = butler_e2e::e2e::chatgpt_wire::functions(body);
     assert!(

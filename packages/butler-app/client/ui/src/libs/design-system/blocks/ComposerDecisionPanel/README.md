@@ -24,7 +24,7 @@ The header row stays icon, small label and title. The default
 | `renderText` | Optional display formatter for title and details; original strings remain available in titles and accessible labels |
 | `onOpen` | Opens the plan or the request's source |
 | `details` | Lines under the title (examples, a "+N more" line) in the secondary caption style, aligned to the title text. Every line wraps in full: what is being decided is never cut |
-| `detailsShowMoreLabel`, `detailsShowLessLabel` | With both, details longer than four lines clamp behind an inline Show more / Show less button (the QueuedMessage pattern); without them details always show in full |
+| `detailsShowMoreLabel`, `detailsShowLessLabel` | With both, details longer than four lines clamp behind an inline Show more / Show less button (the QueuedMessage pattern); without them details always show in full. Overflow is measured against the clamped block's real height, so several detail lines (a short line followed by a long reviewed input) still get the button when a later line is hidden |
 | `aside` | Trailing subject-row content: a status `Tag`, a pending count, non-interactive metadata |
 | `error` | A failed decision, announced with `role="alert"` |
 | `actions` | Decision buttons, or `(complete) => buttons` to run a decision after the shared exit motion |
@@ -64,6 +64,11 @@ when the tab is vault-filled:
   media={{ content: <LiveTabFrame frame={frame} favicon={tab.favicon} />, label: tab.title, onOpen: () => openHandoffTab(tab.id) }}
   actions={<ButtonContainer size="sm" justify="end">…</ButtonContainer>} />
 ```
+
+Approval cards that show a complete reviewed input (a memory text, a schedule's
+prompt, a browser step's fields, an MCP call's arguments) pass the input as a
+later detail line with both Show more/less labels: the first lines stay
+visible and the full input is one click away.
 
 Pass `data-test-class` for smokes; `details` (with the Show more/less labels) for up to three examples and a
 "+N more" line; `aside` for a status Tag, a pending count; `error` after a failed decision.

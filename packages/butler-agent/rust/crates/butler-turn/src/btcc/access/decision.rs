@@ -24,6 +24,8 @@ pub enum CapabilityKind {
     Schedule,
     SettingsWrite,
     ProjectRecord,
+    /// Durable lifecycle bookkeeping that also bootstraps its own Plan authority.
+    WorkRecord,
     CrossConversation,
     ButlerOutput,
     DeliverFiles,
@@ -51,6 +53,8 @@ pub use crate::workspace::TargetScope;
 pub enum TurnTaint {
     Clean,
     External,
+    /// The turn was admitted from an untrusted connector event.
+    ConnectorEvent,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AccessRequest {
@@ -87,12 +91,22 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     use CapabilityKind::{
         ButlerOutput, CommandMutation, CommandObservation, Connector, DeliverFiles, Exempt,
         FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
+        WorkRecord,
     };
+    if request.taint == TurnTaint::ConnectorEvent
+        && (request.kind.can_send_outside() || request.kind.persists_beyond_turn())
+    {
+        return if *mode == AccessMode::ReadOnly {
+            Deny(DenyReason::ReadOnly)
+        } else {
+            Ask(GrantUse::Ignore)
+        };
+    }
     if *mode == AccessMode::FullAccess {
         return Allow;
     }
     if let CapabilityKind::WebRequest { carries_data } = request.kind {
-        return if request.taint != TurnTaint::External || !carries_data {
+        return if request.taint == TurnTaint::Clean || !carries_data {
             Allow
         } else if *mode == AccessMode::ReadOnly {
             Deny(DenyReason::ReadOnly)
@@ -106,7 +120,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode == AccessMode::ReadOnly {
         return if matches!(
             request.kind,
-            InternalRead | FileRead | DeliverFiles | CommandObservation { .. }
+            InternalRead | WorkRecord | FileRead | DeliverFiles | CommandObservation { .. }
         ) {
             Allow
         } else {
@@ -117,7 +131,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     let auto = *mode == AccessMode::Auto;
     let first = auto || *mode == AccessMode::AskExceptReads;
     match request.kind {
-        Exempt(_) | InternalRead | ButlerOutput | DeliverFiles => Allow,
+        Exempt(_) | InternalRead | WorkRecord | ButlerOutput | DeliverFiles => Allow,
         CommandMutation {
             sandbox: CommandSandbox::Disabled,
         } if auto => Ask(GrantUse::Honor),
@@ -158,12 +172,69 @@ pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
     }
 }
 impl CapabilityKind {
+    /// Gate creation rather than propagating taint through every derived artifact
+    /// forever (schedule runs, recalled memory, new conversations). That propagation
+    /// is fragile; a card lets the user see the exact artifact before it exists.
+    /// Documents are inert data read on demand, never instructions; Library
+    /// organization lets briefs attach them. Connector classification rules are
+    /// host-constrained and announced once with undo, so they also need no card.
+    pub fn persists_beyond_turn(self) -> bool {
+        match self {
+            Self::Exempt(action) => match action {
+                ApprovalExemptAction::FirstConversationOnboarding
+                | ApprovalExemptAction::MemorySave => true,
+                ApprovalExemptAction::AttachedImageAnalysis
+                | ApprovalExemptAction::LibraryOrganize
+                | ApprovalExemptAction::DocumentWrite => false,
+            },
+            Self::FileEdit
+            | Self::Schedule
+            | Self::SettingsWrite
+            | Self::ProjectRecord
+            | Self::WorkRecord
+            | Self::CrossConversation
+            | Self::ButlerOutput
+            | Self::FolderSwitch
+            | Self::FullOnly(FullOnlyAction::GitWorktree | FullOnlyAction::MemoryForget) => true,
+            Self::InternalRead
+            | Self::FileRead
+            | Self::WebRequest { .. }
+            | Self::CommandObservation { .. }
+            | Self::CommandMutation { .. }
+            | Self::ImageModelCall
+            | Self::Network
+            | Self::Connector
+            | Self::DeliverFiles
+            | Self::FullOnly(FullOnlyAction::ServiceRestart)
+            | Self::OtherEffect => false,
+        }
+    }
+
+    /// Commands and undeclared effects can send data too; containment does
+    /// not establish that a command has no outward effect. Butler's own
+    /// records, outputs and delivery to its user remain internal operations.
+    fn can_send_outside(self) -> bool {
+        matches!(
+            self,
+            Self::Exempt(ApprovalExemptAction::AttachedImageAnalysis)
+                | Self::Connector
+                | Self::Network
+                | Self::ImageModelCall
+                | Self::WebRequest { carries_data: true }
+                | Self::CommandMutation { .. }
+                | Self::CommandObservation { .. }
+                | Self::OtherEffect
+        )
+    }
+
     /// Effects cannot inherit exemptions intended for other dispatch routes.
     pub fn gated_effect(self) -> Self {
         match self {
-            Self::InternalRead | Self::Exempt(_) | Self::ButlerOutput | Self::DeliverFiles => {
-                Self::OtherEffect
-            }
+            Self::InternalRead
+            | Self::WorkRecord
+            | Self::Exempt(_)
+            | Self::ButlerOutput
+            | Self::DeliverFiles => Self::OtherEffect,
             kind => kind,
         }
     }
@@ -220,9 +291,22 @@ impl CapabilityKind {
             }
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,
+            ToolName::ControlWork
+                if arguments.get("action").and_then(Value::as_str) == Some("view_result") =>
+            {
+                Self::InternalRead
+            }
+            ToolName::ControlWork => Self::ProjectRecord,
+            ToolName::StartWork
+            | ToolName::ContinueWork
+            | ToolName::ReplaceWorkPlan
+            | ToolName::RecordWorkCheckpoint
+            | ToolName::RecordWorkReview
+            | ToolName::RecordWorkDisposition => Self::WorkRecord,
             OutputPublish => Self::ButlerOutput,
             ToolName::DeliverFiles => Self::DeliverFiles,
             SwitchFolder => Self::FolderSwitch,
+            // Includes classification rules, whose host enforces action and read-only limits.
             _ => Self::InternalRead,
         }
     }

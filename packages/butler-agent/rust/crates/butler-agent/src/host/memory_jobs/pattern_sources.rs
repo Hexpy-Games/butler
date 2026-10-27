@@ -80,7 +80,7 @@ fn page_ids(
     let mut statement = db
         .prepare(
             "SELECT id FROM conversation_messages WHERE role='user' \
-        AND (origin_kind <> 'internal_control' OR source_gateway='automation') \
+        AND origin_kind <> 'connector' AND (origin_kind <> 'internal_control' OR source_gateway='automation') \
         AND created_at>=?1 ORDER BY created_at,seq,id LIMIT 200 OFFSET ?2",
         )
         .map_err(PatternError::port)?;

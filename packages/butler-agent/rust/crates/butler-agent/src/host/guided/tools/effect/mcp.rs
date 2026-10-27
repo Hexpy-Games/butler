@@ -81,6 +81,13 @@ impl EffectAdapter for McpToolEffect {
             && object.get("tool_name").and_then(Value::as_str) == Some(&self.tool_name)
             && object.get("arguments").is_some_and(Value::is_object);
         if valid {
+            if let Some(args) = object.get("arguments").and_then(Value::as_object) {
+                self.client
+                    .validate_connector_destination(&self.server_id, &self.tool_name, args)
+                    .map_err(|code| {
+                        EffectFailure::policy(code, "Connector destination refused.")
+                    })?;
+            }
             Ok(input.clone())
         } else {
             Err(policy("mcp_tool_input_invalid"))

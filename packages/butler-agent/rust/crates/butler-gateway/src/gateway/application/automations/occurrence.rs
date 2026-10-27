@@ -81,6 +81,7 @@ impl AppApplication {
             automation_id: id.into(),
             run_id: run_id.into(),
             unattended: trigger == "scheduled",
+            connector_event: false,
             scheduled_at,
         })
     }
