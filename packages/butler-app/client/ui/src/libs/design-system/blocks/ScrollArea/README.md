@@ -32,18 +32,22 @@ horizontal scroller; the fade follows the scrolling axis.
 The frame bleeds a scrollbar lane past the content's inline end. An overlay
 scrollbar takes no layout width, so the content gives the lane back and the
 scrollbar floats in it; a classic (always-shown) scrollbar is its own lane, so
-nothing more is reserved. The first ScrollArea in a document measures the thin
-scrollbar once and publishes it as `--scrollbar-width` on the root (`0px` for
-overlay scrollbars); nothing runs while idle or on scroll. The probe is styled
-like the scroller (a stable gutter on a vertical auto scroller), so it reads
-the lane the scroller really reserves.
+nothing more is reserved. The first DS scroller in a document measures a drawn
+thin scrollbar once and publishes its width as `--scrollbar-width` on the root
+(`0px` for overlay scrollbars); nothing runs while idle or on scroll.
+
+Lane rule (all DS scrollers: ScrollArea, Dialog, the conversation transcript,
+the aside, autoGrow Textarea): a scrollbar lane or gutter is reserved only
+while a scrollbar takes space, that is a classic scrollbar is drawn because
+the content overflows. No scroller sets `scrollbar-gutter`. The scroller is a
+`scroll-state` container, and while it is scrollable the content gives the
+drawn scrollbar's width back (`@container scroll-state(scrollable: block)`).
 
 Inset rule: the content's inline end sits on the column edge whether the
-content fits or overflows, with overlay or classic scrollbars. The vertical
-scroller sets `scrollbar-gutter: stable`, so a classic scrollbar's lane stays
-reserved while the content fits (an overlay one reserves nothing), and the
-content never widens into the lane. Horizontal scrollers have no inline lane.
-`bleed="inline-end"` follows the same rule inside the inspector gutter.
+content fits or overflows, with overlay or classic scrollbars, so nothing moves
+when overflow starts or stops, and content that fits never widens into the
+lane. Horizontal scrollers have no inline lane. `bleed="inline-end"` follows
+the same rule inside the inspector gutter.
 
 ## Focus Rings
 

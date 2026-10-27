@@ -51,13 +51,32 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden auto;
+  container: conversation-scroll / scroll-state;
   padding-bottom: var(--composer-reserve);
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
-  scrollbar-gutter: stable;
   scrollbar-width: thin;
   --scroll-fade-gutter: var(--conversation-scrollbar-offset);
+}
+
+/* The column centres on the scroller's whole width, as the composer below it
+   does. No gutter is reserved: a classic scrollbar takes its width only while
+   the transcript overflows, and the content gives that width back under it
+   (clipped there; the column's own margins are wider), so the column keeps
+   its width and centre when overflow starts or stops. Overlay scrollbars have
+   --scrollbar-width 0px. */
+.scrollContent {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+@container conversation-scroll scroll-state(scrollable: block) {
+  .scrollContent {
+    margin-inline-end: calc(-1 * var(--scrollbar-width, 0px));
+  }
 }
 
 .virtualScroll {
@@ -66,9 +85,12 @@
   padding-bottom: 0;
 }
 
+.virtualScroll > .scrollContent {
+  display: block;
+}
+
 .lockedScroll {
   overflow: hidden;
-  scrollbar-gutter: auto;
 }
 
 .scroll::-webkit-scrollbar {

@@ -30,7 +30,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Content without a ScrollArea grows the page instead of scrolling.", render: () => <Box padding="none"><Stack gap="sm">{ROWS.map((row) => <Typo.Body key={row}>{row}</Typo.Body>)}</Stack></Box> },
     },
   ],
-  content: ["Content ends on the column edge whether it fits or overflows, with overlay or classic scrollbars: the scrollbar lane sits past that edge, so rows never reach into it.", "bleed=\"inline-end\" puts the scrollbar in the inspector gutter; windowDrag=\"no-drag\" keeps a scroller inside a drag region scrollable.", "No copy of its own."],
+  content: ["Content ends on the column edge whether it fits or overflows, with overlay or classic scrollbars: the scrollbar lane sits past that edge, so rows never reach into it.", "No gutter is reserved for a scrollbar that is not drawn: a classic scrollbar takes its width only while the content overflows, and the content gives it back then.", "bleed=\"inline-end\" puts the scrollbar in the inspector gutter; windowDrag=\"no-drag\" keeps a scroller inside a drag region scrollable.", "No copy of its own."],
   accessibility: ["Scrollable regions that hold focusable content need no tabIndex; otherwise give them a label and tabIndex=0."],
   tokens: ["--scroll-fade-size", "--scroll-area-max-height-xs", "--scroll-area-min-height-xs"],
 };

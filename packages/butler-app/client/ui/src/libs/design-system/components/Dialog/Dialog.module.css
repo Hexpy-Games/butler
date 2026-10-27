@@ -46,13 +46,21 @@
   overflow: auto;
   padding: var(--space-4);
   outline: none;
+  container: dialog-content / scroll-state;
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
-  /* Both edges: a classic scrollbar's lane is mirrored so the form stays
-     centered; overlay scrollbars reserve nothing. */
-  scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
   transform: translate(-50%, -50%);
+}
+
+/* No gutter is reserved: a classic scrollbar takes its width only while the
+   dialog overflows, and then out of the inline-end padding. The in-flow
+   children give that width back, so the form keeps its width and centre when
+   overflow starts or stops. Overlay scrollbars have --scrollbar-width 0px. */
+@container dialog-content scroll-state(scrollable: block) {
+  .content > :not([data-slot="dialog-close"]) {
+    margin-inline-end: calc(-1 * var(--scrollbar-width, 0px));
+  }
 }
 
 .content[data-state="open"] {
