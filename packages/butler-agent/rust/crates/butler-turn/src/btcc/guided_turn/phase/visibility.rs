@@ -253,6 +253,14 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
     }
 }
 
+/// Workspace write tools every non-read-only tier offers.
+const WRITE_TOOLS: [&str; 4] = [
+    "run_command",
+    "read_tool_output_artifact",
+    "write_file",
+    "edit_file",
+];
+
 pub(super) fn legacy_visible<'a>(
     authorized: &[&'a GuidedCatalogTool],
     policy: &GuidedExecutionPolicy,
@@ -291,12 +299,7 @@ pub(super) fn legacy_visible<'a>(
     match policy.access_mode {
         AccessMode::ReadOnly => {}
         AccessMode::AskAlways | AccessMode::AskExceptReads | AccessMode::Auto => {
-            names.extend([
-                "run_command",
-                "read_tool_output_artifact",
-                "write_file",
-                "edit_file",
-            ]);
+            names.extend(WRITE_TOOLS);
             names.extend(
                 policy
                     .required_tools
@@ -306,12 +309,7 @@ pub(super) fn legacy_visible<'a>(
             );
         }
         AccessMode::FullAccess => {
-            names.extend([
-                "run_command",
-                "read_tool_output_artifact",
-                "write_file",
-                "edit_file",
-            ]);
+            names.extend(WRITE_TOOLS);
             names.extend(policy.required_tools.iter().map(String::as_str));
             if policy.has_project_id() {
                 names.insert("bind_session_git_worktree");
