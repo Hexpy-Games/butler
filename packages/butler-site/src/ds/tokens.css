@@ -332,11 +332,14 @@
   --icon-size-2xl: 32px;
   --sidebar-row-height: 30px;
   --sidebar-row-gap: 10px;
-  --radius-control: 8px;
-  --radius-panel: 10px;
-  --radius-popover: 12px;
-  --radius-composer: 22px;
-  --radius-pill: 999px;
+  /* The App's text size (큰 글자) zooms its UI by --ui-scale and radii divide
+     by it; the site never zooms, so it stays 1. */
+  --ui-scale: 1;
+  --radius-control: calc(8px / var(--ui-scale));
+  --radius-panel: calc(10px / var(--ui-scale));
+  --radius-popover: calc(12px / var(--ui-scale));
+  --radius-composer: calc(22px / var(--ui-scale));
+  --radius-pill: calc(999px / var(--ui-scale));
   --surface: rgba(255, 255, 255, 0.9);
   --surface-raised: var(--color-surface-raised);
   --workspace-bg: rgba(255, 255, 255, 0.94);

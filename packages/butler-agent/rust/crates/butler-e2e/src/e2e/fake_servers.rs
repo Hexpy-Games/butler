@@ -60,6 +60,7 @@ pub const OAUTH_ACCOUNT_ID: &str = "e2e-account-0001";
 #[derive(Clone, Debug)]
 pub struct ChatBehavior {
     pub answer: String,
+    pub finish_reason: String,
     pub script: Vec<Value>,
     /// Refuse `stream: true` with HTTP 400, as servers without streaming do.
     pub refuse_stream: bool,
@@ -86,6 +87,7 @@ impl Default for ChatBehavior {
         Self {
             answer: "Local models stream their answers word by word.".into(),
             script: Vec::new(),
+            finish_reason: "stop".into(),
             refuse_stream: false,
             chunk_delay: Duration::from_millis(150),
             omit_done: false,
@@ -323,7 +325,7 @@ fn chat_completion(chat: &ChatBehavior, body: &str, first_stream: bool) -> Respo
                 "id": "chatcmpl-e2e", "object": "chat.completion", "created": 1_759_000_000,
                 "model": model,
                 "choices": [{"index": 0, "message": {"role": "assistant", "content": chat.answer},
-                             "finish_reason": "stop"}],
+                             "finish_reason": chat.finish_reason}],
                 "usage": {"prompt_tokens": 12, "completion_tokens": 9, "total_tokens": 21}
             }),
         );
@@ -343,12 +345,24 @@ fn chat_completion(chat: &ChatBehavior, body: &str, first_stream: bool) -> Respo
     } else {
         StreamEnd::Done
     };
-    stream_response(&model, &chat.answer, chat.chunk_delay, end)
+    stream_response(
+        &model,
+        &chat.answer,
+        &chat.finish_reason,
+        chat.chunk_delay,
+        end,
+    )
 }
 
 /// `text/event-stream` chunks: the role, one word at a time, the finish
 /// reason, then `[DONE]` (as `end` says); each after `delay`.
-fn stream_response(model: &str, answer: &str, delay: Duration, end: StreamEnd) -> Response<Body> {
+fn stream_response(
+    model: &str,
+    answer: &str,
+    finish_reason: &str,
+    delay: Duration,
+    end: StreamEnd,
+) -> Response<Body> {
     let chunk = |delta: Value, finish: Value| {
         let event = json!({
             "id": "chatcmpl-e2e", "object": "chat.completion.chunk", "created": 1_759_000_000,
@@ -368,9 +382,9 @@ fn stream_response(model: &str, answer: &str, delay: Duration, end: StreamEnd) -
     );
     match end {
         StreamEnd::Cut => frames.truncate(3),
-        StreamEnd::FinishOnly => frames.push(chunk(json!({}), json!("stop"))),
+        StreamEnd::FinishOnly => frames.push(chunk(json!({}), json!(finish_reason))),
         StreamEnd::Done => {
-            frames.push(chunk(json!({}), json!("stop")));
+            frames.push(chunk(json!({}), json!(finish_reason)));
             frames.push("data: [DONE]\n\n".to_owned());
         }
     }

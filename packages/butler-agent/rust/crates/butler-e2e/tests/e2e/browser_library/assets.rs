@@ -163,7 +163,7 @@ async fn asset_scraps_reject_invalid_sources_without_replacing_saved_item()
     let mut neither = base.clone();
     neither.as_object_mut().unwrap().remove("asset");
     let mut crop = neither.clone();
-    crop["crop"] = json!("data:image/jpeg;base64,YQ==");
+    crop["crop"] = json!("data:image/png;base64,YQ==");
     let mut bad_url = base.clone();
     bad_url["url"] = json!("file:///picture.png");
     let mut null_crop = base.clone();

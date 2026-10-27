@@ -1,6 +1,8 @@
 //! App-owned retry actions for runtime-faulted turns.
 
+mod fresh;
 mod source;
+pub(super) use fresh::consume_fresh_retry;
 
 #[cfg(test)]
 pub(in crate::gateway::application) use source::RUNTIME_FAULT_SQL;
@@ -155,7 +157,10 @@ impl AppApplication {
     ) -> Result<MessageSendResult, GatewayApplicationError> {
         self.wait_retry_ready().await?;
         self.recover_expired().await?;
-        let operation_turn = turn_id;
+        if let Some(result) = self.existing_fresh_retry(&turn_id).await? {
+            return Ok(result);
+        }
+        let operation_turn = turn_id.clone();
         let source = self
             .storage
             .execute(move |db| current_controls_retry_source(db, &operation_turn))
@@ -167,7 +172,7 @@ impl AppApplication {
             content_parts: None,
             chat_id: Some(Value::String(source.chat_id.clone())),
             text: Some(Value::String(source.text)),
-            client_message_id: None,
+            client_message_id: Some(Value::String(format!("fresh-retry-{turn_id}"))),
             attachments: Some(Value::Array(
                 source
                     .attachment_ids
@@ -188,6 +193,7 @@ impl AppApplication {
                 request,
             },
             source.user_message_id,
+            turn_id,
         )
         .await
     }

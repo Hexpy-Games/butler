@@ -3,7 +3,7 @@ import { Box, FolderOpen, GroupTile, GroupTileMore, OverflowActionMenu, PencilLi
 import type { LibraryItem } from "../browser/libraryStore";
 import { useElementDrag } from "../browser/elementDrag";
 import { useCardDrag } from "./libraryCardDrag";
-import { safeHost } from "./libraryActions";
+import { hasWebSource, safeHost } from "./libraryActions";
 import type { GroupKind, LibraryGroup } from "./libraryApi";
 import { useLibraryDialogs } from "./libraryDialogs";
 import { startGroupDrag } from "./libraryGroupDrag";
@@ -11,7 +11,7 @@ import { openLibrary } from "./libraryNav";
 
 export function preview(item: LibraryItem): GroupTilePreview {
   if (item.crop) return { kind: "image", src: item.crop };
-  if (item.kind === "bookmark") return { kind: "site", host: item.site ?? safeHost(item.url) };
+  if (item.kind === "bookmark" && hasWebSource(item)) return { kind: "site", host: item.site ?? safeHost(item.url) };
   if (item.kind === "scrap") return { kind: "quote", text: item.text ?? item.title };
   return { kind: "document" };
 }

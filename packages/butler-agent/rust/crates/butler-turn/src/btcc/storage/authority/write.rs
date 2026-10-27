@@ -114,7 +114,7 @@ pub(super) fn decide(
         AND json_extract(source.authority_continuation_json,'$.requestRef')=request_ref) \
         OR EXISTS (SELECT 1 FROM json_each(source.authority_continuation_json, \
         '$.batch.concurrentCallIds') sibling WHERE sibling.value=source_call_id)))",
-        params![decision,schedule,if write.permission.is_some(){"conversation"}else{"once"},
+        params![decision,schedule,write.allow_scope,
             decision,write.alternative_input,write.now,write.request_ref,write.owner_session_id,
             write.source_session_id]).map_err(query::sql)?;
     if changed != 1 {

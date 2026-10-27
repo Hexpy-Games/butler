@@ -98,9 +98,9 @@ try {
   // The existing browser menu is the public history entry.
   await a.click("More"); await a.page.clickText("History", "[role=menuitem]");
   await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===5"), "history page loaded");
-  await a.page.clickSelector('[role=switch][aria-label="Visited by Butler"]');
+  await a.page.clickRole("switch", "Visited by Butler");
   await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===1"), "Butler filter applied");
-  await a.page.clickSelector('[role=switch][aria-label="Visited by Butler"]');
+  await a.page.clickRole("switch", "Visited by Butler");
   await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===5"), "all visits restored");
   assert.equal(await a.page.expression("document.querySelectorAll('[data-row-id] [role=checkbox]').length"), 0, "check boxes only in selection mode");
   await a.page.clickText("Select", "button");

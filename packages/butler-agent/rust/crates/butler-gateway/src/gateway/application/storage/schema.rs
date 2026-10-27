@@ -16,6 +16,7 @@ mod monitoring;
 pub(super) mod pending_asks;
 mod project_ledger_bindings;
 mod schedule_access;
+mod schedule_browser;
 mod schedule_legacy;
 mod security;
 mod session_reads;
@@ -127,8 +128,7 @@ fn create_queue_order_index(connection: &Connection) -> Result<(), AppStorageErr
 }
 
 /// `PRAGMA user_version` once the full-table backfills of an older database
-/// have run. Both leave a current database untouched, but finding that out
-/// reads every message.
+/// have run. Finding rows that need these backfills reads every message.
 const BACKFILLS_DONE: i64 = 1;
 
 fn run_backfills_once(connection: &Connection) -> Result<(), AppStorageError> {
@@ -171,7 +171,8 @@ pub(super) fn migrate_legacy_schedules(
     connection: &mut Connection,
     butler_data: Option<&Path>,
 ) -> Result<(), AppStorageError> {
-    schedule_legacy::migrate(connection, butler_data)
+    schedule_legacy::migrate(connection, butler_data)?;
+    schedule_browser::migrate(connection)
 }
 
 #[cfg(test)]

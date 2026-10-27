@@ -183,7 +183,7 @@ fn reply_for(wire: &str, body: &[u8]) -> Vec<u8> {
                 "span":null,"support":["n0u0","n0c0h"]}]})
         }
         .to_string();
-        json!({"id":"resp_binding","model":"gpt-5.5","output":[{"type":"message",
+        json!({"id":"resp_binding","model":"gpt-5.5","status":"completed","output":[{"type":"message",
             "content":[{"type":"output_text","text":binding}]}],
             "usage":{"input_tokens":3,"total_tokens":5}})
         .to_string()
@@ -195,7 +195,7 @@ fn reply_for(wire: &str, body: &[u8]) -> Vec<u8> {
                 "old":"tea","new":"coffee","evidence":[0]}],
             "attributes":[]})
         .to_string();
-        json!({"id":"resp_correction","model":"gpt-5.5",
+        json!({"id":"resp_correction","model":"gpt-5.5","status":"completed",
             "output":[{"type":"message","content":[{"type":"output_text",
                 "text":meaning}]}],"usage":{"input_tokens":3,"total_tokens":5}})
         .to_string()
@@ -308,7 +308,7 @@ fn assert_projection_committed(graph: &Connection) {
 #[tokio::test]
 async fn actual_native_provider_applies_registered_semantic_window() {
     let meaning=serde_json::json!({"status":"processed","entities":[{"name":"Straße","evidence":[0]}],"items":[{"kind":"preference","subject":0,"text":"Straße likes tea","evidence":[0]}],"attributes":[]}).to_string();
-    let body=serde_json::json!({"id":"resp_cognition","model":"gpt-5.5","output":[{"type":"message","content":[{"type":"output_text","text":meaning}]}],"usage":{"input_tokens":3,"total_tokens":5}}).to_string().into_bytes();
+    let body=serde_json::json!({"id":"resp_cognition","model":"gpt-5.5","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":meaning}]}],"usage":{"input_tokens":3,"total_tokens":5}}).to_string().into_bytes();
     let server_shutdown = tokio_util::sync::CancellationToken::new();
     let (endpoint, server, requests) = response_server(body, server_shutdown.clone()).await;
     let fixture = Fixture::new("native-semantic");

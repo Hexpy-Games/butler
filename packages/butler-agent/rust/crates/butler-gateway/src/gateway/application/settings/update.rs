@@ -121,6 +121,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "access_mode",
         "command_sandbox_enabled",
         "appearance_theme",
+        "text_size",
         "collapse_message_box",
         "show_thinking",
         "reduce_motion",

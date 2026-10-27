@@ -65,12 +65,7 @@ impl ChatGptPlanState {
         api: &str,
     ) -> Result<Option<Value>, Box<ProviderRequestError>> {
         let kind = event.get("type").and_then(Value::as_str).unwrap_or("");
-        if kind == "response.incomplete" {
-            return Err(diagnostics::plan::incomplete(event, provider, api));
-        }
-        if kind == "error" || kind == "response.failed" {
-            return Err(stream_error(event, provider, api));
-        }
+        check_terminal(event, provider, api)?;
         if kind == "response.output_text.delta" {
             if let Some(delta) = event.get("delta").and_then(Value::as_str) {
                 self.fallback_text.push_str(delta);
@@ -132,7 +127,7 @@ impl ChatGptPlanState {
             && let Some(response) = event.get("response").filter(|value| value.is_object())
         {
             // An incomplete Response (its output limit) is terminal, not a dropped stream.
-            self.emit(observer, &serde_json::json!({"type":"completed","streamId":self.stream_id(event),"status":"completed","raw":event}));
+            self.emit(observer, &serde_json::json!({"type":"completed","streamId":self.stream_id(event),"status":response.get("status"),"raw":event}));
             return Ok(Some(response.clone()));
         }
         Ok(None)
@@ -312,6 +307,26 @@ fn data(frame: &str) -> Option<String> {
         .join("\n");
     let data = butler_core::public_text::trim_js_whitespace(&data);
     (!data.is_empty()).then(|| data.to_owned())
+}
+
+/// Output limits are resumable responses; other terminal errors keep their policy.
+fn check_terminal(
+    event: &Value,
+    provider: &str,
+    api: &str,
+) -> Result<(), Box<ProviderRequestError>> {
+    match event.get("type").and_then(Value::as_str) {
+        Some("response.incomplete")
+            if event
+                .pointer("/response/incomplete_details/reason")
+                .and_then(Value::as_str)
+                != Some("max_output_tokens") =>
+        {
+            Err(diagnostics::plan::incomplete(event, provider, api))
+        }
+        Some("error" | "response.failed") => Err(stream_error(event, provider, api)),
+        _ => Ok(()),
+    }
 }
 
 fn stream_error(event: &Value, provider: &str, api: &str) -> Box<ProviderRequestError> {

@@ -78,6 +78,7 @@ interface SettingsUIStore {
   update: (
     partial: SettingsUpdatePayload,
     onSettingsChange: (settings: SettingsData) => void,
+    options?: { optimistic?: Partial<SettingsData>; silent?: boolean },
   ) => Promise<void>;
   savePersonalization: () => Promise<void>;
   importProfileMigration: (
@@ -234,8 +235,14 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
   },
 
   // Update settings
-  update: async (partial, onSettingsChange) => {
+  update: async (partial, onSettingsChange, options) => {
+    const previous = get().baseline;
     if (!get().draft) return;
+    if (options?.optimistic && previous) {
+      const next = settingsDraftFrom({ ...previous, ...options.optimistic });
+      set({ draft: { ...get().draft!, ...options.optimistic } });
+      onSettingsChange(next);
+    }
 
     set({ saving: true, localMessage: null });
     try {
@@ -250,11 +257,15 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
         baseline: saved,
       });
       onSettingsChange(saved);
-      notifyStatus(appCopy.settings.saved, {
+      if (!options?.silent) notifyStatus(appCopy.settings.saved, {
         id: "settings-update",
         tone: "ok",
       });
     } catch (error) {
+      if (options?.optimistic && previous) {
+        set({ draft: previous });
+        onSettingsChange(previous);
+      }
       notifyError(error, appCopy.settings.errors.saveFailed, {
         id: "settings-update",
       });

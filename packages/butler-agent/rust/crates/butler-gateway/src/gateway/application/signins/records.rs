@@ -362,7 +362,7 @@ fn site_row(db: &Connection, site: &str) -> Result<Value> {
             |row| row.get(0),
         )
         .map_err(sql)?;
-    let all: bool = db
+    let all = db
         .query_row(
             "SELECT all_conversations FROM browser_site_access WHERE site=?1",
             [site],
@@ -370,7 +370,7 @@ fn site_row(db: &Connection, site: &str) -> Result<Value> {
         )
         .optional()
         .map_err(sql)?
-        .is_some_and(|value| value == 1);
+        == Some(1);
     let mut uses = Vec::new();
     if let Some(id) = entry.as_ref().and_then(|e| e["id"].as_str()) {
         let mut statement = db

@@ -1,3 +1,4 @@
+import { appZoomFactor, textSizePreferences, registerTextSizeWindow, nativeAppBounds } from "../text-size.mjs";
 import { openLink } from "./links.mjs";
 import { BrowserWindow, WebContentsView, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
@@ -49,7 +50,7 @@ function wireChrome(browser, tab, win) {
       if (op === "state") return popupState(entry.tab);
       if (op === "close") return entry.win.close();
       if (op === "dialog") return answerUserDialog(entry.browser, { ...input, id: entry.tab.id });
-      if (op === "bounds" || op === "covered") return entry.browser.commandTab(op, entry.tab.id, input);
+      if (op === "bounds" || op === "covered") return entry.browser.commandTab(op, entry.tab.id, op === "bounds" ? nativeAppBounds(event.sender, input) : input);
       throw new Error("invalid_popup_call");
     });
   }
@@ -75,9 +76,10 @@ function popupView(browser, source, details, options, agent) {
     tab.url = webUrl(details.url) ?? ""; tab.popup = false;
   } else {
     tab.view = new WebContentsView({ ...options, webPreferences: { ...options.webPreferences, ...preferences } });
-    const win = new BrowserWindow({ width: 520, height: 620, minWidth: 320, minHeight: 240, show: false,
-      parent: browser.getWindow(), ...popupWindowOptions(), webPreferences: { sandbox: true, nodeIntegration: false,
+    const win = new BrowserWindow({ width: 520, height: 620, minWidth: Math.ceil(320 * appZoomFactor()), minHeight: Math.ceil(240 * appZoomFactor()), show: false,
+      parent: browser.getWindow(), ...popupWindowOptions(undefined, appZoomFactor()), webPreferences: { ...textSizePreferences(), sandbox: true, nodeIntegration: false,
         contextIsolation: true, preload: fileURLToPath(new URL("./popup-preload.cjs", import.meta.url)) } });
+    registerTextSizeWindow(win, { minimum: [320, 240], buttons: { x: 12, y: 13 } });
     const parent = browser.getWindow().getBounds();
     win.setPosition(Math.round(parent.x + (parent.width - 520) / 2), Math.round(parent.y + (parent.height - 620) / 2));
     tab.popupWindow = win; tab.popupChrome = { webContents: win.webContents };

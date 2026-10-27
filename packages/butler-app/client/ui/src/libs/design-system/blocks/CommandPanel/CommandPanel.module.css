@@ -71,7 +71,7 @@
 }
 
 .results mark {
-  border-radius: 2px;
+  border-radius: calc(2px / var(--ui-scale));
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: inherit;
   font-weight: var(--font-weight-semibold);

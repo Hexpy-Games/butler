@@ -35,5 +35,5 @@ export function captureLifecycleCss(root: Element): string {
     for (const block of tokens) for (const [name, value] of block.entries) if (used.has(name)) add(value);
   }
   const pinned = tokens.map(({ selector, entries }) => `${selector}{${entries.filter(([name]) => !name.startsWith("--") || used.has(name)).map(([name, value]) => `${name}:${value};`).join("")}}`);
-  return [...pinned, ...selected].join("").replace(/\s+/g, " ").replace(/\s*([{}:;,])\s*/g, "$1");
+  return [...pinned, ...selected].join("").replace(/\s+/g, " ").replace(/\s*([{}:;,])\s*/g, "$1").replace(/;}/g, "}");
 }

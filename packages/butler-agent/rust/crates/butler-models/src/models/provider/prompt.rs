@@ -163,6 +163,17 @@ fn complete(
     super::prefix_diagnostics::reported_usage(&mut observation.prefix, response);
     observe_usage(provider, request, config, &observation, Some(&decoded))?;
     let (_, _, api) = super::client::carrier(config);
+    if let Some(error) = super::result::stop::error(
+        &decoded.stop,
+        response,
+        carrier,
+        &config.metadata.provider_id,
+        api,
+        true,
+    ) {
+        provider.observations.failure(&error);
+        return Err(ModelRoundError::Provider(error));
+    }
     let text = decoded.text.ok_or_else(|| {
         ModelRoundError::Provider(Box::new(crate::models::diagnostics::empty(
             &config.metadata.provider_id,

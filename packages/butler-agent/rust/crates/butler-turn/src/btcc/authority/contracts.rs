@@ -205,6 +205,7 @@ pub struct AuthorityStoredExecution {
     // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub normalized_input: Value,
     pub decision: RequestDecision,
+    pub allow_scope: String,
     pub(crate) alternative_input: Option<String>,
     pub(crate) outcome: RequestOutcome,
     // Passthrough: tool/effect receipts, shaped by the capability.
@@ -428,6 +429,7 @@ pub(crate) struct DecisionWrite {
     pub(crate) owner_session_id: String,
     pub(crate) source_session_id: String,
     pub(crate) action: AuthorityAction,
+    pub(crate) allow_scope: String,
     pub(crate) permission: Option<ConversationPermission>,
     pub(crate) alternative_input: Option<String>,
     pub(crate) now: String,

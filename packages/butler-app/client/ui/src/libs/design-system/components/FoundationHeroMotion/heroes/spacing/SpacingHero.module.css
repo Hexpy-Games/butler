@@ -35,7 +35,7 @@
   left: 100%;
   inline-size: var(--space-md);
   block-size: var(--space-md);
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs, calc(2px / var(--ui-scale)));
   background: var(--block-fill);
   opacity: 0;
 }
@@ -292,13 +292,21 @@
 
 /* The insets meet the card's rounded inner corners (inside its hairline). */
 .gap[data-gap="pt"] > .fill {
-  border-start-start-radius: calc(var(--radius-panel) - var(--border-hairline));
-  border-start-end-radius: calc(var(--radius-panel) - var(--border-hairline));
+  border-start-start-radius: calc(
+    var(--radius-panel) - var(--border-hairline) / var(--ui-scale)
+  );
+  border-start-end-radius: calc(
+    var(--radius-panel) - var(--border-hairline) / var(--ui-scale)
+  );
 }
 
 .gap[data-gap="pb"] > .fill {
-  border-end-start-radius: calc(var(--radius-panel) - var(--border-hairline));
-  border-end-end-radius: calc(var(--radius-panel) - var(--border-hairline));
+  border-end-start-radius: calc(
+    var(--radius-panel) - var(--border-hairline) / var(--ui-scale)
+  );
+  border-end-end-radius: calc(
+    var(--radius-panel) - var(--border-hairline) / var(--ui-scale)
+  );
 }
 
 /* Right of the card: the column of units, then the label. */
