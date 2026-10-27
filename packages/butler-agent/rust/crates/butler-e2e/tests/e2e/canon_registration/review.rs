@@ -150,7 +150,7 @@ async fn project_chat_card_names_requested_project_and_move_destination_in_ui_la
                 .cloned()
         })
         .collect::<Vec<_>>();
-    assert!(!definitions.is_empty());
+    assert_ne!(definitions, [] as [serde_json::Value; 0]);
     assert!(
         definitions
             .iter()
