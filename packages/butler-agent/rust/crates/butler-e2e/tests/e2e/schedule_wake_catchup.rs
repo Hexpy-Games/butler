@@ -45,6 +45,11 @@ async fn ss12_automation_wake_catches_up_once() -> Result<(), HarnessError> {
         .env("BUTLER_E2E_SCHEDULER_INSTRUMENTATION", "1");
     super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
+    // Wake catch-up at 22:04 is outside this scenario's quiet-hours window.
+    let settings =
+        s.gw.patch("/settings", json!({"quiet_hours_start":"23:00"}))
+            .await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
     s.provider()?.set_chat_responder(|_| {
         Some(butler_e2e::e2e::provider::title_response(
             "This run ran late.",

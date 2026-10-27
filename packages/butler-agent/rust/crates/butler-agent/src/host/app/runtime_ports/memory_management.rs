@@ -184,6 +184,9 @@ impl AppMemoryManagement {
 }
 
 impl AppMemoryPort for AppMemoryManagement {
+    fn proposals_changed(&self) -> Option<Arc<tokio::sync::Notify>> {
+        Some(self.daily.patterns().proposals_changed())
+    }
     fn execute(
         &self,
         command: AppMemoryCommand,

@@ -302,3 +302,6 @@ mod worker_cap;
 mod canon_link;
 mod canon_registration;
 mod one_call_delegation;
+
+mod chats_initiated;
+mod chats_proposals;

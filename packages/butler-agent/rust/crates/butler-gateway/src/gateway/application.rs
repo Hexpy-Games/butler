@@ -2,6 +2,7 @@
 
 mod assets;
 mod image_usage;
+mod initiated;
 pub use image_usage::{AppImageUsageCommand, ImageUsageOperation, ImageUsageRecord};
 mod canon;
 mod canon_proposals;
@@ -219,6 +220,8 @@ pub struct AppApplication {
     automation_wake: Arc<tokio::sync::Notify>,
     automation_queued: Arc<std::sync::atomic::AtomicBool>,
     automation_runs: automations::AutomationRunOwner,
+    composing: initiated::Composing,
+    initiated_decisions: initiated::Decisions,
     queue_mutations: SessionQueueMutationOwner,
     session_creation: sessions::SessionCreationOwner,
     project_creation: projects::ProjectCreationOwner,
@@ -262,17 +265,12 @@ impl AppApplication {
         let project_root = initial_project_root(&storage).await?;
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
-        let retention_cursor = latest_event_cursor(&storage).await?;
         let (queue_dispatcher, queue_wake) =
             queue_dispatcher::QueueDispatcher::start(dependencies.service_shutdown.child_token());
         let (automation_wake, automation_queued) = automations::signals();
         let automation_scheduler = automations::AutomationScheduler::start(automation_wake.clone());
         let automation_runs = automations::AutomationRunOwner::start();
-        let (retention, retention_wake) = retention::RetentionOwner::start(
-            storage.clone(),
-            &subscribers.clone(),
-            retention_cursor,
-        );
+        let (retention, retention_wake) = handle::start_retention(&storage, &subscribers).await?;
         let projection =
             match projection::ProjectionOwner::start(projection::ProjectionContext::new(
                 storage.clone(),
@@ -281,7 +279,7 @@ impl AppApplication {
                 config.butler_data.clone(),
                 queue_wake.clone(),
                 retention_wake,
-                (automation_wake.clone(), automation_queued.clone()),
+                automation_wake.clone(),
             )) {
                 Ok(projection) => projection,
                 Err(error) => {
@@ -302,6 +300,8 @@ impl AppApplication {
             queue_dispatcher: Some(queue_dispatcher.clone()),
             queue_wake,
             automation_scheduler: Some(automation_scheduler),
+            composing: Default::default(),
+            initiated_decisions: Default::default(),
             automation_wake,
             automation_queued,
             automation_runs,

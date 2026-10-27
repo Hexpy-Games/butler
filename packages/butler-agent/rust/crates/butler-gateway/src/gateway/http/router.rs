@@ -122,6 +122,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/automations/{id}", Handler::Automations),
     ("/automations/{id}/pause", Handler::Automations),
     ("/automations/{id}/resume", Handler::Automations),
+    ("/automations/{id}/report-pause", Handler::Automations),
     ("/automations/{id}/run", Handler::Automations),
     ("/automations/{id}/runs", Handler::Automations),
     (
@@ -327,6 +328,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/sessions/{id}/controls", Handler::Controls),
     ("/sessions/{id}/plan-decisions/{id2}", Handler::Controls),
     ("/sessions/{id}/read", Handler::ProjectSession),
+    ("/sessions/{id}/composing", Handler::ProjectSession),
     ("/sessions/{id}/task-graphs", Handler::TaskGraphs),
     ("/sessions/{id}/worker-activity", Handler::Monitors),
     ("/sessions/{id}/worker-activity/{*path}", Handler::Monitors),
