@@ -100,7 +100,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "payment-methods", kind: "list", fields: [] },
     { id: "profiles", kind: "list", fields: [] },
     { id: "purchase-sites", kind: "form", fields: [] },
-    { id: "browser-import", kind: "list", fields: ["browser-import-bookmarks", "browser-import-passwords"] },
+    { id: "browser-import", kind: "form", fields: ["browser-import-data"] },
   ],
   // Remote-only controls hide when refused. Authority and keys stay visible.
   security: [

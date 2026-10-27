@@ -2495,6 +2495,11 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       fullDiskAccess: "Allow access to the browser folder",
       failed: "Couldn't import",
       needsKeychain: "Needs the system password store",
+      open: "Import from a browser",
+      dataLabel: "Browser data",
+      chooseBrowser: "Choose a browser",
+      steps: "Import steps",
+      next: "Next", back: "Back", done: "Done",
     },
     agentImport: {
       purpose: "Bring instructions and MCP servers into Butler",
