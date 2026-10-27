@@ -92,6 +92,7 @@ export const guidance: ShowcaseGuidance = {
     "The title names the plan, or asks what the request will do: what, where and how many (Edit 24 files in 'Desktop'?).",
     "Details are short concrete items (file names, the command line), at most three, then \"+N more\".",
     "Details show exactly what is decided: never cut a command or path; pass the Show more/less labels so a long block clamps with the full text one click away.",
+    "A complete reviewed input (memory text, schedule prompt, browser fields, MCP arguments) is a later detail line; the clamp keeps the first lines visible and Show more reveals the rest, never a silent cut.",
     "Paths in details are relative to the workspace, never absolute.",
     "Buttons are verbs (Accept plan, Deny, Allow once).",
     "media label names the target page (Open tab · Pine Grove Campground); a browser hand-off's primary action is 열어서 확인 / Open to check (butler-i18n browser.rail.openToCheck).",
