@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { electronViewInput } from "../support/electron-view-input";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
-import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
+import { nativeAligned, sheetSettled, shellReady } from "../support/browser-shell-acceptance";
 import { showPickSidebar } from "../support/browser-pick-acceptance";
 import { pointerPage } from "../support/browser-pointer-page";
 
@@ -34,6 +34,8 @@ async function input(action: string, from: Point, to?: Point) {
   await nativeAligned(app);
   if (from.selector) from = from.renderer ? await rendererPoint(from.selector) : await point(from.selector, from.where);
   if (to?.selector) to = to.renderer ? await rendererPoint(to.selector) : await point(to.selector, to.where);
+  // A press while the pane still moves meets the still that covers the page, never the page itself.
+  assert.ok(await app.page.expression(sheetSettled), `${action} waits for the browser sheet to settle`);
   console.log(action, from, to ?? "");
   await viewInput(action, from, to);
 }
