@@ -1291,6 +1291,11 @@ const butlerApp = Object.freeze({
   }),
   initialTextSize: process.argv.find(arg => arg.startsWith("--butler-text-size="))?.split("=")[1] ?? "default",
   setTextSize: value => ipcRenderer.invoke("butler:set-text-size", value),
+  onTextSizeShortcut: handler => {
+    const listener = (_event, command) => handler(command);
+    ipcRenderer.on("butler:text-size-shortcut", listener);
+    return () => ipcRenderer.removeListener("butler:text-size-shortcut", listener);
+  },
   setNativeAppearanceTheme: ({ theme } = {}) => ipcRenderer.invoke("butler:set-native-appearance-theme", { theme }),
   getPersonalization: () => requestJson("/personalization"),
   getProfileImportPrompt: ({ locale } = {}) => {

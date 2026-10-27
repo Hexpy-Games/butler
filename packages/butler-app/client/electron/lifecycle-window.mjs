@@ -64,7 +64,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   updateTitle();
   const area = bounds ?? screen.getPrimaryDisplay().workArea;
   window.setPosition(Math.round(area.x + (area.width - 296 * appZoomFactor()) / 2), Math.round(area.y + (area.height - manifest.initialHeight * appZoomFactor()) / 2));
-  window.setMenu(null);
+  window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   let finishTrace = () => {};

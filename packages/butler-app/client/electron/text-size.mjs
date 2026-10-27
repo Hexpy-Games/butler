@@ -1,10 +1,12 @@
-import { ipcMain, screen } from "electron";
+import { ipcMain, screen, Menu, MenuItem } from "electron";
 import { readStartupAppearance } from "./startup-appearance.mjs";
-import { positionWindowButtons } from "./butler-platform/text-size.mjs";
+import { positionWindowButtons, appMenuPrefix } from "./butler-platform/text-size.mjs";
 
 const factors = { default: 1, large: 1.15, larger: 1.3 };
 const windows = new Map();
 let selected;
+let settingsContents;
+const pendingShortcuts = [];
 
 export function currentTextSize() {
   if (!selected) {
@@ -16,6 +18,27 @@ export function currentTextSize() {
 export function appZoomFactor() { return factors[currentTextSize()]; }
 export function textSizePreferences() {
   return { zoomFactor: appZoomFactor(), additionalArguments: [`--butler-text-size=${currentTextSize()}`] };
+}
+/** Replace native zoom roles too: on macOS, setting a null menu leaves NSApp's menu intact. */
+export function installTextSizeMenu() {
+  const items = [zoomItem("zoomin", "increase"), zoomItem("zoomout", "decrease"), zoomItem("resetzoom", "reset")];
+  const equal = zoomItem("zoomin", "increase", "CommandOrControl+=");
+  equal.visible = false;
+  equal.acceleratorWorksWhenHidden = true;
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...appMenuPrefix(), { role: "editMenu" }, { label: "View", submenu: [...items, equal] }, { role: "windowMenu" },
+  ]));
+}
+function zoomItem(role, command, accelerator) {
+  const item = new MenuItem({ role, id: `text-size-${role}${accelerator ? "-equal" : ""}`,
+    ...(accelerator ? { accelerator } : {}) });
+  const original = item.click;
+  item.click = (event, window, contents) => {
+    if (!contents || !windows.has(contents.id)) return original(event, window, contents);
+    if (settingsContents) settingsContents.send("butler:text-size-shortcut", command);
+    else pendingShortcuts.push(command);
+  };
+  return item;
 }
 function updateWindow(win, options) {
   const factor = appZoomFactor();
@@ -34,13 +57,27 @@ function updateWindow(win, options) {
 /** Only registered App surfaces can change App zoom; web page and frame senders cannot. */
 export function registerTextSizeWindow(win, options = {}) {
   options.factor = appZoomFactor();
-  const id = win.webContents.id;
+  const contents = win.webContents;
+  const id = contents.id;
   windows.set(id, { win, options });
-  win.once("closed", () => windows.delete(id));
+  if (!Menu.getApplicationMenu()?.getMenuItemById("text-size-zoomin")) installTextSizeMenu();
+  void contents.setVisualZoomLevelLimits(1, 1);
+  contents.on("zoom-changed", event => event.preventDefault());
+  contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
+    if (mainFrame && !inPlace && settingsContents === contents) settingsContents = undefined;
+  });
+  win.once("closed", () => {
+    if (settingsContents === contents) settingsContents = undefined;
+    windows.delete(id);
+  });
 }
 ipcMain.handle("butler:set-text-size", (event, value) => {
   if (!windows.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) return;
   if (typeof value !== "string" || !Object.hasOwn(factors, value)) throw new Error("invalid_text_size");
+  if (windows.get(event.sender.id).options.settings) {
+    settingsContents = event.sender;
+    for (const command of pendingShortcuts.splice(0)) settingsContents.send("butler:text-size-shortcut", command);
+  }
   if (selected === value) return;
   selected = value;
   for (const { win, options } of windows.values()) updateWindow(win, options);

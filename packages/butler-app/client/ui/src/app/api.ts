@@ -60,6 +60,7 @@ export interface PowerState {
 }
 
 interface ButlerAppBridge extends PendingAsksBridge {
+  onTextSizeShortcut?: (handler: (command: "increase" | "decrease" | "reset") => void) => () => void;
   initialTextSize?: SettingsView["text_size"];
   setTextSize?: (value: SettingsView["text_size"]) => Promise<void>;
   log?: (row: { level: "DEBUG"; category: "http.client"; event: "image.fetch"; attrs: { url: string } }) => void;

@@ -5,7 +5,7 @@ import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./sh
 import * as desktopShell from "./desktop-shell.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
-import { appZoomFactor, textSizePreferences, registerTextSizeWindow } from "./text-size.mjs";
+import { appZoomFactor, textSizePreferences, registerTextSizeWindow, installTextSizeMenu } from "./text-size.mjs";
 import { scaledWindowButtonPosition } from "./butler-platform/text-size.mjs";
 import { defaultWindowBounds } from "./window-bounds.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
@@ -2045,7 +2045,7 @@ async function createWindow() {
         ...(dataGeneration?.resetFailed ? ["--butler-full-reset-failed"] : [])],
     },
   });
-  registerTextSizeWindow(win, { minimum: [344, 480], buttons: macTrafficLightPosition });
+  registerTextSizeWindow(win, { settings: true, minimum: [344, 480], buttons: macTrafficLightPosition });
   mainWindow = win;
   win.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
     if (!isMainFrame) return;
@@ -2061,7 +2061,6 @@ async function createWindow() {
   win.webContents.on("before-input-event", (event, input) => {
     if (userBrowser.shortcut(input)) event.preventDefault();
   });
-  win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
     if (isWindows && !finalQuitAllowed) {
@@ -2728,7 +2727,7 @@ if (appSingleInstanceLock) {
       configureAppIcon();
       suppressInitialWindowForLogin = usesAppForegroundLifecycle && isMac &&
         app.getLoginItemSettings().wasOpenedAtLogin;
-      Menu.setApplicationMenu(null);
+      installTextSizeMenu();
       nativeTheme.on("updated", updateTrayIcon);
       if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
         process.exit(0);

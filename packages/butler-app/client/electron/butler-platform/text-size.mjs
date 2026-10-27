@@ -5,3 +5,8 @@ export function scaledWindowButtonPosition(factor, base = { x: 20, y: 18 }) {
 export function positionWindowButtons(window, factor, base) {
   if (process.platform === "darwin") window.setWindowButtonPosition(scaledWindowButtonPosition(factor, base));
 }
+
+/** The macOS application menu supplies the standard Quit and Hide commands. */
+export function appMenuPrefix() {
+  return process.platform === "darwin" ? [{ role: "appMenu" }] : [];
+}

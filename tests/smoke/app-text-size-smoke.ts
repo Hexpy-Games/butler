@@ -56,9 +56,10 @@ async function launch() {
   }).observe(document, {childList:true, subtree:true});`);
   writeFileSync(join(scratch, "entry.mjs"), `import {createRequire} from 'node:module';
     const {appendFileSync}=createRequire(${JSON.stringify(pathToFileURL(join(electronRoot, 'package.json')).href)})('node:fs');
-    const {app}=createRequire(${JSON.stringify(pathToFileURL(join(electronRoot, "package.json")).href)})('electron');
+    const {app,Menu}=createRequire(${JSON.stringify(pathToFileURL(join(electronRoot, "package.json")).href)})('electron');
     const fail=error=>{appendFileSync(${JSON.stringify(join(evidence, 'native-errors.log'))},String(error?.stack||error)+'\\n');app.exit(1);};
     process.on('uncaughtException',fail);process.on('unhandledRejection',fail);
+    app.whenReady().then(()=>{globalThis.textSizeNativeMenu=Menu.getApplicationMenu();});
     app.setAppPath(${JSON.stringify(electronRoot)});
     globalThis.textSizeFirstPaint=[];
     app.on('browser-window-created',(_event,w)=>{
@@ -151,6 +152,37 @@ async function radii(page: Page, factor: number) {
     }));
   })(${factor})`);
 }
+async function shortcut(main: TextSizeMain, role: string, contents = `${win}.webContents`, alias = "") {
+  await main.evaluate(`(()=>{
+    const {Menu}=${electron};
+    const find=menu=>menu?.items.flatMap(item=>[item,...(item.submenu?find(item.submenu):[])] )??[];
+    const items=find(Menu.getApplicationMenu()??globalThis.textSizeNativeMenu);
+    const item=items.find(item=>item.id===${JSON.stringify(`text-size-${role}${alias}`)})??items.find(item=>item.role===${JSON.stringify(role)});
+    if(!item)throw new Error('Missing zoom accelerator: '+${JSON.stringify(role)});
+    ${contents}.focus();item.click({},${win},${contents});
+  })()`);
+  await main.evaluate(`${contents}.executeJavaScript('new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))')`);
+}
+async function assertSize(page: Page, main: TextSizeMain, size: "default" | "large" | "larger", label: string) {
+  const factor = textSizeFactor(size);
+  await until(() => server.api<{text_size:string}>("/settings"), settings => settings.text_size === size, `persisted text size ${size}`);
+  await until(() => main.evaluate(`${win}.webContents.getZoomFactor()`), zoom => zoom === factor, `accelerator zoom ${factor}`);
+  assert.equal(await page.expression("Number(document.documentElement.style.getPropertyValue('--ui-scale'))"), factor);
+  assert.equal(await page.expression(`document.querySelector('[data-setting-id="text-size"] [aria-checked="true"]')?.textContent?.trim()`), label);
+  console.log(JSON.stringify({ acceleratorSize: size, zoom: factor, scale: factor, selectedLabel: label }));
+}
+async function gestures(main: TextSizeMain, contents: string) {
+  await main.evaluate(`(async()=>{
+    const wc=${contents};
+    const point=await wc.executeJavaScript('({x:innerWidth/2,y:innerHeight/2})');
+    wc.debugger.attach('1.3');
+    try {
+      for(const modifiers of [2,4]) await wc.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseWheel',...point,deltaY:-120,deltaX:0,modifiers});
+      await wc.debugger.sendCommand('Input.synthesizePinchGesture',{...point,scaleFactor:1.5,gestureSourceType:'touch'});
+      return await wc.debugger.sendCommand('Runtime.evaluate',{expression:'new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(visualViewport.scale))))',awaitPromise:true,returnByValue:true});
+    }finally{wc.debugger.detach();}
+  })()`).then(result => assert.equal((result as {result:{value:number}}).result.value, 1, 'pinch visual zoom stays at 1'));
+}
 const site = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("<!doctype html><title>Local page</title><p>Independent browser zoom</p>", { headers: { "content-type": "text/html" } }) });
 let app: Awaited<ReturnType<typeof launch>> | undefined;
 try {
@@ -188,10 +220,42 @@ try {
     console.log(JSON.stringify({ factor, radiiDip: values }));
     await appearance(page);
   }
-  for (const shortcut of ['Meta+Equal', 'Meta+Minus', 'Meta+0']) {
-    await main.evaluate(`${win}.webContents.sendInputEvent({type:"keyDown",keyCode:${JSON.stringify(shortcut.split("+")[1])},modifiers:["meta"]});${win}.webContents.sendInputEvent({type:"keyUp",keyCode:${JSON.stringify(shortcut.split("+")[1])},modifiers:["meta"]})`);
-    assert.equal(await main.evaluate(`${win}.webContents.getZoomFactor()`), 1.3, `${shortcut} does not desync text size`);
-  }
+  await change(page, copy.settings.options.textSizeLarge, 1.15);
+  await assertSize(page, main, "large", copy.settings.options.textSizeLarge);
+  writeFileSync(join(evidence, "sidebar-before-shortcut.png"), await page.screenshot());
+  console.log("zoom accelerator baseline", await main.evaluate(`({zoom:${win}.webContents.getZoomFactor(),menu:${electron}.Menu.getApplicationMenu()?.items.map(x=>x.role)??null,vibrancy:${win}.getVibrancy?.(),background:${win}.getBackgroundColor()})`));
+  await shortcut(main, "zoomin");
+  console.log("zoom accelerator first result", await main.evaluate(`${win}.webContents.getZoomFactor()`));
+  await assertSize(page, main, "larger", copy.settings.options.textSizeLarger);
+  await shortcut(main, "zoomin", `${win}.webContents`, "-equal");
+  await assertSize(page, main, "larger", copy.settings.options.textSizeLarger);
+  await main.evaluate(`(async()=>{
+    const {createLifecycleWindow}=${module}(${JSON.stringify(join(electronRoot, "lifecycle-window.mjs"))});
+    globalThis.textSizeLifecycle=createLifecycleWindow({BrowserWindow:${electron}.BrowserWindow,kind:'startup'});
+    return true;
+  })()`);
+  const lifecycle = "globalThis.textSizeLifecycle.window.webContents";
+  await until(() => main.evaluate<boolean>(`${lifecycle}.getURL().includes('lifecycle.html') && !${lifecycle}.isLoading()`), Boolean, 'lifecycle loaded');
+  await gestures(main, lifecycle);
+  assert.equal(await main.evaluate(`${lifecycle}.getZoomFactor()`), 1.3);
+  await shortcut(main, "zoomout", lifecycle);
+  await assertSize(page, main, "large", copy.settings.options.textSizeLarge);
+  assert.equal(await main.evaluate(`${lifecycle}.getZoomFactor()`), 1.15, 'lifecycle follows the setting');
+  await main.evaluate('globalThis.textSizeLifecycle.destroy()');
+  await main.evaluate(`${win}.focus();${win}.webContents.focus()`);
+  await shortcut(main, "zoomout");
+  await assertSize(page, main, "default", copy.settings.options.textSizeDefault);
+  await shortcut(main, "zoomout");
+  await assertSize(page, main, "default", copy.settings.options.textSizeDefault);
+  await change(page, copy.settings.options.textSizeLarger, 1.3);
+  await assertSize(page, main, "larger", copy.settings.options.textSizeLarger);
+  await shortcut(main, "resetzoom");
+  await assertSize(page, main, "default", copy.settings.options.textSizeDefault);
+  await change(page, copy.settings.options.textSizeLarger, 1.3);
+  await assertSize(page, main, "larger", copy.settings.options.textSizeLarger);
+  await gestures(main, `${win}.webContents`);
+  await assertSize(page, main, "larger", copy.settings.options.textSizeLarger);
+  writeFileSync(join(evidence, "sidebar-branch.png"), await page.screenshot());
   await main.evaluate(`(()=>{const {WebContentsView}=${electron};
     globalThis.zoomProbe=new WebContentsView({webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});
     void globalThis.zoomProbe.webContents.loadURL('app://butler/browser-overlay.html');})()`);
@@ -245,6 +309,11 @@ try {
   await until(() => main.evaluate<boolean>(`${agent}.bounds.visible === false && ${agent}.bounds.scale === 1`), Boolean, 'agent parked at its own scale');
   const agentScale = await main.evaluate<number>(`${agent}.bounds.scale`);
   assert.equal(await main.evaluate(`${webContents}.getZoomFactor()`), 1, 'page starts at its own zoom 1');
+  await shortcut(main, "zoomin", webContents);
+  assert(Math.abs(await main.evaluate<number>(`${webContents}.getZoomFactor()`) - Math.sqrt(1.2)) < 0.001, 'browser menu keeps normal Electron zoom step');
+  assert.equal(await main.evaluate(`${win}.webContents.getZoomFactor()`), 1.3, 'browser shortcut leaves App size unchanged');
+  await shortcut(main, "resetzoom", webContents);
+  assert.equal(await main.evaluate(`${webContents}.getZoomFactor()`), 1);
   for (const [size, factor] of (['default','large','larger'] as const).map(size => [size, textSizeFactor(size)] as const)) {
     await page.expression(`window.butlerApp.setTextSize(${JSON.stringify(size)})`);
     assert.equal(await main.evaluate(`${webContents}.getZoomFactor()`), 1, "web page keeps its own zoom");
