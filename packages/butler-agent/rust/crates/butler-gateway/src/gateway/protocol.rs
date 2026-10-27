@@ -239,6 +239,9 @@ pub enum ChangedFileLineType {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MessageRecord {
+    /// Open origin contract: S4 work results and S5 connector briefs add kinds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initiated: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_parts: Option<MessageContent>,
     pub id: String,

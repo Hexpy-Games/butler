@@ -7,7 +7,7 @@ use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session'),a.access_mode,a.schedule_type,a.run_at,a.start_at,a.schedule_json,a.model,a.browser_signin,a.browser_payment";
 
 #[derive(Clone)]
-pub(super) struct AutomationRow {
+pub(in crate::gateway::application) struct AutomationRow {
     pub id: String,
     pub title: String,
     pub prompt: String,
@@ -34,7 +34,7 @@ pub(super) struct AutomationRow {
     pub browser_payment: bool,
 }
 
-pub(super) struct QueuedRunRow {
+pub(in crate::gateway::application) struct QueuedRunRow {
     pub run_id: String,
     pub trigger: String,
     pub placeholder_id: Option<String>,
@@ -42,7 +42,10 @@ pub(super) struct QueuedRunRow {
     pub automation: AutomationRow,
 }
 
-pub(super) fn target(db: &Connection, id: &str) -> Result<(String, String), AppStorageError> {
+pub(in crate::gateway::application) fn target(
+    db: &Connection,
+    id: &str,
+) -> Result<(String, String), AppStorageError> {
     db.query_row("SELECT kind,title FROM chats WHERE id=?1", [id], |row| {
         Ok((row.get(0)?, row.get(1)?))
     })
@@ -51,7 +54,10 @@ pub(super) fn target(db: &Connection, id: &str) -> Result<(String, String), AppS
     .ok_or_else(|| AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found."))
 }
 
-pub(super) fn get(db: &Connection, id: &str) -> Result<Option<AutomationRow>, AppStorageError> {
+pub(in crate::gateway::application) fn get(
+    db: &Connection,
+    id: &str,
+) -> Result<Option<AutomationRow>, AppStorageError> {
     let sql = format!(
         "SELECT {COLUMNS} FROM app_automations a LEFT JOIN chats c ON c.id=a.target_session_id WHERE a.id=?1"
     );
@@ -60,13 +66,16 @@ pub(super) fn get(db: &Connection, id: &str) -> Result<Option<AutomationRow>, Ap
         .map_err(AppStorageError::sqlite)
 }
 
-pub(super) fn active(db: &Connection, id: &str) -> Result<AutomationRow, AppStorageError> {
+pub(in crate::gateway::application) fn active(
+    db: &Connection,
+    id: &str,
+) -> Result<AutomationRow, AppStorageError> {
     get(db, id)?
         .filter(|row| row.state != "deleted")
         .ok_or_else(not_found)
 }
 
-pub(super) fn list(
+pub(in crate::gateway::application) fn list(
     db: &Connection,
     target_id: Option<&str>,
     include_deleted: bool,
@@ -93,7 +102,10 @@ pub(super) fn list(
     Ok(rows)
 }
 
-pub(super) fn due(db: &Connection, now: &str) -> Result<Vec<AutomationRow>, AppStorageError> {
+pub(in crate::gateway::application) fn due(
+    db: &Connection,
+    now: &str,
+) -> Result<Vec<AutomationRow>, AppStorageError> {
     let sql = format!(
         "SELECT {COLUMNS} FROM app_automations a LEFT JOIN chats c ON c.id=a.target_session_id WHERE a.state='enabled' AND a.next_run_at IS NOT NULL AND a.next_run_at<=?1 ORDER BY a.next_run_at LIMIT 20"
     );
@@ -105,7 +117,9 @@ pub(super) fn due(db: &Connection, now: &str) -> Result<Vec<AutomationRow>, AppS
         .map_err(AppStorageError::sqlite)
 }
 
-pub(super) fn next_due(db: &Connection) -> Result<Option<String>, AppStorageError> {
+pub(in crate::gateway::application) fn next_due(
+    db: &Connection,
+) -> Result<Option<String>, AppStorageError> {
     db.query_row(
         "SELECT next_run_at FROM app_automations WHERE state='enabled' AND next_run_at IS NOT NULL ORDER BY next_run_at LIMIT 1",
         [], |row| row.get(0),
@@ -120,7 +134,9 @@ pub(in crate::gateway::application) fn queued_sql() -> String {
     )
 }
 
-pub(super) fn queued(db: &Connection) -> Result<Vec<QueuedRunRow>, AppStorageError> {
+pub(in crate::gateway::application) fn queued(
+    db: &Connection,
+) -> Result<Vec<QueuedRunRow>, AppStorageError> {
     let mut statement = db
         .prepare_cached(&queued_sql())
         .map_err(AppStorageError::sqlite)?;
@@ -139,7 +155,7 @@ pub(super) fn queued(db: &Connection) -> Result<Vec<QueuedRunRow>, AppStorageErr
         .map_err(AppStorageError::sqlite)
 }
 
-pub(super) fn runs(
+pub(in crate::gateway::application) fn runs(
     db: &Connection,
     id: &str,
 ) -> Result<Vec<AutomationRunSummary>, AppStorageError> {
@@ -151,11 +167,14 @@ pub(super) fn runs(
         .map_err(AppStorageError::sqlite)
 }
 
-pub(super) fn run(db: &Connection, id: &str) -> Result<AutomationRunSummary, AppStorageError> {
+pub(in crate::gateway::application) fn run(
+    db: &Connection,
+    id: &str,
+) -> Result<AutomationRunSummary, AppStorageError> {
     db.query_row("SELECT id,automation_id,target_session_id,state,trigger,started_at,completed_at,safe_error_code,queued_message_id,turn_id,scheduled_at,late FROM app_automation_runs WHERE id=?1", [id], run_row).map_err(AppStorageError::sqlite)
 }
 
-pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
+pub(in crate::gateway::application) fn summary(value: AutomationRow) -> AutomationSummary {
     AutomationSummary {
         id: value.id,
         title: value.title,
@@ -183,7 +202,7 @@ pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
     }
 }
 
-pub(super) fn not_found() -> AppStorageError {
+pub(in crate::gateway::application) fn not_found() -> AppStorageError {
     AppStorageError::new(AppStorageCode::AutomationNotFound, "Schedule not found.")
 }
 

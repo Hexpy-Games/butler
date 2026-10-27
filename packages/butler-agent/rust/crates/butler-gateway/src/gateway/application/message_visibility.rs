@@ -31,7 +31,10 @@ macro_rules! owner_visible {
           AND m.text GLOB '*'||char(10)||'Result ref: steward-result-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*') \
          OR EXISTS (SELECT 1 FROM turns dt WHERE dt.user_message_id=m.id AND \
          CASE WHEN json_valid(dt.execution_controls_json) \
-         THEN json_extract(dt.execution_controls_json,'$.subsession_result') END IS NOT NULL)))"
+         THEN json_extract(dt.execution_controls_json,'$.subsession_result') END IS NOT NULL) \
+         OR EXISTS (SELECT 1 FROM turns st WHERE st.user_message_id=m.id AND st.chat_id='general' AND \
+         CASE WHEN json_valid(st.execution_controls_json) \
+         THEN json_extract(st.execution_controls_json,'$.schedule_run') END IS NOT NULL)))"
     };
 }
 pub(super) use owner_visible;

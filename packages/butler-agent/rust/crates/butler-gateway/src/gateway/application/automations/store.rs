@@ -64,6 +64,7 @@ impl AppApplication {
         &self,
         input: CreateAutomationRequest,
     ) -> Result<AutomationMutationResult, GatewayApplicationError> {
+        let input = self.calendar_timezone(input).await?;
         let model = self
             .validate_automation_model(input.model.as_deref())
             .await?;
@@ -134,6 +135,22 @@ impl AppApplication {
             self.automation_wake.notify_one();
         }
         result
+    }
+
+    async fn calendar_timezone(
+        &self,
+        mut input: CreateAutomationRequest,
+    ) -> Result<CreateAutomationRequest, GatewayApplicationError> {
+        let Some(rule) = input.schedule.as_mut().filter(|rule| rule.tz.is_empty()) else {
+            return Ok(input);
+        };
+        let facts = self.dependencies.settings_facts.snapshot()?;
+        rule.tz = self
+            .storage
+            .read(move |db| settings::effective_timezone(db, &facts))
+            .await
+            .map_err(app_error)?;
+        Ok(input)
     }
 
     pub(crate) async fn update_automation_owned(

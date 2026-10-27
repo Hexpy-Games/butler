@@ -11,6 +11,8 @@ pub struct ApprovalSchedule {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interval_seconds: Option<i64>,
@@ -41,6 +43,9 @@ pub(in crate::btcc::authority) fn schedule(input: &Value) -> ApprovalSchedule {
                 .unwrap_or(0)
                 .saturating_mul(60)
         }),
+        time: matches!(schedule_type.as_str(), "daily" | "weekdays")
+            .then(|| text("time"))
+            .flatten(),
         schedule_type,
         run_at: text("run_at"),
         start_at: text("start_at"),
@@ -59,6 +64,7 @@ pub(in crate::btcc::authority) fn schedule_update(input: &Value) -> ApprovalSche
             .trim()
             .to_owned(),
         schedule_type: "update".into(),
+        time: None,
         run_at: None,
         start_at: None,
         interval_seconds: None,

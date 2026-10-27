@@ -14,6 +14,7 @@ pub(super) fn event(id: u64) -> AppEventEnvelope {
 pub(super) fn message_result() -> MessageSendResult {
     MessageSendResult {
         accepted: Some(MessageRecord {
+            initiated: None,
             content_parts: None,
             id: "message-1".into(),
             chat_id: "general".into(),
