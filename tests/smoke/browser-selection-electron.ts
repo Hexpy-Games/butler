@@ -24,6 +24,18 @@ async function pick(selector: string) {
 async function selected(count: number) {
   await waitBrowser(async () => (await app.call<{ tabs: Array<{ id: string; selectionCount: number }> }>("state")).tabs.find(t => t.id === tab)?.selectionCount === count, `${count} tab picks`);
 }
+/** While picks are held, the page stays on screen: attached, or its still while the slot is covered. */
+async function watchPage() {
+  await app.main(`(()=>{const b=globalThis.browserAgentSubject,t=${subject(tab)};globalThis.pageShown={samples:0,gone:[]};
+    globalThis.pageShownTimer=setInterval(()=>{if(b.selection.dragTab!==t.id||!b.areaVisible||!t.slot?.visible)return;pageShown.samples++;
+      if(t.attached!==b.getWindow()&&!(t.covered&&t.still))pageShown.gone.push({covered:t.covered,still:Boolean(t.still)})},10)})()`);
+}
+async function pageStayed(label: string, held: boolean) {
+  const shown = await app.main<{ samples: number; gone: unknown[] }>("(clearInterval(pageShownTimer),pageShown)");
+  writeFileSync(join(evidence, `page-shown-${label.replace(/[^a-z0-9]+/giu, "-")}-${Date.now()}.json`), JSON.stringify(shown));
+  if (held) assert.ok(shown.samples > 10, `${label}: held drag sampled (${shown.samples})`);
+  assert.equal(shown.gone.length, 0, `${label}: the page stays on screen during the held drag (${shown.gone.length} of ${shown.samples} samples gone)`);
+}
 async function drag(selector: string, screenshot?: string) {
   if (!selector.includes("composer-card")) {
     await showPickSidebar(app);
@@ -35,6 +47,14 @@ async function drag(selector: string, screenshot?: string) {
   const x = Math.round(origin.x * scale), y = Math.round(origin.y * scale);
   await app.main(`(()=>{const p=globalThis.browserAgentSubject.pointer.view.webContents;p.sendInputEvent({type:"mouseDown",x:${x},y:${y},button:"left",clickCount:1});p.sendInputEvent({type:"mouseMove",x:${x+20},y:${y},button:"left",movementX:20,movementY:0});})()`);
   await waitBrowser(() => app.main("Boolean(globalThis.browserAgentSubject.selection.dragTab)"), "native overlay starts drag");
+  await watchPage();
+  // Held over the page (no drop target) before the destination. The screenshot matrix keeps its
+  // direct path: leaving a peeked sidebar for the page would close it.
+  if (!screenshot) {
+    const page = await app.main<{ x: number; y: number; width: number; height: number }>(`${subject(tab)}.view.getBounds()`);
+    await app.page.dragPointer(page.x + page.width * 0.6, page.y + page.height * 0.6);
+    await new Promise(done => setTimeout(done, 400));
+  }
   await app.page.dragPointer(point.x, point.y);
   await dragPreview(app, false);
   if (screenshot) {
@@ -46,6 +66,7 @@ async function drag(selector: string, screenshot?: string) {
   writeFileSync(join(evidence, `drag-${Date.now()}.json`), JSON.stringify(await app.page.expression(`(()=>{const n=document.elementFromPoint(${point.x},${point.y});return {hit:n?.outerHTML,drop:[...document.querySelectorAll(\'[data-slot="nav-drop-target"]\')].filter(n=>n.dataset.drop).map(n=>({drop:n.dataset.drop,html:n.outerHTML.slice(0,600)}))}})()`)));
   await app.page.pointerUp(screenshot ? 900 : point.x, screenshot ? 24 : point.y);
   await waitBrowser(() => app.main("!globalThis.browserAgentSubject.selection.dragTab"), "renderer ends native drag");
+  await pageStayed(screenshot ?? selector, !screenshot);
   await app.main(`globalThis.browserAgentSubject.pointer.view.webContents.sendInputEvent({type:"mouseUp",x:${x+20},y:${y},button:"left",clickCount:1})`);
   writeFileSync(join(evidence, `drop-${Date.now()}.json`), JSON.stringify(await app.page.expression("({events:window.dropPointerProof,toasts:[...document.querySelectorAll('[data-sonner-toast]')].map(n=>n.textContent)})")));
   await nativeAligned(app);
