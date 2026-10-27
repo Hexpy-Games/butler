@@ -3075,7 +3075,7 @@
       "definition": {
         "type": "function",
         "name": "create_automation",
-        "description": "Create a Butler schedule (예약 작업): a one-shot or interval scheduled prompt routed back into a Butler session.",
+        "description": "Create a Butler schedule (예약 작업): a prompt that runs later in a Butler session, once, at an interval, or every day or every weekday at a local time.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -3100,7 +3100,9 @@
               "type": "string",
               "enum": [
                 "once",
-                "interval"
+                "interval",
+                "daily",
+                "weekdays"
               ]
             },
             "run_at": {
@@ -3114,6 +3116,10 @@
             "start_at": {
               "type": "string",
               "description": "Optional ISO start timestamp for interval schedules."
+            },
+            "time": {
+              "type": "string",
+              "description": "Local time as HH:MM in the user's timezone, for daily and weekdays schedules."
             }
           },
           "required": [
@@ -11800,7 +11806,7 @@
     "create_automation": {
       "type": "function",
       "name": "create_automation",
-      "description": "Create a Butler schedule (예약 작업): a one-shot or interval scheduled prompt routed back into a Butler session.",
+      "description": "Create a Butler schedule (예약 작업): a prompt that runs later in a Butler session, once, at an interval, or every day or every weekday at a local time.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11825,7 +11831,9 @@
             "type": "string",
             "enum": [
               "once",
-              "interval"
+              "interval",
+              "daily",
+              "weekdays"
             ]
           },
           "run_at": {
@@ -11848,6 +11856,10 @@
               "full_access"
             ],
             "description": "Access for this schedule; omitted uses the target conversation mode."
+          },
+          "time": {
+            "type": "string",
+            "description": "Local time as HH:MM in the user's timezone, for daily and weekdays schedules."
           }
         },
         "required": [

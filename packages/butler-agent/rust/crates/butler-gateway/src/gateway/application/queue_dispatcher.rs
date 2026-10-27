@@ -319,6 +319,7 @@ async fn drain_chat(
                 .await;
         }
     }
+    app.automation_wake.notify_one();
     Ok(())
 }
 

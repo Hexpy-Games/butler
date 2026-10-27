@@ -592,10 +592,11 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     });
   }
   if (url.pathname.startsWith("/memory/")) {
-    return await callBridge<T>(bridge, "memoryRequest", {
+    const result = await callBridge<BridgeResult<T> | T>(bridge, "memoryRequest", {
       path: url.pathname, method,
       ...(options.body == null ? {} : { body: parseBody(options.body) }),
     });
+    return /^\/memory\/pattern-proposals(?:\/[^/]+)?$/u.test(url.pathname) ? unwrapBridgeResult<T>(result) : result as T;
   }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);
   if (projectMatch && method === "PATCH") {
@@ -675,6 +676,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionId: decodeURIComponent(sessionArchiveMatch[1]!),
     });
   }
+  const composingMatch = method === "POST" ? url.pathname.match(/^\/sessions\/([^/]+)\/composing$/u) : null;
+  if (composingMatch) return await callBridge<T>(bridge, "sessionComposing", { sessionId: decodeURIComponent(composingMatch[1]!) });
+  const reportPauseMatch = method === "POST" ? url.pathname.match(/^\/automations\/([^/]+)\/report-pause$/u) : null;
+  if (reportPauseMatch) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "decideReportPause", {
+    automationId: decodeURIComponent(reportPauseMatch[1]!), decision: parseBody(options.body).decision,
+  }));
   const sessionReadMatch = url.pathname.match(/^\/sessions\/([^/]+)\/read$/u);
   if (method === "POST" && sessionReadMatch) {
     return await callBridge<T>(bridge, "markSessionRead", {

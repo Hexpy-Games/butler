@@ -244,6 +244,15 @@ interface ConversationWorkCopy {
 
 interface ConversationCopy {
   chatsIntro: string;
+  initiated: {
+    noThanks: string; soundsGood: string;
+    created: (action: string) => string; skipped: (action: string) => string;
+    continuing: (action: string) => string; paused: (action: string) => string;
+    alreadyHandled: string; failed: string;
+    dailyAt: (time: string) => string; weekdaysAt: (time: string) => string;
+    unopened: (count: number) => string;
+    action: (frequency: string, title: string, date?: string) => string;
+  };
   messageActions: {
     showMore: string;
     showLess: string;
@@ -2179,6 +2188,16 @@ export interface AppCopy {
       fullDiskAccess: string;
       failed: string;
       needsKeychain: string;
+      /** The settings button and the import dialog's title. */
+      open: string;
+      /** Label of the settings row that opens the dialog. */
+      dataLabel: string;
+      /** Dialog step names (step 2 uses chooseItems, step 3 uses run) and the stepper's accessible name. */
+      chooseBrowser: string;
+      steps: string;
+      next: string;
+      back: string;
+      done: string;
     };
     /** Import from other AI tools: instructions and MCP servers, never secrets. */
     agentImport: {

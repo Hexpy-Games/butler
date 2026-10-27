@@ -48,6 +48,18 @@ pub(super) async fn route(
         );
     }
     let suffix = path.strip_prefix("/automations/").ok_or_else(not_found)?;
+    if method == Method::POST
+        && let Some(id) = suffix.strip_suffix("/report-pause")
+    {
+        let input: ReportPauseRequest = body(request).await?;
+        return json(
+            StatusCode::OK,
+            state
+                .application
+                .report_pause(decode(id)?, input.decision)
+                .await?,
+        );
+    }
     // An unattended run reports a step it skipped for want of permission (D8).
     if method == Method::POST
         && let Some((id, run_id)) = suffix
@@ -204,4 +216,9 @@ fn json<T: serde::Serialize>(status: StatusCode, data: T) -> Result<Response, Ht
             data,
         },
     )
+}
+
+#[derive(serde::Deserialize)]
+struct ReportPauseRequest {
+    decision: String,
 }

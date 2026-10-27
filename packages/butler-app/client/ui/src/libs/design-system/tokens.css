@@ -243,6 +243,9 @@
      match the page card; the card stands --browser-card-inset off the pane
      edges; the chat column beside the pane resizes between min and max. */
   --browser-pane-radius: var(--radius-popover);
+  /* PageCard corners; BrowserPane sets the card flush with its edges and
+     gives it its own bottom corner radius (0 beside the window frame). */
+  --page-card-radius: var(--radius-popover);
   --browser-card-inset: var(--space-sm);
   --browser-band-height: 40px;
   --browser-chat-width: 400px;

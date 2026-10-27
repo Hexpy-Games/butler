@@ -1756,14 +1756,14 @@ A halo and a status dot around an IconButton that tell what Butler is doing with
 
 `import { AddressField } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/AddressField`
 
-The browser toolbar's address: security glyph, bold host with a muted path, tags and the star; a click edits the full URL.
+The browser toolbar's address (34px, --control-height-lg, as heavy as the tabs above it): security glyph, bold host with a muted path, tags and the star; a click edits the full URL.
 
 - Use for: The address in BrowserToolbar
 - Use for: Address suggestions while typing (listbox, onInputChange, onInputKeyDown with SuggestionList)
 - Use for: A Butler page's name in the same place (library, new tab)
 - Not for: A plain URL setting in a form → `Input`
 - Not for: A link inside text → `InlineReference`
-- Tokens: `--control-height-md`, `--selection`, `--focus-ring`, `--radius-pill`, `--placeholder`
+- Tokens: `--control-height-lg`, `--selection`, `--focus-ring`, `--radius-pill`, `--placeholder`
 
 ### AgentPointer
 
@@ -1781,13 +1781,13 @@ Butler's own pointer for the transparent overlay layer above a page: where Butle
 
 `import { BrowserPane } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/BrowserPane`
 
-The browser sheet: tab row, toolbar and the page card, inset on a tinted pane whose top corners match the card.
+The browser sheet: tab row and toolbar on a tinted pane, and the page card filling the pane edge to edge under them.
 
 - Use for: The browser beside a conversation (the AdaptiveShellSplit pane)
 - Use for: The standalone Browser view under its title bar
 - Not for: A preview of a Butler output inside the chat → `ArtifactPreview`
 - Not for: A page frame inside a dashboard or settings → `SurfacePanel`
-- Tokens: `--browser-pane-bg`, `--browser-pane-radius`, `--browser-card-inset`, `--browser-band-height`, `--space-xs`, `--menu-item-height`
+- Tokens: `--browser-pane-bg`, `--browser-pane-radius`, `--browser-card-inset`, `--browser-band-height`, `--space-xs`, `--menu-item-height`, `--page-card-radius`, `--shell-card-radius`, `--butler-ink-blue`, `--butler-ink-purple`, `--butler-ink-pink`, `--motion-agent-edge`
 
 ### DragPreview
 
@@ -1851,7 +1851,7 @@ The web page as one elevated card that wraps NativeViewSlot: who holds the tab, 
 - Use for: Showing who holds a tab: nobody, Butler (riso edge), you, or an approval
 - Not for: A native view without the browser card (a raw slot) → `NativeViewSlot`
 - Not for: A static picture of a page in the chat → `ArtifactPreview`
-- Tokens: `--radius-popover`, `--browser-card-shadow`, `--butler-ink-blue`, `--butler-ink-purple`, `--butler-ink-pink`, `--motion-agent-edge`, `--motion-loop-count`
+- Tokens: `--page-card-radius`, `--radius-popover`, `--browser-card-shadow`, `--butler-ink-blue`, `--butler-ink-purple`, `--butler-ink-pink`, `--motion-agent-edge`, `--motion-loop-count`
 
 ### PickOutline
 
@@ -1913,7 +1913,7 @@ Live previews of Butler's tabs beside the conversation: a full rail, a compact r
 - Not for: The browser area is open (its TabStrip lists the same tabs) → `TabStrip`
 - Not for: One tab's preview elsewhere (an approval) → `LiveTabCard`
 - Not for: What Butler did, step by step → `WorkActivityBlock`
-- Tokens: `--tab-rail-width`, `--tab-rail-compact-width`, `--tab-rail-shelf-height`, `--tab-rail-inset`, `--tab-rail-clearance`, `--motion-base`, `--motion-fast`, `--motion-distance-sm`
+- Tokens: `--tab-rail-width`, `--tab-rail-compact-width`, `--tab-rail-shelf-height`, `--control-hit-target`, `--focus-ring-room`, `--tab-rail-inset`, `--tab-rail-clearance`, `--motion-base`, `--motion-fast`, `--motion-distance-sm`
 
 ## Blocks · Navigation
 

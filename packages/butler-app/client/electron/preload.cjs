@@ -875,6 +875,9 @@ const butlerApp = Object.freeze({
       (method === "GET" && /^\/memory\/reset\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path));
     const patterns = (method === "GET" && path === "/memory/patterns") ||
       (method === "DELETE" && /^\/memory\/patterns\/[A-Za-z0-9_-]+$/.test(path));
+    const proposals = (method === "GET" && path === "/memory/pattern-proposals") ||
+      (method === "POST" && /^\/memory\/pattern-proposals\/[A-Za-z0-9_-]+$/.test(path));
+    if (proposals) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
     if (!existing && !reset && !patterns) throw new Error("Invalid memory path");
     return requestJson(path, { method, ...(body && method !== "GET" && method !== "HEAD" ? { body: JSON.stringify(body) } : {}) });
   },
@@ -969,6 +972,12 @@ const butlerApp = Object.freeze({
   archiveSession: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/archive`, {
     method: "POST",
     body: JSON.stringify({}),
+  }),
+  sessionComposing: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/composing`, {
+    method: "POST", body: JSON.stringify({}),
+  }),
+  decideReportPause: ({ automationId, decision }) => requestBridgeResult(`/automations/${encodeURIComponent(automationId)}/report-pause`, {
+    method: "POST", body: JSON.stringify({ decision }),
   }),
   markSessionRead: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/read`, {
     method: "POST",
