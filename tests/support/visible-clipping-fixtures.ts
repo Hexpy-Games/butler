@@ -6,7 +6,10 @@ import { visibleClipping } from "./visible-clipping";
 export async function verifyVisibleClipping(page: ElectronPage) {
   const cases = [
     { name: "ancestor-right", css: "overflow:hidden", child: "width:120px", expected: ["right"] },
-    { name: "horizontal-scroll", css: "overflow-x:auto", child: "width:120px", expected: ["right"] },
+    { name: "horizontal-scroll", css: "overflow-x:auto;overflow-y:hidden;height:20px", child: "width:120px", expected: [] },
+    { name: "horizontal-scroll-hidden-y", css: "overflow-x:auto;overflow-y:hidden;height:20px", child: "width:120px;height:40px", expected: ["bottom"] },
+    { name: "scroller-nonscrolling-axis", css: "overflow-x:auto;overflow-y:hidden;height:40px", child: "width:100px;margin-left:-10px", expected: ["left"] },
+    { name: "viewport-right", css: "overflow:visible;width:500px", child: "width:500px", expected: ["right"] },
     { name: "ancestor-left", css: "overflow:clip", child: "width:100px;margin-left:-10px", expected: ["left"] },
     { name: "ancestor-bottom", css: "overflow:hidden;height:10px", child: "height:30px", expected: ["bottom"] },
     { name: "vertical-scroll", css: "overflow-y:auto;height:10px", child: "height:30px", expected: [] },

@@ -22,10 +22,10 @@ export function visibleClipping() {
     const ownText = [...node.childNodes].some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim());
     if (!ownText && !node.matches('img,svg,canvas,[role="img"]')) continue;
     const style = getComputedStyle(node), rect = node.getBoundingClientRect();
-    if (!rect.width || !rect.height || rect.bottom <= 0 || rect.top >= innerHeight) continue;
+    if (!rect.width || !rect.height) continue;
     if (style.visibility !== "visible" || (rect.width <= 1 && rect.height <= 1 && (style.clip !== "auto" || style.clipPath !== "none"))) continue;
     if ((style.textOverflow === "ellipsis" && style.whiteSpace === "nowrap") || Number(style.webkitLineClamp) > 0) continue;
-    const bounds: Array<{ node: Element | null; left: number; right: number; top: number; bottom: number; x: boolean; y: boolean; scroll: boolean }> = [];
+    const bounds: Array<{ node: Element | null; left: number; right: number; top: number; bottom: number; x: boolean; y: boolean; scrollX: boolean; scrollY: boolean }> = [];
     for (let parent = node.parentElement; parent; parent = parent.parentElement) {
       const css = getComputedStyle(parent), box = parent.getBoundingClientRect();
       if (!clips(css.overflowX) && !clips(css.overflowY)) continue;
@@ -33,9 +33,10 @@ export function visibleClipping() {
       const sy = parent.offsetHeight ? box.height / parent.offsetHeight : 1;
       bounds.push({ node: parent, left: box.left + parent.clientLeft * sx, right: box.left + (parent.clientLeft + parent.clientWidth) * sx,
         top: box.top + parent.clientTop * sy, bottom: box.top + (parent.clientTop + parent.clientHeight) * sy,
-        x: clips(css.overflowX), y: clips(css.overflowY), scroll: ["auto", "scroll"].includes(css.overflowY) && parent.scrollHeight > parent.clientHeight });
+        x: clips(css.overflowX), y: clips(css.overflowY), scrollX: ["auto", "scroll"].includes(css.overflowX) && parent.scrollWidth > parent.clientWidth,
+        scrollY: ["auto", "scroll"].includes(css.overflowY) && parent.scrollHeight > parent.clientHeight });
     }
-    bounds.push({ node: null, left: 0, right: innerWidth, top: 0, bottom: innerHeight, x: true, y: true, scroll: false });
+    bounds.push({ node: null, left: 0, right: innerWidth, top: 0, bottom: innerHeight, x: true, y: true, scrollX: false, scrollY: false });
     let top = rect.top, bottom = rect.bottom, left = rect.left, right = rect.right;
     for (const box of bounds) {
       const css = box.node && getComputedStyle(box.node);
@@ -46,17 +47,16 @@ export function visibleClipping() {
       }
       const cuts = { left: box.x ? box.left - left : 0, right: box.x ? right - box.right : 0,
         top: box.y ? box.top - top : 0, bottom: box.y ? bottom - box.bottom : 0 };
-      const onlyBlock = cuts.left <= 1 && cuts.right <= 1;
-      // A scroller exposes only this block-axis slice to its outer ancestors.
-      // Offscreen content is reachable by scrolling; sideways cuts still fail.
-      if (box.scroll && onlyBlock) {
-        top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom);
-        if (bottom <= top) break;
-      }
+      // A scrolling axis exposes only its visible slice to outer ancestors.
+      // The other axis still reports cuts, including a scroller's hidden axis.
       for (const [side, px] of Object.entries(cuts)) {
-        if (px <= 1 || (box.scroll && onlyBlock && (side === "top" || side === "bottom"))) continue;
+        const reachable = side === "left" || side === "right" ? box.scrollX : box.scrollY;
+        if (px <= 1 || reachable) continue;
         findings.push({ selector: selector(node), ancestor: box.node ? selector(box.node) : "viewport", side, px: Math.round(px * 100) / 100 });
       }
+      if (box.scrollX) { left = Math.max(left, box.left); right = Math.min(right, box.right); }
+      if (box.scrollY) { top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom); }
+      if (right <= left || bottom <= top) break;
     }
   }
   return findings;

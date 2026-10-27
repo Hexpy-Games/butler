@@ -12,6 +12,7 @@ import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { connectElectronMain } from "../support/electron-main-cdp";
 import { smokeElectronArgs } from "../support/smoke-browser";
 import { verifyVisibleClipping } from "../support/visible-clipping-fixtures";
+import { checkSuggestionStrips } from "../support/text-size-strip";
 import { textSizeSweep } from "../support/text-size-sweep";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 
@@ -387,6 +388,8 @@ try {
   }
   await main.evaluate(`${win}.setContentSize(1280,800)`);
   await click(page, copy.browser.title);
+  await click(page, copy.sidebar.newChat);
+  await checkSuggestionStrips(page, main, win, evidence);
   await verifyVisibleClipping(page);
   await textSizeSweep({ page, main, win, evidence, click, server });
   await appearance(page);

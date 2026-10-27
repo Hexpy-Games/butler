@@ -25,7 +25,7 @@ export async function textSizeSweep({ page, main, win, evidence, click, server }
   const baselines = new Map<string, ReturnType<typeof visibleClipping>>();
   const zoomOnly: unknown[] = [];
   const preExisting: unknown[] = [];
-  const findingKey = (clip: ReturnType<typeof visibleClipping>[number]) => JSON.stringify([clip.selector, clip.side]);
+  const findingKey = (clip: ReturnType<typeof visibleClipping>[number]) => JSON.stringify([clip.selector, clip.ancestor, clip.side]);
   for (const [width, height] of [[1280, 800], [1440, 900]]) {
     for (const [size, scale] of [["default", 1], ["large", 1.15], ["larger", 1.3]] as const) {
       await page.expression(`window.butlerApp.setTextSize(${JSON.stringify(size)})`);
