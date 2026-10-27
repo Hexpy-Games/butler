@@ -9,7 +9,7 @@ export async function installMemoryDesktopBridge(page: Page, server: NativeAppSe
     const ipcRenderer = {
       invoke: async (channel: string) => channel === "butler:get-server-url" ? url
         : channel === "butler:get-local-auth-headers" ? headers : null,
-      send() {}, on() {}, removeListener() {},
+      on() {}, removeListener() {},
     };
     const contextBridge = { exposeInMainWorld(name: string, value: unknown) {
       if (name === "butlerApp") Object.assign(window, { butlerApp: value });
