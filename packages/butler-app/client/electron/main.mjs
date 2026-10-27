@@ -2061,6 +2061,7 @@ async function createWindow() {
   win.webContents.on("before-input-event", (event, input) => {
     if (userBrowser.shortcut(input)) event.preventDefault();
   });
+  win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
     if (isWindows && !finalQuitAllowed) {

@@ -171,6 +171,42 @@ async function assertSize(page: Page, main: TextSizeMain, size: "default" | "lar
   assert.equal(await page.expression(`document.querySelector('[data-setting-id="text-size"] [aria-checked="true"]')?.textContent?.trim()`), label);
   console.log(JSON.stringify({ acceleratorSize: size, zoom: factor, scale: factor, selectedLabel: label }));
 }
+async function inputShortcuts(page: Page, main: TextSizeMain) {
+  const cases = [
+    [{ key: "0", code: "Digit0" }, "reset", "default", copy.settings.options.textSizeDefault],
+    [{ key: "=", code: "Equal" }, "increase", "large", copy.settings.options.textSizeLarge],
+    [{ key: "+", code: "Equal", shift: true }, "increase", "larger", copy.settings.options.textSizeLarger],
+    [{ key: "+", code: "NumpadAdd" }, "increase", "larger", copy.settings.options.textSizeLarger],
+    [{ key: "-", code: "Minus" }, "decrease", "large", copy.settings.options.textSizeLarge],
+    [{ key: "-", code: "NumpadSubtract" }, "decrease", "default", copy.settings.options.textSizeDefault],
+    [{ key: "+", code: "Equal" }, "increase", "large", copy.settings.options.textSizeLarge],
+    [{ key: "0", code: "Numpad0" }, "reset", "default", copy.settings.options.textSizeDefault],
+    [{ key: "Insert", code: "Numpad0" }, "reset", "default", copy.settings.options.textSizeDefault],
+  ] as const;
+  for (const platform of ["win32", "linux"]) {
+    for (const [key, command, size, label] of cases) {
+      const input = { type: "keyDown", control: true, ...key };
+      const mapped = await main.evaluate(`(()=>{
+        const {textSizeShortcut}=${module}(${JSON.stringify(join(electronRoot, "butler-platform/text-size.mjs"))});
+        const {dispatchTextSizeCommand}=${module}(${JSON.stringify(join(electronRoot, "text-size.mjs"))});
+        const command=textSizeShortcut(${JSON.stringify(input)},${JSON.stringify(platform)});
+        if(command && !dispatchTextSizeCommand(${win}.webContents,command))throw new Error('App shortcut rejected');
+        return command;
+      })()`);
+      assert.equal(mapped, command, `${platform}: ${JSON.stringify(input)}`);
+      await assertSize(page, main, size, label);
+    }
+  }
+  const ignored = await main.evaluate(`(()=>{
+    const {textSizeShortcut}=${module}(${JSON.stringify(join(electronRoot, "butler-platform/text-size.mjs"))});
+    const input={type:'keyDown',control:true,key:'=',code:'Equal'};
+    return [textSizeShortcut(input,'darwin'), ...[
+      {type:'keyUp'},{control:false},{alt:true},{meta:true},{key:'a',code:'KeyA'},
+    ].map(override=>textSizeShortcut({...input,...override},'linux'))].every(command=>command===undefined);
+  })()`);
+  assert(ignored, "macOS, key-up, unrelated keys and other modifiers do not dispatch Ctrl zoom");
+  console.log(JSON.stringify({ syntheticInputShortcuts: cases.length * 2, platforms: ["win32", "linux"], ignoredInputs: 6 }));
+}
 async function gestures(main: TextSizeMain, contents: string) {
   await main.evaluate(`(async()=>{
     const wc=${contents};
@@ -210,6 +246,7 @@ try {
   await appearance(page);
 
   const origin = await page.expression('window.textSizeDocumentMarker = Math.random()');
+  await inputShortcuts(page, main);
   for (const [label, factor] of [[copy.settings.options.textSizeLarge, textSizeFactor("large")], [copy.settings.options.textSizeLarger, textSizeFactor("larger")]] as const) {
     await change(page, label, factor);
     await until(() => main.evaluate<number>(`${win}.webContents.getZoomFactor()`), value => value === factor, 'native zoom');

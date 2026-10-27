@@ -1,6 +1,6 @@
 import { ipcMain, screen, Menu, MenuItem } from "electron";
 import { readStartupAppearance } from "./startup-appearance.mjs";
-import { positionWindowButtons, appMenuPrefix } from "./butler-platform/text-size.mjs";
+import { positionWindowButtons, appMenuPrefix, usesTextSizeMenu, textSizeShortcut } from "./butler-platform/text-size.mjs";
 
 const factors = { default: 1, large: 1.15, larger: 1.3 };
 const windows = new Map();
@@ -21,6 +21,10 @@ export function textSizePreferences() {
 }
 /** Replace native zoom roles too: on macOS, setting a null menu leaves NSApp's menu intact. */
 export function installTextSizeMenu() {
+  if (!usesTextSizeMenu()) {
+    Menu.setApplicationMenu(null);
+    return;
+  }
   const items = [zoomItem("zoomin", "increase"), zoomItem("zoomout", "decrease"), zoomItem("resetzoom", "reset")];
   const equal = zoomItem("zoomin", "increase", "CommandOrControl+=");
   equal.visible = false;
@@ -34,11 +38,15 @@ function zoomItem(role, command, accelerator) {
     ...(accelerator ? { accelerator } : {}) });
   const original = item.click;
   item.click = (event, window, contents) => {
-    if (!contents || !windows.has(contents.id)) return original(event, window, contents);
-    if (settingsContents) settingsContents.send("butler:text-size-shortcut", command);
-    else pendingShortcuts.push(command);
+    if (!dispatchTextSizeCommand(contents, command)) return original(event, window, contents);
   };
   return item;
+}
+export function dispatchTextSizeCommand(contents, command) {
+  if (!contents || !windows.has(contents.id)) return false;
+  if (settingsContents) settingsContents.send("butler:text-size-shortcut", command);
+  else pendingShortcuts.push(command);
+  return true;
 }
 function updateWindow(win, options) {
   const factor = appZoomFactor();
@@ -63,6 +71,12 @@ export function registerTextSizeWindow(win, options = {}) {
   if (!Menu.getApplicationMenu()?.getMenuItemById("text-size-zoomin")) installTextSizeMenu();
   void contents.setVisualZoomLevelLimits(1, 1);
   contents.on("zoom-changed", event => event.preventDefault());
+  if (!usesTextSizeMenu()) contents.on("before-input-event", (event, input) => {
+    const command = textSizeShortcut(input);
+    if (!command) return;
+    event.preventDefault();
+    dispatchTextSizeCommand(contents, command);
+  });
   contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
     if (mainFrame && !inPlace && settingsContents === contents) settingsContents = undefined;
   });

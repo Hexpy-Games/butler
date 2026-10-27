@@ -10,3 +10,15 @@ export function positionWindowButtons(window, factor, base) {
 export function appMenuPrefix() {
   return process.platform === "darwin" ? [{ role: "appMenu" }] : [];
 }
+
+export function usesTextSizeMenu(platform = process.platform) {
+  return platform === "darwin";
+}
+
+/** Menu-less App windows handle Ctrl zoom keys before Chromium's native zoom. */
+export function textSizeShortcut(input, platform = process.platform) {
+  if (usesTextSizeMenu(platform) || input.type !== "keyDown" || !input.control || input.alt || input.meta) return;
+  if (["=", "+"].includes(input.key) || input.code === "NumpadAdd") return "increase";
+  if (input.key === "-" || input.code === "NumpadSubtract") return "decrease";
+  if (input.key === "0" || input.code === "Numpad0") return "reset";
+}
