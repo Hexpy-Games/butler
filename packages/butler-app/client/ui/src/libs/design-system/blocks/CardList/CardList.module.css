@@ -88,9 +88,12 @@
   white-space: nowrap;
 }
 
+/* One line with an ellipsis; controls placed in a description (a switch, a
+   site field) keep --focus-ring-room past the clip, so their rings are whole. */
 .description {
   min-width: 0;
-  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
   color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -101,7 +104,12 @@
   white-space: nowrap;
 }
 
+/* One title line tall: actions of any height center on the title's line,
+   not on the whole card; taller actions spill evenly into the card padding. */
 .actions {
-  align-self: start;
+  display: flex;
+  height: var(--typo-body-line-height);
   min-width: max-content;
+  align-items: center;
+  align-self: start;
 }

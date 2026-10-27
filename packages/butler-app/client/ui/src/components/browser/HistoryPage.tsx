@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { api } from "@/app/api";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
-import { Box, Button, ButtonContainer, EmptyLine, HistoryGroup, HistoryRow, IconButton, Input, MessageSquare, PageContainer, ScrollArea, Stack, Switch, Trash2, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, EmptyLine, Field, FieldLabel, HistoryGroup, HistoryRow, IconButton, Input, MessageSquare, PageContainer, ScrollArea, Stack, Switch, Trash2, Typo } from "@/butler-ds";
 import { HistoryClearDialog } from "./HistoryClearDialog";
 import { historyCommand, openHistoryUrl, useHistoryVersion, type HistoryPageData, type HistoryVisit } from "./historyApi";
 
 export function HistoryPage() {
   const locale = useAppLocale(), copy = appCopy.browser.history;
-  const version = useHistoryVersion(s => s.version);
+  const version = useHistoryVersion(s => s.version), onlyId = useId();
   const [search, setSearch] = useState(""), [only, setOnly] = useState(false), [cursor, setCursor] = useState("");
   const [page, setPage] = useState<HistoryPageData>({ items: [] }), [failed, setFailed] = useState(false), [loading, setLoading] = useState(false);
   const [selecting, setSelecting] = useState(false), [selected, setSelected] = useState<number[]>([]), [clear, setClear] = useState(false), [busy, setBusy] = useState(false);
@@ -42,12 +42,12 @@ export function HistoryPage() {
   </ButtonContainer>;
   return <ScrollArea fill dataTestClass="history-page"><PageContainer width="narrow" gutter="xl"><Box paddingY="xl"><Stack gap="xl">
     <Stack gap="md"><Input aria-label={copy.search} placeholder={copy.search} value={search} onChange={event => setSearch(event.target.value)} />
-      <Stack align="row" wrap justify="between" cross="center" gap="sm"><Stack align="row" cross="center" gap="sm"><Switch aria-label={copy.butlerOnly} checked={only} onCheckedChange={setOnly} /><Typo.Label>{copy.butlerOnly}</Typo.Label></Stack>
-        {selecting ? <Stack align="row" cross="center" gap="md"><Typo.Caption tone="secondary" numeric="tabular">{appCopy.library.selected(selected.length)}</Typo.Caption>
+      <Stack align="row" justify="between" cross="end" gap="sm"><Field><FieldLabel htmlFor={onlyId}>{copy.butlerOnly}</FieldLabel><Switch id={onlyId} checked={only} onCheckedChange={setOnly} /></Field>
+        <Stack.Item shrink={false}>{selecting ? <Stack align="row" cross="center" gap="md"><Typo.Caption tone="secondary" numeric="tabular">{appCopy.library.selected(selected.length)}</Typo.Caption>
           <ButtonContainer size="sm"><Button size="sm" variant="ghost" onClick={stopSelecting}>{appCopy.browser.cancel}</Button>
             <Button size="sm" variant="destructive" disabled={busy || !selected.length} onClick={() => void remove(selected)}>{appCopy.browser.remove}</Button></ButtonContainer></Stack>
           : <ButtonContainer size="sm"><Button size="sm" variant="ghost" onClick={() => setSelecting(true)} disabled={!page.items.length}>{appCopy.library.select}</Button>
-            <Button size="sm" variant="outline" onClick={() => setClear(true)}>{copy.clear}</Button></ButtonContainer>}</Stack></Stack>
+            <Button size="sm" variant="outline" onClick={() => setClear(true)}>{copy.clear}</Button></ButtonContainer>}</Stack.Item></Stack></Stack>
     {groups.size > 0 && <Stack gap="lg">{Array.from(groups, ([day, visits]) => <HistoryGroup key={day} title={day}>
       {visits.map(visit => <HistoryRow key={visit.id} rowId={visit.id} title={visit.title} url={visit.url} iconSrc={visit.favicon || undefined} dateTime={visit.visitedAt}
         time={new Date(visit.visitTime).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })} onOpen={() => open(visit.url)} actions={actions(visit)}
