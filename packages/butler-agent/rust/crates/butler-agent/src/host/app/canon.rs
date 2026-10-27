@@ -1,6 +1,7 @@
 //! Host-owned BTCC adapter; every SQL operation stays on its owning lane.
 mod canon_sidebar;
 mod progress;
+mod proposals;
 use butler_canon::{store, work_queries::Query};
 use butler_gateway::gateway::{
     AppCanonConflict, AppCanonEvent, AppCanonPort, AppCanonRequest, AppCanonResource,
@@ -28,6 +29,9 @@ impl AppCanon {
     }
 }
 impl AppCanonPort for AppCanon {
+    fn proposal(&self, action: String, input: Value) -> ApplicationFuture<Value> {
+        proposals::execute(self.storage.clone(), action, input)
+    }
     fn canon_operation(
         &self,
         operation: butler_gateway::gateway::AppCanonOperation,

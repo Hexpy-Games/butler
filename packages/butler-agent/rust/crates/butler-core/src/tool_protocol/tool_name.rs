@@ -107,6 +107,8 @@ tool_names! {
     RenderProjectDashboard = "render_project_dashboard",
     ReplaceWorkPlan = "replace_work_plan",
     AskUser = "ask_user",
+    CanonRead = "canon_read",
+    CanonPropose = "canon_propose",
     ResolveAsk = "resolve_ask",
     RequestServiceRestart = "request_service_restart",
     RunCommand = "run_command",

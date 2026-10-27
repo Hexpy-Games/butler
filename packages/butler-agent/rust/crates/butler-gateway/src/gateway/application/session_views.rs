@@ -1,5 +1,6 @@
 //! Canonical App session reads composed with BTCC child projections.
 
+mod canon_proposals;
 mod helpers;
 mod questions;
 mod snapshot;
@@ -66,6 +67,7 @@ impl AppApplication {
         view.insert("pending_questions".into(), pending);
         view.insert("authority_requests".into(), approvals);
         view.insert("question_answers".into(), answers);
+        canon_proposals::insert(self, &messages.messages, &mut view).await?;
         insert_turns(
             &mut view,
             active_turn_view.as_ref(),

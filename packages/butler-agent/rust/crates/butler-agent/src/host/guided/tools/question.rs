@@ -100,6 +100,12 @@ pub(super) async fn dispatch(
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     super::dispatch::steward_gate::check(owner, call).await?;
+    if matches!(
+        ToolName::parse(&call.name),
+        Some(ToolName::CanonRead | ToolName::CanonPropose)
+    ) {
+        return super::canon::execute(owner, call, call_id).await;
+    }
     if call.name == ToolName::ProjectArtifacts {
         return super::project_artifacts::execute(owner, invocation, call).await;
     }

@@ -430,6 +430,10 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.retry_turn_with_current_controls_owned(turn_id).await })
     }
+    fn canon_proposal(&self, action: String, input: Value) -> ApplicationFuture<Value> {
+        let app = self.clone_handle();
+        Box::pin(async move { super::canon_proposals::execute(&app, &action, input).await })
+    }
     fn canon(&self, request: AppCanonRequest) -> ApplicationFuture<Value> {
         super::canon::execute(self, request)
     }

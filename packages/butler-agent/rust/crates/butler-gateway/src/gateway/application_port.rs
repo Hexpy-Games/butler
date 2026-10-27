@@ -283,6 +283,13 @@ pub trait GatewayApplication:
         &self,
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
+    fn canon_proposal(
+        &self,
+        _action: String,
+        _input: serde_json::Value,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn canon(&self, _request: AppCanonRequest) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

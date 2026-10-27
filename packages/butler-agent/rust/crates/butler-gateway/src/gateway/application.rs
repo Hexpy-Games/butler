@@ -4,6 +4,7 @@ mod assets;
 mod image_usage;
 pub use image_usage::{AppImageUsageCommand, ImageUsageOperation, ImageUsageRecord};
 mod canon;
+mod canon_proposals;
 pub(crate) mod canon_sidebar;
 mod data_reset;
 pub use assets::{AppAssetCommand, GeneratedAssetKind, composite, mask_bounds};

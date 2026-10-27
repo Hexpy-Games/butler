@@ -177,7 +177,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             if let Some(consent) = consent {
                 workspace.set_consent(consent);
             }
-            let surface = self.tool_surface(&mut phase).await?;
+            let (surface, open_asks) = prompt_state::surface(self, start.turn, &mut phase).await?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
             let (work, work_tools) =
@@ -198,7 +198,6 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             {
                 activity.restore(&saved.activity)?;
             }
-            let open_asks = prompt_state::reminders(self, start.turn, &policy.role).await?;
             let tools = Arc::new(GuidedTools::new(
                 self.capabilities.clone(),
                 self.command.clone(),

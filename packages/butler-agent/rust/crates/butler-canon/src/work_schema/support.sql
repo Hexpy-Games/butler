@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS canon_cursors (
 CREATE TABLE IF NOT EXISTS canon_session_epics (
   session_id TEXT NOT NULL,
   epic_id TEXT NOT NULL REFERENCES canon_epics(id),
+  is_home INTEGER NOT NULL DEFAULT 0 CHECK(is_home IN (0,1)),
   bound_at INTEGER NOT NULL,
   bound_by TEXT NOT NULL CHECK (json_valid(bound_by)),
   origin TEXT NOT NULL CHECK (origin IN ('user','butler')),

@@ -180,6 +180,9 @@ impl CapabilityKind {
         if let Some(action) = ApprovalExemptAction::of_tool(name) {
             return Self::Exempt(action);
         }
+        if name == ToolName::CanonPropose {
+            return Self::ProjectRecord;
+        }
         if ledger_effect {
             return Self::ProjectRecord;
         }

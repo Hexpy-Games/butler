@@ -1,5 +1,9 @@
 /** Exact canon route allowlist; the preload retains ownership of authenticated requests. */
 export function canonBridgeInput(url: URL, verb: string, body: () => Record<string, unknown>): { method: string; input: Record<string, unknown> } | null {
+  const proposal = url.pathname.match(/^\/canon\/proposals\/([^/]+)$/u);
+  if (proposal && (verb === "GET" || verb === "POST")) return {
+    method: verb === "GET" ? "getCanonProposal" : "resolveCanonProposal", input: { id: decodeURIComponent(proposal[1]!), body: body() },
+  };
   const project = url.pathname.match(/^\/projects\/([^/]+)\/canon(?:\/(plans|epics|tags|backlog\/order|sidebar|sidebar-order))?$/u);
   if (project) {
     const method = verb === "GET" ? (!project[2] ? "getCanon" : project[2] === "sidebar" ? "getCanonSidebar" : project[2] === "tags" ? "getCanonTags" : undefined) : verb === "POST" ?

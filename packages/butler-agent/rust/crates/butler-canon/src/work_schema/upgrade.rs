@@ -55,7 +55,7 @@ pub(super) fn merged(db: &Connection) -> rusqlite::Result<bool> {
 const COPIES: &[(&str, &str)] = &[
     (
         "wm_works",
-        "INSERT INTO canon_session_epics SELECT home_session_id,id,created_at,created_by,'user' FROM wm_works WHERE visibility='canon' AND home_session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canon_epics WHERE id=wm_works.id) ON CONFLICT(session_id,epic_id) DO NOTHING",
+        "INSERT INTO canon_session_epics(session_id,epic_id,bound_at,bound_by,origin,is_home) SELECT home_session_id,id,created_at,created_by,'user',1 FROM wm_works WHERE visibility='canon' AND home_session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canon_epics WHERE id=wm_works.id) ON CONFLICT(session_id,epic_id) DO NOTHING",
     ),
     (
         "wm_audit",

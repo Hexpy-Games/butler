@@ -41,7 +41,11 @@ fn create_tables(connection: &Connection) -> Result<(), AppStorageError> {
     }
     connection
         .execute_batch(
-            "CREATE TABLE IF NOT EXISTS app_canon_conversations (
+            "CREATE TABLE IF NOT EXISTS app_canon_proposal_projects (
+            proposal_id TEXT PRIMARY KEY, project_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, workspace TEXT NOT NULL, created_at TEXT NOT NULL, resolved_by TEXT
+         );
+         CREATE INDEX IF NOT EXISTS projects_recent_canon ON projects(archived,updated_at DESC);
+         CREATE TABLE IF NOT EXISTS app_canon_conversations (
             session_id TEXT NOT NULL,
             epic_id TEXT NOT NULL,
             is_home INTEGER NOT NULL DEFAULT 0 CHECK(is_home IN (0,1)),

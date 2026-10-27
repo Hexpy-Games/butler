@@ -18,7 +18,9 @@ fn builtin(name: &str) -> bool {
     matches!(
         ToolName::parse(name),
         Some(
-            ToolName::AskUser
+            ToolName::CanonRead
+                | ToolName::CanonPropose
+                | ToolName::AskUser
                 | ToolName::ResolveAsk
                 | ToolName::ReadFile
                 | ToolName::RunCommand

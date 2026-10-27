@@ -84,7 +84,24 @@ async fn drain(
             prune_receipts(storage, last).await?;
             cursor.prune = None;
         }
-        let rows = port.unpublished(cursor.after).await?;
+        let mut rows = port.unpublished(cursor.after).await?;
+        for row in rows
+            .iter_mut()
+            .filter(|r| r.topic == "pending_asks.changed")
+        {
+            let owner = row.payload["session_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned();
+            let authority = app
+                .dependencies
+                .authority_handoff
+                .pending_asks(Some(owner), usize::MAX, None)
+                .await?
+                .len();
+            row.payload["open_count"] =
+                json!(row.payload["open_count"].as_u64().unwrap_or(0) + authority as u64);
+        }
         if rows.is_empty() {
             // Apply the durable outbox before expiring unsaved uploads after a crash.
             super::files::sweep(app, !cursor.started).await?;

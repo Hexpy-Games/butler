@@ -886,6 +886,7 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  canon_proposals?: import("../../../shared/canon-proposal-contracts.ts").CanonProposalAnchor[];
   question_answer?: AnsweredUserQuestions;
   question_summary?: UserQuestion[];
   system_event_kind?: "context.compaction.started" | "context.compaction.completed";
@@ -1186,6 +1187,7 @@ export interface SessionView {
   authority_requests?: unknown[];
   pending_questions?: PendingUserQuestions[];
   question_answers?: AnsweredUserQuestions[];
+  canon_proposals?: import("../../../shared/canon-proposal-contracts.ts").CanonProposalAnchor[];
   branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
   protocol_version?: string;
   session_id: string;

@@ -34,7 +34,7 @@ impl AppApplication {
     }
 }
 
-fn decorate(
+pub(super) fn decorate(
     db: &rusqlite::Connection,
     mut asks: Vec<PendingAsk>,
 ) -> Result<Vec<PendingAsk>, AppStorageError> {

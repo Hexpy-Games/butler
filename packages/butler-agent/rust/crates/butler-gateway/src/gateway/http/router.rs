@@ -257,6 +257,8 @@ const ROUTES: &[(&str, Handler)] = &[
         Handler::Personalization,
     ),
     ("/plans/{id}/task-graph", Handler::TaskGraphs),
+    ("/canon/proposals/{id}", Handler::Canon),
+    ("/sessions/{id}/canon/{action}", Handler::Canon),
     ("/projects/{id}/canon", Handler::Canon),
     ("/canon/plans/{id}", Handler::Canon),
     ("/canon/epics/{id}", Handler::Canon),
