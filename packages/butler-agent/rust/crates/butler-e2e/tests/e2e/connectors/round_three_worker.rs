@@ -4,7 +4,11 @@ use crate::worker_cap::{self, stub as worker};
 use butler_e2e::e2e::scenario::Access;
 use std::sync::atomic::Ordering;
 
-async fn worker_direction(tainted: bool, unattended: bool) -> Result<(), HarnessError> {
+async fn worker_direction(
+    tainted: bool,
+    unattended: bool,
+    user_resteer: bool,
+) -> Result<(), HarnessError> {
     let (url, script, server) = worker::start(4).await?;
     script.steer.store(true, Ordering::SeqCst);
     script.followup.store(true, Ordering::SeqCst);
@@ -37,6 +41,11 @@ async fn worker_direction(tainted: bool, unattended: bool) -> Result<(), Harness
     } else {
         invoke(&s, "steer_steward", spec["arguments"].clone()).await?;
     }
+    if user_resteer {
+        let arguments =
+            json!({"relation_id":relation,"instruction":"Verify the updated source from the user"});
+        invoke(&s, "steer_steward", arguments).await?;
+    }
     script.direction.add_permits(1);
     let deadline = Instant::now() + Duration::from_secs(30);
     while !script.steered.load(Ordering::SeqCst) {
@@ -54,7 +63,12 @@ async fn worker_direction(tainted: bool, unattended: bool) -> Result<(), Harness
             let refused = script.requests.lock().unwrap().iter().any(|(role, r)| {
                 role == "worker" && r.to_string().contains("schedule_permission_required")
             });
-            if (!unattended && asked) || (unattended && refused) {
+            assert!(
+                !user_resteer || !refused,
+                "attended user steering was refused with schedule_permission_required"
+            );
+            if ((!unattended || user_resteer) && asked) || (unattended && !user_resteer && refused)
+            {
                 break;
             }
             assert!(
@@ -70,6 +84,19 @@ async fn worker_direction(tainted: bool, unattended: bool) -> Result<(), Harness
             Vec::<Value>::new()
         );
     }
+    if user_resteer {
+        let runtime = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        let run: String = runtime.query_row(
+            "SELECT instruction_run_context_json FROM btcc_subsession_delegations WHERE relation_id=?1",
+            [relation], |r| r.get(0),
+        )?;
+        let run: Value = serde_json::from_str(&run)?;
+        assert_eq!(run["connector_event"], true);
+        assert_eq!(run["unattended"], false);
+        assert_eq!(run["automation_id"], "");
+        assert_eq!(run["run_id"], "");
+        assert!(run["scheduled_at"].is_null());
+    }
     s.finish().await?;
     server.abort();
     Ok(())
@@ -77,15 +104,22 @@ async fn worker_direction(tainted: bool, unattended: bool) -> Result<(), Harness
 #[tokio::test]
 async fn round_three_connector_worker_attended() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    worker_direction(true, false).await
+    worker_direction(true, false, false).await
 }
 #[tokio::test]
 async fn round_three_connector_worker_unattended() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    worker_direction(true, true).await
+    worker_direction(true, true, false).await
 }
 #[tokio::test]
 async fn round_three_clean_worker_direction() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    worker_direction(false, false).await
+    worker_direction(false, false, false).await
+}
+
+#[tokio::test]
+async fn round_four_user_resteer_worker_restores_attendance_keeps_connector_taint()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    worker_direction(true, true, true).await
 }

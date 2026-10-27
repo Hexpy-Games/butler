@@ -209,12 +209,13 @@ impl SubsessionService {
         {
             return self.closed_feedback(&relation).await;
         }
-        if let Some(run) = request.schedule_run.clone() {
-            self.repository
-                .restrict_instruction_context(relation.relation_id.clone(), run)
-                .await
-                .map_err(BtccError::from)?;
-        }
+        self.repository
+            .restrict_instruction_context(
+                relation.relation_id.clone(),
+                request.schedule_run.clone(),
+            )
+            .await
+            .map_err(BtccError::from)?;
         let identity = json!({"relation_id":relation.relation_id,"source_message_id":request.source_message_id,"instruction":instruction});
         let instruction_id = format!(
             "steward-direction-{}",

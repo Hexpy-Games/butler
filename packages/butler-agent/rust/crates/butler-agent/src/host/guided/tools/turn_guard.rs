@@ -170,12 +170,12 @@ impl GuidedTools {
     }
 
     pub(super) fn unattended(&self) -> bool {
-        self.binding.turn_guard.unattended.is_some()
-            || self
-                .instruction_run
-                .lock()
-                .as_ref()
-                .is_some_and(|run| run.unattended)
+        self.instruction_run
+            .lock()
+            .as_ref()
+            .map_or(self.binding.turn_guard.unattended.is_some(), |run| {
+                run.unattended
+            })
     }
 
     /// Preserve attendance and event origin in every delegated child.
@@ -196,7 +196,6 @@ impl GuidedTools {
             scheduled_at: run.and_then(|r| r.scheduled_at.clone()),
         });
         result.connector_event |= connector_event;
-        result.unattended |= run.is_some();
         Some(result)
     }
 }

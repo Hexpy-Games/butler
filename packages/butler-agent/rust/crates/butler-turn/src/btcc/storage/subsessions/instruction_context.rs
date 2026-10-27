@@ -1,4 +1,4 @@
-//! Monotonic execution restrictions carried by later instructions to a child.
+//! Latest instruction attendance and sticky connector origin for a child.
 use super::*;
 use crate::btcc::ScheduleRunContext;
 
@@ -19,20 +19,20 @@ impl SqliteSubsessionRepository {
     pub(crate) async fn restrict_instruction_context(
         &self,
         relation: String,
-        incoming: ScheduleRunContext,
+        incoming: Option<ScheduleRunContext>,
     ) -> Result<(), StorageError> {
         self.storage.execute(move |db| {
             let raw: Option<String> = db.query_row(
                 "SELECT instruction_run_context_json FROM btcc_subsession_delegations WHERE relation_id=?1",
                 [&relation], |r| r.get::<_, Option<String>>(0),
             ).optional().map_err(StorageError::sqlite)?.flatten();
-            let mut run: ScheduleRunContext = raw.map(|raw| serde_json::from_str(&raw).map_err(context_error))
-                .transpose()?.unwrap_or_else(|| incoming.clone());
-            run.connector_event |= incoming.connector_event;
-            run.unattended |= incoming.unattended;
-            if run.automation_id.is_empty() { run.automation_id = incoming.automation_id; }
-            if run.run_id.is_empty() { run.run_id = incoming.run_id; }
-            run.scheduled_at = run.scheduled_at.or(incoming.scheduled_at);
+            let previous: Option<ScheduleRunContext> = raw.map(|raw| serde_json::from_str(&raw).map_err(context_error))
+                .transpose()?;
+            let mut run = incoming.unwrap_or(ScheduleRunContext {
+                automation_id: String::new(), run_id: String::new(), unattended: false,
+                connector_event: false, scheduled_at: None,
+            });
+            run.connector_event |= previous.is_some_and(|run| run.connector_event);
             let encoded = serde_json::to_string(&run).map_err(context_error)?;
             let changed = db.execute("UPDATE btcc_subsession_delegations SET instruction_run_context_json=?2 WHERE relation_id=?1",
                 params![relation, encoded]).map_err(StorageError::sqlite)?;
