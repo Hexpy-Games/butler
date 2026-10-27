@@ -73,13 +73,25 @@ impl Step {
 /// The assistant's reply for one iteration.
 struct Reply {
     nonfinal: bool,
-    /// The provider stopped at its output token limit.
-    truncated: bool,
-    paused: bool,
+    stop: crate::btcc::ModelStop,
+    provider_content_progress: bool,
     text: String,
     calls: Vec<ModelRoundToolCall>,
     /// Tool names the model wrote as text, sorted and deduplicated.
     text_call_names: Vec<String>,
+}
+
+impl Reply {
+    fn is_paused(&self) -> bool {
+        self.stop == crate::btcc::ModelStop::Paused
+    }
+
+    fn is_cut(&self) -> bool {
+        matches!(
+            self.stop,
+            crate::btcc::ModelStop::Paused | crate::btcc::ModelStop::Truncated
+        )
+    }
 }
 
 /// Runs the model/tool loop for one admitted turn until it answers or suspends.
@@ -180,8 +192,8 @@ async fn run_iteration(
     let reply = match &resumed_batch {
         Some(batch) => Reply {
             nonfinal: false,
-            truncated: false,
-            paused: false,
+            stop: crate::btcc::ModelStop::Complete,
+            provider_content_progress: false,
             text: String::new(),
             calls: batch.calls.clone(),
             text_call_names: Vec::new(),
@@ -199,7 +211,7 @@ async fn run_iteration(
             }
         }
     };
-    if reply.paused {
+    if reply.is_paused() {
         return settle_answer(input, state, prepared, reply, iteration).await;
     }
     if let Some(step) =
@@ -257,8 +269,8 @@ async fn obtain_reply(
             .push(assistant_message(String::new(), vec![call.clone()], None));
         return Ok(Reply {
             nonfinal: false,
-            truncated: false,
-            paused: false,
+            stop: crate::btcc::ModelStop::Complete,
+            provider_content_progress: false,
             text: String::new(),
             calls: vec![call],
             text_call_names: Vec::new(),
@@ -277,6 +289,7 @@ async fn obtain_reply(
         raw_text.trim()
     }
     .to_owned();
+    let provider_content_progress = new_provider_content(state, result.assistant_message.as_ref());
     let calls = result.tool_calls;
     let mut text_call_names = result.text_tool_call_names;
     text_call_names.sort();
@@ -302,12 +315,31 @@ async fn obtain_reply(
     }
     Ok(Reply {
         nonfinal: result.nonfinal,
-        truncated: result.output_truncated,
-        paused: result.stop == crate::btcc::ModelStop::Paused,
+        stop: result.stop,
+        provider_content_progress,
         text,
         calls,
         text_call_names,
     })
+}
+
+/// Provider blocks are opaque: any newly added nonempty block advances a pause.
+fn new_provider_content(state: &State, message: Option<&ModelRoundMessage>) -> bool {
+    message
+        .and_then(|m| m.provider_data.as_ref())
+        .and_then(Value::as_array)
+        .is_some_and(|blocks| {
+            blocks.iter().any(|block| {
+                (block["type"] != "text" || block["text"].as_str().is_some_and(|s| !s.is_empty()))
+                    && !state
+                        .messages
+                        .iter()
+                        .filter_map(|m| m.provider_data.as_ref())
+                        .filter_map(Value::as_array)
+                        .flatten()
+                        .any(|previous| previous == block)
+            })
+        })
 }
 
 /// Tells the stream relay that the latest round's streamed text is not the

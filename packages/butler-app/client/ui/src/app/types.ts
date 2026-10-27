@@ -917,6 +917,8 @@ export interface MessageRecord {
   limitations?: string[];
   safe_error_code?: string;
   retryable?: boolean;
+  retry_mode?: "resume" | "fresh";
+  retry_with_current_controls?: boolean;
   cursor?: number;
   created_at?: string;
   updated_at?: string;

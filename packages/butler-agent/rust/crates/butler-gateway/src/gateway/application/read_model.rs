@@ -68,7 +68,7 @@ pub(super) fn list_message_page(
     let query = format!(
         "SELECT m.rowid,m.id,o.chat_id,m.turn_id,m.conversation_session_id,m.conversation_turn_id,\
          m.conversation_message_id,m.role,m.text,m.content_parts_json,m.status,m.created_at,m.updated_at,\
-         m.safe_error_code,m.retryable,m.plan_json,m.blocks_json FROM app_message_owners o CROSS JOIN messages m \
+         m.safe_error_code,m.retryable,m.plan_json,m.blocks_json,m.retry_mode,m.retry_with_current_controls FROM app_message_owners o CROSS JOIN messages m \
          WHERE o.chat_id=?1 AND m.chat_id=o.source_chat_id \
          AND m.rowid BETWEEN o.first_rowid AND o.last_rowid AND m.rowid{operator}?2 \
          AND NOT (role='assistant' AND safe_error_code IS NOT NULL AND \
@@ -245,6 +245,8 @@ struct MessageRow {
     updated_at: String,
     safe_error_code: Option<String>,
     retryable: i64,
+    retry_mode: Option<String>,
+    retry_with_current_controls: bool,
     plan_json: Option<String>,
     blocks_json: Option<String>,
 }
@@ -313,6 +315,8 @@ fn message(
         limitation_codes: None,
         limitations: None,
         retryable: row.retryable == 1,
+        retry_mode: row.retry_mode.as_deref().map(parse_enum).transpose()?,
+        retry_with_current_controls: row.retry_with_current_controls,
         cursor: row.cursor,
         attachments: (!files.is_empty()).then_some(files),
         artifacts: artifacts.filter(|items: &Vec<_>| !items.is_empty()),

@@ -1,19 +1,12 @@
 use crate::btcc::RuntimeFailure;
 
-/// The answer of a turn whose agent loop failed operationally.
-pub(super) fn runtime_failure_message(original: &str, failure: &RuntimeFailure) -> String {
-    message(original, failure, None, None)
-}
-
-/// The failure answer in the user's language (Korean when the request is
-/// Korean), noting when the accepted Work already completed.
+/// The failure answer in the app locale, including accepted Work results.
 pub(super) fn runtime_failure_message_for_turn(
     turn: &super::contracts::TurnRecord,
     failure: &RuntimeFailure,
     accepted_work: Option<&crate::btcc::AcceptedWorkResult>,
 ) -> String {
     message(
-        &turn.original_message,
         failure,
         accepted_work,
         turn.context
@@ -23,14 +16,13 @@ pub(super) fn runtime_failure_message_for_turn(
 }
 
 fn message(
-    original: &str,
     failure: &RuntimeFailure,
     accepted_work: Option<&crate::btcc::AcceptedWorkResult>,
     locale: Option<&str>,
 ) -> String {
     let work_completed =
         accepted_work.is_some_and(|value| value.status == crate::btcc::AcceptedWorkStatus::Success);
-    let korean = original.chars().any(|value| ('가'..='힣').contains(&value));
+    let korean = locale == Some("ko");
     if failure.code == "provider_tools_unsupported" && !work_completed {
         return if korean {
             "이 모델 서버는 도구 호출을 지원하지 않습니다.".into()
@@ -38,7 +30,7 @@ fn message(
             "This model server doesn't support tool calls.".into()
         };
     }
-    let short = match (failure.code.as_str(), locale == Some("ko")) {
+    let short = match (failure.code.as_str(), korean) {
         ("provider_output_truncated", true) => Some("답변이 출력 한도에 도달했습니다."),
         ("provider_output_truncated", false) => {
             Some("The answer reached the model's output limit.")

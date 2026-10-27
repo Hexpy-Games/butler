@@ -32,6 +32,8 @@ pub(super) fn message_result() -> MessageSendResult {
             limitation_codes: None,
             limitations: None,
             retryable: false,
+            retry_mode: None,
+            retry_with_current_controls: false,
             cursor: 1,
             attachments: None,
             artifacts: None,

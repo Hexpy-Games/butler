@@ -238,6 +238,14 @@ pub enum ChangedFileLineType {
     Deleted,
 }
 
+/// The server-selected action for a terminal failure.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RetryMode {
+    Resume,
+    Fresh,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MessageRecord {
     /// Open origin contract: S4 work results and S5 connector briefs add kinds.
@@ -269,6 +277,10 @@ pub struct MessageRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limitations: Option<Vec<String>>,
     pub retryable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_mode: Option<RetryMode>,
+    #[serde(default)]
+    pub retry_with_current_controls: bool,
     pub cursor: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attachments: Option<Vec<MessageFileRef>>,

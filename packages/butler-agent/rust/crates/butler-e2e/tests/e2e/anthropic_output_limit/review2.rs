@@ -50,8 +50,7 @@ fn tool_response(path: &str) -> String {
 }
 
 #[tokio::test]
-async fn fresh_retry_after_tools_and_later_turn_appends_without_replaying_effects()
--> Result<(), HarnessError> {
+async fn fresh_retry_refuses_failure_after_effecting_tool() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, stub, server) = setup(false).await?;
     let controls =
@@ -62,45 +61,45 @@ async fn fresh_retry_after_tools_and_later_turn_appends_without_replaying_effect
         .await?;
     assert_eq!(controls.status, 200, "{}", controls.text);
     let path = s.sandbox.workspace.join("effect.txt");
-    *stub.responses.lock().unwrap() = vec![
-        tool_response(path.to_str().unwrap()),
-        response(PARTIAL, "future_reason"),
-        text_response("Later answer."),
-        text_response("Retried answer."),
-    ];
+    *stub.responses.lock().unwrap() = vec![tool_response(path.to_str().unwrap())];
+    *stub.fail_after.lock().unwrap() = Some(1);
+    *stub.fail_status.lock().unwrap() = 503;
     let (id, turn) = s.turn("general", "Write the file and explain.").await?;
     assert_eq!(turn_state(&turn), "failed", "{turn}");
     assert_eq!(std::fs::read_to_string(&path)?, "original");
-    std::fs::write(&path, "after failure")?;
-    let original = s.gw.messages("general").await?;
-    let (later, turn) = s.turn("general", "A later question.").await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let messages = s.gw.messages("general").await?;
+    let failure = messages
+        .iter()
+        .find(|m| m["turn_id"] == id && m["status"] == "failed")
+        .unwrap();
+    assert_eq!(failure["retryable"], false, "{failure}");
+    assert!(failure["retry_mode"].is_null(), "{failure}");
     let retry =
         s.gw.post(&format!("/turns/{id}/retry-current"), json!({}))
             .await?;
-    assert_eq!(retry.status, 202, "{}", retry.text);
-    let next = butler_e2e::e2e::scenario::accepted_turn_id(retry.data())?;
-    assert_ne!(next, id);
-    let turn =
-        s.gw.wait_terminal("general", &next, Duration::from_secs(turn_timeout()))
-            .await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    assert_eq!(std::fs::read_to_string(path)?, "after failure");
-    let messages = s.gw.messages("general").await?;
-    for old in original.iter().filter(|m| m["turn_id"] == id) {
-        assert_eq!(messages.iter().find(|m| m["id"] == old["id"]), Some(old));
-    }
-    let later_index = messages
-        .iter()
-        .position(|m| m["turn_id"] == later && m["role"] == "assistant")
-        .unwrap();
-    let next_index = messages
-        .iter()
-        .position(|m| m["turn_id"] == next && m["role"] == "assistant")
-        .unwrap();
-    assert!(next_index > later_index);
-    assert_eq!(messages[next_index]["text"], "Retried answer.");
-    assert_eq!(stub.requests.lock().unwrap().len(), 4);
+    assert_eq!(retry.status, 409, "{}", retry.text);
+    assert_eq!(std::fs::read_to_string(&path)?, "original");
+    let calls: i64 = {
+        let db = butler_platform::sqlite::open_with_flags(
+            s.sandbox.data.join("agent-runtime/btcc.sqlite"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        db.query_row(
+            "SELECT COUNT(*) FROM btcc_guided_tool_calls WHERE turn_id=?1",
+            [&id],
+            |r| r.get(0),
+        )?
+    };
+    assert_eq!(calls, 1, "effecting tool executed more than once");
+    let bodies = stub.requests.lock().unwrap().clone();
+    assert!(bodies.len() > 2, "automatic retries were not exhausted");
+    assert_eq!(
+        bodies
+            .iter()
+            .filter(|body| body["messages"].as_array().unwrap().len() == 1)
+            .count(),
+        1
+    );
     s.finish().await?;
     server.abort();
     Ok(())

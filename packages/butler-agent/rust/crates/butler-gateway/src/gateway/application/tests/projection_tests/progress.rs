@@ -92,6 +92,11 @@ async fn delivered_progress_is_receipted_and_returned_by_message_get() {
         assert_eq!(hidden,1);
         assert_eq!((receipt,staged),(3,0)); Ok(())
     }).await.unwrap();
+    let empty_turn = turn.clone();
+    app.storage.execute(move |db| {
+        db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at) VALUES('empty-question','general',?1,'assistant','','streaming','now','now')", [&empty_turn]).map_err(AppStorageError::sqlite)?;
+        Ok(())
+    }).await.unwrap();
     let outbound = json!({"eventId":"outbound-empty","sessionId":"butler/app-general","kind":"outbound",
         "timestamp":"2026-09-14T00:00:07.000Z","transport":"app",
         "payload":{"actionId":"action-empty","message":{"text":""},"metadata":{
@@ -116,6 +121,21 @@ async fn delivered_progress_is_receipted_and_returned_by_message_get() {
         assert_eq!((failed, changed), (1, 1));
         Ok(())
     }).await.unwrap();
+    let messages = app
+        .list_messages("general".into(), 0.0, 200)
+        .await
+        .unwrap()
+        .messages;
+    assert!(
+        !messages.iter().any(|m| m.id == "empty-question"),
+        "{messages:?}"
+    );
+    assert!(
+        messages.iter().any(
+            |m| m.safe_error_code.as_deref() == Some("no_visible_result") && !m.text.is_empty()
+        ),
+        "{messages:?}"
+    );
     app.close().await.unwrap();
     let _ = std::fs::remove_dir_all(root);
 }

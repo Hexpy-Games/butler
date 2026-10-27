@@ -31,6 +31,7 @@ async fn refusal_keeps_partial_and_fails_without_continuation() -> Result<(), Ha
             .unwrap()
             .contains(PARTIAL)
     );
+    assert!(answer(&s, &id).await?["safe_error_code"].is_null());
     assert_eq!(stub.requests.lock().unwrap().len(), 1);
     s.finish().await?;
     server.abort();
@@ -270,6 +271,7 @@ async fn unrecognized_stop_offers_user_retry() -> Result<(), HarnessError> {
         .find(|m| m["turn_id"] == id && m["status"] == "failed")
         .unwrap();
     assert_eq!(notice["retryable"], true, "{notice}");
+    assert_eq!(notice["retry_mode"], "fresh", "{notice}");
     assert_eq!(notice["safe_error_code"], "provider_stop_unrecognized");
     let rejected = s.gw.post(&format!("/turns/{id}/retry"), json!({})).await?;
     assert_eq!(rejected.status, 409, "{}", rejected.text);
@@ -285,7 +287,30 @@ async fn unrecognized_stop_offers_user_retry() -> Result<(), HarnessError> {
     assert_eq!(turn_state(&recovered), "delivered", "{recovered}");
     assert_eq!(answer(&s, &next).await?["text"], "Recovered.");
     assert_eq!(answer(&s, &id).await?["text"], PARTIAL);
+    let messages = s.gw.messages("general").await?;
+    let notice = messages
+        .iter()
+        .find(|m| m["turn_id"] == id && m["status"] == "failed")
+        .unwrap();
+    assert_eq!(notice["retryable"], false, "{notice}");
+    assert!(notice["retry_mode"].is_null(), "{notice}");
     s.restart().await?;
+    let repeated =
+        s.gw.post(&format!("/turns/{id}/retry-current"), json!({}))
+            .await?;
+    assert_eq!(repeated.status, 202, "{}", repeated.text);
+    assert_eq!(
+        butler_e2e::e2e::scenario::accepted_turn_id(repeated.data())?,
+        next
+    );
+    assert_eq!(
+        s.gw.messages("general")
+            .await?
+            .iter()
+            .filter(|m| m["role"] == "user")
+            .count(),
+        2
+    );
     assert_eq!(answer(&s, &next).await?["text"], "Recovered.");
     assert_eq!(stub.requests.lock().unwrap().len(), 2);
     s.finish().await?;
@@ -308,3 +333,6 @@ async fn complete_round_trims_public_text() -> Result<(), HarnessError> {
 
 #[path = "review2.rs"]
 mod review2;
+
+#[path = "review3.rs"]
+mod review3;

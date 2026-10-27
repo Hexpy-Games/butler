@@ -195,7 +195,7 @@ pub(super) fn stop(
         turn,
         now,
         "cancelled",
-        "turn_stopped",
+        Some("turn_stopped"),
     )
 }
 
@@ -206,7 +206,7 @@ pub(super) fn incomplete(
     turn: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    settle_partial(db, subscribers, chat, turn, now, "incomplete", "")
+    settle_partial(db, subscribers, chat, turn, now, "incomplete", None)
 }
 
 fn settle_partial(
@@ -216,7 +216,7 @@ fn settle_partial(
     turn: &str,
     now: &str,
     partial_status: &str,
-    code: &str,
+    code: Option<&str>,
 ) -> Result<(), AppStorageError> {
     let target = StreamTarget {
         db,
@@ -235,7 +235,10 @@ fn settle_partial(
     let answer = draft(db, turn)?.is_none_or(|(_, discarded)| !discarded);
     db.execute_cached("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
         .map_err(AppStorageError::sqlite)?;
-    if answer {
+    let content: String = db
+        .query_row("SELECT text FROM messages WHERE id=?1", [&id], |r| r.get(0))
+        .map_err(AppStorageError::sqlite)?;
+    if answer && !butler_core::public_text::trim_js_whitespace(&content).is_empty() {
         db.execute_cached(
             "UPDATE messages SET status=?3,safe_error_code=?4,updated_at=?1 \
              WHERE id=?2",
@@ -304,19 +307,29 @@ pub(super) fn settle_suspended(
     updated(&target, &id, true)
 }
 
-/// Marks the turn's provisional message failed when the turn ended without a
-/// visible answer (`code` is the turn's error code).
+/// Settles the draft and records the reason when no visible answer was delivered.
 pub(in crate::gateway::application::projection) fn fail_unanswered(
     db: &Connection,
     subscribers: &EventSubscribers,
     chat: &str,
     turn: &str,
-    code: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let _ = code;
-    // Final projection owns the terminal turn events. Only settle the draft here.
-    incomplete(db, subscribers, chat, turn, now)
+    incomplete(db, subscribers, chat, turn, now)?;
+    let id = format!("message-{}", uuid::Uuid::new_v4());
+    db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code) VALUES(?1,?2,?3,'assistant','No visible answer.','failed',?4,?4,'no_visible_result')",
+        params![id,chat,turn,now]).map_err(AppStorageError::sqlite)?;
+    updated(
+        &StreamTarget {
+            db,
+            subscribers,
+            chat,
+            turn,
+            now,
+        },
+        &id,
+        false,
+    )
 }
 
 fn open(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {

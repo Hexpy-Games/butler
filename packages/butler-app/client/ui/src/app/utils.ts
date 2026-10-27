@@ -971,22 +971,18 @@ function capTurnProgressSnapshots(
   );
 }
 
-/** Terminal failure rows carry the runtime's retry eligibility. */
+/** Terminal failure rows carry the server-selected retry action. */
 export function isRetryableFailureMessage(
-  message: Pick<MessageRecord, "retryable" | "safe_error_code">,
+  message: Pick<MessageRecord, "retryable" | "retry_mode" | "retry_with_current_controls">,
 ): boolean {
-  return message.retryable === true;
+  return message.retryable === true && Boolean(message.retry_mode);
 }
 
-/**
- * Whether a failed reply also offers "Retry with current settings". That
- * starts a fresh turn, so a crash-interrupted reply (whose finished tool steps
- * a fresh turn could run again) only offers Retry, which resumes it.
- */
+/** The server also offers fresh controls for a resumable runtime fault. */
 export function canRetryWithCurrentControls(
-  message: Pick<MessageRecord, "retryable" | "safe_error_code">,
+  message: Pick<MessageRecord, "retryable" | "retry_mode" | "retry_with_current_controls">,
 ): boolean {
-  return message.retryable === true && message.safe_error_code === "runtime_fault";
+  return message.retryable === true && message.retry_with_current_controls === true;
 }
 
 export function isAssistantFailureNoticeMessage(

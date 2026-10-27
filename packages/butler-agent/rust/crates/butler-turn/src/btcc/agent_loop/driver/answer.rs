@@ -9,22 +9,8 @@ pub(super) async fn settle_answer(
     reply: Reply,
     iteration: u32,
 ) -> Result<Step, AgentLoopError> {
-    if (state.answer_continuation || reply.paused || reply.truncated)
-        && let Some(step) = advance_cut(input, state, prepared, &reply).await?
-    {
+    if let Some(step) = settle_progress(input, state, prepared, &reply).await? {
         return Ok(step);
-    }
-    if reply.paused || reply.truncated {
-        return continue_cut(input, state, &reply).await;
-    }
-    if (reply.text.is_empty() && state.cut_answer.is_empty()) || reply.nonfinal {
-        let reason = if reply.nonfinal {
-            "Your previous response only reported progress, not a final answer. Continue the request or provide its completed result."
-        } else {
-            state.empty_recovery_used = true;
-            "Your previous response was empty. Continue and provide the required result."
-        };
-        return continue_answer(input, state, prepared, reason).await;
     }
     if state.automatic_continuations == 0
         && state.phase == super::super::contracts::LoopPhase::Working
@@ -81,6 +67,40 @@ pub(super) async fn settle_answer(
     }
 }
 
+/// Nonfinal rounds and cuts continue before a visible final candidate is considered.
+async fn settle_progress(
+    input: &Invocation<'_>,
+    state: &mut State,
+    prepared: &PreparedPolicy,
+    reply: &Reply,
+) -> Result<Option<Step>, AgentLoopError> {
+    if reply.nonfinal {
+        return continue_answer(input, state, prepared,
+            "Your previous response only reported progress, not a final answer. Continue the request or provide its completed result."
+        ).await.map(Some);
+    }
+    if (state.answer_continuation || reply.is_cut())
+        && let Some(step) = advance_cut(input, state, prepared, reply).await?
+    {
+        return Ok(Some(step));
+    }
+    if reply.is_cut() {
+        return continue_cut(input, state, reply).await.map(Some);
+    }
+    if reply.text.is_empty() && state.cut_answer.is_empty() {
+        state.empty_recovery_used = true;
+        return continue_answer(
+            input,
+            state,
+            prepared,
+            "Your previous response was empty. Continue and provide the required result.",
+        )
+        .await
+        .map(Some);
+    }
+    Ok(None)
+}
+
 /// Only repeated cuts must extend the answer; a Complete round may just close it.
 async fn advance_cut(
     input: &Invocation<'_>,
@@ -94,8 +114,9 @@ async fn advance_cut(
         .unwrap_or_default()
         .trim();
     let no_progress = state.answer_continuation
-        && (reply.truncated || reply.paused)
-        && (added.is_empty() || state.cut_answer.contains(added));
+        && reply.is_cut()
+        && (added.is_empty() || state.cut_answer.contains(added))
+        && !(reply.is_paused() && reply.provider_content_progress);
     state.answer_continuation = true;
     if !no_progress {
         state.cut_answer = joined;
@@ -106,12 +127,11 @@ async fn advance_cut(
     let limit = crate::btcc::continuation_budget::model_context_byte_limit(
         input.semantic.model.context_window_tokens,
     );
-    if no_progress || ((reply.truncated || reply.paused) && state.cut_answer.len() as u64 >= limit)
-    {
+    if no_progress || (reply.is_cut() && state.cut_answer.len() as u64 >= limit) {
         return finish_limit(
             input,
             state,
-            if no_progress && reply.paused {
+            if no_progress && reply.is_paused() {
                 "provider_pause_not_resumed"
             } else if no_progress {
                 "answer_not_extended"
@@ -131,7 +151,7 @@ async fn continue_cut(
     state: &mut State,
     reply: &Reply,
 ) -> Result<Step, AgentLoopError> {
-    if reply.paused {
+    if reply.is_paused() {
         state.automatic_continuations = state.automatic_continuations.saturating_add(1);
         record_continuation(
             input,

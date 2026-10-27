@@ -5,6 +5,7 @@ use super::super::failure;
 use super::super::support::rebase_continuation;
 use crate::btcc::agent_loop::ModelRoundError;
 
+// test-category: pure-logic
 #[test]
 fn outer_failure_reduction_matches_turn_runtime_diagnostics() {
     let retry = failure::reduce(ModelRoundError::Recovered {
@@ -22,10 +23,6 @@ fn outer_failure_reduction_matches_turn_runtime_diagnostics() {
             message: "Serialized model request does not fit.".into(),
             plan: None,
         })),
-        ModelRoundError::InvocationFailure {
-            code: Some("EACCES".into()),
-            message: "Metric append failed.".into(),
-        },
         ModelRoundError::StablePrefix("stable_provider_prefix_contract_invalid".into()),
         ModelRoundError::ImageAdmission {
             code: "image_model_unsupported".into(),
@@ -37,9 +34,15 @@ fn outer_failure_reduction_matches_turn_runtime_diagnostics() {
         assert!(matches!(
             failure::reduce(error),
             ModelRoundError::Operational(ref value)
-                if value.code == "gateway_failed" && value.retryable
+                if value.code == "gateway_failed" && !value.retryable
         ));
     }
+    assert!(matches!(
+        failure::reduce(ModelRoundError::InvocationFailure {
+            code: Some("EACCES".into()), message: "Metric append failed.".into(),
+        }),
+        ModelRoundError::Operational(ref value) if value.code == "gateway_failed" && value.retryable
+    ));
     assert_eq!(
         failure::code(&ModelRoundError::DispatchLimit),
         "model_route_dispatch_limit_exceeded"

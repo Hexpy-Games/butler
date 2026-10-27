@@ -99,10 +99,11 @@ pub(super) fn reduce_outer(error: ModelRoundError) -> ReducedModelError {
             ReducedModelError::Operational(RuntimeFailure::new("turn_cancelled", false))
         }
         ModelRoundError::RequestAdmission(_)
-        | ModelRoundError::InvocationFailure { .. }
         | ModelRoundError::StablePrefix(_)
-        | ModelRoundError::ImageAdmission { .. }
-        | ModelRoundError::DispatchLimit => {
+        | ModelRoundError::ImageAdmission { .. } => {
+            ReducedModelError::Operational(RuntimeFailure::new("gateway_failed", false))
+        }
+        ModelRoundError::InvocationFailure { .. } | ModelRoundError::DispatchLimit => {
             ReducedModelError::Operational(RuntimeFailure::new("gateway_failed", true))
         }
     }

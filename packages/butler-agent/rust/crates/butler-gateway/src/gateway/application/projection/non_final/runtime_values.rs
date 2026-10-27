@@ -77,7 +77,8 @@ pub(super) fn prepare_runtime_payload(
 fn valid_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "turn.started"
+        "turn.tool_batch.recorded"
+            | "turn.started"
             | "turn.first_progress"
             | "turn.iteration.started"
             | "assistant.decision.delta"

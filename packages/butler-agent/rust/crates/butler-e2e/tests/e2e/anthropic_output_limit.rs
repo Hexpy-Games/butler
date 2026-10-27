@@ -30,6 +30,7 @@ pub(super) struct Stub {
     responses: Arc<Mutex<Vec<String>>>,
     repeat: Arc<Mutex<Option<String>>>,
     fail_after: Arc<Mutex<Option<usize>>>,
+    fail_status: Arc<Mutex<u16>>,
 }
 
 fn frame(value: &Value) -> String {
@@ -121,7 +122,7 @@ async fn reply(State(stub): State<Stub>, Json(body): Json<Value>) -> Response {
         .is_some_and(|after| round > after)
     {
         return (
-            axum::http::StatusCode::BAD_REQUEST,
+            axum::http::StatusCode::from_u16(*stub.fail_status.lock().unwrap()).unwrap(),
             Json(json!({"error":{"type":"invalid_request_error","message":"Invalid request"}})),
         )
             .into_response();
@@ -155,6 +156,7 @@ async fn setup_with_memory(
         responses: Arc::default(),
         repeat: Arc::default(),
         fail_after: Arc::default(),
+        fail_status: Arc::new(Mutex::new(400)),
     };
     let app = Router::new()
         .route("/v1/messages", post(reply))

@@ -414,6 +414,10 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
         visibility,
         source.get("payload").and_then(Value::as_object),
     )?;
+    if kind == "turn.tool_batch.recorded" {
+        db.execute("UPDATE turns SET tool_work_recorded=1 WHERE id=?1", [turn])
+            .map_err(AppStorageError::sqlite)?;
+    }
     internal_continuation::remember(db, turn, source)?;
     if visibility != "internal" {
         runtime_event::publish(input, source, &kind, normalized_payload)?;

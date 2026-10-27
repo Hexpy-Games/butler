@@ -256,14 +256,7 @@ fn settle(
     now: &str,
 ) -> Result<(), AppStorageError> {
     if message.is_none() && !error.is_empty() {
-        super::non_final::fail_unanswered(
-            db,
-            subscribers,
-            &input.chat_id,
-            &input.turn_id,
-            error,
-            now,
-        )?;
+        super::non_final::fail_unanswered(db, subscribers, &input.chat_id, &input.turn_id, now)?;
     }
     if queue::claim_status(
         db,
