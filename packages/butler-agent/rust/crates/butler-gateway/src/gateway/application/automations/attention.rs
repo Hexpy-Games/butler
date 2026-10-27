@@ -19,6 +19,7 @@ impl AppApplication {
         run_id: String,
         code: String,
         tainted: bool,
+        action: Option<serde_json::Value>,
     ) -> Result<AutomationRunSummary, GatewayApplicationError> {
         if !CODES.contains(&code.as_str()) {
             return Err(public(
@@ -27,9 +28,11 @@ impl AppApplication {
                 "Unknown schedule attention code.",
             ));
         }
+        let gate = self.initiated_gate().await?;
+        let language = gate.language;
         let now = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
-        self.storage
+        let result = self.storage
             .execute(move |db| {
                 let changed = db
                     .execute(
@@ -48,6 +51,9 @@ impl AppApplication {
                     params![code, now, automation_id],
                 )
                 .map_err(AppStorageError::sqlite)?;
+                if let Some(action) = action {
+                    super::super::initiated::enqueue_attention(db, &automation_id, &run_id, &action, &language, &now)?;
+                }
                 let run = records::run(db, &run_id)?;
                 let mut event = run_event(&run);
                 event["tainted"] = serde_json::Value::Bool(tainted);
@@ -55,6 +61,8 @@ impl AppApplication {
                 Ok(run)
             })
             .await
-            .map_err(app_error)
+            .map_err(app_error);
+        self.automation_wake.notify_one();
+        result
     }
 }

@@ -76,6 +76,7 @@ fn builtin(name: &str) -> bool {
                 | ToolName::ListToolCapabilities
                 | ToolName::ListWorkStreams
                 | ToolName::UpdateWorkStreamState
+                | ToolName::CanonPropose
                 | ToolName::CreateAutomation
                 | ToolName::UpdateAutomation
                 | ToolName::ListAutomations

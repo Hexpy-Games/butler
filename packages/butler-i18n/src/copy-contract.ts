@@ -196,6 +196,10 @@ export interface ApprovalRequestCopy {
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
   manageSchedule: { create: string; delete: string; run: string; change: string };
+  actionLabels: Record<string, string>;
+  createCanon: { epic: string; plan: string };
+  canonPlan: (plan: string) => string;
+  canonDue: (date: string) => string;
   updateProject: string;
   startConversation: string;
   restartService: string;
@@ -245,6 +249,7 @@ interface ConversationWorkCopy {
 interface ConversationCopy {
   chatsIntro: string;
   initiated: {
+    viewWork: string; needsApproval: string;
     noThanks: string; soundsGood: string;
     created: (action: string) => string; skipped: (action: string) => string;
     continuing: (action: string) => string; paused: (action: string) => string;

@@ -125,7 +125,11 @@ fn exact_approval(
         }
     }
     approval.operation = Some(operation);
-    if record.capability == "create_automation" {
+    if record.capability == "canon_propose" {
+        approval.canon = input
+            .get("canon")
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+    } else if record.capability == "create_automation" {
         approval.schedule = Some(approval::schedule(input));
     } else if record.capability == "delete_automation" {
         approval.schedule = input

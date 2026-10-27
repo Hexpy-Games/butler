@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 pub(super) struct Entry {
     pub(super) id: String,
     pub(super) chat: String,
+    pub(super) kind: String,
     /// S5 connector items under an explicit user rule may bypass quiet hours.
     /// All S2 producers leave this false.
     pub(super) bypass_quiet_hours: bool,
@@ -29,12 +30,13 @@ pub(super) fn enqueue(
 }
 
 fn held(db: &Connection) -> Result<Vec<Entry>, AppStorageError> {
-    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours FROM app_initiated_messages WHERE state='held' ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours,kind FROM app_initiated_messages WHERE state='held' ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |r| {
             Ok(Entry {
                 id: r.get(0)?,
                 chat: r.get(1)?,
+                kind: r.get(3)?,
                 bypass_quiet_hours: r.get(2)?,
             })
         })
@@ -51,22 +53,38 @@ impl AppApplication {
         if rows.is_empty() {
             return Ok(());
         }
-        let gate = self.initiated_gate().await?;
-        let subscribers = self.subscribers.clone();
-        self.storage
-            .execute(move |db| {
-                for entry in rows {
+        for entry in rows {
+            let gate = self.initiated_gate().await?;
+            let chat = entry.chat.clone();
+            let bypass = entry.bypass_quiet_hours;
+            let free = self
+                .storage
+                .read(move |db| Ok(matches!(gate.hold(db, &chat, bypass)?, Hold::Free)))
+                .await
+                .map_err(app_error)?;
+            if !free {
+                continue;
+            }
+            if entry.kind == "work_result" {
+                self.deliver_work_result(entry.id).await?;
+                continue;
+            }
+            let gate = self.initiated_gate().await?;
+            let subscribers = self.subscribers.clone();
+            self.storage
+                .execute(move |db| {
                     if matches!(
                         gate.hold(db, &entry.chat, entry.bypass_quiet_hours)?,
                         Hold::Free
                     ) {
                         post(db, &subscribers, &entry, &gate.now, gate.quiet()?)?;
                     }
-                }
-                Ok(())
-            })
-            .await
-            .map_err(app_error)
+                    Ok(())
+                })
+                .await
+                .map_err(app_error)?;
+        }
+        Ok(())
     }
 
     pub(in crate::gateway::application) async fn next_initiated_due(
@@ -79,6 +97,7 @@ impl AppApplication {
         if queued {
             rows.push(Entry {
                 id: String::new(),
+                kind: String::new(),
                 chat: "general".into(),
                 bypass_quiet_hours: false,
             });

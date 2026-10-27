@@ -9,9 +9,17 @@ impl SubsessionService {
     /// worker subsession. The delegation is idempotent.
     pub async fn delegate_worker(
         &self,
-        request: WorkerDelegationRequest,
+        mut request: WorkerDelegationRequest,
         reviewed: &WorkView,
     ) -> Result<Value, BtccError> {
+        request.access_mode = self
+            .delegated_access(
+                &request.parent_session_id,
+                &request.parent_turn_id,
+                request.access_mode.clone(),
+                None,
+            )
+            .await?;
         let parent = self
             .parent_binding(
                 &request.parent_session_id,

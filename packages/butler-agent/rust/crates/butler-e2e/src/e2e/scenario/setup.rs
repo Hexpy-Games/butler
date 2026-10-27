@@ -4,6 +4,12 @@ use super::{
 };
 
 impl Setup {
+    /// A fixed App clock after the daily jobs have already run, for non-scheduler scenarios.
+    pub fn clock_after_daily_jobs(self, at: &str) -> Result<Self, HarnessError> {
+        fixtures::scheduler_ran_today(&self.sandbox.data, at)?;
+        Ok(self.env("BUTLER_E2E_APP_NOW", at))
+    }
+
     /// Removes a variable from child commands, including harness defaults.
     pub fn unset_env(mut self, key: &str) -> Self {
         self.unset_env.push(key.to_owned());

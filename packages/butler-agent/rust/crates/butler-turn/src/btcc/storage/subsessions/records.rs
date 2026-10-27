@@ -65,7 +65,7 @@ pub struct SubsessionPacket {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_chat_id: Option<String>,
     pub relation_id: String,
-    pub access_mode: String,
+    pub access_mode: crate::btcc::AccessMode,
     pub execution_mode: PacketExecutionMode,
     pub objective: String,
     /// Runtime-attached previous request and canonical result for a fresh follow-up.
@@ -239,6 +239,8 @@ pub struct WorkerResultInput {
 /// A steward result for the butler App.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StewardResultInput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_session_id: Option<String>,
     pub relation_id: String,
     pub result_id: String,
     pub parent_session_id: String,
@@ -285,7 +287,7 @@ impl SubsessionPacket {
             parent_turn_id: "parent-turn".into(),
             parent_chat_id: Some("parent-chat".into()),
             relation_id: "relation".into(),
-            access_mode: "full_access".into(),
+            access_mode: crate::btcc::AccessMode::FullAccess,
             execution_mode: PacketExecutionMode::Mutation,
             objective: objective.into(),
             prior_context: None,
@@ -461,6 +463,7 @@ mod tests {
             r#"{"route":"steward_queue","text":"t","model_ref":"m","reasoning_effort":"r","timestamp":"now"}"#
         );
         let steward = ParentResultInput::ButlerApp(Box::new(StewardResultInput {
+            child_session_id: None,
             relation_id: "rel".into(),
             result_id: "res".into(),
             parent_session_id: "ps".into(),

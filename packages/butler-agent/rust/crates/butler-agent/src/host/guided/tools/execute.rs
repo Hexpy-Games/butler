@@ -267,6 +267,7 @@ pub(super) async fn record_unexecuted(
     let occurrence = occurrence(&owner.binding.turn_id, index, call)
         .map_err(super::GuidedToolError::contract)?;
     let call_id = occurrence.call_id.clone();
+    let (effective_name, presentation_args, _) = super::discovery::effective(call);
     remember_provider(owner, &occurrence, &call_id);
     owner
         .activity
@@ -277,9 +278,9 @@ pub(super) async fn record_unexecuted(
         .start(ToolJournalStart {
             turn_id: owner.binding.turn_id.clone(),
             call_id: call_id.clone(),
-            tool_name: call.name.clone(),
+            tool_name: effective_name,
             raw_arguments: call.raw_arguments.clone(),
-            arguments: Value::Object(call.arguments.clone()),
+            arguments: presentation_args,
         })
         .await
         .map_err(BtccError::from)?;

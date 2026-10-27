@@ -17,6 +17,7 @@ async fn steward_plan_gate_restart_settlement_and_one_call_followup() -> Result<
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("ONE-CALL-DELEGATION")?
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .cassette("TOOL-01")
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_E2E_HOLD_QUEUE_CLAIMS", "1");
@@ -86,6 +87,7 @@ async fn steward_mutations_require_a_review_of_the_current_plan() -> Result<(), 
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
     let s = Setup::new("STEWARD-PLAN-GATE")?
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .cassette("TOOL-01")
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
@@ -122,6 +124,7 @@ async fn an_old_result_turn_can_acknowledge_runtime_settlement() -> Result<(), H
         .legacy_closeout
         .store(true, std::sync::atomic::Ordering::SeqCst);
     let s = Setup::new("STEWARD-LEGACY-CLOSEOUT")?
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .cassette("TOOL-01")
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
@@ -166,6 +169,7 @@ async fn an_accepted_legacy_steward_plan_keeps_its_revision_and_review() -> Resu
         .legacy_plan
         .store(true, std::sync::atomic::Ordering::SeqCst);
     let s = Setup::new("STEWARD-LEGACY-PLAN")?
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .cassette("TOOL-01")
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()

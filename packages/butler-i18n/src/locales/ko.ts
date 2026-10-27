@@ -633,6 +633,15 @@ export const koKrCopy: AppCopy = {
       networkCommand: workspace => `${workspaceName(workspace)}에서 인터넷을 쓰는 명령을 실행할까요?`,
       useConnector: (tool, server) => tool && server ? `${server}의 ${tool} 도구를 사용할까요?` : tool ? `${tool} 도구를 사용할까요?` : "연결된 도구를 사용할까요?",
       manageSchedule: { create: "예약 작업을 만들까요?", delete: "예약 작업을 삭제할까요?", run: "예정된 예약 작업을 실행할까요?", change: "예약 작업을 변경할까요?" },
+      actionLabels: {
+        edit_files: "파일 수정", run_command: "명령 실행", network_command: "네트워크 명령 실행", web_request: "웹 요청",
+        use_connector: "연결된 도구 사용", manage_schedule: "예약 작업 관리", create_canon: "프로젝트 항목 생성",
+        update_project: "프로젝트 기록 변경", start_conversation: "대화 시작", restart_service: "버틀러 다시 시작",
+        create_worktree: "워크트리 생성", switch_folder: "작업 폴더 이동", other: "기타 동작",
+      },
+      createCanon: { epic: "과제를 만들까요?", plan: "계획을 만들까요?" },
+      canonPlan: plan => `계획: ${plan}`,
+      canonDue: date => `마감일 ${date}`,
       updateProject: "프로젝트 기록을 업데이트할까요?",
       startConversation: "새 대화를 시작할까요?",
       restartService: "버틀러를 다시 시작할까요?",
@@ -931,6 +940,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   conversation: {
     initiated: {
+      viewWork: "작업 보기", needsApproval: "확인 필요",
       noThanks: "괜찮아요", soundsGood: "좋아요",
       created: action => `만들었어요 · ${action}`, skipped: action => `안 만들었어요 · ${action}`,
       continuing: action => `계속 받아요 · ${action}`, paused: action => `멈춰 뒀어요 · ${action}`, alreadyHandled: "이미 처리된 제안이에요", failed: "처리하지 못했어요. 다시 해 주세요.",
@@ -1676,7 +1686,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       done: "완료",
     },
     grants: {
-      kind: { command: "명령 실행", fileWrite: "파일 쓰기", network: "네트워크", tool: "외부 도구", other: "기타 작업" },
+      kind: { command: "명령 실행", fileWrite: "파일 쓰기", network: "네트워크", tool: "외부 도구", other: "기타 동작" },
       scope: { conversation: "대화", project: "프로젝트", always: "항상" },
       conversations: count => `대화 ${count}개`, cwd: path => `위치 ${path}`,
       revoke: "허용 해제", revokeAlwaysTitle: "항상 허용을 해제할까요?", revokeAlwaysMessage: "다음부터는 실행 전에 묻습니다.", revoked: "허용을 해제했습니다.",

@@ -2,6 +2,10 @@ use super::*;
 use crate::gateway::GatewayMutationCommands;
 
 impl GatewayMutationCommands for AppApplication {
+    fn send_subsession_result(&self, command: SendMessageCommand) -> ApplicationFuture<Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.subsession_result_owned(command).await })
+    }
     fn composing(&self, id: String) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.composing_owned(id).await })
@@ -42,10 +46,11 @@ impl GatewayMutationCommands for AppApplication {
         run_id: String,
         code: String,
         tainted: bool,
+        action: Option<serde_json::Value>,
     ) -> ApplicationFuture<crate::gateway::AutomationRunSummary> {
         let this = self.clone_handle();
         Box::pin(async move {
-            this.automation_run_attention_owned(id, run_id, code, tainted)
+            this.automation_run_attention_owned(id, run_id, code, tainted, action)
                 .await
         })
     }

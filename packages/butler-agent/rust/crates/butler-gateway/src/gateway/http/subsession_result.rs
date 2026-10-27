@@ -57,7 +57,7 @@ pub(super) async fn post(
     );
     let result = state
         .application
-        .send_message(SendMessageCommand {
+        .send_subsession_result(SendMessageCommand {
             chat_id,
             request: crate::gateway::MessageSendRequest {
                 image_edit: None,
@@ -72,6 +72,10 @@ pub(super) async fn post(
                 access_mode: Some(access.into()),
                 plan_mode: None,
                 subsession_result: Some(butler_turn::btcc::SubsessionResultContext {
+                    child_session_id: object
+                        .get("child_session_id")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
                     relation_id,
                     result_id,
                     safe_title,

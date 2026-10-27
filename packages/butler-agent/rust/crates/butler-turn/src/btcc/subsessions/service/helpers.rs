@@ -238,7 +238,7 @@ pub(super) fn child_metadata(
         Value::String("parent_session".into()),
     );
 
-    let metadata = json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":packet.reasoning_effort,"subsession":{"root_session_id":inherited_usage_root(parent, &packet.parent_session_id),"relation_id":packet.relation_id,"delegation_id":packet.delegation_id,"task_id":packet.task_id,"parent_session_id":packet.parent_session_id,"execution_mode":packet.execution_mode,"mutation_scope":packet.mutation_scope,"allowed_tools_and_effects":packet.allowed_tools_and_effects},"runtimePolicy":runtime_policy});
+    let metadata = json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":packet.reasoning_effort,"subsession":{"root_session_id":inherited_usage_root(parent, &packet.parent_session_id),"relation_id":packet.relation_id,"delegation_id":packet.delegation_id,"task_id":packet.task_id,"parent_session_id":packet.parent_session_id,"parent_turn_id":packet.parent_turn_id,"parent_access_from_turn":packet.schedule_run.is_some(),"execution_mode":packet.execution_mode,"mutation_scope":packet.mutation_scope,"allowed_tools_and_effects":packet.allowed_tools_and_effects},"runtimePolicy":runtime_policy});
     match metadata {
         Value::Object(metadata) => inherit_folder(metadata, parent),
         _ => Map::new(),

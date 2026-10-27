@@ -4,6 +4,12 @@ export interface InitiatedOrigin {
   quiet: boolean;
   automation_id?: string;
   automation_title?: string;
+  relation_id?: string;
+  work_session_id?: string;
+  work_title?: string;
+  run_id?: string;
+  /** Raw authority approval; narrowed by the shared approval normalizer. */
+  approval?: unknown;
   panel?: PatternProposalPanel | SchedulePausePanel;
 }
 export interface InitiatedSchedule {

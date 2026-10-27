@@ -158,7 +158,7 @@ async fn child_creation_binds_work(
         "Complete task.",
     );
     if child_role == SessionRole::Steward {
-        packet.access_mode = "read_only".into();
+        packet.access_mode = crate::btcc::AccessMode::ReadOnly;
     }
     assert!(
         repository
@@ -222,7 +222,7 @@ async fn child_creation_binds_work(
     );
 
     let policy = &child_binding.metadata.as_ref().unwrap()["runtimePolicy"];
-    assert_eq!(policy["accessMode"], stored.packet.access_mode);
+    assert_eq!(policy["accessMode"], stored.packet.access_mode.as_str());
     if child_role == SessionRole::Steward {
         assert_eq!(policy["trackingMode"], "ledger");
         assert_eq!(policy["tracking_mode"], "ledger");

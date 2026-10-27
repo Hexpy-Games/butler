@@ -14,6 +14,7 @@ async fn external_content_web_requests_ask_with_exact_targets() -> Result<(), Ha
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("PERM-WEB")?
         .access(Access::Auto)
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let outside = setup.sandbox.home.join("outside.txt");

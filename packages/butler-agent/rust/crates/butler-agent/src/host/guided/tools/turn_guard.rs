@@ -4,7 +4,6 @@
 
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{AuthorityLoopContinuation, ToolExecutionError, TurnTaint};
-use reqwest::Method;
 use serde_json::{Map, Value, json};
 
 use super::GuidedTools;
@@ -221,21 +220,16 @@ fn grant_kind(capability: &str) -> &'static str {
 
 /// D8: the result an unattended run gets instead of an approval it cannot
 /// receive. No authority request exists; the run reports the skipped step.
-pub(super) async fn unattended_result(
+pub(super) fn unattended_result(
     owner: &GuidedTools,
     capability: &str,
     subject: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let value = unattended_feedback(owner, capability, subject).await;
+    let value = unattended_feedback(owner, capability, subject);
     JsonDocument::from_value(&value).map_err(super::effect::wire_error)
 }
 
-pub(super) async fn unattended_feedback(
-    owner: &GuidedTools,
-    capability: &str,
-    subject: &str,
-) -> Value {
-    notify(owner).await;
+pub(super) fn unattended_feedback(owner: &GuidedTools, capability: &str, subject: &str) -> Value {
     json!({"ok":false,"error":{
         "reason": (owner.taint() != TurnTaint::Clean)
             .then_some("This run read outside content, so the step needs a fresh permission."),
@@ -257,45 +251,16 @@ pub(super) fn unattended_question() -> Value {
     }})
 }
 
-/// Flags the App run once per turn so the schedule shows it needs permission.
-/// Best effort: the model still reports the skipped step if this fails.
-async fn notify(owner: &GuidedTools) {
-    let Some(run) = owner.binding.turn_guard.unattended.as_ref() else {
-        return;
-    };
-    let (Some(automation), Some(run_id)) = (&run.automation_id, &run.run_id) else {
-        return;
-    };
-    if std::mem::replace(&mut *owner.attention_sent.lock(), true) {
-        return;
-    }
-    let Ok(client) = crate::host::automation::client::ScheduleClient::active(&owner.app_endpoint)
-    else {
-        return;
-    };
-    let path = format!(
-        "/automations/{}/runs/{}/attention",
-        encode(automation),
-        encode(run_id)
-    );
-    let body =
-        json!({"code":"schedule_permission_required", "tainted":owner.taint() != TurnTaint::Clean});
-    let _ = client.request(Method::POST, &path, Some(body)).await;
-}
-
-fn encode(segment: &str) -> String {
-    url::form_urlencoded::byte_serialize(segment.as_bytes()).collect()
-}
-
 /// A denied scheduled action needs a different mode, rather than a waiting review.
 pub(super) async fn unattended_denial(
     owner: &GuidedTools,
     call: &butler_turn::btcc::ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    super::attention::skipped_call(owner, call).await;
     let subject = call
         .arguments
         .get("path")
         .and_then(Value::as_str)
         .unwrap_or(&call.name);
-    unattended_result(owner, &call.name, subject).await
+    unattended_result(owner, &call.name, subject)
 }

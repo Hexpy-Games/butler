@@ -296,7 +296,7 @@ impl CapabilityKind {
             {
                 Self::InternalRead
             }
-            ToolName::ControlWork => Self::ProjectRecord,
+            ToolName::CanonPropose | ToolName::ControlWork => Self::ProjectRecord,
             ToolName::StartWork
             | ToolName::ContinueWork
             | ToolName::ReplaceWorkPlan

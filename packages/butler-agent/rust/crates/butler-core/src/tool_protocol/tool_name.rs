@@ -50,6 +50,7 @@ tool_names! {
     ConnectorTriage = "connector_triage",
     ContinueWork = "continue_work",
     ControlWork = "control_work",
+    CanonPropose = "canon_propose",
     CreateAutomation = "create_automation",
     DelegateToSteward = "delegate_to_steward",
     DelegateToWorker = "delegate_to_worker",

@@ -40,7 +40,7 @@ pub(super) async fn execute(
         }
         AccessDecision::Ask(_) => {
             if owner.unattended() {
-                return super::turn_guard::unattended_result(owner, &call.name, &call.name).await;
+                return super::turn_guard::unattended_denial(owner, call).await;
             }
             match gate(owner, call, occurrence).await? {
                 Gate::Pending(value) => return super::dispatch::encoded(&value),
@@ -85,9 +85,9 @@ async fn gate(
     if super::access::resumes(owner, occurrence) {
         return resume(owner, call, occurrence, &input).await;
     }
-    let admitted = owner
-        .authority
-        .admit(AuthorityAdmissionInput {
+    let admitted = super::attention::admit(
+        owner,
+        AuthorityAdmissionInput {
             owner_session_id: owner.binding.owner_session_id.clone(),
             source_session_id: owner.binding.source_session_id.clone(),
             source_turn_id: owner.binding.turn_id.clone(),
@@ -106,9 +106,10 @@ async fn gate(
             public_action_title: Some("authority.taintReason".into()),
             honor_standing_permission: false,
             unattended: owner.unattended(),
-        })
-        .await
-        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+        },
+    )
+    .await
+    .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
     Ok(match admitted {
         AuthorityAdmissionResult::Granted => Gate::Allowed(None),
         AuthorityAdmissionResult::Pending { request_ref, .. }
@@ -116,7 +117,7 @@ async fn gate(
             json!({"ok":true,"authority_pending":true,"request_ref":request_ref,"status":"awaiting_allow"}),
         ),
         AuthorityAdmissionResult::Unattended => Gate::Pending(
-            super::turn_guard::unattended_feedback(owner, &call.name, &call.name).await,
+            super::turn_guard::unattended_feedback(owner, &call.name, &call.name),
         ),
         _ => Gate::Pending(json!({"ok":false,"error":{"code":"authority_request_denied"}})),
     })

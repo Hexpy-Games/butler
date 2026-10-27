@@ -56,7 +56,7 @@ function MessageContentComponent({
       {message.role === "assistant" ? (
         <AssistantMessageBody message={message} running={running} liveActivity={liveActivity} failureNotice={failureNotice}
           stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} attachedParts={<>
-            <MessageArtifacts bubble={isGeneralChat(message.chat_id)} text={message.text} artifacts={artifacts} attachments={message.attachments ?? []}
+            <MessageArtifacts origin={isGeneralChat(message.chat_id) ? message.initiated : undefined} bubble={isGeneralChat(message.chat_id)} text={message.text} artifacts={artifacts} attachments={message.attachments ?? []}
               refreshFileUrls={refreshFileUrls} />
             <MessageChangedFiles bubble={isGeneralChat(message.chat_id)} files={message.changed_files ?? []} attachments={message.attachments ?? []}
               artifacts={artifacts} text={message.text} />
@@ -73,6 +73,7 @@ function MessageContentComponent({
       {message.role === "assistant" && !running && onCopyAssistantMessage && (
         <AssistantResponseFooter
           bubble={isGeneralChat(message.chat_id)}
+          timeOnly={message.initiated?.kind === "approval_needed"}
           copied={copied}
           meta={footerMeta}
           status={message.status}

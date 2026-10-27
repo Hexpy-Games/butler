@@ -233,6 +233,11 @@ fn apply_access_mode(
 /// user, so they never show answer blocks: a child's blocks would be accepted
 /// but never reach the conversation.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    if policy.role == PolicyRole::Butler && policy.access_mode != AccessMode::ReadOnly {
+        names.insert("canon_propose".into());
+    } else {
+        names.remove("canon_propose");
+    }
     if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
         names.remove("answer_blocks");
         names.remove("resolve_ask");
@@ -268,6 +273,7 @@ pub(super) fn legacy_visible<'a>(
     }
     if policy.role == PolicyRole::Butler {
         names.extend(STEWARD_PARENT.iter().copied());
+        names.insert("canon_propose");
     }
     if policy.role == PolicyRole::Steward {
         names.extend(WORKER_DELEGATION.iter().copied());

@@ -56,7 +56,7 @@ impl SqliteSubsessionRepository {
             let packet = &delegation.packet;
             let model = packet.model_ref.as_str();
             let reasoning = packet.reasoning_effort.as_str();
-            let access = required_packet_string(&packet.access_mode, "access_mode")?;
+            let access = packet.access_mode.as_str();
             let parent_chat = packet.parent_chat_id.as_deref();
             if model.is_empty() || reasoning.is_empty() { return Err(StorageError::new(StorageCode::SubsessionParentModelContextMissing,"Subsession model context is missing")); }
             let tx = db.transaction().map_err(StorageError::sqlite)?;
@@ -90,6 +90,7 @@ impl SqliteSubsessionRepository {
                     reasoning_effort: reasoning.into(), timestamp: now.clone(),
                 }),
                 ChildRole::Steward => ParentResultInput::ButlerApp(Box::new(StewardResultInput {
+                    child_session_id: Some(child_session.clone()),
                     relation_id: delegation.relation_id.clone(),
                     result_id: result_id.clone(),
                     parent_session_id: delegation.parent_session_id.clone(),

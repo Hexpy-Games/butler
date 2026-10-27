@@ -50,6 +50,7 @@
     "app:queued-send-now:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-queued-send-now-smoke.ts",
     "app:session-info:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-session-info-smoke.ts",
     "app:noticed-patterns:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-noticed-patterns-smoke.ts",
+    "app:chats-results:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-chats-results-smoke.ts",
     "app:chats-initiated:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-chats-initiated-smoke.ts",
     "app:chats-bubble:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-chats-bubble-smoke.ts",
     "app:file-viewer:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-file-viewer-smoke.ts",

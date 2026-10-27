@@ -2,6 +2,7 @@
 
 mod authority;
 mod automation;
+mod canon;
 mod ledger;
 mod ledger_input;
 mod mcp;
@@ -17,10 +18,13 @@ pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
 }
 
-/// Effects routed by name beyond the fixed tool list: managed ledger writes
-/// and working-folder moves.
+/// Host-managed effects routed before direct adapters, independently of their access kind.
 pub(super) fn routes_effect(name: &str) -> bool {
-    ledger_input::managed(name) || name == ToolName::SwitchFolder
+    ledger_input::managed(name)
+        || matches!(
+            ToolName::parse(name),
+            Some(ToolName::CanonPropose | ToolName::SwitchFolder)
+        )
 }
 
 use std::sync::Arc;
@@ -230,6 +234,8 @@ async fn prepare(
         session_folder::prepare(owner, &call.arguments).await
     } else if mcp::supports(&call.name) {
         mcp::prepare(owner, &call.arguments).map(|prepared| (prepared.0, prepared.1, prepared.2))
+    } else if call.name == ToolName::CanonPropose {
+        canon::prepare(owner, call, occurrence).await
     } else if automation::supports(&call.name) {
         automation::prepare(owner, call, occurrence).await
     } else if topic_conversation::supports(&call.name) {

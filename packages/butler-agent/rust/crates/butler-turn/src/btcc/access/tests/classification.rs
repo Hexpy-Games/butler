@@ -39,6 +39,7 @@ pub(super) fn boundaries() {
         ("read_file", FileRead),
         ("list_files", FileRead),
         ("grep_files", FileRead),
+        ("canon_propose", ProjectRecord),
         ("create_automation", Schedule),
         ("update_automation", Schedule),
         ("delete_automation", Schedule),

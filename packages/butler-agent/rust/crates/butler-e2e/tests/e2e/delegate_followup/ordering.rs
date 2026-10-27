@@ -1,15 +1,15 @@
-//! Results outrank user follow-ups queued during a busy parent turn.
+//! Queued user follow-ups precede a held completion under the shared S2 gate.
 use super::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
-async fn child_result_precedes_queued_followups() -> Result<(), HarnessError> {
+async fn queued_followups_precede_child_result() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     ordered("/session-queue", false).await
 }
 
 #[tokio::test]
-async fn child_result_precedes_composer_followups() -> Result<(), HarnessError> {
+async fn composer_followups_precede_child_result() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     ordered("/messages", false).await
 }
@@ -25,6 +25,7 @@ async fn ordered(endpoint: &str, restart: bool) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start(true).await?;
     let mut s = Setup::new("CHILD-RESULT-BEFORE-FOLLOWUPS")?
         .app_supervisor()
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env(
@@ -144,11 +145,20 @@ async fn assert_pending(
             .unwrap().query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
             .unwrap().collect::<Result<Vec<_>, _>>().unwrap()
     }).await.unwrap();
-    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert_eq!(rows.len(), 2, "{rows:?}");
     assert_eq!([rows[0].0.as_str(), rows[1].0.as_str()], followups);
-    assert!(rows[2].0.contains("Delegated result"), "{rows:?}");
-    let controls: Value = serde_json::from_str(&rows[2].1)?;
-    assert!(controls["subsession_result"].is_object(), "{controls}");
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    let held: Vec<(String, String)> = db.prepare("SELECT text,payload_json FROM app_initiated_messages WHERE kind='work_result' AND state='held'")?
+        .query_map([], |r| Ok((r.get(0)?,r.get(1)?)))?.collect::<Result<_, _>>()?;
+    assert_eq!(held.len(), 1, "{held:?}");
+    let payload: Value = serde_json::from_str(&held[0].1)?;
+    assert!(
+        payload["text"]
+            .as_str()
+            .unwrap()
+            .contains("Delegated result")
+    );
+    assert!(payload["subsession_result"].is_object(), "{payload}");
     assert!(
         !script
             .requests
@@ -185,6 +195,12 @@ async fn assert_ordered(
             )
             .await?;
     }
+    events
+        .wait_for(Duration::from_secs(30), |event| {
+            event["payload"]["message"]["initiated"]["kind"] == "work_result"
+                && event["payload"]["message"]["status"] == "delivered"
+        })
+        .await?;
     let messages = s.gw.messages("general").await?;
     let requests = script.requests.lock().unwrap();
     let ordered: Vec<_> = requests
@@ -194,10 +210,10 @@ async fn assert_ordered(
         .collect();
     assert_eq!(ordered.len(), 3, "{ordered:?}");
     assert!(
-        ordered[0].contains("Delegated result") && ordered[0].contains("status: success"),
+        ordered[2].contains("Delegated result") && ordered[2].contains("status: success"),
         "{ordered:?}"
     );
-    assert_eq!(&ordered[1..], followups, "{ordered:?}");
+    assert_eq!(&ordered[..2], followups, "{ordered:?}");
     let result = messages
         .iter()
         .position(|m| m["text"] == "원문 확인 결과를 정리했습니다.")
@@ -218,7 +234,7 @@ async fn assert_ordered(
             matches[0].0
         })
         .collect();
-    assert!(result < users[0] && users[0] < users[1], "{messages:?}");
+    assert!(users[0] < users[1] && users[1] < result, "{messages:?}");
     Ok(())
 }
 

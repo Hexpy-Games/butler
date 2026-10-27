@@ -1,6 +1,7 @@
 //! Native BTCC Turn preparation in the source orchestration order.
 
 mod context;
+mod inherited_access;
 mod model;
 mod origin;
 mod request;
@@ -111,6 +112,13 @@ pub struct DefaultTurnPreparation {
     observer: Arc<dyn ConversationAdmissionObserver>,
     context: Arc<dyn AdmissionContextPort>,
     models: Arc<dyn AdmissionModelCatalogPort>,
+    parent_access: Option<
+        Arc<
+            dyn Fn(StoredSessionBinding) -> PortFuture<'static, crate::btcc::AccessMode>
+                + Send
+                + Sync,
+        >,
+    >,
 }
 
 impl DefaultTurnPreparation {
@@ -130,7 +138,21 @@ impl DefaultTurnPreparation {
             observer,
             context,
             models,
+            parent_access: None,
         }
+    }
+
+    /// Resolve App parent controls on demand when admitting a new child turn.
+    pub fn with_parent_access(
+        mut self,
+        resolver: Arc<
+            dyn Fn(StoredSessionBinding) -> PortFuture<'static, crate::btcc::AccessMode>
+                + Send
+                + Sync,
+        >,
+    ) -> Self {
+        self.parent_access = Some(resolver);
+        self
     }
 
     /// Prepares a turn: a known turn replays its stored admission; a new one
@@ -172,6 +194,7 @@ impl DefaultTurnPreparation {
                     ),
                 )
             })?;
+        let binding = self.inherited_binding(binding).await?;
         request::assert_binding_role(&binding, &request)?;
         let subsession = subsession::read(&binding)?;
         let assembly = self

@@ -228,7 +228,7 @@ async fn resolve_default(
     Ok(())
 }
 
-async fn restore_reviewed_input(
+pub(super) async fn restore_reviewed_input(
     owner: &GuidedTools,
     occurrence: &str,
     input: &mut Value,

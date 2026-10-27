@@ -29,6 +29,7 @@ async fn scheduled_runs_never_wait_in_any_mode() -> Result<(), HarnessError> {
     let (url, script, server) = stub::start().await?;
     let s = Setup::new("PERM-03")?
         .access(Access::Auto)
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()

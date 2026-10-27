@@ -25,16 +25,18 @@ impl Hold {
     }
 }
 
-pub(super) struct Gate {
+pub(in crate::gateway::application) struct Gate {
     pub(super) now: String,
     pub(super) tz: String,
-    pub(super) language: String,
+    pub(in crate::gateway::application) language: String,
     start: String,
     end: String,
     composing: Composing,
 }
 impl AppApplication {
-    pub(super) async fn initiated_gate(&self) -> Result<Gate, GatewayApplicationError> {
+    pub(in crate::gateway::application) async fn initiated_gate(
+        &self,
+    ) -> Result<Gate, GatewayApplicationError> {
         let settings = self.worker_profile_settings().await?;
         let facts = self.dependencies.settings_facts.snapshot()?;
         let tz = self

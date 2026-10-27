@@ -373,6 +373,8 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
         }
         assert_eq!(authorized("call_mcp_tool"), mcp, "{access}");
         assert_eq!(authorized("create_automation"), automation, "{access}");
+        assert_eq!(authorized("canon_propose"), automation, "{access}");
+        assert_eq!(offered("canon_propose"), automation, "{access}");
         // Ordinary sessions authorize discovery without adding visible schemas.
         for flag in ["off", "on"] {
             let mut ordinary = phase_turn(access, &json!({}));

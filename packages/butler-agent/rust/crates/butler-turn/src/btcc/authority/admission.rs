@@ -48,6 +48,26 @@ pub(super) fn admit(
     projection::admission(&stored, collation)
 }
 
+/// Builds the same exact card as admission without persisting a request.
+pub(super) fn preview(
+    input: AuthorityAdmissionInput,
+    collation: &butler_core::locale::LocaleCollation,
+) -> AuthorityResult<super::approval::AuthorityApproval> {
+    let record = pending_record(
+        input,
+        PendingIdentity {
+            identity_sha: String::new(),
+            generation: 1,
+            request_id: String::new(),
+            now: String::new(),
+        },
+        collation,
+    )?;
+    projection::request(&record, collation)?
+        .approval
+        .ok_or_else(|| AuthorityError::policy("authority_approval_missing"))
+}
+
 /// The admission slot of a request.
 enum Slot {
     /// An existing request or a standing permission already answers it.

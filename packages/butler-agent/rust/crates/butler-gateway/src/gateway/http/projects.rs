@@ -16,6 +16,19 @@ use crate::gateway::{
 };
 
 pub(super) async fn list(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
+    if let Some(reference) = query(uri).get("project_ref") {
+        let project = state
+            .application
+            .resolve_project_reference(reference.clone())
+            .await?;
+        return json(
+            StatusCode::OK,
+            ApiEnvelope {
+                protocol_version: APP_PROTOCOL_VERSION,
+                data: project,
+            },
+        );
+    }
     let include_sessions = query(uri)
         .get("include_sessions")
         .is_some_and(|value| value == "true");
