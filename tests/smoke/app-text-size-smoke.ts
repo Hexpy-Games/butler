@@ -11,6 +11,7 @@ import { createNativeAppServer, freePort } from "../support/native-app-server";
 import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { connectElectronMain } from "../support/electron-main-cdp";
 import { smokeElectronArgs } from "../support/smoke-browser";
+import { visibleClipping } from "../support/visible-clipping";
 import { verifyVisibleClipping } from "../support/visible-clipping-fixtures";
 import { checkSuggestionStrips } from "../support/text-size-strip";
 import { textSizeSweep } from "../support/text-size-sweep";
@@ -95,26 +96,60 @@ async function launch() {
     return { page, main, stop, readFirstPaints, debug };
   } catch (error) { await stop(); throw error; }
 }
-async function layout(page: Page, screen: string) {
-  const result = await page.evaluate(() => {
-    const clipped = [...document.querySelectorAll<HTMLElement>('*')].flatMap(node => {
-      if (!node.checkVisibility() || !node.textContent?.trim()) return [];
-      const style = getComputedStyle(node);
-      const rect = node.getBoundingClientRect();
-      // Visually hidden accessibility labels do not paint text.
-      if (rect.width <= 1 && rect.height <= 1 && (style.clip !== "auto" || style.clipPath !== "none")) return [];
-      // Intentional ellipsis is a disclosed compact label; clipped multiline content is a failure.
-      if (style.textOverflow === "ellipsis") return [];
-      if (node.scrollWidth <= node.clientWidth + 1) return [];
-      if (!["hidden", "clip"].includes(style.overflowX)) return [];
-      return [{ tag: node.tagName, slot: node.dataset.slot, text: node.textContent!.slice(0, 80),
-        x: node.scrollWidth - node.clientWidth, y: node.scrollHeight - node.clientHeight }];
+function measureLayout(cuts: ReturnType<typeof visibleClipping>) {
+  const clipped = [...document.querySelectorAll<HTMLElement>('*')].flatMap(node => {
+    if (!node.checkVisibility() || !node.textContent?.trim()) return [];
+    const style = getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    // Visually hidden accessibility labels do not paint text.
+    if (rect.width <= 1 && rect.height <= 1 && (style.clip !== "auto" || style.clipPath !== "none")) return [];
+    // Intentional ellipsis is a disclosed compact label; clipped multiline content is a failure.
+    if (style.textOverflow === "ellipsis") return [];
+    if (node.scrollWidth <= node.clientWidth + 1) return [];
+    if (!["hidden", "clip"].includes(style.overflowX)) return [];
+    // Scroll extents include decorative descendants and pseudo-elements.
+    // Require painted text or control geometry to cross this clipping box.
+    const left = rect.left + parseFloat(style.borderLeftWidth);
+    const right = rect.right - parseFloat(style.borderRightWidth);
+    const ownTextCut = [...node.childNodes].some(child => {
+      if (child.nodeType !== Node.TEXT_NODE || !child.textContent?.trim()) return false;
+      const range = document.createRange(); range.selectNodeContents(child);
+      return [...range.getClientRects()].some(box => box.left < left - 1 || box.right > right + 1);
     });
-    return { width: innerWidth, height: innerHeight, clientWidth: document.documentElement.clientWidth, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, clipped };
+    const descendantCut = cuts.some(cut => ["left", "right"].includes(cut.side)
+      && cut.ancestor !== "viewport" && document.querySelector(cut.ancestor) === node);
+    if (!ownTextCut && !descendantCut) return [];
+    return [{ tag: node.tagName, slot: node.dataset.slot, text: node.textContent!.slice(0, 80),
+      x: node.scrollWidth - node.clientWidth, y: node.scrollHeight - node.clientHeight }];
   });
+  return { width: innerWidth, height: innerHeight, clientWidth: document.documentElement.clientWidth, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, clipped };
+}
+async function layout(page: Page, screen: string) {
+  const result = await page.expression<ReturnType<typeof measureLayout>>(`(${measureLayout.toString()})((${visibleClipping.toString()})())`);
   console.log(JSON.stringify({ screen, ...result }));
 
   if (result.overflow > 0 || result.clipped.length) layoutFailures.push(`${screen}: ${JSON.stringify(result)}`);
+}
+async function verifyLayoutClipping(page: Page) {
+  const cases = [
+    { name: "decorative extent", content: 'Readable<span aria-hidden="true" style="position:absolute;left:0;width:140px;height:30px"></span>', expected: 0 },
+    { name: "decorative pseudo-element", css: '#clip::after{content:"";position:absolute;inset:0 -2px -2px}', content: "Readable", expected: 0 },
+    { name: "own text cut", content: "Readable text extending past the clipping box", expected: 1 },
+    { name: "descendant cut", content: '<span style="display:inline-block;width:140px">Readable text</span>', expected: 1 },
+    { name: "control cut", content: '<button style="width:140px"><svg width="120" height="10" aria-label="Icon"></svg>Action</button>', expected: 1 },
+    { name: "intentional ellipsis", css: '#clip{text-overflow:ellipsis}', content: "Readable text extending past the clipping box", expected: 0 },
+  ];
+  await page.expression(`(()=>{const frame=document.createElement('iframe');frame.id='layout-checker-fixture';
+    frame.style.cssText='position:fixed;inset:0;width:400px;height:200px;z-index:2147483647';document.body.append(frame)})()`);
+  try {
+    for (const cell of cases) {
+      const html = `<style>body{margin:20px}#clip{position:relative;width:100px;overflow:hidden;white-space:nowrap;font:10px monospace}${cell.css ?? ""}</style><div id="clip">${cell.content}</div>`;
+      const actual = await page.expression<ReturnType<typeof measureLayout>>(`(()=>{const doc=document.querySelector('#layout-checker-fixture').contentDocument;
+        doc.open();doc.write(${JSON.stringify(html)});doc.close();return doc.defaultView.eval(${JSON.stringify(`(${measureLayout.toString()})((${visibleClipping.toString()})())`)})})()`);
+      assert.equal(actual.clipped.length, cell.expected, cell.name);
+    }
+    console.log(JSON.stringify({ layoutClippingCheckerCases: cases.length, result: "PASS" }));
+  } finally { await page.expression("document.querySelector('#layout-checker-fixture').remove()"); }
 }
 async function click(page: Page, name: string, scope = 'button,[role="button"]') {
   await page.expression(`(()=>{const n=[...document.querySelectorAll(${JSON.stringify(scope)})].find(e=>(e.getAttribute('aria-label')||e.textContent)?.trim()===${JSON.stringify(name)});n?.scrollIntoView({block:'nearest'})})()`);
@@ -391,6 +426,7 @@ try {
   await click(page, copy.sidebar.newChat);
   await checkSuggestionStrips(page, main, win, evidence);
   await verifyVisibleClipping(page);
+  await verifyLayoutClipping(page);
   await textSizeSweep({ page, main, win, evidence, click, server });
   await appearance(page);
   await change(page, copy.settings.options.textSizeDefault, textSizeFactor("default"));
