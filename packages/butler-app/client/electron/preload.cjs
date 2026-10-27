@@ -1,4 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
+ipcRenderer.on("butler:text-size", (_event, factor) => {
+  if (typeof factor === "number" && Number.isFinite(factor) && factor > 0) document.documentElement.style.setProperty("--ui-scale", String(factor));
+});
 
 // Capture links before nested message menus; non-web schemes keep their handlers.
 for (const type of ["click", "contextmenu"]) globalThis.window?.addEventListener(type, event => {
@@ -1308,6 +1311,13 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  initialTextSize: process.argv.find(arg => arg.startsWith("--butler-text-size="))?.split("=")[1] ?? "default",
+  setTextSize: value => ipcRenderer.invoke("butler:set-text-size", value),
+  onTextSizeShortcut: handler => {
+    const listener = (_event, command) => handler(command);
+    ipcRenderer.on("butler:text-size-shortcut", listener);
+    return () => ipcRenderer.removeListener("butler:text-size-shortcut", listener);
+  },
   setNativeAppearanceTheme: ({ theme } = {}) => ipcRenderer.invoke("butler:set-native-appearance-theme", { theme }),
   getPersonalization: () => requestJson("/personalization"),
   getProfileImportPrompt: ({ locale } = {}) => {

@@ -114,43 +114,7 @@ pub(super) fn sanitize(
             output.insert(key.into(), mode.as_str().into());
         }
     }
-    for (key, allowed) in [
-        ("follow_up_behavior", &["queue", "steer"][..]),
-        (
-            "multiline_send_behavior",
-            &[
-                "modifier_enter_send_enter_newline",
-                "enter_send_shift_enter_newline",
-                "enter_newline_shift_enter_send",
-            ][..],
-        ),
-        ("appearance_theme", &["system", "light", "dark"][..]),
-        (
-            "main_screen_theme_preset",
-            &[
-                "monochrome",
-                "aurora",
-                "bloom",
-                "lavender",
-                "morning",
-                "custom",
-            ][..],
-        ),
-    ] {
-        if let Some(value) = input
-            .get(key)
-            .and_then(Value::as_str)
-            .filter(|value| allowed.contains(value))
-        {
-            let normalized =
-                if key == "multiline_send_behavior" && value == "enter_newline_shift_enter_send" {
-                    "modifier_enter_send_enter_newline"
-                } else {
-                    value
-                };
-            output.insert(key.into(), json!(normalized));
-        }
-    }
+    enum_settings(input, &mut output);
     boolean_settings(input, &mut output);
     if let Some(value) = input.get("main_screen_theme").and_then(Value::as_str) {
         let normalized = match value {
@@ -279,6 +243,47 @@ fn boolean_settings(input: &Map<String, Value>, output: &mut Map<String, Value>)
     ] {
         if let Some(value) = input.get(key).filter(|value| value.is_boolean()) {
             output.insert(key.into(), value.clone());
+        }
+    }
+}
+
+fn enum_settings(input: &Map<String, Value>, output: &mut Map<String, Value>) {
+    for (key, allowed) in [
+        ("follow_up_behavior", &["queue", "steer"][..]),
+        (
+            "multiline_send_behavior",
+            &[
+                "modifier_enter_send_enter_newline",
+                "enter_send_shift_enter_newline",
+                "enter_newline_shift_enter_send",
+            ][..],
+        ),
+        ("appearance_theme", &["system", "light", "dark"][..]),
+        ("text_size", &["default", "large", "larger"][..]),
+        (
+            "main_screen_theme_preset",
+            &[
+                "monochrome",
+                "aurora",
+                "bloom",
+                "lavender",
+                "morning",
+                "custom",
+            ][..],
+        ),
+    ] {
+        if let Some(value) = input
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|value| allowed.contains(value))
+        {
+            let normalized =
+                if key == "multiline_send_behavior" && value == "enter_newline_shift_enter_send" {
+                    "modifier_enter_send_enter_newline"
+                } else {
+                    value
+                };
+            output.insert(key.into(), json!(normalized));
         }
     }
 }

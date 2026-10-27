@@ -245,6 +245,15 @@ describe("spacing and radius lint", () => {
       ".a { padding: var(--space-sm) var(--space-lg); border-radius: var(--radius-control); }",
     )).toEqual([]);
   });
+
+  test("px radii divide by --ui-scale so corners keep their size under 큰 글자", () => {
+    expect(lint(".a { border-radius: 2px; }").join("\n")).toContain("--ui-scale");
+    expect(lint(".a { border-top-left-radius: calc(var(--radius-control) - 2px); }").join("\n")).toContain("--ui-scale");
+    expect(lint(".a { --card-radius: 3px; }").join("\n")).toContain("--ui-scale");
+    expect(lint(
+      ".a { border-radius: calc(2px / var(--ui-scale)) 0 0 calc(var(--radius-control) - 2px / var(--ui-scale)); --x-radius: 0px; }",
+    )).toEqual([]);
+  });
 });
 
 // test-category: pure-logic

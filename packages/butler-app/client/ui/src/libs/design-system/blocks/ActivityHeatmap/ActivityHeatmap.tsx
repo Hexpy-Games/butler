@@ -4,6 +4,7 @@ import { Tooltip } from "../../components/Tooltip";
 import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./ActivityHeatmap.module.css";
 import { useAnchoredScroll, useCellFocus } from "./useHeatmapFocus";
+import { useFitCell } from "./useFitCell";
 import { dsClass, dsStyle } from "../../lib/internal";
 
 export type ActivityHeatmapLevel = 0 | 1 | 2 | 3 | 4;
@@ -95,13 +96,15 @@ export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabe
   const hasMonths = days.some((day) => day.monthLabel);
   const fadeRef = useScrollEdges("x");
   const viewportRef = useAnchoredScroll(scrollAnchor, weeks);
-  const setViewport = useCallback((node: HTMLDivElement | null) => { fadeRef(node); viewportRef.current = node; }, [fadeRef, viewportRef]);
+  const [fitCell, fitRef] = useFitCell(weeks);
+  const setViewport = useCallback((node: HTMLDivElement | null) => { fadeRef(node); fitRef(node); viewportRef.current = node; }, [fadeRef, fitRef, viewportRef]);
   const selectedIndex = days.findIndex((day) => day.id === selectedId);
   const focus = useCellFocus(days, selectedIndex >= 0 ? selectedIndex : scrollAnchor === "end" ? days.length - 1 : 0);
   const activeDay = focus.active === null ? undefined : days[focus.active];
   const activePosition = (focus.active ?? 0) + offset;
   const anchorStyle = { "--heatmap-column": Math.floor(activePosition / 7), "--heatmap-row": activePosition % 7 } as CSSProperties;
-  return <div className={styles.root} data-cell={cell} role="group" aria-label={ariaLabel}>
+  const rootStyle = fitCell === null ? undefined : { "--heatmap-cell-fit": `${fitCell}px` } as CSSProperties;
+  return <div className={styles.root} data-cell={cell} style={rootStyle} role="group" aria-label={ariaLabel}>
   <div className={styles.frame}>
     {weekdayLabels && <Weekdays labels={weekdayLabels} months={hasMonths} />}
     <div ref={setViewport} className={styles.viewport}>

@@ -50,6 +50,7 @@ export const EMPTY_SETTINGS: SettingsView = {
   follow_up_behavior: "queue",
   multiline_send_behavior: "modifier_enter_send_enter_newline",
   appearance_theme: "system",
+  text_size: "default",
   reduce_motion: false,
   collapse_message_box: true,
   main_screen_theme: "riso",

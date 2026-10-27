@@ -43,7 +43,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "full-reset", kind: "form", fields: ["full-reset"] },
   ],
   appearance: [
-    { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
+    { id: "theme", kind: "form", fields: ["theme", "text-size", "translucent-sidebar"] },
     { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
     { id: "conversation", kind: "form", fields: ["show-thinking", "conversation-background"] },
     { id: "message-box", kind: "form", fields: ["collapse-message-box", "composer-decoration", "composer-character"] },

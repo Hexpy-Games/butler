@@ -104,6 +104,7 @@ export function settingsWithDefaults(
     ...EMPTY_SETTINGS,
     ...(record as Partial<SettingsView>),
     ...legacyTheme,
+    text_size: record.text_size === "large" || record.text_size === "larger" ? record.text_size : "default",
     reduce_motion: record.reduce_motion === true,
     show_thinking: record.show_thinking === true,
     collapse_message_box: record.collapse_message_box !== false,
@@ -137,7 +138,9 @@ export function readCachedSettings(
   try {
     const storage = globalThis.localStorage;
     const raw = storage.getItem(APP_SETTINGS_CACHE_KEY);
-    return raw ? settingsWithDefaults(JSON.parse(raw)) : fallback;
+    const settings = raw ? settingsWithDefaults(JSON.parse(raw)) : fallback;
+    const initial = typeof window === "undefined" ? undefined : window.butlerApp?.initialTextSize;
+    return initial ? { ...settings, text_size: initial } : settings;
   } catch {
     return fallback;
   }

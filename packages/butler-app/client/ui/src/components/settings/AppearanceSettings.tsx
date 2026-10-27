@@ -16,6 +16,7 @@ import { ComposerFoldField } from "./ComposerFoldField";
 import { ReduceMotionField } from "./ReduceMotionField";
 import { ComposerDecorationSettings } from "./ComposerDecorationSettings";
 import { ConversationBackgroundSettings } from "./ConversationBackgroundSettings";
+import { TextSizeField } from "./TextSizeField";
 import { MainScreenThemeSettings } from "./MainScreenThemeSettings";
 
 export const AppearanceSettings = memo(function AppearanceSettings() {
@@ -53,6 +54,7 @@ export const AppearanceSettings = memo(function AppearanceSettings() {
             { value: "dark", label: options.dark },
           ]}
         />
+        <TextSizeField />
         <SettingsSwitch
           settingId="translucent-sidebar"
           label={fields.translucentSidebar}
