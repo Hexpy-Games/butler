@@ -93,6 +93,12 @@
   overflow: hidden;
 }
 
+/* A locked scroller never draws a scrollbar: its children lay out in it
+   directly, as flex items that may shrink to fit. */
+.lockedScroll > .scrollContent {
+  display: contents;
+}
+
 .scroll::-webkit-scrollbar {
   width: 8px;
 }
