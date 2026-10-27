@@ -3110,47 +3110,18 @@ test("work blocks ignore opening decisions and acknowledged receipt rows", () =>
   expect(JSON.stringify(blocks)).not.toContain("app-client readmodel");
 });
 
-test("retry eligibility requires a runtime fault or crash interruption code", () => {
-  expect(
-    isRetryableFailureMessage({
-      retryable: true,
-      safe_error_code: "runtime_fault",
-    }),
-  ).toBe(true);
-  expect(
-    isRetryableFailureMessage({
-      retryable: true,
-      safe_error_code: "turn_interrupted",
-    }),
-  ).toBe(true);
-  expect(
-    isRetryableFailureMessage({
-      retryable: true,
-      safe_error_code: "tool_invalid_arguments",
-    }),
-  ).toBe(false);
+test("retry eligibility follows the server action", () => {
+  expect(isRetryableFailureMessage({ retryable: true, retry_mode: "fresh" })).toBe(true);
+  expect(isRetryableFailureMessage({ retryable: true, retry_mode: "resume" })).toBe(true);
   expect(isRetryableFailureMessage({ retryable: true })).toBe(false);
-  expect(
-    isRetryableFailureMessage({
-      retryable: false,
-      safe_error_code: "runtime_fault",
-    }),
-  ).toBe(false);
+  expect(isRetryableFailureMessage({ retryable: false, retry_mode: "fresh" })).toBe(false);
 });
 
-test("retry with current settings is offered only for a runtime fault", () => {
-  const cases: Array<[boolean, string | undefined, boolean]> = [
-    [true, "runtime_fault", true],
-    [true, "turn_interrupted", false],
-    [true, "tool_invalid_arguments", false],
-    [true, undefined, false],
-    [false, "runtime_fault", false],
-  ];
-  for (const [retryable, code, expected] of cases) {
-    expect(
-      canRetryWithCurrentControls({ retryable, safe_error_code: code }),
-    ).toBe(expected);
-  }
+test("retry with current settings follows the server flag", () => {
+  expect(canRetryWithCurrentControls({ retryable: true, retry_mode: "resume", retry_with_current_controls: true })).toBe(true);
+  expect(canRetryWithCurrentControls({ retryable: true, retry_mode: "resume" })).toBe(false);
+  expect(canRetryWithCurrentControls({ retryable: true, retry_mode: "fresh" })).toBe(false);
+  expect(canRetryWithCurrentControls({ retryable: false, retry_with_current_controls: true })).toBe(false);
 });
 
 test("production work block projection keeps mixed tool row decisions out of block semantics", () => {

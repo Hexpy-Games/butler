@@ -1,3 +1,4 @@
+import { nativeAppBounds } from "../text-size.mjs";
 import { snapshotApp } from "./app-snapshot.mjs";
 import { openExternalSignIn, openLink } from "./links.mjs";
 import { requestClose } from "./dialogs.mjs";
@@ -59,7 +60,7 @@ export function installUserBrowser(app, getWindow, getLanguage) {
       case "clear-site-data": return clearSiteData(browser);
       default:
         if (!["navigate", "back", "forward", "reload", "stop", "bounds", "covered", "still", "focus"].includes(op)) throw new Error("invalid_browser_call");
-        return browser.commandTab(op, input.id, input.value);
+        return browser.commandTab(op, input.id, op === "bounds" ? nativeAppBounds(event.sender, input.value, browser.tabs.get(input.id)?.agent === true) : input.value);
     }
   });
   ipcMain.on("butler-browser:selection-command", (event, op, id, point) => {

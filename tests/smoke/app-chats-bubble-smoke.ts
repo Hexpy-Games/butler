@@ -99,6 +99,55 @@ try {
       await page.close();
     }
   }
+  for (const kind of ["partial", "empty", "stopped"] as const) {
+    for (const width of [800, ...(kind === "partial" && process.env.BUTLER_STOP_REVIEW_BEFORE !== "1" ? [390] : [])]) {
+    const before = process.env.BUTLER_STOP_REVIEW_BEFORE === "1";
+    const page = await browser.newPage({ viewport: { width, height: 1000 }, deviceScaleFactor: 2, colorScheme: theme, reducedMotion: "reduce" });
+    try {
+      await installFixture(page, failedTranscript(kind));
+      await page.goto(`http://chats-bubble.localhost/?visual=components&theme=${theme}&locale=ko`);
+      await page.getByText("검토 요청입니다.", { exact: true }).waitFor();
+      await page.evaluate(() => document.fonts.ready);
+      if (!before) {
+        if (kind === "partial") {
+          await page.getByText("미완료", { exact: true }).waitFor();
+          assert.equal(await page.locator('[data-test-class~="assistant-footer"] time').count(), 1, "partial and failure share one timestamp");
+          assert.equal(await page.getByRole("button", { name: "답변 복사", exact: true }).count(), 1, "partial and failure share one copy action");
+          assert.equal(await page.locator('[role="alert"]').filter({ hasText: "검토 결과" }).count(), 0);
+          assert.equal(await page.locator("strong").filter({ hasText: "검토 결과" }).count(), 1);
+        }
+        if (kind === "stopped") await page.getByText("중지됨", { exact: true }).waitFor();
+        if (kind !== "stopped") await page.getByText("모델 응답 중단", { exact: true }).waitFor();
+      }
+      await page.locator('[data-test-class~="message"][data-test-class~="user"]').first().evaluate(element => {
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) parent.scrollTop = 0;
+      });
+      await page.locator('[data-test-class~="message"][data-test-class~="user"]').first().scrollIntoViewIfNeeded();
+      const clip = await page.locator('[data-test-class~="message"]').evaluateAll(rows => {
+        const rects = rows.map(row => row.getBoundingClientRect());
+        const left = innerWidth === 390 ? 0 : Math.max(0, Math.min(...rects.map(r => r.left)));
+        const top = Math.max(0, Math.min(...rects.map(r => r.top)));
+        return { x: left, y: top, width: (innerWidth === 390 ? innerWidth : Math.min(innerWidth, Math.max(...rects.map(r => r.right)))) - left,
+          height: Math.max(...rects.map(r => r.bottom)) - top + 8 };
+      });
+      await page.screenshot({ path: join(shots, `${before ? "before" : "after"}-${kind}-${theme}${width === 390 ? "-mobile" : ""}.jpg`), clip, type: "jpeg", quality: 80, animations: "disabled" });
+    } finally { await page.close(); }
+    }
+  }
+  if (process.env.BUTLER_STOP_REVIEW_BEFORE !== "1") {
+    for (const [locale, expected] of [["ko", "표시할 답변이 없습니다."], ["en", "No visible answer."]] as const) {
+      const page = await browser.newPage({ viewport: { width: 800, height: 1000 }, colorScheme: theme });
+      try {
+        const view = failedTranscript("empty");
+        const failure = view.messages[1];
+        failure.safe_error_code = "no_visible_result";
+        failure.text = expected;
+        await installFixture(page, view);
+        await page.goto(`http://chats-bubble.localhost/?visual=components&theme=${theme}&locale=${locale}`);
+        await page.getByText(expected, { exact: true }).waitFor();
+      } finally { await page.close(); }
+    }
+  }
   console.log(JSON.stringify({ result: "SS10_PASS", theme, cells: 10, screenshots: shots, modelCalls: 0 }));
 } finally {
   await browser.close();
@@ -195,4 +244,16 @@ async function measure(page: Page) {
       copyCount: footer.querySelectorAll('[aria-label="답변 복사"], [aria-label="Copy assistant response"]').length,
     };
   });
+}
+
+function failedTranscript(kind: "partial" | "empty" | "stopped"): SessionView {
+  const view = transcript("general");
+  const partial = "## 검토 결과\n\n첫 번째 항목을 확인했습니다. **검토 결과**를 정리하는 중입니다.\n\n- 확인한 내용은 여기에 남습니다.\n- 다음 항목은 아직 작성 중입니다.";
+  const base = { chat_id: "general", role: "assistant" as const, turn_id: "review", created_at: "2026-10-25T09:00:03Z" };
+  const messages: MessageRecord[] = [{ ...view.messages[0], text: "검토 요청입니다." }];
+  if (kind === "stopped" || (kind === "partial" && process.env.BUTLER_STOP_REVIEW_BEFORE !== "1")) messages.push({ ...base, id: "partial", cursor: 2,
+    status: "cancelled", incomplete: kind === "partial", text: partial });
+  if (kind !== "stopped") messages.push({ ...base, id: "failure", cursor: 3, status: "failed", safe_error_code: "provider_invalid_request",
+    text: "모델 응답 중단" });
+  return { ...view, messages };
 }

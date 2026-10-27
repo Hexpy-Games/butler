@@ -14,6 +14,7 @@ use crate::gateway::application::{
 };
 
 pub(super) struct FinalApply<'a> {
+    pub language: crate::gateway::ui_language::UiLanguage,
     pub files: Vec<MaterializedResponderFile>,
     pub reply_id: &'a str,
     pub now: &'a str,
@@ -96,37 +97,7 @@ fn apply(
     }
     let visible = visible_result(&tx, input, &apply.files)?;
     if input.no_visible_reply || !visible {
-        super::final_turn_events::append_if_missing(
-            &tx,
-            apply.subscribers,
-            &super::final_turn_events::TurnEventInput {
-                session_id: &input.chat_id,
-                turn_id: &input.turn_id,
-                kind: "turn.failed",
-                payload: object_value(&json!({
-                    "safeLabel":"No visible answer",
-                    "safeErrorCode":"no_visible_result"
-                }))?,
-                event_id: &apply.turn_event_ids.failed,
-                created_at: apply.now,
-            },
-        )?;
-        tx.execute("UPDATE turns SET state='failed',safe_status_label='Failed',safe_error_code='no_visible_result',retryable=0,cancellable=0,updated_at=?1 WHERE id=?2",params![apply.now,input.turn_id]).map_err(AppStorageError::sqlite)?;
-        append_turn_state_changed(
-            &tx,
-            apply.subscribers,
-            &input.chat_id,
-            &input.turn_id,
-            apply.now,
-        )?;
-        settle(
-            &tx,
-            apply.subscribers,
-            input,
-            "no_visible_result",
-            None,
-            apply.now,
-        )?;
+        project_unanswered(&tx, input, &apply)?;
     } else {
         let message_id = current_existing.as_deref().unwrap_or(apply.reply_id);
         super::final_turn_events::append_if_missing(
@@ -195,6 +166,7 @@ fn apply(
             "",
             Some(message_id),
             apply.now,
+            apply.language,
         )?;
         if let Some(continuation) = apply.continuation {
             super::super::settings::create_plan_continuation(
@@ -247,6 +219,46 @@ fn apply(
     Ok(true)
 }
 
+fn project_unanswered(
+    tx: &Connection,
+    input: &FinalCandidate,
+    apply: &FinalApply<'_>,
+) -> Result<(), AppStorageError> {
+    super::final_turn_events::append_if_missing(
+        tx,
+        apply.subscribers,
+        &super::final_turn_events::TurnEventInput {
+            session_id: &input.chat_id,
+            turn_id: &input.turn_id,
+            kind: "turn.failed",
+            payload: object_value(&json!({
+                "safeLabel":"No visible answer",
+                "safeErrorCode":"no_visible_result"
+            }))?,
+            event_id: &apply.turn_event_ids.failed,
+            created_at: apply.now,
+        },
+    )?;
+    tx.execute("UPDATE turns SET state='failed',safe_status_label='Failed',safe_error_code='no_visible_result',retryable=0,cancellable=0,updated_at=?1 WHERE id=?2",params![apply.now,input.turn_id]).map_err(AppStorageError::sqlite)?;
+    append_turn_state_changed(
+        tx,
+        apply.subscribers,
+        &input.chat_id,
+        &input.turn_id,
+        apply.now,
+    )?;
+    settle(
+        tx,
+        apply.subscribers,
+        input,
+        "no_visible_result",
+        None,
+        apply.now,
+        apply.language,
+    )?;
+    Ok(())
+}
+
 fn settle(
     db: &Connection,
     subscribers: &EventSubscribers,
@@ -254,6 +266,7 @@ fn settle(
     error: &str,
     message: Option<&str>,
     now: &str,
+    language: crate::gateway::ui_language::UiLanguage,
 ) -> Result<(), AppStorageError> {
     if message.is_none() && !error.is_empty() {
         super::non_final::fail_unanswered(
@@ -261,8 +274,8 @@ fn settle(
             subscribers,
             &input.chat_id,
             &input.turn_id,
-            error,
             now,
+            language.as_str(),
         )?;
     }
     if queue::claim_status(

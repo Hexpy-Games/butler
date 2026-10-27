@@ -2,6 +2,7 @@ mod command;
 mod contracts;
 mod conversation;
 mod failure;
+pub use failure::runtime_failure_message;
 mod host;
 #[cfg(test)]
 mod host_tests;

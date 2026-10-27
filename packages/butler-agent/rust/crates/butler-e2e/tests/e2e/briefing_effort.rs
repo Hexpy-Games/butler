@@ -172,3 +172,35 @@ async fn briefing_with_unlisted_effort_uses_the_model_default() -> Result<(), Ha
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn truncated_prompt_is_not_stored_as_briefing() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let response =
+        briefing(&json!({"input":json!({"task":"general_new_chat_briefing"}).to_string()}))
+            .unwrap();
+    let last = &response.chunks.last().unwrap().text;
+    let data = last
+        .lines()
+        .find_map(|line| line.strip_prefix("data: "))
+        .unwrap();
+    let value: Value = serde_json::from_str(data)?;
+    let text = value["response"]["output"][0]["content"][0]["text"]
+        .as_str()
+        .unwrap();
+    let (mut s, stub, server) = super::anthropic_output_limit::setup_briefing(text).await?;
+    next_daily_cycle(&mut s).await?;
+    assert!(
+        !stub.requests.lock().unwrap().is_empty(),
+        "no briefing request: {}",
+        s.agent.logs()
+    );
+    assert!(
+        general_briefing(&s.sandbox.data).is_none(),
+        "truncated briefing stored; {}",
+        s.agent.logs()
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

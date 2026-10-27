@@ -24,9 +24,13 @@ const CONTINUED: &str = "The second line is cut off here and continues.\nThe end
 const COMPLETE: &str = "# Design\n\nThe first part of the answer.\nThe second line is cut off here and continues.\nThe end.";
 
 #[derive(Clone)]
-struct Stub {
-    requests: Arc<Mutex<Vec<Value>>>,
+pub(super) struct Stub {
+    pub(super) requests: Arc<Mutex<Vec<Value>>>,
     tool_cut: bool,
+    responses: Arc<Mutex<Vec<String>>>,
+    repeat: Arc<Mutex<Option<String>>>,
+    fail_after: Arc<Mutex<Option<usize>>>,
+    fail_status: Arc<Mutex<u16>>,
 }
 
 fn frame(value: &Value) -> String {
@@ -94,7 +98,7 @@ fn cut_response(tool: bool) -> String {
         + &thinking
         + &start(1, &json!({"type":"text","text":""}))
         + &delta(1, &json!({"type":"text_delta","text":PARTIAL}))
-        + &message_end("max_tokens", true)
+        + &message_end("max_tokens", false)
 }
 
 fn text_response(text: &str) -> String {
@@ -111,22 +115,48 @@ async fn reply(State(stub): State<Stub>, Json(body): Json<Value>) -> Response {
         requests.push(body);
         requests.len()
     };
-    let text = match (round, stub.tool_cut) {
-        (1, tool) => cut_response(tool),
-        (_, false) => text_response(CONTINUED),
-        (_, true) => text_response("I will write the document in smaller parts."),
-    };
+    if stub
+        .fail_after
+        .lock()
+        .unwrap()
+        .is_some_and(|after| round > after)
+    {
+        return (
+            axum::http::StatusCode::from_u16(*stub.fail_status.lock().unwrap()).unwrap(),
+            Json(json!({"error":{"type":"invalid_request_error","message":"Invalid request"}})),
+        )
+            .into_response();
+    }
+    let scripted = stub.responses.lock().unwrap().get(round - 1).cloned();
+    let text = scripted
+        .or_else(|| stub.repeat.lock().unwrap().clone())
+        .unwrap_or_else(|| match (round, stub.tool_cut) {
+            (1, tool) => cut_response(tool),
+            (_, false) => text_response(CONTINUED),
+            (_, true) => text_response("I will write the document in smaller parts."),
+        });
     ([("content-type", "text/event-stream")], Body::from(text)).into_response()
 }
 
 async fn setup(
     tool_cut: bool,
 ) -> Result<(Scenario, Stub, tokio::task::JoinHandle<()>), HarnessError> {
+    setup_with_memory(tool_cut, false).await
+}
+
+async fn setup_with_memory(
+    tool_cut: bool,
+    memory: bool,
+) -> Result<(Scenario, Stub, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let base = format!("http://{}/v1", listener.local_addr()?);
     let stub = Stub {
         requests: Arc::default(),
         tool_cut,
+        responses: Arc::default(),
+        repeat: Arc::default(),
+        fail_after: Arc::default(),
+        fail_status: Arc::new(Mutex::new(400)),
     };
     let app = Router::new()
         .route("/v1/messages", post(reply))
@@ -135,11 +165,14 @@ async fn setup(
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
     });
-    let s = Setup::new("ANTHROPIC-OUTPUT-LIMIT")?
+    let setup = Setup::new("ANTHROPIC-OUTPUT-LIMIT")?
         .env("BUTLER_ANTHROPIC_BASE_URL", &base)
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
-        .start()
-        .await?;
+        .env("BUTLER_E2E_APP_NOW", "2026-10-02T04:01:00.000Z");
+    if memory {
+        super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
+    }
+    let s = setup.start().await?;
     let saved =
         s.gw.post(
             "/credentials",
@@ -232,3 +265,27 @@ async fn anthropic_tool_call_cut_at_output_limit_is_not_run() -> Result<(), Harn
     server.abort();
     Ok(())
 }
+
+#[path = "anthropic_output_limit/stops.rs"]
+mod stops;
+
+pub(super) async fn setup_briefing(
+    text: &str,
+) -> Result<(Scenario, Stub, tokio::task::JoinHandle<()>), HarnessError> {
+    let (s, stub, server) = setup_with_memory(false, true).await?;
+    *stub.responses.lock().unwrap() =
+        vec![text_response(text).replace("end_turn", "max_tokens"); 16];
+    let settings =
+        s.gw.patch(
+            "/settings",
+            json!({
+                "consolidation_model":format!("anthropic/{MODEL}")
+            }),
+        )
+        .await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
+    Ok((s, stub, server))
+}
+
+#[path = "anthropic_output_limit/replay.rs"]
+mod replay;

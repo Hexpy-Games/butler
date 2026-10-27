@@ -546,6 +546,7 @@ export interface SettingsView {
     | "modifier_enter_send_enter_newline"
     | "enter_send_shift_enter_newline";
   appearance_theme: "system" | "light" | "dark";
+  text_size: "default" | "large" | "larger";
   /** false follows the OS; true forces the DS reduced-motion path. */
   reduce_motion: boolean;
   collapse_message_box: boolean;
@@ -886,6 +887,8 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  /** Terminal failure grouped with this turn's retained partial answer. */
+  failure_notice?: MessageRecord;
   initiated?: import("./initiatedTypes").InitiatedOrigin;
   question_answer?: AnsweredUserQuestions;
   question_summary?: UserQuestion[];
@@ -915,6 +918,9 @@ export interface MessageRecord {
   limitations?: string[];
   safe_error_code?: string;
   retryable?: boolean;
+  incomplete?: boolean;
+  retry_mode?: "resume" | "fresh";
+  retry_with_current_controls?: boolean;
   cursor?: number;
   created_at?: string;
   updated_at?: string;

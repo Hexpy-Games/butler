@@ -69,6 +69,10 @@ ratchet mode: existing violations are baselined per file and may only shrink.
   motion and typography, never targets DS internals (element selectors,
   `[data-slot]`, `[data-state]`, `:global(.ds-class)`), and never sets DS
   custom properties such as `--clickable-*`, `--sidebar-*` or `--icon-button-*`.
+- Text size (큰 글자) zooms the whole App UI by `--ui-scale` (Electron page
+  zoom: 1, 1.15 or 1.3). Corner radii keep their 100% size: the `--radius-*`
+  tokens divide by `--ui-scale`, and any px length in a radius must too
+  (`calc(6px / var(--ui-scale))`). `lint:design` enforces it.
 
 When the DS cannot express what a screen needs, request a DS capability
 instead of working around it: add a prop, variant or block here (with a

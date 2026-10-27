@@ -24,7 +24,7 @@ async fn anthropic_truncated_tool_arguments_feed_back_to_model() -> Result<(), H
     let final_response = ResponseRecord {
         status: 200, headers: vec![("content-type".into(), "application/json".into())],
         chunks: vec![butler_e2e::e2e::cassette::Chunk { delay_ms: 0,
-            text: json!({"content":[{"type":"text","text":"Recovered"}],"usage":{"input_tokens":20,"output_tokens":2}}).to_string() }],
+            text: json!({"stop_reason":"end_turn","content":[{"type":"text","text":"Recovered"}],"usage":{"input_tokens":20,"output_tokens":2}}).to_string() }],
     };
     let server = Server::new(vec![(response, false), (final_response, false)]).await?;
     let report = invoke(&server, &fixture, 2, 1).await?;

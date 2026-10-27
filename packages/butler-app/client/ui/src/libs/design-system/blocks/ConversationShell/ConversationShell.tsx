@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { cn } from "../../lib/utils";
 import { useComposedRefs } from "../../lib/composeRefs";
 import { useScrollEdges } from "../../lib/useScrollEdges";
+import { publishScrollbarWidth } from "../../lib/scrollbarWidth";
 import { AsideSlot, hasAsideContent, type AsideContent } from "../../lib/AsideSlot";
 import { useAsideLayout } from "../../lib/asideLayout";
 import styles from "./ConversationShell.module.css";
@@ -114,8 +115,7 @@ export function ConversationScroll({
   virtualized?: boolean;
   scrollRef?: Ref<HTMLDivElement>;
 }) {
-  const edgesRef = useScrollEdges("y", masked);
-  const ref = useComposedRefs(scrollRef, edgesRef);
+  const ref = useComposedRefs(scrollRef, useScrollEdges("y", masked), publishScrollbarWidth);
   return (
     <div
       className={cn(
@@ -126,7 +126,7 @@ export function ConversationScroll({
       data-test-class={`conversation-scroll${virtualized ? " message-virtual-scroll" : ""}`}
       ref={ref}
     >
-      {children}
+      <div className={styles.scrollContent}>{children}</div>
     </div>
   );
 }

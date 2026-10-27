@@ -184,6 +184,24 @@ function rawScaleFindings(
     }));
 }
 
+/**
+ * 큰 글자 zooms the whole App UI by --ui-scale while corners keep their 100% size, so every px length in a
+ * radius (a border-*-radius or a *radius* custom property) divides by var(--ui-scale) right after it.
+ */
+const RADIUS_VALUE = /(?:^|;|\s)(border(?:-[a-z]+)*-radius|--[a-z0-9-]*radius[a-z0-9-]*)\s*:\s*([^;]+)/gu;
+const UNSCALED_PX = /(?<![\w.-])(?!0+(?:\.0+)?px)\d+(?:\.\d+)?px(?!\s*\/\s*var\(--ui-scale\))/u;
+
+function unscaledRadiusFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
+  return [...rule.body.matchAll(RADIUS_VALUE)]
+    .filter((match) => UNSCALED_PX.test(match[2]))
+    .map((match) => ({
+      path,
+      line: rule.line,
+      reason: `px in ${match[1]} must divide by var(--ui-scale) so the corner keeps its size under 큰 글자`,
+      text: rule.selector,
+    }));
+}
+
 /** Text takes an integer px line-height role token; unitless ratios are for display art only. */
 const RATIO_LINE_HEIGHT = /(?:^|;|\s)line-height\s*:\s*(\d*\.\d+|var\(--line-height-(?:tight|snug|body|document)\))\s*(?:;|$)/u;
 const RATIO_FONT_SHORTHAND = /(?:^|;|\s)font\s*:[^;]*\/\s*(\d*\.\d+|var\(--line-height-(?:tight|snug|body|document)\))/u;
@@ -247,6 +265,7 @@ export function lintDesignSystemRules(path: string, source: string): DesignSyste
     ...rawMotionFindings(path, rule),
     ...rawScaleFindings(path, rule, "spacing"),
     ...rawScaleFindings(path, rule, "radius"),
+    ...unscaledRadiusFindings(path, rule),
   ]);
 }
 

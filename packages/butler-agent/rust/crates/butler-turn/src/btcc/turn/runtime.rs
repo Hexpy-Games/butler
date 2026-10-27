@@ -4,7 +4,7 @@ use super::contracts::{
     ProgressEvent, StopPersistenceOutcome, SuspensionReason, TurnRecord, TurnSemanticState,
     TurnTransition,
 };
-use super::failure::runtime_failure_message;
+use super::failure::runtime_failure_message_for_turn;
 use super::ports::{
     AgentLoop, AgentLoopError, AgentLoopProgress, CanonicalMessageStore, PreparedConversation,
     ProgressEventRepository, StorageReadiness, TransitionCommitError, TurnStore,
@@ -434,7 +434,7 @@ fn runtime_failure_result(
 ) -> super::contracts::AgentLoopResult {
     super::contracts::AgentLoopResult {
         route: super::contracts::ExecutionRoute::Assisted,
-        content: runtime_failure_message(&turn.original_message, &failure),
+        content: runtime_failure_message_for_turn(turn, &failure, None),
         terminal_outcome: None,
         suspension: None,
         authority_continuation: None,
@@ -457,8 +457,8 @@ fn explain_runtime_failure(turn: &TurnRecord, result: &mut super::contracts::Age
     let Some(failure) = &result.runtime_failure else {
         return;
     };
-    result.content = super::failure::runtime_failure_message_for_work(
-        &turn.original_message,
+    result.content = super::failure::runtime_failure_message_for_turn(
+        turn,
         failure,
         result.accepted_work_result.as_ref(),
     );

@@ -20,6 +20,9 @@ pub(super) fn read(row: &Row<'_>) -> rusqlite::Result<MessageRow> {
         retryable: row.get(14)?,
         plan_json: row.get(15)?,
         blocks_json: row.get(16)?,
+        retry_mode: row.get(17)?,
+        incomplete: row.get(19)?,
+        retry_with_current_controls: row.get(18)?,
     })
 }
 
@@ -35,7 +38,7 @@ pub(in crate::gateway::application) fn streaming_message(
     let sql = concat!(
         "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,",
         "conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,",
-        "safe_error_code,retryable,plan_json,blocks_json FROM app_owned_messages m ",
+        "safe_error_code,retryable,plan_json,blocks_json,retry_mode,retry_with_current_controls,incomplete FROM app_owned_messages m ",
         "WHERE id=?1 AND chat_id=?2 AND turn_id=?3 AND role='assistant' AND status='streaming' ",
         "AND EXISTS(SELECT 1 FROM turns WHERE id=?3 AND state IN ",
         "('accepted','thinking','streaming','waiting_for_tool','retrying','cancelling')) ",
@@ -63,7 +66,7 @@ pub(in crate::gateway::application) fn exact_message(
     id: &str,
 ) -> Result<Option<MessageRecord>, AppStorageError> {
     let query = format!(
-        "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,safe_error_code,retryable,plan_json,blocks_json FROM messages m WHERE id=?1 AND chat_id=?2 AND {}",
+        "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,safe_error_code,retryable,plan_json,blocks_json,retry_mode,retry_with_current_controls,incomplete FROM messages m WHERE id=?1 AND chat_id=?2 AND {}",
         owner_visible!()
     );
     let row = db

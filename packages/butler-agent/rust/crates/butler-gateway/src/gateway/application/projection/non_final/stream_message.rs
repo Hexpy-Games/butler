@@ -188,6 +188,27 @@ pub(super) fn stop(
     turn: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
+    settle_partial(db, subscribers, chat, turn, now, Some("turn_stopped"))
+}
+
+pub(super) fn incomplete(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    settle_partial(db, subscribers, chat, turn, now, None)
+}
+
+fn settle_partial(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    now: &str,
+    code: Option<&str>,
+) -> Result<(), AppStorageError> {
     let target = StreamTarget {
         db,
         subscribers,
@@ -205,11 +226,16 @@ pub(super) fn stop(
     let answer = draft(db, turn)?.is_none_or(|(_, discarded)| !discarded);
     db.execute_cached("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
         .map_err(AppStorageError::sqlite)?;
-    if answer {
+    let content: String = db
+        .query_row("SELECT text FROM messages WHERE id=?1", [&id], |r| r.get(0))
+        .map_err(AppStorageError::sqlite)?;
+    if answer
+        && (code.is_some() || !butler_core::public_text::trim_js_whitespace(&content).is_empty())
+    {
         db.execute_cached(
-            "UPDATE messages SET status='cancelled',safe_error_code='turn_stopped',updated_at=?1 \
+            "UPDATE messages SET status='cancelled',safe_error_code=?3,incomplete=?4,updated_at=?1 \
              WHERE id=?2",
-            params![now, id],
+            params![now, id, code, code.is_none().then_some(true)],
         )
         .map_err(AppStorageError::sqlite)?;
         return updated(&target, &id, false);
@@ -274,37 +300,39 @@ pub(super) fn settle_suspended(
     updated(&target, &id, true)
 }
 
-/// Marks the turn's provisional message failed when the turn ended without a
-/// visible answer (`code` is the turn's error code).
+/// Settles the draft and records the reason when no visible answer was delivered.
 pub(in crate::gateway::application::projection) fn fail_unanswered(
     db: &Connection,
     subscribers: &EventSubscribers,
     chat: &str,
     turn: &str,
-    code: &str,
     now: &str,
+    locale: &str,
 ) -> Result<(), AppStorageError> {
-    let target = StreamTarget {
-        db,
-        subscribers,
-        chat,
-        turn,
-        now,
-    };
-    let Some((id, status)) = latest(db, chat, turn)? else {
-        return Ok(());
-    };
-    if status != "streaming" {
-        return Ok(());
-    }
-    db.execute_cached("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
-        .map_err(AppStorageError::sqlite)?;
-    db.execute_cached(
-        "UPDATE messages SET status='failed',safe_error_code=?1,updated_at=?2 WHERE id=?3",
-        params![code, now, id],
+    incomplete(db, subscribers, chat, turn, now)?;
+    let id = format!("message-{}", uuid::Uuid::new_v4());
+    let copy = butler_turn::btcc::runtime_failure_message(
+        &butler_turn::btcc::RuntimeFailure {
+            code: "no_visible_result".into(),
+            retryable: false,
+            status_code: None,
+            cause: None,
+        },
+        locale,
+    );
+    db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code) VALUES(?1,?2,?3,'assistant',?5,'failed',?4,?4,'no_visible_result')",
+        params![id,chat,turn,now,copy]).map_err(AppStorageError::sqlite)?;
+    updated(
+        &StreamTarget {
+            db,
+            subscribers,
+            chat,
+            turn,
+            now,
+        },
+        &id,
+        false,
     )
-    .map_err(AppStorageError::sqlite)?;
-    updated(&target, &id, false)
 }
 
 fn open(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
@@ -338,7 +366,7 @@ fn latest(
     turn: &str,
 ) -> Result<Option<(String, String)>, AppStorageError> {
     db.query_row_cached(
-        "SELECT id,status FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
+        "SELECT id,status FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' AND COALESCE(incomplete,0)=0 \
          ORDER BY rowid DESC LIMIT 1",
         params![chat, turn],
         |row| Ok((row.get(0)?, row.get(1)?)),

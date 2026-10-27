@@ -1,3 +1,4 @@
+import { appZoomFactor, registerTextSizeWindow, textSizePreferences } from "./text-size.mjs";
 import { app, ipcMain, nativeTheme, screen } from "electron";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -23,7 +24,7 @@ function installBridges() {
   ipcMain.handle("butler:lifecycle-action", (event, action) => owned(event)?.action(action));
   ipcMain.on("butler:lifecycle-size", (event, height) => {
     const surface = owned(event);
-    if (surface && Number.isInteger(height) && height >= 96 && height <= 500 && surface.window.getContentSize()[1] !== height) surface.window.setContentSize(296, height);
+    if (surface && Number.isInteger(height) && height >= 96 && height <= 500 && surface.window.getContentSize()[1] !== Math.ceil(height * appZoomFactor())) surface.window.setContentSize(Math.ceil(296 * appZoomFactor()), Math.ceil(height * appZoomFactor()));
   });
   ipcMain.on("butler:lifecycle-painted", (event, profile) => owned(event)?.painted(profile));
 }
@@ -48,21 +49,23 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   timing("appearance_read_end");
   timing(`${kind}_create_start`);
   const window = new BrowserWindow({
-    width: 296, height: manifest.initialHeight, useContentSize: true, frame: false, resizable: false,
+    width: Math.ceil(296 * appZoomFactor()), height: Math.ceil(manifest.initialHeight * appZoomFactor()), useContentSize: true, frame: false, resizable: false,
     maximizable: false, fullscreenable: false, show: false, paintWhenInitiallyHidden: false, hasShadow: true,
     roundedCorners: true, closable: kind !== "quit", title: "Butler",
     backgroundColor: manifest.surface[appearance.theme],
-    webPreferences: { preload: join(directory, "lifecycle-preload.cjs"), sandbox: true,
+    webPreferences: { ...textSizePreferences(), preload: join(directory, "lifecycle-preload.cjs"), sandbox: true,
       contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, devTools: !app.isPackaged },
   });
+  registerTextSizeWindow(window, { lifecycle: true });
   timing(`${kind}_create_end`);
   window.webContents.once("dom-ready", () => timing(`${kind}_dom_ready`));
   window.webContents.once("did-finish-load", () => timing(`${kind}_load_end`));
   const updateTitle = () => window.setTitle(copy[state.locale.startsWith("ko") ? "ko" : "en"][kind].title);
   updateTitle();
   const area = bounds ?? screen.getPrimaryDisplay().workArea;
-  window.setPosition(Math.round(area.x + (area.width - 296) / 2), Math.round(area.y + (area.height - manifest.initialHeight) / 2));
+  window.setPosition(Math.round(area.x + (area.width - 296 * appZoomFactor()) / 2), Math.round(area.y + (area.height - manifest.initialHeight * appZoomFactor()) / 2));
   window.setMenu(null);
+  window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   let finishTrace = () => {};
@@ -86,7 +89,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   const load = () => {
     timing(`${kind}_load_start`);
     return window.loadFile(join(dist, "lifecycle/lifecycle.html"), { query: {
-    kind, stage: state.stage, locale: state.locale, theme: state.theme,
+    kind, stage: state.stage, locale: state.locale, theme: state.theme, scale: String(appZoomFactor()),
     motion: state.reducedMotion ? "reduced" : "auto",
   } }).catch(() => surface.update({ state: kind === "startup" ? "error" : "failed" }));
   };

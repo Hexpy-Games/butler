@@ -92,13 +92,14 @@ function AssistantAttachments({ message, children }: { message: MessageRecord; c
     {message.plan_document ? (
       <PlanDocumentMessage plan={message.plan_document} bubble={isGeneralChat(message.chat_id)} />
     ) : null}
-    {message.status === "cancelled" && (
+    {(message.status === "cancelled" || message.incomplete === true) && (
       <div role="status">
-        <Tag ariaLabel={appCopy.conversation.stoppedStatus}>
-          {appCopy.conversation.stoppedStatus}
+        <Tag ariaLabel={message.incomplete === true ? appCopy.conversation.incompleteStatus : appCopy.conversation.stoppedStatus}>
+          {message.incomplete === true ? appCopy.conversation.incompleteStatus : appCopy.conversation.stoppedStatus}
         </Tag>
       </div>
     )}
+    {message.failure_notice && <AssistantFailureNotice message={message.failure_notice} />}
     {children}
     {message.limitation_codes?.includes("message_file_unavailable") && (
       <Tag ariaLabel={appCopy.conversation.attachmentUnavailable}>
