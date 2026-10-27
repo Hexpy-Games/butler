@@ -383,7 +383,7 @@ try {
     if (url.pathname === "/usage-monitor") return route.fulfill({ json: { ok: true, data: usageMonitor(url) } });
     return route.fulfill({ status: 404, json: { ok: false, error: { code: "not_found" } } });
   });
-  for (const [width, height] of [[1280, 860], [390, 844]]) {
+  for (const [width, height] of [[1280, 860], [390, 844], [985, 662], [1280, 800]]) {
     for (const theme of ["light", "dark"] as const) {
       for (const background of ["plain", "wallpaper"] as const) {
         const only = process.env.BUTLER_FOCUS_RING_CELL;
