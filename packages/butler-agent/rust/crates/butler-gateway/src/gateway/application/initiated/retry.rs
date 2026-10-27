@@ -52,6 +52,15 @@ impl AppApplication {
             .map_err(super::super::AppStorageError::sqlite)).await.map_err(app_error)
     }
 
+    /// Shipped builds inject no delivery faults.
+    #[cfg(not(feature = "e2e-fixtures"))]
+    pub(super) fn work_send_fault(
+        &self,
+        _: &str,
+    ) -> std::future::Ready<Result<(), GatewayApplicationError>> {
+        std::future::ready(Ok(()))
+    }
+
     #[cfg(feature = "e2e-fixtures")]
     pub(super) async fn work_send_fault(&self, id: &str) -> Result<(), GatewayApplicationError> {
         let failures = std::env::var("BUTLER_E2E_WORK_SEND_FAILURES")

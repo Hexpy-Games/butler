@@ -170,11 +170,10 @@ impl AppApplication {
     }
     async fn send_work_result(
         &self,
-        _id: &str,
+        id: &str,
         command: SendMessageCommand,
     ) -> Result<crate::gateway::MessageSendResult, GatewayApplicationError> {
-        #[cfg(feature = "e2e-fixtures")]
-        self.work_send_fault(_id).await?;
+        self.work_send_fault(id).await?;
         self.send_message(command).await.map_err(|error| {
             if matches!(&error, GatewayApplicationError::Public { code, .. } if code == "session_model_unavailable") {
                 error.permanent()
