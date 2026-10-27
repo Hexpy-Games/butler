@@ -1,3 +1,4 @@
+import { notifyStatus } from "@/app/notifications.ts";
 import { publishDocumentEvent } from "@/app/documentEvents";
 import { publishCanonProposalEvent } from "@/app/canonProposals.ts";
 import { publishPendingAsksEvent } from "@/app/pendingAsks.ts";
@@ -87,6 +88,9 @@ export function useLiveSessionEvents(): void {
         useButlerStore.getState().resetGeneralConversation(event.id);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
+      }
+      if (event.type === "browser.payment_confirmation_skipped" && isRecentEvent(event)) {
+        notifyStatus(appCopy.interfaceDetails.paymentSkipped(String(event.payload?.site ?? ""), String(event.payload?.amount ?? "")), { id: `payment-skipped-${event.id}`, tone: "ok" });
       }
       receiveUpdateProgress(event);
       publishMemoryEvent(event);
@@ -265,15 +269,17 @@ function notifyDesktopEvent(
   if (!settings.enabled || !isRecentEvent(event)) return;
   if (
     event.type === "automation.run" &&
-    event.payload?.safe_error_code === "schedule_permission_required"
+    ["schedule_permission_required", "schedule_signin_off", "schedule_payment_off"].includes(String(event.payload?.safe_error_code))
   ) {
     void showDesktopNotification({
       kind: "task_completion",
       title: appCopy.firstRun.product,
-      body: event.payload?.tainted === true
+      body: event.payload?.safe_error_code === "schedule_signin_off" ? appCopy.automations.signinOffNotify
+        : event.payload?.safe_error_code === "schedule_payment_off" ? appCopy.automations.paymentOffNotify
+        : event.payload?.tainted === true
         ? `${appCopy.automations.needsPermissionNotify} ${appCopy.interfaceTemplates.approvalRequest.taintReason}`
         : appCopy.automations.needsPermissionNotify,
-      sessionId: event.payload.target_session_id,
+      sessionId: event.payload?.target_session_id,
     });
     return;
   }

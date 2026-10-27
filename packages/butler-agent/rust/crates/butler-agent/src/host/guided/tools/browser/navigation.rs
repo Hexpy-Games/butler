@@ -21,7 +21,7 @@ pub(super) async fn execute(
     }
     let reference = match authority::act_gate(owner, call, occurrence, &input, &target).await? {
         authority::Gate::Pending(value) => return encoded(&value),
-        authority::Gate::Allowed(reference) => reference,
+        authority::Gate::Allowed(reference, _) => reference,
     };
     let result = if args.get("results").is_some() {
         open::execute(owner, invocation, call, occurrence, client).await
