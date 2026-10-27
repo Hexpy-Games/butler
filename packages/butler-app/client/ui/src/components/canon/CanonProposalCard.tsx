@@ -1,6 +1,6 @@
 import { CanonProposalChanges } from "./CanonProposalChanges.tsx";
 import { useState } from "react";
-import { Button, ButtonContainer, Card, KeyValueRow, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, Card, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
 import { useAppLocale } from "@/app/copy.ts";
 import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -10,6 +10,7 @@ import { appCopy } from "@/app/copy.ts";
 import { MessageAttachments } from "../conversation/MessageAttachments.tsx";
 import { EpicMarkdown } from "./EpicMarkdown.tsx";
 import { CanonProposalProject } from "./CanonProposalProject.tsx";
+import { CanonProposalFact } from "./CanonProposalFact.tsx";
 import { canonProposalCopy } from "./canonProposalCopy.ts";
 import { useCanonProposal } from "./useCanonProposal.ts";
 
@@ -68,7 +69,7 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
       })}
       <CanonProposalChanges changes={p.changes} ko={ko} />
       {chooseProject ? <CanonProposalProject value={target} name={name} busy={busy} ko={ko} onSelect={setTarget} onName={setName} />
-        : <KeyValueRow label={copy.project} value={projectName} />}
+        : <CanonProposalFact label={copy.project} value={projectName} />}
       <ButtonContainer size="sm" justify="end">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => void apply("declined")}>{copy.cancel}</Button>
         <Tooltip wrap label={empty ? copy.name : undefined}><Button size="sm" disabled={busy} aria-disabled={empty || undefined} onClick={() => void apply("accepted")}>{creates ? copy.add : copy.apply}</Button></Tooltip>

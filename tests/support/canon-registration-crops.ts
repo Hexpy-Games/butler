@@ -3,6 +3,7 @@ import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
+import { auditCanonFacts } from "./canon-registration-cards.ts";
 
 export const cropDirectory = process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/canon-registration-crops";
 export const cropPhase = process.env.BUTLER_SMOKE_CROP_PHASE ?? (process.env.BUTLER_SMOKE_BASELINE === "1" ? "before" : "after");
@@ -79,6 +80,7 @@ export async function cardMatrix(page: Page, server: NativeAppServerHandle, id: 
       assert.equal(await card.locator("select option:checked").textContent(), "다른 제품");
     }
     if (state === "epic-move") await card.getByText("다음 릴리스", { exact: true }).waitFor();
+    if (cropPhase === "after") await auditCanonFacts(card);
     await cropRegion(page, card, `${cropPhase}-${state}-${width}-${theme}-${background}`);
   }
 }

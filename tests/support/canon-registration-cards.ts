@@ -4,6 +4,28 @@ import type { Locator, Page } from "playwright";
 import { probeFocusRing } from "./focus-ring-clipping.ts";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 
+export async function auditCanonFacts(card: Locator) {
+  assert.equal(await card.locator('[data-test-class="key-value-row"]').count(), 0, "proposal facts stack vertically");
+  const facts = card.locator('[data-slot="field"][aria-labelledby]');
+  for (const fact of await facts.all()) {
+    const label = fact.locator('[data-slot="field-label"]');
+    const title = await label.textContent(); assert(title);
+    assert(await card.getByRole("group", { name: title, exact: true }).count() > 0, "title names the field group");
+    assert.equal(await fact.getAttribute("aria-labelledby"), await label.getAttribute("id"));
+    assert.equal(await label.evaluate(element => element.tagName), "DIV", "read-only title is not a control label");
+    const geometry = await fact.evaluate(element => {
+      const [label, value] = [...element.children].map(child => child.getBoundingClientRect());
+      return { label, value, gap: getComputedStyle(element).rowGap, textAlign: getComputedStyle(element.lastElementChild!).textAlign };
+    });
+    assert(Math.abs(geometry.label.x - geometry.value.x) < 1, "label and value share the left edge");
+    assert(geometry.value.y >= geometry.label.bottom, "value is below its label");
+    assert(Math.abs(geometry.value.y - geometry.label.bottom - parseFloat(geometry.gap)) < 1, "field uses its DS gap");
+    assert(["start", "left"].includes(geometry.textAlign), "value is left aligned");
+  }
+  const gaps = await card.locator('[data-slot="field"]').evaluateAll(fields => fields.map(field => getComputedStyle(field.parentElement!).rowGap));
+  assert(gaps.every(gap => gap === gaps[0]), "read-only and editable fields share the card's field spacing");
+}
+
 export async function auditCanonCardFocus(page: Page, card: Locator) {
   const controls = card.locator("button, input, select");
   for (const control of await controls.all()) {

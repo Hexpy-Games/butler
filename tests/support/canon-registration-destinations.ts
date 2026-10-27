@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import { auditCanonCardFocus } from "./canon-registration-cards.ts";
+import { auditCanonCardFocus, auditCanonFacts } from "./canon-registration-cards.ts";
 
 /** A project's chat must still name and expose a different proposed destination. */
 export async function captureDestinationVariants(page: Page, server: NativeAppServerHandle, anchor: { session_id: string; source_turn_id: string }, project: string, shots: string, baseline: boolean) {
@@ -42,11 +42,11 @@ async function captures(page: Page, server: NativeAppServerHandle, id: string, p
       assert.equal(await card.getByText("프로젝트", { exact: true }).count(), 1, "one visible project label");
       if (variant === "move-destination") {
         await card.getByText("이동할 과제", { exact: true }).waitFor();
-        const rows = card.locator('[data-test-class="key-value-row"]');
-        await rows.filter({ hasText: "현재 계획" }).getByText("백로그", { exact: true }).waitFor();
-        await rows.filter({ hasText: "대상 계획" }).getByText("다음 릴리스", { exact: true }).waitFor();
+        await card.getByRole("group", { name: "현재 계획", exact: true }).getByText("백로그", { exact: true }).waitFor();
+        await card.getByRole("group", { name: "대상 계획", exact: true }).getByText("다음 릴리스", { exact: true }).waitFor();
         assert.equal(await card.getByText("과제 이동", { exact: true }).count(), 0);
       }
+      await auditCanonFacts(card);
       await auditCanonCardFocus(page, card);
     }
     await page.screenshot({ path: join(shots, `${baseline ? "before" : "after"}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}-${variant}.png`), animations: "disabled" });
