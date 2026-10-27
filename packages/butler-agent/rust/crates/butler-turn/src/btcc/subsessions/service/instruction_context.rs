@@ -3,8 +3,8 @@ use super::*;
 use crate::btcc::ScheduleRunContext;
 
 impl SubsessionService {
-    /// Restrictions only accumulate for an existing assignment. Its immutable
-    /// task packet remains the source of the initial dispatch context.
+    /// Connector origin accumulates; attendance comes from the latest instruction,
+    /// falling back to the immutable task packet until the first instruction.
     pub async fn instruction_run_context(
         &self,
         session: &str,
@@ -23,14 +23,6 @@ impl SubsessionService {
         Ok(match (stored, initial) {
             (Some(mut run), Some(initial)) => {
                 run.connector_event |= initial.connector_event;
-                run.unattended |= initial.unattended;
-                if run.automation_id.is_empty() {
-                    run.automation_id = initial.automation_id;
-                }
-                if run.run_id.is_empty() {
-                    run.run_id = initial.run_id;
-                }
-                run.scheduled_at = run.scheduled_at.or(initial.scheduled_at);
                 Some(run)
             }
             (run, initial) => run.or(initial),
