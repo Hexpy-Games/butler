@@ -8,7 +8,7 @@ import { Box, Folder, LibraryCard, MessageSquarePlus, DropdownMenu, DropdownMenu
 import { deleteLibrary, type LibraryItem } from "../browser/libraryStore";
 import { openLibraryItem } from "../browser/LibraryItemCard";
 import { hasGroups } from "./libraryApi";
-import { itemMeta, renameItem } from "./libraryActions";
+import { hasWebSource, itemMeta, renameItem } from "./libraryActions";
 import { startCardDrag, useCardDrag } from "./libraryCardDrag";
 import { useLibraryDialogs } from "./libraryDialogs";
 import { openDetail } from "./libraryNav";
@@ -40,11 +40,11 @@ export function LibraryItemCard({ item, view, selection, onAttach }: { item: Lib
     ...(hasGroups(kind) ? [{ icon: <Folder size="sm" />, label: `${copy.groups[kind].moveTo}…`, onSelect: () => useLibraryDialogs.setState({ move: { kind, items: [item] } }) }] : []),
     { icon: <TagIcon size="sm" />, label: copy.editTags, onSelect: () => useLibraryDialogs.setState({ tagItems: [item] }) },
     { icon: <MessageSquarePlus size="sm" />, label: appCopy.browser.attach, onSelect: onAttach },
-    { icon: <Popup size="sm" />, label: appCopy.browser.openSource, onSelect: () => void openLibraryItem(item, true) },
+    ...(item.block || documentKind(item) || item.file || item.output || hasWebSource(item) ? [{ icon: <Popup size="sm" />, label: appCopy.browser.openSource, onSelect: () => void openLibraryItem(item, true) }] : []),
     { icon: <Trash2 size="sm" />, label: copy.deleteItem, variant: "destructive" as const, onSelect: remove },
   ];
   return (
-    <Box data-library-item={item.id} data-butler-link={item.url}><LibraryCard title={item.title} tag={item.block ? appCopy.conversation.answerBlocks.block : KIND_TAG()[kind]} meta={itemMeta(item)} tags={item.tags ?? []}
+    <Box data-library-item={item.id} data-butler-link={hasWebSource(item) ? item.url : undefined}><LibraryCard title={item.title} tag={item.block ? appCopy.conversation.answerBlocks.block : KIND_TAG()[kind]} meta={itemMeta(item)} tags={item.tags ?? []}
       media={documentKind(item)?.media ?? (item.block ? { kind: "block", content: <BlockScrap item={item} preview /> } : item.crop ? { kind: "image", src: item.crop } : kind === "bookmark" ? { kind: "quote", text: itemMeta(item).split(" · ")[0] ?? item.url } : { kind: "document" })}
       onOpen={open} selected={selection?.selected} selectionMode={selection?.mode} selectLabel={selection ? copy.select : undefined}
       onSelectedChange={selection?.onSelect} dragging={dragging}
