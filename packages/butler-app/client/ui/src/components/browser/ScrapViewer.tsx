@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { ArtifactPreview, ArtifactPreviewFrame, ArtifactPreviewImage, Button, ButtonContainer, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Typo, type DialogSize } from "@/butler-ds";
+import { hasWebSource } from "../library/libraryActions";
 import { librarySnapshot, type LibraryItem } from "./libraryStore";
 
 /** The scrap open in the viewer; any surface that lists scraps opens it here. */
@@ -33,16 +34,16 @@ export function ScrapViewer({ onSource }: { onSource: (item: LibraryItem) => voi
   const text = appCopy.browser;
   return <Dialog open={Boolean(item)} onOpenChange={open => { if (!open) close(); }}>
     {item && <DialogContent size={dialogSize(size?.width ?? 0)} closeLabel={appCopy.common.close} data-test-class="scrap-viewer">
-      <DialogHeader><DialogTitle>{item.title}</DialogTitle>{item.site && <DialogDescription>{item.site}</DialogDescription>}</DialogHeader>
+      <DialogHeader><DialogTitle>{item.title}</DialogTitle>{hasWebSource(item) && item.site && <DialogDescription>{item.site}</DialogDescription>}</DialogHeader>
       <ArtifactPreview>
         {loaded?.html && size ? <ArtifactPreviewFrame srcDoc={loaded.html} title={item.title} intrinsicSize={size}
           sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" data-test-class="scrap-frame" />
           : loaded && item.crop ? <ArtifactPreviewImage src={item.crop} alt={item.title} />
             : <Typo.Caption>{loaded ? text.failed : appCopy.artifacts.loading}</Typo.Caption>}
       </ArtifactPreview>
-      <DialogFooter><ButtonContainer size="sm">
+      {hasWebSource(item) && <DialogFooter><ButtonContainer size="sm">
         <Button size="sm" variant="outline" onClick={() => { close(); onSource(item); }}>{text.openSourcePage}</Button>
-      </ButtonContainer></DialogFooter>
+      </ButtonContainer></DialogFooter>}
     </DialogContent>}
   </Dialog>;
 }

@@ -40,7 +40,8 @@ async fn serialize_catalog(definitions: &[Value]) {
         })
         .collect();
     validate_other_carriers(&tools, definitions);
-    let payload = br#"{"content":[{"type":"text","text":"ok"}],"usage":{}}"#;
+    let payload =
+        br#"{"stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{}}"#;
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         payload.len(),

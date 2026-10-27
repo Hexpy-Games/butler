@@ -16,6 +16,7 @@ pub(super) struct Terminal<'a> {
     turn_id: &'a str,
     kind: &'static str,
     safe_error: Option<&'a str>,
+    retryable: bool,
     suspension: Option<&'a str>,
     model: Option<Value>,
     pub(super) artifacts: &'a [FinalArtifact],
@@ -47,6 +48,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
                 .runtime_failure
                 .as_ref()
                 .map(|failure| failure.code.as_str()),
+            retryable: value.runtime_failure.as_ref().is_some_and(|f| f.retryable),
             suspension: None,
             model: value
                 .model_identity
@@ -71,6 +73,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
                 .runtime_failure
                 .as_ref()
                 .map(|failure| failure.code.as_str()),
+            retryable: value.runtime_failure.as_ref().is_some_and(|f| f.retryable),
             suspension: None,
             model: None,
             artifacts: &value.artifacts,
@@ -88,6 +91,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
             turn_id,
             kind: "turn_suspended",
             safe_error: None,
+            retryable: false,
             suspension: Some(reason),
             model: None,
             artifacts: &[],
@@ -114,6 +118,7 @@ pub(super) fn cancelled(turn_id: &str) -> Terminal<'_> {
         turn_id,
         kind: "turn_cancelled",
         safe_error: Some("turn_cancelled"),
+        retryable: false,
         suspension: None,
         model: None,
         artifacts: &[],
@@ -132,6 +137,7 @@ pub(super) fn crash_interrupted(turn_id: &str) -> Terminal<'_> {
         turn_id,
         kind: "turn_failed",
         safe_error: Some("turn_interrupted"),
+        retryable: false,
         suspension: None,
         model: None,
         artifacts: &[],
@@ -150,6 +156,7 @@ pub(super) fn rejected<'a>(turn_id: &'a str, code: &'a str) -> Terminal<'a> {
         turn_id,
         kind: "turn_failed",
         safe_error: Some(code),
+        retryable: false,
         suspension: None,
         model: None,
         artifacts: &[],
@@ -180,6 +187,7 @@ pub(super) fn action(
         target.thread_id.as_deref().unwrap_or("main")
     );
     let mut metadata = base_metadata(item, envelope);
+    metadata.insert("retryable".into(), terminal.retryable.into());
     metadata.insert("kind".into(), terminal.kind.into());
     metadata.insert("turnId".into(), terminal.turn_id.into());
     if let Some(canonical) = terminal.canonical {
