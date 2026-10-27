@@ -55,19 +55,21 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
   </Card>;
   const empty = chooseProject && target === "@new" && !name.trim();
   return <Card radius="lg" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
-    <Stack gap="md">
-      <Typo.Caption tone="tertiary">{creates ? copy.draft : copy.changes}</Typo.Caption>
-      <Typo.Caption>{creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.target_label}</Typo.Caption>
-      {p.epics.map((epic, index) => {
-        const description = epic.description.replace(/!?\[[^\]]*\]\(attachment:[^)]+\)/giu, "");
-        return <Stack key={index} gap="sm">
-          <Typo.PanelTitle wrap="anywhere">{epic.title}</Typo.PanelTitle>
-          {description.trim() && <EpicMarkdown epicId="" description={description} density="compact" />}
-          {epic.tags.length > 0 && <Stack align="row" gap="xs" wrap>{epic.tags.map((tag, index) => <Tag key={tag.id ?? index} tone={tag.color} size="sm">{tag.name}</Tag>)}</Stack>}
-          <MessageAttachments attachments={epic.attachments} sessionId={sessionId} />
-        </Stack>;
-      })}
-      <CanonProposalChanges changes={p.changes} ko={ko} />
+    <Stack gap="lg">
+      <Stack gap="md">
+        <Typo.Caption tone="tertiary">{creates ? copy.draft : copy.changes}</Typo.Caption>
+        <Typo.Caption>{creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.target_label}</Typo.Caption>
+        {p.epics.map((epic, index) => {
+          const description = epic.description.replace(/!?\[[^\]]*\]\(attachment:[^)]+\)/giu, "");
+          return <Stack key={index} gap="sm">
+            <Typo.PanelTitle wrap="anywhere">{epic.title}</Typo.PanelTitle>
+            {description.trim() && <EpicMarkdown epicId="" description={description} density="compact" />}
+            {epic.tags.length > 0 && <Stack align="row" gap="xs" wrap>{epic.tags.map((tag, index) => <Tag key={tag.id ?? index} tone={tag.color} size="sm">{tag.name}</Tag>)}</Stack>}
+            <MessageAttachments attachments={epic.attachments} sessionId={sessionId} />
+          </Stack>;
+        })}
+        <CanonProposalChanges changes={p.changes} ko={ko} />
+      </Stack>
       {chooseProject ? <CanonProposalProject value={target} name={name} busy={busy} ko={ko} onSelect={setTarget} onName={setName} />
         : <CanonProposalFact label={copy.project} value={projectName} />}
       <ButtonContainer size="sm" justify="end">
