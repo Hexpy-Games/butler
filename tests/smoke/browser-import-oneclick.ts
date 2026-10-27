@@ -246,7 +246,8 @@ try {
     assert.equal(await dialog.getByRole("radio", { checked: true }).count(), 1, "the first profile is picked");
     await capture("sources");
     await choose("chrome:work");
-    await dialog.getByText(bi.chooseItems, { exact: true }).waitFor();
+    assert.equal(await dialog.locator('[aria-current="step"]').innerText(), `2\n${bi.chooseItems}`, "the stepper marks step 2");
+    await dialog.locator("legend").filter({ hasText: bi.chooseItems }).waitFor();
     for (const label of [bi.bookmarks, bi.passwords, bi.history]) assert.equal(await dialog.getByRole("checkbox", { name: label, exact: true }).getAttribute("aria-checked"), "true");
     await capture("items");
     await page.keyboard.press("Escape");
