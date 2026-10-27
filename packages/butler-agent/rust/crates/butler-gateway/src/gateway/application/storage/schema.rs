@@ -128,8 +128,7 @@ fn create_queue_order_index(connection: &Connection) -> Result<(), AppStorageErr
 }
 
 /// `PRAGMA user_version` once the full-table backfills of an older database
-/// have run. Both leave a current database untouched, but finding that out
-/// reads every message.
+/// have run. Finding rows that need these backfills reads every message.
 const BACKFILLS_DONE: i64 = 1;
 
 fn run_backfills_once(connection: &Connection) -> Result<(), AppStorageError> {

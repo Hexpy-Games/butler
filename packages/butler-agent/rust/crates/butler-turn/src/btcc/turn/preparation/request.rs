@@ -291,6 +291,7 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
         }
         for (source, target) in [
             ("branchSeed", "branchSeed"),
+            ("language", "language"),
             ("defaultProjectFolder", "defaultProjectFolder"),
             ("contentParts", "messageContent"),
             ("documentEdits", "documentEdits"),

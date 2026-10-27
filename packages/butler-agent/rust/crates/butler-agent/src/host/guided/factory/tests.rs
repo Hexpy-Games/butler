@@ -132,7 +132,7 @@ async fn loopback(web_page_url: &str) -> (Url, tokio::task::JoinHandle<Vec<Value
     let served = tokio::spawn(async move {
         let mut bodies = Vec::new();
         for response in [
-            json!({"id":"resp_1","model":"gpt-5.5","output":[
+            json!({"id":"resp_1","model":"gpt-5.5","status":"completed","output":[
                 {"type":"function_call","call_id":"file-call","name":"read_file",
                     "arguments":"{\"requests\":[{\"path\":\"proof.txt\"}]}"},
                 {"type":"function_call","call_id":"search-call","name":"web_search",
@@ -140,7 +140,7 @@ async fn loopback(web_page_url: &str) -> (Url, tokio::task::JoinHandle<Vec<Value
                 {"type":"function_call","call_id":"read-call","name":"web_read",
                     "arguments":serde_json::to_string(&json!({"url":web_page_url})).unwrap()}
             ]}),
-            json!({"id":"resp_2","model":"gpt-5.5","output":[{"type":"message",
+            json!({"id":"resp_2","model":"gpt-5.5","status":"completed","output":[{"type":"message",
                 "content":[{"type":"output_text","text":"The file and public page evidence were read."}]}]}),
         ] {
             let (mut socket, _) = listener.accept().await.unwrap();

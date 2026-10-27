@@ -5,6 +5,7 @@ use crate::models::PromptUsageReport;
 use super::super::serialize::Carrier;
 
 pub(super) struct PromptDecoded {
+    pub stop: butler_turn::btcc::ModelStop,
     pub text: Option<String>,
     pub usage: Option<PromptUsageReport>,
     pub cache_write_tokens: Option<Option<f64>>,
@@ -58,6 +59,7 @@ pub(super) fn decode(response: &Value, model: &str, carrier: Carrier) -> PromptD
         .or_else(|| response.pointer("/usage/input_tokens_details/cache_write_tokens"))
         .or_else(|| response.pointer("/usage/cache_creation_input_tokens"));
     PromptDecoded {
+        stop: super::super::result::stop::classify(response, carrier, text.is_some()),
         text,
         usage: stats.map(|stats| PromptUsageReport {
             model: model.into(),
