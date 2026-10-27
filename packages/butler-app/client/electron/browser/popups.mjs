@@ -29,7 +29,7 @@ export function syncPopup(browser, tab) {
     if (tab.attached === win) { win.contentView.removeChildView(tab.view); tab.attached = null; }
   } else {
     tab.bounds = tab.slot;
-    attachView(tab, win, () => {
+    attachView(tab, win, -1, () => {
       const { x, y, width, height } = tab.bounds;
       tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
       tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
