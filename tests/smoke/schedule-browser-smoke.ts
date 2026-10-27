@@ -71,6 +71,10 @@ async function capture(page: Page, name: string, selector: string, overlay?: Loc
     ? page.getByRole("heading", { name: "브라우저", exact: true }).locator("xpath=ancestor::section[1]")
     : page.locator(selector).first();
   if (!overlay) await region.scrollIntoViewIfNeeded();
+  if (name.includes("-card-")) {
+    assert.deepEqual(await page.locator('[role="menu"]:visible, [data-slot="dropdown-menu-content"]:visible, [data-slot="popover-content"]:visible').allTextContents(), [],
+      `${name}: closed-state capture has no visible menu or popover`);
+  }
   await captureUnion(page, `${before ? "before" : "after"}-${name}.png`, [region, ...(overlay ? [overlay] : [])]);
   if (!before && name.startsWith("editor-off")) {
     await captureUnion(page, `after-editor-layout-${name.slice("editor-off-".length)}.png`, [page.locator(selector).first()]);
@@ -241,10 +245,14 @@ try {
           await item.waitFor();
           const menu = page.getByRole("menu");
           await settled(menu);
+          const bounds = await menu.boundingBox();
+          assert(bounds);
+          assert(bounds.x >= 8 && bounds.x + bounds.width <= width - 8, "menu respects viewport collision padding");
           assert.equal(await page.getByText(/this reply\. Retry to continue\.|답변 실패/u).count(), 0, "clean fixture turn");
           assert.deepEqual(await page.locator("[data-sonner-toast]:visible").allTextContents(), [], "no fixture toast");
           await capture(page, `site-menu-${width}-${theme}`, panel, menu);
           await page.keyboard.press("Escape");
+          await menu.waitFor({ state: "detached" });
         }
         console.log(JSON.stringify({ mode, width, theme, scene: await page.locator(panel).evaluate(element => {
           const parent = element.closest("article");
