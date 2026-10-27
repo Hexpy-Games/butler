@@ -98,9 +98,15 @@ export async function textSizeSweep({ page, main, win, evidence, click, server }
       await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-area"]')));
       await audit("browser-chrome");
       await click(page, copy.sidebar.newChat);
-      const point = await page.expression<{ x:number;y:number }>("(()=>{const n=[...document.querySelectorAll('.icon-button:not([aria-haspopup]):not([aria-expanded])')].find(n=>n.checkVisibility()),r=n.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()");
+      const tooltipTrigger = '[data-test-class="chrome-floating-toggle-layer"] button';
+      const point = await page.expression<{ x:number;y:number }>(`(()=>{const n=document.querySelector(${JSON.stringify(tooltipTrigger)}),r=n.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
       await page.movePointer(point.x, point.y);
-      await page.waitForFunction(() => Boolean(document.querySelector('[role="tooltip"]')));
+      await page.expression(`new Promise(done=>{const check=()=>{
+        const trigger=document.querySelector(${JSON.stringify(tooltipTrigger)}),id=trigger?.getAttribute('aria-describedby');
+        const n=id&&document.getElementById(id);
+        if(n?.getAttribute('role')==='tooltip'&&n.getAttribute('data-state')==='open'&&n.checkVisibility({visibilityProperty:true,opacityProperty:true})){done(true);return;}
+        setTimeout(check,50);
+      };check()})`);
       await audit("tooltip");
     }
   }
