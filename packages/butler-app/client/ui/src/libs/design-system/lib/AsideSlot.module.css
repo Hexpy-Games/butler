@@ -22,7 +22,7 @@
   padding: var(--scroll-fade-size) var(--focus-ring-room);
   overflow: hidden auto;
   overscroll-behavior: contain;
-  container: aside-scroll / scroll-state;
+  container-type: inline-size;
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
   scrollbar-width: thin;
@@ -35,17 +35,11 @@
   padding-inline-start: max(var(--focus-ring-room), var(--space-md));
 }
 
+/* `100cqw - 100%` is the drawn scrollbar's width (0 when none is drawn): a
+   scroll container's container width leaves its scrollbar out. Taken in the
+   same layout that draws the scrollbar, so nothing moves for a frame. */
 .content {
-  padding-inline-end: var(--aside-scroll-end);
-}
-
-@container aside-scroll scroll-state(scrollable: block) {
-  .content {
-    padding-inline-end: max(
-      0px,
-      var(--aside-scroll-end) - var(--scrollbar-width, 0px)
-    );
-  }
+  padding-inline-end: max(0px, var(--aside-scroll-end) - (100cqw - 100%));
 }
 
 .scroll::-webkit-scrollbar {

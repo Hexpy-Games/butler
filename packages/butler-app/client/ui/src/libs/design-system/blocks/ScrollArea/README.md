@@ -39,9 +39,20 @@ thin scrollbar once and publishes its width as `--scrollbar-width` on the root
 Lane rule (all DS scrollers: ScrollArea, Dialog, the conversation transcript,
 the aside, autoGrow Textarea): a scrollbar lane or gutter is reserved only
 while a scrollbar takes space, that is a classic scrollbar is drawn because
-the content overflows. No scroller sets `scrollbar-gutter`. The scroller is a
-`scroll-state` container, and while it is scrollable the content gives the
-drawn scrollbar's width back (`@container scroll-state(scrollable: block)`).
+the content overflows. No scroller sets `scrollbar-gutter`. The content gives
+a drawn scrollbar's width back:
+
+- Dialog, the conversation transcript and the aside: the scroller is an
+  `inline-size` container. A scroll container's container width leaves its
+  scrollbar out, so `100% - 100cqw` is minus the drawn scrollbar's width (0
+  when none is drawn), resolved in the same layout that draws the scrollbar:
+  no read, not even a forced one mid-frame, sees the content move.
+- ScrollArea: the scroller is a `scroll-state` container
+  (`@container scroll-state(scrollable: block)`). Size containment would drop
+  its content from a content-sized parent's width (the model picker is sized
+  by its longest row), so it does not use the rule above. The painted frame
+  never moves, but a layout read inside `requestAnimationFrame` in the frame
+  where overflow starts can see the content one scrollbar narrower.
 
 Inset rule: the content's inline end sits on the column edge whether the
 content fits or overflows, with overlay or classic scrollbars, so nothing moves

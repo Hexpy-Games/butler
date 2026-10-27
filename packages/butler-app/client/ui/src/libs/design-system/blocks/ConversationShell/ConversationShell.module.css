@@ -52,7 +52,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden auto;
-  container: conversation-scroll / scroll-state;
+  container-type: inline-size;
   padding-bottom: var(--composer-reserve);
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
@@ -62,21 +62,18 @@
 
 /* The column centres on the scroller's whole width, as the composer below it
    does. No gutter is reserved: a classic scrollbar takes its width only while
-   the transcript overflows, and the content gives that width back under it
-   (clipped there; the column's own margins are wider), so the column keeps
-   its width and centre when overflow starts or stops. Overlay scrollbars have
-   --scrollbar-width 0px. */
+   the transcript overflows. The scroller is an inline-size container, and a
+   scroll container's container width leaves its scrollbar out, so
+   `100% - 100cqw` is minus the drawn scrollbar's width (0 when none is
+   drawn): the content takes that width back under the scrollbar (clipped
+   there; the column's own margins are wider) in the same layout that draws
+   it, so the column never moves, not even for a frame. */
 .scrollContent {
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
   min-width: 0;
-}
-
-@container conversation-scroll scroll-state(scrollable: block) {
-  .scrollContent {
-    margin-inline-end: calc(-1 * var(--scrollbar-width, 0px));
-  }
+  margin-inline-end: calc(100% - 100cqw);
 }
 
 .virtualScroll {

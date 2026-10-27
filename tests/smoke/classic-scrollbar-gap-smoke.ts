@@ -19,6 +19,8 @@ import { dirname, join, resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { fixtureData, installBridge, surfaces, unavailable, type State, type Surface } from "../support/classic-scrollbar-gap-surfaces.ts";
 import { execFileSync, spawn } from "node:child_process";
+import { assertTransition, sampleTransition } from "../support/classic-scrollbar-gap-frames.ts";
+import { growTranscript } from "../support/classic-scrollbar-gap-growth.ts";
 
 // Keep the entry runnable with the repository's Bun script, but use Node's
 // WebSocket transport for Playwright's CDP connection (Bun's handshake stalls).
@@ -40,6 +42,7 @@ const rows: Row[] = surfaces.map(surface => ({ surface, cells: {} }));
 const conditions: unknown[] = [];
 const probes: Partial<Record<Mode, number>> = {};
 const harnessFailures: string[] = [];
+const transitions: { surface: string; mode: Mode; trigger: string; result?: Awaited<ReturnType<typeof sampleTransition>>; error?: string }[] = [];
 const shots = process.env.BUTLER_SCROLLBAR_GAP_SHOTS;
 const report = process.env.BUTLER_SCROLLBAR_GAP_REPORT;
 if (shots) mkdirSync(shots, { recursive: true });
@@ -186,15 +189,42 @@ async function run(mode: Mode) {
     const screenLocked = /"IOConsoleLocked"\s*=\s*Yes/u.test(consoleState);
     conditions.push({ mode, ...condition, screenLocked });
     assert(String(condition.electron).startsWith("44."), `Requires Electron 44, got ${condition.electron}`);
+    await transitionCells(page, host.url, mode);
     for (const row of rows) for (const state of ["fits", "overflows"] as const) {
       console.error(`Measuring ${row.surface.name} ${state}/${mode}`);
       await cell(page, host.url, row, state, mode);
-      if (report) writeFileSync(report + ".partial.json", JSON.stringify({ probes, conditions, rows, harnessFailures }, null, 2));
+      if (report) writeFileSync(report + ".partial.json", JSON.stringify({ probes, conditions, rows, transitions, harnessFailures }, null, 2));
     }
   } finally {
     // Disconnecting CDP is followed by owned-group teardown, including failures.
     await disconnect(host.browser);
     await stopElectronChild(host.child);
+  }
+}
+async function transitionCells(page: Page, url: string, mode: Mode) {
+  for (const name of ["transcript", "dialog-self", "aside-docked", "settings-nav", "model-picker"]) {
+    const surface = surfaces.find(surface => surface.name === name)!;
+    for (const trigger of name === "transcript" ? ["messages", "window-shrink"] : [name === "model-picker" ? "filter" : "window-shrink"]) {
+      const record: typeof transitions[number] = { surface: name, mode, trigger };
+      transitions.push(record);
+      try {
+        console.error(`Sampling frames ${name} ${mode} ${trigger}`);
+        await open(page, url, surface, name === "model-picker" ? "overflows" : "fits", "light");
+        const search = page.locator('[data-slot="popover-content"] input');
+        if (name === "model-picker") { await search.fill("Layout model 60"); await page.waitForTimeout(100); }
+        record.result = await sampleTransition(page, surface, async () => {
+          if (trigger === "messages") { await growTranscript(page); }
+          else if (trigger === "filter") { await search.fill(""); }
+          else { await resize(url, surface.width ?? 1280, surface.heights?.[1] ?? 340); }
+        }, `${name}-${mode}-${trigger}`);
+        console.error(JSON.stringify({ surface: name, mode, trigger, summaries: record.result.summaries }));
+        if (name === "transcript" || name === "dialog-self") assertTransition(record.result);
+      } catch (error) {
+        record.error = String(error);
+        console.error(`${name} ${mode} ${trigger}: ${record.error}`);
+        harnessFailures.push(`${name} ${mode} ${trigger}: ${record.error}`);
+      } finally { await surface.leave?.(page); }
+    }
   }
 }
 async function disconnect(browser: Browser) { try { await browser.close(); } catch { /* process already exited */ } }
@@ -265,7 +295,7 @@ const table = markdown();
 console.log(table);
 const selectors = rows.map(({ surface }) => ({ name: surface.name, S: surface.s, C: surface.c, note: surface.note }));
 const payload = { table, units: "CSS px, rounded to 0.5", probes, conditions,
-  rows: rows.map(({ surface, ...row }) => ({ name: surface.name, ...row })), selectors, unavailable, inventory: inventory(), harnessFailures, shots };
+  rows: rows.map(({ surface, ...row }) => ({ name: surface.name, ...row })), transitions, selectors, unavailable, inventory: inventory(), harnessFailures, shots };
 if (report) {
   mkdirSync(dirname(report), { recursive: true });
   writeFileSync(report, JSON.stringify(payload, null, 2) + "\n");
