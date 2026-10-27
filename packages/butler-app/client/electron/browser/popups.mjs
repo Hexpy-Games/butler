@@ -10,6 +10,7 @@ import { browserEvent } from "./events.mjs";
 import { connectDebugger, backgroundTab } from "./agent.mjs";
 import { publicDialog } from "./dialogs.mjs";
 import { answerUserDialog } from "./user-dialogs.mjs";
+import { attachView } from "./view-capture.mjs";
 
 const windows = new Map();
 let installed = false;
@@ -28,14 +29,12 @@ export function syncPopup(browser, tab) {
   if (tab.covered || tab.dialog || !tab.slot?.visible) {
     if (tab.attached === win) { win.contentView.removeChildView(tab.view); tab.attached = null; }
   } else {
-    if (tab.attached !== win) {
-      if (browser.attachAfterCaptures(tab)) { publishPopup(tab); return; }
-      win.contentView.addChildView(tab.view); tab.attached = win;
-    }
     tab.bounds = tab.slot;
-    const { x, y, width, height } = tab.bounds;
-    tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
-    tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
+    attachView(tab, win, () => {
+      const { x, y, width, height } = tab.bounds;
+      tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+      tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
+    }, () => { if (browser.tabs.get(tab.id) === tab) browser.sync(tab); });
   }
   publishPopup(tab);
 }
