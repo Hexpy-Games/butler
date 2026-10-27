@@ -75,6 +75,9 @@ async fn auto_01_automation_runs_a_turn() -> Result<(), HarnessError> {
         .replay_only()
         .start()
         .await?;
+    // This lifecycle fixture runs at midnight; quiet-hour delivery has its own scenario.
+    s.patch_settings(json!({"quiet_hours_end":"23:00"}), "quiet-hours window")
+        .await?;
     let id = create(&s).await?;
     assert!(
         dispatch_due(&s).await?.is_empty(),
@@ -92,15 +95,16 @@ async fn auto_01_automation_runs_a_turn() -> Result<(), HarnessError> {
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let messages = s.gw.messages("general").await?;
     assert!(
-        messages.iter().any(|m| m["role"] == "user"
-            && m["turn_id"] == turn_id.as_str()
-            && m["text"] == NUMBERS),
-        "automation prompt not in the chat: {messages:?}"
+        !messages
+            .iter()
+            .any(|m| m["role"] == "user" && m["turn_id"] == turn_id.as_str()),
+        "schedule prompt visible in Chats: {messages:?}"
     );
     assert!(
-        messages
-            .iter()
-            .any(|m| m["role"] == "assistant" && m["turn_id"] == turn_id.as_str()),
+        messages.iter().any(|m| m["role"] == "assistant"
+            && m["turn_id"] == turn_id.as_str()
+            && m["initiated"]["kind"] == "schedule_report"
+            && m["initiated"]["automation_id"] == id),
         "no answer for the automation turn"
     );
     let recorded = runs(&s, &id).await?;

@@ -933,6 +933,13 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     failureReason: "Failure reason",
   },
   conversation: {
+    initiated: {
+      noThanks: "No thanks", soundsGood: "Sounds good",
+      created: action => `Created · ${action}`, skipped: action => `Skipped · ${action}`,
+      continuing: action => `Continuing · ${action}`, paused: action => `Paused · ${action}`, alreadyHandled: "This suggestion was already handled", failed: "Couldn't complete that. Please try again.",
+      dailyAt: time => `Daily at ${time}`, weekdaysAt: time => `Weekdays at ${time}`, unopened: n => `Unopened ${n} times in a row`,
+      action: (frequency, title, date) => ["Schedule", frequency, title, ...(date ? [`From ${date}`] : []), "In Chats"].join(" · "),
+    },
     chatsIntro: "You can talk to me casually here. Anything long, I'll send as a document.",
     messageActions: {
       showMore: "Show more",
