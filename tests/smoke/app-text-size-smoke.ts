@@ -11,6 +11,8 @@ import { createNativeAppServer, freePort } from "../support/native-app-server";
 import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { connectElectronMain } from "../support/electron-main-cdp";
 import { smokeElectronArgs } from "../support/smoke-browser";
+import { verifyVisibleClipping } from "../support/visible-clipping-fixtures";
+import { textSizeSweep } from "../support/text-size-sweep";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 
 type TextSizeMain = Awaited<ReturnType<typeof connectElectronMain>>;
@@ -114,6 +116,7 @@ async function layout(page: Page, screen: string) {
   if (result.overflow > 0 || result.clipped.length) layoutFailures.push(`${screen}: ${JSON.stringify(result)}`);
 }
 async function click(page: Page, name: string, scope = 'button,[role="button"]') {
+  await page.expression(`(()=>{const n=[...document.querySelectorAll(${JSON.stringify(scope)})].find(e=>(e.getAttribute('aria-label')||e.textContent)?.trim()===${JSON.stringify(name)});n?.scrollIntoView({block:'nearest'})})()`);
   await until(() => page.expression<boolean>(`[...document.querySelectorAll(${JSON.stringify(scope)})].some(e=>{
     if((e.getAttribute('aria-label')||e.textContent)?.trim()!==${JSON.stringify(name)})return false;
     const r=e.getBoundingClientRect();if(!r.width||!r.height||!e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))return false;
@@ -161,7 +164,8 @@ async function shortcut(main: TextSizeMain, role: string, contents = `${win}.web
     if(!item)throw new Error('Missing zoom accelerator: '+${JSON.stringify(role)});
     ${contents}.focus();item.click({},${win},${contents});
   })()`);
-  await main.evaluate(`${contents}.executeJavaScript('new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))')`);
+  // A native view can be occluded (including by the lock screen). Its animation
+  // frames need not run; callers assert the observable zoom/settings instead.
 }
 async function assertSize(page: Page, main: TextSizeMain, size: "default" | "large" | "larger", label: string) {
   const factor = textSizeFactor(size);
@@ -346,6 +350,11 @@ try {
   await until(() => main.evaluate<boolean>(`${agent}.bounds.visible === false && ${agent}.bounds.scale === 1`), Boolean, 'agent parked at its own scale');
   const agentScale = await main.evaluate<number>(`${agent}.bounds.scale`);
   assert.equal(await main.evaluate(`${webContents}.getZoomFactor()`), 1, 'page starts at its own zoom 1');
+  const frameProbe = await main.evaluate(`(async()=>{const wc=${webContents};
+    await wc.executeJavaScript('globalThis.smokeFrameFired=false;requestAnimationFrame(()=>globalThis.smokeFrameFired=true);true');
+    await new Promise(done=>setTimeout(done,150));
+    return {mainTimerFired:true,destroyed:wc.isDestroyed(),loading:wc.isLoading(),renderer:await wc.executeJavaScript('({visibility:document.visibilityState,frameFired:globalThis.smokeFrameFired,ready:document.readyState})')};})()`);
+  console.log(JSON.stringify({occludedBrowserFrameProbe:frameProbe}));
   await shortcut(main, "zoomin", webContents);
   assert(Math.abs(await main.evaluate<number>(`${webContents}.getZoomFactor()`) - Math.sqrt(1.2)) < 0.001, 'browser menu keeps normal Electron zoom step');
   assert.equal(await main.evaluate(`${win}.webContents.getZoomFactor()`), 1.3, 'browser shortcut leaves App size unchanged');
@@ -377,6 +386,9 @@ try {
     console.log(JSON.stringify({ factor, compactThroughDip, expandedFromDip: high, agent: agentState }));
   }
   await main.evaluate(`${win}.setContentSize(1280,800)`);
+  await click(page, copy.browser.title);
+  await verifyVisibleClipping(page);
+  await textSizeSweep({ page, main, win, evidence, click, server });
   await appearance(page);
   await change(page, copy.settings.options.textSizeDefault, textSizeFactor("default"));
   await until(() => main.evaluate<number>(`${win}.webContents.getZoomFactor()`), value => value === 1, 'back to default native zoom');

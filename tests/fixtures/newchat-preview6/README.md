@@ -63,3 +63,8 @@ Historical screenshots use the following filenames under each of
 - `1280-dark-coastal.png`, `1280-dark-none.png`
 - `375-light-coastal.png`, `375-light-none.png`
 - `375-dark-coastal.png`, `375-dark-none.png`
+
+Re-captured from `89c589074` for the wrapping suggestion grid: the four cards
+now wrap in the header's column, one row of four at 1280 and two columns at
+375, with no sideways rail. Hero geometry, content and paint are unchanged.
+This reference is pending owner approval (preview 14 큰 글자).

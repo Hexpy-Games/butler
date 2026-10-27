@@ -7,11 +7,10 @@ import { captureNewChatMatrix, compareNewChatCase, type NewChatVisualCase } from
 const reference = JSON.parse(readFileSync(new URL("../fixtures/newchat-preview6/reference.json", import.meta.url), "utf8")) as {
   revision: string; cases: Record<string, NewChatVisualCase>;
 };
-// #1239 (e60ee7b93): owner-approved light secondary text #696d73 -> #52565a.
-assert.equal(reference.revision, "daa2a28c91daa2f20d2659d89ab182e8636f38c1");
-// #924 (dcbd58d68): suggestion cards hug their ordinal and copy, with no empty
-// art slot, and every card in the row shares one height (CSS px, per width).
-const CARD_HEIGHT_PX: Record<string, number> = { 1280: 142, 375: 156 };
+// Wrapping suggestions at 89c589074; pending owner approval (preview 14 큰 글자).
+assert.equal(reference.revision, "89c589074fcb8a953f54c9ce04836b4f7d1cf2d2");
+// Complete copy wraps in the header column; each grid row shares a height.
+const CARD_HEIGHT_PX: Record<string, number> = { 1280: 186, 375: 206 };
 const output = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/newchat-regression/fix");
 const actual = await captureNewChatMatrix(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist", output);
 assert.deepEqual(Object.keys(actual.cases), Object.keys(reference.cases), "All eight viewport/theme/wallpaper cases are required");
