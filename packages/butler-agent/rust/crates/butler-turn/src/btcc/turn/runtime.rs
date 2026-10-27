@@ -83,6 +83,7 @@ impl TurnRuntime {
                 conversation,
                 &destination,
                 prepared.request.recovery_attempt.unwrap_or(1),
+                &prepared.command,
             ))
             .await?;
             timing.mark("agent_returned");

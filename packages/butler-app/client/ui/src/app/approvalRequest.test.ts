@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { getAppCopy } from "./copy.ts";
-import { approvalRequestView, normalizeApprovalSummary } from "./approvalRequest.ts";
+import { approvalActionView, approvalRequestView, normalizeApprovalSummary } from "./approvalRequest.ts";
 import type { ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
 
 const en = getAppCopy("en-US").interfaceTemplates.approvalRequest;
@@ -137,6 +137,21 @@ test("the badge shows the risk the agent sent: the App never classifies commands
 
 // test-category: security
 test("outside paths stay absolute and inside paths remain project-relative", () => {
+  for (const [input, masked] of [
+    ["curl -H 'Authorization: Bearer sample-value' https://example.com", "curl -H 'Authorization: Bearer ••••' https://example.com"],
+    ["curl -H 'Authorization: Basic sample-value'", "curl -H 'Authorization: Basic ••••'"],
+    ["run --api-key sample-value --token=sample-value secret='two words'", "run --api-key •••• --token=•••• secret=••••"],
+    ['run api_key="two words" access_token=sample-value', "run api_key=•••• access_token=••••"],
+    ["fetch https://example.com/?token=sample-value&limit=5", "fetch https://example.com/?token=••••&limit=5"],
+    ["send Bearer sample-value", "send Bearer sample-value"],
+  ]) {
+    const request = normalizeApprovalSummary({ action_kind: "run_command", examples: [input],
+      operation: { tool: "exec_command", access: "change", targets: [], command: input } })!;
+    for (const copy of [en, ko]) {
+      expect(approvalRequestView(card(request), copy).details).toEqual([masked]);
+      expect(approvalActionView(request, copy, {}).target).toBe(masked);
+    }
+  }
   const approval = summary("edit_files", {
     targets: [folder("/home/mina/.butler"), { kind: "outside", path: "/tmp/reports/a.txt" }],
     examples: ["/tmp/reports/a.txt"],
@@ -226,4 +241,9 @@ test("the transport approval is narrowed fail-soft: bad fields drop, a bad shape
   expect(normalizeApprovalSummary({ action_kind: "run_command" })).toEqual({
     actionKind: "run_command", targets: [], count: 1, examples: [],
   });
+  const canon = normalizeApprovalSummary({ action_kind: "create_canon", canon: { kind: "epic", title: "Review",
+    project_id: "p", project_title: "Research", plan_id: "plan", plan_title: "Autumn", due_on: "2026-11-30", description: "Read every source" } })!;
+  for (const copy of [en, ko]) expect(approvalRequestView(card(canon), copy).details).toEqual([
+    copy.canonTitle("Review"), copy.canonProject("Research"), copy.canonPlan("Autumn"), copy.canonDue("2026-11-30"), copy.canonDescription("Read every source"),
+  ]);
 });

@@ -302,7 +302,9 @@ mod work_model_schema;
 mod worker_cap;
 
 mod canon_link;
+mod canon_propose;
 mod one_call_delegation;
 
 mod chats_initiated;
 mod chats_proposals;
+mod chats_work;

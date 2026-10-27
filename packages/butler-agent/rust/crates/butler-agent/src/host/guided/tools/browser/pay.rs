@@ -39,8 +39,14 @@ pub(super) async fn execute(
             .schedule_run()
             .and_then(|run| run.browser)
             .is_some_and(|browser| !browser.payment)
-        && let Some(refused) =
-            super::super::turn_guard::schedule_browser_feedback(owner, "schedule_payment_off").await
+        && let Some(refused) = super::super::turn_guard::schedule_browser_feedback(
+            owner,
+            call,
+            &args,
+            args["tab"].as_str().unwrap_or(""),
+            "schedule_payment_off",
+        )
+        .await
     {
         return encoded(&refused);
     }
@@ -105,14 +111,19 @@ async fn fill(
     targets: &Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
     if kind == "card" && this.owner.schedule_run().is_some() && looked["purchase_allowed"] != true {
-        return encoded(
-            &super::super::turn_guard::unattended_feedback(
-                this.owner,
-                &this.call.name,
-                looked["site"].as_str().unwrap_or(""),
-            )
-            .await,
-        );
+        super::super::attention::skipped_input(
+            this.owner,
+            this.call,
+            approval_input(inspected, item, kind, this.tab),
+            &format!("browser:pay:{}", looked["site"].as_str().unwrap_or("")),
+            "schedule_permission_required",
+        )
+        .await;
+        return encoded(&super::super::turn_guard::unattended_feedback(
+            this.owner,
+            &this.call.name,
+            looked["site"].as_str().unwrap_or(""),
+        ));
     }
     let mut approval = None;
     if item["allowed"] != true && !(kind == "card" && looked["purchase_allowed"] == true) {

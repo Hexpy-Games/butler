@@ -58,6 +58,7 @@ impl SubsessionService {
         checks: Option<Vec<String>>,
         epic_ref: Option<String>,
     ) -> Result<Value, BtccError> {
+        let request = self.inherit_steward_access(request).await?;
         let parent = self
             .parent_binding(
                 &request.parent_session_id,

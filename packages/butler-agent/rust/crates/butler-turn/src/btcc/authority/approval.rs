@@ -4,9 +4,11 @@
 //! summaries use workspace labels; the local decision projection also carries
 //! exact operation paths, without tool contents or credentials.
 
+mod canon;
 mod command_risk;
 mod operation;
 mod schedule;
+mod tool;
 pub(super) use operation::exact_operation;
 pub(super) use schedule::{schedule, schedule_update};
 
@@ -51,6 +53,8 @@ pub struct AuthorityApproval {
     /// What a reviewed schedule create sets up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedule: Option<schedule::ApprovalSchedule>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canon: Option<canon::ApprovalCanon>,
 }
 
 /// What kind of action waits for the user.
@@ -73,6 +77,7 @@ pub enum ApprovalActionKind {
     ManageSchedule,
     /// Record project work (plans, tasks, attempts, reviews).
     UpdateProject,
+    CreateCanon,
     /// Start a conversation on a topic.
     StartConversation,
     /// Restart the Butler service.
@@ -149,6 +154,7 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             ApprovalRisk::High,
         ),
         "call_mcp_tool" => mcp(facts),
+        "canon_propose" => canon::summarize(facts),
         "start_topic_conversation" => single(
             ApprovalActionKind::StartConversation,
             ApprovalTargetKind::Other,
@@ -183,7 +189,7 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
                 ApprovalRisk::Medium
             },
         ),
-        capability => by_tool(facts, ToolName::parse(capability)),
+        capability => tool::by_tool(facts, ToolName::parse(capability)),
     }
 }
 
@@ -208,47 +214,6 @@ fn mcp(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             ));
     }
     approval
-}
-
-fn by_tool(facts: ApprovalFacts<'_>, tool: Option<ToolName>) -> AuthorityApproval {
-    let (kind, target, risk) = match tool {
-        Some(ToolName::WriteFile | ToolName::EditFile) => return file_edits(facts),
-        Some(ToolName::ReadFile | ToolName::ListFiles | ToolName::GrepFiles) => {
-            return file_reads(facts);
-        }
-        Some(ToolName::DeleteAutomation) => (
-            ApprovalActionKind::ManageSchedule,
-            ApprovalTargetKind::Schedule,
-            ApprovalRisk::High,
-        ),
-        Some(ToolName::CreateAutomation | ToolName::RunDueAutomations) => (
-            ApprovalActionKind::ManageSchedule,
-            ApprovalTargetKind::Schedule,
-            ApprovalRisk::Medium,
-        ),
-        Some(
-            ToolName::ProjectLedgerCreate
-            | ToolName::ProjectLedgerUpdate
-            | ToolName::ProjectLedgerWorkUpdate
-            | ToolName::ProjectLedgerWorkComplete
-            | ToolName::CompleteProjectWork
-            | ToolName::ProjectLedgerTaskUpdate
-            | ToolName::ProjectLedgerTaskComplete
-            | ToolName::ProjectLedgerAttemptStart
-            | ToolName::ProjectLedgerAttemptSucceed
-            | ToolName::ProjectLedgerAttemptFail,
-        ) => (
-            ApprovalActionKind::UpdateProject,
-            ApprovalTargetKind::Project,
-            ApprovalRisk::Low,
-        ),
-        _ => (
-            ApprovalActionKind::Other,
-            ApprovalTargetKind::Other,
-            ApprovalRisk::High,
-        ),
-    };
-    single(kind, target, facts.target, risk)
 }
 
 /// `write_file` (`path`) or `edit_file` (`path`, or `edits[].path`): the
@@ -290,6 +255,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     AuthorityApproval {
         operation: None,
         schedule: None,
+        canon: None,
         command_access: None,
         action_kind: ApprovalActionKind::EditFiles,
         targets,
@@ -333,6 +299,7 @@ fn file_reads(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         examples: paths,
         risk: ApprovalRisk::Low,
         schedule: None,
+        canon: None,
         command_access: None,
     }
 }
@@ -374,6 +341,7 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
     AuthorityApproval {
         operation: None,
         schedule: None,
+        canon: None,
         command_access: (!butler_platform::command_sandbox::approval_free_reads()
             && matches!(
                 facts.input.get("state_effect").and_then(Value::as_str),
@@ -410,6 +378,7 @@ fn single(
     AuthorityApproval {
         operation: None,
         schedule: None,
+        canon: None,
         command_access: None,
         action_kind,
         targets: vec![ApprovalTarget {

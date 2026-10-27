@@ -165,6 +165,9 @@ pub(super) fn add_role_tools(
                 .tool(name)
                 .is_none_or(|tool| tool.category.as_deref() != Some("project") || tool.durable)
         });
+        if policy.access_mode != AccessMode::ReadOnly {
+            names.insert("canon_propose".into());
+        }
     }
 }
 

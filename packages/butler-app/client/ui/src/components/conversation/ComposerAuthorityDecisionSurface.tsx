@@ -13,7 +13,7 @@ import { ComposerBrowserHandoffSurface } from "./ComposerBrowserHandoffSurface";
 /** What the request touches, at a glance: a folder for file edits (as in the README demo), a terminal for commands. */
 const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
   edit_files: Folder, run_command: Terminal, network_command: Globe2, web_request: Globe2, use_connector: McpServer,
-  manage_schedule: Clock3, update_project: ListChecks, start_conversation: MessageSquarePlus,
+  manage_schedule: Clock3, create_canon: ListChecks, update_project: ListChecks, start_conversation: MessageSquarePlus,
   restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, other: ShieldCheck,
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
@@ -24,7 +24,7 @@ function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
     ? `${path.slice(0, 30)}…${path.slice(-25)}` : path;
   const display = decision.pathDetails?.includes(text) ? shorten(text)
     : text === decision.title ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : text;
-  return <Typo.Text title={text} aria-label={text}>{display}</Typo.Text>;
+  return display === text ? text : <span title={text} aria-label={text}>{display}</span>;
 }
 
 export function ComposerAuthorityDecisionSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision }) {

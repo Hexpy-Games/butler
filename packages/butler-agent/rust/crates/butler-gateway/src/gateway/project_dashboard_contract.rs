@@ -3,6 +3,14 @@ use super::*;
 
 /// Project dashboard HTTP operations, backed by the App and Project Ledger owners.
 pub trait GatewayProjectDashboard: Send + Sync {
+    /// Resolve one active App project by id or an unambiguous exact name.
+    fn resolve_project_reference(
+        &self,
+        _reference: String,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+
     fn get_project_dashboard(&self, project_id: String) -> ApplicationFuture<serde_json::Value>;
     fn get_project_dashboard_records(
         &self,

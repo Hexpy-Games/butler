@@ -53,6 +53,7 @@ pub(in crate::gateway::application) fn streaming_message(
     row.map(|row| {
         let ids = vec![row.id.clone()];
         let mut record = message(row, &attachments(db, &ids)?, &changed_files(db, &ids)?)?;
+        record.quiet = super::super::initiated::quiet(db, &record.id)?;
         record.initiated = super::super::initiated::origin(db, &record.id)?;
         Ok(record)
     })

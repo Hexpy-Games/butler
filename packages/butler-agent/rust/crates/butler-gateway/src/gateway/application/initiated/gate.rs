@@ -25,16 +25,18 @@ impl Hold {
     }
 }
 
-pub(super) struct Gate {
+pub(in crate::gateway::application) struct Gate {
     pub(super) now: String,
     pub(super) tz: String,
-    pub(super) language: String,
+    pub(in crate::gateway::application) language: String,
     start: String,
     end: String,
     composing: Composing,
 }
 impl AppApplication {
-    pub(super) async fn initiated_gate(&self) -> Result<Gate, GatewayApplicationError> {
+    pub(in crate::gateway::application) async fn initiated_gate(
+        &self,
+    ) -> Result<Gate, GatewayApplicationError> {
         let settings = self.worker_profile_settings().await?;
         let facts = self.dependencies.settings_facts.snapshot()?;
         let tz = self
@@ -112,6 +114,22 @@ impl AppApplication {
 }
 
 impl Gate {
+    pub(in crate::gateway::application) fn for_admission(
+        db: &Connection,
+        facts: &super::super::AppSettingsFacts,
+        now: &str,
+    ) -> Result<Self, AppStorageError> {
+        let settings = &facts.native_settings["proactive_settings"];
+        Ok(Self {
+            now: now.into(),
+            tz: super::super::settings::effective_timezone(db, facts)?,
+            language: String::new(),
+            start: string(settings, "quiet_hours_start", "22:00"),
+            end: string(settings, "quiet_hours_end", "07:00"),
+            composing: Default::default(),
+        })
+    }
+
     pub(super) fn hold(
         &self,
         db: &Connection,
@@ -127,6 +145,13 @@ impl Gate {
         let queued: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM session_queued_messages WHERE chat_id=?1 AND state IN ('queued','dispatching'))", [chat], |r| r.get(0)).map_err(AppStorageError::sqlite)?;
         if queued {
             return Ok(Hold::Busy);
+        }
+        self.work_hold(chat, bypass)
+    }
+
+    pub(super) fn work_hold(&self, chat: &str, bypass: bool) -> Result<Hold, AppStorageError> {
+        if chat != "general" {
+            return Ok(Hold::Free);
         }
         let lease = self.composing.lock().get(chat).cloned();
         if let Some(until) = lease.filter(|at| at.as_str() > self.now.as_str()) {
@@ -160,7 +185,7 @@ impl Gate {
             .ok_or_else(timing::invalid)
     }
 
-    pub(super) fn quiet(&self) -> Result<bool, AppStorageError> {
+    pub(in crate::gateway::application) fn quiet(&self) -> Result<bool, AppStorageError> {
         let minute = self.local(&self.now)?.time();
         let current = format!("{:02}:{:02}", minute.hour(), minute.minute());
         Ok(if self.start < self.end {

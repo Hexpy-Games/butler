@@ -14,6 +14,7 @@ use crate::gateway::application::{
 };
 
 pub(super) struct FinalApply<'a> {
+    pub facts: &'a crate::gateway::application::AppSettingsFacts,
     pub language: crate::gateway::ui_language::UiLanguage,
     pub files: Vec<MaterializedResponderFile>,
     pub reply_id: &'a str,
@@ -115,7 +116,7 @@ fn apply(
         save_message(
             &tx,
             input,
-            apply.now,
+            (apply.now, apply.facts),
             message_id,
             current_existing.is_some(),
         )?;
@@ -393,10 +394,12 @@ fn object_value(value: &Value) -> Result<Map<String, Value>, AppStorageError> {
 fn save_message(
     db: &Connection,
     input: &FinalCandidate,
-    now: &str,
+    delivery: (&str, &crate::gateway::application::AppSettingsFacts),
     message_id: &str,
     existing: bool,
 ) -> Result<(), AppStorageError> {
+    let (now, facts) = delivery;
+    super::super::initiated::save_reply_quiet(db, &input.turn_id, facts, now)?;
     if existing {
         db.execute("UPDATE messages SET text=?1,status='delivered',updated_at=?2,safe_error_code=NULL,retryable=0,plan_json=?3,blocks_json=?5 WHERE id=?4",
                 params![input.text,now,input.plan.as_ref().map(Value::to_string),message_id,input.answer_blocks.as_ref().map(Value::to_string)]).map_err(AppStorageError::sqlite)?;

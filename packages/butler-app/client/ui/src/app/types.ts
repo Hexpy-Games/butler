@@ -887,6 +887,7 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  quiet?: boolean;
   /** Terminal failure grouped with this turn's retained partial answer. */
   failure_notice?: MessageRecord;
   initiated?: import("./initiatedTypes").InitiatedOrigin;
@@ -1899,6 +1900,7 @@ export type ApprovalRisk = "low" | "medium" | "high";
  * generic sentence instead of dropping the request.
  */
 export interface ApprovalSummary {
+  canon?: import("./approvalCanon").ApprovalCanon;
   /** Exact local decision facts; do not apply workspace-label normalization. */
   operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; allow_site?: "signed_in" | "payment"; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";

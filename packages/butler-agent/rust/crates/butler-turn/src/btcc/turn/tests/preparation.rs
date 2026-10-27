@@ -9,6 +9,9 @@ impl TurnPreparation for Harness {
                     preparation_id: turn_id,
                     request,
                     command: crate::btcc::TurnCommand::Resume(crate::btcc::ResumeCommand {
+                        access_ceiling: None,
+                        released_tools: Vec::new(),
+                        released_profiles: Vec::new(),
                         turn_id: "harness".into(),
                         recovery_attempt: None,
                     }),

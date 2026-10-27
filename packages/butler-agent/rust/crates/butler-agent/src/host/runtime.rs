@@ -5,6 +5,7 @@ mod contracts;
 mod defaults;
 pub(crate) use defaults::ensure_reply_language;
 mod attachments;
+mod delegation_access;
 pub(super) mod environment;
 mod mcp_owner;
 mod memory_bootstrap;
@@ -234,14 +235,14 @@ impl AgentRuntime {
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         let memory_writes =
             memory_bootstrap::rule_owner(&paths, &environment.cognition_paths, &coordinator, stop);
-        let preparation = Arc::new(DefaultTurnPreparation::new(
-            stores.bindings.clone(),
-            stores.conversations.clone(),
+        let preparation = delegation_access::preparation(
+            &stores,
             documents.clone(),
             observer.clone(),
             prompt,
             models.configuration.clone(),
-        ));
+            app_endpoint.clone(),
+        );
         let authority = mcp_owner::authority(&plugins, &stores, &collation, now.clone());
         let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));
         let (project_work, canon) = work_ports::create(&stores.btcc, &project_ledger, now.clone());

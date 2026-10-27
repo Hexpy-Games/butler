@@ -379,6 +379,7 @@ fn access_boundary_matches_the_owner_table() {
         "bind_session_git_worktree",
         "start_topic_conversation",
         "request_service_restart",
+        "canon_propose",
         "create_automation",
         "update_automation",
         "delete_automation",

@@ -34,6 +34,8 @@ pub struct ModelFallback {
 /// The subsession result a turn reports.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubsessionResultContext {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_session_id: Option<String>,
     pub relation_id: String,
     pub result_id: String,
     pub safe_title: String,
@@ -236,6 +238,7 @@ impl SubsessionResultContext {
             ));
         }
         Ok(Self {
+            child_session_id: self.child_session_id.clone(),
             relation_id: trim(&self.relation_id).into(),
             result_id: trim(&self.result_id).into(),
             safe_title: self

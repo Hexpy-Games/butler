@@ -307,6 +307,7 @@ fn message(
     let retry_current = row.retry_with_current_controls
         || (legacy_resume && row.safe_error_code.as_deref() == Some("runtime_fault"));
     Ok(MessageRecord {
+        quiet: false,
         incomplete: row.incomplete,
         initiated: None,
         content_parts: parse_optional(row.content_parts_json.as_deref())?,

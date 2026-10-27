@@ -19,9 +19,31 @@ function shape(value: unknown): unknown {
 
 test("English and Korean catalogs have complete recursive key and formatter parity", () => {
   expect(shape(getAppCopy("en-US"))).toEqual(shape(getAppCopy("ko-KR")));
+  for (const [locale, failed, retrying, continuing, reasons] of [
+    ["ko-KR", "작업 결과를 전달하지 못했어요", "작업 결과를 아직 전달하지 못했어요", "계속 다시 시도하고 있어요",
+      ["설정된 규칙이 막았어요", "모델을 사용할 수 없어요", "요청을 처리할 수 없어요", "알 수 없는 오류예요"]],
+    ["en-US", "Couldn't deliver the work result", "The work result hasn't been delivered yet", "Still retrying",
+      ["A configured rule blocked it", "The model isn't available", "The request can't be processed", "Unknown error"]],
+  ] as const) {
+    const line = getAppCopy(locale).conversation.initiated.workFailed;
+    for (const [index, code] of ["hook_blocked", "session_model_unavailable", "invalid_request", "unknown_error"].entries()) {
+      expect(line("failed", code)).toBe(`${failed} · ${reasons[index]}`);
+      expect(line("retrying", code)).toBe([retrying, ...(code === "unknown_error" ? [] : [reasons[index]]), continuing].join(" · "));
+    }
+    for (const code of [undefined, "future_code", "toString"]) {
+      expect(line("failed", code)).toBe(`${failed} · ${reasons[3]}`);
+      expect(line("retrying", code)).toBe(`${retrying} · ${continuing}`);
+    }
+  }
   expect(getAppCopy("en-US").conversation.work.collapsedSummary("Read file", 2)).toBe("Read file and 1 more activities");
   expect(getAppCopy("ko-KR").space.general).toBe("대화");
   expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Downloads folder cleanup");
+  for (const [locale, labels] of [["ko-KR", ["제목", "프로젝트", "계획", "마감일", "설명"]],
+    ["en-US", ["Title", "Project", "Plan", "Due", "Description"]]] as const) {
+    const copy = getAppCopy(locale).interfaceTemplates.approvalRequest;
+    expect([copy.canonTitle("x"), copy.canonProject("x"), copy.canonPlan("x"), copy.canonDue("x"), copy.canonDescription("x")])
+      .toEqual(labels.map(label => `${label}: x`));
+  }
 });
 
 // test-category: pure-logic

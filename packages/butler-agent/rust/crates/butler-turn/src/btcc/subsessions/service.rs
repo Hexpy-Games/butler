@@ -1,5 +1,6 @@
 //! Durable subsession orchestration and role-specific result routing.
 
+mod access;
 mod control;
 mod delegation;
 mod followup;
@@ -104,7 +105,7 @@ pub struct StewardDelegationRequest {
     pub safe_title: Option<String>,
     pub model_ref: String,
     pub reasoning_effort: String,
-    pub access_mode: String,
+    pub access_mode: crate::btcc::AccessMode,
     /// The unattended schedule run delegating, if any (D8).
     pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
@@ -122,7 +123,7 @@ pub struct WorkerDelegationRequest {
     pub implementation_brief: String,
     pub safe_title: Option<String>,
     pub profile_id: Option<String>,
-    pub access_mode: String,
+    pub access_mode: crate::btcc::AccessMode,
     /// The unattended schedule run delegating, if any (D8).
     pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
@@ -208,6 +209,7 @@ impl SubsessionService {
         request: StewardDelegationRequest,
         reviewed: &WorkView,
     ) -> Result<Value, BtccError> {
+        let request = self.inherit_steward_access(request).await?;
         let parent = self
             .parent_binding(
                 &request.parent_session_id,

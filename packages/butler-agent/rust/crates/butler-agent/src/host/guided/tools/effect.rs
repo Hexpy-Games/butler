@@ -2,6 +2,7 @@
 
 mod authority;
 mod automation;
+mod canon;
 mod ledger;
 mod ledger_input;
 mod mcp;
@@ -17,10 +18,13 @@ pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
 }
 
-/// Effects routed by name beyond the fixed tool list: managed ledger writes
-/// and working-folder moves.
+/// Host-managed effects routed before direct adapters, independently of their access kind.
 pub(super) fn routes_effect(name: &str) -> bool {
-    ledger_input::managed(name) || name == ToolName::SwitchFolder
+    ledger_input::managed(name)
+        || matches!(
+            ToolName::parse(name),
+            Some(ToolName::CanonPropose | ToolName::SwitchFolder)
+        )
 }
 
 use std::sync::Arc;
@@ -75,21 +79,7 @@ async fn execute_effect(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let scope = CommandScope {
-        workspace_reference: owner.binding.workspace_reference.as_ref(),
-        workspace_path: &owner.binding.workspace_path,
-        butler_data: &owner.binding.butler_data,
-        execution: if owner.binding.access_mode == AccessMode::FullAccess {
-            crate::host::guided::command::CommandExecution::Registered
-        } else {
-            crate::host::guided::command::CommandExecution::Sandboxed
-        },
-        contained_reads: false,
-        abort: invocation.cancellation.clone(),
-        allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
-        installation_root: owner.binding.installation_root.as_deref(),
-        deny_secret_reads: owner.binding.access_mode != AccessMode::FullAccess,
-    };
+    let scope = command_scope(owner, invocation.cancellation.clone());
     if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
     }
@@ -194,7 +184,11 @@ async fn execute_prepared(
         .execute(ExecuteEffect {
             work,
             access: EffectAccess::Full,
-            occurrence_id: Some(occurrence.to_owned()),
+            occurrence_id: Some(if call.name == ToolName::CanonPropose {
+                target.clone()
+            } else {
+                occurrence.to_owned()
+            }),
             signal: invocation.cancellation.clone(),
             target: target.clone(),
             input,
@@ -230,6 +224,8 @@ async fn prepare(
         session_folder::prepare(owner, &call.arguments).await
     } else if mcp::supports(&call.name) {
         mcp::prepare(owner, &call.arguments).map(|prepared| (prepared.0, prepared.1, prepared.2))
+    } else if call.name == ToolName::CanonPropose {
+        canon::prepare(owner, call, occurrence).await
     } else if automation::supports(&call.name) {
         automation::prepare(owner, call, occurrence).await
     } else if topic_conversation::supports(&call.name) {
@@ -421,4 +417,55 @@ async fn admission_refusal(
         .map(Some);
     }
     Ok(None)
+}
+
+fn command_scope(
+    owner: &GuidedTools,
+    signal: tokio_util::sync::CancellationToken,
+) -> CommandScope<'_> {
+    CommandScope {
+        workspace_reference: owner.binding.workspace_reference.as_ref(),
+        workspace_path: &owner.binding.workspace_path,
+        butler_data: &owner.binding.butler_data,
+        execution: if owner.binding.access_mode == AccessMode::FullAccess {
+            crate::host::guided::command::CommandExecution::Registered
+        } else {
+            crate::host::guided::command::CommandExecution::Sandboxed
+        },
+        contained_reads: false,
+        abort: signal,
+        allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
+        installation_root: owner.binding.installation_root.as_deref(),
+        deny_secret_reads: owner.binding.access_mode != AccessMode::FullAccess,
+    }
+}
+
+/// Denied effects still describe the exact operation prepared for a card.
+pub(super) async fn attention_facts(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+) -> Result<(String, Value), BtccError> {
+    let work = owner
+        .work
+        .bound_work()
+        .await?
+        .unwrap_or_else(|| runtime_work::untracked(owner));
+    let occurrence =
+        butler_turn::btcc::digest_identity(&Value::Object(call.arguments.clone()).to_string());
+    let scope = command_scope(owner, tokio_util::sync::CancellationToken::new());
+    let (target, input, adapter) = prepare(
+        owner,
+        call,
+        &occurrence,
+        (scope, Contained::default()),
+        &work,
+    )
+    .await?;
+    let target = adapter
+        .normalize_target(&target)
+        .map_err(|e| BtccError::relayed(e.code().to_owned(), e.message().to_owned()))?;
+    let input = adapter
+        .normalize_input(&input)
+        .map_err(|e| BtccError::relayed(e.code().to_owned(), e.message().to_owned()))?;
+    Ok((target, input))
 }

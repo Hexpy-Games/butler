@@ -12,7 +12,7 @@ pub(super) enum Resolved {
     Turn(String),
     Pending {
         parent: String,
-        receipt: Option<(String, String, bool)>,
+        receipt: Option<(String, String, bool, String)>,
     },
 }
 
@@ -80,7 +80,12 @@ pub(super) fn resolve(data: &Path, owner: &Owner) -> io::Result<Option<Resolved>
                     "subsession-result:{}",
                     butler_turn::btcc::digest_identity(&format!("{relation}\0{result}"))
                 );
-                (parent_session, client, status == "delivered")
+                (
+                    parent_session,
+                    crate::gateway::application::admission_identity::canonical_client_id(&client),
+                    status == "delivered",
+                    format!("work-result:{relation}:{result}"),
+                )
             });
             return Ok(Some(Resolved::Pending {
                 parent: parent_turn,
@@ -137,9 +142,12 @@ pub(super) fn expired(db: &Connection, owner: Option<Resolved>) -> Result<bool, 
             if parent.0 != "delivered" && final_state(&parent) {
                 return Ok(true);
             }
-            let Some((session, client, submitted)) = receipt else {
+            let Some((session, client, submitted, source)) = receipt else {
                 return Ok(false);
             };
+            if let Some(expired) = initiated_result_expired(db, &source)? {
+                return Ok(expired);
+            }
             let Some(chat) = resolve_owner(db, &session)? else {
                 return Ok(true);
             };
@@ -155,4 +163,41 @@ pub(super) fn expired(db: &Connection, owner: Option<Resolved>) -> Result<bool, 
             }
         }
     }
+}
+
+/// A held completion owns its files until its consuming turn materializes them.
+fn initiated_result_expired(
+    db: &Connection,
+    source: &str,
+) -> Result<Option<bool>, AppStorageError> {
+    let row: Option<(String, Option<String>)> = db
+        .query_row(
+            "SELECT state,message_id FROM app_initiated_messages WHERE source_key=?1",
+            [source],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    let Some((status, message)) = row else {
+        return Ok(None);
+    };
+    if status == "held" {
+        return Ok(Some(false));
+    }
+    if status == "failed" {
+        return Ok(Some(true));
+    }
+    let Some(message) = message else {
+        return Ok(None);
+    };
+    let turn: Option<String> = db
+        .query_row("SELECT turn_id FROM messages WHERE id=?1", [message], |r| {
+            r.get(0)
+        })
+        .optional()
+        .map_err(AppStorageError::sqlite)?
+        .flatten();
+    turn.map(|turn| state(db, &turn).map(|s| s.is_none_or(|s| final_state(&s))))
+        .transpose()
+        .map(|expired| Some(expired.unwrap_or(true)))
 }

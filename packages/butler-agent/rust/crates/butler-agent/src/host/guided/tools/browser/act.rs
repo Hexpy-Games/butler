@@ -63,11 +63,11 @@ async fn run(
             .await;
         return finish_batch(&args, prepared);
     }
-    if let Some(refused) = schedule_payment_refusal(owner, call, &prepared).await {
-        return finish_batch(&args, refused);
-    }
     let scope = act_scope(&prepared);
     let input = approval_input(&args, &mut prepared, &scope, !client.approval_handoff);
+    if let Some(refused) = schedule_payment_refusal(owner, call, &prepared, &input).await {
+        return finish_batch(&args, refused);
+    }
     if client.approval_handoff
         && (input["commit"] == true
             || input["always_confirm"] == true
@@ -194,6 +194,7 @@ async fn schedule_payment_refusal(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     prepared: &Value,
+    input: &Value,
 ) -> Option<Value> {
     let run = owner.schedule_run()?;
     if !prepared["steps"]
@@ -203,14 +204,29 @@ async fn schedule_payment_refusal(
         return None;
     }
     if !run.browser?.payment {
-        return super::super::turn_guard::schedule_browser_feedback(owner, "schedule_payment_off")
-            .await;
+        return super::super::turn_guard::schedule_browser_feedback(
+            owner,
+            call,
+            input,
+            &act_scope(prepared),
+            "schedule_payment_off",
+        )
+        .await;
     }
     if prepared["purchase_allowed"] != true {
-        return Some(
-            super::super::turn_guard::unattended_feedback(owner, &call.name, &act_scope(prepared))
-                .await,
-        );
+        super::super::attention::skipped_input(
+            owner,
+            call,
+            input.clone(),
+            &act_scope(prepared),
+            "schedule_permission_required",
+        )
+        .await;
+        return Some(super::super::turn_guard::unattended_feedback(
+            owner,
+            &call.name,
+            &act_scope(prepared),
+        ));
     }
     None
 }

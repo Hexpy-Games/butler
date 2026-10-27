@@ -11,6 +11,14 @@ use crate::btcc::storage::{BtccStorage, SqliteAuthorityReader, SqliteAuthorityRe
 use butler_core::locale::LocaleCollation;
 
 impl PrincipalAuthority {
+    /// Exact action projection for an unattended skip; creates no authority row.
+    pub fn preview_approval(
+        &self,
+        input: AuthorityAdmissionInput,
+    ) -> AuthorityResult<super::approval::AuthorityApproval> {
+        admission::preview(input, &self.collation)
+    }
+
     /// Whether the turn still holds an approval it must not release.
     pub async fn retains_approval_claim(&self, turn_id: String) -> AuthorityResult<bool> {
         self.in_read(move |repo| repo.retains_approval_claim(&turn_id))

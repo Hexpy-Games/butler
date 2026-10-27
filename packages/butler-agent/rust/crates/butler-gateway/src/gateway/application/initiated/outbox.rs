@@ -6,35 +6,51 @@ use super::{
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
+#[derive(Clone)]
 pub(super) struct Entry {
     pub(super) id: String,
     pub(super) chat: String,
+    pub(super) kind: String,
+    next_attempt_at: Option<String>,
     /// S5 connector items under an explicit user rule may bypass quiet hours.
     /// All S2 producers leave this false.
     pub(super) bypass_quiet_hours: bool,
 }
 
+impl Entry {
+    fn hold(&self, gate: &super::gate::Gate, db: &Connection) -> Result<Hold, AppStorageError> {
+        if self.kind == "work_result" {
+            gate.work_hold(&self.chat, self.bypass_quiet_hours)
+        } else {
+            gate.hold(db, &self.chat, self.bypass_quiet_hours)
+        }
+    }
+}
+
 pub(super) fn enqueue(
     db: &Connection,
-    id: &str,
+    identity: (&str, &str),
     source: &str,
     kind: &str,
     text: &str,
     payload: &Value,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    db.execute("INSERT OR IGNORE INTO app_initiated_messages(id,chat_id,kind,source_key,text,payload_json,state,created_at) VALUES(?1,'general',?2,?3,?4,?5,'held',?6)",
-        params![id,kind,source,text,payload.to_string(),now]).map_err(AppStorageError::sqlite)?;
+    let (id, chat) = identity;
+    db.execute("INSERT OR IGNORE INTO app_initiated_messages(id,chat_id,kind,source_key,text,payload_json,state,created_at) VALUES(?1,?7,?2,?3,?4,?5,'held',?6)",
+        params![id,kind,source,text,payload.to_string(),now,chat]).map_err(AppStorageError::sqlite)?;
     Ok(())
 }
 
 fn held(db: &Connection) -> Result<Vec<Entry>, AppStorageError> {
-    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours FROM app_initiated_messages WHERE state='held' ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours,kind,next_attempt_at FROM app_initiated_messages WHERE state='held' AND posting=0 AND (reason IS NULL OR reason<>'session_model_unavailable') ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |r| {
             Ok(Entry {
                 id: r.get(0)?,
                 chat: r.get(1)?,
+                kind: r.get(3)?,
+                next_attempt_at: r.get(4)?,
                 bypass_quiet_hours: r.get(2)?,
             })
         })
@@ -51,17 +67,43 @@ impl AppApplication {
         if rows.is_empty() {
             return Ok(());
         }
+        for entry in rows {
+            if let Err(error) = self.deliver_entry(&entry).await {
+                self.initiated_failure(entry.id.clone(), &error).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn deliver_entry(&self, entry: &Entry) -> Result<(), GatewayApplicationError> {
+        let gate = self.initiated_gate().await?;
+        if entry
+            .next_attempt_at
+            .as_ref()
+            .is_some_and(|at| at > &gate.now)
+        {
+            return Ok(());
+        }
+        let row = entry.clone();
+        let free = self
+            .storage
+            .read(move |db| Ok(matches!(row.hold(&gate, db)?, Hold::Free)))
+            .await
+            .map_err(app_error)?;
+        if !free {
+            return Ok(());
+        }
+        if entry.kind == "work_result" {
+            self.deliver_work_result(entry.id.clone()).await?;
+            return Ok(());
+        }
         let gate = self.initiated_gate().await?;
         let subscribers = self.subscribers.clone();
+        let entry = entry.clone();
         self.storage
             .execute(move |db| {
-                for entry in rows {
-                    if matches!(
-                        gate.hold(db, &entry.chat, entry.bypass_quiet_hours)?,
-                        Hold::Free
-                    ) {
-                        post(db, &subscribers, &entry, &gate.now, gate.quiet()?)?;
-                    }
+                if matches!(entry.hold(&gate, db)?, Hold::Free) {
+                    post(db, &subscribers, &entry, &gate.now, gate.quiet()?)?;
                 }
                 Ok(())
             })
@@ -79,6 +121,8 @@ impl AppApplication {
         if queued {
             rows.push(Entry {
                 id: String::new(),
+                kind: String::new(),
+                next_attempt_at: None,
                 chat: "general".into(),
                 bypass_quiet_hours: false,
             });
@@ -91,13 +135,16 @@ impl AppApplication {
             .read(move |db| {
                 let mut next = None;
                 for entry in rows {
-                    let hold = gate.hold(db, &entry.chat, entry.bypass_quiet_hours)?;
+                    let hold = entry.hold(&gate, db)?;
                     let until = if matches!(hold, Hold::Free) {
                         Some(gate.now.clone())
                     } else {
                         hold.until()
                     };
                     if let Some(at) = until {
+                        let at = entry
+                            .next_attempt_at
+                            .map_or(at.clone(), |retry| retry.max(at));
                         next = Some(next.map_or(at.clone(), |old: String| old.min(at)));
                     }
                 }
@@ -171,7 +218,15 @@ fn message_event(
     id: &str,
     now: &str,
 ) -> Result<crate::gateway::AppEventEnvelope, AppStorageError> {
-    let row = super::super::read_model::exact_message(db, "general", id)?.ok_or_else(|| {
+    let row = super::super::read_model::exact_message(
+        db,
+        &db.query_row("SELECT chat_id FROM messages WHERE id=?1", [id], |r| {
+            r.get::<_, String>(0)
+        })
+        .map_err(AppStorageError::sqlite)?,
+        id,
+    )?
+    .ok_or_else(|| {
         AppStorageError::new(
             super::super::storage::AppStorageCode::ProjectedMessageMissing,
             "Projected message missing.",
