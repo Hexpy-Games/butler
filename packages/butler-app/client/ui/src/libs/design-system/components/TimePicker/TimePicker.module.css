@@ -63,7 +63,7 @@
    time field: typing replaces it, arrows step it. */
 .segment {
   padding: 2px 3px;
-  border-radius: var(--space-xs);
+  border-radius: calc(var(--space-xs) / var(--ui-scale));
   caret-color: transparent;
   cursor: default;
   outline: none;

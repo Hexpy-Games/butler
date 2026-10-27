@@ -2,6 +2,7 @@ import { ipcMain, WebContentsView } from "electron";
 import { fileURLToPath } from "node:url";
 import { tabInUse } from "./usage.mjs";
 import { mouseInput } from "./pointer-input.mjs";
+import { overlaySession } from "./overlay-session.mjs";
 
 const MODES = new Set(["observe", "click", "type", "scroll", "batch", "parked"]);
 
@@ -55,6 +56,7 @@ export class BrowserPointer {
   create() {
     if (this.view) return;
     this.view = new WebContentsView({ webPreferences: {
+      session: overlaySession(),
       preload: fileURLToPath(new URL("./overlay-preload.cjs", import.meta.url)),
       sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: true,
     } });

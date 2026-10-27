@@ -97,7 +97,7 @@ ComposerCard reads.
 `aside` puts content in the conversation's right margin (session details:
 open requests, the task, results, attachments, environment). The shell owns
 where it sits and scrolls it in a scroller of its own (the shared edge fade,
-the scrollbar gutter reserved on both edges):
+a scrollbar lane only while a classic scrollbar is drawn):
 
 - Docked (a 960px shell or wider; a floating aside docks again from 992px, so a
   width on the line never flaps): flat on the shell's background, 272px

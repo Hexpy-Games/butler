@@ -5,6 +5,8 @@ import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./sh
 import * as desktopShell from "./desktop-shell.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
+import { appZoomFactor, textSizePreferences, registerTextSizeWindow, installTextSizeMenu } from "./text-size.mjs";
+import { scaledWindowButtonPosition } from "./butler-platform/text-size.mjs";
 import { defaultWindowBounds } from "./window-bounds.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
@@ -2004,19 +2006,26 @@ async function createWindow() {
     rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
     rendererOrigin = rendererOriginForUrl(rendererUrl);
   }
-  const bounds = defaultWindowBounds(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea);
+  const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const bounds = defaultWindowBounds(workArea);
+  const minWidth = Math.min(Math.ceil(344 * appZoomFactor()), workArea.width);
+  const minHeight = Math.min(Math.ceil(480 * appZoomFactor()), workArea.height);
+  bounds.width = Math.max(bounds.width, minWidth);
+  bounds.height = Math.max(bounds.height, minHeight);
+  bounds.x = workArea.x + Math.round((workArea.width - bounds.width) / 2);
+  bounds.y = workArea.y + Math.round((workArea.height - bounds.height) / 2);
   const win = new BrowserWindow({
     show: false,
     ...bounds,
     // Width: the compact Browser toolbar's minimum (nav, narrow address, More, insets).
     // Height: the new-chat hero and first suggestion row need 480 or more above the composer.
-    minWidth: Math.min(344, bounds.width),
-    minHeight: Math.min(480, bounds.height),
+    minWidth,
+    minHeight,
     title: appDisplayName,
     icon: appIconForWindow(),
     frame: isLinux ? false : undefined,
     titleBarStyle: "hidden",
-    trafficLightPosition: macTrafficLightPosition,
+    trafficLightPosition: scaledWindowButtonPosition(appZoomFactor(), macTrafficLightPosition),
     transparent: usesTransparentWindow,
     vibrancy: isMac ? macVibrancy : undefined,
     visualEffectState: isMac ? "active" : undefined,
@@ -2027,14 +2036,16 @@ async function createWindow() {
     backgroundColor: usesTransparentWindow ? macTransparentBackground
       : nativeTheme.shouldUseDarkColors ? "#1f2023" : "#f8f9fa",
     webPreferences: {
+      ...textSizePreferences(),
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : []),
+      additionalArguments: [...textSizePreferences().additionalArguments, appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : []),
         ...(dataGeneration?.resetFailed ? ["--butler-full-reset-failed"] : [])],
     },
   });
+  registerTextSizeWindow(win, { settings: true, minimum: [344, 480], buttons: macTrafficLightPosition });
   mainWindow = win;
   win.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
     if (!isMainFrame) return;
@@ -2717,7 +2728,7 @@ if (appSingleInstanceLock) {
       configureAppIcon();
       suppressInitialWindowForLogin = usesAppForegroundLifecycle && isMac &&
         app.getLoginItemSettings().wasOpenedAtLogin;
-      Menu.setApplicationMenu(null);
+      installTextSizeMenu();
       nativeTheme.on("updated", updateTrayIcon);
       if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
         process.exit(0);

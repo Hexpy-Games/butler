@@ -32,6 +32,15 @@ import { delegatedUsageView } from "../../packages/butler-app/client/ui/src/comp
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { auditTabOrder, formatClips, probeFocusRing, probeFocusRingFrames, type FocusRingClip } from "../support/focus-ring-clipping";
 
+import { textSizeFactor } from "../../packages/butler-app/client/ui/src/app/textSize";
+import type { SettingsView } from "../../packages/butler-app/client/ui/src/app/types";
+
+const textSize = process.env.BUTLER_SMOKE_TEXT_SIZE ?? "default";
+assert(["default", "large", "larger"].includes(textSize), "invalid smoke text size");
+const uiScale = textSizeFactor(textSize as SettingsView["text_size"]);
+/** The CSS viewport the App shows in a window of `cell` DIPs under its page zoom, never below the App's minimum window. */
+const cssViewport = (cell: { width: number; height: number }) =>
+  ({ width: Math.max(Math.round(cell.width / uiScale), 344), height: Math.max(Math.round(cell.height / uiScale), 480) });
 const root = process.cwd();
 const copy = getAppCopy("ko-KR");
 const shots = process.env.BUTLER_FOCUS_RING_SHOTS;
@@ -79,7 +88,7 @@ function record(cell: Cell, screen: string, result: { stops: number; clipped: Fo
   }
   assert(result.stops > 0, `${screen}: the keyboard reached no control`);
   if (result.clipped.length) {
-    const failure = `${screen} @ ${cell.width}px ${cell.theme} ${cell.background}: ${result.clipped.length} clipped ring(s)\n${formatClips(result.clipped)}`;
+    const failure = `${screen} @ ${cell.width}px${uiScale === 1 ? "" : ` (${cssViewport(cell).width} CSS px at ${uiScale})`} ${cell.theme} ${cell.background}: ${result.clipped.length} clipped ring(s)\n${formatClips(result.clipped)}`;
     failures.push(failure);
     if (process.env.BUTLER_FOCUS_RING_VERBOSE) console.error(failure);
   }
@@ -104,7 +113,7 @@ function usageMonitor(url: URL): UsageMonitorView {
 /** `auth` picks the harness model's billing; a tracked one (api_key) shows usage in the context popover. */
 async function open(page: Page, cell: Cell, auth?: string) {
   fixture = { messages: [answer], background: cell.background };
-  await page.setViewportSize({ width: cell.width, height: cell.height });
+  await page.setViewportSize(cssViewport(cell));
   await page.goto(`${base}?visual=components&theme=${cell.theme}&locale=ko${auth ? `&auth=${auth}` : ""}`);
   await page.locator('[data-slot="item-card"]').first().waitFor();
   await page.locator('[data-slot="tab-rail"]').first().waitFor();
@@ -386,6 +395,9 @@ async function auditUsage(page: Page, cell: Cell) {
 try {
   const page = await browser.newPage({ reducedMotion: "reduce", locale: "ko-KR", timezoneId: "Asia/Seoul" });
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript((scale) => {
+    document.addEventListener("DOMContentLoaded", () => document.documentElement.style.setProperty("--ui-scale", String(scale)), { once: true });
+  }, uiScale);
   await page.addInitScript((tabs) => {
     const state = { enabled: true, blocked: false, activeId: "m1", nativeCovered: false, tabs };
     (window as Window & { butlerBrowser?: unknown }).butlerBrowser = {
