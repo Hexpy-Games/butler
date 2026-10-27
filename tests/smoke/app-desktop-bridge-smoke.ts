@@ -1,3 +1,4 @@
+// test-category: race
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -185,7 +186,58 @@ async function saveAnswerCard(page: Page, server: NativeAppServerHandle, output:
   await page.locator('[data-library-kind="scrap"]').getByText(answerTitle, { exact: true }).waitFor();
   await assertNoErrors(page, "Answer card in library");
   await page.screenshot({ path: resolve(output, "saved-answer-card-ko-light-1280.png") });
+  await scrapSources(page, server, output, item.crop);
   console.log(`Answer card passed (${Math.round(performance.now() - started)} ms): real assistant card, preload saveLibrary, native HTTP ${response.status()}, empty source and JPEG retained, visible in scraps`);
+}
+
+// Exercise the saved answer crop and existing stored-picture scraps through the drawer UI.
+async function scrapSources(page: Page, server: NativeAppServerHandle, output: string, crop: string) {
+  const copy = getAppCopy("ko-KR");
+  const sourcedTitle = "출처 있는 그림 스크랩";
+  const assetTitle = "출처 없는 저장 그림";
+  for (const item of [
+    { title: sourcedTitle, url: "https://example.com/picture", crop, site: "example.com" },
+    { title: assetTitle, url: "", asset: answerImage, site: "Previous site" },
+  ]) {
+    await server.api("/library", { method: "POST", body: JSON.stringify({
+      ...item, id: crypto.randomUUID(), kind: "scrap", text: "", capturedAt: new Date().toISOString(),
+    }) });
+  }
+  // Remount the drawer so API-created scraps are fetched along with the UI-saved answer.
+  await page.locator('[data-tree-item="s:general"]').first().click();
+  await page.locator('[data-test-class="library-entry"]').click();
+  await page.locator('[data-library-kind="scrap"]').getByRole("button", { name: copy.library.viewAll, exact: true }).click();
+  const failures: string[] = [];
+  for (const [title, hasSource, filename] of [
+    [answerTitle, false, "sourceless-scrap-detail"],
+    [sourcedTitle, true, "sourced-scrap-detail"],
+    [assetTitle, false, "sourceless-asset-detail"],
+  ] as const) {
+    const card = page.locator("[data-library-item]").filter({ has: page.getByText(title, { exact: true }) });
+    await card.waitFor();
+    await card.getByRole("button", { name: copy.browser.more, exact: true }).click();
+    await page.getByRole("menu").waitFor();
+    const sourceAction = page.getByRole("menuitem", { name: copy.browser.openSource, exact: true });
+    if (await sourceAction.count() !== Number(hasSource)) failures.push(`${title}: card source action`);
+    await page.keyboard.press("Escape");
+    if (!hasSource && (await card.innerText()).includes("Previous site")) failures.push(`${title}: card source metadata`);
+    await card.getByText(title, { exact: true }).click();
+    const detail = page.locator('[data-test-class="library-detail"]');
+    await detail.waitFor();
+    await detail.getByText(copy.artifacts.loading, { exact: true }).waitFor({ state: "hidden" });
+    await detail.locator("img").evaluateAll(images => Promise.all(images.map(image => (image as HTMLImageElement).decode())));
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: resolve(output, `${filename}-ko-light-1280.png`) });
+    const button = detail.getByRole("button", { name: copy.browser.openSourcePage, exact: true });
+    const sourceRow = detail.getByText(copy.library.source, { exact: true });
+    if (await button.count() !== Number(hasSource)) failures.push(`${title}: detail source button`);
+    if (await sourceRow.count() !== Number(hasSource)) failures.push(`${title}: detail source row`);
+    if (hasSource) await detail.getByText("example.com", { exact: true }).waitFor();
+    await page.locator('[data-test-class="titlebar-back"]').click();
+    await card.waitFor();
+  }
+  assert.deepEqual(failures, [], "Only scraps with an HTTP(S) source show source actions and metadata");
+  await assertNoErrors(page, "Scrap source visibility");
 }
 
 const answerTitle = "출처 없는 그림 카드";
@@ -221,6 +273,7 @@ try {
     await observeBridge(page);
     await usageHistory(page, server, output);
     await editDocument(page, server, output);
+    assert.equal(server.stubModelCalls.length, 0, "Usage and document steps make no model calls");
     await saveAnswerCard(page, server, output);
     // The native server only reaches the local stub; the seeded answer turn is its only model use.
     assert(server.stubModelCalls.length > 0, "The answer turn ran on the local stub model");

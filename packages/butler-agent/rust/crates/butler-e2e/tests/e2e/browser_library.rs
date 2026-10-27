@@ -210,6 +210,8 @@ async fn crop_scraps_allow_no_source_and_reject_invalid_sources() -> Result<(), 
     for url in [
         "file:///x",
         "javascript:alert(1)",
+        "data:text/html,x",
+        " ",
         "https://user:pass@example.com/",
     ] {
         item["url"] = json!(url);
