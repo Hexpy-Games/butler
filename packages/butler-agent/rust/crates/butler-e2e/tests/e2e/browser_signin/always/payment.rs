@@ -1,5 +1,5 @@
 //! A payment card grants the merchant, covering future saved-card fills and
-//! final clicks. Revocation returns both cards and fences the live site.
+//! final-click policy. Revocation returns the fill card without closing tabs.
 mod schedules;
 use super::super::{
     host::{admin, attach, snapshot},
@@ -44,6 +44,15 @@ async fn payment_site_card_covers_fill_and_click_with_audit_and_event() -> Resul
 async fn payment_flow(access: &str) -> Result<(), HarnessError> {
     let s = vault_scenario("BROWSER-ALWAYS-PAYMENT", Some(script()?)).await?;
     let admin = admin(&s);
+    let signin = admin
+        .send(
+            Method::POST,
+            "/security/signins/site",
+            Some(json!({"site":SITE,"all_conversations":true})),
+            &[],
+        )
+        .await?;
+    assert_eq!(signin.status, 200, "{}", signin.text);
     let changed =
         s.gw.patch("/settings", json!({"access_mode":access}))
             .await?;
@@ -72,7 +81,14 @@ async fn payment_flow(access: &str) -> Result<(), HarnessError> {
             _ => json!({"status":"ok","tab":frame["tab"],"url":CHECKOUT,"obs":"o1","text":"Checkout"}),
         }
     }))).await?;
-    snapshot(&admin, json!([tab("t1", "agent", CHECKOUT)])).await?;
+    snapshot(
+        &admin,
+        json!([
+            tab("t1", "agent", CHECKOUT),
+            super::super::host::tab("account", "conversation:general", CHECKOUT, "agent")
+        ]),
+    )
+    .await?;
     let id = begin(&s, "general").await?;
     let card = super::super::tool::waiting_card(&s, &id).await?;
     assert_eq!(card["approval"]["operation"]["allow_site"], "payment");
@@ -81,8 +97,14 @@ async fn payment_flow(access: &str) -> Result<(), HarnessError> {
         format!("{TOP} · 59,800원")
     );
     decide(&s, "general", &card, "site").await?;
+    let purchase = next_card(&s, &id, &card).await?;
+    assert_eq!(purchase["approval"]["operation"]["tool"], "browser_act");
+    decide(&s, "general", &purchase, "once").await?;
     delivered(&s, "general", &id).await?;
     let id = begin(&s, "general").await?;
+    let purchase = super::super::tool::waiting_card(&s, &id).await?;
+    assert_eq!(purchase["approval"]["operation"]["tool"], "browser_act");
+    decide(&s, "general", &purchase, "once").await?;
     delivered(&s, "general", &id).await?;
     assert_eq!(host.ops().iter().filter(|op| *op == "pay.fill").count(), 2);
     assert_eq!(host.ops().iter().filter(|op| *op == "tab.act").count(), 2);
@@ -90,7 +112,6 @@ async fn payment_flow(access: &str) -> Result<(), HarnessError> {
         .send(Method::GET, "/security/vault", None, &[])
         .await?;
     assert_eq!(view.data()["purchase_sites"], json!([SITE]));
-    assert!(view.data()["purchase_site_grants"][0]["since"].is_string());
     assert_eq!(view.data()["cards"][0]["uses"].as_array().unwrap().len(), 2);
     assert_eq!(view.data()["cards"][0]["uses"][0]["result"], "filled");
     let events = s.gw.get("/events?limit=500").await?;
@@ -116,16 +137,16 @@ async fn payment_flow(access: &str) -> Result<(), HarnessError> {
         )
         .await?;
     assert_eq!(off.status, 200, "{}", off.text);
-    for _ in 0..100 {
-        if host.last("use.signin_revoked").is_some() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    assert!(host.last("use.signin_revoked").is_none());
+    let account =
+        super::super::host::call(&admin, "general", "tab.observe", "account", json!({})).await?;
     assert_eq!(
-        host.last("use.signin_revoked").unwrap()["args"]["site"],
-        SITE
+        account["status"], "ok",
+        "payment revocation preserves signed-in access"
     );
+    let lookup = super::super::host::call(&admin, "general", "pay.lookup", "t1", json!({})).await?;
+    assert_eq!(lookup["status"], "ok", "the tab stays usable");
+    assert_eq!(lookup["purchase_allowed"], false);
     let id = begin(&s, "general").await?;
     let fill = super::super::tool::waiting_card(&s, &id).await?;
     decide(&s, "general", &fill, "once").await?;
@@ -136,6 +157,9 @@ async fn payment_flow(access: &str) -> Result<(), HarnessError> {
     decide(&s, "general", &purchase, "site").await?;
     delivered(&s, "general", &id).await?;
     let id = begin(&s, "general").await?;
+    let purchase = super::super::tool::waiting_card(&s, &id).await?;
+    assert_eq!(purchase["approval"]["operation"]["tool"], "browser_act");
+    decide(&s, "general", &purchase, "once").await?;
     delivered(&s, "general", &id).await?;
     // A different merchant is never covered by this site's standing allow.
     snapshot(
@@ -162,4 +186,49 @@ async fn next_card(
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     panic!("payment card did not replace fill card");
+}
+
+#[tokio::test]
+async fn popup_purchase_card_displays_and_saves_the_checked_merchant() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let script = cassette(vec![
+        ("tool_describe", json!({"ids":["native:browser_act"]})),
+        (
+            "tool_call",
+            json!({"id":"native:browser_act","arguments":{"tab":"checkout","observation":"o1","steps":[{"action":"click","ref":"e1","commits":true}]}}),
+        ),
+    ])?;
+    let s = vault_scenario("BROWSER-PAYMENT-POPUP-MERCHANT", Some(script)).await?;
+    let admin = admin(&s);
+    let host = attach(&s, Arc::new(|frame: Value| Box::pin(async move {
+        if frame["op"] == "tab.prepare" {
+            json!({"status":"ok","tab":"checkout","url":"https://checkout.stripe.com/pay","profile":"signed_out","obs":"o1",
+                "steps":[{"action":"click","payment":true,"submit":true,"form_post":true,"hit":{"role":"button","name":"Pay","frame":""}}]})
+        } else { json!({"status":"ok","url":"https://checkout.stripe.com/pay","steps":[{"status":"ok"}]}) }
+    }))).await?;
+    let mut checkout = tab("checkout", "agent", "https://checkout.stripe.com/pay");
+    checkout["opener"] = json!("merchant");
+    snapshot(
+        &admin,
+        json!([
+            tab("merchant", "agent", "https://shop-a.test/cart"),
+            checkout
+        ]),
+    )
+    .await?;
+    let turn = begin(&s, "general").await?;
+    let card = super::super::tool::waiting_card(&s, &turn).await?;
+    let displayed = card["approval"]["operation"]["targets"][0]
+        .as_str()
+        .unwrap();
+    assert_eq!(displayed, "shop-a.test");
+    assert_eq!(card["approval"]["operation"]["allow_site"], "payment");
+    decide(&s, "general", &card, "site").await?;
+    delivered(&s, "general", &turn).await?;
+    let view = admin
+        .send(Method::GET, "/security/vault", None, &[])
+        .await?;
+    assert_eq!(view.data()["purchase_sites"], json!([displayed]));
+    assert_eq!(host.ops().iter().filter(|op| *op == "tab.act").count(), 1);
+    s.finish().await
 }

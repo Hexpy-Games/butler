@@ -362,18 +362,15 @@ fn site_row(db: &Connection, site: &str) -> Result<Value> {
             |row| row.get(0),
         )
         .map_err(sql)?;
-    let access: Option<(i64, String)> = db
+    let all = db
         .query_row(
-            "SELECT all_conversations,updated_at FROM browser_site_access WHERE site=?1",
+            "SELECT all_conversations FROM browser_site_access WHERE site=?1",
             [site],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| row.get::<_, i64>(0),
         )
         .optional()
-        .map_err(sql)?;
-    let all = access.as_ref().is_some_and(|(value, _)| *value == 1);
-    let since = access
-        .filter(|(value, _)| *value == 1)
-        .map(|(_, since)| since);
+        .map_err(sql)?
+        == Some(1);
     let mut uses = Vec::new();
     if let Some(id) = entry.as_ref().and_then(|e| e["id"].as_str()) {
         let mut statement = db
@@ -391,6 +388,6 @@ fn site_row(db: &Connection, site: &str) -> Result<Value> {
         }
     }
     Ok(
-        json!({"site": site, "entry": entry, "conversations": conversations, "all_conversations": all, "since": since, "uses": uses}),
+        json!({"site": site, "entry": entry, "conversations": conversations, "all_conversations": all, "uses": uses}),
     )
 }

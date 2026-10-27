@@ -135,7 +135,7 @@ async fn apply(
         let recorded = pay::allow_site(
             &client,
             &args["tab"],
-            &prepared["merchant_site"],
+            &input["merchant_site"],
             invocation.cancellation,
         )
         .await;

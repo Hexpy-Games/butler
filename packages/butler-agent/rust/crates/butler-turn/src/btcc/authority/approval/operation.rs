@@ -141,14 +141,14 @@ fn paths<'a>(input: &'a Value, key: &str) -> Vec<&'a str> {
 }
 
 fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
-    let mut targets = vec![
+    let site = facts.input["merchant_site"].as_str().unwrap_or_else(|| {
         facts
             .target
             .strip_prefix("browser:signed_out:")
             .or_else(|| facts.target.strip_prefix("browser:signed_in:"))
             .unwrap_or(facts.target)
-            .to_owned(),
-    ];
+    });
+    let mut targets = vec![site.to_owned()];
     let browser_steps = facts.input["resolved_steps"]
         .as_array()
         .into_iter()

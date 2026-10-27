@@ -13,7 +13,7 @@ pub(super) async fn bind(
     let content = super::user_message(envelope)?;
     let mut app_context =
         json!({"session":{"id":session_id},"contentParts":[{"type":"text","text":content}]});
-    // A child of an unattended schedule run cannot wait for the user (D8).
+    // Every schedule descendant inherits the run identity and browser switches.
     if let Some(run) = context.get("scheduleRun").filter(|run| run.is_object()) {
         app_context["scheduleRun"] = run.clone();
     }

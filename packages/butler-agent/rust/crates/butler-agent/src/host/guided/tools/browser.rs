@@ -302,10 +302,6 @@ fn approval_input(
     let upload = steps.is_some_and(|steps| steps.iter().any(|s| s["upload"] == true));
     let payment = steps.is_some_and(|steps| steps.iter().any(authority::payment_step));
     let always = upload || purchase && payment;
-    let payment_site_allowed = !purchase
-        && !upload
-        && payment
-        && steps.is_some_and(|steps| steps.iter().all(authority::payment_step));
     if let Some(steps) = prepared["steps"].as_array_mut() {
         for step in steps {
             if let Some(map) = step.as_object_mut() {
@@ -321,7 +317,7 @@ fn approval_input(
         "signed_out"
     };
     let commit = authority::commits(args, prepared);
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always,"merchant_site":prepared["merchant_site"],"commit":commit,"payment_site_allowed":payment_site_allowed,"review_commit":authority::review_commit(args, prepared, !purchase),"allow_site":if allow_site { Some("payment") } else { None }})
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always,"merchant_site":if payment { prepared["merchant_site"].clone() } else { Value::Null },"commit":commit,"allow_site":if allow_site { Some("payment") } else { None }})
 }
 /// The act's authority target: the page's site under its tab profile.
 fn act_scope(prepared: &Value) -> String {

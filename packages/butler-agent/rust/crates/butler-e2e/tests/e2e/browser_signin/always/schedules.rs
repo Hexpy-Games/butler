@@ -21,6 +21,15 @@ pub(super) async fn create(
     signin: bool,
     payment: bool,
 ) -> Result<String, HarnessError> {
+    if scheduled {
+        // The fixture clock is midnight. Exercise the browser gates outside
+        // the quiet-hours policy introduced on main.
+        s.patch_settings(
+            json!({"quiet_hours_start":"01:00","quiet_hours_end":"02:00"}),
+            "schedule browser quiet hours",
+        )
+        .await?;
+    }
     let result =
         s.gw.post(
             "/automations",

@@ -154,18 +154,10 @@ pub(super) async fn act_gate(
 /// that commits something on the user's behalf (the risky browser step).
 /// Browsing never asks there.
 pub(super) fn reviews(mode: &AccessMode, input: &Value) -> bool {
-    if input["payment_site_allowed"] == true
-        && input["always_confirm"] != true
-        && input["review_commit"] != true
-    {
-        return false;
-    }
     input["always_confirm"] == true
         || match mode {
             AccessMode::AskAlways => true,
-            AccessMode::AskExceptReads | AccessMode::Auto => {
-                input.get("review_commit").unwrap_or(&input["commit"]) == true
-            }
+            AccessMode::AskExceptReads | AccessMode::Auto => input["commit"] == true,
             AccessMode::FullAccess | AccessMode::ReadOnly => false,
         }
 }
@@ -230,19 +222,4 @@ pub(super) fn payment_step(step: &Value) -> bool {
         || step["hit"]["frame"]
             .as_str()
             .is_some_and(butler_runtime::browser::payment_host)
-}
-
-/// A site's purchase permission covers payment commits, never another action in the batch.
-pub(super) fn review_commit(args: &Value, prepared: &Value, purchase_allowed: bool) -> bool {
-    args["steps"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .enumerate()
-        .any(|(i, step)| {
-            let resolved = &prepared["steps"][i];
-            let commit = step["commits"] == true
-                || prepared["profile"] == "signed_in" && resolved["form_post"] == true;
-            commit && !(purchase_allowed && payment_step(resolved) && resolved["upload"] != true)
-        })
 }

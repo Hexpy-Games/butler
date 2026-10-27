@@ -117,3 +117,51 @@ async fn tainted_full_access_schedule_edits_cannot_enable_browser_without_a_card
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn connector_tainted_full_access_schedule_create_requires_a_card() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let script = cassette(vec![
+        (
+            "tool_describe",
+            json!({"ids":["mcp:e2e:e2e_echo","native:create_automation"]}),
+        ),
+        ("tool_call", json!({"id":"mcp:e2e:e2e_echo","arguments":{}})),
+        (
+            "tool_call",
+            json!({"id":"native:create_automation","arguments":{
+            "id":"tainted-create","title":"Account summary","prompt":"Read account",
+            "schedule_type":"interval","interval_minutes":60,"browser_signin":true}}),
+        ),
+    ])?;
+    let s = Setup::new("SCHEDULE-TAINTED-BROWSER-CREATE")?
+        .access(Access::FullAccess)
+        .stub_cassette(script)
+        .start()
+        .await?;
+    let added =
+        s.gw.post(
+            "/mcp-servers",
+            json!({"id":"e2e","display_name":"E2E connector",
+        "enabled":true,"transport":"stdio","command":butler_e2e::e2e::binary::mcp_fixture_binary()?,
+        "args":[],"env":[{"key":"E2E_MCP_NONCE","source":"literal","value":"connector-content"}]}),
+        )
+        .await?;
+    assert_eq!(added.status, 201, "{}", added.text);
+    let turn = begin(&s, "general").await?;
+    let card = waiting_card(&s, &turn).await?;
+    assert_eq!(card["reason"], "authority.taintReason");
+    assert_eq!(card["approval"]["schedule"]["browser_signin"], true);
+    assert_eq!(
+        s.gw.get("/automations").await?.data()["automations"],
+        json!([])
+    );
+    decide(&s, "general", &card, "once").await?;
+    delivered(&s, "general", &turn).await?;
+    assert_eq!(
+        s.gw.get("/automations/tainted-create").await?.data()["automation"]["browser_signin"],
+        true
+    );
+    s.finish().await
+}

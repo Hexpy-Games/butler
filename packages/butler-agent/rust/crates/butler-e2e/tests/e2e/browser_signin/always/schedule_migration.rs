@@ -15,6 +15,7 @@ async fn upgrade_preserves_existing_schedule_capability_once_and_new_defaults_st
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("SCHEDULE-BROWSER-UPGRADE")?
+        .env("BUTLER_E2E_APP_NOW", "2026-09-27T12:00:00Z")
         .stub_cassette(observe()?)
         .start()
         .await?;

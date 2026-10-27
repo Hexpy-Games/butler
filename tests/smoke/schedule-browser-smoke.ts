@@ -161,6 +161,22 @@ try {
         await page.locator('[data-test-class="composer-send-button"]').click();
         const panel = '[data-test-class="composer-authority-decision"]';
         await page.locator(panel).waitFor();
+        // Use the persisted waiting scene: pending asks can arrive before the
+        // assistant message is committed, leaving an initial user anchor cached.
+        const pending = await server.api<{ requests: Array<{ source_turn_id: string }> }>(`/authority-requests?session_id=${encodeURIComponent(sessionId)}`);
+        const sourceTurn = pending.requests[0]?.source_turn_id;
+        assert(sourceTurn, `the card belongs to ${sessionId}`);
+        const waitingDeadline = Date.now() + 20_000;
+        for (;;) {
+          const view = await server.api<{ turns: Array<{ id: string; state: string }> }>(`/turns?chat_id=${encodeURIComponent(sessionId)}`);
+          if (view.turns.some(turn => turn.id === sourceTurn && turn.state === "waiting_for_form")) break;
+          assert(Date.now() < waitingDeadline, "the approval turn did not settle");
+          await new Promise(done => setTimeout(done, 25));
+        }
+        await page.reload();
+        await page.locator(panel).waitFor();
+        await page.waitForFunction(selector => document.querySelector(selector)?.closest("article")
+          ?.getAttribute("data-test-class")?.split(" ").includes("assistant"), panel);
         if (!before && mode !== "site") {
           await page.locator(panel).getByText("로그인 정보 사용 · 켜짐", { exact: true }).waitFor();
           await page.locator(panel).getByText(`결제 정보 사용 · ${mode === "edit" ? "켜짐" : "꺼짐"}`, { exact: true }).waitFor();
@@ -168,16 +184,25 @@ try {
         if (!before && mode === "site") {
           await page.locator(panel).getByRole("button", { name: "이 대화에서 허용", exact: true }).waitFor();
           await page.locator(panel).getByRole("button", { name: "허용 범위 선택", exact: true }).click();
-          await page.getByRole("menuitem", { name: /이 사이트는 항상 허용/u }).waitFor();
+          const item = page.getByRole("menuitem", { name: /이 사이트는 항상 허용/u });
+          await item.waitFor();
+          await item.evaluate(async element => {
+            const menu = element.closest('[role="menu"]')!;
+            await Promise.all(menu.getAnimations({ subtree: true }).map(animation => animation.finished));
+            const opacity = getComputedStyle(menu).opacity;
+            if (opacity !== "1") throw new Error(`Menu is still fading: ${opacity}`);
+          });
           const path = join(output, `after-site-menu-${width}-${theme}.png`);
           await page.screenshot({ path }); paths.push(path);
           await page.keyboard.press("Escape");
         }
+        console.log(JSON.stringify({ mode, width, theme, scene: await page.locator(panel).evaluate(element => {
+          const parent = element.closest("article");
+          return { parent: parent?.getAttribute("data-test-class"), width: element.getBoundingClientRect().width,
+            request: element.closest('[data-test-class="conversation-request"]')?.getAttribute("data-request-source-message") };
+        }) }));
         await capture(page, `${mode}-card-${width}-${theme}`, panel);
         if (!before) await checkFocus(page, panel);
-        const pending = await server.api<{ requests: Array<{ source_turn_id: string }> }>(`/authority-requests?session_id=${encodeURIComponent(sessionId)}`);
-        const sourceTurn = pending.requests[0]?.source_turn_id;
-        assert(sourceTurn, `the card belongs to ${sessionId}`);
         const denied = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/deny"));
         await page.locator(panel).getByRole("button", { name: "거절", exact: true }).click();
         const response = await denied;

@@ -1,5 +1,6 @@
 //! A real card writes the existing standing allow; other chats and schedules
 //! inherit it, while revocation fences live identity tabs and restores the card.
+mod delegation;
 mod payment;
 mod schedule_cards;
 mod schedule_migration;
@@ -70,7 +71,6 @@ async fn standing_flow(access: Access) -> Result<(), HarnessError> {
         .await?;
     let row = &listed.data()["sites"][0];
     assert_eq!(row["all_conversations"], true);
-    assert!(row["since"].as_str().is_some());
     let mut signed_out = tab("plain", "conversation:general", URL, "agent");
     signed_out["profile"] = json!("signed_out");
     snapshot(
