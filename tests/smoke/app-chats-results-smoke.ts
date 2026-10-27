@@ -102,26 +102,30 @@ async function resultBubble(page: Page, gateway: Gateway, viewWork: string, en: 
 }
 async function failedWorkLines(page: Page, gateway: Gateway, copy: ReturnType<typeof getAppCopy>["conversation"]["initiated"], en: boolean, capture: Capture) {
   for (const chatId of ["general", "butler-client"]) {
-    for (const retrying of [false, true]) {
-      const message = workFailed(en, retrying, chatId);
-      const view = session([message], chatId);
-      if (chatId !== "general") { view.kind = "project"; view.project_id = "butler"; }
-      await gateway.showView(view);
-      const line = page.locator('[data-test-class="initiated-work-failed"]');
-      await line.getByText(copy.workFailed(message.initiated!.reason_label!), { exact: true }).waitFor();
-      const row = page.locator('[data-test-class~="message"][data-test-class~="assistant"]');
-      assert(!(await row.innerText()).includes("Stored notification text"));
-      assert.equal(await row.locator('[data-test-class="assistant-bubble"]').count(), chatId === "general" ? 1 : 0);
-      const list = row.locator('[data-test-class="message-artifact-list"]');
-      const link = list.getByRole("button", { name: workTitle, exact: true });
-      await link.getByText(copy.viewWork, { exact: true }).waitFor();
-      assert.equal(await list.getByRole("button").count(), 1);
-      await checkFooter(page);
-      assert.equal(await row.locator('[data-test-class~="assistant-footer"] button, [data-test-class~="assistant-footer"] [role="button"]').count(), 0);
-      assert.deepEqual(await probeFocusRingFrames(page, () => link.focus()), []);
-      await capture(row, `work-failed-${retrying ? "retrying" : "permanent"}-${chatId === "general" ? "chats" : "project"}`, `작업 결과 전달 실패 · ${retrying ? "재시도 중" : "영구 실패"} · ${chatId === "general" ? "대화" : "프로젝트 대화"}`);
-      await opensObserver(page, link, false);
-      await opensObserver(page, link, true);
+    for (const reasonCode of ["hook_blocked", "session_model_unavailable", "invalid_request", "unknown_error"]) {
+      for (const retrying of [true, false]) {
+        const message = workFailed(!en, retrying, chatId, reasonCode);
+        const view = session([message], chatId);
+        if (chatId !== "general") { view.kind = "project"; view.project_id = "butler"; }
+        if (chatId === "general" && !retrying) await gateway.show(message);
+        else await gateway.showView(view);
+        const line = page.locator('[data-test-class="initiated-work-failed"]');
+        await line.getByText(copy.workFailed(message.initiated!.state, message.initiated!.reason_code), { exact: true }).waitFor();
+        assert.equal(await line.count(), 1, "message.updated replaces the retrying line in place");
+        const row = page.locator('[data-test-class~="message"][data-test-class~="assistant"]');
+        assert(!(await row.innerText()).includes("Stored notification text"));
+        assert.equal(await row.locator('[data-test-class="assistant-bubble"]').count(), chatId === "general" ? 1 : 0);
+        const list = row.locator('[data-test-class="message-artifact-list"]');
+        const link = list.getByRole("button", { name: workTitle, exact: true });
+        await link.getByText(copy.viewWork, { exact: true }).waitFor();
+        assert.equal(await list.getByRole("button").count(), 1);
+        await checkFooter(page);
+        assert.equal(await row.locator('[data-test-class~="assistant-footer"] button, [data-test-class~="assistant-footer"] [role="button"]').count(), 0);
+        assert.deepEqual(await probeFocusRingFrames(page, () => link.focus()), []);
+        await capture(row, `work-failed-${retrying ? "retrying" : "permanent"}-${chatId === "general" ? "chats" : "project"}-${reasonCode}`, `작업 결과 전달 실패 · ${retrying ? "재시도 중" : "영구 실패"} · ${chatId === "general" ? "대화" : "프로젝트 대화"}`);
+        await opensObserver(page, link, false);
+        await opensObserver(page, link, true);
+      }
     }
   }
   await gateway.showView(session([]));
@@ -206,7 +210,7 @@ async function quietWorkResult(page: Page, gateway: Gateway) {
   assert.equal(await count(), before + 1, "top-level quiet suppresses notifications without an initiated origin");
 }
 async function captureRegion(page: Page, region: Locator, name: string, caption: string, language: string, theme: string, width: number) {
-  if (!output || !name.startsWith("work-failed-") || (width === 390 && theme === "dark") || name === "work-result" || name.startsWith("canon-")) return;
+  if (!output || !name.startsWith("work-failed-") || width !== 1440) return;
   await page.mouse.move(-1, -1);
   await page.evaluate(() => { (document.activeElement as HTMLElement)?.blur(); return document.fonts.ready; });
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));

@@ -43,7 +43,7 @@ pub(super) fn enqueue(
 }
 
 fn held(db: &Connection) -> Result<Vec<Entry>, AppStorageError> {
-    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours,kind,next_attempt_at FROM app_initiated_messages WHERE state='held' AND posting=0 ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached("SELECT id,chat_id,bypass_quiet_hours,kind,next_attempt_at FROM app_initiated_messages WHERE state='held' AND posting=0 AND (reason IS NULL OR reason<>'session_model_unavailable') ORDER BY created_at,rowid").map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |r| {
             Ok(Entry {

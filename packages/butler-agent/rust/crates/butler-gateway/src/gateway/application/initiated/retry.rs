@@ -20,6 +20,7 @@ impl AppApplication {
         let gate = self.initiated_gate().await?;
         let reason_kind = super::failures::Reason::from_error(error);
         let now = gate.now;
+        let subscribers = self.subscribers.clone();
         self.storage.execute(move |db| {
             let tx = db.savepoint().map_err(super::super::AppStorageError::sqlite)?;
             let attempts: u32 = tx.query_row("SELECT attempts FROM app_initiated_messages WHERE id=?1", [&id], |r| r.get(0))
@@ -28,11 +29,13 @@ impl AppApplication {
             let next = (time + chrono::Duration::seconds((1_i64 << attempts.min(9)).min(300)))
                 .with_timezone(&chrono::Utc).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
             let changed = tx.execute("UPDATE app_initiated_messages SET state=?1,posting=0,reason=?2,attempts=attempts+1,next_attempt_at=?3 WHERE id=?4 AND state='held'",
-                params![if permanent {"failed"} else {"held"},reason,if permanent {None} else {Some(next)},&id])
+                params![if permanent {"failed"} else {"held"},reason,if permanent || reason == "session_model_unavailable" {None} else {Some(next)},&id])
                 .map_err(super::super::AppStorageError::sqlite)?;
             if permanent && changed == 1 {
                 let work: bool = tx.query_row("SELECT kind='work_result' FROM app_initiated_messages WHERE id=?1", [&id], |r| r.get(0)).map_err(super::super::AppStorageError::sqlite)?;
-                if work { super::failures::enqueue(&tx, &id, &reason_kind, &gate.language, &now)?; }
+                if work && let Some(event) = super::failures::enqueue(&tx, &id, &reason_kind, &gate.language, false, &now)? {
+                    super::super::events::publish(&subscribers, &event);
+                }
             }
             tx.commit().map_err(super::super::AppStorageError::sqlite)
         }).await.map_err(app_error)?;
@@ -48,8 +51,19 @@ impl AppApplication {
         id: String,
     ) -> Result<bool, GatewayApplicationError> {
         let now = self.dependencies.identity_clock.now_iso();
-        self.storage.read(move |db| db.query_row("SELECT next_attempt_at IS NOT NULL AND next_attempt_at>?1 FROM app_initiated_messages WHERE id=?2", params![now,id], |r| r.get(0))
+        self.storage.read(move |db| db.query_row("SELECT reason='session_model_unavailable' OR (next_attempt_at IS NOT NULL AND next_attempt_at>?1) FROM app_initiated_messages WHERE id=?2", params![now,id], |r| Ok(r.get::<_,Option<bool>>(0)?.unwrap_or(false)))
             .map_err(super::super::AppStorageError::sqlite)).await.map_err(app_error)
+    }
+
+    pub(in crate::gateway::application) async fn retry_model_results(
+        &self,
+        chat: String,
+    ) -> Result<(), GatewayApplicationError> {
+        let changed = self.storage.execute(move |db| db.execute("UPDATE app_initiated_messages SET reason=NULL WHERE chat_id=?1 AND state='held' AND kind='work_result' AND reason='session_model_unavailable'", [chat]).map_err(super::super::AppStorageError::sqlite)).await.map_err(app_error)?;
+        if changed > 0 {
+            self.automation_wake.notify_one();
+        }
+        Ok(())
     }
 
     /// Shipped builds inject no delivery faults.

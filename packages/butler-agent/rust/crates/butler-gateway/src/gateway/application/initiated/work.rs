@@ -66,6 +66,7 @@ impl AppApplication {
         );
         let key = id.clone();
         let chat = command.chat_id;
+        let retry_chat = chat.clone();
         self.storage
             .execute(move |db| {
                 outbox::enqueue(db, (&key, &chat), &source, "work_result", &title, &payload, &now)?;
@@ -78,9 +79,14 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
+        self.retry_model_results(retry_chat).await?;
         let result = self.deliver_work_result(id.clone()).await;
         if let Err(error) = &result {
             self.initiated_failure(id, error).await?;
+            if matches!(error, GatewayApplicationError::Public { code, .. } if code == "session_model_unavailable")
+            {
+                return Ok(json!({"held":true}));
+            }
             if error.failure_class() == crate::gateway::error::FailureClass::Permanent {
                 self.deliver_initiated().await?;
                 return Ok(json!({"state":"failed"}));
@@ -151,19 +157,19 @@ impl AppApplication {
         ) {
             return Ok(json!({"held":true}));
         }
-        let key = id.clone();
-        let reserved = self.storage.execute(move |db| {
-            db.execute("UPDATE app_initiated_messages SET posting=1 WHERE id=?1 AND state='held' AND posting=0", [key]).map_err(AppStorageError::sqlite)
-        }).await.map_err(app_error)?;
-        if reserved == 0 {
+        let Some(_posting) = super::posting::Reservation::claim(self, id.clone())
+            .await
+            .map_err(app_error)?
+        else {
             return Ok(json!({"held":true}));
-        }
+        };
         let result = self.send_work_result(&id, command).await?;
         let message = result.accepted.as_ref().map(|m| m.id.clone());
         let now = self.dependencies.identity_clock.now_iso();
         self.storage.execute(move |db| {
             db.execute("UPDATE app_initiated_messages SET state='posted',posting=0,reason=NULL,next_attempt_at=NULL,message_id=?1,posted_at=?2 WHERE id=?3 AND state='held'", params![message,now,id])
                 .map_err(AppStorageError::sqlite)?;
+            super::failures::withdraw(db, &id)?;
             Ok(())
         }).await.map_err(app_error)?;
         serde_json::to_value(result).map_err(GatewayApplicationError::internal_from)
@@ -174,11 +180,7 @@ impl AppApplication {
         command: SendMessageCommand,
     ) -> Result<crate::gateway::MessageSendResult, GatewayApplicationError> {
         self.work_send_fault(id).await?;
-        self.send_message(command).await.map_err(|error| {
-            if matches!(&error, GatewayApplicationError::Public { code, .. } if code == "session_model_unavailable") {
-                error.permanent()
-            } else { error }
-        })
+        self.send_message(command).await
     }
 
     async fn load_work_result(

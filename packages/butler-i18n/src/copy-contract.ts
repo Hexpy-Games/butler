@@ -254,7 +254,7 @@ interface ConversationCopy {
   chatsIntro: string;
   initiated: {
     viewWork: string; needsApproval: string;
-    workFailed: (reason: string) => string; unknownReason: string;
+    workFailed: (state: "retrying" | "failed" | undefined, reasonCode: string | undefined) => string;
     noThanks: string; soundsGood: string;
     created: (action: string) => string; skipped: (action: string) => string;
     continuing: (action: string) => string; paused: (action: string) => string;

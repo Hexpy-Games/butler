@@ -6,6 +6,7 @@ mod failures;
 mod gate;
 mod outbox;
 mod pause;
+pub(super) mod posting;
 mod projection;
 mod proposals;
 mod retry;

@@ -50,6 +50,9 @@ impl AppApplication {
             .request
             .persist_editor_metadata()
             .map_err(GatewayApplicationError::internal_from)?;
+        if command.request.subsession_result.is_none() {
+            self.retry_model_results(command.chat_id.clone()).await?;
+        }
         self.recover_expired().await?;
         let chat_id = command.chat_id.clone();
         let request = command.request.clone();

@@ -16,7 +16,7 @@ export function AssistantReply({ message, refreshFileUrls }: { message: MessageR
 export function AssistantReplyText({ message, refreshFileUrls }: { message: MessageRecord; refreshFileUrls: RefreshFileUrls }) {
   useAppLocale();
   if (message.initiated?.kind === "work_failed") return <Typo.Body wrap="anywhere" data-test-class="initiated-work-failed">
-    {appCopy.conversation.initiated.workFailed(message.initiated.reason_label ?? appCopy.conversation.initiated.unknownReason)}
+    {appCopy.conversation.initiated.workFailed(message.initiated.state, message.initiated.reason_code)}
   </Typo.Body>;
   return <MessageMarkdown artifacts={message.artifacts} attachments={message.attachments}
     refreshFileUrls={refreshFileUrls} streaming={message.status === "streaming"} text={message.text} />;

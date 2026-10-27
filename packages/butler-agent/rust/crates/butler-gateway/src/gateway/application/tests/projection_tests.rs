@@ -98,6 +98,7 @@ async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
         Some(crate::gateway::DeliveryState::DeliveredWithLimitations)
     ));
     assert_eq!(message.work_blocks.as_ref().map(Vec::len), Some(1));
+    cancelled_posting_releases_claim(&app).await;
     cancelled_reader_joins_on_close(app).await;
     let _ = std::fs::remove_dir_all(root);
 }
@@ -381,4 +382,55 @@ async fn cancelled_reader_joins_on_close(app: AppApplication) {
     );
     release.send(()).unwrap();
     closing.await.unwrap().unwrap();
+}
+
+// The HTTP transport cannot deterministically cancel after storage commits.
+async fn cancelled_posting_releases_claim(app: &AppApplication) {
+    let caller = app.clone_handle();
+    let storage = app.storage.clone();
+    let (claimed, ready) = tokio::sync::oneshot::channel();
+    let handler = tokio::spawn(async move {
+        storage.execute(|db| {
+            db.execute("INSERT INTO app_initiated_messages(id,chat_id,kind,source_key,text,payload_json,state,created_at) VALUES('cancelled-result','general','work_result','cancelled-result','','{}','held','now')", []).map_err(AppStorageError::sqlite)?;
+            Ok(())
+        }).await.unwrap();
+        let _reservation =
+            initiated::posting::Reservation::claim(&caller, "cancelled-result".into())
+                .await
+                .unwrap()
+                .unwrap();
+        assert!(
+            initiated::posting::Reservation::claim(&caller, "cancelled-result".into())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        claimed.send(()).unwrap();
+        std::future::pending::<()>().await;
+    });
+    ready.await.unwrap();
+    handler.abort();
+    assert!(handler.await.unwrap_err().is_cancelled());
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let posting: bool = app
+                .storage
+                .read(|db| {
+                    db.query_row(
+                        "SELECT posting FROM app_initiated_messages WHERE id='cancelled-result'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .map_err(AppStorageError::sqlite)
+                })
+                .await
+                .unwrap();
+            if !posting {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
 }

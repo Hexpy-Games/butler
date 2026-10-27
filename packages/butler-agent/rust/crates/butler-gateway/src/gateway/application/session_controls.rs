@@ -79,6 +79,7 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
+        self.retry_model_results(session_id.clone()).await?;
         Ok(AppSessionControlsView {
             session_id,
             controls,

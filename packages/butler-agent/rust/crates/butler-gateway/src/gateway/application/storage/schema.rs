@@ -74,6 +74,7 @@ pub(super) fn migrate(
          CREATE INDEX IF NOT EXISTS projects_active_name_idx ON projects(display_name) WHERE archived=0;
          CREATE UNIQUE INDEX IF NOT EXISTS chats_runtime_hint_idx
            ON chats(runtime_session_hint) WHERE runtime_session_hint IS NOT NULL;
+         DROP INDEX IF EXISTS initiated_retry_chat_idx;
          DROP INDEX IF EXISTS chats_conversation_idx;
          DROP INDEX IF EXISTS projected_transport_chat_idx;
          DROP INDEX IF EXISTS projection_receipts_chat_idx;

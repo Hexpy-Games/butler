@@ -6,6 +6,8 @@ test("mask only credential values, preserving the exact action", () => {
   const unchanged = [
     "gh secret delete PROD_DB_PASSWORD", "kubectl delete secret prod-db", "npm token revoke 123abc",
     "git commit -m 'rotate token handling'", "secret notes/a.txt", "send Bearer sample-value",
+    "token_count: 5", '{"token_count": 5}', "token-count: 5", "service_token_count: 5",
+    "secret_notes: public", "password_hint: public", "mytoken: public", "authorization_status: ready",
     "TOKENIZER=value", "mysecret=value", "https://user@host/path", "notes/sk-example.txt",
   ];
   const masked = [
@@ -38,13 +40,21 @@ test("mask only credential values, preserving the exact action", () => {
   ];
   for (const input of unchanged) expect(maskActionSecrets(input)).toBe(input);
   for (const [input, expected] of masked) expect(maskActionSecrets(input!)).toBe(expected!);
+  for (const name of ["token", "secret", "password", "passwd", "pwd", "apikey", "api-key", "api_key", "accesskey", "access-key", "access_key", "privatekey", "private-key", "private_key", "clientsecret", "client-secret", "client_secret", "authorization"]) {
+    for (const variant of [name, `service_${name}`, `service-${name}`]) {
+      expect(maskActionSecrets(`${variant}: example`)).toBe(`${variant}: ••••`);
+      expect(maskActionSecrets(`"${variant}": "example"`)).toBe(`"${variant}": ••••`);
+      expect(maskActionSecrets(`${variant}_count: 5`)).toBe(`${variant}_count: 5`);
+    }
+  }
   for (const name of ["TOKEN", "SECRET", "PASSWORD", "PASSWD", "PWD", "API_KEY", "APIKEY", "ACCESS_KEY", "PRIVATE_KEY", "CLIENT_SECRET"]) {
     for (const variant of [name, `service_${name.toLowerCase()}_value`, `service-${name.toLowerCase().replaceAll("_", "-")}-value`]) {
       expect(maskActionSecrets(`${variant}=example`)).toBe(`${variant}=••••`);
       expect(maskActionSecrets(`--${variant} example`)).toBe(`--${variant} ••••`);
-      expect(maskActionSecrets(`${variant}: example`)).toBe(`${variant}: ••••`);
+      const fieldExpected = variant === name ? "••••" : "example";
+      expect(maskActionSecrets(`${variant}: example`)).toBe(`${variant}: ${fieldExpected}`);
       for (const quote of ['"', "'"]) {
-        expect(maskActionSecrets(`${quote}${variant}${quote}: ${quote}example${quote}`)).toBe(`${quote}${variant}${quote}: ••••`);
+        expect(maskActionSecrets(`${quote}${variant}${quote}: ${quote}example${quote}`)).toBe(`${quote}${variant}${quote}: ${variant === name ? "••••" : `${quote}example${quote}`}`);
       }
     }
   }

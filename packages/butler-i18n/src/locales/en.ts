@@ -1,3 +1,4 @@
+import { workFailureLine } from "../work-failure.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -947,7 +948,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   conversation: {
     initiated: {
-      workFailed: reason => `Couldn't deliver the work result · ${reason}`, unknownReason: "Unknown error",
+      workFailed: (state, reasonCode) => workFailureLine("en-US", state, reasonCode),
       viewWork: "View work", needsApproval: "Needs your OK",
       noThanks: "No thanks", soundsGood: "Sounds good",
       created: action => `Created · ${action}`, skipped: action => `Skipped · ${action}`,
