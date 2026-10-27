@@ -22,6 +22,11 @@ pub(crate) fn variables(value: &str) -> Result<Vec<String>> {
 }
 pub(crate) fn derive_capabilities(manifest: &Package) -> Result<CapabilitySet> {
     let mut caps = manifest.declared.clone();
+    caps.connectors = manifest
+        .connectors
+        .iter()
+        .map(|c| (c.id.clone(), c.clone()))
+        .collect();
     caps.network = caps
         .network
         .iter()

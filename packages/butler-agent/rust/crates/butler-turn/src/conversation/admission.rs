@@ -131,12 +131,14 @@ pub struct ConversationAdmissionTurn {
 }
 
 impl ConversationAdmissionTurn {
-    /// Begins the conversation turn; the origin must be classified user input or internal control.
+    /// Begins the conversation turn; the origin must be classified from verified ingress.
     pub async fn begin(input: ConversationAdmissionTurnInput) -> ConversationResult<Self> {
         if input.origin.reference.as_deref().is_none_or(str::is_empty)
             || !matches!(
                 input.origin.kind,
-                ConversationOriginKind::UserInput | ConversationOriginKind::InternalControl
+                ConversationOriginKind::UserInput
+                    | ConversationOriginKind::InternalControl
+                    | ConversationOriginKind::Connector
             )
         {
             return Err(ConversationError::new(

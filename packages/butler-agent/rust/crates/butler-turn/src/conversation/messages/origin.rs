@@ -333,6 +333,7 @@ fn parse_origin(value: &str) -> ConversationResult<ConversationOriginKind> {
         "user_input" => Ok(ConversationOriginKind::UserInput),
         "assistant_public" => Ok(ConversationOriginKind::AssistantPublic),
         "internal_control" => Ok(ConversationOriginKind::InternalControl),
+        "connector" => Ok(ConversationOriginKind::Connector),
         "unknown" => Ok(ConversationOriginKind::Unknown),
         _ => Err(ConversationError::new(
             ConversationCode::ConversationOriginInvalid,

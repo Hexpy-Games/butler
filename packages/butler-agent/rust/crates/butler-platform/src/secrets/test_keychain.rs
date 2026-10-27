@@ -72,6 +72,14 @@ pub(super) fn run(home: &Path, args: &[&str], path: &Path) -> std::io::Result<()
 /// Checks metadata only; the test process does not read an Agent-created secret.
 pub fn system_secret_present_for_test(home: &Path, key: &SecretKey) -> std::io::Result<bool> {
     require_test_service(key)?;
+    isolated_system_secret_present_for_test(home, key)
+}
+
+/// Checks metadata in an explicitly isolated temporary keychain.
+pub fn isolated_system_secret_present_for_test(
+    home: &Path,
+    key: &SecretKey,
+) -> std::io::Result<bool> {
     #[cfg(target_os = "macos")]
     {
         let query = query(home, key)?;
@@ -175,4 +183,37 @@ fn require_test_service(key: &SecretKey) -> std::io::Result<()> {
 pub(super) fn test_store(home: &Path) -> std::io::Result<SecretStore> {
     let store = super::test_file::for_home(home);
     store.map_err(|_| std::io::Error::other("test secret store open failed"))
+}
+
+/// Makes only this temporary scenario's configured credential store unreachable.
+/// Retains existing credentials so cleanup tests can check the pending keys.
+pub fn make_system_keychain_unavailable_for_test(home: &Path) -> std::io::Result<()> {
+    let home = home.canonicalize()?;
+    let temporary = std::env::temp_dir().canonicalize()?;
+    if home == temporary || !home.starts_with(temporary) {
+        return Err(std::io::Error::other("a temporary test home is required"));
+    }
+    let directory = home
+        .parent()
+        .ok_or_else(|| std::io::Error::other("test home parent missing"))?
+        .join("tmp/test-secrets");
+    if directory.exists() {
+        std::fs::rename(&directory, directory.with_extension("unavailable"))?;
+    }
+    std::fs::write(directory, "unavailable")
+}
+
+/// Validate the configured fixture-store location even on native-keychain hosts.
+#[cfg(target_os = "macos")]
+pub(super) fn validate_store_path(path: &Path) -> Result<(), super::SecretError> {
+    if path
+        .parent()
+        .and_then(|p| std::fs::metadata(p).ok())
+        .is_some_and(|m| !m.is_dir())
+    {
+        return Err(super::SecretError::File(std::io::Error::other(
+            "credential store directory is unavailable",
+        )));
+    }
+    Ok(())
 }

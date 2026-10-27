@@ -474,7 +474,10 @@ fn insert_result_ref(
         context.insert("scheduleRun".into(), json!({"unattended": true}));
     } else if let Some(run) = app_turn_context
         .and_then(|value| value.get("scheduleRun"))
-        .filter(|run| run.get("unattended") == Some(&Value::Bool(true)))
+        .filter(|run| {
+            run.get("unattended") == Some(&Value::Bool(true))
+                || run.get("connector_event") == Some(&Value::Bool(true))
+        })
     {
         context.insert("scheduleRun".into(), run.clone());
     }

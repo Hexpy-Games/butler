@@ -16,7 +16,10 @@ pub(super) fn handler(request: &Request<Body>) -> Option<Handler> {
         (family(path, "/security"), Handler::Security),
         (family(path, "/hooks"), Handler::Hooks),
         (
-            family(path, "/plugins") || family(path, "/plugin-registries"),
+            family(path, "/plugins")
+                || family(path, "/plugin-registries")
+                || family(path, "/connectors")
+                || family(path, "/connector-rules"),
             Handler::Plugins,
         ),
     ]

@@ -39,11 +39,11 @@ pub(super) async fn execute(
     if super::browser::supports(&call.name) {
         return super::browser::execute(owner, &invocation, call, call_id).await;
     }
-    if super::image::supports(&call.name) {
-        return Box::pin(super::image::execute(owner, invocation, call)).await;
-    }
-    if super::memory_write::supports(&call.name) {
-        return super::memory_write::execute(owner, invocation, call, call_id).await;
+    if super::direct_approval::supports(call) {
+        return Box::pin(super::direct_approval::execute(
+            owner, invocation, call, call_id,
+        ))
+        .await;
     }
     if web::supports(&call.name) {
         return web::execute(owner, invocation, call, call_id).await;
@@ -56,9 +56,6 @@ pub(super) async fn execute(
     }
     if call.name == ToolName::CallMcpTool {
         return super::effect::execute(owner, invocation, call, call_id).await;
-    }
-    if super::profile::supports(&call.name) {
-        return super::profile::execute(owner, call).await;
     }
     if super::monitoring::supports(&call.name) {
         return super::monitoring::execute(owner, call).await;
@@ -90,16 +87,35 @@ pub(super) async fn execute(
     if call.name == ToolName::CancelSteward {
         return steward::cancel(owner, invocation, call).await;
     }
+    if let Some(result) = state_tool(owner, call, call_id).await {
+        return result;
+    }
+    effect_or_read(owner, invocation, call, call_id).await
+}
+
+async fn state_tool(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Option<Result<JsonDocument, ToolExecutionError>> {
     if call.name == ToolName::WaitForWorker {
-        let waiting = owner
+        let waiting = match owner
             .subsessions
             .should_wait_for_child(&owner.binding.source_session_id)
             .await
-            .map_err(ToolExecutionError::Integrity)?;
-        return encoded(&json!({"ok":true,"status":if waiting{"waiting"}else{"no_active_worker"}}));
+        {
+            Ok(waiting) => waiting,
+            Err(error) => return Some(Err(ToolExecutionError::Integrity(error))),
+        };
+        return Some(encoded(
+            &json!({"ok":true,"status":if waiting{"waiting"}else{"no_active_worker"}}),
+        ));
     }
     if GuidedWorkTools::is_work_tool(&call.name) {
-        return encoded(&execute_work(owner, call, call_id).await?);
+        return Some(match execute_work(owner, call, call_id).await {
+            Ok(value) => encoded(&value),
+            Err(error) => Err(error),
+        });
     }
     if matches!(
         ToolName::parse(call.name.as_str()),
@@ -123,9 +139,18 @@ pub(super) async fn execute(
                 Value::Object(call.arguments.clone()),
             )
             .await
-            .map_err(ToolExecutionError::Integrity)?;
-        return encoded(&result);
+            .map_err(ToolExecutionError::Integrity);
+        return Some(result.and_then(|value| encoded(&value)));
     }
+    None
+}
+
+async fn effect_or_read(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
     if matches!(
         ToolName::parse(call.name.as_str()),
         Some(
@@ -157,6 +182,15 @@ pub(super) async fn execute(
     ) {
         return read_tool_artifact(owner, &call.name, args).await;
     }
+    read_native(owner, call, call_id, args).await
+}
+
+async fn read_native(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+    args: Value,
+) -> Result<JsonDocument, ToolExecutionError> {
     let result = match call.name.as_str() {
         "list_conversation_sessions" => owner
             .conversation_tools
@@ -280,12 +314,32 @@ pub(super) fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError>
     })
 }
 
-async fn domain_tool(
+pub(super) async fn domain_tool(
     owner: &GuidedTools,
     invocation: &GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
+    if matches!(
+        call.name.as_str(),
+        "connector_fetch"
+            | "connector_rule_list"
+            | "connector_rule_remove"
+            | "connector_rule_set"
+            | "connector_triage"
+    ) {
+        let result = owner
+            .mcp_client
+            .connector_tool(
+                call.name.clone(),
+                Value::Object(call.arguments.clone()),
+                owner.binding.access_mode == butler_turn::btcc::AccessMode::ReadOnly,
+            )
+            .await;
+        return Some(encoded(
+            &result.unwrap_or_else(|e| json!({"ok":false,"error":{"code":e.code}})),
+        ));
+    }
     if super::documents::supports(&call.name) {
         return Some(super::documents::execute(owner, call, invocation).await);
     }

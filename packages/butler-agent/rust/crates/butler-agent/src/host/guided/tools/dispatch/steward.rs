@@ -38,7 +38,7 @@ pub(super) async fn execute(
                 model_ref: owner.binding.model_ref.clone(),
                 reasoning_effort: owner.binding.reasoning_effort.clone(),
                 access_mode: access_mode(owner),
-                schedule_run: owner.unattended_run(),
+                schedule_run: owner.inherited_run(),
             },
             owner.work.scope(),
             call_id.to_owned(),
@@ -170,6 +170,7 @@ pub(super) async fn steer(
                 butler_turn::workspace::SessionRole::Steward
             },
             access_mode: access_mode(owner),
+            schedule_run: owner.inherited_run(),
         })
         .await
         .map_err(ToolExecutionError::Integrity)?;

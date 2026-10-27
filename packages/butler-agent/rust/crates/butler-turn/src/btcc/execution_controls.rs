@@ -46,6 +46,9 @@ pub struct ScheduleRunContext {
     pub automation_id: String,
     pub run_id: String,
     pub unattended: bool,
+    /// Untrusted event origin inherited by delegated turns.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub connector_event: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduled_at: Option<String>,
 }
