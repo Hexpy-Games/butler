@@ -1,0 +1,104 @@
+{
+  "name": "mail",
+  "version": "1.0.0",
+  "mcpServers": {
+    "mail": {
+      "command": "${BUTLER_PLUGIN_ROOT}/bin/butler-mail-connector"
+    }
+  },
+  "extensions": {
+    "io.github.hexpy-games.butler": {
+      "api": 1,
+      "connectors": [
+        {
+          "id": "mail",
+          "label": "메일",
+          "account": {
+            "fields": [
+              {
+                "key": "address",
+                "label": "주소"
+              },
+              {
+                "key": "imap_host",
+                "label": "IMAP 서버"
+              },
+              {
+                "key": "imap_port",
+                "label": "IMAP 포트"
+              },
+              {
+                "key": "imap_security",
+                "label": "IMAP 보안"
+              },
+              {
+                "key": "smtp_host",
+                "label": "SMTP 서버"
+              },
+              {
+                "key": "smtp_port",
+                "label": "SMTP 포트"
+              },
+              {
+                "key": "smtp_security",
+                "label": "SMTP 보안"
+              },
+              {
+                "key": "username",
+                "label": "사용자 이름"
+              }
+            ],
+            "secrets": [
+              {
+                "key": "IMAP_PASSWORD",
+                "label": "앱 비밀번호"
+              }
+            ]
+          },
+          "events": {
+            "server": "mail"
+          },
+          "context": {
+            "tool": "mail/thread"
+          },
+          "destinations": {
+            "resource": "connector://destinations",
+            "argument": "destination"
+          },
+          "actions": [
+            {
+              "tool": "mail/move",
+              "organize": true,
+              "destination": true
+            },
+            {
+              "tool": "mail/label",
+              "organize": true
+            },
+            {
+              "tool": "mail/archive",
+              "organize": true,
+              "relocates": true
+            },
+            {
+              "tool": "mail/mark_read",
+              "organize": true
+            },
+            {
+              "tool": "mail/search"
+            },
+            {
+              "tool": "mail/draft_reply"
+            },
+            {
+              "tool": "mail/send"
+            },
+            {
+              "tool": "mail/unsubscribe"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
