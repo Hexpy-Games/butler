@@ -100,10 +100,12 @@ try {
   assert.ok(Math.abs(saved.snapshot!.width - picked.width) <= 1 && Math.abs(saved.snapshot!.height - picked.height) <= 1, "copy sized like the card");
   await input("key", title, "Escape"); await waitBrowser(() => app.main(`!${subject()}.picking`), "Escape ends picking");
 
-  // Before (kept for scraps without a copy): opening one loads its whole source page.
+  // Before (kept for scraps without a copy): its detail shows the crop, and its source action loads the whole page.
   await openLibrary(false);
   await app.shot("2-library", false);
   await clickApp(card("Legacy scrap"), "legacy scrap card");
+  await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=library-detail] img[alt=\"Legacy scrap\"]')) && !document.querySelector('[data-test-class=scrap-frame]')"), "legacy scrap detail shows its crop");
+  await app.click("Open source page");
   await waitBrowser(async () => (await app.call<{ tabs: Array<{ url: string }> }>("state")).tabs.filter(t => t.url.endsWith("/card-font")).length >= 2, "legacy scrap opens the source page");
   await nativeAligned(app); await app.shot("3-before-legacy-opens-page", true);
 
