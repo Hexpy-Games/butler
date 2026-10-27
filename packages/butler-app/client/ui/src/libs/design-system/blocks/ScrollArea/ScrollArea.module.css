@@ -2,9 +2,10 @@
   /* The frame bleeds a scrollbar lane past the inline end. An overlay
      scrollbar takes no layout width, so the content gives the lane back; a
      classic one (--scrollbar-width, measured once per document) is its own
-     lane, and reserving both would push the content in twice. The vertical
-     scroller keeps that lane even when the content fits (scrollbar-gutter
-     below), so this math never depends on whether it overflows. A classic
+     lane, and reserving both would push the content in twice. The scroller
+     reserves no gutter: a classic scrollbar takes its width only while the
+     content overflows, so the content gives that width back only then (the
+     scroll-state rule below) and ends on the column either way. A classic
      lane sits past the ring room, so the inline end keeps the same
      --focus-ring-room as the inline start; an overlay lane already holds it. */
   --scroll-area-scrollbar-width: var(--scrollbar-width, 0px);
@@ -16,10 +17,7 @@
   --scroll-area-fade-guard: var(--space-xs);
   --scroll-area-edge-padding: var(--scroll-area-fade-size);
   --scroll-area-frame-width: calc(100% + var(--scroll-area-scrollbar-offset));
-  --scroll-area-content-width: calc(
-    100% - var(--scroll-area-scrollbar-offset) +
-      var(--scroll-area-scrollbar-width)
-  );
+  --scroll-area-content-width: calc(100% - var(--scroll-area-scrollbar-offset));
   /* The frame bleeds this past the content's inline start (the block edges
      already have the edge padding) and the content pads it back: content
      keeps its place and focus rings paint inside the clip and the fades. */
@@ -58,11 +56,8 @@
   --scroll-area-edge-padding: var(--space-xs);
 }
 
-.frame[data-bleed="inline-end"] .content {
-  padding-inline-end: max(
-    0px,
-    var(--scroll-area-bleed) - var(--scroll-area-scrollbar-width)
-  );
+.frame[data-bleed="inline-end"] > .scroll > .content {
+  padding-inline-end: var(--scroll-area-bleed);
 }
 
 .fill {
@@ -78,6 +73,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden auto;
+  container: scroll-area / scroll-state;
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
   scrollbar-width: thin;
@@ -108,10 +104,25 @@
   margin-block: calc(-1 * var(--focus-ring-room));
 }
 
-/* A classic scrollbar's lane stays reserved while the content fits, so the
-   content ends on the column either way; an overlay scrollbar reserves none. */
-.frame:not([data-orientation="x"]) > .scroll {
-  scrollbar-gutter: stable;
+/* A classic scrollbar is drawn, and takes its width out of the scroller,
+   only while the content overflows: the content gives that width back then,
+   so it ends on the column whether it fits or overflows and never moves when
+   overflow starts or stops. While it fits nothing is reserved for a scrollbar
+   that is not there. Overlay scrollbars have --scrollbar-width 0px. */
+@container scroll-area scroll-state(scrollable: block) {
+  .frame:not([data-orientation="x"], [data-bleed]) > .scroll > .content {
+    --scroll-area-content-width: calc(
+      100% - var(--scroll-area-scrollbar-offset) +
+        var(--scroll-area-scrollbar-width)
+    );
+  }
+
+  .frame[data-bleed="inline-end"] > .scroll > .content {
+    padding-inline-end: max(
+      0px,
+      var(--scroll-area-bleed) - var(--scroll-area-scrollbar-width)
+    );
+  }
 }
 
 .frame[data-orientation="x"] > .scroll {
