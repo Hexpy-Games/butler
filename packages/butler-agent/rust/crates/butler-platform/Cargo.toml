@@ -9,6 +9,7 @@ publish.workspace = true
 # The only crate with operating-system specific code (see src/lib.rs). It is a
 # leaf: it depends on no other workspace crate, so every crate can use it.
 [dependencies]
+socket2 = "0.6.5"
 # Quotes paths inside macOS sandbox profiles.
 iana-time-zone.workspace = true
 serde_json.workspace = true

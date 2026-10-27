@@ -120,6 +120,7 @@ mod linux_sandbox;
 mod live;
 mod live_config;
 mod long_paths;
+mod mail;
 mod mcp;
 mod memory;
 mod memory_existing;
