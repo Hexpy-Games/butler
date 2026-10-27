@@ -19,11 +19,14 @@
   color: var(--send-fg);
 }
 
-/* The page scroller: row 2 of the shell workspace, under the titlebar row. */
+/* The page scroller: row 2 of the shell workspace, under the titlebar row.
+   Focus that scrolls an example's control into view stops a ring's width
+   short of the edge, so the ring is never cut in a short window. */
 .scroll {
   min-width: 0;
   min-height: 0;
   overflow: hidden auto;
+  scroll-padding-block: var(--focus-ring-room);
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }

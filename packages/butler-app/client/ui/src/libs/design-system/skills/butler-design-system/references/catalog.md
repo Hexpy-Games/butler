@@ -1957,7 +1957,7 @@ A search-first chooser with filters, grouped results and an optional footer choi
 
 `import { ListRow } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ListRow`
 
-A presentational row: icon, title, optional description and trailing meta with two-region truncation.
+A presentational row: icon, title, optional description and trailing meta. The title truncates; a meta that does not fit beside it moves under the title.
 
 - Use for: Rows of data in panels and lists (automations, artifacts, models)
 - Not for: Navigation rows → `NavRow`
