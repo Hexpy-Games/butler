@@ -40,7 +40,7 @@ impl AppApplication {
             let payload = json!({"automation_id":id,"automation_title":row.title,
                 "panel":{"kind":"schedule_pause","automation_id":id,"state":"pending","title":row.title,
                 "schedule":schedule,"unopened_count":REPORT_PAUSE_UNOPENED_RUNS}});
-            outbox::enqueue(&tx, &clock.new_uuid(), &format!("schedule-pause:{id}:{}",gate.now), "schedule_pause", &text, &payload, &gate.now)?;
+            outbox::enqueue(&tx, (&clock.new_uuid(), "general"), &format!("schedule-pause:{id}:{}",gate.now), "schedule_pause", &text, &payload, &gate.now)?;
             let event = events::append_unpublished(&tx,"automation.updated",None,super::super::service::map(&json!({"automation":records::summary(records::active(&tx,&id)?)}))?,&gate.now)?;
             tx.commit().map_err(AppStorageError::sqlite)?;
             events::publish(&subscribers,&event);

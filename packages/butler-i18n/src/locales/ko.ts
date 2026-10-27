@@ -1,3 +1,4 @@
+import { workFailureLine } from "../work-failure.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -635,6 +636,12 @@ export const koKrCopy: AppCopy = {
       networkCommand: workspace => `${workspaceName(workspace)}에서 인터넷을 쓰는 명령을 실행할까요?`,
       useConnector: (tool, server) => tool && server ? `${server}의 ${tool} 도구를 사용할까요?` : tool ? `${tool} 도구를 사용할까요?` : "연결된 도구를 사용할까요?",
       manageSchedule: { create: "예약 작업을 만들까요?", delete: "예약 작업을 삭제할까요?", run: "예정된 예약 작업을 실행할까요?", change: "예약 작업을 변경할까요?" },
+      createCanon: { epic: "과제를 만들까요?", plan: "계획을 만들까요?" },
+      canonPlan: plan => `계획: ${plan}`,
+      canonTitle: title => `제목: ${title}`,
+      canonProject: project => `프로젝트: ${project}`,
+      canonDescription: description => `설명: ${description}`,
+      canonDue: date => `마감일: ${date}`,
       updateProject: "프로젝트 기록을 업데이트할까요?",
       startConversation: "새 대화를 시작할까요?",
       restartService: "버틀러를 다시 시작할까요?",
@@ -938,6 +945,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   conversation: {
     initiated: {
+      workFailed: (state, reasonCode) => workFailureLine("ko-KR", state, reasonCode),
+      viewWork: "작업 보기", needsApproval: "확인 필요",
       noThanks: "괜찮아요", soundsGood: "좋아요",
       created: action => `만들었어요 · ${action}`, skipped: action => `안 만들었어요 · ${action}`,
       continuing: action => `계속 받아요 · ${action}`, paused: action => `멈춰 뒀어요 · ${action}`, alreadyHandled: "이미 처리된 제안이에요", failed: "처리하지 못했어요. 다시 해 주세요.",

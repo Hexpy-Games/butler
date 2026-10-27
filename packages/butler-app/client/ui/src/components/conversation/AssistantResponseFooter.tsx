@@ -21,6 +21,7 @@ const NON_TERMINAL_ASSISTANT_STATUSES = new Set([
 
 export function AssistantResponseFooter({
   bubble = false,
+  timeOnly = false,
   copied,
   meta,
   onCopy,
@@ -29,6 +30,7 @@ export function AssistantResponseFooter({
   actions,
 }: {
   bubble?: boolean;
+  timeOnly?: boolean;
   copied: boolean;
   meta: AssistantFooterMeta | null;
   onCopy: () => void;
@@ -44,15 +46,15 @@ export function AssistantResponseFooter({
   return (
     <>
       <MessageFooter>
-        <CopyButton
+        {!timeOnly && <CopyButton
           copied={copied}
           label={appCopy.conversation.messageActions.copyMessage}
           copiedLabel={appCopy.conversation.messageActions.copied}
           aria-label={appCopy.interfacePanels.copyResponse}
           onCopy={onCopy}
-        />
-        {actions}
-        {!bubble && settledMeta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(settledMeta.durationLabel)}</span>}
+        />}
+        {!timeOnly && actions}
+        {!timeOnly && !bubble && settledMeta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(settledMeta.durationLabel)}</span>}
         {settledMeta?.timeLabel && (
           <Typo.Text as="time" dateTime={settledMeta.completedAtIso ?? undefined} numeric="tabular">
             {settledMeta.timeLabel}

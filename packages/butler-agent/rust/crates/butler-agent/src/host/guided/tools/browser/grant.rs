@@ -29,6 +29,9 @@ pub(super) async fn call(
     let result = client.call(op, tab, args, signal).await;
     if let Some(refusal) = super::super::turn_guard::schedule_browser_feedback(
         owner,
+        tool,
+        &json!({"grant":{"site":result["site"]},"tab":tab,"mode":"signed_in","always_confirm":true,"allow_site":"signed_in"}),
+        &butler_runtime::browser::signed_in_scope(result["site"].as_str().unwrap_or("")),
         result["reason"].as_str().unwrap_or(""),
     )
     .await

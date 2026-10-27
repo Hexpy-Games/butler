@@ -35,20 +35,25 @@ export function session(messages: MessageRecord[], id = "general"): SessionView 
 }
 
 /** Stub gateway transport only: real App bootstrap, subscription, navigation and composer. */
-export async function installInitiatedGateway(page: Page, language: "ko" | "en", theme: "light" | "dark") {
+export async function installInitiatedGateway(page: Page, language: "ko" | "en", theme: "light" | "dark", initial?: SessionView, projectChat = false) {
   const root = resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
   const navigation = structuredClone(HARNESS_NAVIGATION);
   const general = { id: "general", kind: "chat" as const, title: "Chats", unread: false, pinned: false, archived: false, created_at: "2026-10-27T00:00:00Z", updated_at: "2026-10-27T00:00:00Z", last_activity_at: "2026-10-27T00:00:00Z" };
   navigation.chats = [general, { ...general, id: "other", title: "다른 대화" }];
-  navigation.projects = [];
-  navigation.space = { revision: 1, groups: [], nodes: navigation.chats.map((chat, index) => ({ key: `s:${chat.id}`, kind: "session", entityId: chat.id, parentKey: null, position: index, revision: 1, manualPlacement: false, scopeProjectId: null })) };
-  let view = session([initiatedMessage("proposal", language === "en")]);
+  navigation.projects = projectChat ? navigation.projects : [];
+  const projectSessions = navigation.projects.flatMap(project => (project.sessions ?? []).map(chat => ({
+    key: `s:${chat.id}`, kind: "session" as const, entityId: chat.id, parentKey: null, position: 2,
+    revision: 1, manualPlacement: false, scopeProjectId: project.id,
+  })));
+
+  navigation.space = { revision: 1, groups: [], nodes: [...navigation.chats.map((chat, index) => ({ key: `s:${chat.id}`, kind: "session" as const, entityId: chat.id, parentKey: null, position: index, revision: 1, manualPlacement: false, scopeProjectId: null })), ...projectSessions] };
+  let view = initial ?? session([initiatedMessage("proposal", language === "en")]);
   let settings = { ...EMPTY_SETTINGS, ...onboardingCompletedPatch(undefined, "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"),
     language, appearance_theme: theme, timezone: "Asia/Seoul", chats_intro_seen: true, model: HARNESS_MODEL_CATALOG.default_model_ref,
     conversation_background: { source: { kind: "none" as const }, overlay: 0 } };
   const requests: { path: string; body: unknown; at: number }[] = [];
   await page.addInitScript(code => {
-    localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({ schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), active_session_id: "general", left_open: true, right_open: false }));
+    if (!localStorage.getItem("butler:app-ui-state:v1")) localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({ schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), active_session_id: "general", left_open: true, right_open: false }));
     const notifications: unknown[] = [];
     Object.assign(window, { __notifications: notifications });
     const ipcRenderer = {
@@ -90,7 +95,12 @@ export async function installInitiatedGateway(page: Page, language: "ko" | "en",
     }
     if (path === "/navigation") return send(navigation);
     if (path === "/model-catalog") return send(HARNESS_MODEL_CATALOG);
-    if (path === "/session-view") return send(url.searchParams.get("session_id") === "other" ? session([], "other") : view);
+    if (path === "/session-view") {
+      const id = url.searchParams.get("session_id");
+      if (id && id !== view.session_id) return send(session([], id));
+      return send(view);
+    }
+    if (path === "/authority-requests") return send({ session_id: "general", requests: view.authority_requests ?? [] });
     if (path === "/messages") return send({ messages: view.messages, next_cursor: view.messages.length });
     if (path === "/session-queue") return send({ queued_messages: [] });
     if (path.endsWith("/controls")) return send({ session_id: url.pathname.split("/")[2], revision: 0, catalog_generation: HARNESS_MODEL_CATALOG.generation,
@@ -113,7 +123,15 @@ export async function installInitiatedGateway(page: Page, language: "ko" | "en",
       id: ++eventId, type, created_at: "2026-10-26T21:00:00Z", payload,
     });
   };
-  return { requests, async show(message: MessageRecord) {
+  return { requests, async showView(next: SessionView) {
+    view = next;
+    await page.evaluate(id => {
+      const key = "butler:app-ui-state:v1";
+      const cached = JSON.parse(localStorage.getItem(key)!);
+      localStorage.setItem(key, JSON.stringify({ ...cached, active_session_id: id }));
+    }, next.session_id);
+    await page.reload();
+  }, async show(message: MessageRecord) {
     const sameMessage = view.messages[0]?.id === message.id;
     view = session([message]);
     if (!sameMessage) await page.reload();

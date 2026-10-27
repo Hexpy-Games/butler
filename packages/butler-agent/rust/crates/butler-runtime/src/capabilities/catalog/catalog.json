@@ -7585,12 +7585,73 @@
         "rules"
       ],
       "durable": false
+    },
+    {
+      "name": "canon_propose",
+      "definition": {
+        "type": "function",
+        "name": "canon_propose",
+        "description": "Create a 과제 (epic) or 계획 (plan) on a project's board. Depending on the conversation's permission tier, the user may first see the exact item and decide; nothing is created if they decline.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "epic",
+                "plan"
+              ],
+              "description": "epic = 과제, plan = 계획."
+            },
+            "project_ref": {
+              "type": "string",
+              "description": "Project id or name."
+            },
+            "title": {
+              "type": "string",
+              "description": "Short title as it should appear on the board."
+            },
+            "description": {
+              "type": "string",
+              "description": "Optional details."
+            },
+            "plan_id": {
+              "type": "string",
+              "description": "Epic only: the 계획 to place it in; omit for the backlog."
+            },
+            "due_on": {
+              "type": "string",
+              "description": "Plan only: due date as YYYY-MM-DD."
+            }
+          },
+          "required": [
+            "kind",
+            "project_ref",
+            "title"
+          ]
+        },
+        "effectBoundary": "reviewed_persistent",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "reviewed_persistent",
+      "category": "project",
+      "tags": [
+        "canon",
+        "epic",
+        "plan",
+        "board"
+      ],
+      "durable": false
     }
   ],
   "workerForbidden": [
     "complete_project_work",
     "generate_image",
-    "edit_image"
+    "edit_image",
+    "canon_propose"
   ],
   "workTracking": [
     "update_todo_list",
@@ -13490,6 +13551,54 @@
         ]
       },
       "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "canon_propose": {
+      "type": "function",
+      "name": "canon_propose",
+      "description": "Create a 과제 (epic) or 계획 (plan) on a project's board. Depending on the conversation's permission tier, the user may first see the exact item and decide; nothing is created if they decline.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "epic",
+              "plan"
+            ],
+            "description": "epic = 과제, plan = 계획."
+          },
+          "project_ref": {
+            "type": "string",
+            "description": "Project id or name."
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title as it should appear on the board."
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional details."
+          },
+          "plan_id": {
+            "type": "string",
+            "description": "Epic only: the 계획 to place it in; omit for the backlog."
+          },
+          "due_on": {
+            "type": "string",
+            "description": "Plan only: due date as YYYY-MM-DD."
+          }
+        },
+        "required": [
+          "kind",
+          "project_ref",
+          "title"
+        ]
+      },
+      "effectBoundary": "reviewed_persistent",
       "concurrencySafe": false,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"

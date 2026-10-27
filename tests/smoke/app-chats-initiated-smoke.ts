@@ -126,7 +126,7 @@ async function unreadAndNotifications(page: Page, gateway: Awaited<ReturnType<ty
   const row = page.locator('[data-test-class="app-sidebar"] [data-test-class="tree-row"][aria-label="대화"]');
   await row.locator('[data-slot="unread-dot"]').waitFor();
   await page.waitForFunction(count => (window as unknown as { __notifications: unknown[] }).__notifications.length === count + 1, before);
-  const quiet = { ...report, id: "quiet-report", initiated: { ...report.initiated!, quiet: true } };
+  const quiet = { ...report, id: "quiet-report", quiet: true, initiated: { ...report.initiated!, quiet: true } };
   await gateway.arrive(quiet);
   // A response to the following event establishes that the event callback has run.
   await page.waitForResponse(response => response.url().endsWith("/navigation"));

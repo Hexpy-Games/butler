@@ -130,7 +130,7 @@ async fn admit(
         honor_standing_permission,
         unattended: owner.unattended(),
     };
-    let admitted = match owner.authority.admit(input).await {
+    let admitted = match super::super::attention::admit(owner, input).await {
         Ok(value) => value,
         Err(failure) => {
             return error(
@@ -162,7 +162,6 @@ async fn admit(
         ),
         AuthorityAdmissionResult::Unattended => {
             super::super::turn_guard::unattended_result(owner, adapter.capability(), &subject)
-                .await
                 .map(Gate::Return)
         }
     }

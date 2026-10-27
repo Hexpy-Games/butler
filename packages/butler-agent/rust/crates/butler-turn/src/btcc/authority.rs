@@ -1,5 +1,6 @@
 //! Principal authority decisions over durable, session-bound operations.
 
+mod action_identity;
 mod admission;
 pub(in crate::btcc) mod approval;
 pub(in crate::btcc) mod contracts;

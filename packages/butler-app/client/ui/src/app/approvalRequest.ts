@@ -1,3 +1,5 @@
+import { normalizeApprovalCanon } from "./approvalCanon.ts";
+import { maskActionSecrets } from "./maskActionSecrets.ts";
 import { appCopy } from "./copy.ts";
 import type { AppCopy } from "./copy.ts";
 import { approvalTargetsFromTransport, isAbsolutePath } from "./approvalTargets.ts";
@@ -9,7 +11,7 @@ type ApprovalRequestCopy = AppCopy["interfaceTemplates"]["approvalRequest"];
 /** The `approval.action_kind` values the agent sends (#277). */
 export const APPROVAL_ACTION_KINDS = [
   "edit_files", "run_command", "network_command", "web_request", "use_connector", "manage_schedule",
-  "update_project", "start_conversation", "restart_service", "create_worktree", "switch_folder", "other",
+  "create_canon", "update_project", "start_conversation", "restart_service", "create_worktree", "switch_folder", "other",
 ] as const;
 export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
 
@@ -64,10 +66,12 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
   });
   const operation = normalizeOperation(value.operation);
   const schedule = normalizeSchedule(value.schedule);
+  const canon = normalizeApprovalCanon(value.canon);
   return {
     actionKind, targets, count, examples,
     ...(operation ? { operation } : {}),
     ...(schedule ? { schedule } : {}),
+    ...(canon ? { canon } : {}),
     ...(value.command_access === "read_only_unisolated" ? { commandAccess: value.command_access } : {}),
     ...(examplesTruncated.some(Boolean) ? { examplesTruncated } : {}),
     ...(typeof risk === "string" && RISKS.includes(risk) ? { risk: risk as ApprovalRisk } : {}),
@@ -139,22 +143,18 @@ export function approvalRequestView(
       ...(scope ? { conversationScope: scope.description } : {}),
     };
   }
-  const actionKind = (APPROVAL_ACTION_KINDS as readonly string[]).includes(approval.actionKind)
-    ? approval.actionKind as ApprovalActionKind : "other";
+  const actionKind = knownActionKind(approval);
   const workspace = workspaceLabel(approval);
   const operation = approval.operation;
   // A tool without a readable label reads as its action kind's sentence, never its internal name.
   const label = operation ? toolLabels[operation.tool] : undefined;
-  const { schedule } = approval;
   return {
     title: operation && label && !SENTENCE_KINDS.has(actionKind) ? copy.operation(label, operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
-      ...(schedule ? [schedule.title, ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)] : !schedule.accessMode && typeof schedule.browserSignin !== "boolean" && typeof schedule.browserPayment !== "boolean" ? [copy.scheduleUnavailable] : []), ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : []), ...(typeof schedule.browserSignin === "boolean" ? [copy.scheduleSignin(schedule.browserSignin)] : []), ...(typeof schedule.browserPayment === "boolean" ? [copy.schedulePayment(schedule.browserPayment)] : []), ...approval.examples].filter(Boolean)
-        : actionKind === "manage_schedule" ? [copy.scheduleUnavailable]
-          : operation ? [...new Set([...operationDetails(operation, copy), ...approval.examples])] : details(approval, actionKind, card, copy))],
+      ...actionDetails(approval, actionKind, card, copy)].map(maskActionSecrets),
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -165,8 +165,39 @@ export function approvalRequestView(
   };
 }
 
+/** A skipped operation is a statement; its target uses the card's exact detail formatting. */
+export function approvalActionView(approval: ApprovalSummary, copy: ApprovalRequestCopy, toolLabels: Record<string, string>) {
+  const kind = knownActionKind(approval);
+  return {
+    label: (approval.operation && toolLabels[approval.operation.tool]) || toolLabels[approval.actionKind] || toolLabels.fallback,
+    target: maskActionSecrets((COMMAND_KINDS.has(kind) ? approval.operation?.command ?? approval.examples[0] : undefined)
+      ?? actionDetails(approval, kind, { reason: "" }, copy)[0] ?? ""),
+  };
+}
+
+function knownActionKind(approval: ApprovalSummary): ApprovalActionKind {
+  return (APPROVAL_ACTION_KINDS as readonly string[]).includes(approval.actionKind) ? approval.actionKind as ApprovalActionKind : "other";
+}
+
+/** The action's details, separate from permission notices and card explanations. */
+function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
+  card: Pick<AuthorityApprovalCard, "scope" | "reason">, copy: ApprovalRequestCopy): string[] {
+  const { canon, schedule, operation } = approval;
+  if (kind === "create_canon" && canon) return [copy.canonTitle(canon.title), copy.canonProject(canon.project_title),
+    ...(canon.plan_title ? [copy.canonPlan(canon.plan_title)] : []), ...(canon.due_on ? [copy.canonDue(canon.due_on)] : []),
+    ...(canon.description ? [copy.canonDescription(canon.description)] : [])];
+  if (schedule) return [schedule.title,
+    ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)]
+      : !schedule.accessMode && typeof schedule.browserSignin !== "boolean" && typeof schedule.browserPayment !== "boolean" ? [copy.scheduleUnavailable] : []),
+    ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : []),
+    ...(typeof schedule.browserSignin === "boolean" ? [copy.scheduleSignin(schedule.browserSignin)] : []),
+    ...(typeof schedule.browserPayment === "boolean" ? [copy.schedulePayment(schedule.browserPayment)] : []), ...approval.examples].filter(Boolean);
+  if (kind === "manage_schedule") return [copy.scheduleUnavailable];
+  return operation ? [...new Set([...operationDetails(operation, copy), ...approval.examples])] : details(approval, kind, card, copy);
+}
+
 /** Kinds whose own sentence names the action better than a tool label. */
-const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule"]);
+const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule", "create_canon"]);
 
 /** The exact operation, as the local decision shows it. */
 function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): string[] {
@@ -191,6 +222,7 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace
         : copy.useConnector(path || null, null);
     }
     case "manage_schedule": return copy.manageSchedule[scheduleOperation(approval).operation];
+    case "create_canon": return approval.canon ? copy.createCanon[approval.canon.kind] : copy.generic;
     case "update_project": return copy.updateProject;
     case "start_conversation": return copy.startConversation;
     case "restart_service": return copy.restartService;

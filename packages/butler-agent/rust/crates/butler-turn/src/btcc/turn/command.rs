@@ -24,6 +24,15 @@ pub enum TurnCommand {
 #[serde(rename_all = "camelCase")]
 pub struct ResumeCommand {
     pub turn_id: String,
+    /// Current owner policy, applied only to delegated turn resumes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_ceiling: Option<crate::btcc::AccessMode>,
+    /// Parent input requirements released when replaying a delegated turn.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub released_tools: Vec<String>,
+    /// Parent profiles (or a child profile incompatible with its new tier).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub released_profiles: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recovery_attempt: Option<u32>,
 }

@@ -233,6 +233,11 @@ fn apply_access_mode(
 /// user, so they never show answer blocks: a child's blocks would be accepted
 /// but never reach the conversation.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    if policy.role == PolicyRole::Butler && policy.access_mode != AccessMode::ReadOnly {
+        names.insert("canon_propose".into());
+    } else {
+        names.remove("canon_propose");
+    }
     if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
         names.remove("answer_blocks");
         names.remove("resolve_ask");
@@ -247,6 +252,14 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
         }
     }
 }
+
+/// Workspace write tools every non-read-only tier offers.
+const WRITE_TOOLS: [&str; 4] = [
+    "run_command",
+    "read_tool_output_artifact",
+    "write_file",
+    "edit_file",
+];
 
 pub(super) fn legacy_visible<'a>(
     authorized: &[&'a GuidedCatalogTool],
@@ -268,6 +281,9 @@ pub(super) fn legacy_visible<'a>(
     }
     if policy.role == PolicyRole::Butler {
         names.extend(STEWARD_PARENT.iter().copied());
+        if policy.access_mode != AccessMode::ReadOnly {
+            names.insert("canon_propose");
+        }
     }
     if policy.role == PolicyRole::Steward {
         names.extend(WORKER_DELEGATION.iter().copied());
@@ -283,12 +299,7 @@ pub(super) fn legacy_visible<'a>(
     match policy.access_mode {
         AccessMode::ReadOnly => {}
         AccessMode::AskAlways | AccessMode::AskExceptReads | AccessMode::Auto => {
-            names.extend([
-                "run_command",
-                "read_tool_output_artifact",
-                "write_file",
-                "edit_file",
-            ]);
+            names.extend(WRITE_TOOLS);
             names.extend(
                 policy
                     .required_tools
@@ -298,12 +309,7 @@ pub(super) fn legacy_visible<'a>(
             );
         }
         AccessMode::FullAccess => {
-            names.extend([
-                "run_command",
-                "read_tool_output_artifact",
-                "write_file",
-                "edit_file",
-            ]);
+            names.extend(WRITE_TOOLS);
             names.extend(policy.required_tools.iter().map(String::as_str));
             if policy.has_project_id() {
                 names.insert("bind_session_git_worktree");

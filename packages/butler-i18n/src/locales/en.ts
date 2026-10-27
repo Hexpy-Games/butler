@@ -1,3 +1,4 @@
+import { workFailureLine } from "../work-failure.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -638,6 +639,12 @@ export const enUsCopy: AppCopy = {
       networkCommand: workspace => `Run a command that uses the internet ${inWorkspace(workspace)}?`,
       useConnector: (tool, server) => tool && server ? `Use ${tool} from ${server}?` : tool ? `Use ${tool}?` : "Use a connected tool?",
       manageSchedule: { create: "Create a schedule?", delete: "Delete a schedule?", run: "Run due schedules?", change: "Change a schedule?" },
+      createCanon: { epic: "Create this epic?", plan: "Create this plan?" },
+      canonPlan: plan => `Plan: ${plan}`,
+      canonTitle: title => `Title: ${title}`,
+      canonProject: project => `Project: ${project}`,
+      canonDescription: description => `Description: ${description}`,
+      canonDue: date => `Due: ${date}`,
       updateProject: "Update the project records?",
       startConversation: "Start a new conversation?",
       restartService: "Restart Butler?",
@@ -941,6 +948,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   conversation: {
     initiated: {
+      workFailed: (state, reasonCode) => workFailureLine("en-US", state, reasonCode),
+      viewWork: "View work", needsApproval: "Needs your OK",
       noThanks: "No thanks", soundsGood: "Sounds good",
       created: action => `Created · ${action}`, skipped: action => `Skipped · ${action}`,
       continuing: action => `Continuing · ${action}`, paused: action => `Paused · ${action}`, alreadyHandled: "This suggestion was already handled", failed: "Couldn't complete that. Please try again.",

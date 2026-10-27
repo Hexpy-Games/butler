@@ -1,5 +1,6 @@
 //! Durable subsession state on the existing BTCC SQLite owner.
 
+mod access;
 mod activity;
 mod assets;
 mod completion;
@@ -26,7 +27,7 @@ pub use records::*;
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
-use self::decode::{direction_row, list, read, required_packet_string};
+use self::decode::{direction_row, list, read};
 use super::{BtccStorage, StorageError};
 use crate::btcc::StorageCode;
 

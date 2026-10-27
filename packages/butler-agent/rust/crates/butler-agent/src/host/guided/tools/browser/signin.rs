@@ -116,7 +116,17 @@ pub(super) async fn schedule_refusal(
             .and_then(|run| run.browser)
             .is_some_and(|browser| !browser.signin)
     {
-        super::super::turn_guard::schedule_browser_feedback(owner, "schedule_signin_off").await
+        super::super::turn_guard::schedule_browser_feedback(
+            owner,
+            call,
+            args,
+            args["tab"]
+                .as_str()
+                .or_else(|| args["url"].as_str())
+                .unwrap_or(""),
+            "schedule_signin_off",
+        )
+        .await
     } else {
         None
     }
