@@ -103,3 +103,21 @@ async fn hand_over(
         }
     }
 }
+
+/// A scheduled sign-in step requires its run's switch, even on a granted site.
+pub(super) async fn schedule_refusal(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    args: &Value,
+) -> Option<Value> {
+    if (call.name == "browser_sign_in" || call.name == "browser_open" && args["signed_in"] == true)
+        && owner
+            .schedule_run()
+            .and_then(|run| run.browser)
+            .is_some_and(|browser| !browser.signin)
+    {
+        super::super::turn_guard::schedule_browser_feedback(owner, "schedule_signin_off").await
+    } else {
+        None
+    }
+}

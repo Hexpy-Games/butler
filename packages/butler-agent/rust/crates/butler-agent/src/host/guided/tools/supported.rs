@@ -5,7 +5,8 @@ use butler_core::tool_protocol::ToolName;
 
 impl GuidedTools {
     pub(crate) fn supports(name: &str) -> bool {
-        builtin(name)
+        connector(name)
+            || builtin(name)
             || documents::supports(name)
             || browser::supports(name)
             || image_gen::supports(name)
@@ -89,6 +90,19 @@ fn builtin(name: &str) -> bool {
                 | ToolName::BrowserHistorySearch
                 | ToolName::LibrarySearch
                 | ToolName::LibraryOrganize
+        )
+    )
+}
+
+fn connector(name: &str) -> bool {
+    matches!(
+        ToolName::parse(name),
+        Some(
+            ToolName::ConnectorFetch
+                | ToolName::ConnectorRuleList
+                | ToolName::ConnectorRuleRemove
+                | ToolName::ConnectorRuleSet
+                | ToolName::ConnectorTriage
         )
     )
 }

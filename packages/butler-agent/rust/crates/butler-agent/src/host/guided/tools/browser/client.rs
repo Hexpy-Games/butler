@@ -45,7 +45,7 @@ impl Client {
             .clone();
         Some(Self {
             approval_handoff: false,
-            schedule_browser: owner.schedule_run().map(|run| run.browser),
+            schedule_browser: owner.schedule_run().and_then(|run| run.browser),
             client,
             turn: owner.binding.turn_id.clone(),
             base: endpoint.base_url,

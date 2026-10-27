@@ -6,12 +6,18 @@
 //! JSON-RPC). `E2E_MCP_REQUIRE_SECRET=<name>`: `initialize` fails unless
 //! that env var is set (proves a stored secret still reaches the server).
 
+#[path = "../connector_fixture.rs"]
+mod connector_fixture;
 use std::io::{BufRead, Write};
 
 use serde_json::{Value, json};
 
 fn main() {
     prepare_process();
+    if std::env::var("E2E_MCP_MODE").as_deref() == Ok("events") {
+        connector_fixture::run();
+        return;
+    }
     let mode = std::env::var("E2E_MCP_MODE").unwrap_or_default();
     let nonce = std::env::var("E2E_MCP_NONCE").unwrap_or_default();
     let required = std::env::var("E2E_MCP_REQUIRE_SECRET").unwrap_or_default();

@@ -12,6 +12,7 @@ pub(super) mod images;
 mod live;
 pub(super) use live::page as live_page;
 mod look;
+mod navigation;
 mod observe_after;
 mod open;
 mod pay;
@@ -88,11 +89,8 @@ async fn execute_client(
     client: client::Client,
     mut args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if (call.name == "browser_sign_in" || call.name == "browser_open" && args["signed_in"] == true)
-        && owner.schedule_run().is_some_and(|run| !run.browser.signin)
-        && let Some(refused) =
-            super::turn_guard::schedule_browser_feedback(owner, "schedule_signin_off").await
-    {
+    owner.refresh_instruction_context().await?;
+    if let Some(refused) = signin::schedule_refusal(owner, call, &args).await {
         return encoded(&refused);
     }
     if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
@@ -109,6 +107,10 @@ async fn execute_client(
     }
     if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
         return pay::execute(owner, invocation, call, occurrence, client, args).await;
+    }
+    if call.name == "browser_open" && owner.taint() == butler_turn::btcc::TurnTaint::ConnectorEvent
+    {
+        return navigation::execute(owner, invocation, call, occurrence, client, args).await;
     }
     if call.name == "browser_open" && args.get("results").is_some() {
         return open::execute(owner, invocation, call, occurrence, client).await;
@@ -317,7 +319,7 @@ fn approval_input(
         "signed_out"
     };
     let commit = authority::commits(args, prepared);
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always,"merchant_site":if payment { prepared["merchant_site"].clone() } else { Value::Null },"commit":commit,"allow_site":if allow_site { Some("payment") } else { None }})
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"url":prepared["url"],"site":scope,"mode":mode,"always_confirm":always,"merchant_site":if payment { prepared["merchant_site"].clone() } else { Value::Null },"commit":commit,"allow_site":if allow_site { Some("payment") } else { None }})
 }
 /// The act's authority target: the page's site under its tab profile.
 fn act_scope(prepared: &Value) -> String {
@@ -373,7 +375,8 @@ async fn dispatch_effect(
     }
     dispatch_args["commit_cleared"] = json!(authority::commit_cleared(
         &owner.binding.access_mode,
-        &input
+        &input,
+        owner.taint()
     ));
     let outcome = owner
         .effects

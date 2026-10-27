@@ -11,6 +11,11 @@ pub(super) const DISCOVERY: &[&str] = &[
     "list_files",
 ];
 pub(super) const NON_FULL: &[&str] = &[
+    "connector_fetch",
+    "connector_rule_list",
+    "connector_rule_remove",
+    "connector_rule_set",
+    "connector_triage",
     "deliver_files",
     "answer_blocks",
     "output_check",

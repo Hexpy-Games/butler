@@ -202,7 +202,7 @@ async fn schedule_payment_refusal(
     {
         return None;
     }
-    if !run.browser.payment {
+    if !run.browser?.payment {
         return super::super::turn_guard::schedule_browser_feedback(owner, "schedule_payment_off")
             .await;
     }

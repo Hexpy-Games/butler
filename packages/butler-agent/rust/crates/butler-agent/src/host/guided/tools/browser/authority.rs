@@ -1,8 +1,9 @@
 //! Durable ask-first and hand-back waits use the existing #162 continuation lane.
 use super::super::GuidedTools;
 use butler_turn::btcc::{
-    AccessMode, AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityExecutionInput,
-    ModelRoundToolCall, RequestDecision, ToolExecutionError,
+    AccessDecision, AccessMode, AuthorityAdmissionInput, AuthorityAdmissionResult,
+    AuthorityExecutionInput, CapabilityKind, ModelRoundToolCall, RequestDecision,
+    ToolExecutionError, TurnTaint,
 };
 use serde_json::{Value, json};
 pub(super) enum Gate {
@@ -22,32 +23,7 @@ pub(super) async fn gate(
         ));
     }
     if let Some(reference) = resume_reference(owner, occurrence) {
-        let stored = owner
-            .authority
-            .execution(AuthorityExecutionInput {
-                owner_session_id: owner.binding.owner_session_id.clone(),
-                request_ref: reference.to_owned(),
-                source_session_id: Some(owner.binding.source_session_id.clone()),
-                client_message_id: None,
-                turn_id: owner.binding.turn_id.clone(),
-            })
-            .await
-            .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
-        let belongs = stored.decision == RequestDecision::Allowed
-            && stored.capability == call.name
-            && stored.source_call_id.as_deref() == Some(occurrence);
-        if !belongs || stored.normalized_input != *input || stored.normalized_target != target {
-            if belongs {
-                super::settle(owner, Some(reference.to_owned()), "unknown").await?;
-            }
-            return Ok(Gate::Pending(
-                json!({"ok":false,"status":"unknown","observe_required":true,"error":"authority_request_identity_mismatch"}),
-            ));
-        }
-        return Ok(Gate::Allowed(
-            Some(reference.to_owned()),
-            Some(stored.allow_scope),
-        ));
+        return resumed_gate(owner, call, occurrence, input, target, reference).await;
     }
     let admitted = owner
         .authority
@@ -67,8 +43,12 @@ pub(super) async fn gate(
             model_ref: owner.binding.model_ref.clone(),
             reasoning_effort: owner.binding.reasoning_effort.clone(),
             category: Some("reviewed_effect".into()),
-            public_action_title: Some(call.name.clone()),
-            honor_standing_permission: true,
+            public_action_title: Some(if owner.taint() == TurnTaint::ConnectorEvent {
+                "authority.taintReason".into()
+            } else {
+                call.name.clone()
+            }),
+            honor_standing_permission: owner.taint() != TurnTaint::ConnectorEvent,
             unattended: owner.unattended(),
         })
         .await
@@ -85,6 +65,43 @@ pub(super) async fn gate(
         ),
         _ => Gate::Pending(json!({"ok":false,"error":"authority_request_denied"})),
     })
+}
+
+/// Resume only the exact action and grant scope the owner approved.
+async fn resumed_gate(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    input: &Value,
+    target: &str,
+    reference: &str,
+) -> Result<Gate, ToolExecutionError> {
+    let stored = owner
+        .authority
+        .execution(AuthorityExecutionInput {
+            owner_session_id: owner.binding.owner_session_id.clone(),
+            request_ref: reference.to_owned(),
+            source_session_id: Some(owner.binding.source_session_id.clone()),
+            client_message_id: None,
+            turn_id: owner.binding.turn_id.clone(),
+        })
+        .await
+        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+    let belongs = stored.decision == RequestDecision::Allowed
+        && stored.capability == call.name
+        && stored.source_call_id.as_deref() == Some(occurrence);
+    if !belongs || stored.normalized_input != *input || stored.normalized_target != target {
+        if belongs {
+            super::settle(owner, Some(reference.to_owned()), "unknown").await?;
+        }
+        return Ok(Gate::Pending(
+            json!({"ok":false,"status":"unknown","observe_required":true,"error":"authority_request_identity_mismatch"}),
+        ));
+    }
+    Ok(Gate::Allowed(
+        Some(reference.to_owned()),
+        Some(stored.allow_scope),
+    ))
 }
 
 /// One durable slot per distinct decision inside a call: a dialog, a site
@@ -142,10 +159,41 @@ pub(super) async fn act_gate(
     input: &Value,
     target: &str,
 ) -> Result<Gate, ToolExecutionError> {
-    if reviews(&owner.binding.access_mode, input) || resume_reference(owner, occurrence).is_some() {
+    let decision = super::super::access::for_kind(owner, outward_kind(input));
+    if owner.taint() == TurnTaint::ConnectorEvent && matches!(decision, AccessDecision::Deny(_)) {
+        return Ok(Gate::Pending(
+            json!({"status":"not_dispatched","reason":"read_only"}),
+        ));
+    }
+    let tainted_review =
+        owner.taint() == TurnTaint::ConnectorEvent && matches!(decision, AccessDecision::Ask(_));
+    if tainted_review
+        || reviews(&owner.binding.access_mode, input)
+        || resume_reference(owner, occurrence).is_some()
+    {
         gate(owner, call, occurrence, input, target).await
     } else {
         Ok(Gate::Allowed(None, None))
+    }
+}
+
+/// Committing sends data; navigating carries data in the destination URL.
+fn outward_kind(input: &Value) -> CapabilityKind {
+    if input["commit"] == true {
+        CapabilityKind::Network
+    } else if input["navigation"] == true
+        || input["resolved_steps"].as_array().is_some_and(|steps| {
+            steps.iter().any(|s| {
+                s["hit"]["role"] == "link"
+                    || matches!(s["action"].as_str(), Some("back" | "forward" | "reload"))
+            })
+        })
+    {
+        CapabilityKind::WebRequest { carries_data: true }
+    } else {
+        // A page can send through script-backed input without a POST form or
+        // a model-declared commit. Unknown browser effects need fresh consent.
+        CapabilityKind::OtherEffect
     }
 }
 
@@ -164,8 +212,10 @@ pub(super) fn reviews(mode: &AccessMode, input: &Value) -> bool {
 
 /// Whether a focus-dependent step may still land on a signed-in commit: only
 /// when ask-first or Auto did not review this batch as one.
-pub(super) fn commit_cleared(mode: &AccessMode, input: &Value) -> bool {
-    input["commit"] == true || !matches!(mode, AccessMode::AskExceptReads | AccessMode::Auto)
+pub(super) fn commit_cleared(mode: &AccessMode, input: &Value, taint: TurnTaint) -> bool {
+    input["commit"] == true
+        || taint != TurnTaint::ConnectorEvent
+            && !matches!(mode, AccessMode::AskExceptReads | AccessMode::Auto)
 }
 
 /// A batch commits when the model declares a step as committing, or when a

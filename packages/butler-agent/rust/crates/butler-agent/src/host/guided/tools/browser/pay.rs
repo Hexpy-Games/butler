@@ -35,7 +35,10 @@ pub(super) async fn execute(
         return super::signin::execute(owner, invocation, call, occurrence, client, args).await;
     }
     if call.name == "browser_pay_fill"
-        && owner.schedule_run().is_some_and(|run| !run.browser.payment)
+        && owner
+            .schedule_run()
+            .and_then(|run| run.browser)
+            .is_some_and(|browser| !browser.payment)
         && let Some(refused) =
             super::super::turn_guard::schedule_browser_feedback(owner, "schedule_payment_off").await
     {

@@ -12,6 +12,10 @@ async fn pg10_each_growth_requires_review_removals_narrow_and_rollback_refuses()
         "secret",
         "hook",
         "hook_script",
+        "connector",
+        "connector_server",
+        "connector_action",
+        "connector_organize",
     ] {
         growth(kind).await?;
     }
@@ -19,11 +23,25 @@ async fn pg10_each_growth_requires_review_removals_narrow_and_rollback_refuses()
 }
 async fn growth(kind: &str) -> Result<(), HarnessError> {
     let setup = git_setup(&format!("PG10-{kind}"))?;
+    butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
     let repo = Repo::new(&setup.sandbox.home, "helper", true)?;
     edit(&repo.work.join("plugin.json"), |v| {
         v["extensions"]["io.github.hexpy-games.butler"]["capabilities"] =
             json!({"files":[{"path":"/workspace/notes","access":"read"}]});
     });
+    if kind.starts_with("connector_") {
+        edit(&repo.work.join("plugin.json"), |v| {
+            v["extensions"]["io.github.hexpy-games.butler"]["connectors"] = json!([{
+                "id":"items","label":"Items","events":{"server":"notes"},"context":{"tool":"notes/e2e_echo"},
+                "actions":if kind=="connector_organize"{json!([{"tool":"notes/e2e_echo"}])}else{json!([])}
+            }]);
+        });
+        if kind == "connector_server" {
+            edit(&repo.work.join("mcp.json"), |v| {
+                v["mcpServers"]["other"] = v["mcpServers"]["notes"].clone();
+            });
+        }
+    }
     repo.publish();
     let baseline = ["plugin.json", "mcp.json", "hooks.json"]
         .map(|p| (p, fs::read(repo.work.join(p)).unwrap()));
@@ -35,7 +53,13 @@ async fn growth(kind: &str) -> Result<(), HarnessError> {
     repo.publish();
     let review = check(&s, true).await?;
     assert_eq!(review["status"], "needs_review", "{kind}: {review}");
-    let expected_kind = if kind == "hook_script" { "hook" } else { kind };
+    let expected_kind = if kind == "hook_script" {
+        "hook"
+    } else if kind.starts_with("connector") {
+        "connector"
+    } else {
+        kind
+    };
     let pending = &review["pending"];
     assert!(
         pending["uncovered"]
@@ -74,6 +98,12 @@ async fn growth(kind: &str) -> Result<(), HarnessError> {
         // Removing a hook, including its script, must remain a silent removal.
         edit(&repo.work.join("hooks.json"), |v| v["hooks"] = json!([]));
     }
+    if kind == "connector_server" {
+        // Switching an event source back is still growth; removing the connector narrows consent.
+        edit(&repo.work.join("plugin.json"), |v| {
+            v["extensions"]["io.github.hexpy-games.butler"]["connectors"] = json!([]);
+        });
+    }
     repo.version("3.0.0");
     repo.publish();
     let removed = check(&s, true).await?;
@@ -104,6 +134,21 @@ async fn growth(kind: &str) -> Result<(), HarnessError> {
 }
 fn apply_growth(repo: &Repo, kind: &str) {
     match kind {
+        "connector_server" | "connector_action" | "connector_organize" => {
+            edit(&repo.work.join("plugin.json"), |v| {
+                let c = &mut v["extensions"]["io.github.hexpy-games.butler"]["connectors"][0];
+                match kind {
+                    "connector_server" => c["events"]["server"] = "other".into(),
+                    "connector_action" => c["actions"] = json!([{"tool":"notes/e2e_echo"}]),
+                    _ => c["actions"][0]["organize"] = true.into(),
+                }
+            });
+        }
+        "connector" => edit(&repo.work.join("plugin.json"), |v| {
+            v["extensions"]["io.github.hexpy-games.butler"]["connectors"] = json!([{
+                "id":"items","label":"Items","events":{"server":"notes"},"context":{"tool":"notes/e2e_echo"},"actions":[]
+            }]);
+        }),
         "executable" => {
             fs::copy(repo.work.join("server.exe"), repo.work.join("extra.exe")).unwrap();
             edit(&repo.work.join("mcp.json"), |v| {

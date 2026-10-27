@@ -91,7 +91,7 @@ fn request(
             .and_then(Value::as_str)
             .map(str::to_owned),
         access_mode: access_mode(owner),
-        schedule_run: owner.schedule_run(),
+        schedule_run: owner.inherited_run(),
     })
 }
 

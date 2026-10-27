@@ -89,6 +89,15 @@ async fn reply(
     Json(body): Json<Value>,
 ) -> impl axum::response::IntoResponse {
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    if crate::connectors::stub::find_spec(&body["input"]).is_some() {
+        let response = crate::connectors::stub::run(&body).unwrap();
+        let text = response
+            .chunks
+            .into_iter()
+            .map(|c| c.text)
+            .collect::<String>();
+        return ([("content-type", "text/event-stream")], text).into_response();
+    }
     let group = if key.user_request.contains("blue") {
         "blue"
     } else {

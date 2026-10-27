@@ -86,7 +86,10 @@ fn supersede(
         .ok_or_else(changed)?;
     if request.message.session_id != outcome.session_id
         || request.message.turn_id.as_deref() != Some(&state.turn_id)
-        || request.message.origin_kind != ConversationOriginKind::InternalControl
+        || !matches!(
+            request.message.origin_kind,
+            ConversationOriginKind::InternalControl | ConversationOriginKind::Connector
+        )
     {
         return Err(changed());
     }
@@ -96,7 +99,10 @@ fn supersede(
             .read_message(assistant_id)
             .map_err(CognitionError::from)?;
         if assistant.is_some_and(|message| {
-            message.message.origin_kind == ConversationOriginKind::InternalControl
+            matches!(
+                message.message.origin_kind,
+                ConversationOriginKind::InternalControl | ConversationOriginKind::Connector
+            )
         }) {
             internal_ids.push(assistant_id.to_owned());
         }

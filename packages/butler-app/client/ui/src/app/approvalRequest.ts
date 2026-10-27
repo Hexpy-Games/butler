@@ -152,9 +152,9 @@ export function approvalRequestView(
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
-      ...(schedule ? [schedule.title, ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)] : !schedule.accessMode && typeof schedule.browserSignin !== "boolean" && typeof schedule.browserPayment !== "boolean" ? [copy.scheduleUnavailable] : []), ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : []), ...(typeof schedule.browserSignin === "boolean" ? [copy.scheduleSignin(schedule.browserSignin)] : []), ...(typeof schedule.browserPayment === "boolean" ? [copy.schedulePayment(schedule.browserPayment)] : [])].filter(Boolean)
+      ...(schedule ? [schedule.title, ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)] : !schedule.accessMode && typeof schedule.browserSignin !== "boolean" && typeof schedule.browserPayment !== "boolean" ? [copy.scheduleUnavailable] : []), ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : []), ...(typeof schedule.browserSignin === "boolean" ? [copy.scheduleSignin(schedule.browserSignin)] : []), ...(typeof schedule.browserPayment === "boolean" ? [copy.schedulePayment(schedule.browserPayment)] : []), ...approval.examples].filter(Boolean)
         : actionKind === "manage_schedule" ? [copy.scheduleUnavailable]
-          : operation ? operationDetails(operation, copy) : details(approval, actionKind, card, copy))],
+          : operation ? [...new Set([...operationDetails(operation, copy), ...approval.examples])] : details(approval, actionKind, card, copy))],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
