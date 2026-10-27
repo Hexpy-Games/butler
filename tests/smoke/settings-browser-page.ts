@@ -50,7 +50,7 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
     await open("browser", copy.settings.sections.browser);
     await section(page, "sign-ins").locator('[data-test-class="sign-in-row"]').waitFor();
     await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
-    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), [...(!before ? ["browsing-agent"] : []), "browser-history", "browser-site-data", "sign-ins", "browser-import", "payment-methods", "profiles", "purchase-sites"]);
+    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), [...(!before ? ["browsing-agent"] : []), "browser-history", "browser-site-data", "sign-ins", "payment-methods", "profiles", "purchase-sites", "browser-import"]);
     if (!before) {
       const settings = await server.api<{ browser: { auto: { model: string; available: boolean } } }>("/settings");
       const catalog = await server.api<{ models: { model_ref: string; display_name: string }[]; registered_models: { model_ref: string; display_name: string }[] }>("/model-catalog");
