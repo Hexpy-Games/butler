@@ -12,7 +12,6 @@ pub(super) fn label(
     for change in changes {
         let title = change["title"].as_str().unwrap_or_default();
         let label = match change["op"].as_str().unwrap_or_default() {
-            "project.create" => continue, // The required epic.create names both operations.
             "epic.create" => registration(document, plan, ko),
             "epic.move" => {
                 let destination = change["destination_plan_title"].as_str().unwrap_or(if ko {
@@ -61,6 +60,7 @@ pub(super) fn label(
                     "Edit spec".into()
                 }
             }
+            // The required epic.create also labels project.create.
             _ => continue,
         };
         if !labels.contains(&label) {
