@@ -77,13 +77,17 @@ showcase story, README and tests) or record the gap against
 and run `bun run lint:ds:baseline` to shrink the baseline. See
 `packages/butler-app/scripts/lint/README.md` for the rule details.
 
-## Label First, Control At The Line End
+## Switch Fields
 
-A switch or checkbox and its label on one line: the label comes first and the
-control sits at the line end (`SettingsField`, a horizontal `Field`, or
-`Label` + control in a `Stack align="row" justify="between"`). In a wrapping
-toolbar the control follows its label directly. Never put the control before
-its label. Row actions in a `CardListItem` center on the title's line.
+A switch field stacks like an input by default: label, description, then the
+switch underneath, left-aligned (`SettingsField`, or a vertical `Field`). The
+row layout (label and switch on one row, the switch at the row end, the
+description under the label) is `Field orientation="horizontal"`, allowed
+only on a phone layout or for a list item inside a closed container (a card,
+a list row). Never put a switch before its label. `lint:ds`
+(`switch-field-layout`) flags a `Switch` beside a label in a `Stack` or
+`Inline` row. Switch's README ("Placement", "Usage") holds the full rule.
+Row actions in a `CardListItem` center on the title's line.
 
 ## Responsive Contract
 

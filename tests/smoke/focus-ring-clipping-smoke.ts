@@ -324,6 +324,32 @@ async function auditCell(page: Page, cell: Cell) {
   const aside = '[data-ds-story="Aside floating"] [data-slot="conversation-aside"]';
   await page.locator(`${aside} [data-slot="clickable"]`).first().waitFor();
   await auditScope(page, cell, "conversation-aside-floating", aside, 20);
+  await auditCardListControls(page, cell);
+}
+
+/** Settings › 브라우저: controls inside a CardList description (the sign-in switch, the payment site field), keyboard-focused. */
+async function auditCardListControls(page: Page, cell: Cell) {
+  await open(page, cell);
+  await openSidebar(page);
+  await page.getByRole("button", { name: copy.sidebar.settings }).first().click();
+  await page.getByRole("button", { name: copy.settings.sections.browser, exact: true }).first().click();
+  for (const [screen, selector] of [
+    ["settings-sign-in-switch", '[data-test-class="sign-in-row"] [role="switch"]'],
+    ["settings-payment-site-field", '[data-test-class="vault-card-row"] input'],
+  ] as const) {
+    const control = page.locator(selector).first();
+    await control.waitFor();
+    // Programmatic focus is not :focus-visible; step out and back in with the keyboard.
+    await control.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(100);
+    assert(await control.evaluate((node) => node === document.activeElement), `${screen}: keyboard focus reached the control`);
+    const probe = await probeFocusRing(page);
+    assert(probe, `${screen}: focus indicator`);
+    record(cell, screen, { stops: 1, clipped: probe.clips });
+    if (probe.clips.length) await capture(page, `${screen}-${cell.width}-${cell.theme}-${cell.background}`);
+  }
 }
 
 /** Settings › Usage with a delegating chat selected (linked split rows, the chart), then the context popover. */
@@ -377,6 +403,12 @@ try {
       root_name: "Workspace", path: url.searchParams.get("path") ?? "",
       folders: Array.from({ length: 40 }, (_, index) => ({ name: `Folder ${index + 1}` })), next_after: null,
     } } });
+    if (url.pathname === "/security/signins") return route.fulfill({ json: { ok: true, data: { available: true, sites: [{ site: "example.test",
+      entry: { id: "12345678-1234-1234-1234-123456789012", username: "reader@example.test", policy: "ask", last_used_at: null },
+      conversations: 0, all_conversations: false, uses: [] }] } } });
+    if (url.pathname === "/security/vault") return route.fulfill({ json: { ok: true, data: { available: true, reveal_available: true, purchase_sites: [],
+      cards: [{ id: "card-1", nickname: "Test card", brand: "visa", last4: "4242", exp_month: 12, exp_year: 2030, holder_name: "Test Holder",
+        extras: [], sites: [], uses: [], last_used_at: null }], profiles: [] } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     if (url.pathname === "/usage-history") return route.fulfill({ json: { ok: true, data: historyFixture() } });

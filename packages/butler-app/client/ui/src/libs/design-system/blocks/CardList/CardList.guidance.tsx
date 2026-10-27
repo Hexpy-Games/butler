@@ -32,7 +32,8 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: [
     "Titles are identifiers as configured; descriptions say what the item does.",
-    "Row actions (a switch, a menu, buttons) sit at the line end and center on the title's line.",
+    "Row actions (a menu, buttons, the row's own toggle) sit at the line end and center on the title's line.",
+    "A labelled switch inside an item's description uses the row switch field (Field orientation=\"horizontal\").",
   ],
   accessibility: ["Items are list items; selected items expose it; actions are labelled buttons."],
   tokens: ["--line", "--radius-panel", "--selection", "--space-sm"],

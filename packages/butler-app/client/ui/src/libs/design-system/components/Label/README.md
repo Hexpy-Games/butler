@@ -30,11 +30,13 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.
 - Keep domain data, app state, and business decisions outside this component.
 
-## Label first, control at the line end
-On one line the label comes first and the control (a `Switch`, a checkbox)
-sits at the line end: `<Stack align="row" cross="center" justify="between">`
-with the `Label` before the control. In a wrapping toolbar the control follows
-its label directly. Never put a switch or checkbox before its label.
+## Label and switch
+A switch field stacks like an input: the label, its description, then the
+switch underneath, left-aligned (a vertical `Field`, or `SettingsField` in
+settings). The row layout (label and switch on one row, the switch at the
+row end) is `Field orientation="horizontal"`, only on a phone or for a list
+item inside a card or list row. Never put a switch before its label. See
+Switch, "Placement".
 
 ## Wrong use cases
 - Do not use Label as a domain-specific component with embedded feature logic; create a domain component under `src/components` and compose this component instead.

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { appCopy, getAppLocale } from "@/app/copy.ts";
 import {
-  Button, ButtonContainer, CardListItem, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  Button, ButtonContainer, CardListItem, DropdownMenu, Field, FieldContent, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   Globe2, IconButton, Input, MoreHorizontal, Plus, SegmentedControl, SettingsSection, Stack, Switch, Tag, Tooltip, Typo,
 } from "@/butler-ds";
 import { canSignOut, type SignInPolicy, type SignInSiteRow } from "./signInsApi";
@@ -69,11 +69,11 @@ function SignInRow({ row, busy, actions }: { row: SignInSiteRow; busy: boolean; 
                 onValueChange={(value) => void actions.policy(row.entry!.id, value as SignInPolicy)} />
             </Stack>
           )}
-          <Stack as="span" align="row" cross="center" justify="between" gap="sm">
-            <Typo.Caption tone="secondary">{copy.allConversations}</Typo.Caption>
+          <Field orientation="horizontal">
+            <FieldContent><Typo.Caption tone="secondary">{copy.allConversations}</Typo.Caption></FieldContent>
             <Switch aria-label={copy.allConversations} checked={row.all_conversations} disabled={busy}
               onCheckedChange={(value) => void actions.allConversations(row.site, value)} />
-          </Stack>
+          </Field>
         </Stack>
       )}
       actions={(

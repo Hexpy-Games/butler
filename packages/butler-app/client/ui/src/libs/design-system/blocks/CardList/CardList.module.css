@@ -88,9 +88,12 @@
   white-space: nowrap;
 }
 
+/* One line with an ellipsis; controls placed in a description (a switch, a
+   site field) keep --focus-ring-room past the clip, so their rings are whole. */
 .description {
   min-width: 0;
-  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
   color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;

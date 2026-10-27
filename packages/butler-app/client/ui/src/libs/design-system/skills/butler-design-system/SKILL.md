@@ -80,9 +80,11 @@ lints below enforce most of this; the rest is review.
 - Consecutive buttons must be wrapped in `ButtonContainer`. Pass the intended
   button `size` to the container and use the same size on every button inside it
   so inter-button spacing is consistent across the app.
-- A switch or checkbox and its label on one line: the label comes first and
-  the control sits at the line end (`SettingsField`, horizontal `Field`, or
-  `Label` + control in a `justify="between"` row). Never control-first.
+- A switch field stacks like an input: label, description, then the switch
+  underneath (`SettingsField`, vertical `Field`). The row layout
+  (`Field orientation="horizontal"`: switch at the row end) is only for a phone
+  or a list item inside a card or list row. Never switch-first. See Switch
+  "Placement" and "Usage".
 
 ## Decision Loop
 

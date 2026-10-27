@@ -192,3 +192,30 @@ describe("butler-ds/settings-field-grouping", () => {
     ],
   });
 });
+
+describe("butler-ds/switch-field-layout", () => {
+  const ds = 'import { Field, FieldContent, FieldLabel, Inline, Label, Stack, Switch, Typo } from "@/butler-ds";';
+  tester.run("switch-field-layout", rules["switch-field-layout"], {
+    valid: [
+      `${ds} const a = <Field><FieldLabel htmlFor="s">Live</FieldLabel><Switch id="s" /></Field>;`,
+      `${ds} const a = <Field orientation="horizontal"><FieldContent><FieldLabel htmlFor="s">Live</FieldLabel></FieldContent><Switch id="s" /></Field>;`,
+      `${ds} const a = <Stack gap="xs"><Label htmlFor="s">Live</Label><Switch id="s" /></Stack>;`,
+      `${ds} const a = <Stack align="row"><Switch aria-label="On" /><Switch aria-label="Off" /></Stack>;`,
+      'import { Stack, Typo } from "@/butler-ds"; import { Switch } from "./Switch"; const a = <Stack align="row"><Typo.Label>Live</Typo.Label><Switch /></Stack>;',
+    ],
+    invalid: [
+      {
+        code: `${ds} const a = <Stack align="row" cross="center"><Switch aria-label="Live" /><Typo.Caption>Live</Typo.Caption></Stack>;`,
+        errors: [{ messageId: "rowSwitchField", data: { wrapper: "Stack" } }],
+      },
+      {
+        code: `${ds} const a = <Stack align="row" justify="between"><Typo.Label>Live</Typo.Label><Switch aria-label="Live" /></Stack>;`,
+        errors: [{ messageId: "rowSwitchField", data: { wrapper: "Stack" } }],
+      },
+      {
+        code: `${ds} const a = <Inline gap="xs"><Label htmlFor="s">Live</Label><Switch id="s" /></Inline>;`,
+        errors: [{ messageId: "rowSwitchField", data: { wrapper: "Inline" } }],
+      },
+    ],
+  });
+});
