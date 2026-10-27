@@ -22,7 +22,8 @@ function capturesSettled(tab, match = () => true) {
 }
 
 /**
- * Puts the tab's view in `win`; `place` sizes it there and `resync` lays the tab out again later.
+ * Puts the tab's view in `win`, beneath the child at `below` when that is a child index (or on top);
+ * `place` sizes it there and `resync` lays the tab out again later.
  * A capture of a page that was hidden out of a window when it started, and still is, finishes
  * without a window; adding the view while it runs strands it. So the view waits for those (the
  * still stands in meanwhile). Any other capture in flight (the page was or now is visible, as while
@@ -30,7 +31,7 @@ function capturesSettled(tab, match = () => true) {
  * good: the view is attached at once and keeps its last bounds until those captures settle.
  * Returns false while the attach waits.
  */
-export function attachView(tab, win, place, resync) {
+export function attachView(tab, win, below, place, resync) {
   if (tab.attached === win) {
     if (!tab.placeHold) place();
     return true;
@@ -41,7 +42,8 @@ export function attachView(tab, win, place, resync) {
     tab.attachWait ??= hidden.then(() => { tab.attachWait = null; resync(); });
     return false;
   }
-  win.contentView.addChildView(tab.view); tab.attached = win;
+  if (below >= 0) win.contentView.addChildView(tab.view, below); else win.contentView.addChildView(tab.view);
+  tab.attached = win;
   const { width, height } = tab.view.getBounds();
   // A view that was never placed shows nothing until it is; it takes its place at once.
   const settled = width && height ? capturesSettled(tab) : null;
