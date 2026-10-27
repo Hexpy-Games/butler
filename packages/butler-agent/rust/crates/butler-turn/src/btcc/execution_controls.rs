@@ -43,14 +43,25 @@ pub struct SubsessionResultContext {
 /// scheduler, not "run now") never wait for an approval (D8).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScheduleRunContext {
+    #[serde(default)]
     pub automation_id: String,
+    #[serde(default)]
     pub run_id: String,
     pub unattended: bool,
+    #[serde(default)]
+    pub browser: Option<ScheduleBrowserOptions>,
     /// Untrusted event origin inherited by delegated turns.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub connector_event: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduled_at: Option<String>,
+}
+
+/// Per-run browser permissions. Existing site grants still decide where.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScheduleBrowserOptions {
+    pub signin: bool,
+    pub payment: bool,
 }
 
 /// Execution controls after schema and hash verification.
