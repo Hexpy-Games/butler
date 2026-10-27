@@ -14,19 +14,23 @@ type SmokeWindow = Window & {
   desktopBridgeSmoke: { calls: Array<{ method: string; input: unknown }>; errors: string[] };
 };
 
+type AnswerMessage = { role: string; status: string; answer_blocks?: Array<{
+  spec: { blocks: Array<{ type: string; items?: Array<{ title: string; image_url?: string }> }> };
+}> };
+
 // Observe real preload calls and retain transient error toasts for the whole flow.
 async function observeBridge(page: Page) {
   await page.evaluate((usageFailed) => {
     const target = window as unknown as SmokeWindow;
     const bridge = target.butlerApp;
-    if (typeof bridge?.getUsageHistory !== "function" || typeof bridge.documents !== "function") {
-      throw new Error("Real desktop preload must expose getUsageHistory and documents");
+    if (typeof bridge?.getUsageHistory !== "function" || typeof bridge.documents !== "function" || typeof bridge.saveLibrary !== "function") {
+      throw new Error("Real desktop preload must expose getUsageHistory, documents and saveLibrary");
     }
     const state: SmokeWindow["desktopBridgeSmoke"] = { calls: [], errors: [] };
     target.desktopBridgeSmoke = state;
     // The preload object is frozen. Wrap only for observation, forwarding unchanged.
     target.butlerApp = { ...bridge };
-    for (const method of ["getUsageHistory", "documents"]) {
+    for (const method of ["getUsageHistory", "documents", "saveLibrary"]) {
       const original = bridge[method] as (...args: unknown[]) => unknown;
       target.butlerApp[method] = (...args: unknown[]) => {
         state.calls.push({ method, input: args[0] });
@@ -127,10 +131,77 @@ async function editDocument(page: Page, server: NativeAppServerHandle, output: s
   console.log(`Document passed (${Math.round(performance.now() - started)} ms): library open/edit/blur-save, native revision ${doc.rev} → ${head.rev}, full text verified, no error toast`);
 }
 
+async function saveAnswerCard(page: Page, server: NativeAppServerHandle, output: string) {
+  const started = performance.now();
+  // Store a real picture before the stub's answer_blocks tool references it.
+  const data = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 100; canvas.height = 80;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#426c98"; context.fillRect(0, 0, 100, 80);
+    return canvas.toDataURL("image/jpeg").split(",")[1];
+  });
+  const image = await server.api<{ id: string }>("/internal/e2e/images/generated", {
+    method: "POST", body: JSON.stringify({ session: "general", data, model_ref: "local/stub" }),
+  });
+  answerImage = image.id;
+  await server.api("/messages", { method: "POST", body: JSON.stringify({
+    chat_id: "general", text: "그림 카드를 보여 주세요", client_message_id: crypto.randomUUID(),
+  }) });
+  await page.waitForFunction(async (title) => {
+    const response = await fetch("/messages?chat_id=general");
+    const body = await response.json() as { data: { messages: AnswerMessage[] } };
+    return body.data.messages.some(message => message.role === "assistant" && message.status === "delivered"
+      && message.answer_blocks?.some(set => set.spec.blocks.some(block => block.type === "cards"
+        && block.items?.some(item => item.title === title && item.image_url))));
+  }, answerTitle);
+  await page.locator('[data-tree-item="s:general"]').first().click();
+  const card = page.locator('[data-slot="item-card"]').filter({ has: page.getByText(answerTitle, { exact: true }) });
+  await card.waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-slot="item-card"] img')]
+    .some(image => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0));
+  await card.screenshot({ path: resolve(output, "answer-card-before-save-ko-light-1280.png") });
+  const savedResponse = page.waitForResponse(res => new URL(res.url()).pathname === "/library" && res.request().method() === "POST");
+  void savedResponse.catch(() => {});
+  await card.getByRole("button", { name: "서랍에 저장", exact: true }).click();
+  const response = await savedResponse;
+  const payload = response.request().postDataJSON() as { title: string; url: string; crop?: string };
+  assert.equal(payload.title, answerTitle);
+  assert.equal(payload.url, "");
+  assert(payload.crop?.startsWith("data:image/jpeg;base64,"), "Card sends its photo as a JPEG crop");
+  await page.waitForFunction(() => (window as unknown as SmokeWindow).desktopBridgeSmoke.errors.length > 0
+    || [...document.querySelectorAll("[data-sonner-toast]")].some(toast => toast.textContent?.includes("서랍에 저장했어요")));
+  await page.screenshot({ path: resolve(output, "answer-card-save-result-ko-light-1280.png") });
+  await assertNoErrors(page, `Answer card save (native HTTP ${response.status()})`);
+  assert(response.ok(), `Native card save returned ${response.status()}`);
+  await page.locator("[data-sonner-toast]").getByText("서랍에 저장했어요", { exact: true }).waitFor();
+  const calls = await page.evaluate(() => (window as unknown as SmokeWindow).desktopBridgeSmoke.calls);
+  assert(calls.some(call => call.method === "saveLibrary" && (call.input as { title: string }).title === answerTitle),
+    "Card save went through the real preload saveLibrary");
+  const saved = await server.api<{ items: Array<{ title: string; url: string; crop: string }> }>("/library?kind=scrap");
+  const item = saved.items.find(item => item.title === answerTitle);
+  assert(item); assert.equal(item.url, ""); assert(item.crop.startsWith("data:image/jpeg;base64,"));
+  await page.locator('[data-test-class="library-entry"]').click();
+  await page.locator('[data-library-kind="scrap"]').getByText(answerTitle, { exact: true }).waitFor();
+  await assertNoErrors(page, "Answer card in library");
+  await page.screenshot({ path: resolve(output, "saved-answer-card-ko-light-1280.png") });
+  console.log(`Answer card passed (${Math.round(performance.now() - started)} ms): real assistant card, preload saveLibrary, native HTTP ${response.status()}, empty source and JPEG retained, visible in scraps`);
+}
+
+const answerTitle = "출처 없는 그림 카드";
+let answerImage = "";
+let answerToolSent = false;
+
 const started = performance.now();
 const output = resolve(process.env.BUTLER_DESKTOP_BRIDGE_SHOTS ?? ".tmp/desktop-bridge");
 mkdirSync(output, { recursive: true });
 const server = await createNativeAppServer({
+  stubReply: () => "그림을 카드로 정리했습니다.",
+  stubToolCall: () => {
+    if (answerToolSent) return null;
+    answerToolSent = true;
+    return { name: "answer_blocks", arguments: { v: 2, blocks: [{ type: "cards", items: [{ title: answerTitle, img: answerImage }] }] } };
+  },
   uiRoot: resolve("packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: "ko" } },
 });
 console.log(`Native smoke data (removed on stop): ${server.butlerData}`);
@@ -150,7 +221,9 @@ try {
     await observeBridge(page);
     await usageHistory(page, server, output);
     await editDocument(page, server, output);
-    assert.equal(server.stubModelCalls.length, 0, "This smoke makes no model calls");
+    await saveAnswerCard(page, server, output);
+    // The native server only reaches the local stub; the seeded answer turn is its only model use.
+    assert(server.stubModelCalls.length > 0, "The answer turn ran on the local stub model");
     console.log(`Desktop bridge smoke passed (${Math.round(performance.now() - started)} ms); screenshots: ${output}`);
   } finally { await browser.close(); }
 } finally { await server.stop(); }
