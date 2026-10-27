@@ -7,6 +7,7 @@ mod decode;
 mod directions;
 mod files;
 mod handoff;
+mod instruction_context;
 mod parents;
 mod records;
 mod worker_admission;

@@ -12,6 +12,7 @@ pub(super) mod images;
 mod live;
 pub(super) use live::page as live_page;
 mod look;
+mod navigation;
 mod observe_after;
 mod open;
 mod pay;
@@ -88,6 +89,10 @@ async fn execute_client(
     client: client::Client,
     mut args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    owner.refresh_instruction_context().await?;
+    if let Some(refused) = signin::schedule_refusal(owner, call, &args).await {
+        return encoded(&refused);
+    }
     if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
         return preview::execute(owner, invocation, call, occurrence, client).await;
     }
@@ -102,6 +107,10 @@ async fn execute_client(
     }
     if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
         return pay::execute(owner, invocation, call, occurrence, client, args).await;
+    }
+    if call.name == "browser_open" && owner.taint() == butler_turn::btcc::TurnTaint::ConnectorEvent
+    {
+        return navigation::execute(owner, invocation, call, occurrence, client, args).await;
     }
     if call.name == "browser_open" && args.get("results").is_some() {
         return open::execute(owner, invocation, call, occurrence, client).await;
@@ -291,17 +300,10 @@ fn approval_input(
     // A purchase step asks every time unless the user lets this merchant site
     // skip the final card in Settings; uploads always ask.
     let purchase = !honor_purchase_permission || prepared["purchase_allowed"] != true;
-    let always = prepared["steps"].as_array().is_some_and(|steps| {
-        steps.iter().any(|s| {
-            s["upload"] == true
-                || purchase
-                    && (s["payment"] == true && s["submit"] == true
-                        || s["frame_payment"] == true
-                        || s["hit"]["frame"]
-                            .as_str()
-                            .is_some_and(butler_runtime::browser::payment_host))
-        })
-    });
+    let steps = prepared["steps"].as_array();
+    let upload = steps.is_some_and(|steps| steps.iter().any(|s| s["upload"] == true));
+    let payment = steps.is_some_and(|steps| steps.iter().any(authority::payment_step));
+    let always = upload || purchase && payment;
     if let Some(steps) = prepared["steps"].as_array_mut() {
         for step in steps {
             if let Some(map) = step.as_object_mut() {
@@ -310,13 +312,14 @@ fn approval_input(
             }
         }
     }
+    let allow_site = always && !upload;
     let mode = if prepared["profile"] == "signed_in" {
         "signed_in"
     } else {
         "signed_out"
     };
     let commit = authority::commits(args, prepared);
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always,"commit":commit})
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"url":prepared["url"],"site":scope,"mode":mode,"always_confirm":always,"merchant_site":if payment { prepared["merchant_site"].clone() } else { Value::Null },"commit":commit,"allow_site":if allow_site { Some("payment") } else { None }})
 }
 /// The act's authority target: the page's site under its tab profile.
 fn act_scope(prepared: &Value) -> String {
@@ -355,9 +358,25 @@ async fn dispatch_effect(
         .unwrap_or_else(|| super::effect::runtime_work::untracked(owner));
     let mut dispatch_args = args.clone();
     dispatch_args["prepared_steps"] = prepared["steps"].clone();
+    if prepared["purchase_allowed"] == true
+        && prepared["steps"]
+            .as_array()
+            .is_some_and(|s| s.iter().any(authority::payment_step))
+    {
+        let inspected = client
+            .call(
+                "pay.inspect",
+                &args["tab"],
+                &json!({"kind":"card"}),
+                invocation.cancellation,
+            )
+            .await;
+        dispatch_args["payment_skip"] = json!({"amount":inspected["amount"]});
+    }
     dispatch_args["commit_cleared"] = json!(authority::commit_cleared(
         &owner.binding.access_mode,
-        &input
+        &input,
+        owner.taint()
     ));
     let outcome = owner
         .effects
@@ -425,7 +444,7 @@ async fn wait(
                 .await;
             encoded(&value)
         }
-        authority::Gate::Allowed(reference) => {
+        authority::Gate::Allowed(reference, _) => {
             settle(owner, reference, "ok").await?;
             encoded(&json!({"status":"ready","observe_required":true}))
         }

@@ -3,6 +3,8 @@
 //! session scoped to the calling Turn.
 
 mod catalog;
+mod connector;
+pub use connector::ConnectorSession;
 mod children;
 mod client;
 pub use children::stop_mcp_children;

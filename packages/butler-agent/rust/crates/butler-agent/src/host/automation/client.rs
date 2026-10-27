@@ -143,6 +143,8 @@ impl ScheduleClient {
                         _ => Value::Null,
                     },
                     "access_mode": args.get("access_mode"),
+                    "browser_signin": args.get("browser_signin"),
+                    "browser_payment": args.get("browser_payment"),
                     "source_session_id": session,
                 }))).await?
             }

@@ -81,6 +81,18 @@ showcase story, README and tests) or record the gap against
 and run `bun run lint:ds:baseline` to shrink the baseline. See
 `packages/butler-app/scripts/lint/README.md` for the rule details.
 
+## Switch Fields
+
+A switch field stacks like an input by default: label, description, then the
+switch underneath, left-aligned (`SettingsField`, or a vertical `Field`). The
+row layout (label and switch on one row, the switch at the row end, the
+description under the label) is `Field orientation="horizontal"`, allowed
+only on a phone layout or for a list item inside a closed container (a card,
+a list row). Never put a switch before its label. `lint:ds`
+(`switch-field-layout`) flags a `Switch` beside a label in a `Stack` or
+`Inline` row. Switch's README ("Placement", "Usage") holds the full rule.
+Row actions in a `CardListItem` center on the title's line.
+
 ## Responsive Contract
 
 Design system components must be fluid by default. Use intrinsic sizing, `auto-fit` grids, clamp-based padding where needed, and mobile checks around iPhone viewport widths before treating a component as ready.

@@ -240,6 +240,7 @@ impl McpClient {
                 false,
             ));
         }
+        self.check_connector_destination(&server.id, tool_name, &arguments)?;
         let request = Operation::CallTool {
             name: tool_name.to_owned(),
             arguments,
@@ -303,6 +304,7 @@ impl McpClient {
                 false,
             ));
         }
+        self.check_connector_destination(&server.id, tool_name, &arguments)?;
         Ok((server.id.clone(), tool_name.to_owned(), arguments))
     }
 

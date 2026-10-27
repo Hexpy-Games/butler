@@ -8,7 +8,7 @@ mod command_risk;
 mod operation;
 mod schedule;
 pub(super) use operation::exact_operation;
-pub(super) use schedule::schedule;
+pub(super) use schedule::{schedule, schedule_update};
 
 use std::collections::HashSet;
 use std::path::{Component, Path};
@@ -148,12 +148,7 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             facts.target,
             ApprovalRisk::High,
         ),
-        "call_mcp_tool" => single(
-            ApprovalActionKind::UseConnector,
-            ApprovalTargetKind::Connector,
-            facts.target.strip_prefix("mcp:").unwrap_or(facts.target),
-            ApprovalRisk::High,
-        ),
+        "call_mcp_tool" => mcp(facts),
         "start_topic_conversation" => single(
             ApprovalActionKind::StartConversation,
             ApprovalTargetKind::Other,
@@ -190,6 +185,29 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         ),
         capability => by_tool(facts, ToolName::parse(capability)),
     }
+}
+
+fn mcp(facts: ApprovalFacts<'_>) -> AuthorityApproval {
+    let mut approval = single(
+        ApprovalActionKind::UseConnector,
+        ApprovalTargetKind::Connector,
+        facts.target.strip_prefix("mcp:").unwrap_or(facts.target),
+        ApprovalRisk::High,
+    );
+    if let Some(arguments) = facts
+        .input
+        .get("arguments")
+        .and_then(Value::as_object)
+        .filter(|a| !a.is_empty())
+    {
+        // Show the exact operation's arguments, independent of any connector or tool vocabulary.
+        approval
+            .examples
+            .push(butler_core::public_text::sanitize_public_delta(
+                &Value::Object(arguments.clone()).to_string(),
+            ));
+    }
+    approval
 }
 
 fn by_tool(facts: ApprovalFacts<'_>, tool: Option<ToolName>) -> AuthorityApproval {

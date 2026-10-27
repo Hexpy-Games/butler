@@ -260,7 +260,10 @@ pub(in crate::conversation) fn cognition(
         .filter(|v| v.is_finite())
         .map(|v| butler_core::json::saturating_u64(v.floor().max(0.0)))
         .unwrap_or(0);
-    let mut clauses = vec!["visibility='model'".to_owned()];
+    let mut clauses = vec![
+        "visibility='model'".to_owned(),
+        "origin_kind <> 'connector'".to_owned(),
+    ];
     let mut values = Vec::new();
     if let Some(session) = input
         .session_id

@@ -1,5 +1,7 @@
 //! Consent-bound local packages. No discovery, background jobs or startup spawns.
 mod capabilities;
+mod connector_manifest;
+mod connectors;
 mod coverage;
 mod git_process;
 mod inspect;
@@ -8,6 +10,7 @@ mod manifest;
 mod overlay;
 mod registries;
 pub(crate) mod safe_mode;
+mod secret_cleanup;
 mod source_work;
 mod sources;
 mod storage;
@@ -41,13 +44,13 @@ struct State {
     source_users: BTreeMap<String, BTreeSet<String>>,
 }
 pub(crate) struct Plugins {
+    connectors: Arc<connectors::Connectors>,
     authority: std::sync::OnceLock<Arc<butler_turn::btcc::PrincipalAuthority>>,
     root: PathBuf,
     safe_mode: bool,
     state: Mutex<State>,
     mutation: Mutex<()>,
     writes: Arc<ConfigurationWrites>,
-    secrets: butler_platform::secrets::SecretStore,
 }
 impl Plugins {
     pub(crate) async fn open(
@@ -73,22 +76,8 @@ impl Plugins {
                 .filter_map(|p| p.pending_inspection.clone())
                 .map(|i| (i.staging_id.clone(), i))
                 .collect();
-            let secret_store_policy = butler_models::models::credential_store_policy(
-                &data,
-                butler_models::models::SecretStoreFacts::for_data_root(&data),
-            );
-            let secrets = if secret_store_policy.store == "system" {
-                match butler_platform::secrets::SecretStore::system() {
-                    Ok(store) => store,
-                    Err(butler_platform::secrets::SecretError::Unavailable(_)) => {
-                        butler_models::models::fallback_file(&data)
-                    }
-                    Err(_) => return Err(error("plugin_secret_store_unavailable")),
-                }
-            } else {
-                butler_platform::secrets::SecretStore::file(data.join("secrets/plugins.json"))
-            };
-            Ok(Arc::new(Self {
+            Ok(Arc::new_cyclic(|weak| Self {
+                connectors: connectors::Connectors::new(weak.clone()),
                 authority: std::sync::OnceLock::new(),
                 root,
                 safe_mode,
@@ -103,7 +92,6 @@ impl Plugins {
                     source_users,
                 }),
                 writes,
-                secrets,
             }))
         })
         .await
@@ -167,6 +155,9 @@ impl Plugins {
 }
 pub(crate) struct Admin(pub Arc<Plugins>);
 impl PluginPort for Admin {
+    fn bind_connector_store(&self, store: butler_core::plugins::ConnectorStoreRef) {
+        self.0.connectors.bind(store);
+    }
     fn safe_mode(&self) -> bool {
         self.0.safe_mode
     }
@@ -176,36 +167,54 @@ impl PluginPort for Admin {
     fn execute(&self, action: String, id: Option<String>, input: Value) -> PluginFuture<'_> {
         let owner = self.0.clone();
         Box::pin(async move {
-            if matches!(
+            if action.starts_with("connector") {
+                return owner.connectors.admin(&action, id, input).await;
+            }
+            let runtime = owner.connectors.clone();
+            let changed_action = action.clone();
+            let changed_id = id.clone();
+            let result = if matches!(
                 action.as_str(),
                 "inspect" | "check" | "registry_add" | "registry_refresh"
             ) {
-                return tokio::task::spawn_blocking(move || {
+                // Source work runs outside the admin locks (network I/O).
+                tokio::task::spawn_blocking(move || {
                     owner.source_action(&action, id.as_deref(), &input)
                 })
                 .await
-                .map_err(|_| error("plugin_task_failed"))?;
-            }
-            let permit = owner.writes.acquire_owned().await;
-            if action == "uninstall" {
-                owner.revoke_grants(id.as_deref(), &input).await?;
-            }
-            tokio::task::spawn_blocking(move || {
-                let _permit = permit;
-                match action.as_str() {
-                    "install" => owner.install(&input),
-                    "update" => owner.update(id.as_deref(), &input),
-                    "rollback" => owner.rollback(id.as_deref(), &input),
-                    "registry_list" | "registry_add" | "registry_refresh" | "registry_delete" => {
-                        owner.registry_action(&action, id.as_deref(), &input, None)
-                    }
-                    "enable" | "disable" => owner.toggle(id.as_deref(), &input, action == "enable"),
-                    "uninstall" => owner.uninstall(id.as_deref(), &input),
-                    _ => Err(error("plugin_action_invalid")),
+                .map_err(|_| error("plugin_task_failed"))?
+            } else {
+                let permit = owner.writes.acquire_owned().await;
+                if action == "uninstall" {
+                    owner.revoke_grants(id.as_deref(), &input).await?;
+                    owner.connectors.stop_plugin(id.as_deref()).await;
                 }
-            })
-            .await
-            .map_err(|_| error("plugin_task_failed"))?
+                tokio::task::spawn_blocking(move || {
+                    let _permit = permit;
+                    match action.as_str() {
+                        "install" => owner.install(&input),
+                        "update" => owner.update(id.as_deref(), &input),
+                        "rollback" => owner.rollback(id.as_deref(), &input),
+                        "registry_list" | "registry_delete" => {
+                            owner.registry_action(&action, id.as_deref(), &input, None)
+                        }
+                        "enable" | "disable" => {
+                            owner.toggle(id.as_deref(), &input, action == "enable")
+                        }
+                        "uninstall" => owner.uninstall(id.as_deref(), &input),
+                        _ => Err(error("plugin_action_invalid")),
+                    }
+                })
+                .await
+                .map_err(|_| error("plugin_task_failed"))?
+            };
+            if result.is_ok() {
+                runtime
+                    .plugin_changed(&changed_action, changed_id.as_deref())
+                    .await;
+                runtime.reconcile().await;
+            }
+            result
         })
     }
 }

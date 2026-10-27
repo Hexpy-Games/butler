@@ -5,6 +5,7 @@ mod assets;
 pub(in crate::gateway::application) mod canon;
 pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
+mod connectors;
 mod core;
 mod documents;
 mod initiated;
@@ -15,6 +16,7 @@ mod monitoring;
 pub(super) mod pending_asks;
 mod project_ledger_bindings;
 mod schedule_access;
+mod schedule_browser;
 mod schedule_legacy;
 mod security;
 mod session_reads;
@@ -170,7 +172,8 @@ pub(super) fn migrate_legacy_schedules(
     connection: &mut Connection,
     butler_data: Option<&Path>,
 ) -> Result<(), AppStorageError> {
-    schedule_legacy::migrate(connection, butler_data)
+    schedule_legacy::migrate(connection, butler_data)?;
+    schedule_browser::migrate(connection)
 }
 
 #[cfg(test)]
@@ -193,6 +196,7 @@ fn migrate_app_features(
     session_reads::create(connection)?;
     monitoring::migrate(connection)?;
     pending_asks::create(connection)?;
+    connectors::create(connection)?;
     library::recover(connection, butler_data)?;
     Ok(())
 }

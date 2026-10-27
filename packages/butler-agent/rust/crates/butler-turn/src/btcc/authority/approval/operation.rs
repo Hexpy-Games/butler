@@ -12,6 +12,8 @@ pub struct ApprovalOperation {
     pub command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_conversation: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_site: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     /// In-memory desktop media binding, never a display target.
     pub browser_tab: Option<String>,
@@ -55,7 +57,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
     if let Some(operation) = signed_in_operation(&facts).or_else(|| pay_operation(&facts)) {
         return operation;
     }
-    if facts.capability == "browser_act"
+    if matches!(facts.capability, "browser_act" | "browser_open")
         || matches!(facts.capability, "browser_close" | "browser_observe")
             && facts.input.get("dialog").is_some()
     {
@@ -112,6 +114,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             "web_read" | "web_search" | "generate_image" | "edit_image"
         )
         .then_some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: None,
         browser_mode: None,
         browser_steps: Vec::new(),
@@ -138,36 +141,27 @@ fn paths<'a>(input: &'a Value, key: &str) -> Vec<&'a str> {
 }
 
 fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
-    let mut targets = vec![
+    let site = facts.input["merchant_site"].as_str().unwrap_or_else(|| {
         facts
             .target
             .strip_prefix("browser:signed_out:")
             .or_else(|| facts.target.strip_prefix("browser:signed_in:"))
             .unwrap_or(facts.target)
-            .to_owned(),
-    ];
-    let browser_steps = facts.input["resolved_steps"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|step| {
-            let hit = &step["hit"];
-            BrowserApprovalStep {
-                action: step["action"].as_str().unwrap_or("").into(),
-                role: hit["role"].as_str().unwrap_or("").into(),
-                name: hit["name"].as_str().unwrap_or("").into(),
-                frame: hit["frame"].as_str().unwrap_or("").into(),
-                value_preview: step["value_preview"].as_str().map(str::to_owned),
-                addons: step["addons"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect(),
-            }
-        })
-        .collect();
+    });
+    let mut targets = vec![site.to_owned()];
+    if let Some(url) = facts.input["url"].as_str() {
+        targets.push(url.into());
+    }
+    targets.extend(
+        facts.input["urls"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned),
+    );
+    targets.dedup();
+    let browser_steps = browser_steps(facts.input);
     if let Some(dialog) = facts.input.get("dialog") {
         targets.push(format!(
             "{} · \"{}\"",
@@ -187,6 +181,7 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         targets,
         command: None,
         allow_conversation: Some(facts.input["always_confirm"] != true),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: facts.input["mode"].as_str().map(str::to_owned),
         browser_steps,
@@ -194,6 +189,43 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         wait_reason: None,
         image: None,
     }
+}
+
+fn browser_steps(input: &Value) -> Vec<BrowserApprovalStep> {
+    input["resolved_steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .map(|(index, step)| {
+            let hit = &step["hit"];
+            let declared = input
+                .get("steps")
+                .and_then(|steps| steps.get(index))
+                .unwrap_or(&Value::Null);
+            BrowserApprovalStep {
+                action: step["action"]
+                    .as_str()
+                    .or_else(|| declared["action"].as_str())
+                    .unwrap_or("")
+                    .into(),
+                role: hit["role"].as_str().unwrap_or("").into(),
+                name: hit["name"].as_str().unwrap_or("").into(),
+                frame: hit["frame"].as_str().unwrap_or("").into(),
+                value_preview: step["value_preview"]
+                    .as_str()
+                    .or_else(|| declared["value"].as_str())
+                    .map(str::to_owned),
+                addons: step["addons"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect(),
+            }
+        })
+        .collect()
 }
 
 /// Signed-in site grants, sign-in fills and the sign-in hand-back wait: one
@@ -222,6 +254,7 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         targets,
         command: None,
         allow_conversation: Some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: (access == "change").then(|| "signed_in".into()),
         sign_in_step: (tool == "browser_sign_in_wait")
@@ -282,6 +315,7 @@ fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         targets,
         command: None,
         allow_conversation: Some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: None,
         browser_steps: Vec::new(),
@@ -306,6 +340,7 @@ fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
             .collect(),
         command: None,
         allow_conversation: Some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: None,
         browser_steps: Vec::new(),

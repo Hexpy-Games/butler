@@ -467,14 +467,13 @@ fn insert_result_ref(
     {
         context.insert("messageOrigin".into(), origin.into());
     }
-    // A schedule the agent itself dispatches has nobody to ask either, nor
-    // does a delegated child of an unattended run (its App context says so;
-    // the mark can only make a turn stricter).
+    // Every descendant keeps the run identity and browser switches, including
+    // Run now. The internal App context carries these without execution controls.
     if transport == "automation" {
         context.insert("scheduleRun".into(), json!({"unattended": true}));
     } else if let Some(run) = app_turn_context
         .and_then(|value| value.get("scheduleRun"))
-        .filter(|run| run.get("unattended") == Some(&Value::Bool(true)))
+        .filter(|run| run.is_object())
     {
         context.insert("scheduleRun".into(), run.clone());
     }

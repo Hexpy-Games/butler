@@ -28,3 +28,13 @@ pub fn external_addresses() -> Option<Vec<IpAddr>> {
     addresses.dedup();
     Some(addresses)
 }
+
+/// Detect dead long-lived connections within a few minutes, including after sleep.
+pub fn tcp_keepalive(stream: &tokio::net::TcpStream) -> std::io::Result<()> {
+    let socket = socket2::SockRef::from(stream);
+    socket.set_tcp_keepalive(
+        &socket2::TcpKeepalive::new()
+            .with_time(std::time::Duration::from_secs(120))
+            .with_interval(std::time::Duration::from_secs(30)),
+    )
+}
