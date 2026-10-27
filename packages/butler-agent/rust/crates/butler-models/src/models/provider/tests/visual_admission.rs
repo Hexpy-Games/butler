@@ -62,7 +62,7 @@ fn reply(model: &str) -> Vec<u8> {
         json!({"candidates":[{"content":{"role":"model","parts":[{"text":"A photo."}]},
             "finishReason":"STOP"}]})
     } else {
-        json!({"output":[{"type":"message","role":"assistant",
+        json!({"status":"completed","output":[{"type":"message","role":"assistant",
             "content":[{"type":"output_text","text":"A photo."}]}],"usage":{}})
     }
     .to_string();
