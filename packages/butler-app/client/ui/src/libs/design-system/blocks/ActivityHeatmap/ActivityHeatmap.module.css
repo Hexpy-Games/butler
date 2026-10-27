@@ -1,9 +1,8 @@
 .root {
   /* Cell size and gap; the month axis, weekday labels and tooltip anchor share them.
-     The cell is the base size, or the smaller fit the block measures (down to
-     the min) so a narrow pane or large text size shows every week. */
+     The cell is the base size, or under a larger App text size the smaller fit
+     the block measures (useFitCell) so the zoom does not push weeks out. */
   --heatmap-cell-base: 24px;
-  --heatmap-cell-min: 16px;
   --heatmap-cell: var(--heatmap-cell-fit, var(--heatmap-cell-base));
   --heatmap-gap: 0px;
   --heatmap-pitch: calc(var(--heatmap-cell) + var(--heatmap-gap));
@@ -11,7 +10,6 @@
 }
 .root[data-cell="compact"] {
   --heatmap-cell-base: 10px;
-  --heatmap-cell-min: 6px;
   --heatmap-gap: 3px;
 }
 /* Weekday labels stay pinned beside the scroller. */

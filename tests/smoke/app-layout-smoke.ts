@@ -38,27 +38,11 @@ const screenshotDir = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(root,
 mkdirSync(screenshotDir, { recursive: true });
 const sessionInfoToggleSelector = '[data-test-class~="session-info-toggle"]';
 const turnActivityTimeoutMs = 5_000;
+// #924 (dcbd58d68): suggestion cards hug their ordinal and copy (no empty art
+// slot); the height of this smoke's first card at the 1440px desktop width.
+const NEW_CHAT_CARD_HEIGHT_PX = 186;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
-async function assertWrappingSuggestions(page: Page, columns: number) {
-  const layout = await page.locator(testClass("new-chat-empty-state")).evaluate(element => {
-    const header = element.querySelector("header")!.getBoundingClientRect();
-    const rail = element.querySelector<HTMLElement>('[data-test-class~="new-chat-suggestion-rail"]')!;
-    const grid = element.querySelector<HTMLElement>('[data-test-class~="new-chat-suggestions"]')!;
-    const cards = [...element.querySelectorAll('[data-test-class~="new-chat-suggestion"]')].map(card => card.getBoundingClientRect());
-    return { count: cards.length, columns: new Set(cards.map(card => Math.round(card.left))).size,
-      rows: new Set(cards.map(card => Math.round(card.top))).size,
-      aligned: Math.abs(Math.min(...cards.map(card => card.left)) - header.left) <= 1 &&
-        Math.abs(Math.max(...cards.map(card => card.right)) - header.right) <= 1,
-      fits: cards.every(card => card.left >= -1 && card.right <= innerWidth + 1),
-      railOverflow: rail.scrollWidth - rail.clientWidth, gridOverflow: grid.scrollWidth - grid.clientWidth };
-  });
-  console.log(JSON.stringify({ wrappingSuggestions: layout }));
-  assert(layout.count === 4 && layout.columns === columns && layout.rows === 4 / columns &&
-    layout.aligned && layout.fits && layout.railOverflow <= 1 && layout.gridOverflow <= 1,
-  `suggestions wrap in the header column: ${JSON.stringify(layout)}`);
-}
-
 /**
  * Visible sidebar width: the docked sidebar keeps its full width and slides
  * out with a transform, so collapsed means its right edge is at the frame edge.
@@ -2830,13 +2814,8 @@ try {
           (count, card) => count + card.querySelectorAll("svg").length,
           0,
         ),
-        // Cards in a row share the tallest height; the tallest hugs its copy (no empty art slot, #924).
-        cardHugsContent: cards.length > 0 && Math.min(...cards.map(card => {
-          const item = card.querySelector<HTMLElement>('[data-slot="clickable"]');
-          const copy = card.querySelector<HTMLElement>('[data-slot="prompt-suggestion-description"]');
-          if (!item || !copy) return Infinity;
-          return card.getBoundingClientRect().bottom - copy.getBoundingClientRect().bottom - Number.parseFloat(getComputedStyle(item).paddingBottom);
-        })) <= 2,
+        cardWidth: cardRect?.width ?? 0,
+        cardHeight: cardRect?.height ?? 0,
         emptyWidth: emptyRect.width,
         fluidCovers: fluidRect
           ? (cardsFrame && contentRect
@@ -2865,9 +2844,9 @@ try {
         scrollClientHeight: scroll?.clientHeight ?? 0,
         scrollHeight: scroll?.scrollHeight ?? 0,
         scrollOverflowY: scrollStyle?.overflowY ?? "",
-        railViewportAligned: railViewportRect && element.querySelector("header")
-          ? Math.abs(railViewportRect.left - element.querySelector("header")!.getBoundingClientRect().left) <= 1 &&
-            Math.abs(railViewportRect.right - element.querySelector("header")!.getBoundingClientRect().right) <= 1
+        railViewportAligned: railViewportRect
+          ? Math.abs(railViewportRect.left - emptyRect.left) <= 1 &&
+            Math.abs(railViewportRect.right - emptyRect.right) <= 1
           : false,
         cardDescriptionBelowTitle:
           firstTitleRect && firstDescriptionRect
@@ -2946,17 +2925,24 @@ try {
           : false,
       };
     });
-  await assertWrappingSuggestions(page, 4);
   assert(
     emptyStateLayout.cardCount === 4 &&
       emptyStateLayout.emptyWidth >= 900 &&
       emptyStateLayout.railViewportAligned &&
+      emptyStateLayout.railViewportWidth >= emptyStateLayout.emptyWidth - 2 &&
+      emptyStateLayout.railScrollWidth > emptyStateLayout.railViewportWidth &&
+      emptyStateLayout.railGridWidth > emptyStateLayout.railViewportWidth &&
+      emptyStateLayout.scrollOverflowY === "hidden" &&
+      emptyStateLayout.scrollHeight <=
+        emptyStateLayout.scrollClientHeight + 1 &&
       emptyStateLayout.fluidCovers &&
       emptyStateLayout.fluidPainted &&
       emptyStateLayout.cardHasTintedGlass &&
       emptyStateLayout.cardIconCount === 0 &&
       emptyStateLayout.cardGraphicCount === 0 &&
-      emptyStateLayout.cardHugsContent &&
+      emptyStateLayout.cardWidth >= 190 &&
+      emptyStateLayout.cardWidth <= 230 &&
+      Math.abs(emptyStateLayout.cardHeight - NEW_CHAT_CARD_HEIGHT_PX) <= 1 &&
       emptyStateLayout.cardDescriptionBelowTitle &&
       emptyStateLayout.cardMetaBeforeTitle &&
       emptyStateLayout.momentAboveTitle &&
@@ -2978,15 +2964,44 @@ try {
       emptyStateLayout.workspaceLeftRadiusPreserved,
     `new chat empty state should use coherent DS suggestion cards: ${JSON.stringify(emptyStateLayout)}`,
   );
-  // The cards wrap instead of scrolling sideways (89c589074): the card area is
-  // no scroll region and draws no edge fade.
-  const cardArea = await page.locator(testClass("new-chat-suggestion-rail")).first().evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { overflowX: style.overflowX, axis: element.dataset.scrollFade ?? null, mask: style.maskImage,
-      overflow: element.scrollWidth - element.clientWidth };
+  const railFade = page.locator(testClass("new-chat-suggestion-rail")).first();
+  const railFadeAt = async (position: "start" | "mid" | "end") =>
+    railFade.evaluate(async (element, where) => {
+      const grid = element.firstElementChild as HTMLElement | null;
+      if (grid) grid.style.minWidth = `${element.clientWidth * 3}px`;
+      const max = element.scrollWidth - element.clientWidth;
+      element.scrollLeft = where === "start" ? 0 : where === "end" ? max : max / 2;
+      element.dispatchEvent(new Event("scroll"));
+      await new Promise((resolveWait) => setTimeout(resolveWait, 320));
+      const style = getComputedStyle(element);
+      return {
+        axis: element.dataset.scrollFade,
+        overflowing: element.dataset.overflowing,
+        start: style.getPropertyValue("--scroll-fade-start").trim(),
+        end: style.getPropertyValue("--scroll-fade-end").trim(),
+        mask: style.maskImage,
+      };
+    }, position);
+  const railStart = await railFadeAt("start");
+  const railMid = await railFadeAt("mid");
+  const railEnd = await railFadeAt("end");
+  assert(
+    railStart.axis === "x" &&
+      railStart.overflowing === "true" &&
+      railStart.mask !== "none" &&
+      railStart.start === "0px" &&
+      railStart.end === "14px" &&
+      railMid.start === "14px" &&
+      railMid.end === "14px" &&
+      railEnd.start === "14px" &&
+      railEnd.end === "0px",
+    `suggestion rail fade should follow scroll position: ${JSON.stringify({ railStart, railMid, railEnd })}`,
+  );
+  await railFade.evaluate((element) => {
+    const grid = element.firstElementChild as HTMLElement | null;
+    if (grid) grid.style.minWidth = "";
+    element.scrollLeft = 0;
   });
-  assert(cardArea.overflowX === "visible" && cardArea.axis === null && cardArea.mask === "none" && cardArea.overflow <= 1,
-    `suggestion cards should not scroll sideways or fade: ${JSON.stringify(cardArea)}`);
   const desktopComposer = page.locator(testClass("composer-card"));
   const desktopPreview = desktopComposer.locator(
     '[data-slot="composer-compact-preview"]',
@@ -3101,7 +3116,6 @@ try {
   await compactTextarea.fill("");
   await compactTextarea.evaluate((element) => element.blur());
   await page.waitForTimeout(260);
-  await assertWrappingSuggestions(page, 2);
   const narrowNewChatState = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate((element) => {
@@ -3718,7 +3732,7 @@ try {
         "new-chat-tall-tinted-cards",
         "new-chat-card-ordinals-only",
         "new-chat-scroll-unmasked",
-        "new-chat-suggestion-cards-no-sideways-scroll",
+        "new-chat-suggestion-rail-fade",
         "new-chat-vertical-scroll-absent",
         "new-chat-start-position-high",
         "new-chat-extra-icon-gutter",

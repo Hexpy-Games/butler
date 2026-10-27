@@ -1,7 +1,8 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import { Wallpaper, type WallpaperContentRect, type WallpaperMotion, type WallpaperSource, type WallpaperTone } from "../Wallpaper";
 import { PromptSuggestionCard } from "./PromptSuggestionCard";
 import { useContentRectReport, usePromptContentRect } from "./usePromptContentRect";
@@ -54,9 +55,14 @@ export function PromptSuggestionList({
   titleIcon,
 }: PromptSuggestionListProps) {
   const titleIconState = titleIcon ? "true" : undefined;
+  const railFadeRef = useScrollEdges("x");
   const [header, setHeader] = useState<HTMLElement | null>(null);
   const [rail, setRail] = useState<HTMLDivElement | null>(null);
   const [grid, setGrid] = useState<HTMLDivElement | null>(null);
+  const railRef = useCallback((node: HTMLDivElement | null) => {
+    setRail(node);
+    return railFadeRef(node);
+  }, [railFadeRef]);
   // Modules keep the headline and cards readable (u_contentRect), as they are composed around them.
   const contentRect = usePromptContentRect(wallpaper || onContentRect ? header : null, rail, grid);
   useContentRectReport(contentRect, onContentRect);
@@ -123,12 +129,11 @@ export function PromptSuggestionList({
         </div>
       </header>
       <div
-        ref={setRail}
+        ref={railRef}
         className={styles.railViewport}
         data-test-class="new-chat-suggestion-rail"
       >
-        <div className={styles.grid} data-test-class="new-chat-suggestions" ref={setGrid}
-          style={{ "--prompt-columns": Math.min(suggestions.length, 4) } as CSSProperties}>
+        <div className={styles.grid} data-test-class="new-chat-suggestions" ref={setGrid}>
           {suggestions.map((suggestion, index) => (
             <PromptSuggestionCard
               key={suggestion.id}

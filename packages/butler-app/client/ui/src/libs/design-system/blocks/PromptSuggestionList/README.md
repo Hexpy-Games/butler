@@ -2,7 +2,7 @@
 
 ## What is this component
 
-PromptSuggestionList is a Butler design-system block for new-chat and empty prompt surfaces. It pairs a moment label, title, optional title icon, optional description, an optional `Wallpaper` behind it, and a wrapping grid of tinted-glass suggestion cards.
+PromptSuggestionList is a Butler design-system block for new-chat and empty prompt surfaces. It pairs a moment label, title, optional title icon, optional description, an optional `Wallpaper` behind it, and a horizontal rail of tall tinted-glass suggestion cards.
 
 ## When to use this component
 
@@ -14,9 +14,9 @@ Use it in conversation empty states and prompt-first surfaces. Keep domain copy,
 
 ## Why to use this component
 
-It keeps empty prompt screens visually coherent: moment rhythm, title/icon alignment, card proportions, glass treatment, ordinal markers, hover motion, and card wrapping stay consistent without one-off product CSS.
+It keeps empty prompt screens visually coherent: moment rhythm, title/icon alignment, card proportions, glass treatment, ordinal markers, hover motion, and horizontal rail behavior stay consistent without one-off product CSS.
 
-At compact widths, the title icon moves into the moment row beside the three-dot marker and time. The title, description, and suggestion cards then use the full content width inside the adaptive page gutter. Expanded layouts keep the icon beside the title.
+At compact widths, the title icon moves into the moment row beside the three-dot marker and time. The title, description, and suggestion rail then use the full content width inside the adaptive page gutter. Expanded layouts keep the icon beside the title.
 
 ## How to use this component
 
@@ -35,9 +35,8 @@ Butler client containers and design-system fixtures can use this block. The bloc
   compact layout from the actual panel width, not the desktop window width.
 - Use three to five suggestions.
 - Give each card a short title plus one concise description.
-- The cards share the header's column: one row of up to four while each card keeps 160px, then two columns, then one. Every card shows whole at any width and text size (큰 글자); nothing scrolls sideways.
-- Compose inside a host that scrolls vertically (`ConversationScroll` without `scrollable={false}`): wrapped cards that pass the composer scroll above it.
-- Keep the card area free of edge shadows; cards carry the only tinted glass treatment.
+- Let the rail scroll horizontally at the viewport edge instead of clipping it inside an invisible max-width container.
+- Keep the rail free of edge shadows; cards carry the only tinted glass treatment.
 - Keep all domain behavior in the container.
 - Let the block own compact icon placement; do not reserve a product-level icon gutter.
 

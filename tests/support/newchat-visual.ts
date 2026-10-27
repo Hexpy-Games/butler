@@ -83,13 +83,7 @@ async function settleNewChat(page: Page, coastal: boolean): Promise<void> {
     }));
   });
   await page.waitForFunction(() => document.getAnimations().every(animation =>
-    !(animation.timeline instanceof DocumentTimeline) || animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running")).catch(async error => {
-      console.error("New-chat animation diagnostics", await page.evaluate(() => document.getAnimations().map(animation => ({
-        state: animation.playState, time: animation.currentTime, timing: animation.effect?.getComputedTiming(),
-        target: (animation.effect as KeyframeEffect)?.target?.outerHTML.slice(0, 300),
-      }))));
-      throw error;
-    });
+    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
   if (coastal) {
     await page.waitForFunction(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('[data-module="butler.shoreline"]');

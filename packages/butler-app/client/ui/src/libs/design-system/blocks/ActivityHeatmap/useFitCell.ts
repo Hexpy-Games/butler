@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from "react";
 
 /**
- * The cell size that shows every week in the scroller without scrolling: the
- * CSS base size (`--heatmap-cell-base`) or smaller, down to `--heatmap-cell-min`;
- * below that the scroller scrolls. A narrow pane or a large App text size
- * (page zoom) shrinks the cells instead of cutting the calendar.
+ * Under a larger App text size (page zoom, `--ui-scale`), the cell size that
+ * shows every week without scrolling: the CSS base size (`--heatmap-cell-base`)
+ * or smaller, but never below the base's on-screen size at 100%
+ * (base / --ui-scale). At 100% cells never shrink; past the floor the
+ * scroller scrolls as it always has.
  */
 export function useFitCell(weeks: number) {
   const [fit, setFit] = useState<number | null>(null);
@@ -16,7 +17,7 @@ export function useFitCell(weeks: number) {
     const measure = () => {
       const style = getComputedStyle(node);
       const base = parseFloat(style.getPropertyValue("--heatmap-cell-base"));
-      const min = parseFloat(style.getPropertyValue("--heatmap-cell-min"));
+      const min = base / (parseFloat(style.getPropertyValue("--ui-scale")) || 1);
       const gap = parseFloat(style.getPropertyValue("--heatmap-gap")) || 0;
       const inner = node.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       if (!Number.isFinite(base) || !Number.isFinite(min) || inner <= 0) return;

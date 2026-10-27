@@ -135,7 +135,7 @@ export function Conversation() {
           </ErrorBoundary>
         </BranchProjectContext.Provider>
       ) : showEmptyState ? (
-        <ConversationScroll masked={false}>
+        <ConversationScroll masked={false} scrollable={false}>
           <EmptyState
             onContentRect={wallpaper.onContentRect}
             activeChat={activeChat}

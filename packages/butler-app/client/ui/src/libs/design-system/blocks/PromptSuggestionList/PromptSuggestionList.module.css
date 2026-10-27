@@ -16,9 +16,7 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  /* Fills its scrolling host above the composer and grows when the cards
-     wrap, so the host scrolls the rest above the composer. */
-  flex: 1 0 auto;
+  height: calc(var(--adaptive-viewport-block-size) - var(--composer-reserve));
   min-height: 0;
   align-content: start;
   gap: var(--space-lg);
@@ -153,45 +151,41 @@
   color: var(--text-secondary);
 }
 
-/* The cards share the header's column and wrap into rows: every card shows
-   whole at any width and text size; nothing scrolls sideways. The frame is
-   the container the column count reads. */
+/* The rail clips vertically; it bleeds the room a lifted, focused card's ring
+   needs above the cards, and the grid pads it back. */
 .railViewport {
   --prompt-card-lift: 2px;
+  --prompt-ring-room: calc(var(--focus-ring-room) + var(--prompt-card-lift));
 
   position: relative;
   z-index: 2;
-  width: min(
-    var(--prompt-content-width),
-    calc(100% - var(--prompt-edge-gutter) - var(--prompt-edge-gutter))
-  );
+  width: 100%;
   min-width: 0;
-  margin: 0 auto;
-  container: prompt-cards / inline-size;
+  margin-block-start: calc(-1 * var(--prompt-ring-room));
+  overflow: auto hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* One row (up to four) while each card keeps 160px, then two, then one. */
+.railViewport::-webkit-scrollbar {
+  display: none;
+}
+
 .grid {
   display: grid;
-  grid-template-columns: repeat(var(--prompt-columns, 4), minmax(0, 1fr));
+  width: max-content;
+  min-width: 100%;
+  grid-auto-columns: minmax(198px, 224px);
+  grid-auto-flow: column;
   gap: var(--space-4);
-  /* Room under the last row for a focused card's ring. */
-  padding-block-end: max(
-    var(--space-2),
-    calc(var(--focus-ring-room) + var(--focus-ring-width))
+  padding-block: var(--prompt-ring-room) var(--space-2);
+  padding-inline: max(var(--prompt-content-inset), var(--prompt-edge-gutter));
+  scroll-padding-inline: max(
+    var(--prompt-content-inset),
+    var(--prompt-edge-gutter)
   );
-}
-
-@container prompt-cards (width < 688px) {
-  .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container prompt-cards (width < 316px) {
-  .grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  scroll-snap-type: x mandatory;
 }
 
 .itemFrame {
@@ -210,6 +204,7 @@
   --tinted-glass-shadow: none;
 
   position: relative;
+  scroll-snap-align: start;
   transition:
     border-color var(--motion-base) var(--motion-ease-standard),
     box-shadow var(--motion-base) var(--motion-ease-standard),
@@ -292,6 +287,10 @@
     font-size: var(--typo-new-chat-title-size-md);
     line-height: var(--typo-new-chat-title-line-height-md);
   }
+
+  .grid {
+    grid-auto-columns: minmax(194px, 218px);
+  }
 }
 
 @container conversation (width <= 640px) {
@@ -337,6 +336,10 @@
 
   .titleCopy {
     gap: var(--space-sm);
+  }
+
+  .grid {
+    grid-auto-columns: minmax(200px, 66cqw);
   }
 }
 
