@@ -13,8 +13,8 @@ export function ComposerPlanToggle({
 }) {
   return (
     <label className={styles.planToggle} data-test-class="plan-switch">
+      <span className={styles.planLabel}>{label}</span>
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
-      <span>{label}</span>
     </label>
   );
 }

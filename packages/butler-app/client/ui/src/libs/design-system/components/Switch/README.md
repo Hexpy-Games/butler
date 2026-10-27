@@ -21,6 +21,13 @@ import { Switch } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
+### Label first, switch at the line end
+
+The label comes first and the switch sits at the end of its line
+(`SettingsField`, a horizontal `Field`, or `Label` + `Switch` in a
+`justify="between"` row). In a wrapping toolbar the switch follows its label
+directly. Never put a switch before its label.
+
 ### Unavailable with a reason
 
 Pass `disabledReason` (a few words, localized) when the setting cannot be

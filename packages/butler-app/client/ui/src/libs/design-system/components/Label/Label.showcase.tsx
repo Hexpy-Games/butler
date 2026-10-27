@@ -26,9 +26,9 @@ export const stories: ShowcaseStory[] = [
     // Product forms use FieldLabel (a Label inside Field); a bare Label names a lone control.
     name: "Beside a switch",
     render: (context) => (
-      <Stack align="row" cross="center" gap="sm">
-        <Switch id="ds-label-developer-mode" defaultChecked />
+      <Stack align="row" cross="center" justify="between" gap="sm">
         <Label htmlFor="ds-label-developer-mode">{text(context).mode}</Label>
+        <Switch id="ds-label-developer-mode" defaultChecked />
       </Stack>
     ),
   },
@@ -45,9 +45,9 @@ export const stories: ShowcaseStory[] = [
     name: "Disabled control",
     states: ["disabled"],
     render: (context) => (
-      <Stack align="row" cross="center" gap="sm">
-        <Switch id="ds-label-search" disabled />
+      <Stack align="row" cross="center" justify="between" gap="sm">
         <Label htmlFor="ds-label-search">{text(context).search}</Label>
+        <Switch id="ds-label-search" disabled />
       </Stack>
     ),
   },

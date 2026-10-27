@@ -49,8 +49,8 @@ export function LogFilters({ filter, categories, live, onChange, onLiveChange }:
           {LOG_PERIODS.map((period) => <option key={period} value={period}>{copy.periods[period]}</option>)}
         </NativeSelect>
         <Inline gap="xs" cross="center" wrap={false}>
-          <Switch id={liveId} checked={live} onCheckedChange={onLiveChange} />
           <Label htmlFor={liveId}>{copy.live}</Label>
+          <Switch id={liveId} checked={live} onCheckedChange={onLiveChange} />
         </Inline>
       </Inline>
     </Stack>

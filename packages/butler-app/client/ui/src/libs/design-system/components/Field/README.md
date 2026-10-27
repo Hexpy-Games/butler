@@ -31,7 +31,7 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Keep domain data, app state, and business decisions outside this component.
 
 ## Horizontal fields
-With `orientation="horizontal"`, put the control first, then `FieldContent` (label, optional description). The control centers on the label's line; the description runs below the label, never beside the control.
+With `orientation="horizontal"`, put `FieldContent` (label, optional description) first, then the control: the label comes first and the control sits at the line end. The control centers on the label's line; the description runs below the label, never under the control.
 
 ## Wrong use cases
 - Do not use Field as a domain-specific component with embedded feature logic; create a domain component under `src/components` and compose this component instead.

@@ -77,6 +77,14 @@ showcase story, README and tests) or record the gap against
 and run `bun run lint:ds:baseline` to shrink the baseline. See
 `packages/butler-app/scripts/lint/README.md` for the rule details.
 
+## Label First, Control At The Line End
+
+A switch or checkbox and its label on one line: the label comes first and the
+control sits at the line end (`SettingsField`, a horizontal `Field`, or
+`Label` + control in a `Stack align="row" justify="between"`). In a wrapping
+toolbar the control follows its label directly. Never put the control before
+its label. Row actions in a `CardListItem` center on the title's line.
+
 ## Responsive Contract
 
 Design system components must be fluid by default. Use intrinsic sizing, `auto-fit` grids, clamp-based padding where needed, and mobile checks around iPhone viewport widths before treating a component as ready.

@@ -9,3 +9,6 @@ actions. Product components map domain records into `CardListItem` props.
 
 Set `maxVisibleRows` when a group should keep a compact height and scroll
 internally.
+
+Row `actions` center on the title's line, whatever their height and however
+many lines the description runs; they never center on the whole card.

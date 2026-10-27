@@ -42,7 +42,7 @@ export function HistoryPage() {
   </ButtonContainer>;
   return <ScrollArea fill dataTestClass="history-page"><PageContainer width="narrow" gutter="xl"><Box paddingY="xl"><Stack gap="xl">
     <Stack gap="md"><Input aria-label={copy.search} placeholder={copy.search} value={search} onChange={event => setSearch(event.target.value)} />
-      <Stack align="row" wrap justify="between" cross="center" gap="sm"><Stack align="row" cross="center" gap="sm"><Switch aria-label={copy.butlerOnly} checked={only} onCheckedChange={setOnly} /><Typo.Label>{copy.butlerOnly}</Typo.Label></Stack>
+      <Stack align="row" wrap justify="between" cross="center" gap="sm"><Stack align="row" cross="center" gap="sm"><Typo.Label>{copy.butlerOnly}</Typo.Label><Switch aria-label={copy.butlerOnly} checked={only} onCheckedChange={setOnly} /></Stack>
         {selecting ? <Stack align="row" cross="center" gap="md"><Typo.Caption tone="secondary" numeric="tabular">{appCopy.library.selected(selected.length)}</Typo.Caption>
           <ButtonContainer size="sm"><Button size="sm" variant="ghost" onClick={stopSelecting}>{appCopy.browser.cancel}</Button>
             <Button size="sm" variant="destructive" disabled={busy || !selected.length} onClick={() => void remove(selected)}>{appCopy.browser.remove}</Button></ButtonContainer></Stack>

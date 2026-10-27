@@ -31,8 +31,8 @@ export function LibraryKindView({ view, onAttach }: { view: LibraryView; onAttac
   return <Stack gap="lg" data-library-kind={kind}>
     {hasGroups(kind) ? <GroupChips kind={kind} groups={groups} selected={view.group} /> : null}
     {items.length ? <Inline gap="sm" wrap cross="center" justify="between" data-test-class="library-selection">
-      <Inline gap="sm" cross="center"><IconButton label={copy.select} role="checkbox" aria-checked={items.length === page.items.length ? true : "mixed"}
-        onClick={() => setSelected(items.length === page.items.length ? [] : page.items.map((item) => item.id))}>{items.length === page.items.length ? <CheckIcon size="sm" /> : <Minus size="sm" />}</IconButton><Typo.Text>{copy.selected(items.length)}</Typo.Text></Inline>
+      <Inline gap="sm" cross="center"><Typo.Text>{copy.selected(items.length)}</Typo.Text><IconButton label={copy.select} role="checkbox" aria-checked={items.length === page.items.length ? true : "mixed"}
+        onClick={() => setSelected(items.length === page.items.length ? [] : page.items.map((item) => item.id))}>{items.length === page.items.length ? <CheckIcon size="sm" /> : <Minus size="sm" />}</IconButton></Inline>
       <ButtonContainer size="sm">
         {hasGroups(kind) ? <Button size="sm" variant="outline" onClick={() => useLibraryDialogs.setState({ move: { kind, items } })}>{copy.groups[kind].moveTo}</Button> : null}
         <Button size="sm" variant="outline" onClick={() => useLibraryDialogs.setState({ tagItems: items })}>{copy.editTags}</Button>

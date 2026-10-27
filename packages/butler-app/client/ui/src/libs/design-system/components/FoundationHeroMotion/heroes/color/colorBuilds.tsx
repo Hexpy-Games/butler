@@ -64,8 +64,8 @@ export function colorBuilds(copy: ColorCopy): BuildSpec[] {
           <Mark fill n="a-primary" sketch><Button text={<R name="a-primary-t">{copy.publish}</R>} /></Mark>
           <Mark fill n="a-outline" sketch><Button text={<R name="a-outline-t">{copy.later}</R>} variant="outline" /></Mark>
           <span className={s.switchRow}>
-            <Mark fill n="a-switch" sketch><Switch aria-label={copy.autoSave} checked onCheckedChange={() => undefined} /></Mark>
             <Typo.Caption tone="secondary"><R name="a-switch-t">{copy.autoSave}</R></Typo.Caption>
+            <Mark fill n="a-switch" sketch><Switch aria-label={copy.autoSave} checked onCheckedChange={() => undefined} /></Mark>
           </span>
         </div>
       )),

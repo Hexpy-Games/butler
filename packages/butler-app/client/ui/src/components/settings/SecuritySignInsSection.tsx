@@ -69,10 +69,10 @@ function SignInRow({ row, busy, actions }: { row: SignInSiteRow; busy: boolean; 
                 onValueChange={(value) => void actions.policy(row.entry!.id, value as SignInPolicy)} />
             </Stack>
           )}
-          <Stack as="span" align="row" cross="center" gap="sm">
+          <Stack as="span" align="row" cross="center" justify="between" gap="sm">
+            <Typo.Caption tone="secondary">{copy.allConversations}</Typo.Caption>
             <Switch aria-label={copy.allConversations} checked={row.all_conversations} disabled={busy}
               onCheckedChange={(value) => void actions.allConversations(row.site, value)} />
-            <Typo.Caption tone="secondary">{copy.allConversations}</Typo.Caption>
           </Stack>
         </Stack>
       )}

@@ -68,10 +68,12 @@ export const stories: ShowcaseStory[] = [
     render: (context) => (
       <Stack gap="sm">
         {(["default", "sm"] as const).map((size) => (
-          <Stack align="row" cross="center" gap="md" key={size}>
-            <Switch aria-label={`${text(context).on} ${size}`} defaultChecked size={size} />
-            <Switch aria-label={`${text(context).off} ${size}`} size={size} />
+          <Stack align="row" cross="center" justify="between" gap="md" key={size}>
             <Typo.Caption tone="secondary">{size}</Typo.Caption>
+            <Stack align="row" cross="center" gap="md">
+              <Switch aria-label={`${text(context).on} ${size}`} defaultChecked size={size} />
+              <Switch aria-label={`${text(context).off} ${size}`} size={size} />
+            </Stack>
           </Stack>
         ))}
         <Typo.Caption tone="secondary">{text(context).motion}</Typo.Caption>
@@ -83,9 +85,9 @@ export const stories: ShowcaseStory[] = [
     name: "Disabled with a reason (hover or focus)",
     states: ["disabled"],
     render: (context) => (
-      <Stack align="row" cross="center" gap="md">
-        <Switch aria-label={text(context).reduceMotion} checked disabledReason={text(context).followsSystem} />
+      <Stack align="row" cross="center" justify="between" gap="md">
         <Typo.Caption tone="secondary">{text(context).reduceMotion}</Typo.Caption>
+        <Switch aria-label={text(context).reduceMotion} checked disabledReason={text(context).followsSystem} />
       </Stack>
     ),
   },

@@ -318,7 +318,7 @@
     padding: 0 var(--space-xs);
   }
 
-  .planToggle > span:last-child {
+  .planLabel {
     position: absolute;
     width: 1px;
     height: 1px;

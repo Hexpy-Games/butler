@@ -47,6 +47,7 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: [
+    "Label first, switch at the line end: never put the switch before its label.",
     "Name the setting, not the action: Use backup models, not Turn on backup models.",
     "disabledReason is a few words (Follows the system setting), never an explanation paragraph.",
     "The reason opens to the right of the switch (disabledReasonSide, default right; disabledReasonAlign, default center). Change it only when something the reader needs sits to the right.",

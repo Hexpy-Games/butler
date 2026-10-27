@@ -33,7 +33,11 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["Vertical labels sit above the control and wrap inside the column, including long unbroken labels.", "Labels are nouns (Server ID); descriptions are one sentence; errors say how to fix it."],
+  content: [
+    "Vertical labels sit above the control and wrap inside the column, including long unbroken labels.",
+    "Horizontal fields put the label first and the control (a switch, a checkbox) at the line end.",
+    "Labels are nouns (Server ID); descriptions are one sentence; errors say how to fix it.",
+  ],
   accessibility: ["Connect help with aria-describedby when it explains the value; FieldError renders role=\"alert\"."],
   tokens: ["--space-sm", "--space-xs", "--text-secondary", "--danger"],
 };

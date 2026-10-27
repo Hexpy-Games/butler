@@ -30,6 +30,12 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.
 - Keep domain data, app state, and business decisions outside this component.
 
+## Label first, control at the line end
+On one line the label comes first and the control (a `Switch`, a checkbox)
+sits at the line end: `<Stack align="row" cross="center" justify="between">`
+with the `Label` before the control. In a wrapping toolbar the control follows
+its label directly. Never put a switch or checkbox before its label.
+
 ## Wrong use cases
 - Do not use Label as a domain-specific component with embedded feature logic; create a domain component under `src/components` and compose this component instead.
 - Do not import from `@/butler-ds/shadcn/ui` in app code; import from `@/butler-ds` so the public API remains stable.

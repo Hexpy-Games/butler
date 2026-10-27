@@ -101,7 +101,12 @@
   white-space: nowrap;
 }
 
+/* One title line tall: actions of any height center on the title's line,
+   not on the whole card; taller actions spill evenly into the card padding. */
 .actions {
-  align-self: start;
+  display: flex;
+  height: var(--typo-body-line-height);
   min-width: max-content;
+  align-items: center;
+  align-self: start;
 }

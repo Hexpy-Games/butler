@@ -85,11 +85,11 @@ export const stories: ShowcaseStory[] = [
     name: "Horizontal switch field",
     render: (context) => (
       <Field orientation="horizontal">
-        <Switch id="ds-field-enabled" defaultChecked />
         <FieldContent>
           <FieldLabel htmlFor="ds-field-enabled">{text(context).enabled}</FieldLabel>
           <FieldDescription>{text(context).enabledHint}</FieldDescription>
         </FieldContent>
+        <Switch id="ds-field-enabled" defaultChecked />
       </Field>
     ),
   },
