@@ -30,7 +30,7 @@ impl SqliteSubsessionRepository {
                 .transpose()?;
             let mut run = incoming.unwrap_or(ScheduleRunContext {
                 automation_id: String::new(), run_id: String::new(), unattended: false,
-                connector_event: false, scheduled_at: None,
+                connector_event: false, scheduled_at: None, browser: None,
             });
             run.connector_event |= previous.is_some_and(|run| run.connector_event);
             let encoded = serde_json::to_string(&run).map_err(context_error)?;

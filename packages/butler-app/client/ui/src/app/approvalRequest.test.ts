@@ -174,6 +174,12 @@ test("a request without examples shows what it acts on: its target, else the leg
   expect(approvalRequestView(card(connector), en).details).toEqual(["github/create_issue"]);
   const schedule = summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation:delete:daily-news" }] });
   expect(approvalRequestView(card(schedule), en).details).toEqual([en.scheduleUnavailable]);
+  for (const copy of [en, ko]) {
+    const edit = { ...schedule, schedule: { title: "Evening summary", scheduleType: "update" as const } };
+    expect(approvalRequestView(card(edit), copy).details).toEqual(["Evening summary", copy.scheduleUnavailable]);
+    expect(approvalRequestView(card({ ...edit, schedule: { ...edit.schedule, browserSignin: true } }), copy).details)
+      .toEqual(["Evening summary", copy.scheduleSignin(true)]);
+  }
   const topic = summary("start_conversation", { targets: [{ kind: "other", path: "Weekly review" }] });
   expect(approvalRequestView(card(topic), en).details).toEqual(["Weekly review"]);
 });

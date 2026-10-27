@@ -65,7 +65,8 @@ impl AppApplication {
         let scheduled_at = self
             .storage
             .execute(move |db| {
-                let scheduled_at = super::records::run(db, &run)?.scheduled_at;
+                let record = super::records::run(db, &run)?;
+                let scheduled_at = record.scheduled_at;
                 let dispatch = super::holds::dispatch_time(db, &run, &now)?;
                 let late = is_late(scheduled_at.as_deref(), &dispatch);
                 db.execute(
@@ -73,7 +74,14 @@ impl AppApplication {
                     rusqlite::params![late, run],
                 )
                 .map_err(AppStorageError::sqlite)?;
-                Ok(scheduled_at)
+                let schedule = super::records::active(db, &record.automation_id)?;
+                Ok((
+                    scheduled_at,
+                    butler_turn::btcc::ScheduleBrowserOptions {
+                        signin: schedule.browser_signin,
+                        payment: schedule.browser_payment,
+                    },
+                ))
             })
             .await
             .map_err(app_error)?;
@@ -82,7 +90,8 @@ impl AppApplication {
             run_id: run_id.into(),
             unattended: trigger == "scheduled",
             connector_event: false,
-            scheduled_at,
+            scheduled_at: scheduled_at.0,
+            browser: Some(scheduled_at.1),
         })
     }
 }

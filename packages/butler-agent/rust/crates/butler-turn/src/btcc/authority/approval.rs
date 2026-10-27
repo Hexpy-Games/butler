@@ -8,7 +8,7 @@ mod command_risk;
 mod operation;
 mod schedule;
 pub(super) use operation::exact_operation;
-pub(super) use schedule::schedule;
+pub(super) use schedule::{schedule, schedule_update};
 
 use std::collections::HashSet;
 use std::path::{Component, Path};
