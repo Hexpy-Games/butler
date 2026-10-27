@@ -98,6 +98,12 @@ try {
   assert.ok(stored.html.startsWith("<!doctype html>") && stored.html.length < 5 * 1024 * 1024);
   const picked = await app.main<{ width: number; height: number }>(`${subject()}.view.webContents.executeJavaScript("document.querySelector('#card').getBoundingClientRect().toJSON()")`);
   assert.ok(Math.abs(saved.snapshot!.width - picked.width) <= 1 && Math.abs(saved.snapshot!.height - picked.height) <= 1, "copy sized like the card");
+  // Saving offers the group chooser, which moves keyboard focus into the App a frame after it mounts.
+  // Settle that first: a key sent before the focus move lands would go to the chooser instead of the page.
+  const chooser = "document.querySelector('[data-test-class=library-saved-chooser]')";
+  await waitBrowser(async () => await app.page.expression<boolean>(`Boolean(${chooser}?.contains(document.activeElement))`) && await app.main<boolean>(`${app.win}.webContents.isFocused()`), "group chooser takes focus");
+  await clickApp(`[...${chooser}.querySelectorAll('button')].find(n=>n.textContent.trim()===${JSON.stringify(getAppCopy("en-US").library.leaveUngrouped)})`, "Leave ungrouped");
+  await waitBrowser(() => app.page.expression(`!${chooser}`), "group chooser closes");
   await input("key", title, "Escape"); await waitBrowser(() => app.main(`!${subject()}.picking`), "Escape ends picking");
 
   // Before (kept for scraps without a copy): its detail shows the crop, and its source action loads the whole page.
