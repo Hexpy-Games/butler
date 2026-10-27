@@ -31,7 +31,7 @@ export async function auditInlinePanes(browser: Browser) {
     const epic = await server.api<{ id: string }>(`/projects/${project.id}/canon/epics`, { method: "POST", body: JSON.stringify({ title: "화면 확인", description: "제목과 설명을 확인합니다." }) });
     const linked = await server.api<{ session_id: string }>(`/canon/epics/${epic.id}/conversation`, { method: "POST", body: "{}" });
     for (const theme of ["dark", "light"]) {
-      await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, reduce_motion: true }) });
+      await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, text_size: process.env.BUTLER_SMOKE_TEXT_SIZE ?? "default", reduce_motion: true }) });
       const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
       try {
         await server.signIn(page.context());

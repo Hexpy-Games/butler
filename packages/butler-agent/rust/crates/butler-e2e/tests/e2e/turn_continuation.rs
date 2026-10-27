@@ -284,3 +284,21 @@ async fn approval_resume_preserves_actor_feedback_counts() -> Result<(), Harness
 }
 
 mod stub;
+
+#[tokio::test]
+async fn commentary_after_output_cut_is_excluded_from_answer() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server) = setup(stub::Mode::CutCommentary, Access::FullAccess).await?;
+    let (id, turn) = s.turn("general", stub::REQUEST).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let messages = s.gw.messages("general").await?;
+    let answer = messages
+        .iter()
+        .find(|m| m["turn_id"] == id && m["role"] == "assistant")
+        .unwrap();
+    assert_eq!(answer["text"], "The total is 42.", "{messages:?}");
+    assert_eq!(script.requests.lock().unwrap().len(), 3);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

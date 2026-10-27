@@ -1,7 +1,7 @@
 use serde_json::{Map, Value};
 
 use super::contracts::{DeliveryOutbox, DeliveryStatus, FinalPayload, TurnRecord, TurnTransition};
-use super::failure::runtime_failure_message;
+use super::failure::runtime_failure_message_for_turn;
 use crate::btcc::BtccError;
 use crate::btcc::identity::{content_ref, digest, json_value};
 
@@ -89,9 +89,10 @@ fn final_content(turn: &TurnRecord, result: &super::contracts::AgentLoopResult) 
     if !trimmed.is_empty() {
         return trimmed.to_owned();
     }
-    runtime_failure_message(
-        &turn.original_message,
+    runtime_failure_message_for_turn(
+        turn,
         &crate::btcc::RuntimeFailure::new("runtime_error", false),
+        None,
     )
 }
 

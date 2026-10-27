@@ -134,8 +134,8 @@ async fn server() -> (Url, tokio::task::JoinHandle<Vec<Value>>) {
     let task = tokio::spawn(async move {
         let mut bodies = Vec::new();
         for response in [
-            json!({"id":"resp_1","model":"gpt-5.5","output":[{"type":"function_call","call_id":"one","name":"read_file","arguments":"{}"}]}),
-            json!({"id":"resp_2","model":"gpt-5.5","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}]}),
+            json!({"id":"resp_1","model":"gpt-5.5","status":"completed","output":[{"type":"function_call","call_id":"one","name":"read_file","arguments":"{}"}]}),
+            json!({"id":"resp_2","model":"gpt-5.5","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}]}),
         ] {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut request = Vec::new();

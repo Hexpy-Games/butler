@@ -121,7 +121,7 @@ async fn codex_fallback_stream_id_is_reused_and_final_id_samples_separately() {
     let body = concat!(
         "data: {\"type\":\"response.output_text.delta\",\"delta\":\"a\"}\n\n",
         "data: {\"type\":\"response.output_text.delta\",\"response_id\":\"explicit\",\"delta\":\"b\"}\n\n",
-        "data: {\"type\":\"response.completed\",\"response\":{\"output\":[]}}\n\n",
+        "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n",
     )
     .as_bytes();
     let response = format!(

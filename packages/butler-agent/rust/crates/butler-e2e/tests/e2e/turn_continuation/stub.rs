@@ -10,6 +10,7 @@ pub(crate) enum Mode {
     Empty,
     Reasoning,
     Commentary,
+    CutCommentary,
     Approval,
     Question,
     Todo,
@@ -95,6 +96,13 @@ async fn reply(
             Mode::Reasoning if step == 0 => {
                 json!({"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Need to calculate the result."}]})
             }
+            Mode::CutCommentary if step == 0 => message("The total "),
+            Mode::CutCommentary if step == 1 => {
+                let mut item = message("Private progress.");
+                item["phase"] = json!("commentary");
+                item
+            }
+            Mode::CutCommentary => message("is 42."),
             Mode::Commentary if step == 0 => {
                 let mut item = message("I am working on the total.");
                 item["phase"] = json!("commentary");
@@ -141,8 +149,36 @@ async fn reply(
     } else {
         item
     };
-    ([("content-type", "text/event-stream")], wire(&item)).into_response()
+    let response = if matches!(script.mode, Mode::CutCommentary)
+        && script.requests.lock().unwrap().len() == 1
+    {
+        cut_wire(&item)
+    } else {
+        wire(&item)
+    };
+    ([("content-type", "text/event-stream")], response).into_response()
 }
+
+fn cut_wire(item: &Value) -> String {
+    wire(item)
+        .lines()
+        .map(|line| {
+            let Some(raw) = line.strip_prefix("data: ") else {
+                return line.replace("event: response.completed", "event: response.incomplete");
+            };
+            let mut event: Value = serde_json::from_str(raw).unwrap();
+            if event["type"] == "response.completed" {
+                event["type"] = json!("response.incomplete");
+                event["response"]["status"] = json!("incomplete");
+                event["response"]["incomplete_details"] = json!({"reason":"max_output_tokens"});
+            }
+            format!("data: {event}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
 fn progress(step: usize, body: &Value) -> Value {
     match step {
         0 => call("start", "start_work", &json!({"objective":REQUEST})),

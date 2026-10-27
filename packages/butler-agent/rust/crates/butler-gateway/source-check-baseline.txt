@@ -6,7 +6,7 @@ src/gateway/application/new_chat_briefing.rs	AppApplication::new_chat_briefing_v
 src/gateway/application/plan_decisions/workflow.rs	AppApplication::decide_session_plan_owned	146
 src/gateway/application/progress_view.rs	read	106
 src/gateway/application/project_sources.rs	AppApplication::resolve_project_sources	132
-src/gateway/application/projection/final_result.rs	apply	201
+src/gateway/application/projection/final_result.rs	apply	172
 src/gateway/application/projection/non_final/runtime_progress.rs	row_from_runtime_event	139
 src/gateway/application/projects/dashboard/board.rs	board_cards	95
 src/gateway/application/projects/dashboard/board.rs	get	119
@@ -27,7 +27,7 @@ src/gateway/application/session_queue_mutations.rs	AppApplication::update_sessio
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	81
 src/gateway/application/settings/update/patch/project.rs	project	177
-src/gateway/application/settings/update/patch/sanitize.rs	sanitize	180
+src/gateway/application/settings/update/patch/sanitize.rs	sanitize	144
 src/gateway/application/settings/view.rs	read	161
 src/gateway/application/shell.rs	command_palette	148
 src/gateway/application/space/commands.rs	execute	125
