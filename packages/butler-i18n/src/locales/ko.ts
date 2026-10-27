@@ -2499,6 +2499,11 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       fullDiskAccess: "브라우저 폴더 접근 권한이 필요해요",
       failed: "가져오지 못했어요",
       needsKeychain: "시스템 암호 저장소가 있어야 가져올 수 있어요",
+      open: "브라우저 가져오기",
+      dataLabel: "브라우저 데이터",
+      chooseBrowser: "브라우저 선택",
+      steps: "가져오기 단계",
+      next: "다음", back: "이전", done: "완료",
     },
     agentImport: {
       purpose: "지침과 MCP 서버를 버틀러로 옮겨요",
