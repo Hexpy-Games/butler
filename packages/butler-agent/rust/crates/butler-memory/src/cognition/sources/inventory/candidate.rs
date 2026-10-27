@@ -296,6 +296,12 @@ pub(super) fn turn_messages(
             "request_ineligible"
         })));
     }
+    if assistant
+        .as_ref()
+        .is_some_and(|message| message.message.origin_kind == ConversationOriginKind::Connector)
+    {
+        return Ok(Ok(request.into_iter().collect()));
+    }
     if outcome.public_assistant_message_id.is_some()
         && assistant.as_ref().is_none_or(|message| {
             message.message.role != ConversationRole::Assistant

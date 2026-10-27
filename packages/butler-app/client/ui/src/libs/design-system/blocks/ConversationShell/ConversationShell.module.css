@@ -207,8 +207,16 @@
 
 @container conversation (width < 720px) {
   .railed > * {
+    /* The shelf's height (see TabRail): 52px on touch. */
     --conversation-rail-top: calc(
-      var(--tab-rail-shelf-height) + var(--space-sm)
+      max(
+          var(--tab-rail-shelf-height),
+          calc(
+            var(--control-hit-target) + var(--focus-ring-room) * 2 +
+              var(--border-hairline) * 2
+          )
+        ) +
+        var(--space-sm)
     );
   }
 }

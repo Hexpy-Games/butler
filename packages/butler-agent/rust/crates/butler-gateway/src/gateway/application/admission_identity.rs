@@ -132,5 +132,17 @@ pub(super) fn resolve_message(
     {
         resolution.persisted["message_origin"] = "question_followup".into();
     }
+    if let Some(id) = request.client_message_id.as_ref().and_then(Value::as_str) {
+        let connected: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM app_connector_deliveries WHERE id=?1)",
+                [id],
+                |r| r.get(0),
+            )
+            .map_err(super::storage::AppStorageError::sqlite)?;
+        if connected {
+            resolution.persisted["message_origin"] = "connector".into();
+        }
+    }
     Ok(resolution)
 }

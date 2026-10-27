@@ -29,7 +29,8 @@ pub(super) async fn route(
             .execute(action.clone(), id, input)
             .await
             .map_err(|e| failure(&e))?;
-        if action != "inspect"
+        if !action.starts_with("connector")
+            && action != "inspect"
             && action != "registry_list"
             && (action != "check"
                 || result["applied"] == true
@@ -58,6 +59,9 @@ async fn command(
     uri: &Uri,
     request: Request<Body>,
 ) -> Result<(String, Option<String>, Value), HttpError> {
+    if uri.path().starts_with("/connectors") || uri.path().starts_with("/connector-rules") {
+        return super::connectors::command(method, uri, request).await;
+    }
     if uri.path().starts_with("/plugin-registries") {
         return registry_command(method, uri, request).await;
     }

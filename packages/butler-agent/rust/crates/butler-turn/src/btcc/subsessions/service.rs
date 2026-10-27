@@ -6,6 +6,7 @@ mod followup;
 #[cfg(feature = "e2e-fixtures")]
 mod handoff_hold;
 mod helpers;
+mod instruction_context;
 mod one_call;
 mod project_handoff;
 mod project_settlement;

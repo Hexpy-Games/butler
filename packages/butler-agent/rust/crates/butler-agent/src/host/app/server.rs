@@ -148,6 +148,9 @@ impl AppServer {
         )
         .await?;
         let application = open_application(app_config, data_root, dependencies, &owners).await?;
+        use butler_core::plugins::PluginPort;
+        crate::host::plugins::Admin(runtime.plugins.clone())
+            .bind_connector_store(application.connector_store());
         let memory_application = Arc::downgrade(&application);
         runtime
             .daily_cognition

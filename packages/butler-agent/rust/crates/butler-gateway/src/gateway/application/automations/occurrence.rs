@@ -65,14 +65,15 @@ impl AppApplication {
         let scheduled_at = self
             .storage
             .execute(move |db| {
-                let record = super::records::run(db, &run)?;
-                let late = is_late(record.scheduled_at.as_deref(), &now);
+                let scheduled_at = super::records::run(db, &run)?.scheduled_at;
+                let dispatch = super::holds::dispatch_time(db, &run, &now)?;
+                let late = is_late(scheduled_at.as_deref(), &dispatch);
                 db.execute(
                     "UPDATE app_automation_runs SET late=?1 WHERE id=?2",
                     rusqlite::params![late, run],
                 )
                 .map_err(AppStorageError::sqlite)?;
-                Ok(record.scheduled_at)
+                Ok(scheduled_at)
             })
             .await
             .map_err(app_error)?;
@@ -80,6 +81,7 @@ impl AppApplication {
             automation_id: id.into(),
             run_id: run_id.into(),
             unattended: trigger == "scheduled",
+            connector_event: false,
             scheduled_at,
         })
     }

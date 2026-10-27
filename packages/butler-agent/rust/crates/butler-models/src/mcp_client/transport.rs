@@ -42,7 +42,7 @@ impl McpClient {
         timeout: Duration,
         signal: &CancellationToken,
     ) -> Result<Value, McpClientError> {
-        let prepared = self.overlay_execution(&server.id).await?;
+        let prepared = self.prepared_operation(server, &operation).await?;
         let resolved = prepared
             .as_ref()
             .map(|(s, _)| super::registry::resolve_secrets(s, &self.environment))
@@ -112,6 +112,21 @@ impl McpClient {
         }
     }
 
+    async fn prepared_operation(
+        &self,
+        server: &McpServerConfig,
+        operation: &Operation,
+    ) -> Result<Option<super::overlay::LeasedConfig>, McpClientError> {
+        if let Operation::CallTool { arguments, .. } = operation {
+            if let Some(overlay) = self.overlay.clone().filter(|_| server.plugin.is_some()) {
+                return self
+                    .overlay_call(&server.id, overlay, Some(arguments.clone()))
+                    .await;
+            }
+            return Ok(None);
+        }
+        self.overlay_execution(&server.id).await
+    }
     async fn with_stdio(
         &self,
         server: &McpServerConfig,

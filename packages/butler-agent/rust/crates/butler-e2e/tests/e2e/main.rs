@@ -70,6 +70,7 @@ mod cli_reply_language;
 mod cli_surface;
 mod composer_decoration;
 mod composer_fold;
+mod connectors;
 mod context_telemetry;
 mod conversation_background;
 mod credential_store;
@@ -119,6 +120,7 @@ mod linux_sandbox;
 mod live;
 mod live_config;
 mod long_paths;
+mod mail;
 mod mcp;
 mod memory;
 mod memory_existing;
@@ -301,3 +303,6 @@ mod worker_cap;
 
 mod canon_link;
 mod one_call_delegation;
+
+mod chats_initiated;
+mod chats_proposals;
