@@ -33,7 +33,7 @@ fn candidate(id: &Value) -> Value {
     json!({"pattern_id":id,"title":"Prepare your morning report", "action":{"title":"Morning report",
         "prompt":"Research and summarize the latest information.","schedule":{"type":"weekdays","time":"07:25"}}})
 }
-fn responder(request: &Value) -> Option<ResponseRecord> {
+pub(super) fn responder(request: &Value) -> Option<ResponseRecord> {
     let task = task(request);
     let content = match task["task"].as_str() {
         Some("pattern_extraction") => {
@@ -69,7 +69,7 @@ fn responder(request: &Value) -> Option<ResponseRecord> {
     };
     Some(title_response(&format!("```json\n{content}\n```")))
 }
-async fn setup(id: &str) -> Result<Scenario, HarnessError> {
+pub(super) async fn setup(id: &str) -> Result<Scenario, HarnessError> {
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
     let setup = Setup::new(id)?
@@ -82,7 +82,7 @@ async fn setup(id: &str) -> Result<Scenario, HarnessError> {
     s.provider()?.set_chat_responder(responder);
     Ok(s)
 }
-fn seed(s: &Scenario, start: usize, count: usize) -> Result<(), HarnessError> {
+pub(super) fn seed(s: &Scenario, start: usize, count: usize) -> Result<(), HarnessError> {
     let db =
         butler_platform::sqlite::open(s.sandbox.data.join("runtime/conversation-store.sqlite"))?;
     db.execute("INSERT OR IGNORE INTO conversation_sessions(id,gateway_origin,created_at,updated_at,status,schema_version) VALUES('pattern-source','app','2026-10-01T00:00:00.000Z','2026-10-01T00:00:00.000Z','active',6)", [])?;
@@ -99,7 +99,7 @@ fn seed(s: &Scenario, start: usize, count: usize) -> Result<(), HarnessError> {
     }
     Ok(())
 }
-async fn enable(s: &Scenario) -> Result<(), HarnessError> {
+pub(super) async fn enable(s: &Scenario) -> Result<(), HarnessError> {
     let r =
         s.gw.patch("/personalization", json!({"profiling":{"mode":"basic"}}))
             .await?;
@@ -124,7 +124,7 @@ async fn parked(s: &Scenario) {
     .await
     .expect("source consumer parked after its last state transition");
 }
-async fn run(s: &Scenario) -> Result<Value, HarnessError> {
+pub(super) async fn run(s: &Scenario) -> Result<Value, HarnessError> {
     run_phase(s, "complete").await
 }
 async fn run_phase(s: &Scenario, phase: &str) -> Result<Value, HarnessError> {

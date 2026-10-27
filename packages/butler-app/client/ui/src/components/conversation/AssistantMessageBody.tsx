@@ -1,3 +1,4 @@
+import { InitiatedPanels } from "./InitiatedPanels";
 import { isGeneralChat } from "@/app/isGeneralChat";
 import { projectTurnActivity } from "@/app/conversation-progress";
 import { appCopy, useAppLocale } from "@/app/copy";
@@ -49,6 +50,7 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
             {!failureNotice && <AnswerBlocks sets={message.answer_blocks} messageId={message.id} replyText={message.text}
               sessionId={message.chat_id} turnId={message.turn_id} />}
             {attachments}
+            <InitiatedPanels origin={message.initiated} />
           </MessageBubbleAttachments>
         </> : <>
           <AnswerReply message={message} failureNotice={failureNotice} stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} />

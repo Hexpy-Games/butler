@@ -49,5 +49,5 @@ export const guidance: ShowcaseGuidance = {
     "Reduced motion: no enter or exit motion and still thinking marks.",
     "The shelf scrolls sideways inside its strip without a scrollbar (the TabStrip rule), so a classic scrollbar never lifts the cards or cuts their focus rings; the page never scrolls horizontally.",
   ],
-  tokens: ["--tab-rail-width", "--tab-rail-compact-width", "--tab-rail-shelf-height", "--tab-rail-inset", "--tab-rail-clearance", "--motion-base", "--motion-fast", "--motion-distance-sm"],
+  tokens: ["--tab-rail-width", "--tab-rail-compact-width", "--tab-rail-shelf-height", "--control-hit-target", "--focus-ring-room", "--tab-rail-inset", "--tab-rail-clearance", "--motion-base", "--motion-fast", "--motion-distance-sm"],
 };
