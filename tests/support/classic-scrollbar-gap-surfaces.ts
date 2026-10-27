@@ -110,7 +110,7 @@ export const unavailable = [
 function lines(state: State) { return Array.from({ length: state === "fits" ? 1 : 60 }, (_, i) => `Layout measurement paragraph ${i + 1}.`).join("\n\n"); }
 function draftText(state: State) { return state === "fits" ? "Layout input." : "Layout input. ".repeat(300); }
 
-export function fixtureData(state: State) {
+export function fixtureData(state: State, compact = false) {
   const count = state === "fits" ? 1 : 60;
   const navigation = structuredClone(HARNESS_NAVIGATION);
   const session = navigation.projects[0].sessions![0];
@@ -127,9 +127,9 @@ export function fixtureData(state: State) {
       message_id: "layout-message", created_at: "2026-10-25T00:00:00Z" }] };
   const sessionView = { ...HARNESS_SS03_OBSERVER_VIEW, session_id: "butler-client", active_turn: null, latest_turn: null,
     parent_session_id: null, relation: null, steward_children: [], messages: [message], context: null, branch: null,
-    artifacts: Array.from({ length: count }, (_, i) => ({ ...message.artifacts[0], id: `layout-file-${i}`, title: `Layout file ${i + 1}.txt` })),
+    artifacts: Array.from({ length: compact ? 0 : count }, (_, i) => ({ ...message.artifacts[0], id: `layout-file-${i}`, title: `Layout file ${i + 1}.txt` })),
     automations: [], pending_questions: [] };
-  const browserTabs = Array.from({ length: count }, (_, i) => ({ id: `layout-tab-${i}`, owner: "conversation:butler-client",
+  const browserTabs = Array.from({ length: compact ? 0 : count }, (_, i) => ({ id: `layout-tab-${i}`, owner: "conversation:butler-client",
     url: "https://example.invalid/", title: `Layout tab ${i + 1}`, favicon: "", agent: true, holder: "agent", agentAt: 1_760_000_000_000 - i,
     status: "idle", canBack: false, canForward: false }));
   const fixture = { messages: [message], sessionView, browserTabs, background: "plain", navigation,

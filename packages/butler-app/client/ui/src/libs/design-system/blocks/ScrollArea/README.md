@@ -33,8 +33,10 @@ The frame bleeds a scrollbar lane past the content's inline end. An overlay
 scrollbar takes no layout width, so the content gives the lane back and the
 scrollbar floats in it; a classic (always-shown) scrollbar is its own lane, so
 nothing more is reserved. The first DS scroller in a document measures a drawn
-thin scrollbar once and publishes its width as `--scrollbar-width` on the root
-(`0px` for overlay scrollbars); nothing runs while idle or on scroll.
+thin scrollbar and publishes its width as `--scrollbar-width` on the root
+(`0px` for overlay scrollbars). It measures again only when the page zoom (App
+text size) changes, since a classic scrollbar's CSS width shrinks as the page
+zooms in; nothing runs while idle or on scroll.
 
 Lane rule (all DS scrollers: ScrollArea, Dialog, the conversation transcript,
 the aside, autoGrow Textarea): a scrollbar lane or gutter is reserved only

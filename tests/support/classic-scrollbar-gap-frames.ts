@@ -4,13 +4,20 @@ import { join } from "node:path";
 import type { Page } from "playwright";
 import type { Surface } from "./classic-scrollbar-gap-surfaces.ts";
 
-export type Frame = { frame: number; time: number; left: number; right: number; clientWidth?: number; overflows?: boolean };
+export type Frame = { frame: number; time: number; left: number; right: number; dpr: number; clientWidth?: number; overflows?: boolean };
 export function deltas(records: Frame[]) {
   const changes = records.slice(1).flatMap((item, i) => {
     const left = item.left - records[i].left, right = item.right - records[i].right;
     return left !== 0 || right !== 0 ? [{ from: records[i].frame, frame: item.frame, left, right }] : [];
   });
-  return { count: records.length, maxLeft: Math.max(0, ...records.slice(1).map((r, i) => Math.abs(r.left - records[i].left))),
+  const dpr = records[0]?.dpr ?? 1;
+  const device = (value: number) => Math.round(Math.abs(value) * dpr) * Math.sign(value);
+  return { dpr, devicePixels: {
+    maxLeft: Math.max(0, ...changes.map(change => Math.abs(device(change.left)))),
+    maxRight: Math.max(0, ...changes.map(change => Math.abs(device(change.right)))),
+    steadyLeft: records.length ? device(records.at(-1)!.left - records[0].left) : null,
+    steadyRight: records.length ? device(records.at(-1)!.right - records[0].right) : null,
+  }, count: records.length, maxLeft: Math.max(0, ...records.slice(1).map((r, i) => Math.abs(r.left - records[i].left))),
     maxRight: Math.max(0, ...records.slice(1).map((r, i) => Math.abs(r.right - records[i].right))), changes,
     steadyLeft: records.length ? records.at(-1)!.left - records[0].left : null,
     steadyRight: records.length ? records.at(-1)!.right - records[0].right : null };
@@ -29,7 +36,7 @@ export async function startFrames(page: Page, surface: Surface) {
     const shifts: unknown[] = [];
     const read = (): Frame => {
       const r = c.getBoundingClientRect();
-      return { frame, time: performance.timeOrigin + performance.now(), left: r.left, right: r.right,
+      return { frame, time: performance.timeOrigin + performance.now(), left: r.left, right: r.right, dpr: devicePixelRatio,
         clientWidth: s.clientWidth, overflows: s.scrollHeight > s.clientHeight + 1 };
     };
     const observer = new ResizeObserver(() => ro.set(frame, read()));
@@ -132,7 +139,7 @@ async function decodeFrames(page: Page, images: { data: string; timestamp: numbe
       bitmap.close();
       if (right < left) continue;
       const nearest = raf.reduce((a, b) => Math.abs(b.time - timestamp) < Math.abs(a.time - timestamp) ? b : a);
-      records.push({ frame: nearest.frame, time: timestamp, left: left / scale, right: (right + 1) / scale });
+      records.push({ frame: nearest.frame, time: timestamp, left: left / scale, right: (right + 1) / scale, dpr: devicePixelRatio });
     }
     return { painted: records, unmarked };
   }, { images, raf });
@@ -148,7 +155,7 @@ export function assertTransition(result: Awaited<ReturnType<typeof sampleTransit
   for (const [name, summary] of Object.entries(result.summaries)) {
     if (name === "raf" && !result.rafReads) continue;
     assert(summary.count >= 2, `${name}: insufficient frame coverage`);
-    assert(Math.round(summary.maxLeft * 2) === 0 && Math.round(summary.maxRight * 2) === 0, `${name}: per-frame column shift ${JSON.stringify(summary)}`);
-    assert(Math.round(Math.abs(summary.steadyLeft!) * 2) === 0 && Math.round(Math.abs(summary.steadyRight!) * 2) === 0, `${name}: steady column shift`);
+    assert(summary.devicePixels.maxLeft === 0 && summary.devicePixels.maxRight === 0, `${name}: per-frame column shift ${JSON.stringify(summary)}`);
+    assert(summary.devicePixels.steadyLeft === 0 && summary.devicePixels.steadyRight === 0, `${name}: steady column shift`);
   }
 }

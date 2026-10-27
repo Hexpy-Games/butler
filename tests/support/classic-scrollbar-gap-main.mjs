@@ -28,6 +28,13 @@ const server = createServer(async (request, response) => {
       response.end(JSON.stringify({ electron: process.versions.electron, shown: window.isVisible(), locked,
         size: window.getContentSize(), argv: process.argv })); return;
     }
+    if (url.pathname === "/__zoom") {
+      const factor = Number(url.searchParams.get("factor"));
+      if (!Number.isFinite(factor) || factor <= 0) throw new Error("Invalid zoom factor");
+      window.webContents.setZoomFactor(factor);
+      await window.webContents.executeJavaScript(`document.documentElement.style.setProperty('--ui-scale', '${factor}')`);
+      response.end(JSON.stringify({ factor: window.webContents.getZoomFactor(), size: window.getContentSize() })); return;
+    }
     let file = resolve(dist, "." + decodeURIComponent(url.pathname));
     if (!file.startsWith(dist + sep) && file !== dist) throw new Error("outside dist");
     if (url.pathname === "/") file = resolve(dist, "index.html");

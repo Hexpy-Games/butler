@@ -21,6 +21,8 @@ import { fixtureData, installBridge, surfaces, unavailable, type State, type Sur
 import { execFileSync, spawn } from "node:child_process";
 import { assertTransition, sampleTransition } from "../support/classic-scrollbar-gap-frames.ts";
 import { growTranscript } from "../support/classic-scrollbar-gap-growth.ts";
+import { textSizeFactor } from "../../packages/butler-app/client/ui/src/app/textSize.ts";
+import type { SettingsView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 // Keep the entry runnable with the repository's Bun script, but use Node's
 // WebSocket transport for Playwright's CDP connection (Bun's handshake stalls).
@@ -33,20 +35,25 @@ if (typeof Bun !== "undefined") {
 const { spawnElectron, stopElectronChild } = await import("../support/electron-child.ts");
 
 type Mode = "classic" | "overlay";
-type Metric = { lane: number; overflows: boolean; unused: number; end: number; start: number;
+type Metric = { lane: number; laneApi: string; overflows: boolean; unused: number; end: number; start: number;
   content: { text: string; referenceText: string; items: number; icons: number; value: string };
   height: number; scrollHeight: number; overflowY: string; overflowsX: boolean; overflowX: string; dpr: number; rect: { x: number; y: number; width: number; height: number } };
-type Cell = { metric?: Metric; error?: string; gap?: number };
-type Row = { surface: Surface; cells: Record<string, Cell>; jump?: Partial<Record<Mode, number>>; comparable?: Partial<Record<State, boolean>> };
+type Cell = { metric?: Metric; error?: string; gap?: number; rawGap?: number };
+type Row = { surface: Surface; cells: Record<string, Cell>; jump?: Partial<Record<Mode, number>>; rawJump?: Partial<Record<Mode, number>>; comparable?: Partial<Record<State, boolean>> };
 const rows: Row[] = surfaces.map(surface => ({ surface, cells: {} }));
 const conditions: unknown[] = [];
+const textSize = process.env.BUTLER_SMOKE_TEXT_SIZE ?? "default";
+assert(["default", "large", "larger"].includes(textSize), "invalid smoke text size");
+const uiScale = textSizeFactor(textSize as SettingsView["text_size"]);
+const zoomMeasurements = new Map<string, unknown[]>();
 const probes: Partial<Record<Mode, number>> = {};
 const harnessFailures: string[] = [];
 const transitions: { surface: string; mode: Mode; trigger: string; result?: Awaited<ReturnType<typeof sampleTransition>>; error?: string }[] = [];
 const shots = process.env.BUTLER_SCROLLBAR_GAP_SHOTS;
 const report = process.env.BUTLER_SCROLLBAR_GAP_REPORT;
 if (shots) mkdirSync(shots, { recursive: true });
-const round = (n: number) => Math.round(n * 2) / 2;
+const devicePixels = (n: number, dpr: number) => Math.round(Math.abs(n) * dpr) * Math.sign(n);
+const fitFixtures = new Map<string, { height: number; compact: boolean }>();
 const key = (state: State, mode: Mode) => `${state}/${mode}`;
 const require = createRequire(resolve("packages/butler-app/client/electron/package.json"));
 const electron: string = require("electron");
@@ -82,25 +89,79 @@ async function resize(url: string, width: number, height: number) {
 }
 
 async function probe(page: Page, mode: Mode) {
-  const width = await page.evaluate(() => {
-    const node = document.createElement("div");
-    node.style.cssText = "position:absolute;width:100px;height:100px;overflow-y:scroll;visibility:hidden";
-    document.body.append(node);
-    const width = node.offsetWidth - node.clientWidth;
-    node.remove(); return width;
-  });
+  const measurement = await probeWidths(page);
+  const width = measurement.native;
   probes[mode] = width;
   assert(mode === "classic" ? width > 0 : width === 0,
     `${mode} platform probe measured ${width}px; expected ${mode === "classic" ? "> 0" : "0"}. No gap evidence is valid for this process.`);
 }
 
+async function probeWidths(page: Page) {
+  return page.evaluate(async () => {
+    const node = document.createElement("div");
+    node.style.cssText = "position:absolute;width:100px;height:100px;overflow-y:scroll;visibility:hidden";
+    document.body.append(node);
+    const lane = () => new Promise<number>(done => {
+      const observer = new ResizeObserver(([entry]) => {
+        observer.disconnect(); done(node.getBoundingClientRect().width - entry.contentRect.width);
+      });
+      observer.observe(node);
+    });
+    const native = await lane();
+    node.style.scrollbarWidth = "thin";
+    const thin = await lane();
+    node.remove();
+    return { native, thin, laneApi: "getBoundingClientRect - ResizeObserver.contentRect (unbordered, unpadded probe)", published: getComputedStyle(document.documentElement).getPropertyValue("--scrollbar-width").trim(),
+      dpr: devicePixelRatio, viewport: { width: innerWidth, height: innerHeight } };
+  });
+}
+
+async function zoom(url: string, factor: number) {
+  const response = await fetch(`${url}/__zoom?factor=${factor}`);
+  assert(response.ok, `Zoom failed: ${await response.clone().text()}`);
+  const result = await response.json();
+  assert.equal(result.factor, factor);
+  return result;
+}
+
 async function open(page: Page, url: string, surface: Surface, state: State, theme: string) {
-  const height = surface.heights?.[state === "fits" ? 0 : 1] ?? 860;
-  await resize(url, surface.width ?? 1280, height);
-  const data = fixtureData(state);
+  const fit = state === "fits" ? fitFixtures.get(surface.name) : undefined;
+  let height = fit?.height ?? surface.heights?.[state === "fits" ? 0 : 1] ?? 860;
+  let compact = fit?.compact ?? false;
+  await openFixture(page, url, surface, state, theme, height, compact);
+  if (state !== "fits" || surface.axis === "x") return;
+  let metric = await measure(page, surface);
+  if (metric.overflows) {
+    // Request the missing CSS height in DIPs. macOS may cap the actual window.
+    height += metric.scrollHeight - metric.height + 32;
+    await resize(url, surface.width ?? 1280, Math.ceil(height * uiScale));
+    await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    metric = await measure(page, surface);
+    if (metric.overflows && !compact) {
+      compact = true;
+      await openFixture(page, url, surface, state, theme, height, compact);
+    }
+  }
+  fitFixtures.set(surface.name, { height, compact });
+}
+
+async function openFixture(page: Page, url: string, surface: Surface, state: State, theme: string, height: number, compact: boolean) {
+  await resize(url, surface.width ?? 1280, Math.ceil(height * uiScale));
+  await zoom(url, 1);
+  const data = fixtureData(state, compact);
   await fetch(`${url}/__fixture`, { method: "POST", body: JSON.stringify({ ...data, fixture: { ...data.fixture, storage: surface.storage?.(state) } }) });
   await page.goto(`${url}/?visual=components&theme=${theme}&locale=ko${surface.route ?? ""}`);
   await page.locator('[data-test-class~="conversation"], [data-test-class="editable-document"]').first().waitFor();
+  await page.waitForFunction(() => document.documentElement.style.getPropertyValue("--scrollbar-width") !== "");
+  const before = await probeWidths(page);
+  const window = await zoom(url, uiScale);
+  await page.waitForFunction(({ dpr, factor }) => Math.abs(devicePixelRatio - dpr * factor) < 0.001,
+    { dpr: before.dpr, factor: uiScale });
+  await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+  const after = await probeWidths(page);
+  assert(Math.abs(after.viewport.width - window.size[0] / uiScale) <= 1, "CSS viewport width must follow page zoom");
+  assert(Math.abs(after.viewport.height - window.size[1] / uiScale) <= 1, "CSS viewport height must follow page zoom");
+  zoomMeasurements.get(url)!.push({ surface: surface.name, state, theme, height, compact, before, after });
   await surface.navigate?.(page, state);
   await page.locator(surface.s).first().waitFor();
   await page.evaluate(() => document.fonts.ready);
@@ -112,18 +173,24 @@ async function open(page: Page, url: string, surface: Surface, state: State, the
 }
 
 async function measure(page: Page, surface: Surface): Promise<Metric> {
-  return page.locator(surface.s).first().evaluate((element, selector) => {
+  return page.locator(surface.s).first().evaluate(async (element, selector) => {
     const s = element as HTMLElement;
     const c = selector === ":scope" ? s : s.querySelector(selector);
     if (!c) throw new Error(`Content reference missing: ${selector}`);
+    // ResizeObserver exposes the fractional content box excluding the scrollbar.
+    const contentWidth = await new Promise<number>(done => {
+      const observer = new ResizeObserver(([entry]) => { observer.disconnect(); done(entry.contentRect.width); });
+      observer.observe(s);
+    });
     const style = getComputedStyle(s), bounds = s.getBoundingClientRect(), content = c.getBoundingClientRect();
-    const lane = s.offsetWidth - s.clientWidth - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+    const lane = bounds.width - contentWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
     const overflows = s.scrollHeight > s.clientHeight + 1;
     const text = (node: Element) => (node.textContent ?? "").replace(/\s+/gu, " ").trim();
     const contentIdentity = { text: text(s), referenceText: text(c),
       items: s.querySelectorAll('[role="menuitem"], [role="option"], [role="tab"], button, li').length,
       icons: s.querySelectorAll("svg").length, value: s instanceof HTMLTextAreaElement ? s.value : "" };
-    return { content: contentIdentity, lane, overflows, unused: overflows ? 0 : lane, end: content.right, start: content.left,
+    return { content: contentIdentity, lane, laneApi: "getBoundingClientRect - ResizeObserver.contentRect - computed padding/borders", overflows, unused: overflows ? 0 : lane, end: content.right, start: content.left,
       height: s.clientHeight, scrollHeight: s.scrollHeight, overflowY: style.overflowY, dpr: devicePixelRatio,
       overflowsX: s.scrollWidth > s.clientWidth + 1, overflowX: style.overflowX,
       rect: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } };
@@ -187,7 +254,9 @@ async function run(mode: Mode) {
     const condition = await resize(host.url, 1280, 860);
     const consoleState = execFileSync("ioreg", ["-n", "Root", "-d1"], { encoding: "utf8" });
     const screenLocked = /"IOConsoleLocked"\s*=\s*Yes/u.test(consoleState);
-    conditions.push({ mode, ...condition, screenLocked });
+    const measurements: unknown[] = [];
+    zoomMeasurements.set(host.url, measurements);
+    conditions.push({ mode, ...condition, screenLocked, textSize, uiScale, zoomMeasurements: measurements });
     assert(String(condition.electron).startsWith("44."), `Requires Electron 44, got ${condition.electron}`);
     await transitionCells(page, host.url, mode);
     for (const row of rows) for (const state of ["fits", "overflows"] as const) {
@@ -215,7 +284,7 @@ async function transitionCells(page: Page, url: string, mode: Mode) {
         record.result = await sampleTransition(page, surface, async () => {
           if (trigger === "messages") { await growTranscript(page); }
           else if (trigger === "filter") { await search.fill(""); }
-          else { await resize(url, surface.width ?? 1280, surface.heights?.[1] ?? 340); }
+          else { await resize(url, surface.width ?? 1280, Math.ceil((surface.heights?.[1] ?? 340) * uiScale)); }
         }, `${name}-${mode}-${trigger}`);
         console.error(JSON.stringify({ surface: name, mode, trigger, summaries: record.result.summaries }));
         if (name === "transcript" || name === "dialog-self") assertTransition(record.result);
@@ -233,7 +302,10 @@ function calculate() {
   for (const row of rows) {
     for (const state of ["fits", "overflows"] as const) {
       const classic = row.cells[key(state, "classic")], overlay = row.cells[key(state, "overlay")];
-      if (overlay?.metric && !overlay.error) overlay.gap = round(overlay.metric.unused);
+      if (overlay?.metric && !overlay.error) {
+        overlay.rawGap = overlay.metric.unused;
+        overlay.gap = devicePixels(overlay.rawGap, overlay.metric.dpr);
+      }
       if (classic?.metric && overlay?.metric && !classic.error && !overlay.error) {
         const c = classic.metric, o = overlay.metric;
         try {
@@ -247,24 +319,29 @@ function calculate() {
           harnessFailures.push(message);
           continue;
         }
-        classic.gap = round(c.unused + Math.max(0, (o.end - o.rect.x) - (c.end - c.rect.x) - (c.overflows ? c.lane : 0)) + Math.max(0, (c.start - c.rect.x) - (o.start - o.rect.x)));
+        classic.rawGap = c.unused + Math.max(0, (o.end - o.rect.x) - (c.end - c.rect.x) - (c.overflows ? c.lane : 0)) + Math.max(0, (c.start - c.rect.x) - (o.start - o.rect.x));
+        classic.gap = devicePixels(classic.rawGap, c.dpr);
       }
     }
     for (const mode of ["classic", "overlay"] as const) {
       const fits = row.cells[key("fits", mode)]?.metric, overflows = row.cells[key("overflows", mode)]?.metric;
-      if (fits && overflows) (row.jump ??= {})[mode] = round((fits.end - fits.rect.x) - (overflows.end - overflows.rect.x));
+      if (fits && overflows) {
+        const raw = (fits.end - fits.rect.x) - (overflows.end - overflows.rect.x);
+        (row.rawJump ??= {})[mode] = raw;
+        (row.jump ??= {})[mode] = devicePixels(raw, fits.dpr);
+      }
     }
   }
 }
 
 function markdown() {
-  const heading = "| Surface | fits/classic | fits/overlay | overflows/classic | overflows/overlay | lane classic fits/overflows | probe classic | jump classic / overlay |\n|---|---:|---:|---:|---:|---:|---:|---:|";
+  const heading = "| Surface | fits/classic | fits/overlay | overflows/classic | overflows/overlay | raw lane CSS px fits/overflows | probe classic | jump classic / overlay |\n|---|---:|---:|---:|---:|---:|---:|---:|";
   const body = rows.map(row => {
     const cells = ["fits/classic", "fits/overlay", "overflows/classic", "overflows/overlay"].map(id => {
       const cell = row.cells[id];
-      return cell?.error ? "ERROR" : cell?.gap === undefined ? "—" : cell.gap > 0 ? `**${cell.gap}**` : "0";
+      return cell?.error ? "ERROR" : cell?.gap === undefined ? "—" : cell.gap !== 0 ? `**${cell.gap}**` : "0";
     });
-    const lane = (["fits", "overflows"] as const).map(state => row.cells[key(state, "classic")]?.metric?.lane).map(n => n === undefined ? "—" : round(n)).join(" / ");
+    const lane = (["fits", "overflows"] as const).map(state => row.cells[key(state, "classic")]?.metric?.lane).map(n => n === undefined ? "—" : Number(n.toFixed(6))).join(" / ");
     return `| ${row.surface.name} | ${cells.join(" | ")} | ${lane} | ${probes.classic ?? "—"} | ${row.jump?.classic ?? "—"} / ${row.jump?.overlay ?? "—"} |`;
   });
   return [heading, ...body].join("\n");
@@ -294,7 +371,7 @@ calculate();
 const table = markdown();
 console.log(table);
 const selectors = rows.map(({ surface }) => ({ name: surface.name, S: surface.s, C: surface.c, note: surface.note }));
-const payload = { table, units: "CSS px, rounded to 0.5", probes, conditions,
+const payload = { table, units: "gap/jump: whole device pixels; rawGap/rawJump/metric/frame summaries: CSS px", probes, conditions,
   rows: rows.map(({ surface, ...row }) => ({ name: surface.name, ...row })), transitions, selectors, unavailable, inventory: inventory(), harnessFailures, shots };
 if (report) {
   mkdirSync(dirname(report), { recursive: true });
@@ -302,7 +379,7 @@ if (report) {
   writeFileSync(report.replace(/\.json$/u, "") + ".md", table + "\n\n" + JSON.stringify({ selectors, unavailable, conditions, harnessFailures }, null, 2) + "\n");
 }
 console.log(JSON.stringify({ probes, conditions, selectors, unavailable, report, shots }, null, 2));
-const gaps = rows.flatMap(row => Object.entries(row.cells).filter(([, cell]) => (cell.gap ?? 0) > 0).map(([id, cell]) => `${row.surface.name} ${id}: ${cell.gap}px`));
+const gaps = rows.flatMap(row => Object.entries(row.cells).filter(([, cell]) => (cell.gap ?? 0) !== 0).map(([id, cell]) => `${row.surface.name} ${id}: ${cell.gap} device px (raw ${cell.rawGap} CSS px, dpr ${cell.metric?.dpr})`));
 const missing = rows.flatMap(row => ["fits/classic", "fits/overlay", "overflows/classic", "overflows/overlay"].filter(id => row.cells[id]?.gap === undefined).map(id => `${row.surface.name} ${id}`));
 assert.deepEqual(harnessFailures, [], `Harness failures (not gap evidence):\n${harnessFailures.join("\n")}`);
 assert.deepEqual(missing, [], `Missing measurement cells: ${missing.join(", ")}`);
