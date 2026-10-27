@@ -109,6 +109,19 @@ async fn ask_always_still_asks_for_a_plain_click() -> Result<(), HarnessError> {
     assert_eq!(card["approval"]["risk"], "medium", "{card}");
     assert_eq!(card["approval"]["operation"]["allow_conversation"], true);
     assert_eq!(host.acts(), Vec::<Value>::new());
+    assert!(card["approval"]["operation"]["allow_site"].is_null());
+    let reference = card["request_ref"].as_str().unwrap();
+    let invalid =
+        s.gw.post(
+            &format!("/authority-requests/{reference}/allow?session_id=general"),
+            json!({"scope":"site"}),
+        )
+        .await?;
+    assert_eq!(
+        invalid.body["error"]["code"], "site_scope_invalid",
+        "{}",
+        invalid.text
+    );
     allow(&s, &id, &card).await?;
     assert_eq!(host.acts().len(), 1);
     s.finish().await

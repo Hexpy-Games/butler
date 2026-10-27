@@ -42,7 +42,7 @@ pub(super) async fn finish(
             }
             return finish_batch(args, value);
         }
-        authority::Gate::Allowed(reference) => reference,
+        authority::Gate::Allowed(reference, _) => reference,
     };
     let dispatch = json!({"tab":args["tab"],"dialog":pending["dialog"]["id"],"accept":true,"value":pending["dialog"]["defaultPrompt"]});
     let dialog_occurrence = format!(
