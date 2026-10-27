@@ -179,6 +179,13 @@ async fn project_chat_card_names_requested_project_and_move_destination_in_ui_la
     let id = draft(&s, &script, &chat, json!({"project_id":other,"summary":"모델 요약","changes":[{"op":"epic.move","id":epic,"expected_revision":row["revision"],"plan_id":plan["id"]}]})).await?;
     let card = read(&s, &id).await?;
     assert_eq!(card["changes"][0]["destination_plan_title"], "다음 계획");
+    assert!(
+        card["changes"][0]
+            .get("current_plan_title")
+            .unwrap()
+            .is_null()
+    );
+    assert_eq!(card["epics"][0]["title"], "다른 제품 오류");
     data(
         s.gw.patch("/settings", json!({"language":"ko"})).await?,
         200,
@@ -203,6 +210,13 @@ async fn project_chat_card_names_requested_project_and_move_destination_in_ui_la
         asks(&s, &chat).await?["asks"][0]["target_label"],
         "Move Epic to ‘다음 계획’"
     );
+    accept(&s, &id).await?;
+    let row = data(s.gw.get(&format!("/canon/epics/{epic}")).await?, 200);
+    let id = draft(&s, &script, &chat, json!({"project_id":other,"summary":"백로그로 이동","changes":[{"op":"epic.move","id":epic,"expected_revision":row["revision"],"plan_id":null}]})).await?;
+    let card = read(&s, &id).await?;
+    assert_eq!(card["changes"][0]["current_plan_title"], "다음 계획");
+    assert!(card["changes"][0]["destination_plan_title"].is_null());
+    assert_eq!(card["epics"][0]["title"], "다른 제품 오류");
     server.abort();
     s.finish().await
 }

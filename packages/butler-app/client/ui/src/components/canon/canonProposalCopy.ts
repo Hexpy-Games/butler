@@ -6,6 +6,7 @@ export const canonProposalCopy = (ko: boolean) => ({
   cancelled: ko ? "취소함" : "Cancelled", superseded: ko ? "새 초안으로 바뀜" : "Replaced",
   stale: ko ? "이전 내용 기준" : "Out of date", record: ko ? "과제 등록함 · 버틀러" : "Epic added · Butler",
   open: ko ? "열기" : "Open", name: ko ? "이름을 입력하세요" : "Enter a name",
+  currentPlan: ko ? "현재 계획" : "Current plan",
   project: ko ? "프로젝트" : "Project", newProject: ko ? "새 프로젝트" : "New project",
   target: (plan?: string, name?: string) => name ? ko ? `새 프로젝트 ‘${name}’ 만들고 과제 등록` : `Create project ‘${name}’ and add Epic`
     : plan ? ko ? `‘${plan}’에 과제 등록` : `Add Epic to ‘${plan}’` : ko ? "백로그에 과제 등록" : "Add Epic to Backlog",

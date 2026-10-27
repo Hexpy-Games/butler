@@ -22,6 +22,12 @@ pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
     }
     for change in &mut changes {
         if change["op"] == "epic.move" {
+            let current = read_work(db, text(change, "id")?)?;
+            change["current_plan_title"] = current["plan_id"]
+                .as_str()
+                .map(|id| read_plan(db, id).map(|p| p["title"].clone()))
+                .transpose()?
+                .unwrap_or(Value::Null);
             change["destination_plan_title"] = change["plan_id"]
                 .as_str()
                 .map(|id| read_plan(db, id).map(|p| p["title"].clone()))

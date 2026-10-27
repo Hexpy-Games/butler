@@ -7,6 +7,12 @@ import { join, resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import type { CanonProposal } from "../../packages/butler-app/client/shared/canon-proposal-contracts.ts";
+import { captureReviewCrops } from "../support/canon-registration-review.ts";
+
+if (process.env.BUTLER_SMOKE_REVIEW_CROPS === "1") {
+  await captureReviewCrops();
+  process.exit(0);
+}
 
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const shots = process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/canon-registration-screenshots";

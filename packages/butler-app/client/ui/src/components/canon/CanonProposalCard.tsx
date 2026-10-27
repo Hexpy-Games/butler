@@ -1,6 +1,6 @@
 import { CanonProposalChanges } from "./CanonProposalChanges.tsx";
 import { useState } from "react";
-import { Button, ButtonContainer, Card, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, Card, KeyValueRow, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
 import { useAppLocale } from "@/app/copy.ts";
 import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -57,15 +57,18 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
     <Stack gap="md">
       <Typo.Caption tone="tertiary">{creates ? copy.draft : copy.changes}</Typo.Caption>
       <Typo.Caption>{creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.target_label}</Typo.Caption>
-      {p.epics.map((epic, index) => <Stack key={index} gap="sm">
-        <Typo.PanelTitle wrap="anywhere">{epic.title}</Typo.PanelTitle>
-        <EpicMarkdown epicId="" description={epic.description.replace(/!?\[[^\]]*\]\(attachment:[^)]+\)/giu, "")} density="compact" />
-        <Stack align="row" gap="xs" wrap>{epic.tags.map((tag, index) => <Tag key={tag.id ?? index} tone={tag.color} size="sm">{tag.name}</Tag>)}</Stack>
-        <MessageAttachments attachments={epic.attachments} sessionId={sessionId} />
-      </Stack>)}
-      <Typo.Caption>{projectName}</Typo.Caption>
+      {p.epics.map((epic, index) => {
+        const description = epic.description.replace(/!?\[[^\]]*\]\(attachment:[^)]+\)/giu, "");
+        return <Stack key={index} gap="sm">
+          <Typo.PanelTitle wrap="anywhere">{epic.title}</Typo.PanelTitle>
+          {description.trim() && <EpicMarkdown epicId="" description={description} density="compact" />}
+          {epic.tags.length > 0 && <Stack align="row" gap="xs" wrap>{epic.tags.map((tag, index) => <Tag key={tag.id ?? index} tone={tag.color} size="sm">{tag.name}</Tag>)}</Stack>}
+          <MessageAttachments attachments={epic.attachments} sessionId={sessionId} />
+        </Stack>;
+      })}
       <CanonProposalChanges changes={p.changes} ko={ko} />
-      {chooseProject && <CanonProposalProject value={target} name={name} busy={busy} ko={ko} onSelect={setTarget} onName={setName} />}
+      {chooseProject ? <CanonProposalProject value={target} name={name} busy={busy} ko={ko} onSelect={setTarget} onName={setName} />
+        : <KeyValueRow label={copy.project} value={projectName} />}
       <ButtonContainer size="sm" justify="end">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => void apply("declined")}>{copy.cancel}</Button>
         <Tooltip wrap label={empty ? copy.name : undefined}><Button size="sm" disabled={busy} aria-disabled={empty || undefined} onClick={() => void apply("accepted")}>{creates ? copy.add : copy.apply}</Button></Tooltip>

@@ -38,8 +38,15 @@ async function captures(page: Page, server: NativeAppServerHandle, id: string, p
     await card.waitFor(); await card.scrollIntoViewIfNeeded();
     if (!baseline) {
       assert.equal(await card.getByRole("combobox", { name: "프로젝트", exact: true }).inputValue(), project);
-      await card.getByText("다른 제품", { exact: true }).first().waitFor();
-      if (variant === "move-destination") await card.getByText("다음 릴리스", { exact: true }).waitFor();
+      assert.equal(await card.locator("select option:checked").textContent(), "다른 제품");
+      assert.equal(await card.getByText("프로젝트", { exact: true }).count(), 1, "one visible project label");
+      if (variant === "move-destination") {
+        await card.getByText("이동할 과제", { exact: true }).waitFor();
+        const rows = card.locator('[data-test-class="key-value-row"]');
+        await rows.filter({ hasText: "현재 계획" }).getByText("백로그", { exact: true }).waitFor();
+        await rows.filter({ hasText: "대상 계획" }).getByText("다음 릴리스", { exact: true }).waitFor();
+        assert.equal(await card.getByText("과제 이동", { exact: true }).count(), 0);
+      }
       await auditCanonCardFocus(page, card);
     }
     await page.screenshot({ path: join(shots, `${baseline ? "before" : "after"}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}-${variant}.png`), animations: "disabled" });
