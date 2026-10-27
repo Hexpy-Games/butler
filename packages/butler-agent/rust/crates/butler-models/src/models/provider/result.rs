@@ -32,7 +32,11 @@ pub(super) fn decode(
     {
         text_tool_call_names = local::rejected_text_calls(text, request);
     }
-    let output_truncated = cutoff::mark(&response, carrier, &mut calls);
+    let stop = stop::classify(&response, carrier);
+    let output_truncated = stop == butler_turn::btcc::ModelStop::Truncated;
+    if output_truncated {
+        stop::mark_truncated_call(&response, carrier, &mut calls);
+    }
     let identity = reported
         .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .map(|reported_model| ProviderIdentity {
@@ -61,6 +65,7 @@ pub(super) fn decode(
         (provider == "openai").then(|| openai_continuation(&response, request, legacy_projection));
     retain_rejected_text(&mut continuation, text.as_deref(), &text_tool_call_names);
     ModelRoundResult {
+        stop,
         output_truncated,
         reasoning_summary: None,
         nonfinal: nonfinal(&response, carrier),
@@ -336,13 +341,8 @@ type Fields = (
     Option<Value>,
     Option<String>,
 );
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 pub(super) fn nonempty(value: String) -> Option<String> {
-    let value = butler_core::public_text::trim_js_whitespace(&value);
-    if value.is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&value).is_empty() {
         return None;
     }
     let lower = value.to_ascii_lowercase();
@@ -356,7 +356,7 @@ pub(super) fn nonempty(value: String) -> Option<String> {
             return Some(selected.to_owned());
         }
     }
-    Some(value.to_owned())
+    Some(value)
 }
 
 /// Reasoning (thinking) tokens a response reported, a subset of its output
@@ -444,6 +444,6 @@ mod local;
 mod anthropic_history;
 
 mod call;
-mod cutoff;
 mod responses;
+pub(super) mod stop;
 use call::call;

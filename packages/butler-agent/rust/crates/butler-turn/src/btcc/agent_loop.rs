@@ -71,9 +71,9 @@ pub use contracts::{
     BoundedEnvelopeV1, CandidateDisposition, ContextMessages, ContextProjection,
     ContextProjectionInput, ContextProjectionRebaseIdentity, ContextProjectionRebaseV1,
     ContextRebase, LoopPhase, ModelRoundMessage, ModelRoundRequest, ModelRoundResult,
-    ModelRoundRole, ModelRoundTool, ModelRoundToolCall, ProviderIdentity, RollingContextV1,
-    SteeringObservation, TextCallDisposition, ToolCallOrigin, ToolChoice, ToolOutcome, ToolResult,
-    ToolSurface, UsageAttribution,
+    ModelRoundRole, ModelRoundTool, ModelRoundToolCall, ModelStop, ProviderIdentity,
+    RollingContextV1, SteeringObservation, TextCallDisposition, ToolCallOrigin, ToolChoice,
+    ToolOutcome, ToolResult, ToolSurface, UsageAttribution,
 };
 pub use guided_ports::{
     AuthorityPort, ContextPort, FinalSynthesis, GuidedHookBinding, GuidedInvocation,

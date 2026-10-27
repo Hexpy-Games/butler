@@ -51,10 +51,11 @@ pub(in crate::gateway::application) fn project_failed(
             .map(|v| short_text(&v, 240))
             .unwrap_or_else(|| "Butler could not complete this turn.".into())
     };
+    let content = failure_content(db, chat, turn, message, &label)?;
     let existing: Option<String> = db.query_row("SELECT id FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1", params![chat,turn], |row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
     let message_id = existing.as_deref().unwrap_or(&ids.message_id);
-    if existing.is_some() { db.execute("UPDATE messages SET text=?1,status='failed',safe_error_code=?2,retryable=?3,updated_at=?4 WHERE id=?5",params![label,code,retryable,now,message_id]) }
-    else { db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code,retryable) VALUES(?1,?2,?3,'assistant',?4,'failed',?5,?5,?6,?7)",params![message_id,chat,turn,label,now,code,retryable]) }
+    if existing.is_some() { db.execute("UPDATE messages SET text=?1,status='failed',safe_error_code=?2,retryable=?3,updated_at=?4 WHERE id=?5",params![content,code,retryable,now,message_id]) }
+    else { db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code,retryable) VALUES(?1,?2,?3,'assistant',?4,'failed',?5,?5,?6,?7)",params![message_id,chat,turn,content,now,code,retryable]) }
         .map_err(AppStorageError::sqlite)?;
     db.execute("UPDATE turns SET state=?1,safe_status_label=?2,safe_error_code=?3,retryable=?4,cancellable=0,updated_at=?5 WHERE id=?6",params![if code=="runtime_fault"{"runtime_fault"}else{"failed"},if code=="runtime_fault"{"Runtime fault"}else{"Failed"},code,retryable,now,turn]).map_err(AppStorageError::sqlite)?;
     events::append(
@@ -82,6 +83,29 @@ pub(in crate::gateway::application) fn project_failed(
         now,
     )?;
     Ok(())
+}
+
+/// Keep an undiscarded answer draft before the terminal status, as Stop does.
+fn failure_content(
+    db: &Connection,
+    chat: &str,
+    turn: &str,
+    message: &Map<String, Value>,
+    label: &str,
+) -> Result<String, AppStorageError> {
+    let content = text(message.get("text")).unwrap_or_else(|| label.to_owned());
+    let partial: Option<String> = db.query_row(
+        "SELECT m.text FROM app_owned_messages m LEFT JOIN turn_stream_drafts d ON d.turn_id=m.turn_id \
+         WHERE m.chat_id=?1 AND m.turn_id=?2 AND m.role='assistant' AND m.status='streaming' \
+         AND COALESCE(d.discarded,0)=0 ORDER BY m.rowid DESC LIMIT 1",
+        params![chat, turn], |row| row.get(0),
+    ).optional().map_err(AppStorageError::sqlite)?;
+    Ok(
+        match partial.filter(|text| !text.is_empty() && !content.starts_with(text)) {
+            Some(partial) => format!("{partial}\n\n{content}"),
+            None => content,
+        },
+    )
 }
 
 pub(super) fn project_cancelled(

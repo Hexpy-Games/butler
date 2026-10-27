@@ -85,7 +85,7 @@ fn carriers(args: &str, fragments: &[&str]) -> Result<Vec<Value>, serde_json::Er
         json!({"type":"response.output_item.added","output_index":1,"item":other}),
         json!({"type":"response.function_call_arguments.delta","output_index":1,"delta":"{}"}),
         json!({"type":"response.output_item.done","output_index":1,"item":other}),
-        json!({"type":"response.completed","response":{"id":"response-0","output":[answer,other]}}),
+        json!({"type":"response.completed","response":{"id":"response-0","status":"completed","output":[answer,other]}}),
     ]);
     let mut chat = vec![
         json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-0","function":{"name":"answer_","arguments":""}}]}}]}),
@@ -93,9 +93,9 @@ fn carriers(args: &str, fragments: &[&str]) -> Result<Vec<Value>, serde_json::Er
     ];
     chat.extend(fragments.iter().map(|delta|json!({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":delta}}]}}]})));
     chat.push(json!({"choices":[{"finish_reason":"tool_calls","delta":{"tool_calls":[{"index":1,"id":"call-1","function":{"name":"read_file","arguments":"{}"}}]}}]}));
-    let response = json!({"output":[answer,other]}).to_string();
-    let anthropic = json!({"content":[{"type":"tool_use","id":"call-0","name":"answer_blocks","input":input},{"type":"tool_use","id":"call-1","name":"read_file","input":{}}]}).to_string();
-    let gemini = json!({"candidates":[{"content":{"parts":[{"functionCall":{"name":"answer_blocks","args":input}},{"functionCall":{"name":"read_file","args":{}}}]}}]}).to_string();
+    let response = json!({"status":"completed","output":[answer,other]}).to_string();
+    let anthropic = json!({"stop_reason":"tool_use","content":[{"type":"tool_use","id":"call-0","name":"answer_blocks","input":input},{"type":"tool_use","id":"call-1","name":"read_file","input":{}}]}).to_string();
+    let gemini = json!({"candidates":[{"finishReason":"STOP","content":{"parts":[{"functionCall":{"name":"answer_blocks","args":input}},{"functionCall":{"name":"read_file","args":{}}}]}}]}).to_string();
     // Native streams (Anthropic Messages, Responses with an API key, Gemini SSE).
     let mut messages = vec![
         json!({"type":"message_start","message":{"id":"msg-0","type":"message","role":"assistant","content":[],"usage":{"input_tokens":1,"output_tokens":1}}}),

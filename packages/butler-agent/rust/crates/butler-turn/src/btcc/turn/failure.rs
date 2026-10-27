@@ -52,6 +52,9 @@ fn cause(failure: &RuntimeFailure, korean: bool) -> &'static str {
         ("provider_unsupported_capability" | "provider_unsupported_input", true) => {
             "ChatGPT 플랜이 지원하지 않는 요청이라"
         }
+        ("provider_response_refused", true) => "모델이 답변을 거절해",
+        ("provider_safety_error", true) => "모델 제공자의 안전 필터에 걸려",
+        ("provider_stop_unrecognized", true) => "모델이 알 수 없는 이유로 응답을 멈춰",
         ("provider_response_incomplete", true) => "모델 응답이 중간에 끝나",
         ("provider_rate_limited", true) => "모델 제공자의 요청 한도에 걸려",
         ("provider_quota_exhausted", true) => "모델 제공자의 사용량 한도가 소진되어",
@@ -74,6 +77,9 @@ fn cause(failure: &RuntimeFailure, korean: bool) -> &'static str {
         ("provider_unsupported_capability" | "provider_unsupported_input", false) => {
             "An unsupported ChatGPT plan request"
         }
+        ("provider_response_refused", false) => "A model refusal",
+        ("provider_safety_error", false) => "The provider's safety filter",
+        ("provider_stop_unrecognized", false) => "An unrecognized model stop",
         ("provider_response_incomplete", false) => "An incomplete model response",
         ("provider_rate_limited", false) => "The model provider's rate limit",
         ("provider_quota_exhausted", false) => "The model provider's exhausted quota",

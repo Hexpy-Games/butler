@@ -270,6 +270,7 @@ pub(super) fn result(text: &str) -> ModelRoundResult {
     ModelRoundResult {
         nonfinal: false,
         output_truncated: false,
+        stop: crate::btcc::ModelStop::Complete,
         reasoning_summary: None,
         text: Some(text.into()),
         tool_calls: vec![],

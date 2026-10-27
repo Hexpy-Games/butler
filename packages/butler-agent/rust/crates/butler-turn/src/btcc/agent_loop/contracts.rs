@@ -323,6 +323,9 @@ pub enum ToolChoice {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRoundResult {
+    /// Explicit provider termination classification.
+    #[serde(default)]
+    pub stop: ModelStop,
     /// The provider explicitly marked visible text as progress rather than a final answer.
     /// Providers without such a distinction leave this false; Work review still applies.
     #[serde(default)]
@@ -482,3 +485,6 @@ pub struct ToolSurface {
     pub tools: Vec<ModelRoundTool>,
     pub digest: Option<String>,
 }
+
+mod stop;
+pub use stop::ModelStop;

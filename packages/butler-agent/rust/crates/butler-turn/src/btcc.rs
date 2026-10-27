@@ -94,7 +94,7 @@ pub use agent_loop::{
     GuidedPolicyDependencies, GuidedPresentation, GuidedTurnFactory, GuidedTurnInputs,
     GuidedTurnStart, JournalCloseout, JournalPort, LoopPhase, ModelRoundError, ModelRoundMessage,
     ModelRoundObserver, ModelRoundPort, ModelRoundRequest, ModelRoundResult, ModelRoundRole,
-    ModelRoundTool, ModelRoundToolCall, OperationResultMessageReferences,
+    ModelRoundTool, ModelRoundToolCall, ModelStop, OperationResultMessageReferences,
     OperationResultReplayFactory, OperationResultRuntime, OperationResultRuntimeFactory,
     OperationResultScope, PendingTool, ProductionAgentLoop, PromptImages, PromptPort,
     ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver, RenderedGuidedPrompt,

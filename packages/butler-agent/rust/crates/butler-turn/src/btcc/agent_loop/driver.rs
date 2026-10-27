@@ -74,6 +74,7 @@ struct Reply {
     nonfinal: bool,
     /// The provider stopped at its output token limit.
     truncated: bool,
+    paused: bool,
     text: String,
     calls: Vec<ModelRoundToolCall>,
     /// Tool names the model wrote as text, sorted and deduplicated.
@@ -179,6 +180,7 @@ async fn run_iteration(
         Some(batch) => Reply {
             nonfinal: false,
             truncated: false,
+            paused: false,
             text: String::new(),
             calls: batch.calls.clone(),
             text_call_names: Vec::new(),
@@ -196,6 +198,9 @@ async fn run_iteration(
             }
         }
     };
+    if reply.paused {
+        return settle_answer(input, state, prepared, reply, iteration).await;
+    }
     if let Some(step) =
         final_report::reject_tools(input, state, prepared, &reply, iteration).await?
     {
@@ -248,18 +253,30 @@ async fn obtain_reply(
         return Ok(Reply {
             nonfinal: false,
             truncated: false,
+            paused: false,
             text: String::new(),
             calls: vec![call],
             text_call_names: Vec::new(),
         });
     }
     let result = run_model_round(input, state, prepared, iteration, surface, context).await?;
-    let text = result.text.as_deref().unwrap_or_default().trim().to_owned();
+    let raw_text = result.text.as_deref().unwrap_or_default();
+    let continuing = !state.cut_answer.is_empty()
+        || matches!(
+            result.stop,
+            crate::btcc::ModelStop::Truncated | crate::btcc::ModelStop::Paused
+        );
+    let text = if continuing {
+        raw_text
+    } else {
+        raw_text.trim()
+    }
+    .to_owned();
     let calls = result.tool_calls;
     let mut text_call_names = result.text_tool_call_names;
     text_call_names.sort();
     text_call_names.dedup();
-    if !text.is_empty() || !calls.is_empty() {
+    if !text.is_empty() || !calls.is_empty() || result.stop == crate::btcc::ModelStop::Paused {
         let message = result
             .assistant_message
             .unwrap_or_else(|| assistant_message(text.clone(), calls.clone(), result.raw));
@@ -268,6 +285,7 @@ async fn obtain_reply(
     Ok(Reply {
         nonfinal: result.nonfinal,
         truncated: result.output_truncated,
+        paused: result.stop == crate::btcc::ModelStop::Paused,
         text,
         calls,
         text_call_names,

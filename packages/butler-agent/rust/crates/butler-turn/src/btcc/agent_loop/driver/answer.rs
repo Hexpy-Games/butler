@@ -8,11 +8,8 @@ pub(super) async fn settle_answer(
     reply: Reply,
     iteration: u32,
 ) -> Result<Step, AgentLoopError> {
-    if reply.truncated {
-        state.cut_answer = join_cut(&state.cut_answer, &reply.text);
-        return continue_answer(input, state, prepared,
-            "Your previous response reached the output token limit and was cut off. Continue it from where it stopped: begin by repeating its last line exactly, then write the rest. Do not restart or summarize what you already wrote."
-        ).await;
+    if reply.paused || reply.truncated {
+        return continue_cut(input, state, prepared, &reply).await;
     }
     if reply.text.is_empty() || reply.nonfinal {
         let reason = if reply.nonfinal {
@@ -70,6 +67,32 @@ pub(super) async fn settle_answer(
                 .await
                 .map(Step::finished)
         }
+    }
+}
+
+/// Pauses resume with the assistant last; token cuts ask for the remaining text.
+async fn continue_cut(
+    input: &Invocation<'_>,
+    state: &mut State,
+    prepared: &PreparedPolicy,
+    reply: &Reply,
+) -> Result<Step, AgentLoopError> {
+    state.cut_answer = join_cut(&state.cut_answer, &reply.text);
+    if reply.paused {
+        reject_round_text(prepared);
+        state.automatic_continuations = state.automatic_continuations.saturating_add(1);
+        record_continuation(
+            input,
+            state,
+            "turn.continuation.requested",
+            "provider_paused",
+        )
+        .await;
+        Ok(Step::Continue)
+    } else {
+        continue_answer(input, state, prepared,
+            "Your previous response reached the output token limit and was cut off. Continue it from where it stopped: begin by repeating its last line exactly, then write the rest. Do not restart or summarize what you already wrote."
+        ).await
     }
 }
 
@@ -143,8 +166,18 @@ pub(super) async fn finish_limit(
     reason: &str,
 ) -> Result<AgentLoopResult, AgentLoopError> {
     record_continuation(input, state, "turn.continuation.limit_reached", reason).await;
-    let content = "The required input cannot fit the model context. Reduce the required attachments or split the request into smaller parts so I can continue.";
-    let mut result = finish(input, state, Ending::Answer(content)).await?;
+    let korean = input
+        .turn
+        .original_message
+        .chars()
+        .any(|c| ('가'..='힣').contains(&c));
+    let content = match (state.cut_answer.is_empty(), korean) {
+        (false, true) => format!("{}\n\n답변이 출력 한도에 도달해 끝까지 작성하지 못했습니다.", state.cut_answer),
+        (false, false) => format!("{}\n\nThe answer reached the model's output limit and could not be finished.", state.cut_answer),
+        (true, true) => "필요한 입력이 모델 컨텍스트에 들어가지 않습니다. 첨부를 줄이거나 요청을 나누어 주세요.".into(),
+        (true, false) => "The required input cannot fit the model context. Reduce the required attachments or split the request into smaller parts so I can continue.".into(),
+    };
+    let mut result = finish(input, state, Ending::Answer(&content)).await?;
     result.terminal_outcome = Some(crate::btcc::TerminalOutcome::Failed);
     Ok(result)
 }
