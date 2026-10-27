@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { SettingsField, SettingsFieldScopeProvider } from "../../blocks/SettingsField";
+import { Card } from "../Card";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "../Field";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
@@ -38,55 +39,49 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
-/** SettingsSwitch pattern: label + description with the switch trailing. */
-function SettingsSwitchRow({ context, disabled }: { context: ShowcaseRenderContext; disabled?: boolean }) {
+/** A switch field: stacked like an input (the default), or the row exception inside a card. */
+function SwitchFieldStory({ context, disabled, layout = "stacked" }: { context: ShowcaseRenderContext; disabled?: boolean; layout?: "stacked" | "row" }) {
   const [checked, setChecked] = useState(true);
   const copy = text(context);
-  return (
-    <Field orientation="horizontal">
-      <FieldContent>
-        <FieldLabel htmlFor={disabled ? "ds-switch-dev" : "ds-switch-fallback"}>{disabled ? copy.developer : copy.fallback}</FieldLabel>
-        <FieldDescription id={disabled ? "ds-switch-dev-hint" : "ds-switch-fallback-hint"}>
-          {disabled ? copy.developerHint : copy.fallbackHint}
-        </FieldDescription>
-      </FieldContent>
-      <Switch
-        aria-describedby={disabled ? "ds-switch-dev-hint" : "ds-switch-fallback-hint"}
-        checked={disabled ? false : checked}
-        disabled={disabled}
-        id={disabled ? "ds-switch-dev" : "ds-switch-fallback"}
-        onCheckedChange={setChecked}
-      />
-    </Field>
-  );
+  const id = `${disabled ? "ds-switch-dev" : "ds-switch-fallback"}-${layout}`;
+  const label = <FieldLabel htmlFor={id}>{disabled ? copy.developer : copy.fallback}</FieldLabel>;
+  const description = <FieldDescription id={`${id}-hint`}>{disabled ? copy.developerHint : copy.fallbackHint}</FieldDescription>;
+  const control = <Switch aria-describedby={`${id}-hint`} checked={disabled ? false : checked} disabled={disabled} id={id} onCheckedChange={setChecked} />;
+  if (layout === "row") {
+    return <Card padding="md"><Field orientation="horizontal"><FieldContent>{label}{description}</FieldContent>{control}</Field></Card>;
+  }
+  return <Field>{label}{description}{control}</Field>;
 }
 
 export const stories: ShowcaseStory[] = [
-  { name: "Settings switch", render: (context) => <SettingsSwitchRow context={context} /> },
+  { name: "Placement: stacked switch field (default)", render: (context) => <SwitchFieldStory context={context} /> },
+  { name: "Placement: row switch field (phone or list item in a card)", render: (context) => <SwitchFieldStory context={context} layout="row" /> },
   {
     name: "Sizes and values",
     render: (context) => (
       <Stack gap="sm">
         {(["default", "sm"] as const).map((size) => (
-          <Stack align="row" cross="center" gap="md" key={size}>
-            <Switch aria-label={`${text(context).on} ${size}`} defaultChecked size={size} />
-            <Switch aria-label={`${text(context).off} ${size}`} size={size} />
+          <Stack gap="xs" key={size}>
             <Typo.Caption tone="secondary">{size}</Typo.Caption>
+            <Stack align="row" cross="center" gap="md">
+              <Switch aria-label={`${text(context).on} ${size}`} defaultChecked size={size} />
+              <Switch aria-label={`${text(context).off} ${size}`} size={size} />
+            </Stack>
           </Stack>
         ))}
         <Typo.Caption tone="secondary">{text(context).motion}</Typo.Caption>
       </Stack>
     ),
   },
-  { name: "Disabled (unavailable)", states: ["disabled"], render: (context) => <SettingsSwitchRow context={context} disabled /> },
+  { name: "Disabled (unavailable)", states: ["disabled"], render: (context) => <SwitchFieldStory context={context} disabled /> },
   {
     name: "Disabled with a reason (hover or focus)",
     states: ["disabled"],
     render: (context) => (
-      <Stack align="row" cross="center" gap="md">
-        <Switch aria-label={text(context).reduceMotion} checked disabledReason={text(context).followsSystem} />
-        <Typo.Caption tone="secondary">{text(context).reduceMotion}</Typo.Caption>
-      </Stack>
+      <Field>
+        <FieldLabel htmlFor="ds-switch-reduce-motion">{text(context).reduceMotion}</FieldLabel>
+        <Switch id="ds-switch-reduce-motion" checked disabledReason={text(context).followsSystem} />
+      </Field>
     ),
   },
   {
