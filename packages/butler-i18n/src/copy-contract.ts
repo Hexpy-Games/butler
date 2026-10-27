@@ -191,6 +191,8 @@ export interface ApprovalRequestCopy {
   taintReason: string;
   unsandboxedReason: string;
   scheduleMode: (mode: string) => string;
+  scheduleSignin: (on: boolean) => string;
+  schedulePayment: (on: boolean) => string;
   scheduleUnavailable: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
@@ -718,6 +720,11 @@ export interface AppCopy {
     composeLater: string;
     deny: string;
     allowOnce: string;
+    allowInChat: string;
+    allowSite: string;
+    allowPaymentSite: string;
+    allowSiteDescription: string;
+    paymentSkipped: (site: string, amount: string) => string;
     allowScope: string;
     allowConversation: string;
     allowDescription: string;
@@ -1214,6 +1221,9 @@ export interface AppCopy {
     accessHint: string;
     /** Desktop notification when an unattended run skipped a step for permission. */
     needsPermissionNotify: string;
+    signinOffNotify: string;
+    paymentOffNotify: string;
+    browser: { title: string; signin: string; signinDescription: string; payment: string; paymentDescription: string; unavailable: string };
     saveFailed: string;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
@@ -1233,6 +1243,8 @@ export interface AppCopy {
       skippedTargetUnavailable: string;
       /** A run that skipped a step needing permission. */
       needsPermission: string;
+      signinOff: string;
+      paymentOff: string;
       cancelled: string;
       notRun: string;
     };

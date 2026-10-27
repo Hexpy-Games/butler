@@ -235,19 +235,13 @@ impl AgentRuntime {
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         let memory_writes =
             memory_bootstrap::rule_owner(&paths, &environment.cognition_paths, &coordinator, stop);
-        let parent_endpoint = app_endpoint.clone();
-        let preparation = Arc::new(
-            DefaultTurnPreparation::new(
-                stores.bindings.clone(),
-                stores.conversations.clone(),
-                documents.clone(),
-                observer.clone(),
-                prompt,
-                models.configuration.clone(),
-            )
-            .with_parent_access(Arc::new(move |binding| {
-                Box::pin(delegation_access::current(binding, parent_endpoint.clone()))
-            })),
+        let preparation = delegation_access::preparation(
+            &stores,
+            documents.clone(),
+            observer.clone(),
+            prompt,
+            models.configuration.clone(),
+            app_endpoint.clone(),
         );
         let authority = mcp_owner::authority(&plugins, &stores, &collation, now.clone());
         let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));

@@ -10,7 +10,11 @@ use crate::gateway::application::{
 };
 
 /// The only attention codes a run may report.
-const CODES: &[&str] = &["schedule_permission_required"];
+const CODES: &[&str] = &[
+    "schedule_permission_required",
+    "schedule_signin_off",
+    "schedule_payment_off",
+];
 
 impl AppApplication {
     pub(crate) async fn automation_run_attention_owned(
@@ -34,6 +38,16 @@ impl AppApplication {
         let subscribers = self.subscribers.clone();
         let result = self.storage
             .execute(move |db| {
+                let existing = records::run(db, &run_id)?;
+                if existing.automation_id != automation_id {
+                    return Err(records::not_found());
+                }
+                if let Some(action) = action {
+                    super::super::initiated::enqueue_attention(db, &automation_id, &run_id, &action, &language, &now)?;
+                }
+                if existing.safe_error_code.is_some() {
+                    return Ok(existing);
+                }
                 let changed = db
                     .execute(
                         "UPDATE app_automation_runs SET safe_error_code=?1 WHERE id=?2 AND automation_id=?3",
@@ -51,9 +65,6 @@ impl AppApplication {
                     params![code, now, automation_id],
                 )
                 .map_err(AppStorageError::sqlite)?;
-                if let Some(action) = action {
-                    super::super::initiated::enqueue_attention(db, &automation_id, &run_id, &action, &language, &now)?;
-                }
                 let run = records::run(db, &run_id)?;
                 let mut event = run_event(&run);
                 event["tainted"] = serde_json::Value::Bool(tainted);

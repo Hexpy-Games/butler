@@ -10,7 +10,7 @@ mod operation;
 mod schedule;
 mod tool;
 pub(super) use operation::exact_operation;
-pub(super) use schedule::schedule;
+pub(super) use schedule::{schedule, schedule_update};
 
 use std::collections::HashSet;
 use std::path::{Component, Path};

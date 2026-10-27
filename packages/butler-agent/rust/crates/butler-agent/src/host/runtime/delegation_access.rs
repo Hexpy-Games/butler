@@ -37,3 +37,27 @@ pub(super) async fn current(
             )
         })
 }
+
+/// Assemble turn preparation with current parent controls resolved on demand.
+pub(super) fn preparation(
+    stores: &super::stores::RuntimeStores,
+    repositories: butler_turn::btcc::BtccRepositories,
+    observer: Arc<dyn butler_turn::conversation::ConversationAdmissionObserver>,
+    context: Arc<dyn butler_turn::btcc::AdmissionContextPort>,
+    models: Arc<dyn butler_turn::btcc::AdmissionModelCatalogPort>,
+    endpoint: Arc<crate::host::ActiveAppEndpoint>,
+) -> Arc<butler_turn::btcc::DefaultTurnPreparation> {
+    Arc::new(
+        butler_turn::btcc::DefaultTurnPreparation::new(
+            stores.bindings.clone(),
+            stores.conversations.clone(),
+            repositories,
+            observer,
+            context,
+            models,
+        )
+        .with_parent_access(Arc::new(move |binding| {
+            Box::pin(current(binding, endpoint.clone()))
+        })),
+    )
+}

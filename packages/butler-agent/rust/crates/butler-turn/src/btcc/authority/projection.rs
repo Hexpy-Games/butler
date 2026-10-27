@@ -131,6 +131,8 @@ fn exact_approval(
             .and_then(|v| serde_json::from_value(v.clone()).ok());
     } else if record.capability == "create_automation" {
         approval.schedule = Some(approval::schedule(input));
+    } else if record.capability == "update_automation" {
+        approval.schedule = Some(approval::schedule_update(input));
     } else if record.capability == "delete_automation" {
         approval.schedule = input
             .get("schedule")

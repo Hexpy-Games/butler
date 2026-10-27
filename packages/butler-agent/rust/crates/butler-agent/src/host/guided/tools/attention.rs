@@ -14,17 +14,34 @@ pub(super) async fn admit(
     if matches!(result, AuthorityAdmissionResult::Unattended)
         && let Some(facts) = facts
     {
-        skipped(owner, facts).await;
+        skipped(owner, facts, "schedule_permission_required").await;
     }
     Ok(result)
 }
 
 pub(super) async fn skipped_call(owner: &GuidedTools, call: &ModelRoundToolCall) {
     let input = Value::Object(call.arguments.clone());
-    let target = ["path", "url", "tool", "project_ref", "title", "command"]
-        .into_iter()
-        .find_map(|key| input[key].as_str())
-        .unwrap_or(&call.name);
+    skipped_input(owner, call, input, "schedule_permission_required").await;
+}
+
+pub(super) async fn skipped_input(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    input: Value,
+    code: &str,
+) {
+    let target = [
+        "path",
+        "url",
+        "tool",
+        "project_ref",
+        "title",
+        "command",
+        "tab",
+    ]
+    .into_iter()
+    .find_map(|key| input[key].as_str())
+    .unwrap_or(&call.name);
     let facts = AuthorityAdmissionInput {
         owner_session_id: owner.binding.owner_session_id.clone(),
         source_session_id: owner.binding.source_session_id.clone(),
@@ -46,15 +63,15 @@ pub(super) async fn skipped_call(owner: &GuidedTools, call: &ModelRoundToolCall)
         honor_standing_permission: false,
         unattended: true,
     };
-    skipped(owner, facts).await;
+    skipped(owner, facts, code).await;
 }
 
-async fn skipped(owner: &GuidedTools, facts: AuthorityAdmissionInput) {
+async fn skipped(owner: &GuidedTools, facts: AuthorityAdmissionInput, code: &str) {
     let capability = facts.capability.clone();
     if let Ok(identity) = owner.authority.action_identity(&facts)
         && let Ok(approval) = owner.authority.preview_approval(facts)
     {
-        notify(owner, &capability, approval, &identity).await;
+        notify(owner, &capability, approval, &identity, code).await;
     }
 }
 
@@ -63,6 +80,7 @@ async fn notify(
     capability: &str,
     approval: butler_turn::btcc::AuthorityApproval,
     action_identity: &str,
+    code: &str,
 ) {
     let Some(run) = owner
         .inherited_run()
@@ -90,7 +108,7 @@ async fn notify(
     if owner.binding.source_session_id != owner.binding.owner_session_id {
         action["work_session_id"] = json!(owner.binding.source_session_id);
     }
-    let body = json!({"code":"schedule_permission_required","tainted":owner.taint()!=TurnTaint::Clean,"action":action});
+    let body = json!({"code":code,"tainted":code == "schedule_permission_required" && owner.taint()!=TurnTaint::Clean,"action":action});
     if client
         .request(reqwest::Method::POST, &path, Some(body))
         .await

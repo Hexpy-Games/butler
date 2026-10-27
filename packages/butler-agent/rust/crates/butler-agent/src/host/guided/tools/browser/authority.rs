@@ -8,7 +8,7 @@ use butler_turn::btcc::{
 use serde_json::{Value, json};
 pub(super) enum Gate {
     Pending(Value),
-    Allowed(Option<String>),
+    Allowed(Option<String>, Option<String>),
 }
 pub(super) async fn gate(
     owner: &GuidedTools,
@@ -17,30 +17,20 @@ pub(super) async fn gate(
     input: &Value,
     target: &str,
 ) -> Result<Gate, ToolExecutionError> {
+    if owner.schedule_run().is_some() && input["grant"].is_object() {
+        super::super::attention::skipped_input(
+            owner,
+            call,
+            input.clone(),
+            "schedule_permission_required",
+        )
+        .await;
+        return Ok(Gate::Pending(
+            super::super::turn_guard::unattended_feedback(owner, &call.name, target),
+        ));
+    }
     if let Some(reference) = resume_reference(owner, occurrence) {
-        let stored = owner
-            .authority
-            .execution(AuthorityExecutionInput {
-                owner_session_id: owner.binding.owner_session_id.clone(),
-                request_ref: reference.to_owned(),
-                source_session_id: Some(owner.binding.source_session_id.clone()),
-                client_message_id: None,
-                turn_id: owner.binding.turn_id.clone(),
-            })
-            .await
-            .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
-        let belongs = stored.decision == RequestDecision::Allowed
-            && stored.capability == call.name
-            && stored.source_call_id.as_deref() == Some(occurrence);
-        if !belongs || stored.normalized_input != *input || stored.normalized_target != target {
-            if belongs {
-                super::settle(owner, Some(reference.to_owned()), "unknown").await?;
-            }
-            return Ok(Gate::Pending(
-                json!({"ok":false,"status":"unknown","observe_required":true,"error":"authority_request_identity_mismatch"}),
-            ));
-        }
-        return Ok(Gate::Allowed(Some(reference.to_owned())));
+        return resumed_gate(owner, call, occurrence, input, target, reference).await;
     }
     let admitted = super::super::attention::admit(
         owner,
@@ -72,7 +62,7 @@ pub(super) async fn gate(
     .await
     .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
     Ok(match admitted {
-        AuthorityAdmissionResult::Granted => Gate::Allowed(None),
+        AuthorityAdmissionResult::Granted => Gate::Allowed(None, None),
         AuthorityAdmissionResult::Pending { request_ref, .. }
         | AuthorityAdmissionResult::Allowed { request_ref, .. } => Gate::Pending(
             json!({"ok":true,"authority_pending":true,"request_ref":request_ref,"status":"awaiting_allow"}),
@@ -83,6 +73,43 @@ pub(super) async fn gate(
         ),
         _ => Gate::Pending(json!({"ok":false,"error":"authority_request_denied"})),
     })
+}
+
+/// Resume only the exact action and grant scope the owner approved.
+async fn resumed_gate(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    input: &Value,
+    target: &str,
+    reference: &str,
+) -> Result<Gate, ToolExecutionError> {
+    let stored = owner
+        .authority
+        .execution(AuthorityExecutionInput {
+            owner_session_id: owner.binding.owner_session_id.clone(),
+            request_ref: reference.to_owned(),
+            source_session_id: Some(owner.binding.source_session_id.clone()),
+            client_message_id: None,
+            turn_id: owner.binding.turn_id.clone(),
+        })
+        .await
+        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+    let belongs = stored.decision == RequestDecision::Allowed
+        && stored.capability == call.name
+        && stored.source_call_id.as_deref() == Some(occurrence);
+    if !belongs || stored.normalized_input != *input || stored.normalized_target != target {
+        if belongs {
+            super::settle(owner, Some(reference.to_owned()), "unknown").await?;
+        }
+        return Ok(Gate::Pending(
+            json!({"ok":false,"status":"unknown","observe_required":true,"error":"authority_request_identity_mismatch"}),
+        ));
+    }
+    Ok(Gate::Allowed(
+        Some(reference.to_owned()),
+        Some(stored.allow_scope),
+    ))
 }
 
 /// One durable slot per distinct decision inside a call: a dialog, a site
@@ -154,7 +181,7 @@ pub(super) async fn act_gate(
     {
         gate(owner, call, occurrence, input, target).await
     } else {
-        Ok(Gate::Allowed(None))
+        Ok(Gate::Allowed(None, None))
     }
 }
 
@@ -244,4 +271,13 @@ pub(super) async fn refuse_resume(
         super::settle(owner, Some(reference.to_owned()), "unknown").await?;
     }
     Ok(())
+}
+
+/// Payment classifiers match the exact targets prepared by the browser host.
+pub(super) fn payment_step(step: &Value) -> bool {
+    step["payment"] == true && step["submit"] == true
+        || step["frame_payment"] == true
+        || step["hit"]["frame"]
+            .as_str()
+            .is_some_and(butler_runtime::browser::payment_host)
 }

@@ -20,6 +20,8 @@ pub(super) const SOLVABLE: &[&str] = &[
     "canon_epic_link_conflict",
     "schedule_access_exceeds_turn",
     "schedule_permission_required",
+    "schedule_signin_off",
+    "schedule_payment_off",
     "schedule_question_unavailable",
     "delegation_reviewed_plan_required",
     "delegation_allowed_effects_required",
@@ -173,6 +175,12 @@ pub(super) fn repair(code: &str) -> &'static str {
     match code {
         "schedule_access_exceeds_turn" => {
             return "Omit access_mode to use this conversation's access.";
+        }
+        "schedule_signin_off" => {
+            return "Do not retry or change the schedule in this run. Finish what you can without signing in, then tell the user this step needs Use sign-in info (로그인 정보 사용), which they can turn on in the schedule's Browser (브라우저) section or ask you to turn on.";
+        }
+        "schedule_payment_off" => {
+            return "Do not retry or change the schedule in this run. Finish what you can without paying, then tell the user this step needs Use payment info (결제 정보 사용), which they can turn on in the schedule's Browser (브라우저) section or ask you to turn on.";
         }
         "schedule_permission_required" => {
             return "This scheduled run cannot ask. Skip this step, finish what you can, and report what needs permission.";

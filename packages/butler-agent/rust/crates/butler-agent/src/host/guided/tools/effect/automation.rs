@@ -279,6 +279,7 @@ async fn resolve_delete(
                 "title": stored["title"], "schedule_type": stored["schedule_type"],
                 "run_at": stored["run_at"], "start_at": stored["start_at"],
                 "interval_seconds": stored["interval_seconds"], "access_mode": stored["access_mode"],
+                "browser_signin": stored["browser_signin"], "browser_payment": stored["browser_payment"],
             });
             Ok(())
         }
