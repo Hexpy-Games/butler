@@ -22,7 +22,7 @@ export function AutomationBrowserFields() {
       <FieldLabel htmlFor="schedule-browser-payment">{copy.payment}</FieldLabel>
       <FieldDescription id="schedule-browser-payment-description">{copy.paymentDescription}</FieldDescription>
       <Tooltip side="right" label={unavailable ? copy.unavailable : undefined}>
-        <Switch id="schedule-browser-payment" aria-describedby="schedule-browser-payment-description" disabled={unavailable} checked={payment} onCheckedChange={setPayment} />
+        <Switch id="schedule-browser-payment" aria-describedby="schedule-browser-payment-description" disabled={unavailable} checked={!unavailable && payment} onCheckedChange={setPayment} />
       </Tooltip>
     </Field>
   </Section>;

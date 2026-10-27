@@ -3,7 +3,7 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { Page } from "playwright";
+import type { Locator, Page } from "playwright";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { auditTabOrder, formatClips } from "../support/focus-ring-clipping";
@@ -37,19 +37,43 @@ let host: Promise<void> | undefined;
 const paths: string[] = [];
 let stops = 0;
 
-async function capture(page: Page, name: string, selector: string) {
+async function settled(overlay: Locator) {
+  await overlay.waitFor({ state: "visible" });
+  await overlay.evaluate(async element => {
+    await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished));
+    const opacity = getComputedStyle(element).opacity;
+    if (opacity !== "1") throw new Error(`Overlay is still fading: ${opacity}`);
+  });
+}
+
+async function captureUnion(page: Page, filename: string, regions: Locator[]) {
+  const boxes = await Promise.all(regions.map(region => region.boundingBox()));
+  const visible = boxes.map(box => { assert(box); return box; });
+  const x = Math.floor(Math.min(...visible.map(box => box.x)));
+  const y = Math.floor(Math.min(...visible.map(box => box.y)));
+  const clip = { x, y,
+    width: Math.ceil(Math.max(...visible.map(box => box.x + box.width))) - x,
+    height: Math.ceil(Math.max(...visible.map(box => box.y + box.height))) - y };
+  const path = join(output, filename);
+  const png = await page.screenshot({ path, clip, scale: "device" });
+  const pixels = { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+  assert.equal(pixels.width, clip.width * 2, `${filename}: 2x CSS width`);
+  assert.equal(pixels.height, clip.height * 2, `${filename}: 2x CSS height`);
+  console.log(JSON.stringify({ crop: filename, css: clip, pixels }));
+  paths.push(path);
+}
+
+async function capture(page: Page, name: string, selector: string, overlay?: Locator) {
+  await page.bringToFront();
+  assert.equal(await page.evaluate(() => document.hidden), false, "capture page stays frontmost");
   await page.evaluate(() => document.fonts.ready);
   const region = !before && selector.includes("automation-detail-view")
     ? page.getByRole("heading", { name: "브라우저", exact: true }).locator("xpath=ancestor::section[1]")
     : page.locator(selector).first();
-  await region.scrollIntoViewIfNeeded();
-  const path = join(output, `${before ? "before" : "after"}-${name}.png`);
-  await region.screenshot({ path });
-  paths.push(path);
+  if (!overlay) await region.scrollIntoViewIfNeeded();
+  await captureUnion(page, `${before ? "before" : "after"}-${name}.png`, [region, ...(overlay ? [overlay] : [])]);
   if (!before && name.startsWith("editor-off")) {
-    const contextPath = join(output, `after-editor-layout-${name.slice("editor-off-".length)}.png`);
-    await page.locator(selector).first().screenshot({ path: contextPath });
-    paths.push(contextPath);
+    await captureUnion(page, `after-editor-layout-${name.slice("editor-off-".length)}.png`, [page.locator(selector).first()]);
   }
 }
 
@@ -93,7 +117,7 @@ try {
   for (const theme of ["light", "dark"]) {
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
     for (const width of [390, 1280]) {
-      const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+      const context = await browser.newContext({ viewport: { width, height: 1000 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
       await server.signIn(context);
       const page = await context.newPage();
       let available = true;
@@ -132,10 +156,22 @@ try {
         if (width === 390) await page.getByRole("button", { name: "사이드바 숨기기", exact: true }).last().click();
         await page.locator('[data-slot="clickable"]').filter({ hasText: "아침 계정 확인" }).click();
         await page.locator("#schedule-browser-payment:disabled").waitFor();
-        assert(await payment.isDisabled()); assert(await signin.isEnabled());
-        await capture(page, `editor-disabled-${width}-${theme}`, editor);
+        assert(await payment.isDisabled()); assert(!await payment.isChecked()); assert(await signin.isEnabled());
+        await page.getByRole("heading", { name: "브라우저", exact: true }).locator("xpath=ancestor::section[1]").scrollIntoViewIfNeeded();
+        await page.bringToFront();
+        assert.equal(await page.evaluate(() => document.hidden), false, "hover page stays frontmost");
         await payment.hover();
-        await page.getByRole("tooltip").getByText("이 컴퓨터에서 사용 불가", { exact: true }).waitFor();
+        const tooltip = page.getByRole("tooltip", { name: "이 컴퓨터에서 사용 불가", exact: true });
+        await settled(tooltip);
+        await capture(page, `editor-disabled-${width}-${theme}`, editor, tooltip);
+        await signin.uncheck();
+        const otherSaved = page.waitForResponse(response => response.request().method() === "PATCH" && new URL(response.url()).pathname === "/automations/editor-schedule");
+        await page.getByRole("button", { name: "저장", exact: true }).click();
+        assert((await otherSaved).ok());
+        const retained = await server.api<{ automation: { browser_signin: boolean; browser_payment: boolean } }>("/automations/editor-schedule");
+        assert.equal(retained.automation.browser_signin, false, "the other field is saved");
+        assert.equal(retained.automation.browser_payment, true, "unavailable payment keeps its stored value after saving");
+        assert(await payment.isDisabled()); assert(!await payment.isChecked());
         await server.api("/automations/editor-schedule", { method: "PATCH", body: JSON.stringify({ browser_signin: false, browser_payment: false }) });
       }
       await context.close();
@@ -145,7 +181,7 @@ try {
   for (const theme of ["light", "dark"]) {
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
     for (const width of [390, 1280]) {
-      const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+      const context = await browser.newContext({ viewport: { width, height: 1000 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
       await server.signIn(context);
       const page = await context.newPage();
       let sessionId = "general";
@@ -154,7 +190,16 @@ try {
         if (url.pathname === "/session-view") sessionId = url.searchParams.get("session_id") ?? sessionId;
       });
       for (mode of ["create", "edit", "site"] as const) {
+        // Each card gets a fresh conversation, without earlier denied-turn failures or toasts.
+        const { session } = await server.api<{ session: { id: string } }>("/sessions", {
+          method: "POST", body: JSON.stringify({ kind: "chat", title: `${mode} ${width} ${theme}` }),
+        });
         await page.goto(server.url);
+        await page.evaluate(id => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({
+          schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), active_session_id: id,
+          left_open: false, right_open: false,
+        })), session.id);
+        await page.reload();
         const editor = page.locator('[contenteditable="true"]').first();
         await editor.waitFor(); round = 0;
         await editor.fill(`${mode}: 예약 작업을 처리해 주세요.`);
@@ -164,6 +209,7 @@ try {
         // Use the persisted waiting scene: pending asks can arrive before the
         // assistant message is committed, leaving an initial user anchor cached.
         const pending = await server.api<{ requests: Array<{ source_turn_id: string }> }>(`/authority-requests?session_id=${encodeURIComponent(sessionId)}`);
+        assert.equal(sessionId, session.id, "the fixture uses its fresh conversation");
         const sourceTurn = pending.requests[0]?.source_turn_id;
         assert(sourceTurn, `the card belongs to ${sessionId}`);
         const waitingDeadline = Date.now() + 20_000;
@@ -182,18 +228,22 @@ try {
           await page.locator(panel).getByText(`결제 정보 사용 · ${mode === "edit" ? "켜짐" : "꺼짐"}`, { exact: true }).waitFor();
         }
         if (!before && mode === "site") {
+          // The waiting turn posts a persistent attention notification. Dismiss it
+          // through its real close control before opening the approval menu.
+          for (const toast of await page.locator("[data-sonner-toast]:visible").all()) {
+            assert.notEqual(await toast.getAttribute("data-type"), "error", await toast.innerText());
+            await toast.getByRole("button", { name: "Close toast", exact: true }).click();
+            await toast.waitFor({ state: "hidden" });
+          }
           await page.locator(panel).getByRole("button", { name: "이 대화에서 허용", exact: true }).waitFor();
           await page.locator(panel).getByRole("button", { name: "허용 범위 선택", exact: true }).click();
           const item = page.getByRole("menuitem", { name: /이 사이트는 항상 허용/u });
           await item.waitFor();
-          await item.evaluate(async element => {
-            const menu = element.closest('[role="menu"]')!;
-            await Promise.all(menu.getAnimations({ subtree: true }).map(animation => animation.finished));
-            const opacity = getComputedStyle(menu).opacity;
-            if (opacity !== "1") throw new Error(`Menu is still fading: ${opacity}`);
-          });
-          const path = join(output, `after-site-menu-${width}-${theme}.png`);
-          await page.screenshot({ path }); paths.push(path);
+          const menu = page.getByRole("menu");
+          await settled(menu);
+          assert.equal(await page.getByText(/this reply\. Retry to continue\.|답변 실패/u).count(), 0, "clean fixture turn");
+          assert.deepEqual(await page.locator("[data-sonner-toast]:visible").allTextContents(), [], "no fixture toast");
+          await capture(page, `site-menu-${width}-${theme}`, panel, menu);
           await page.keyboard.press("Escape");
         }
         console.log(JSON.stringify({ mode, width, theme, scene: await page.locator(panel).evaluate(element => {
