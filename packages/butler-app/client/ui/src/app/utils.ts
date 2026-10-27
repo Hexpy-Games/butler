@@ -1059,13 +1059,13 @@ export function collapseAssistantAttempts(
   // by decision time. Their synthetic rows have no durable message cursor.
   const partialByTurn = new Map<string, MessageRecord>();
   for (const message of messages) {
-    if (message.role === "assistant" && message.status === "incomplete" && message.turn_id) {
+    if (message.role === "assistant" && message.incomplete === true && message.turn_id) {
       partialByTurn.set(message.turn_id, message);
     }
   }
   return messages.filter(message => {
     if (isAssistantFailureNoticeMessage(message) && message.turn_id && partialByTurn.has(message.turn_id)) return false;
-    return message.role === "user" || !message.turn_id || message.status === "delivered" || message.status === "incomplete"
+    return message.role === "user" || !message.turn_id || message.status === "delivered" || message.incomplete === true
       || latestByTurn.get(message.turn_id)?.id === message.id;
   }).map(message => {
     const failure = message.turn_id ? latestByTurn.get(message.turn_id) : undefined;

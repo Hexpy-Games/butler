@@ -17,7 +17,6 @@ fn app_schema_migrations_keep_existing_data() {
     failed_vault_upgrade_rolls_back_and_releases_savepoint();
     deployed_events_gain_actual_turn_index_without_rewriting_payloads();
     deployed_schema_adds_columns_without_removing_unknown_data();
-    legacy_message_retry_modes_are_backfilled_only_once();
     an_existing_install_keeps_full_access_until_it_saves_a_mode();
     a_new_install_asks_first_until_it_saves_a_mode();
     super::plans::hot_queries_use_their_indexes();
@@ -400,67 +399,4 @@ fn failed_vault_upgrade_rolls_back_and_releases_savepoint() {
         super::vault::create(&db).unwrap();
         assert!(db.is_autocommit());
     }
-}
-
-/// Persisted retry modes upgrade a version-1 database once, across actual opens.
-fn legacy_message_retry_modes_are_backfilled_only_once() {
-    let path =
-        std::env::temp_dir().join(format!("retry-migration-{}.sqlite", uuid::Uuid::new_v4()));
-    let mut connection = Connection::open(&path).unwrap();
-    super::core::create(&connection).unwrap();
-    assert!(!column_exists(&connection, "messages", "retry_mode"));
-    connection.execute_batch(
-        "PRAGMA user_version=1;
-         INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES('chat','t','chat','now','now');
-         INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at,safe_error_code,retryable)
-         VALUES('fault','chat','assistant','','failed','now','now','runtime_fault',1),
-               ('interrupted','chat','assistant','','failed','now','now','turn_interrupted',1),
-               ('not-retryable','chat','assistant','','failed','now','now','runtime_fault',0),
-               ('other-error','chat','assistant','','failed','now','now','other',1),
-               ('unset-error','chat','assistant','','failed','now','now',NULL,1);"
-    ).unwrap();
-    migrate(&mut connection, None).unwrap();
-    let rows = connection
-        .prepare("SELECT id,retry_mode,retry_with_current_controls FROM messages ORDER BY id")
-        .unwrap()
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, Option<String>>(1)?,
-                row.get::<_, bool>(2)?,
-            ))
-        })
-        .unwrap()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    assert_eq!(
-        rows,
-        vec![
-            ("fault".into(), Some("resume".into()), true),
-            ("interrupted".into(), Some("resume".into()), false),
-            ("not-retryable".into(), None, false),
-            ("other-error".into(), None, false),
-            ("unset-error".into(), None, false),
-        ]
-    );
-    connection
-        .execute("UPDATE messages SET retry_mode=NULL", [])
-        .unwrap();
-    connection.close().unwrap();
-
-    let mut connection = Connection::open(&path).unwrap();
-    migrate(&mut connection, None).unwrap();
-    let modes: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM messages WHERE retry_mode IS NOT NULL",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(
-        modes, 0,
-        "reopening must not repeat the retry-mode backfill"
-    );
-    connection.close().unwrap();
-    std::fs::remove_file(path).unwrap();
 }

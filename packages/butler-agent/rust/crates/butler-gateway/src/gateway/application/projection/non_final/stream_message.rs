@@ -188,15 +188,7 @@ pub(super) fn stop(
     turn: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    settle_partial(
-        db,
-        subscribers,
-        chat,
-        turn,
-        now,
-        "cancelled",
-        Some("turn_stopped"),
-    )
+    settle_partial(db, subscribers, chat, turn, now, Some("turn_stopped"))
 }
 
 pub(super) fn incomplete(
@@ -206,7 +198,7 @@ pub(super) fn incomplete(
     turn: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    settle_partial(db, subscribers, chat, turn, now, "incomplete", None)
+    settle_partial(db, subscribers, chat, turn, now, None)
 }
 
 fn settle_partial(
@@ -215,7 +207,6 @@ fn settle_partial(
     chat: &str,
     turn: &str,
     now: &str,
-    partial_status: &str,
     code: Option<&str>,
 ) -> Result<(), AppStorageError> {
     let target = StreamTarget {
@@ -238,11 +229,13 @@ fn settle_partial(
     let content: String = db
         .query_row("SELECT text FROM messages WHERE id=?1", [&id], |r| r.get(0))
         .map_err(AppStorageError::sqlite)?;
-    if answer && !butler_core::public_text::trim_js_whitespace(&content).is_empty() {
+    if answer
+        && (code.is_some() || !butler_core::public_text::trim_js_whitespace(&content).is_empty())
+    {
         db.execute_cached(
-            "UPDATE messages SET status=?3,safe_error_code=?4,updated_at=?1 \
+            "UPDATE messages SET status='cancelled',safe_error_code=?3,incomplete=?4,updated_at=?1 \
              WHERE id=?2",
-            params![now, id, partial_status, code],
+            params![now, id, code, code.is_none().then_some(true)],
         )
         .map_err(AppStorageError::sqlite)?;
         return updated(&target, &id, false);
@@ -314,11 +307,21 @@ pub(in crate::gateway::application::projection) fn fail_unanswered(
     chat: &str,
     turn: &str,
     now: &str,
+    locale: &str,
 ) -> Result<(), AppStorageError> {
     incomplete(db, subscribers, chat, turn, now)?;
     let id = format!("message-{}", uuid::Uuid::new_v4());
-    db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code) VALUES(?1,?2,?3,'assistant','No visible answer.','failed',?4,?4,'no_visible_result')",
-        params![id,chat,turn,now]).map_err(AppStorageError::sqlite)?;
+    let copy = butler_turn::btcc::runtime_failure_message(
+        &butler_turn::btcc::RuntimeFailure {
+            code: "no_visible_result".into(),
+            retryable: false,
+            status_code: None,
+            cause: None,
+        },
+        locale,
+    );
+    db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code) VALUES(?1,?2,?3,'assistant',?5,'failed',?4,?4,'no_visible_result')",
+        params![id,chat,turn,now,copy]).map_err(AppStorageError::sqlite)?;
     updated(
         &StreamTarget {
             db,
@@ -363,7 +366,7 @@ fn latest(
     turn: &str,
 ) -> Result<Option<(String, String)>, AppStorageError> {
     db.query_row_cached(
-        "SELECT id,status FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status NOT IN ('delivered','incomplete') \
+        "SELECT id,status FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' AND COALESCE(incomplete,0)=0 \
          ORDER BY rowid DESC LIMIT 1",
         params![chat, turn],
         |row| Ok((row.get(0)?, row.get(1)?)),

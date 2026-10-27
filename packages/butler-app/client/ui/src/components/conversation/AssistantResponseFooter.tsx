@@ -78,7 +78,6 @@ function terminalAssistantStatus(status?: string): {
   label: string;
   state: "complete" | "failed" | "cancelled";
 } | null {
-  if (status === "incomplete") return null;
   if (status === "failed") return { label: appCopy.interfaceDetails.answerFailed, state: "failed" };
   if (status === "cancelled") {
     return { label: appCopy.interfaceDetails.answerStopped, state: "cancelled" };

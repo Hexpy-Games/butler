@@ -22,9 +22,10 @@ async fn unknown_chat_finish_reason_fails_and_keeps_partial() -> Result<(), Harn
     assert_eq!(turn["retryable"], true);
     let messages = s.gw.messages("general").await?;
     assert!(
-        messages
-            .iter()
-            .any(|m| m["turn_id"] == id && m["status"] == "incomplete" && m["text"] == partial),
+        messages.iter().any(|m| m["turn_id"] == id
+            && m["status"] == "cancelled"
+            && m["incomplete"] == true
+            && m["text"] == partial),
         "{messages:?}"
     );
     s.finish().await

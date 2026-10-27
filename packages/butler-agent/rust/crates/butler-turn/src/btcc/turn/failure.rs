@@ -1,5 +1,10 @@
 use crate::btcc::RuntimeFailure;
 
+/// Failure copy for callers that do not own a runtime turn record.
+pub fn runtime_failure_message(failure: &RuntimeFailure, locale: &str) -> String {
+    message(failure, None, Some(locale))
+}
+
 /// The failure answer in the app locale, including accepted Work results.
 pub(super) fn runtime_failure_message_for_turn(
     turn: &super::contracts::TurnRecord,
@@ -31,6 +36,8 @@ fn message(
         };
     }
     let short = match (failure.code.as_str(), korean) {
+        ("no_visible_result", true) => Some("표시할 답변이 없습니다."),
+        ("no_visible_result", false) => Some("No visible answer."),
         ("provider_output_truncated", true) => Some("답변이 출력 한도에 도달했습니다."),
         ("provider_output_truncated", false) => {
             Some("The answer reached the model's output limit.")

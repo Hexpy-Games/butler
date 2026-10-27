@@ -92,10 +92,10 @@ function AssistantAttachments({ message, children }: { message: MessageRecord; c
     {message.plan_document ? (
       <PlanDocumentMessage plan={message.plan_document} bubble={isGeneralChat(message.chat_id)} />
     ) : null}
-    {(message.status === "cancelled" || message.status === "incomplete") && (
+    {(message.status === "cancelled" || message.incomplete === true) && (
       <div role="status">
-        <Tag ariaLabel={message.status === "incomplete" ? appCopy.conversation.incompleteStatus : appCopy.conversation.stoppedStatus}>
-          {message.status === "incomplete" ? appCopy.conversation.incompleteStatus : appCopy.conversation.stoppedStatus}
+        <Tag ariaLabel={message.incomplete === true ? appCopy.conversation.incompleteStatus : appCopy.conversation.stoppedStatus}>
+          {message.incomplete === true ? appCopy.conversation.incompleteStatus : appCopy.conversation.stoppedStatus}
         </Tag>
       </div>
     )}

@@ -134,6 +134,20 @@ try {
     } finally { await page.close(); }
     }
   }
+  if (process.env.BUTLER_STOP_REVIEW_BEFORE !== "1") {
+    for (const [locale, expected] of [["ko", "표시할 답변이 없습니다."], ["en", "No visible answer."]] as const) {
+      const page = await browser.newPage({ viewport: { width: 800, height: 1000 }, colorScheme: theme });
+      try {
+        const view = failedTranscript("empty");
+        const failure = view.messages[1];
+        failure.safe_error_code = "no_visible_result";
+        failure.text = expected;
+        await installFixture(page, view);
+        await page.goto(`http://chats-bubble.localhost/?visual=components&theme=${theme}&locale=${locale}`);
+        await page.getByText(expected, { exact: true }).waitFor();
+      } finally { await page.close(); }
+    }
+  }
   console.log(JSON.stringify({ result: "SS10_PASS", theme, cells: 10, screenshots: shots, modelCalls: 0 }));
 } finally {
   await browser.close();
@@ -237,8 +251,8 @@ function failedTranscript(kind: "partial" | "empty" | "stopped"): SessionView {
   const partial = "## 검토 결과\n\n첫 번째 항목을 확인했습니다. **검토 결과**를 정리하는 중입니다.\n\n- 확인한 내용은 여기에 남습니다.\n- 다음 항목은 아직 작성 중입니다.";
   const base = { chat_id: "general", role: "assistant" as const, turn_id: "review", created_at: "2026-10-25T09:00:03Z" };
   const messages: MessageRecord[] = [{ ...view.messages[0], text: "검토 요청입니다." }];
-  if (kind === "stopped" || kind === "partial") messages.push({ ...base, id: "partial", cursor: 2,
-    status: kind === "stopped" ? "cancelled" : "incomplete", text: partial });
+  if (kind === "stopped" || (kind === "partial" && process.env.BUTLER_STOP_REVIEW_BEFORE !== "1")) messages.push({ ...base, id: "partial", cursor: 2,
+    status: "cancelled", incomplete: kind === "partial", text: partial });
   if (kind !== "stopped") messages.push({ ...base, id: "failure", cursor: 3, status: "failed", safe_error_code: "provider_invalid_request",
     text: "모델 응답 중단" });
   return { ...view, messages };

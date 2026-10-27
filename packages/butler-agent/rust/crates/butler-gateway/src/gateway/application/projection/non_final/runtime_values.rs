@@ -348,3 +348,19 @@ pub(super) fn terminal_authority_pending(
         .map_err(AppStorageError::sqlite)?;
     Ok(state.is_some_and(|state| !matches!(state.as_str(), "delivered" | "cancelled")))
 }
+
+/// Persist admitted tool work once, even when no public tool progress is emitted.
+pub(super) fn record_tool_work(
+    db: &Connection,
+    turn: &str,
+    kind: &str,
+) -> Result<(), AppStorageError> {
+    if kind == "turn.tool_batch.recorded" {
+        db.execute(
+            "UPDATE turns SET tool_work_recorded=1 WHERE id=?1 AND tool_work_recorded=0",
+            [turn],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    }
+    Ok(())
+}

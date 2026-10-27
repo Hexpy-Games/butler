@@ -1,8 +1,9 @@
 use super::*;
 
-// test-category: race
+// test-category: format-pin
 #[tokio::test]
-async fn delivered_progress_is_receipted_and_returned_by_message_get() {
+async fn progress_receipts_and_terminal_message_projection_contracts() {
+    projection::assert_terminal_projection_contracts().await;
     let native = Arc::new(Native(Mutex::new(Vec::new())));
     let root = projection_root("non-final-progress");
     std::fs::create_dir_all(root.join("transcripts")).unwrap();

@@ -129,7 +129,7 @@ fn create_queue_order_index(connection: &Connection) -> Result<(), AppStorageErr
 
 /// `PRAGMA user_version` once the full-table backfills of an older database
 /// have run. Finding rows that need these backfills reads every message.
-const BACKFILLS_DONE: i64 = 2;
+const BACKFILLS_DONE: i64 = 1;
 
 fn run_backfills_once(connection: &Connection) -> Result<(), AppStorageError> {
     let version: i64 = connection
@@ -138,11 +138,8 @@ fn run_backfills_once(connection: &Connection) -> Result<(), AppStorageError> {
     if version >= BACKFILLS_DONE {
         return Ok(());
     }
-    if version < 1 {
-        supporting::backfill_search_index(connection)?;
-        migration::backfill_message_updated_at(connection)?;
-    }
-    migration::backfill_message_retry_mode(connection)?;
+    supporting::backfill_search_index(connection)?;
+    migration::backfill_message_updated_at(connection)?;
     connection
         .pragma_update(None, "user_version", BACKFILLS_DONE)
         .map_err(AppStorageError::sqlite)

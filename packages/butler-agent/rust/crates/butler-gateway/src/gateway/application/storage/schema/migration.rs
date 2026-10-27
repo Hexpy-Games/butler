@@ -18,6 +18,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
     ("messages", "safe_error_code", "TEXT"),
     ("messages", "retryable", "INTEGER NOT NULL DEFAULT 0"),
     ("messages", "retry_mode", "TEXT"),
+    ("messages", "incomplete", "INTEGER"),
     (
         "messages",
         "retry_with_current_controls",
@@ -152,15 +153,6 @@ pub(super) fn add_current_columns(connection: &Connection) -> Result<(), AppStor
     for &(table, column, definition) in COLUMNS {
         ensure_column(connection, table, column, definition)?;
     }
-    Ok(())
-}
-
-/// Rows written before retry modes existed keep their resumable failure behavior.
-pub(super) fn backfill_message_retry_mode(connection: &Connection) -> Result<(), AppStorageError> {
-    connection.execute(
-        "UPDATE messages SET retry_mode='resume',retry_with_current_controls=(safe_error_code='runtime_fault') \
-         WHERE retryable=1 AND retry_mode IS NULL AND safe_error_code IN ('runtime_fault','turn_interrupted')", [],
-    ).map_err(AppStorageError::sqlite)?;
     Ok(())
 }
 

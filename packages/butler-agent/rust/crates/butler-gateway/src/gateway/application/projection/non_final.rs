@@ -8,6 +8,8 @@ mod runtime_event;
 mod runtime_progress;
 mod runtime_values;
 mod stream_message;
+#[cfg(test)]
+pub(in crate::gateway::application) mod terminal_tests;
 mod transaction;
 pub(in crate::gateway::application::projection) use stream_message::fail_unanswered;
 mod values;
@@ -414,10 +416,7 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
         visibility,
         source.get("payload").and_then(Value::as_object),
     )?;
-    if kind == "turn.tool_batch.recorded" {
-        db.execute("UPDATE turns SET tool_work_recorded=1 WHERE id=?1", [turn])
-            .map_err(AppStorageError::sqlite)?;
-    }
+    record_tool_work(db, turn, &kind)?;
     internal_continuation::remember(db, turn, source)?;
     if visibility != "internal" {
         runtime_event::publish(input, source, &kind, normalized_payload)?;

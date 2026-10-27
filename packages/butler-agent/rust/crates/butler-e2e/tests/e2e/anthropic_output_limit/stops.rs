@@ -184,7 +184,7 @@ async fn repeated_cuts_stop_without_delivering_and_keep_partial() -> Result<(), 
         let messages = s.gw.messages("general").await?;
         let partial = messages
             .iter()
-            .find(|m| m["turn_id"] == id && m["status"] == "incomplete")
+            .find(|m| m["turn_id"] == id && m["incomplete"] == true)
             .unwrap();
         assert_eq!(partial["text"], PARTIAL);
         let notice = messages
@@ -223,7 +223,7 @@ async fn continuation_http_failure_keeps_joined_partial() -> Result<(), HarnessE
     let messages = s.gw.messages("general").await?;
     let partial = messages
         .iter()
-        .find(|m| m["turn_id"] == id && m["status"] == "incomplete")
+        .find(|m| m["turn_id"] == id && m["incomplete"] == true)
         .unwrap();
     assert_eq!(partial["text"], COMPLETE);
     assert_eq!(stub.requests.lock().unwrap().len(), 3);
@@ -331,8 +331,8 @@ async fn complete_round_trims_public_text() -> Result<(), HarnessError> {
     Ok(())
 }
 
-#[path = "review2.rs"]
-mod review2;
+#[path = "continuation_and_tool_retry.rs"]
+mod continuation_and_tool_retry;
 
-#[path = "review3.rs"]
-mod review3;
+#[path = "pause_and_fresh_retry.rs"]
+mod pause_and_fresh_retry;

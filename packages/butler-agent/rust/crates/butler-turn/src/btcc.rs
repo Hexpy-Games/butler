@@ -40,6 +40,7 @@ pub use storage::{
 };
 pub use task_graph_identity::{decode as decode_task_graph_id, encode as encode_task_graph_id};
 mod turn;
+pub use turn::runtime_failure_message;
 mod work;
 
 use std::sync::Arc;
