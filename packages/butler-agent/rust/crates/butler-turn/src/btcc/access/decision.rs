@@ -196,6 +196,7 @@ impl CapabilityKind {
             | Self::Schedule
             | Self::SettingsWrite
             | Self::ProjectRecord
+            | Self::CanonProposal
             | Self::WorkRecord
             | Self::CrossConversation
             | Self::ButlerOutput
