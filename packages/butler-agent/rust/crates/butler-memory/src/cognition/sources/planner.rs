@@ -101,7 +101,10 @@ fn turn(
         .transpose()?
         .flatten();
     if request.as_ref().is_some_and(|message| {
-        message.message.origin_kind == ConversationOriginKind::InternalControl
+        matches!(
+            message.message.origin_kind,
+            ConversationOriginKind::InternalControl | ConversationOriginKind::Connector
+        )
     }) {
         return Ok(PreparedConversationSource::SupersedeInternalControl {
             turn_id: turn_id.to_owned(),
@@ -186,6 +189,12 @@ fn eligible_turn_messages(
         .map(|id| reader.read_message(id))
         .transpose()?
         .flatten();
+    if assistant
+        .as_ref()
+        .is_some_and(|message| message.message.origin_kind == ConversationOriginKind::Connector)
+    {
+        return Ok(vec![request]);
+    }
     if assistant_id.is_some()
         && !assistant.as_ref().is_some_and(|message| {
             message.message.role == ConversationRole::Assistant
@@ -378,6 +387,7 @@ fn origin(value: ConversationOriginKind) -> &'static str {
         ConversationOriginKind::UserInput => "user_input",
         ConversationOriginKind::AssistantPublic => "assistant_public",
         ConversationOriginKind::InternalControl => "internal_control",
+        ConversationOriginKind::Connector => "connector",
         ConversationOriginKind::Unknown => "unknown",
     }
 }

@@ -47,10 +47,12 @@ pub(crate) fn read(root: &Path) -> Result<Package> {
         hooks: Vec::new(),
         declared: CapabilitySet::default(),
         compatibility: Vec::new(),
+        connectors: Vec::new(),
     };
     declared(&mut package, ext)?;
     skills(root, &value, &mut package)?;
     servers(root, &value, &mut package)?;
+    super::connector_manifest::read(ext, &mut package)?;
     if let Some(path) = ext.and_then(|v| v.get("hooks")).and_then(Value::as_str) {
         let config: butler_core::hooks::HookConfig =
             serde_json::from_value(json(root, path)?).map_err(|_| error("plugin_hooks_invalid"))?;
