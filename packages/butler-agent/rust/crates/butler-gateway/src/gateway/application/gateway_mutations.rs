@@ -2,6 +2,15 @@ use super::*;
 use crate::gateway::GatewayMutationCommands;
 
 impl GatewayMutationCommands for AppApplication {
+    fn composing(&self, id: String) -> ApplicationFuture<serde_json::Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.composing_owned(id).await })
+    }
+    fn report_pause(&self, id: String, decision: String) -> ApplicationFuture<serde_json::Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.report_pause_owned(id, decision).await })
+    }
+
     fn upload_canon_file(
         &self,
         project: String,

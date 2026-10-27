@@ -7,6 +7,7 @@ import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, nativePeekDismiss, pane, sessionInfoBesideBrowser, shellGeometry, shellReady, toggle, togglePane, toggleState } from "../support/browser-shell-acceptance";
 import { assertNewTabContent, newTabHub } from "../support/browser-newtab-acceptance";
 import { playingVideoFixture, routeReturnKeepsPage } from "../support/browser-route-return";
+import { assertSidebarRouteActive } from "../support/sidebar-route-active";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 assert.ok(evidence);
@@ -50,13 +51,20 @@ try {
     await toggleState(app, "butler", false); await app.shot(`${locale}-${theme}-${width}-toggle-busy-open`);
     await togglePane(app, false); await toggleState(app, "riso", true); await app.shot(`${locale}-${theme}-${width}-toggle-busy-closed`);
     await app.main(`(()=>{const b=globalThis.browserAgentSubject;b.tabs.get(${JSON.stringify(first)}).busy=false;b.publish()})()`);
+    const general = getAppCopy(locale === "ko" ? "ko-KR" : "en-US").space.general;
+    if (width === 1440) await assertSidebarRouteActive(app, "session", general);
     await app.click(locale === "ko" ? "브라우저" : "Browser");
     await app.call("activate", { id: first }); await nativeAligned(app);
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-split-chat]'))"), false);
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-inspector][data-open=true]'))"), false);
     await app.shot(`${locale}-${theme}-${width}-hub-corners`);
+    if (width === 1440) {
+      await assertSidebarRouteActive(app, "browser", locale === "ko" ? "브라우저" : "Browser");
+      await app.shot(`${locale}-${theme}-1440-sidebar-browser-active`);
+    }
     await app.page.clickSelector('[data-slot="titlebar-leading"] button');
     await waitBrowser(() => app.page.expression(`document.querySelector('${toggle}')?.getAttribute('aria-pressed') === 'true'`), "hub conversation entry");
+    if (width === 1440) await assertSidebarRouteActive(app, "session", general);
   }
   await app.main(`${app.win}.setContentSize(1440,900)`);
   await nativeAligned(app);
@@ -74,6 +82,7 @@ try {
   await togglePane(app, false); await togglePane(app, true);
   assert.equal((await app.call<{ activeId: string }>("state")).activeId, second);
   await app.click("Second conversation");
+  await assertSidebarRouteActive(app, "session", "Second conversation");
   await waitBrowser(() => app.page.expression(`!document.querySelector('${pane}') && document.querySelector('[data-test-class=custom-titlebar]')?.textContent.includes('Second conversation')`), "second conversation has its own closed browser pane");
   assert.equal(await app.page.expression(`Boolean(document.querySelector('${pane}'))`), false);
   await togglePane(app, true);
@@ -113,7 +122,12 @@ try {
   await app.click("Library");
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="library-page"]')));
   assert.equal(await app.page.expression(`Boolean(document.querySelector('${pane}'))`), false);
+  await assertSidebarRouteActive(app, "library", "Library");
   await app.shot("en-dark-library");
+  await app.click("Browser");
+  await assertSidebarRouteActive(app, "browser", "Browser");
+  await app.click("Second conversation");
+  await assertSidebarRouteActive(app, "session", "Second conversation");
   // #1188: the window shrinks to its minimum, and the Browser's tab strip and toolbar still fit there.
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });

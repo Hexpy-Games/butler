@@ -162,6 +162,7 @@ export function useLiveSessionEvents(): void {
         event.type.startsWith("question.") || event.type.startsWith("authority.") ||
         event.type.startsWith("worker.") || event.type.startsWith("worker_") ||
         event.type === "session_queue.changed" || event.type === "session.queue.changed" ||
+        isDeliveredAssistantMessage(event) ||
         (event.type === "session.updated" && !isProjectNavigationEvent(event))
       ) {
         if (!isProjectNavigationEvent(event)) {
@@ -278,6 +279,7 @@ function notifyDesktopEvent(
   if (
     settings.assistant_messages &&
     isDeliveredAssistantMessage(event) &&
+    message?.initiated?.quiet !== true &&
     message?.id &&
     !messageIdsRef.current.has(message.id)
   ) {

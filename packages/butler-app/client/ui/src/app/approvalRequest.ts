@@ -88,11 +88,12 @@ function normalizeBrowserSteps(value: unknown): BrowserStep[] | undefined {
 
 function normalizeSchedule(value: unknown): ApprovalSummary["schedule"] {
   if (!isRecord(value) || typeof value.title !== "string"
-    || (value.schedule_type !== "once" && value.schedule_type !== "interval")) return undefined;
+    || (!["once", "interval", "daily", "weekdays"].includes(String(value.schedule_type)))) return undefined;
   const text = (key: string) => typeof value[key] === "string" && value[key].trim() ? value[key] : undefined;
   const runAt = text("run_at");
   const startAt = text("start_at");
-  return { title: value.title.trim(), scheduleType: value.schedule_type,
+  return { title: value.title.trim(), scheduleType: value.schedule_type as NonNullable<ApprovalSummary["schedule"]>["scheduleType"],
+    ...(text("time") ? { time: text("time") } : {}),
     ...(runAt ? { runAt } : {}), ...(startAt ? { startAt } : {}),
     ...(typeof value.interval_seconds === "number" ? { intervalSeconds: value.interval_seconds } : {}),
     ...(isAccessMode(value.access_mode) ? { accessMode: value.access_mode } : {}) };

@@ -49,7 +49,9 @@ pub(in crate::gateway::application) fn streaming_message(
         .map_err(AppStorageError::sqlite)?;
     row.map(|row| {
         let ids = vec![row.id.clone()];
-        message(row, &attachments(db, &ids)?, &changed_files(db, &ids)?)
+        let mut record = message(row, &attachments(db, &ids)?, &changed_files(db, &ids)?)?;
+        record.initiated = super::super::initiated::origin(db, &record.id)?;
+        Ok(record)
     })
     .transpose()
 }

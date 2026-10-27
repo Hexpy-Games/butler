@@ -6,6 +6,8 @@
     reason = "test assertions"
 )]
 
+mod calendar;
+
 use super::schedule_cassette;
 #[path = "support/schedule_prompt_budget.rs"]
 mod schedule_prompt_budget;
@@ -99,6 +101,7 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
     assert_eq!(schedule["access_mode"], "full_access");
     assert_eq!(schedule["title"], "아침 브리핑");
     assert_eq!(schedule["interval_seconds"], 1440 * 60);
+    assert!(schedule.get("time").is_none());
     assert_eq!(schedule["start_at"], START);
     assert_eq!(s.gw.get("/automations/morning-briefing").await?.status, 404);
     let changed =

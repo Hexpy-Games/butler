@@ -40,6 +40,11 @@ async fn setup(id: &str) -> Result<(Scenario, String), HarnessError> {
         setup = setup.stub_cassette(cassette);
     }
     let s = setup.start().await?;
+    // These clock-jump scenarios exercise delivery at 22:04, outside quiet hours.
+    let settings =
+        s.gw.patch("/settings", json!({"quiet_hours_start":"23:00"}))
+            .await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
     Ok((s, address))
 }
 

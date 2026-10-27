@@ -1,3 +1,4 @@
+import { sendComposingLease } from "../sendComposingLease";
 import { SKIP_DOM_SELECTION_TAG, type LexicalEditor } from "lexical";
 import { writeCachedComposerDraft } from "@/app/composerDraftCache.ts";
 import { messageContentText, type MessageContent } from "@/app/messageContent";
@@ -31,5 +32,8 @@ export function saveDraftFromEditor(editor: LexicalEditor, sessionId: string, co
     writeCachedComposerDraft(sessionId, messageContentText(content), content.parts.some(part => part.type !== "text") ? content : undefined);
     return;
   }
-  if (!same(content, storeDraft())) state.setContentParts(content);
+  if (!same(content, storeDraft())) {
+    state.setContentParts(content);
+    if (editor.getRootElement()?.contains(document.activeElement)) sendComposingLease(sessionId, messageContentText(content));
+  }
 }

@@ -6,7 +6,7 @@ import { SecuritySignInsSections } from "./SecuritySignInsSection";
 import { BrowserVaultSections } from "./BrowserVaultSections";
 import { BrowserSiteDataSection } from "./BrowserSiteDataSection";
 
-/** The in-app browser's history, cookies and cache, saved sign-ins and import, then payment methods and autofill details. */
+/** The in-app browser's history, cookies and cache, saved sign-ins, payment methods and autofill details, then import last. */
 export const BrowserSettings = memo(function BrowserSettings() {
-  return <SettingsPage><BrowsingAgentField /><BrowserHistorySection /><BrowserSiteDataSection /><SecuritySignInsSections /><BrowserVaultSections /></SettingsPage>;
+  return <SettingsPage><BrowsingAgentField /><BrowserHistorySection /><BrowserSiteDataSection /><SecuritySignInsSections><BrowserVaultSections /></SecuritySignInsSections></SettingsPage>;
 });
