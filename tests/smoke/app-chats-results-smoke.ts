@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import type { Locator, Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { installInitiatedGateway, session } from "../support/initiated-fixtures";
-import { approvalNeeded, canonApproval, canonDescription, canonTitle, commandApproval, commandCredential, dueOn, longEditPath, longPathApproval, maskedCommand, planTitle, projectTitle, workFailed, workResult, workSessionId, workTitle } from "../support/work-result-fixtures";
+import { approvalNeeded, commandApproval, commandCredential, longEditPath, longPathApproval, maskedCommand, workFailed, workResult, workSessionId, workTitle } from "../support/work-result-fixtures";
 import { probeFocusRingFrames } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser, smokeBrowserArgs } from "../support/smoke-browser";
 
@@ -43,32 +43,6 @@ try {
     await pathCard.locator(`[aria-label="${longEditPath}"]`).waitFor();
     assert.equal(await pathCard.getByRole("button", { name: copy.conversation.messageActions.showMore, exact: true }).count(), 0, "one abbreviated absolute path never offers false expansion");
     await capture(pathCard, "edit-files-long-path", "파일 수정 승인 카드 · 64자 초과 절대 경로, 더보기 없음, 제목 툴팁 유지");
-    for (const kind of ["epic", "plan"] as const) {
-      await gateway.showView(canonApproval(kind, ""));
-      const shortCard = page.locator('[data-test-class="composer-authority-decision"]');
-      await shortCard.getByText(copy.interfaceTemplates.approvalRequest.canonTitle(canonTitle[kind]), { exact: true }).waitFor();
-      assert.equal(await shortCard.getByRole("button", { name: copy.conversation.messageActions.showMore, exact: true }).count(), 0, "three short canon lines never offer expansion");
-      await gateway.showView(canonApproval(kind));
-      const card = page.locator('[data-test-class="composer-authority-decision"]');
-      const labels = copy.interfaceTemplates.approvalRequest;
-      await card.getByText(labels.createCanon[kind], { exact: true }).waitFor();
-      for (const text of [labels.canonTitle(canonTitle[kind]), labels.canonProject(projectTitle), labels.canonDescription(canonDescription), kind === "epic" ? labels.canonPlan(planTitle) : labels.canonDue(dueOn)]) {
-        await card.getByText(text, { exact: true }).waitFor();
-      }
-      const buttons = card.getByRole("button");
-      const names = await buttons.allTextContents();
-      assert(names.includes(copy.interfaceDetails.deny));
-      assert(names.includes(copy.interfaceDetails.allowOnce));
-      for (const button of await buttons.all()) assert.deepEqual(await probeFocusRingFrames(page, () => button.focus()), []);
-      await capture(card, `canon-${kind}`, kind === "epic" ? "과제 승인 카드 · 제목, 프로젝트, 계획, 설명" : "계획 승인 카드 · 제목, 프로젝트, 마감일, 설명");
-    }
-    await gateway.showView(canonApproval("epic", canonDescription.repeat(50)));
-    const longCard = page.locator('[data-test-class="composer-authority-decision"]');
-    const more = longCard.getByRole("button", { name: copy.conversation.messageActions.showMore, exact: true });
-    await more.waitFor();
-    assert(await longCard.locator('[data-slot="composer-decision-details"] > div').evaluate(node => node.scrollHeight > node.clientHeight + 1));
-    await more.click();
-    await longCard.getByText(copy.interfaceTemplates.approvalRequest.canonDescription(canonDescription.repeat(50)), { exact: true }).waitFor();
     await quietWorkResult(page, gateway);
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ language, theme, width, result: "PASS" }));

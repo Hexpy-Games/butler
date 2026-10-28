@@ -24,6 +24,7 @@ pub enum CapabilityKind {
     Schedule,
     SettingsWrite,
     ProjectRecord,
+    CanonProposal,
     /// Durable lifecycle bookkeeping that also bootstraps its own Plan authority.
     WorkRecord,
     CrossConversation,
@@ -151,6 +152,10 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         {
             Allow
         }
+        CapabilityKind::CanonProposal if auto && request.taint == TurnTaint::Clean => Allow,
+        CapabilityKind::CanonProposal if request.taint == TurnTaint::External => {
+            Ask(GrantUse::Ignore)
+        }
         CapabilityKind::ImageModelCall | ProjectRecord if auto => Allow,
         CapabilityKind::ImageModelCall => Ask(GrantUse::Ignore),
         Network | Connector if request.taint == TurnTaint::External => Ask(GrantUse::Ignore),
@@ -191,6 +196,7 @@ impl CapabilityKind {
             | Self::Schedule
             | Self::SettingsWrite
             | Self::ProjectRecord
+            | Self::CanonProposal
             | Self::WorkRecord
             | Self::CrossConversation
             | Self::ButlerOutput
@@ -251,6 +257,9 @@ impl CapabilityKind {
         if let Some(action) = ApprovalExemptAction::of_tool(name) {
             return Self::Exempt(action);
         }
+        if name == ToolName::CanonPropose {
+            return Self::CanonProposal;
+        }
         if ledger_effect {
             return Self::ProjectRecord;
         }
@@ -296,7 +305,7 @@ impl CapabilityKind {
             {
                 Self::InternalRead
             }
-            ToolName::CanonPropose | ToolName::ControlWork => Self::ProjectRecord,
+            ToolName::ControlWork => Self::ProjectRecord,
             ToolName::StartWork
             | ToolName::ContinueWork
             | ToolName::ReplaceWorkPlan

@@ -1,3 +1,5 @@
+import { CanonProposalCard } from "../canon/CanonProposalCard.tsx";
+import { useButlerStore } from "@/app/store.ts";
 import { InitiatedApprovalLine } from "./InitiatedApprovalLine";
 import { InitiatedPanels } from "./InitiatedPanels";
 import { isGeneralChat } from "@/app/isGeneralChat";
@@ -85,7 +87,11 @@ function AnswerReply({ message, failureNotice, stewardProgress, refreshFileUrls 
 }
 
 function AssistantAttachments({ message, children }: { message: MessageRecord; children: ReactNode }) {
+  const sessionId = useButlerStore(state => state.activeChatId);
+  const projectId = useButlerStore(state => state.sessionViews[sessionId]?.project_id
+    ?? (state.sessionView?.session_id === sessionId ? state.sessionView.project_id : null) ?? null);
   return <>
+    {message.canon_proposals?.map(proposal => <CanonProposalCard key={proposal.proposal_id} id={proposal.proposal_id} sessionId={sessionId} projectId={projectId} />)}
     {message.question_summary?.map(question => (
       <Stack key={question.id} gap="none" data-test-class="assistant-question-summary">
         <Typo.Caption tone="tertiary">{question.eyebrow}</Typo.Caption>

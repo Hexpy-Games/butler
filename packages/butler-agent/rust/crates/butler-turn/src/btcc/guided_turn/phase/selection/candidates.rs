@@ -32,8 +32,10 @@ pub(super) fn provider_candidates(
         names.insert("analyze_attached_image".to_owned());
     }
     for tool in authorized {
-        if matches!(tool.name.as_str(), "generate_image" | "edit_image")
-            || tool.name == ToolName::UpdateTodoList
+        if matches!(
+            tool.name.as_str(),
+            "generate_image" | "edit_image" | "canon_read" | "canon_propose"
+        ) || tool.name == ToolName::UpdateTodoList
             || BROWSER_CORE.contains(&tool.name.as_str())
             || tool.effect_boundary.as_deref() == Some("turn_local")
                 && tool.category.as_deref() == Some("message")
@@ -165,9 +167,6 @@ pub(super) fn add_role_tools(
                 .tool(name)
                 .is_none_or(|tool| tool.category.as_deref() != Some("project") || tool.durable)
         });
-        if policy.access_mode != AccessMode::ReadOnly {
-            names.insert("canon_propose".into());
-        }
     }
 }
 
