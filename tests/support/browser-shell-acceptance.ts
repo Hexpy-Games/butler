@@ -44,12 +44,30 @@ export const sheetSettled = `(() => {
 
 export async function nativeAligned(app: ShellApp) {
   await waitBrowser(() => app.page.expression(sheetSettled), "browser sheet motion settles");
-  await waitBrowser(() => app.main<boolean>(`(async () => {
-    const w=${app.win}, b=globalThis.browserAgentSubject, t=b?.tabs.get(b.activeId);
-    if(!t?.attached || t.covered) return false;
-    const r=await w.webContents.executeJavaScript("document.querySelector('[data-slot=native-view-frame]')?.getBoundingClientRect().toJSON()");
-    const n=t.view.getBounds(); return r && ['x','y','width','height'].every(k=>Math.abs(r[k]-n[k])<=1);
-  })()`), "native view follows the page card");
+  try {
+    await waitBrowser(() => app.main<boolean>(`(async () => {
+      const w=${app.win}, b=globalThis.browserAgentSubject, t=b?.tabs.get(b.activeId);
+      if(!t?.attached || t.covered) return false;
+      const r=await w.webContents.executeJavaScript("document.querySelector('[data-slot=native-view-frame]')?.getBoundingClientRect().toJSON()");
+      const n=t.view.getBounds(); return r && ['x','y','width','height'].every(k=>Math.abs(r[k]-n[k])<=1);
+    })()`), "native view follows the page card");
+  } catch (error) {
+    const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
+    if (evidence) {
+      const state = await app.main(`(async()=>{
+        const w=${app.win},b=globalThis.browserAgentSubject,t=b?.tabs.get(b.activeId),view=t?.view,contents=view?.webContents;
+        const attached=t?.attached,live=contents&&!contents.isDestroyed(),startedHidden=[...t?.captures?.values()??[]];
+        return {id:t?.id??null,attached:attached&&!attached.isDestroyed()?{id:attached.id,visible:attached.isVisible()}:null,
+          covered:t?.covered??null,slot:t?.slot??null,bounds:live?view.getBounds():null,viewVisible:live?view.getVisible():null,
+          attachWait:!!t?.attachWait,placeHold:!!t?.placeHold,detachWait:!!t?.detachWait,
+          captures:{count:startedHidden.length,startedHidden},backgroundThrottling:live?contents.getBackgroundThrottling():null,
+          beingCaptured:live?contents.isBeingCaptured():null,
+          frame:await w.webContents.executeJavaScript("document.querySelector('[data-slot=native-view-frame]')?.getBoundingClientRect().toJSON()??null").catch(()=>null)};
+      })()`).catch(diagnosticError => ({ error: String(diagnosticError) }));
+      writeFileSync(join(evidence, "native-align-failure.json"), JSON.stringify(state, null, 2));
+    }
+    throw error;
+  }
 }
 
 export async function shellGeometry(app: ShellApp, width: number, evidence: string) {
