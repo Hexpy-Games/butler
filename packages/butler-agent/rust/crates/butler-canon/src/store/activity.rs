@@ -80,14 +80,13 @@ fn page_visible(db: &Connection, epic: &str, before: Option<i64>, mcp: bool) -> 
     for row in &mut items {
         row["actor"] = serde_json::from_str(text(row, "actor_json")?)?;
         if row["kind"] == "status" {
-            if !mcp {
-                if let Some(data) = row["body"]
+            if !mcp
+                && let Some(data) = row["body"]
                     .as_str()
                     .and_then(|body| serde_json::from_str::<Value>(body).ok())
-                {
-                    row["from"] = data["from"].clone();
-                    row["to"] = data["to"].clone();
-                }
+            {
+                row["from"] = data["from"].clone();
+                row["to"] = data["to"].clone();
             }
             row["body"] = Value::Null;
         }
