@@ -1,5 +1,7 @@
 import type { ShellApp } from "./browser-shell-acceptance";
 import { waitBrowser } from "./browser-agent-app";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 export async function pageShownBeforeNativeInput(app: ShellApp, contents: string) {
   // Poll from outside the page: hidden documents can suspend rAF indefinitely.
@@ -17,7 +19,35 @@ export async function pageShownBeforeNativeInput(app: ShellApp, contents: string
     }
     return document.visibilityState==='visible' && globalThis.nativeInputPresentation.ready;
   })()`;
-  await waitBrowser(() => app.main(`${contents}.executeJavaScriptInIsolatedWorld(9002,[{code:${JSON.stringify(code)}}])`), "page shown before native input");
+  try {
+    await waitBrowser(() => app.main(`${contents}.executeJavaScriptInIsolatedWorld(9002,[{code:${JSON.stringify(code)}}])`), "page shown before native input");
+  } catch (error) {
+    const expression = app.lastMain();
+    const presentation = await nativeInputPresentation(app, contents).catch(diagnosticError => ({ error: String(diagnosticError) }));
+    const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
+    if (evidence) writeFileSync(join(evidence, "native-input-failure.json"), JSON.stringify({ expression, presentation }, null, 2));
+    throw error;
+  }
+}
+
+/** Read only on failure; never capture or toggle a wedged view before recording it. */
+async function nativeInputPresentation(app: ShellApp, contents: string) {
+  return app.main(`(async()=>{
+    const contents=${contents}, browser=globalThis.browserAgentSubject;
+    const tab=[...browser.tabs.values()].find(t=>t.view?.webContents===contents);
+    if(!tab) return {destroyed:contents.isDestroyed(),tabFound:false};
+    const win=tab.popupWindow??browser.getWindow(), attached=tab.attached;
+    const windowState=w=>w&&!w.isDestroyed()?{id:w.id,visible:w.isVisible(),focused:w.isFocused(),bounds:w.getBounds()}:null;
+    return {id:tab.id,status:tab.status,covered:tab.covered,dialog:tab.dialog?.type??null,
+      nativeCovers:browser.nativeCovers,areaVisible:browser.areaVisible,active:browser.activeId===tab.id,
+      attached:windowState(attached),window:windowState(win),child:!!attached?.contentView.children.includes(tab.view),
+      slot:tab.slot,bounds:tab.view.getBounds(),viewVisible:tab.view.getVisible(),
+      attachWait:!!tab.attachWait,placeHold:!!tab.placeHold,capture:!!tab.capture,
+      captures:[...tab.captures?.values()??[]].map(startedHidden=>({startedHidden})),
+      backgroundThrottling:contents.getBackgroundThrottling(),beingCaptured:contents.isBeingCaptured(),
+      page:await contents.executeJavaScriptInIsolatedWorld(9002,[{code:
+        "({visibility:document.visibilityState,readyState:document.readyState,presentation:globalThis.nativeInputPresentation??null})"}])};
+  })()`);
 }
 
 type Point = { x: number; y: number };
