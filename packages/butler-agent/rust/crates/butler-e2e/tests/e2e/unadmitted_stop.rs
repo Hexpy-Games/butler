@@ -300,6 +300,8 @@ async fn q_02_stop_of_an_unadmitted_turn_settles() -> Result<(), HarnessError> {
 async fn q_02_restart_settles_a_left_stop_and_runs_the_schedule() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("Q-02-LEFT-STOP")?
+        // Quiet-hour holds have their own scenario.
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .cassette("TURN-01")
         .replay_only()
         .env("BUTLER_E2E_TIER", "stub")
@@ -349,6 +351,8 @@ async fn q_02_restart_settles_a_left_stop_and_runs_the_schedule() -> Result<(), 
 async fn sched_due_at_startup_waits_for_dispatch_readiness() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("SCHED-STARTUP-READY")?
+        // Quiet-hour holds have their own scenario.
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .cassette("TURN-01")
         .replay_only()
         .env("BUTLER_E2E_TIER", "stub")
