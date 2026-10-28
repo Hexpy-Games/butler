@@ -141,6 +141,7 @@ fn field(input: &Value, key: &str) -> Result<String, GatewayApplicationError> {
 }
 
 pub(super) async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
+    taking::reconcile(app).await?;
     loop {
         let pending = app
             .dependencies

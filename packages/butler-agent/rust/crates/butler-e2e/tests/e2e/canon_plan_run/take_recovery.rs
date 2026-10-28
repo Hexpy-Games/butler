@@ -113,3 +113,95 @@ async fn take_restart_with_pending_source_step_never_duplicates() -> Result<(), 
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn take_failed_cancel_is_durable_and_never_runs_twice() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, epic, source) =
+        crate::canon_link::setup("CB-TAKE-CANCEL", false, false).await?;
+    data(
+        s.gw.post(
+            &format!("/sessions/{source}/canon/queue"),
+            json!({"op":"start_now","epic_id":epic}),
+        )
+        .await?,
+        200,
+    );
+    script.wait_held().await;
+    let source_turn = first_turn(&s, &source).await?;
+    let target = data(
+        s.gw.post("/sessions", json!({"title":"Target","kind":"chat"}))
+            .await?,
+        201,
+    );
+    let target = target["session"]["id"].as_str().unwrap();
+    let app = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    // A storage failure before the cancel outbox commits is reachable while the
+    // native turn remains alive. Exercise that boundary without a product hook.
+    app.execute_batch("CREATE TRIGGER refuse_cancel BEFORE UPDATE OF state ON turns WHEN NEW.state='cancelling' BEGIN SELECT RAISE(ABORT,'cancel storage unavailable'); END;")?;
+    let moved = data(
+        s.gw.post(
+            &format!("/sessions/{target}/canon/queue/take/{epic}"),
+            json!({}),
+        )
+        .await?,
+        200,
+    );
+    assert_eq!(moved["chains"][0]["steps"][0]["items"][0]["epic_id"], epic);
+    let canon = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let pending = || {
+        canon.query_row::<i64, _, _>(
+            "SELECT count(*) FROM canon_step_cancellations WHERE epic_id=?1",
+            [&epic],
+            |r| r.get(0),
+        )
+    };
+    assert_eq!(pending()?, 1);
+    let state: String =
+        app.query_row("SELECT state FROM turns WHERE id=?1", [&source_turn], |r| {
+            r.get(0)
+        })?;
+    assert_eq!(state, "thinking");
+    assert!(
+        s.gw.turns(target).await?.is_empty(),
+        "target ran before source stopped"
+    );
+    app.execute_batch("DROP TRIGGER refuse_cancel")?;
+    script
+        .quick
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let wake = data(
+        s.gw.post("/sessions", json!({"title":"Other","kind":"chat"}))
+            .await?,
+        201,
+    );
+    let wake = wake["session"]["id"].as_str().unwrap();
+    // An unrelated turn ends; its existing native change notification retries
+    // the indexed cancellation, without a restart, timer or manual Stop.
+    let accepted = s.gw.say(wake, "What does this mean?").await?;
+    let wake_turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    s.gw.wait_terminal(wake, &wake_turn, Duration::from_secs(30))
+        .await?;
+    let source_result =
+        s.gw.wait_terminal(&source, &source_turn, Duration::from_secs(30))
+            .await?;
+    assert_eq!(source_result["state"], "cancelled");
+    let target_turn = first_turn(&s, target).await?;
+    s.gw.wait_terminal(target, &target_turn, Duration::from_secs(30))
+        .await?;
+    assert_eq!(pending()?, 0);
+    assert_eq!(s.gw.turns(&source).await?.len(), 1);
+    assert_eq!(s.gw.turns(target).await?.len(), 1);
+    assert_eq!(
+        s.gw.messages(target)
+            .await?
+            .iter()
+            .filter(|m| m["initiated"]["kind"] == "canon_step")
+            .count(),
+        1
+    );
+    script.release();
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

@@ -40,7 +40,12 @@ pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
                 .iter()
                 .find(|i| i["epic_id"] == epic.as_str())
                 .ok_or(Error::NotFound)?;
-            if item["state"] != "waiting" {
+            let cancelling = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM canon_step_cancellations WHERE epic_id=?1)",
+                [epic.as_str()],
+                |r| r.get::<_, bool>(0),
+            )?;
+            if item["state"] != "waiting" || cancelling {
                 continue;
             }
             let op = format!(
@@ -93,6 +98,19 @@ pub fn reconcile(
     Ok(())
 }
 pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) -> Result<Value> {
+    if let Some(epic) = tx
+        .query_row(
+            "SELECT epic_id FROM canon_step_cancellations WHERE op_id=?1",
+            [op],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()?
+    {
+        tx.execute("DELETE FROM canon_step_cancellations WHERE op_id=?1", [op])?;
+        for owner in rows(tx, sql::OWNER, [&epic])? {
+            ready(tx, ctx, text(&owner, "session_id")?)?;
+        }
+    }
     let item = rows(tx, sql::STEP, [op])?.into_iter().next();
     if let Some(item) = item
         && item["state"] == "running"

@@ -35,3 +35,13 @@ CREATE INDEX IF NOT EXISTS canon_queue_op ON canon_session_queue(step_op_id) WHE
 CREATE INDEX IF NOT EXISTS canon_intents_session ON canon_intents(json_extract(payload_json,'$.session_id'),kind);
 CREATE INDEX IF NOT EXISTS canon_intents_take ON canon_intents(json_extract(payload_json,'$.session_id'),json_extract(payload_json,'$.epic_id')) WHERE kind='canon_take_here';
 CREATE INDEX IF NOT EXISTS canon_queue_intents_pending ON canon_intents(state) WHERE state='pending' AND kind IN ('canon_step','canon_hold','canon_take_here');
+
+-- A moved step keeps its cancellation identity after its queue row is removed.
+CREATE TABLE IF NOT EXISTS canon_step_cancellations (
+  op_id TEXT PRIMARY KEY NOT NULL,
+  epic_id TEXT NOT NULL,
+  source_session_id TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK(state='pending')
+);
+CREATE INDEX IF NOT EXISTS canon_cancellations_pending ON canon_step_cancellations(state);
+CREATE INDEX IF NOT EXISTS canon_cancellations_epic ON canon_step_cancellations(epic_id);

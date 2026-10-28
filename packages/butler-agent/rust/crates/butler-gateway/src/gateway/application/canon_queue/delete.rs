@@ -5,6 +5,7 @@ pub(in crate::gateway::application) async fn reconcile(
     app: &AppApplication,
 ) -> Result<(), GatewayApplicationError> {
     app.dependencies.executor_readiness.wait_ready().await?;
+    taking::reconcile(app).await?;
     let sessions = app
         .dependencies
         .canon

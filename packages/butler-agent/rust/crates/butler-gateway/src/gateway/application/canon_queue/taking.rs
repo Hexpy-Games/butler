@@ -1,7 +1,8 @@
 use super::*;
 
 /// Release the source identity atomically with the move. Both delivery locks
-/// stay held through Stop; a failed Stop leaves cancellation to normal recovery.
+/// stay held through Stop. The move records cancellation durably and gates the
+/// target until a terminal receipt clears it; startup and turn changes retry it.
 pub(super) async fn execute(
     app: &AppApplication,
     chat: &str,
@@ -53,7 +54,7 @@ pub(super) async fn execute(
         })
         .await?;
     if let Some(op) = owner["step_op_id"].as_str()
-        && let Err(error) = stop_source(app, op.to_owned()).await
+        && let Err(error) = stop_source(app, op.to_owned(), true).await
     {
         tracing::warn!(%error, "Canon move committed; source Stop deferred to recovery");
     }
@@ -61,15 +62,32 @@ pub(super) async fn execute(
     Ok(result)
 }
 
-async fn stop_source(app: &AppApplication, source: String) -> Result<(), GatewayApplicationError> {
-    let row=app.storage.read(move|db|db.query_row("SELECT i.id,t.id,q.id,q.state FROM app_initiated_messages i LEFT JOIN turns t ON t.user_message_id=i.message_id LEFT JOIN session_queued_messages q ON q.chat_id=i.chat_id AND q.client_message_id=i.message_id WHERE i.source_key=?1",[source],|r|Ok((r.get::<_,String>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,Option<String>>(3)?))).optional().map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
+async fn stop_source(
+    app: &AppApplication,
+    source: String,
+    wait: bool,
+) -> Result<(), GatewayApplicationError> {
+    let key = source.clone();
+    let row=app.storage.read(move|db|db.query_row("SELECT i.id,t.id,q.id,q.state FROM app_initiated_messages i LEFT JOIN turns t ON t.user_message_id=i.message_id LEFT JOIN session_queued_messages q ON q.chat_id=i.chat_id AND q.client_message_id=i.message_id WHERE i.source_key=?1",[key],|r|Ok((r.get::<_,String>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,Option<String>>(3)?))).optional().map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
     if let Some((id, turn, queued, state)) = row {
+        if state.as_deref() == Some("dispatching") && turn.is_none() {
+            return Ok(());
+        }
         if matches!(state.as_deref(), Some("queued" | "failed")) {
             if let Some(queued) = queued {
                 app.delete_session_queue_owned(queued).await?;
             }
         } else if let Some(turn) = turn {
-            stop(app, turn).await?;
+            if wait {
+                stop(app, turn.clone()).await?;
+            } else {
+                let id = turn.clone();
+                let active = app.storage.read(move |db| db.query_row("SELECT state NOT IN ('delivered','cancelled','failed','runtime_fault') FROM turns WHERE id=?1", [id], |r| r.get::<_, bool>(0)).map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
+                if active {
+                    app.cancel_turn_owned(turn).await?;
+                    return Ok(());
+                }
+            }
         }
         app.storage
             .execute(move |db| {
@@ -82,6 +100,40 @@ async fn stop_source(app: &AppApplication, source: String) -> Result<(), Gateway
             })
             .await
             .map_err(app_error)?;
+    }
+    app.dependencies
+        .canon
+        .canon_operation(AppCanonOperation::StepTurnEnded {
+            op_id: source,
+            outcome: "cancelled".into(),
+        })
+        .await?;
+    Ok(())
+}
+
+/// Native turn completion publishes changes on the same watch as canon writes.
+/// Retry only indexed pending cancellations, without waiting on projection here.
+pub(super) async fn reconcile(app: &AppApplication) -> Result<(), GatewayApplicationError> {
+    let pending = app
+        .dependencies
+        .canon
+        .canon_operation(AppCanonOperation::Queue {
+            session_id: String::new(),
+            action: "cancellations".into(),
+            input: json!({}),
+        })
+        .await?;
+    for row in pending.as_array().into_iter().flatten() {
+        let op = field(row, "op_id")?;
+        let _projection = app.canon_projection_locks.acquire(op.clone()).await;
+        let chat = app.owner_chat(field(row, "source_session_id")?).await?;
+        let _delivery = app
+            .canon_projection_locks
+            .acquire(format!("canon-delivery:{chat}"))
+            .await;
+        if let Err(error) = stop_source(app, op, false).await {
+            tracing::warn!(%error, "Canon source cancellation remains pending");
+        }
     }
     Ok(())
 }

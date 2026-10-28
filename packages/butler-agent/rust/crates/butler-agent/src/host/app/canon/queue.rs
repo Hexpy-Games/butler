@@ -12,6 +12,12 @@ pub(super) async fn execute(
             .canon_read(store::queue::bound_sessions)
             .await
             .map_err(error)?,
+        AppCanonOperation::Queue { action, .. } if action == "cancellations" => {
+            return storage
+                .canon_read(store::queue::cancellations)
+                .await
+                .map_err(error);
+        }
         AppCanonOperation::Queue { action, .. } if action == "running" => {
             return storage
                 .canon_read(store::queue::running)

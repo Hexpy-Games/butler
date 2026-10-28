@@ -211,6 +211,7 @@ pub fn take_here(
         });
     }
     if let Some(op) = expected_op {
+        tx.execute("INSERT INTO canon_step_cancellations(op_id,epic_id,source_session_id) VALUES(?1,?2,?3)", params![op, epic, owner])?;
         tx.execute("UPDATE canon_intents SET state='applied',revision=revision+1 WHERE op_id=?1 AND state='pending'",[op])?;
     }
     if let Some(source) = other["question_message_id"].as_str() {
