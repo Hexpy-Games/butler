@@ -22,3 +22,4 @@ CREATE INDEX IF NOT EXISTS canon_epics_plan_page ON canon_epics(plan_id,id);
 CREATE INDEX IF NOT EXISTS canon_epics_active_page ON canon_epics(id) WHERE canon_status!='done';
 CREATE INDEX IF NOT EXISTS canon_epics_project_active_page ON canon_epics(project_id,id) WHERE canon_status!='done';
 CREATE INDEX IF NOT EXISTS canon_epics_plan_active_page ON canon_epics(plan_id,id) WHERE canon_status!='done';
+CREATE INDEX IF NOT EXISTS canon_proposals_chat_open ON canon_proposals(created_at DESC,id DESC) WHERE source='chat' AND state='open';

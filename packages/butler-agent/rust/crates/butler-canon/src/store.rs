@@ -1,8 +1,17 @@
 //! Transaction operations. The caller owns an IMMEDIATE transaction and must
 //! roll it back on any error. No operation commits, opens a DB, or starts work.
+pub mod activity;
 pub mod api;
 mod attachments;
+pub mod grants;
+pub use grants::sanitize as sanitize_mcp_client;
+pub use public::{
+    Activity as CanonActivity, Epic as CanonEpic, Page as CanonPage, SpecBody as CanonSpecBody,
+};
+pub mod mcp_proposals;
+pub mod page;
 pub mod proposals;
+pub mod public;
 pub use attachments::{
     references as attachment_references, references_lenient as attachment_references_lenient,
 };
@@ -41,6 +50,8 @@ pub enum Error {
     Conflict { current: Value },
     #[error("tag already exists")]
     TagExists { existing: Value },
+    #[error("epic is running")]
+    Running,
     #[error("not found")]
     NotFound,
     #[error("invalid fractional rank")]

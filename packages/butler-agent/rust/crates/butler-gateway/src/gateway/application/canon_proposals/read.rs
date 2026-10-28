@@ -79,6 +79,7 @@ pub(super) async fn attachments(
             app.dependencies
                 .canon
                 .execute(AppCanonRequest {
+                    delegate: None,
                     resource: AppCanonResource::Epic,
                     id: id.into(),
                     input: None,
@@ -113,6 +114,7 @@ pub(super) async fn attachments(
         super::super::canon::files::validate_write(
             app,
             &AppCanonRequest {
+                delegate: None,
                 resource: AppCanonResource::CreateEpic,
                 id: String::new(),
                 input: Some(json!({"description":description})),
@@ -138,6 +140,7 @@ pub(super) async fn canon_read(
         super::super::canon::execute(
             app,
             AppCanonRequest {
+                delegate: None,
                 resource: AppCanonResource::Canon,
                 id: project,
                 input: None,
@@ -191,6 +194,7 @@ async fn shared_view(
     let mut value = super::super::canon::execute(
         app,
         AppCanonRequest {
+            delegate: None,
             resource,
             id: id.into(),
             input: None,

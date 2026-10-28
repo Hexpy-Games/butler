@@ -8,6 +8,7 @@ async fn canon(app: &AppApplication, id: String) -> Result<Value, GatewayApplica
     canon::execute(
         app,
         AppCanonRequest {
+            delegate: None,
             resource: AppCanonResource::Canon,
             id,
             input: None,
@@ -85,6 +86,7 @@ pub(crate) async fn conversation(
     let epic = canon::execute(
         app,
         AppCanonRequest {
+            delegate: None,
             resource: AppCanonResource::Epic,
             id: id.clone(),
             input: None,
@@ -205,6 +207,7 @@ async fn validate_intent(
     canon::execute(
         app,
         AppCanonRequest {
+            delegate: None,
             resource: AppCanonResource::Epic,
             id: work_id.to_owned(),
             input: None,

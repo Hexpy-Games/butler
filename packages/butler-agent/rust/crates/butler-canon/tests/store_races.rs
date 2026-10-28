@@ -1,5 +1,4 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
-mod store_support;
 use butler_canon::{store::*, work_schema};
 use rusqlite::{Connection, TransactionBehavior};
 use std::{
@@ -7,7 +6,6 @@ use std::{
     sync::{Arc, Barrier},
     thread,
 };
-use store_support::*;
 struct Database(PathBuf);
 impl Database {
     fn new() -> Self {
@@ -68,22 +66,32 @@ fn race(
 }
 // test-category: race
 #[test]
-fn concurrent_canon_edit_has_one_winner_and_returns_current_value() {
+fn concurrent_first_mcp_calls_create_one_grant_and_event() {
     let file = Database::new();
-    let mut db = file.open();
-    work(&mut db, "a");
-    drop(db);
-    let results = race(&file, |tx, i| {
-        let mut fields = WorkFields::from_snapshot(&read_work(tx, "a")?).unwrap();
-        fields.title = format!("title-{i}");
-        edit_work(tx, &context(), "a", 0, &fields)
+    let results = race(&file, |tx, _| {
+        let ctx = Context {
+            now: 1,
+            actor: serde_json::json!({"person":"person","client":"external-client","via":"External Client","origin":"mcp"}),
+        };
+        grants::admit(tx, &ctx, "canon.read")
     });
-    assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
-    let winner = read_work(&file.open(), "a").unwrap();
-    assert_eq!(winner["revision"], 1);
-    let loser = results
-        .into_iter()
-        .find_map(std::result::Result::err)
-        .unwrap();
-    assert!(matches!(loser,Error::Conflict {current} if current==winner));
+    for result in results {
+        assert_eq!(result.unwrap()["code"], "trust_pending");
+    }
+    let db = file.open();
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM canon_mcp_grants", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM canon_events WHERE topic='canon.trust_requested'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
+    );
 }
