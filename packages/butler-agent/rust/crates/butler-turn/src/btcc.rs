@@ -293,4 +293,4 @@ mod test_pause;
 pub use test_pause::reach as pause_for_test;
 
 pub use authority::pending_asks::{PendingAsk, PendingAskChange};
-pub use authority::resolve_ask::ResolveAsk;
+pub use authority::resolve_ask::{ResolveAsk, guard as resolve_ask_guard};

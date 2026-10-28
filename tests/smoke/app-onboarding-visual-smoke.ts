@@ -6,6 +6,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { timeBasedFiniteAnimationsSettled } from "../support/animation-settle.ts";
 import { assertNewChatSurfaces } from "../support/newchat-visual.ts";
 
 const output = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/onboarding-p7-screenshots");
@@ -36,8 +37,7 @@ try {
       await page.evaluate(() => document.fonts.ready);
       const capture = async (surface: string) => {
         await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
-        await page.waitForFunction(() => document.getAnimations().every(animation =>
-          animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+        await page.waitForFunction(timeBasedFiniteAnimationsSettled);
         const path = `${output}/${surface}-${width}-${theme}-ko.png`;
         await page.screenshot({ path }); screenshots.push(path);
       };

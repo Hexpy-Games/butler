@@ -832,6 +832,8 @@ function applySessionView(
   const retained = [...loaded, ...view.messages];
   const turns = new Set(retained.map(m => m.turn_id));
   const messageIds = new Set(retained.map(m => m.id));
+  const proposals = new Map([...previous?.canon_proposals ?? [], ...view.canon_proposals ?? []].map(p => [p.proposal_id, p]));
+  view = { ...view, canon_proposals: [...proposals.values()].filter(p => turns.has(p.turn_id)) };
   const answers = new Map([...previous?.question_answers ?? [], ...view.question_answers ?? []].map(a => [a.request_ref, a]));
   view = { ...view, question_answers: [...answers.values()].filter(a => turns.has(a.source_turn_id) || messageIds.has(`question-followup-${a.request_ref}`)) };
   const sessionViews = upsertSessionView(state.sessionViews, view);

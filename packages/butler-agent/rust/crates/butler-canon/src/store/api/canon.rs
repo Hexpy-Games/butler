@@ -142,7 +142,11 @@ pub(super) fn create_epic(
             project_id: project.into(),
             title: title_value,
             description: input.description.clone().unwrap_or_default(),
-            origin: Origin::Dialog,
+            origin: if ctx.actor["origin"] == "chat" {
+                Origin::Chat
+            } else {
+                Origin::Dialog
+            },
         },
         &Registration::Canon(person(ctx)?),
         input.assignee.as_ref().and_then(|v| v.as_deref()),

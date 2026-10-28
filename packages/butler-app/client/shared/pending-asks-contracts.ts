@@ -1,6 +1,6 @@
 /** Read projection over authority approvals and questions; canon proposals can join later. */
 export type PendingAskKind = "approval" | "question" | "canon_proposal";
-export type PendingAskState = "open" | "answered" | "resolved_in_chat" | "dismissed" | "superseded" | "closed";
+export type PendingAskState = "open" | "answered" | "resolved_in_chat" | "dismissed" | "superseded" | "closed" | "applied" | "cancelled" | "stale";
 export interface PendingAsk {
   ask_id: string;
   kind: PendingAskKind;
@@ -13,6 +13,7 @@ export interface PendingAsk {
   waiting_since: string;
   title: string;
   summary?: string;
+  target_label?: string;
   blocking: boolean;
   state: "open";
   created_at: string;

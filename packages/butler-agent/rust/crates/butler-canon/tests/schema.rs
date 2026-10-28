@@ -118,7 +118,7 @@ fn schema_constraints_and_idempotency() {
     );
     assert!(
         db.execute(
-            "INSERT INTO canon_session_epics VALUES('chat','missing',1,'{}','user')",
+            "INSERT INTO canon_session_epics(session_id,epic_id,bound_at,bound_by,origin) VALUES('chat','missing',1,'{}','user')",
             []
         )
         .is_err()
@@ -135,7 +135,7 @@ fn schema_constraints_and_idempotency() {
         CREATE TABLE unrelated_parent(id TEXT PRIMARY KEY);
         CREATE TABLE unrelated_child(id TEXT REFERENCES unrelated_parent(id));
         INSERT INTO unrelated_child VALUES('missing');
-        INSERT INTO canon_session_epics VALUES('chat','missing',1,'{}','user');
+        INSERT INTO canon_session_epics(session_id,epic_id,bound_at,bound_by,origin) VALUES('chat','missing',1,'{}','user');
         PRAGMA foreign_keys=ON",
     )
     .unwrap();

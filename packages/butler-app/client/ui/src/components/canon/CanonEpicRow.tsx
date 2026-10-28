@@ -1,3 +1,4 @@
+import { CanonBoundChats } from "./CanonBoundChats.tsx";
 import { spaceActivity } from "@/app/space/activity.ts";
 import { useState } from "react";
 import { NavDropTarget, NavRow, Notebook, IconSlot, Stack, Typo } from "@/butler-ds";
@@ -27,7 +28,7 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
   const [drop, setDrop] = useState<"before" | "after">();
   const source = useCanonSidebarDrag(state => state.source);
   const valid = source?.projectId === projectId && source.groupKey === groupKey && source.epic.id !== epic.id;
-  return <NavDropTarget {...longPress} onPointerDown={event => { event.stopPropagation(); longPress.onPointerDown(event); }} data-canon-epic={epic.id} drop={valid ? drop : undefined}
+  return <><NavDropTarget {...longPress} onPointerDown={event => { event.stopPropagation(); longPress.onPointerDown(event); }} data-canon-epic={epic.id} drop={valid ? drop : undefined}
     dragging={source?.epic.id === epic.id} draggable={!busy}
     onDragStart={event => {
       event.stopPropagation(); event.dataTransfer.effectAllowed = "move";
@@ -57,5 +58,5 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
       actions={row ? <SpaceRowMenu row={row} running={running} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={running} />}
       onContextMenu={row ? event => { event.preventDefault(); event.stopPropagation(); setMenuOpen(true); } : undefined}
       onClick={() => void openEpicConversation(projectId, epic)} />
-  </NavDropTarget>;
+  </NavDropTarget><CanonBoundChats epic={epic} /></>;
 }

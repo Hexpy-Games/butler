@@ -2,7 +2,6 @@
 
 mod authority;
 mod automation;
-mod canon;
 mod ledger;
 mod ledger_input;
 mod mcp;
@@ -20,11 +19,7 @@ pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
 
 /// Host-managed effects routed before direct adapters, independently of their access kind.
 pub(super) fn routes_effect(name: &str) -> bool {
-    ledger_input::managed(name)
-        || matches!(
-            ToolName::parse(name),
-            Some(ToolName::CanonPropose | ToolName::SwitchFolder)
-        )
+    ledger_input::managed(name) || name == ToolName::SwitchFolder
 }
 
 use std::sync::Arc;
@@ -184,11 +179,7 @@ async fn execute_prepared(
         .execute(ExecuteEffect {
             work,
             access: EffectAccess::Full,
-            occurrence_id: Some(if call.name == ToolName::CanonPropose {
-                target.clone()
-            } else {
-                occurrence.to_owned()
-            }),
+            occurrence_id: Some(occurrence.to_owned()),
             signal: invocation.cancellation.clone(),
             target: target.clone(),
             input,
@@ -224,8 +215,6 @@ async fn prepare(
         session_folder::prepare(owner, &call.arguments).await
     } else if mcp::supports(&call.name) {
         mcp::prepare(owner, &call.arguments).map(|prepared| (prepared.0, prepared.1, prepared.2))
-    } else if call.name == ToolName::CanonPropose {
-        canon::prepare(owner, call, occurrence).await
     } else if automation::supports(&call.name) {
         automation::prepare(owner, call, occurrence).await
     } else if topic_conversation::supports(&call.name) {
