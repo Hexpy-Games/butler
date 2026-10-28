@@ -96,11 +96,11 @@ export const stories: ShowcaseStory[] = [
   },
   { name: "Loading: the skeleton is the box of the card it becomes", widths: ["375", "app", "wide"], render: (context) => <SkeletonPair {...context} /> },
   { name: "Loading: without a picture", widths: ["375", "app"], render: (context) => <SkeletonPair {...context} media={null} /> },
-  { name: "Settle: cards stream in, the grid settles once at close", widths: ["375", "app", "wide"], render: (context) => <StreamSettleDemo {...context} /> },
+  { name: "Settle: cards stream in, the grid settles once at close", widths: ["375", "app", "wide"], render: (context) => <div data-ds-async style={{ display: "contents" }}><StreamSettleDemo {...context} /></div> },
   {
     name: "Reduced motion: fades only, a static skeleton, the height at once",
     widths: ["375", "app"],
-    render: (context) => <Stack data-motion="reduced"><StreamSettleDemo {...context} reducedMotion /></Stack>,
+    render: (context) => <div data-ds-async style={{ display: "contents" }}><Stack data-motion="reduced"><StreamSettleDemo {...context} reducedMotion /></Stack></div>,
   },
 ];
 
