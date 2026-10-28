@@ -58,6 +58,13 @@ pub struct AppRelocationSnapshot {
     pub open_child: bool,
 }
 
+impl AppRelocationSnapshot {
+    /// Relocation waits for every unfinished turn, including retained retry checkpoints.
+    pub(crate) fn has_work(&self) -> bool {
+        self.active_execution || !self.unfinished_turn_ids.is_empty() || self.open_child
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AppRelocationBindingSeed {
     pub runtime_session_id: String,
