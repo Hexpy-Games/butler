@@ -329,7 +329,7 @@ async function auditCell(page: Page, cell: Cell) {
   const deckStory = '[data-ds-story="Four or more cards (edge markers)"]';
   await page.locator(`${deckStory} [data-slot="stack-deck-fan"]`).first().waitFor();
   await auditScope(page, cell, "stack-deck-fanned", deckStory, 40);
-  // StepSortableList (DS viewer story): grips, a collapsed 묶음 (the deck button) and ⋯ menus in two chains.
+  // StepSortableList (DS viewer story): grips, a collapsed 묶음 (the deck toggle) and ⋯ menus in two chains.
   await page.goto(`${base}?visual=design-system&page=blocks/StepSortableList&theme=${cell.theme}&locale=ko`);
   const stepStory = '[data-ds-story="Multiple chains"]';
   await page.locator(`${stepStory} [data-step-grip]`).first().waitFor();

@@ -53,9 +53,9 @@ export const guidance: ShowcaseGuidance = {
     "Pass localized `labels`: `expand(count, front)` names the collapsed deck (ko: “PPT로 정리 외 2건, 펼치기”), `fold(item)` each fanned card (ko: “PPT로 정리, 접기”).",
   ],
   accessibility: [
-    "Collapsed, the front card is the button (aria-expanded=false) with a row's own hover and focus ring; the edges are part of it.",
-    "Enter or Space fans it out and focus moves to the first card; each fanned card is a button that stacks the deck again (Escape too), and focus returns to the deck.",
-    "Controls inside a card (grip, ⋯) stop their own click, mouse-down and touch-start, so they never toggle the deck.",
+    "No interactive element nests another: the Card is a plain container, covered by one transparent toggle button (aria-expanded) with the content above it. A tap anywhere on the card, or on an edge, reaches the toggle; the toggle's focus ring is drawn on the Card.",
+    "Controls in the card (grip, ⋯) are the toggle's siblings: tab order is toggle, grip, ⋯. With `cardListeners`, they stop their own mouse-down and touch-start so they never start the card's drag.",
+    "Enter or Space on the toggle fans the deck out and focus moves to the first card's toggle; each fanned card's toggle (aria-expanded=true) stacks the deck again (Escape too), and focus returns to the deck's toggle.",
     "Keyboard focus scrolls a fanned card into view; at rest the row shows whole cards plus focus-ring room, while it moves the edge fades show.",
     "Edges are decorative (aria-hidden). Reduced motion: no fan or fold travel; the row folds at once.",
   ],

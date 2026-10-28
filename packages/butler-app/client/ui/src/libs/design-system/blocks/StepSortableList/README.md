@@ -27,6 +27,11 @@ trailing control, keep the ⋯ room so statuses line up. A fanned 묶음's card 
 compact: the title (two lines, the marker on the first card only), then
 grip · caption · ⋯. Done rows are muted.
 
+A single step's card is not interactive; only its grip and ⋯ are. A 묶음's
+cards each carry `StackDeck`'s toggle, a sibling of the grip and ⋯ (no
+control nests another): tab order is toggle, grip, ⋯, and the toggle's focus
+ring is drawn on the card.
+
 ## Edits
 
 `onEdit` receives one semantic edit, never a new array. Indexes are places

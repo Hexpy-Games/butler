@@ -57,6 +57,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   accessibility: [
     "Grips are buttons named by `labels.grip`; Space or Enter lifts, Up/Down visit every gap (new step) and step (join), Space or Enter drops, Escape or Tab cancels. Focus follows the item after a drop.",
+    "No control nests another: a single step's card is plain, and a 묶음's cards carry StackDeck's toggle beside the grip and ⋯ (tab order toggle, grip, ⋯; the toggle's ring is drawn on the card).",
     "Pick-up, every keyboard step, the drop and a cancel are announced in a polite live region; dnd-kit's own id announcements are silenced.",
     "Pointer: a card or its grip drags after 4 px; touch after a 180 ms press. A collapsed 묶음 drags as one step; a fanned card drags out on its own (split).",
     "Running and pinned items have no grip; a step holding one never drags as a whole, takes no joins, and nothing goes before a pinned head.",

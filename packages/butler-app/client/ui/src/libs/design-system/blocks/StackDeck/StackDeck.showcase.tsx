@@ -60,7 +60,19 @@ function Deck({ context, count, running, expanded }: { context: ShowcaseRenderCo
 
 export const stories: ShowcaseStory[] = [
   // Tap the deck (or Enter/Space on it): the cards slide out from behind the front card, a stagger step apart.
-  { name: "Collapsed", states: ["default"], widths: ["320", "375", "app"], render: (context) => <Deck context={context} count={3} /> },
+  // Two, three and four cards: one edge per card behind the front.
+  {
+    name: "Collapsed",
+    states: ["default"],
+    widths: ["320", "375", "app"],
+    render: (context) => (
+      <Stack gap="md">
+        <Deck context={context} count={2} />
+        <Deck context={context} count={3} />
+        <Deck context={context} count={4} />
+      </Stack>
+    ),
+  },
   // Two whole cards per view; 140 ms after a scroll stops the row settles on a whole card. Tap a card (or Escape) to stack them again.
   { name: "Fanned", states: ["open"], widths: ["320", "375", "app"], render: (context) => <Deck context={context} count={3} expanded /> },
   {

@@ -15,14 +15,19 @@ such as tasks that run together in one step. It is generic: it takes items
 
 ## Collapsed
 
-The front card is a normal full-width row and the button (aria-expanded), so
-its hover and focus ring are a row's own. One hairline edge per further card
+The front card is a normal full-width row. The Card itself is not a button:
+one transparent toggle button (aria-expanded) covers it, the stretched-link
+pattern, and the card content sits above the toggle. A tap anywhere on the
+card reaches the toggle; the content's own controls (a grip, ⋯) are the
+toggle's siblings, never inside it, and take their own taps. Tab order is
+the toggle, then the content's controls in order. The hover fill is a row's
+own, and the toggle's focus ring is drawn on the Card. One hairline edge per further card
 (up to three; the rest only in the front's count) shows past its right side at
 the same top and height: the right end of a card behind, no fill,
 `--border-hairline` in `--line` (`--line-strong` on hover, `--worker-active`
 while any card runs; the front then takes `Card`'s running state). Edge k
 starts `--focus-ring-room + --space-xs × (k − 1)` past the card, so neither the
-ring nor the running halo covers an edge. The edges sit inside the card, so a
+ring nor the running halo covers an edge. The edges sit inside the toggle, so a
 tap on one opens the deck. An edge that joins slides in from behind
 (`--motion-slow`, emphasized).
 
@@ -35,11 +40,11 @@ scroll stops (never while a pointer or finger is down) the row settles on the
 nearest whole card. At rest a clip shows only whole cards plus focus-ring room,
 and a mirrored edge marks each card out of view at either end (up to three per
 side); while the row moves the clip lifts and the ScrollArea edge fades show
-the cut. Tapping a card, or Escape, folds the cards back. Focus follows the
-toggle between states.
+the cut. Each card has the same toggle (aria-expanded=true); tapping a card, or Escape,
+folds the cards back. Focus follows the toggle between states.
 
 `expanded` / `onExpandedChange` control the state; `defaultExpanded` starts it
-fanned. `interactive={false}` (during a drag) makes no card a button.
+fanned. `interactive={false}` (during a drag) renders no toggle and no hover.
 `cardListeners` forwards pointer handlers per card (`null`: the collapsed deck),
 for example a drag sensor's.
 

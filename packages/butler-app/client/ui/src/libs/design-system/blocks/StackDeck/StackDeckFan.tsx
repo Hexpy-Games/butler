@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Card } from "../../components/Card";
 import { Stack } from "../../components/Stack";
 import { motionDuration, prefersReducedMotion } from "../../lib/motion";
 import { ScrollArea } from "../ScrollArea";
 import type { StackDeckCardContext, StackDeckCardListeners, StackDeckItem } from "./StackDeck";
+import { StackDeckCard } from "./StackDeckCard";
 import type { StackDeckLabels } from "./stackDeckLabels";
 import { useStackDeckSnap } from "./useStackDeckSnap";
 import styles from "./StackDeck.module.css";
@@ -37,7 +37,7 @@ function RowEdges({ count, side }: { count: number; side: "start" | "end" }) {
 /**
  * The 묶음 fanned out to the right in the same row (a horizontal ScrollArea): two cards fill the
  * row; with more it scrolls, settles on whole cards and shows one deck edge per hidden card at
- * either end. Tapping a card (or Escape) slides the cards back into the deck.
+ * either end. Each card's toggle (a tap on the card, or Escape) slides the cards back into the deck.
  */
 export function StackDeckFan<TItem extends StackDeckItem>({ items, renderCard, labels, interactive, cardListeners, onCollapse }: StackDeckFanProps<TItem>) {
   const [folding, setFolding] = useState(false);
@@ -63,11 +63,10 @@ export function StackDeckFan<TItem extends StackDeckItem>({ items, renderCard, l
             {items.map((item, index) => (
               <div key={item.id} role="listitem" className={styles.fan} data-i={Math.min(index, MAX_FAN_INDEX)}
                 data-folding={folding || undefined} data-stack-deck-card="">
-                <Card padding="md" interactive={interactive} activity={item.running ? "running" : undefined}
-                  onClick={interactive ? fold : undefined} aria-label={interactive ? labels.fold(item.label) : undefined}
-                  data-stack-deck-toggle={index === 0 ? "" : undefined} {...cardListeners?.(item)}>
+                <StackDeckCard running={Boolean(item.running)} listeners={cardListeners?.(item)}
+                  toggle={interactive ? { label: labels.fold(item.label), expanded: true, onToggle: fold, focusTarget: index === 0 } : null}>
                   {renderCard(item, { index, count: items.length, expanded: true, interactive: true })}
-                </Card>
+                </StackDeckCard>
               </div>
             ))}
           </Stack>
