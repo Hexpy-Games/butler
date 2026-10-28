@@ -31,8 +31,10 @@ async fn oversized_recent_turns_fit_budget_and_keep_static_prefix() -> Result<()
             stable_prefix = Some(prefix);
         }
         let projected = history(&s.sandbox.data);
-        let charged = serde_json::to_string(&projected)?.len() + "## Conversation history\n".len();
-        assert!(charged <= 16_000, "history charged {charged} bytes");
+        let charged = tiktoken_rs::o200k_base_singleton()
+            .encode_ordinary(&projected)
+            .len();
+        assert!(charged <= 64_000, "history charged {charged} tokens");
         if index == 0 {
             assert!(projected.contains("user: "));
             assert!(projected.contains("butler: "));

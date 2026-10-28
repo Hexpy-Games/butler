@@ -38,12 +38,7 @@ test("English and Korean catalogs have complete recursive key and formatter pari
   expect(getAppCopy("en-US").conversation.work.collapsedSummary("Read file", 2)).toBe("Read file and 1 more activities");
   expect(getAppCopy("ko-KR").space.general).toBe("대화");
   expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Downloads folder cleanup");
-  for (const [locale, labels] of [["ko-KR", ["제목", "프로젝트", "계획", "마감일", "설명"]],
-    ["en-US", ["Title", "Project", "Plan", "Due", "Description"]]] as const) {
-    const copy = getAppCopy(locale).interfaceTemplates.approvalRequest;
-    expect([copy.canonTitle("x"), copy.canonProject("x"), copy.canonPlan("x"), copy.canonDue("x"), copy.canonDescription("x")])
-      .toEqual(labels.map(label => `${label}: x`));
-  }
+
 });
 
 // test-category: pure-logic

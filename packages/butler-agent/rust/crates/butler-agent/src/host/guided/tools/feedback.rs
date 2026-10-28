@@ -11,10 +11,6 @@ pub(super) fn solvable(code: &str) -> bool {
 
 pub(super) const SOLVABLE: &[&str] = &[
     "steward_plan_review_required",
-    "canon_propose_invalid",
-    "project_not_found",
-    "project_reference_ambiguous",
-    "canon_plan_not_found",
     "canon_epic_refs_multiple",
     "canon_epic_not_bound",
     "canon_epic_link_conflict",

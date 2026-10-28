@@ -21,6 +21,7 @@ async fn perf_history_assembly_and_idle_writes() -> Result<(), HarnessError> {
     let request_index = stub.requests.lock().unwrap().len();
     let started = Instant::now();
     let (_, turn) = s.turn("general", "history latest request").await?;
+    let first_delivery = started.elapsed();
     assert_eq!(turn["state"], "delivered");
     let request = stub.requests.lock().unwrap()[request_index].clone();
     for index in 16..20 {
@@ -85,6 +86,12 @@ async fn perf_history_assembly_and_idle_writes() -> Result<(), HarnessError> {
         recent.push((format!("steady history request {index}"), "once".into()));
     }
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;
+    for line in log
+        .lines()
+        .filter(|line| line.contains("[tokenizer-init]") || line.contains("[history-projection]"))
+    {
+        eprintln!("{line}");
+    }
     let elapsed: Vec<u64> = log
         .lines()
         .filter_map(|line| line.split("[history-projection] elapsed_us=").nth(1))
@@ -98,7 +105,7 @@ async fn perf_history_assembly_and_idle_writes() -> Result<(), HarnessError> {
     let p95 = steady[18];
     eprintln!(
         "PROMPT_HISTORY database_bytes={bytes} first_request_us={first} steady_turns=20 median_us={median} p95_us={p95} delivery_ms={} index_build_us=0 index_bytes_written=0 extra_insert_us=0",
-        started.elapsed().as_millis()
+        first_delivery.as_millis()
     );
     tokio::time::sleep(Duration::from_millis(250)).await;
     let before: u64 = db.query_row("PRAGMA data_version", [], |row| row.get(0))?;

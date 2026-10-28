@@ -17,7 +17,7 @@
   "legacy|butler|read_only|ledger": 2713,
   "legacy|butler|read_only|local": 2650,
   "legacy|butler|read_only|none": 2650,
-  "phase_minimal|butler|direct": 182,
+  "phase_minimal|butler|direct": 199,
   "phase_minimal|butler|execution": 911,
   "phase_minimal|butler|read_only": 841,
   "delegated|steward|ask_except_reads|mutation": 937,

@@ -116,7 +116,10 @@ pub(super) fn public_sessions(
 
 /// Reuse the platform fixture barrier without occupying a Tokio worker.
 #[cfg(feature = "e2e-fixtures")]
-async fn hold(app: &AppApplication, point: &'static str) -> Result<(), GatewayApplicationError> {
+pub(super) async fn hold(
+    app: &AppApplication,
+    point: &'static str,
+) -> Result<(), GatewayApplicationError> {
     let shutdown = app.dependencies.service_shutdown.clone();
     tokio::task::spawn_blocking(move || {
         butler_platform::secure_fs::hold_point(point, || shutdown.is_cancelled())

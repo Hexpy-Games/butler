@@ -88,6 +88,9 @@ pub trait AppAuthorityHandoff: Send + Sync + 'static {
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision>;
     fn retry_decided(&self) -> ApplicationFuture<Vec<(String, String, String)>>;
     fn settle_question_followup(&self, request_ref: String) -> ApplicationFuture<()>;
+    fn delete_session_context(&self, _runtime_session_id: String) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn close_self_session(
         &self,
         runtime_session_id: String,

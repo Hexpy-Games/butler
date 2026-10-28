@@ -242,7 +242,7 @@ impl AppApplication {
 }
 
 /// Reject absent uploads before canon can commit a reference into its outbox.
-pub(super) async fn validate_write(
+pub(in crate::gateway::application) async fn validate_write(
     app: &AppApplication,
     request: &AppCanonRequest,
 ) -> Result<Option<Vec<String>>, GatewayApplicationError> {
@@ -309,7 +309,10 @@ fn attachment_error(error: &butler_canon::store::Error) -> GatewayApplicationErr
     }
 }
 
-pub(super) fn from_ids(db: &Connection, ids: &[String]) -> Result<Value, AppStorageError> {
+pub(in crate::gateway::application) fn from_ids(
+    db: &Connection,
+    ids: &[String],
+) -> Result<Value, AppStorageError> {
     let mut files = Vec::new();
     for id in ids {
         if let Some(row) = admission::file(db, id)? {

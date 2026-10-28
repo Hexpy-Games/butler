@@ -25,12 +25,18 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(include_str!("work_schema/specs.sql"))?;
     connection.execute_batch(include_str!("work_schema/tags.sql"))?;
     connection.execute_batch(include_str!("work_schema/support.sql"))?;
+    connection.execute_batch(include_str!("work_schema/proposals.sql"))?;
     let mut stmt = connection.prepare("PRAGMA table_info(canon_epic_work_links)")?;
     let columns = stmt
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     if !columns.iter().any(|name| name == "reported_applied") {
         connection.execute_batch("ALTER TABLE canon_epic_work_links ADD COLUMN reported_applied INTEGER NOT NULL DEFAULT 0 CHECK (reported_applied IN (0,1))")?;
+    }
+    let has_home: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('canon_session_epics') WHERE name='is_home')", [], |r|r.get(0))?;
+    if !has_home {
+        connection.execute_batch("ALTER TABLE canon_session_epics ADD COLUMN is_home INTEGER NOT NULL DEFAULT 0 CHECK(is_home IN (0,1));
+            UPDATE canon_session_epics SET is_home=1")?;
     }
     connection.execute_batch(include_str!("work_schema/indexes.sql"))
 }

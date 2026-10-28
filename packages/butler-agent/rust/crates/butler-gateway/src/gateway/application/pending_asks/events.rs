@@ -77,10 +77,16 @@ async fn publish(
     authority_seq: i64,
 ) -> Result<(), GatewayApplicationError> {
     let owner = app.runtime_hint(chat).await?;
-    let count = port
-        .pending_asks(Some(owner), usize::MAX, None)
+    let mut count = port
+        .pending_asks(Some(owner.clone()), usize::MAX, None)
         .await?
         .len();
+    let canon = app
+        .dependencies
+        .canon
+        .proposal("open".into(), json!({"session_id":owner,"limit":201}))
+        .await?;
+    count += canon.as_array().map_or(0, Vec::len);
     let (chat, id, kind, state) = (
         chat.to_owned(),
         id.to_owned(),

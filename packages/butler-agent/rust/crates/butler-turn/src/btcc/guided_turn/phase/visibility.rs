@@ -102,6 +102,15 @@ pub(super) fn legacy_authorized<'a>(
         .collect()
 }
 
+fn authorize_canon(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    if policy.role == PolicyRole::Butler && policy.subsession.is_none() {
+        names.extend(["canon_read".into(), "canon_propose".into()]);
+    } else {
+        names.remove("canon_read");
+        names.remove("canon_propose");
+    }
+}
+
 /// The facts of a policy that shape legacy authorization.
 #[derive(Clone, Copy)]
 struct AuthorizationScope {
@@ -233,11 +242,7 @@ fn apply_access_mode(
 /// user, so they never show answer blocks: a child's blocks would be accepted
 /// but never reach the conversation.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
-    if policy.role == PolicyRole::Butler && policy.access_mode != AccessMode::ReadOnly {
-        names.insert("canon_propose".into());
-    } else {
-        names.remove("canon_propose");
-    }
+    authorize_canon(names, policy);
     if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
         names.remove("answer_blocks");
         names.remove("resolve_ask");
@@ -280,10 +285,8 @@ pub(super) fn legacy_visible<'a>(
         names.insert("project_ledger_create");
     }
     if policy.role == PolicyRole::Butler {
+        names.extend(["canon_read", "canon_propose"]);
         names.extend(STEWARD_PARENT.iter().copied());
-        if policy.access_mode != AccessMode::ReadOnly {
-            names.insert("canon_propose");
-        }
     }
     if policy.role == PolicyRole::Steward {
         names.extend(WORKER_DELEGATION.iter().copied());
@@ -334,6 +337,9 @@ pub(super) fn legacy_visible<'a>(
 }
 
 pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool {
+    if matches!(tool.name.as_str(), "canon_read" | "canon_propose") {
+        return true;
+    }
     if phase == GuidedPhase::Execution {
         return true;
     }

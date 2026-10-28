@@ -19,9 +19,15 @@ pub fn link(
     let work = read_work(tx, id)?;
     let sessions = rows(tx, super::super::sql::EPIC_SESSIONS, [id])?;
     let session = proposed
-        .or_else(|| sessions.first().and_then(|s| s["session_id"].as_str()))
+        .or_else(|| {
+            sessions
+                .iter()
+                .find(|s| s["is_home"] == 1)
+                .and_then(|s| s["session_id"].as_str())
+        })
         .unwrap_or(new_session);
     bind_session(tx, ctx, id, session)?;
+    tx.execute("UPDATE canon_session_epics SET is_home=1 WHERE epic_id=?1 AND session_id=?2 AND NOT EXISTS(SELECT 1 FROM canon_session_epics WHERE epic_id=?1 AND is_home=1)",rusqlite::params![id,session])?;
     let op_id = format!("canon-conversation:{id}:{session}");
     let payload = json!({"session_id":session,"work_id":id,
         "project_id":work["project_id"],"title":work["title"],

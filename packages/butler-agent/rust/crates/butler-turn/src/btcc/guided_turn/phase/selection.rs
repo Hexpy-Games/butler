@@ -320,12 +320,6 @@ fn admit_phase_tools<'a>(
         PolicyRole::Worker | PolicyRole::Other(_) => &[],
     };
     push_missing(authorized, catalog, delegation);
-    if policy.role == PolicyRole::Butler && policy.access_mode != AccessMode::ReadOnly {
-        push_missing(authorized, catalog, &["canon_propose"]);
-    }
-    if policy.role != PolicyRole::Butler {
-        authorized.retain(|tool| tool.name != "canon_propose");
-    }
 }
 
 fn require_tools(

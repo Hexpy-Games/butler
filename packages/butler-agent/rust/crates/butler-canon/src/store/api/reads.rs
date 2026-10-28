@@ -70,7 +70,8 @@ fn spec_tree(db: &Connection, nodes: &[Value], parent: Option<&str>) -> Result<V
 fn public_work(db: &Connection, mut work: Value) -> Result<Value> {
     let sessions = rows(db, super::super::sql::EPIC_SESSIONS, [text(&work, "id")?])?;
     work["home_session_id"] = sessions
-        .first()
+        .iter()
+        .find(|s| s["is_home"] == 1)
         .map(|s| s["session_id"].clone())
         .unwrap_or(Value::Null);
     work["session_ids"] = json!(

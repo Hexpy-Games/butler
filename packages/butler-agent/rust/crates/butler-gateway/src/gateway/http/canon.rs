@@ -14,8 +14,22 @@ pub(super) async fn route(
     uri: &Uri,
 ) -> Result<Response, HttpError> {
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
+    if matches!(
+        parts.as_slice(),
+        ["canon", "proposals", _] | ["sessions", _, "canon", _]
+    ) {
+        return super::canon_proposals::route(state, request, &parts).await;
+    }
+    resources(state, request, &parts).await
+}
+
+async fn resources(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    parts: &[&str],
+) -> Result<Response, HttpError> {
     if request.method() == Method::POST
-        && let ["projects", id, "canon", "files"] = parts.as_slice()
+        && let ["projects", id, "canon", "files"] = parts
     {
         let id = subsessions::decode_component(id)?;
         let _upload = state
@@ -33,7 +47,7 @@ pub(super) async fn route(
             },
         );
     }
-    let (resource, id) = match (request.method(), parts.as_slice()) {
+    let (resource, id) = match (request.method(), parts) {
         (&Method::GET, ["projects", id, "canon", "tags"]) => (Tags, *id),
         (&Method::POST, ["projects", id, "canon", "tags"]) => (CreateTag, *id),
         (&Method::PATCH, ["canon", "tags", id]) => (EditTag, *id),

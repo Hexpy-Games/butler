@@ -91,6 +91,7 @@ impl AdmissionContextPort for PromptAssembler {
                     runtime_session_id: &request.session_id,
                     model_ref: Some(&binding.model_ref),
                     event_id: Some(&request.event_id),
+                    cognition: Some(self.dependencies.cognition.as_ref()),
                 },
                 assembly,
             )

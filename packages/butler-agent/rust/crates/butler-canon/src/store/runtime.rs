@@ -50,7 +50,7 @@ pub fn precheck(
         .query_row(Query::Bound.sql(), params![session, epic], |_| Ok(()))
         .optional()?
         .is_some();
-    Ok((!bound).then(|| json!({"code":"canon_epic_not_bound","message":format!("canon:epic/{epic} is not bound to this conversation. Use an epic_ref from the canon epics section, or call replace_work_plan again without it so the Work stays private. If the user means that epic, confirm it with them first.")})))
+    Ok((!bound).then(|| json!({"code":"canon_epic_not_bound","message":format!("canon:epic/{epic} is not bound to this conversation. If the user clearly means that epic, bind it with canon_read (view epic, bind true) and call replace_work_plan again; otherwise call it without the epic_ref so the Work stays private.")})))
 }
 
 pub fn link(

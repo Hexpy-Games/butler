@@ -3,8 +3,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use sha2::{Digest, Sha256};
-
 use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult,
     generation::{HotCacheEntryView, physical_hot_cache_entries},
@@ -31,10 +29,10 @@ fn optional_text(path: &Path) -> CognitionResult<Option<String>> {
 }
 
 pub(super) fn continuity(memory_root: &Path, session: &str) -> CognitionResult<Option<String>> {
-    // Hex of the first 16 digest bytes.
-    let mut key = format!("{:x}", Sha256::digest(session.as_bytes()));
-    key.truncate(32);
-    optional_text(&memory_root.join("sessions").join(format!("{key}.md")))
+    let summary =
+        crate::cognition::continuity::read(memory_root, session).map_err(|e| failure(&e))?;
+    let text = summary.text.trim();
+    Ok((!text.is_empty()).then(|| format!("{}\n\n{text}", crate::cognition::continuity::HEADER)))
 }
 
 pub(super) fn capsule_path(memory_root: &Path, project: Option<&str>) -> Option<PathBuf> {

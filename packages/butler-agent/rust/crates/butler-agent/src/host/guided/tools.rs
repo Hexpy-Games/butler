@@ -4,6 +4,7 @@
 mod access;
 mod answer_blocks;
 mod answer_blocks_stream;
+mod canon;
 pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
 mod deliver;
 mod direct_approval;
