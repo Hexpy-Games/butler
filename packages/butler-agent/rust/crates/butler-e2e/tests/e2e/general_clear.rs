@@ -247,6 +247,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     let archives = s.gw.get("/archives").await?;
     assert!(archives.text.contains(archived));
     assert_eq!(s.gw.get("/navigation").await?.data()["archive_count"], 1);
+    let served = server.chat_requests().len();
     let sent = s.gw.post("/messages", json!({"chat_id":"general","text":"A fresh conversation.","client_message_id":"pending-after-clear","attachments":[{"file_id":pending_file}]})).await?;
     assert_eq!(sent.status, 202, "{}", sent.text);
     let sent_turn = accepted_turn_id(sent.data())?;
@@ -259,8 +260,15 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     )?;
     assert_eq!(attached, "general");
     assert_eq!(s.gw.messages("general").await?.len(), 2);
-    let requests = server.chat_requests();
-    let fresh_request = requests.last().expect("fresh model request").to_string();
+    // Background memory rounds share the server; check this turn's own reply request.
+    let requests: Vec<_> = server
+        .chat_requests()
+        .into_iter()
+        .skip(served)
+        .filter(|request| request["stream"] == true)
+        .collect();
+    assert_eq!(requests.len(), 1, "reply count: {}", requests.len());
+    let fresh_request = requests[0].to_string();
     assert!(fresh_request.contains("A fresh conversation."));
     assert!(!fresh_request.contains("cleararchiveunique"));
     let hint: String = db.query_row(
