@@ -84,6 +84,7 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
             "canon_events",
             "canon_intents",
             "canon_plans",
+            "canon_proposals",
             "canon_session_epics",
             "canon_spec_bodies",
             "canon_spec_criteria",
