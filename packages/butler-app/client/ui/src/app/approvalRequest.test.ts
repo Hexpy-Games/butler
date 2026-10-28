@@ -241,9 +241,4 @@ test("the transport approval is narrowed fail-soft: bad fields drop, a bad shape
   expect(normalizeApprovalSummary({ action_kind: "run_command" })).toEqual({
     actionKind: "run_command", targets: [], count: 1, examples: [],
   });
-  const canon = normalizeApprovalSummary({ action_kind: "create_canon", canon: { kind: "epic", title: "Review",
-    project_id: "p", project_title: "Research", plan_id: "plan", plan_title: "Autumn", due_on: "2026-11-30", description: "Read every source" } })!;
-  for (const copy of [en, ko]) expect(approvalRequestView(card(canon), copy).details).toEqual([
-    copy.canonTitle("Review"), copy.canonProject("Research"), copy.canonPlan("Autumn"), copy.canonDue("2026-11-30"), copy.canonDescription("Read every source"),
-  ]);
 });

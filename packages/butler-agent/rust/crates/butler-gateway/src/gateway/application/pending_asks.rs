@@ -1,4 +1,4 @@
-//! Read projection across independent ask owners. Canon kinds can join later.
+//! Read projection across independent authority and canon ask owners.
 pub(super) mod events;
 pub(super) mod metadata;
 use super::{AppApplication, GatewayApplicationError, app_error, storage::AppStorageError};
@@ -24,8 +24,25 @@ impl AppApplication {
             None => None,
         };
         let mut asks = self
-            .authority_ask_page(owner, limit + 1, before.clone())
+            .authority_ask_page(owner.clone(), limit + 1, before.clone())
             .await?;
+        let language = super::canon_proposals::language(self).await?;
+        let canon = self
+            .dependencies
+            .canon
+            .proposal(
+                "open".into(),
+                json!({"session_id":owner,"limit":limit+1,"before":before,"language":language}),
+            )
+            .await?;
+        let canon: Vec<PendingAsk> =
+            serde_json::from_value(canon).map_err(GatewayApplicationError::internal_from)?;
+        asks.extend(
+            self.storage
+                .read(move |db| metadata::decorate(db, canon))
+                .await
+                .map_err(app_error)?,
+        );
         asks.sort_by(|a, b| (&b.created_at, &b.ask_id).cmp(&(&a.created_at, &a.ask_id)));
         if let Some(session) = session {
             for ask in &mut asks {
@@ -47,6 +64,13 @@ impl AppApplication {
     ) -> Result<Value, GatewayApplicationError> {
         if ask_id.starts_with("approval:") {
             return Err(public(409, "approval_card_only", "Use the approval card."));
+        }
+        if let Some(id) = ask_id.strip_prefix("canon:") {
+            return super::canon_proposals::resolve(
+                self,
+                json!({"id":id,"session_id":session,"outcome":"dropped","by":"card"}),
+            )
+            .await;
         }
         let Some(reference) = ask_id.strip_prefix("question:") else {
             return Err(public(
@@ -110,13 +134,29 @@ impl AppApplication {
         &self,
         sessions: &mut [super::AppSessionSummary],
     ) -> Result<(), GatewayApplicationError> {
-        let attention = self
+        let mut attention = self
             .dependencies
             .authority_handoff
             .attention_sessions(sessions.iter().map(|s| s.session_hint.clone()).collect())
             .await?
             .into_iter()
             .collect::<std::collections::HashSet<_>>();
+        let canon = self
+            .dependencies
+            .canon
+            .proposal(
+                "attention".into(),
+                json!({"sessions":sessions.iter().map(|s|&s.session_hint).collect::<Vec<_>>()}),
+            )
+            .await?;
+        attention.extend(
+            canon
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_owned),
+        );
         for session in sessions {
             session.attention_required = attention.contains(&session.session_hint);
         }

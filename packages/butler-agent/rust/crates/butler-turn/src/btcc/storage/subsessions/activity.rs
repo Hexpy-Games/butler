@@ -26,20 +26,19 @@ impl SqliteSubsessionRepository {
             .await
     }
 
-    pub(crate) async fn has_unfinished_execution(
+    pub(crate) async fn unfinished_execution_turns(
         &self,
         session: String,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<Vec<(String, u64, bool)>, StorageError> {
         self.storage
             .execute(move |db| {
-                let active: bool = db
-                    .query_row(
-                        "SELECT EXISTS(SELECT 1 FROM btcc_turns WHERE session_id=?1 AND semantic_state NOT IN ('delivered','cancelled'))",
-                        [session],
-                        |row| row.get(0),
-                    )
-                    .map_err(StorageError::sqlite)?;
-                Ok(active)
+                let mut statement = db.prepare_cached(
+                    "SELECT turn_id,revision,COALESCE(suspension_reason='authority_pending',0) AND authority_continuation_json IS NOT NULL FROM btcc_turns WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed') ORDER BY turn_id",
+                ).map_err(StorageError::sqlite)?;
+                statement.query_map([session], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                    .map_err(StorageError::sqlite)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(StorageError::sqlite)
             })
             .await
     }

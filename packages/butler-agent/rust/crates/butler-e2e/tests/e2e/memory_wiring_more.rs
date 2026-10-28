@@ -15,6 +15,8 @@ use serde_json::json;
 mod crash;
 #[path = "memory_rules/cursor.rs"]
 mod cursor;
+#[path = "memory_rules/drain_wakeup.rs"]
+mod drain_wakeup;
 #[path = "memory_rules/duration.rs"]
 mod duration;
 #[path = "memory_rules/failure.rs"]

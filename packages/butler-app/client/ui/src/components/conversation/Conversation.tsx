@@ -13,7 +13,7 @@ import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import { useConversationWallpaper } from "./hooks/useConversationWallpaper";
 import { EmptyState } from "./EmptyState";
 import { BranchProjectContext } from "./AssistantBranchActions";
-import { withQuestionAnswers } from "./userQuestions";
+import { useConversationMessages } from "./useConversationMessages.ts";
 import { useChatsIntroVisible } from "./ChatsIntro";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
@@ -48,12 +48,9 @@ export function Conversation() {
     return view?.project_id ?? null;
   });
   const navigation = useButlerStore((state) => state.navigation);
-  const storedMessages = useButlerStore((state) => state.messages);
-  const questionAnswers = useButlerStore(state => state.sessionViews[activeChatId]?.question_answers
-    ?? (state.sessionView?.session_id === activeChatId ? state.sessionView.question_answers : undefined));
   const pendingQuestions = useButlerStore(state => state.sessionViews[activeChatId]?.pending_questions
     ?? (state.sessionView?.session_id === activeChatId ? state.sessionView.pending_questions : undefined));
-  const messages = useMemo(() => withQuestionAnswers(storedMessages, questionAnswers ?? []), [storedMessages, questionAnswers]);
+  const messages = useConversationMessages(activeChatId);
   const approvals = useButlerStore(selectActiveAuthorityApprovals);
   const summary = useButlerStore((state) => state.summary);
   const turnProgress = useButlerStore((state) => state.turnProgress);

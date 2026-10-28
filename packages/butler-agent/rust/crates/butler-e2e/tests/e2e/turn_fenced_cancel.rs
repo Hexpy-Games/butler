@@ -17,7 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
     sync::mpsc,
 };
@@ -104,10 +104,15 @@ async fn stop_fenced_cancel_at_delivery_reentry_stop_first() -> Result<(), Harne
     race(true, "delivery_inserted").await
 }
 async fn race(stop_first: bool, entry: &'static str) -> Result<(), HarnessError> {
+    let delivered = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let (url, script, server) = stub::start(false).await?;
     let setup = Setup::new("TURN-FENCED-CANCEL")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
+        .env(
+            "BUTLER_E2E_RESULT_DELIVERED_BARRIER",
+            delivered.local_addr()?.to_string(),
+        );
     let (mut barriers, address) =
         Barriers::start(setup.sandbox.data.join("agent-runtime/btcc.sqlite"), entry).await;
     let s = setup
@@ -121,6 +126,12 @@ async fn race(stop_first: bool, entry: &'static str) -> Result<(), HarnessError>
         .as_str()
         .unwrap()
         .to_owned();
+    // A running child permits parent turns for steering. Hold a real parent
+    // request so both follow-ups remain queued throughout the cancellation race.
+    s.gw.say("general", stub::BUSY).await?;
+    tokio::time::timeout(Duration::from_secs(20), script.busy.notified())
+        .await
+        .unwrap();
     for text in ["Queued after child 1", "Queued after child 2"] {
         let queued = s.gw.post("/session-queue", json!({"chat_id":"general", "text":text, "client_message_id":uuid::Uuid::new_v4().to_string()})).await?;
         assert_eq!(queued.status, 202);
@@ -173,6 +184,18 @@ async fn race(stop_first: bool, entry: &'static str) -> Result<(), HarnessError>
         stop.release().await;
     }
     wait_result(&s, &relation).await?;
+    // Result persistence precedes App admission. Wait for the actual queued
+    // result before releasing the parent, as in delegate_followup::ordering.
+    let (mut acknowledgement, _) =
+        tokio::time::timeout(Duration::from_secs(30), delivered.accept())
+            .await
+            .unwrap()?;
+    let mut signal = [0; 8];
+    acknowledgement.read_exact(&mut signal).await?;
+    assert_eq!(&signal, b"admitted");
+    acknowledgement.write_all(b"!").await?;
+    drop(acknowledgement);
+    script.release_busy.notify_one();
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let messages = s.gw.messages("general").await?;
@@ -231,6 +254,29 @@ async fn race(stop_first: bool, entry: &'static str) -> Result<(), HarnessError>
             })
             .count();
         assert_eq!(results, 1, "parent must receive cancellation exactly once");
+        let ordered: Vec<_> = requests
+            .iter()
+            .map(|r| {
+                butler_e2e::e2e::matching::key("/v1/responses", r, &Default::default()).user_request
+            })
+            .filter(|text| {
+                text.contains("Delegated result")
+                    || matches!(
+                        text.as_str(),
+                        "Queued after child 1" | "Queued after child 2"
+                    )
+            })
+            .collect();
+        assert_eq!(
+            ordered.len(),
+            3,
+            "result and follow-ups run once: {ordered:?}"
+        );
+        assert!(ordered[0].contains("status: cancelled"), "{ordered:?}");
+        assert_eq!(
+            &ordered[1..],
+            ["Queued after child 1", "Queued after child 2"]
+        );
         assert!(
             !requests
                 .iter()

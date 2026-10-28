@@ -1,4 +1,3 @@
-import { appLocaleFromLanguage, getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 /** P2a-2 public guided tools, ownership, authority and native hand-back in the real App. */
 import { Database } from "bun:sqlite";
 import { expectBrowserStills } from "../support/browser-still-delivery";
@@ -25,13 +24,15 @@ const app = await browserAgentApp(evidence, stub.handler, baseline ? resolve(evi
 type Tab = { id: string; owner: string; holder: string; profile: string; epoch: number; waiting: boolean; agent: boolean };
 const state = () => app.call<{ tabs: Tab[]; activeId: string }>("state");
 const traces: unknown[] = [];
+const sessionTitle = "Browser work";
+let sessionId = "";
 async function send(text: string) {
-  const prior = await app.gateway.api<{ latest_turn?: { id: string } }>("/session-view?session_id=general");
-  await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text, client_message_id: crypto.randomUUID() }) });
-  await waitBrowser(async()=>(await app.gateway.api<{ latest_turn?: { id: string } }>("/session-view?session_id=general")).latest_turn?.id !== prior.latest_turn?.id, "new guided turn");
+  const prior = await app.gateway.api<{ latest_turn?: { id: string } }>(`/session-view?session_id=${sessionId}`);
+  await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: sessionId, text, client_message_id: crypto.randomUUID() }) });
+  await waitBrowser(async()=>(await app.gateway.api<{ latest_turn?: { id: string } }>(`/session-view?session_id=${sessionId}`)).latest_turn?.id !== prior.latest_turn?.id, "new guided turn");
 }
-const delivered = () => waitBrowser(async () => (await app.gateway.api<{ latest_turn?: { state: string } }>("/session-view?session_id=general")).latest_turn?.state === "delivered", "delivered guided turn");
-async function internal(op: string, tab?: string, args = {}, session = "general") {
+const delivered = () => waitBrowser(async () => (await app.gateway.api<{ latest_turn?: { state: string } }>(`/session-view?session_id=${sessionId}`)).latest_turn?.state === "delivered", "delivered guided turn");
+async function internal(op: string, tab?: string, args = {}, session = sessionId) {
   const admin = JSON.parse(await Bun.file(join(app.gateway.butlerData, "app/runtime/auth/local-admin.json")).text()).secret as string;
   const response = await fetch(`${app.gateway.url}/internal/browser/calls`, { method: "POST", headers: { ...app.gateway.authHeaders, "x-butler-admin": admin, "content-type": "application/json" }, body: JSON.stringify({ op, session, tab, args }) });
   const result = await response.json(); traces.push({ op, session, status: response.status, result }); return result;
@@ -44,7 +45,7 @@ async function settings(language: string, theme: string) {
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-area"]')));
   await nativeAligned(app);
   await app.call("activate", { id: agentTab.id });
-  await waitBrowser(()=>app.page.expression(`document.querySelector('[data-slot="titlebar-leading"] button')?.textContent.trim() === ${JSON.stringify(getAppCopy(appLocaleFromLanguage(language)).space.general)}`), "owned hub conversation button");
+  await waitBrowser(()=>app.page.expression(`document.querySelector('[data-slot="titlebar-leading"] button')?.textContent.trim() === ${JSON.stringify(sessionTitle)}`), "owned hub conversation button");
   await app.page.clickSelector('[data-slot="titlebar-leading"] button');
   await nativeAligned(app);
   try { await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message assistant"]'))); }
@@ -53,6 +54,7 @@ async function settings(language: string, theme: string) {
 let agentTab!: Tab;
 try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light", access_mode: "full_access" }) });
+  sessionId = (await app.gateway.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: sessionTitle }) })).session.id;
   await app.call("open");
   stub.set([
     () => ({ name: "write_file", arguments: { path: "browser-site/index.html", create_parents: true,
@@ -60,24 +62,24 @@ try {
     () => ({ name: "output_publish", arguments: { path: "browser-site", title: "Browser task" } }),
   ]);
   await send("Publish browser fixture"); await delivered();
-  const artifacts = await app.gateway.api<{ artifacts: Array<{ id: string; kind: string }> }>("/artifacts?session_id=general");
+  const artifacts = await app.gateway.api<{ artifacts: Array<{ id: string; kind: string }> }>(`/artifacts?session_id=${sessionId}`);
   const output = artifacts.artifacts.find(item=>item.kind === "web"); assert.ok(output);
   const view = await app.gateway.api<{ url: string }>(`/outputs/${output.id}/view`);
-  if(!baseline) await browserOutputEntry(app,evidence);
+  if(!baseline) await browserOutputEntry(app,evidence,sessionId,sessionTitle);
   const observe=(request:Parameters<typeof latestBrowser>[0])=>bridgeBrowser("browser_observe",{tab:latestBrowser(request,"tab").tab});
   stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: view.url }), observe, request=>{const call=actConfirm(request);const args=call.arguments.arguments as {steps:unknown[]};args.steps=[args.steps[0],args.steps[0]];return call;},observe,observe]);
   await send("Browse the fixture by ref"); await delivered();
-  await browserContextCheck(app,evidence);
-  agentTab = (await state()).tabs.find(tab=>tab.agent && tab.owner === "conversation:general")!; assert.ok(agentTab, JSON.stringify({ nativeError: await app.main("globalThis.browserAgentError"), toolRounds: stub.results.length }));
+  await browserContextCheck(app,evidence,sessionId);
+  agentTab = (await state()).tabs.find(tab=>tab.agent && tab.owner === `conversation:${sessionId}`)!; assert.ok(agentTab, JSON.stringify({ nativeError: await app.main("globalThis.browserAgentError"), toolRounds: stub.results.length }));
   assert.equal(agentTab.profile, "signed_out");
-  if(process.env.BUTLER_BROWSER_CONTEXT_BYTES==='1') await browserProviderByteCheck(app,stub,agentTab.id,evidence,send,delivered);
+  if(process.env.BUTLER_BROWSER_CONTEXT_BYTES==='1') await browserProviderByteCheck(app,stub,agentTab.id,evidence,send,delivered,sessionId);
   await app.call("activate", { id: agentTab.id });
   await app.page.reload();
   const proof = await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agentTab.id)}).view.webContents.executeJavaScript("({result:document.querySelector('#result').textContent,width:innerWidth,height:innerHeight})")`);
   assert.deepEqual(proof, { result: "Confirmed", width: 1280, height: 800 }); traces.push({ proof });
   writeFileSync(join(evidence,"native-proof.json"),JSON.stringify({proof,loadAverage1m:loadavg()[0]}));
-  if (process.env.BUTLER_BROWSER_SOAK === "1") await soakBrowser(app,stub,agentTab.id,evidence,send,delivered);
-  const sessionView = await app.gateway.api<Record<string,unknown>>("/session-view?session_id=general");
+  if (process.env.BUTLER_BROWSER_SOAK === "1") await soakBrowser(app,stub,agentTab.id,evidence,send,delivered,sessionId);
+  const sessionView = await app.gateway.api<Record<string,unknown>>(`/session-view?session_id=${sessionId}`);
   writeFileSync(join(evidence,"message-projection.json"),JSON.stringify({messages:(sessionView.messages as Array<Record<string,unknown>>).map(m=>({keys:Object.keys(m),role:m.role,turn:m.turn_id,updated:m.updated_at,rows:m.turn_activity_rows})),latest:sessionView.latest_turn},null,2));
   const rows: Array<Record<string,unknown>>=[];
   function collectRows(value:unknown) {
@@ -112,7 +114,7 @@ try {
   writeFileSync(join(evidence,"timeline-dom.json"),JSON.stringify(await app.page.expression(`({text:document.body.innerText,classes:[...document.querySelectorAll('[data-test-class]')].map(e=>e.getAttribute('data-test-class'))})`)));
   writeFileSync(join(evidence,"timeline-props.json"),JSON.stringify(await app.page.expression(`(()=>{const el=document.querySelector('[data-test-class="message assistant"]');let f=el?.[Object.keys(el).find(k=>k.startsWith('__reactFiber'))];const rows=[];for(;f;f=f.return){const p=f.memoizedProps;if(p?.message)rows.push({turn:p.message.turn_id,state:p.message.status,rows:p.message.turn_activity_rows,running:p.running});}return rows})()`)));
   if (!baseline) await waitBrowser(()=>app.page.expression("Boolean(document.querySelector('[data-test-class=browser-step-still] img'))"), "real browser still in timeline");
-  await browserBoundaryChecks(app,agentTab.id,evidence);
+  await browserBoundaryChecks(app,agentTab.id,evidence,sessionId);
   const mine = await app.call<string>("create", { url: "https://example.com" });
   assert.equal((await internal("tab.observe", mine)).reason, "not_your_tab");
   assert.equal((await internal("tab.observe", agentTab.id, {}, "other")).reason, "not_your_tab");
@@ -161,7 +163,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     await app.gateway.signIn(context); const phone = await context.newPage(); await phone.goto(app.gateway.url);
     await phone.getByRole("button", {name:"Show sidebar",exact:true}).click();
-    await phone.getByRole("button", { name: getAppCopy("en-US").space.general, exact: true }).click();
+    await phone.getByRole("button", { name: sessionTitle, exact: true }).click();
     await phone.getByText("Confirm", { exact: false }).first().waitFor();
     assert.equal(await phone.locator('[data-test-class="browser-step-still"]').count(),0);
     assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,"390px approval fits");
@@ -169,13 +171,13 @@ try {
       await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({language,appearance_theme:theme})});
       await phone.reload();
       await phone.getByRole("button",{name:language==="ko"?"사이드바 보기":"Show sidebar",exact:true}).click();
-      await phone.getByRole("button", { name: getAppCopy(appLocaleFromLanguage(language)).space.general, exact: true }).click();
+      await phone.getByRole("button", { name: sessionTitle, exact: true }).click();
       await phone.getByRole("button",{name:language==="ko"?"이번만 허용":"Allow once",exact:true}).waitFor();
       await phone.getByText(language==="ko"?"127.0.0.1 · 로그인 없이":"127.0.0.1 · Without signing in",{exact:true}).waitFor();
       const cardText = await phone.locator('[data-test-class="composer-authority-decision"]').innerText();
       assert.ok(cardText.includes(language === "ko" ? "‘Confirm’ 버튼 클릭 · 127.0.0.1" : "Click the ‘Confirm’ button · 127.0.0.1"));
       assert.ok(!cardText.includes("click · button"));
-      const authority = await app.gateway.api<any>("/authority-requests?session_id=general");
+      const authority = await app.gateway.api<any>(`/authority-requests?session_id=${sessionId}`);
       const risk = authority.requests[0].approval.risk;
       assert.notEqual(risk,"high","plain click is outside always-confirm class");
       await phone.evaluate(()=>document.fonts.ready.then(()=>undefined));
@@ -193,8 +195,8 @@ try {
     await phone.getByRole("button", { name: "Allow once", exact:true }).click();
     await delivered(); await context.close();
   } finally { await browser.close(); }
-  await browserAuthorityChecks(app,stub,agentTab.id,send,delivered,evidence);
-  await browserUiChecks(app,agentTab.id,evidence);
+  await browserAuthorityChecks(app,stub,agentTab.id,send,delivered,evidence,sessionId);
+  await browserUiChecks(app,agentTab.id,evidence,sessionId);
   await browserArchiveCheck(app,view.url,evidence);
   assert.ok(!stub.results.some(item=>item && typeof item==="object" && "stubFailure" in item),"all guided stub steps completed");
   traces.push({ loadAverage1m: loadavg()[0], tools: stub.results });
@@ -213,9 +215,9 @@ try {
   const delivery=db.query("SELECT turn_id,status,committed_turn_revision FROM btcc_delivery_outbox ORDER BY rowid DESC LIMIT 3").all();
   appdb.close();writeFileSync(join(evidence,"app-projection-state.json"),JSON.stringify({staged,events,queue,delivery},null,2));
   db.close();writeFileSync(join(evidence,"btcc-state.json"),JSON.stringify({turns,authority},null,2));
-  writeFileSync(join(evidence,"final-state.json"),JSON.stringify({rustObserve:await internal("tab.observe",agentTab?.id).then((value:any)=>({status:value.status,reason:value.reason})).catch(()=>null),session:await app.gateway.api("/session-view?session_id=general").then((view:any)=>({latest:view.latest_turn})).catch(()=>null),authority:await app.gateway.api("/authority-requests?session_id=general").catch(()=>null),tabs:(await state()).tabs.map(({id,owner,epoch,holder,waiting})=>({id,owner,epoch,holder,waiting}))},null,2));
+  writeFileSync(join(evidence,"final-state.json"),JSON.stringify({rustObserve:await internal("tab.observe",agentTab?.id).then((value:any)=>({status:value.status,reason:value.reason})).catch(()=>null),session:await app.gateway.api(`/session-view?session_id=${sessionId}`).then((view:any)=>({latest:view.latest_turn})).catch(()=>null),authority:await app.gateway.api(`/authority-requests?session_id=${sessionId}`).catch(()=>null),tabs:(await state()).tabs.map(({id,owner,epoch,holder,waiting})=>({id,owner,epoch,holder,waiting}))},null,2));
   writeFileSync(join(evidence,"trace.json"),JSON.stringify({ traces, toolResults: stub.results, nativeError: await app.main("globalThis.browserAgentError").catch(()=>null), renderer: await app.page.diagnostics().catch(()=>null) },null,2));
-  const journal=await Bun.file(join(app.gateway.butlerData,"transcripts/butler_app-general.jsonl")).text().catch(()=>"");
+  const journal=await Bun.file(join(app.gateway.butlerData,`transcripts/butler_app-${sessionId}.jsonl`)).text().catch(()=>"");
   const outbounds=journal.trim().split("\n").filter(Boolean).map(line=>JSON.parse(line)).filter(event=>['outbound','delivery'].includes(event.type ?? event.kind)).map(event=>({kind:event.type ?? event.kind,event:event.eventId ?? event.event_id,action:event.payload?.actionId,ok:event.payload?.ok,error:event.payload?.error,metadata:event.payload?.metadata}));
   writeFileSync(join(evidence,"outbound-metadata.json"),JSON.stringify(outbounds,null,2));
   const inbound=[];

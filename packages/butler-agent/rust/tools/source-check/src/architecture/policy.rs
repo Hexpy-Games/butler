@@ -85,7 +85,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
         "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
-        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files" => &[],
+        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files"
+        | "shared_locks" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.

@@ -306,6 +306,9 @@ async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), Harnes
     s.finish().await
 }
 
+#[path = "memory/first_write.rs"]
+mod first_write;
+
 /// Existing partial memory and typed sources retain the rebuild path untouched.
 #[tokio::test]
 async fn mem_04_bootstrap_preserves_nonfresh_memory() -> Result<(), HarnessError> {

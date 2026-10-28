@@ -55,10 +55,11 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
         (
             matches!(
                 parts.as_slice(),
-                ["projects", _, "canon"]
+                ["sessions", _, "canon", _]
+                    | ["projects", _, "canon"]
                     | ["projects", _, "canon", "plans" | "epics" | "tags" | "files"]
                     | ["projects", _, "canon", "backlog", "order"]
-                    | ["canon", "plans" | "epics" | "tags", _]
+                    | ["canon", "proposals" | "plans" | "epics" | "tags", _]
                     | ["canon", "plans", _, "order"]
                     | ["canon", "epics", _, "progress"]
             ),

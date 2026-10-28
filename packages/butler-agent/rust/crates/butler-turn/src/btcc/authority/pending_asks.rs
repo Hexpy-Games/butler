@@ -16,6 +16,8 @@ pub struct PendingAsk {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_label: Option<String>,
     pub blocking: bool,
     pub state: String,
     pub created_at: String,
@@ -117,6 +119,7 @@ pub(super) fn project(r: super::contracts::AuthorityRecord) -> AuthorityResult<P
         },
         title,
         summary: None,
+        target_label: None,
         blocking,
         state: "open".into(),
         created_at: r.created_at,

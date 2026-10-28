@@ -7,7 +7,7 @@ import { describeBrowser, bridgeBrowser, latestBrowser, type browserStub } from 
 import type { browserAgentApp } from "./browser-agent-app";
 
 /** Provider context folds old observations; durable tool results stay complete. */
-export async function browserContextCheck(app:Awaited<ReturnType<typeof browserAgentApp>>,evidence:string) {
+export async function browserContextCheck(app:Awaited<ReturnType<typeof browserAgentApp>>,evidence:string, sessionId:string) {
   // Provider calls reach the offline vision carrier when the App runs one, else the gateway stub.
   const calls=app.visionRequests ?? app.gateway.stubModelCalls;
   // The turn's last round; title and grouping calls run beside it without tool results.
@@ -19,7 +19,7 @@ export async function browserContextCheck(app:Awaited<ReturnType<typeof browserA
   assert.equal(full.length+old.length,3,"all observations remain represented");
   assert.ok(pageOf(full.map(value=>value.output),full.at(-1).output).untrusted_content.text.includes('Confirm'),'the newest observation reads the page');
   assertBrowserBodies(calls);
-  const view=await app.gateway.api<{latest_turn:{id:string}}>("/session-view?session_id=general");
+  const view=await app.gateway.api<{latest_turn:{id:string}}>(`/session-view?session_id=${sessionId}`);
   const db=new Database(join(app.gateway.butlerData,"agent-runtime/btcc.sqlite"),{readonly:true});
   try {
     const records=db.query("SELECT result_json FROM btcc_guided_tool_calls WHERE turn_id=?1 AND tool_name='browser_observe'").all(view.latest_turn.id) as Array<{result_json:string}>;
@@ -45,7 +45,7 @@ function pageOf(outputs:Array<{obs:string;delta_of?:string;untrusted_content:{te
 }
 
 /** Both total wire bytes and the final prompt are reported; no cached-token inference. */
-export async function browserProviderByteCheck(app:Awaited<ReturnType<typeof browserAgentApp>>,stub:ReturnType<typeof browserStub>,tab:string,evidence:string,send:(text:string)=>Promise<void>,delivered:()=>Promise<void>) {
+export async function browserProviderByteCheck(app:Awaited<ReturnType<typeof browserAgentApp>>,stub:ReturnType<typeof browserStub>,tab:string,evidence:string,send:(text:string)=>Promise<void>,delivered:()=>Promise<void>,sessionId:string) {
   const rows=[];
   for(const count of [10,40]) {
     const calls: Array<(request:Parameters<typeof latestBrowser>[0])=>ReturnType<typeof bridgeBrowser>>=[describeBrowser];
@@ -62,7 +62,7 @@ export async function browserProviderByteCheck(app:Awaited<ReturnType<typeof bro
     await send(`Observe and perform exactly ${count} hover steps by fresh refs.`);await delivered();
     const requests=app.gateway.stubModelCalls.slice(start);
     assertBrowserBodies(requests);
-    const view=await app.gateway.api<{latest_turn:{id:string}}>("/session-view?session_id=general");
+    const view=await app.gateway.api<{latest_turn:{id:string}}>(`/session-view?session_id=${sessionId}`);
     const receipts=journalSteps(app.gateway.butlerData,view.latest_turn.id);
     assert.equal(receipts.length,count,"all receipts remain complete in the journal");
     assert.ok(receipts.every(step=>step.status==='completed' && step.still_file));

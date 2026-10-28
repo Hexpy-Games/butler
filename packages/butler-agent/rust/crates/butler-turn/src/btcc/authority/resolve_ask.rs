@@ -62,7 +62,7 @@ impl PrincipalAuthority {
     }
 }
 
-fn guard(turn: &TurnRecord, has_other_tool_result: bool, input: &ResolveAsk) -> Option<Value> {
+pub fn guard(turn: &TurnRecord, has_other_tool_result: bool, input: &ResolveAsk) -> Option<Value> {
     let delegated = GuidedExecutionPolicy::from_turn(turn, "")
         .map(|policy| policy.role != PolicyRole::Butler || policy.subsession.is_some())
         .unwrap_or(true);
@@ -98,6 +98,16 @@ fn guard(turn: &TurnRecord, has_other_tool_result: bool, input: &ResolveAsk) -> 
             "quote_not_found",
             "quote is not in the user's current message. Quote their own words, or ask if the reply is unclear.",
         ));
+    }
+    if input.ask_id.starts_with("canon:") {
+        return (!(matches!(input.outcome.as_str(), "accepted" | "declined")
+            && input.answer.is_none()))
+        .then(|| {
+            refusal(
+                "invalid_outcome",
+                "Use accepted or declined without answer.",
+            )
+        });
     }
     if !matches!(
         (

@@ -10,6 +10,9 @@ use transaction::Request;
 static SERIAL: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 static WORK: std::sync::LazyLock<parking_lot::Mutex<HashSet<PathBuf>>> =
     std::sync::LazyLock::new(|| parking_lot::Mutex::new(HashSet::new()));
+pub(super) fn has_work(root: &Path) -> bool {
+    WORK.lock().contains(root)
+}
 #[derive(Serialize, Deserialize)]
 struct Captured {
     request: Request,
@@ -165,12 +168,35 @@ impl RememberedRuleOwner {
     }
     /// Drain only after a capture/change signal; no idle filesystem probes.
     pub(crate) async fn drain_captures(&self) -> CognitionResult<usize> {
+        self.drain_captures_inner(
+            #[cfg(feature = "e2e-fixtures")]
+            false,
+        )
+        .await
+    }
+
+    pub(super) async fn drain_inline_captures(&self) -> CognitionResult<usize> {
+        self.drain_captures_inner(
+            #[cfg(feature = "e2e-fixtures")]
+            true,
+        )
+        .await
+    }
+
+    async fn drain_captures_inner(
+        &self,
+        #[cfg(feature = "e2e-fixtures")] inline: bool,
+    ) -> CognitionResult<usize> {
         if !WORK.lock().remove(&self.root()) {
             return Ok(0);
         }
         let owner = self.clone();
         let result = tokio::task::spawn_blocking(move || {
             owner.authority()?;
+            #[cfg(feature = "e2e-fixtures")]
+            if inline && super::capture_fixture::force_busy(&owner.data_root)? {
+                return Err(failure("rule_write_busy"));
+            }
             let lock = owner.environment.consolidation_lock(&owner.data_root);
             let Some(lease) = owner
                 .coordinator

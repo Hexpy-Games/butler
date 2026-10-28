@@ -39,21 +39,21 @@ impl CommandTiming {
         duration: std::time::Duration,
     ) {
         let output_started = Instant::now();
-        eprintln!(
+        butler_platform::stdio::diagnostic_line(format_args!(
             "command_duration_timing phase={phase} event={event} utc_us={} duration_us={}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_micros(),
             duration.as_micros()
-        );
+        ));
         report_output_wait(phase, output_started);
     }
 
     pub(crate) fn mark(&self, event: &'static str) {
         if let Some(timing) = &self.0 {
             let output_started = Instant::now();
-            eprintln!(
+            butler_platform::stdio::diagnostic_line(format_args!(
                 "command_phase_timing phase={} id={} event={} utc_us={} elapsed_us={}",
                 timing.phase,
                 timing.id,
@@ -63,7 +63,7 @@ impl CommandTiming {
                     .unwrap_or_default()
                     .as_micros(),
                 timing.started.elapsed().as_micros()
-            );
+            ));
             report_output_wait(timing.phase, output_started);
         }
     }
@@ -80,9 +80,9 @@ impl Drop for CommandTiming {
 fn report_output_wait(phase: &'static str, started: Instant) {
     let duration = started.elapsed();
     if duration >= std::time::Duration::from_millis(1) {
-        eprintln!(
+        butler_platform::stdio::diagnostic_line(format_args!(
             "command_output_timing phase={phase} duration_us={}",
             duration.as_micros()
-        );
+        ));
     }
 }

@@ -235,6 +235,11 @@ impl Btcc {
         self.inner.run_turn(request).await
     }
 
+    /// Whether a session has a live turn flight, including preparation and delivery.
+    pub fn has_active_session_execution(&self, session_id: &str) -> bool {
+        self.inner.has_active_session_execution(session_id)
+    }
+
     /// Stops a turn and reports how it ended.
     pub async fn stop_turn(&self, request: StopRequest) -> Result<TurnOutcome, BtccError> {
         #[cfg(feature = "e2e-fixtures")]
@@ -288,4 +293,4 @@ mod test_pause;
 pub use test_pause::reach as pause_for_test;
 
 pub use authority::pending_asks::{PendingAsk, PendingAskChange};
-pub use authority::resolve_ask::ResolveAsk;
+pub use authority::resolve_ask::{ResolveAsk, guard as resolve_ask_guard};

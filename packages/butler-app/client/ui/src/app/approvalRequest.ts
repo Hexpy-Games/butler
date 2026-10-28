@@ -1,4 +1,3 @@
-import { normalizeApprovalCanon } from "./approvalCanon.ts";
 import { maskActionSecrets } from "./maskActionSecrets.ts";
 import { appCopy } from "./copy.ts";
 import type { AppCopy } from "./copy.ts";
@@ -11,7 +10,7 @@ type ApprovalRequestCopy = AppCopy["interfaceTemplates"]["approvalRequest"];
 /** The `approval.action_kind` values the agent sends (#277). */
 export const APPROVAL_ACTION_KINDS = [
   "edit_files", "run_command", "network_command", "web_request", "use_connector", "manage_schedule",
-  "create_canon", "update_project", "start_conversation", "restart_service", "create_worktree", "switch_folder", "other",
+  "update_project", "start_conversation", "restart_service", "create_worktree", "switch_folder", "other",
 ] as const;
 export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
 
@@ -66,12 +65,10 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
   });
   const operation = normalizeOperation(value.operation);
   const schedule = normalizeSchedule(value.schedule);
-  const canon = normalizeApprovalCanon(value.canon);
   return {
     actionKind, targets, count, examples,
     ...(operation ? { operation } : {}),
     ...(schedule ? { schedule } : {}),
-    ...(canon ? { canon } : {}),
     ...(value.command_access === "read_only_unisolated" ? { commandAccess: value.command_access } : {}),
     ...(examplesTruncated.some(Boolean) ? { examplesTruncated } : {}),
     ...(typeof risk === "string" && RISKS.includes(risk) ? { risk: risk as ApprovalRisk } : {}),
@@ -182,10 +179,7 @@ function knownActionKind(approval: ApprovalSummary): ApprovalActionKind {
 /** The action's details, separate from permission notices and card explanations. */
 function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
   card: Pick<AuthorityApprovalCard, "scope" | "reason">, copy: ApprovalRequestCopy): string[] {
-  const { canon, schedule, operation } = approval;
-  if (kind === "create_canon" && canon) return [copy.canonTitle(canon.title), copy.canonProject(canon.project_title),
-    ...(canon.plan_title ? [copy.canonPlan(canon.plan_title)] : []), ...(canon.due_on ? [copy.canonDue(canon.due_on)] : []),
-    ...(canon.description ? [copy.canonDescription(canon.description)] : [])];
+  const { schedule, operation } = approval;
   if (schedule) return [schedule.title,
     ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)]
       : !schedule.accessMode && typeof schedule.browserSignin !== "boolean" && typeof schedule.browserPayment !== "boolean" ? [copy.scheduleUnavailable] : []),
@@ -197,7 +191,7 @@ function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
 }
 
 /** Kinds whose own sentence names the action better than a tool label. */
-const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule", "create_canon"]);
+const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule"]);
 
 /** The exact operation, as the local decision shows it. */
 function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): string[] {
@@ -222,7 +216,6 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace
         : copy.useConnector(path || null, null);
     }
     case "manage_schedule": return copy.manageSchedule[scheduleOperation(approval).operation];
-    case "create_canon": return approval.canon ? copy.createCanon[approval.canon.kind] : copy.generic;
     case "update_project": return copy.updateProject;
     case "start_conversation": return copy.startConversation;
     case "restart_service": return copy.restartService;
