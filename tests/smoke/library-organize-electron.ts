@@ -19,7 +19,13 @@ let lastUI = "";
 const clickSelector = app.page.clickSelector, clickText = app.page.clickText;
 app.page.clickSelector = async (selector) => {
   lastUI = selector;
-  await waitBrowser(() => app.page.expression(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});return n && !n.disabled && n.getAttribute('aria-disabled')!=='true'})()`), `click target ready: ${selector}`);
+  await waitBrowser(() => app.page.expression(`(()=>{
+    const n=document.querySelector(${JSON.stringify(selector)});
+    if(!n || n.disabled || n.getAttribute('aria-disabled')==='true') return false;
+    // Navigation can publish Library while its workspace is still sliding after sidebar dismissal.
+    for(let parent=n;parent;parent=parent.parentElement) if(parent.getAnimations().some(a=>a.playState==='running' && a.timeline instanceof DocumentTimeline && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
+    return true;
+  })()`), `click target ready: ${selector}`);
   await clickSelector(selector);
 };
 app.page.clickText = async (text, scope) => { lastUI = `${scope}: ${text}`; await clickText(text, scope); };
@@ -233,6 +239,11 @@ try {
   for (let n = 0; n < 6; n++) await app.gateway.api("/library", { method: "POST", body: JSON.stringify({ id: `loose-${n}`, kind: "scrap", title: `Saved heading ${n}`, text: `Complete heading ${n}`, url: "https://example.com", site: "example.com", crop, capturedAt: new Date(Date.now() - n * 1000).toISOString(), tags: n % 2 ? ["Reading"] : [], snapshot: { html: '<!doctype html><html><body><h1>Saved heading</h1><p>Complete saved content</p></body></html>', width: 300, height: 160 } }) });
   for (let n = 0; n < 4; n++) await app.gateway.api("/library", { method: "POST", body: JSON.stringify({ id: `grouped-${n}`, kind: "scrap", title: `Reference clipping ${n}`, text: `Complete reference ${n}`, url: "https://reference.example/", site: "reference.example", crop, capturedAt: new Date(Date.now() - 60_000 - n * 1000).toISOString(), group: groups[0], tags: ["Reading"] }) });
   for (let n = 0; n < 3; n++) await app.gateway.api("/library", { method: "POST", body: JSON.stringify({ id: `bookmark-${n}`, kind: "bookmark", title: `Reference ${n}`, url: `https://reference${n}.example/`, folder: n ? "Reference" : "", capturedAt: new Date().toISOString(), tags: ["Reading"] }) });
+  // Publishing a web output leaves its working files out of Library documents.
+  const document = await app.gateway.api<{ id: string }>("/documents", { method: "POST", body: JSON.stringify({ title: "Reading notes", body: "# Reading notes\n\nComplete saved document content.", author: "user" }) });
+  const documents = await rows("doc");
+  assert.ok(documents.some((item) => item.id === document.id && item.title === "Reading notes"), "created document is listed in Library");
+  writeFileSync(join(evidence, "seeded-documents.json"), JSON.stringify(documents, null, 2));
   await app.page.reload(); await shellReady(app, "en");
   if (phase === "all") await nativeDrops(groups[0]!);
   else await app.gateway.api("/library/items", { method: "PATCH", body: JSON.stringify({ ids: ["loose-0"], group: groups[0] }) });
