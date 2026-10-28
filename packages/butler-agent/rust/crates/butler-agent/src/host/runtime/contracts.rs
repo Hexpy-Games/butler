@@ -36,6 +36,7 @@ pub(crate) struct AgentRuntime {
     pub bindings: SessionBindingStore,
     pub models: ProcessModels,
     pub context_budget: Arc<ContextBudgetOwner>,
+    pub continuity: Arc<crate::host::memory_jobs::continuity::Continuity>,
     pub context_compactions: ContextCompactionRepository,
     pub collation: Arc<LocaleCollation>,
     pub progress: StorageProgressPublication,

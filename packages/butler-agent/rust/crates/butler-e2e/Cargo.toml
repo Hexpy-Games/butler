@@ -52,5 +52,8 @@ uuid.workspace = true
 zip.workspace = true
 zstd = "0.13.3"
 
+[dev-dependencies]
+butler-memory = { path = "../butler-memory" }
+
 [lints]
 workspace = true

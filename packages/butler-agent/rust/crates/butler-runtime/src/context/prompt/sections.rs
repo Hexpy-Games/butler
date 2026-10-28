@@ -176,11 +176,6 @@ impl PromptAssembler {
             .generation_hot_cache(&projection)
             .await?;
         check_cancelled(request)?;
-        let continuity = self
-            .dependencies
-            .cognition
-            .session_continuity(&projection)
-            .await?;
         push(
             &mut common.retrieved_context,
             "hot-cache",
@@ -193,15 +188,6 @@ impl PromptAssembler {
             } else {
                 "user"
             },
-        );
-        push(
-            &mut common.retrieved_context,
-            "session-continuity",
-            "Session Continuity",
-            continuity,
-            "retrieved_context",
-            "optional_hot_cache",
-            "session",
         );
         push(
             &mut common.retrieved_context,

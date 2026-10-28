@@ -44,13 +44,18 @@ mod provider {
         State(stub): State<Arc<Stub>>,
         Json(body): Json<Value>,
     ) -> axum::response::Response {
-        stub.requests.lock().unwrap().push(body.clone());
+        let continuity = body["instructions"]
+            .as_str()
+            .is_some_and(|text| text.starts_with("You keep the running summary of one chat"));
+        if !continuity {
+            stub.requests.lock().unwrap().push(body.clone());
+        }
         let tool_round = body["input"]
             .as_array()
             .unwrap()
             .iter()
             .any(|item| item["type"] == "function_call_output");
-        let item = if stub.heavy && !tool_round {
+        let item = if stub.heavy && !tool_round && !continuity {
             json!({"type":"function_call","id":"fc_history","call_id":"call_history", "name":"read_file",
                 "arguments":json!({"requests":[{"path":"history-output.txt"}]}).to_string(),"status":"completed"})
         } else {
@@ -439,3 +444,9 @@ pub(super) fn approval_parity(
 ) -> Result<(), HarnessError> {
     golden::parity_case(s, turn_id, requests, "resume")
 }
+
+#[path = "prompt_history_tool_hash.rs"]
+mod tool_hash;
+
+#[path = "chat_continuity_openai.rs"]
+mod chat_continuity_openai;
