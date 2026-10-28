@@ -79,7 +79,7 @@ async fn locked_cancel_does_not_block_replay_and_next_change_delivers() -> Resul
     data(
         s.gw.post(&format!("/turns/{source_turn}/cancel"), json!({}))
             .await?,
-        200,
+        202,
     );
     data(
         tokio::time::timeout(Duration::from_secs(30), taking)
