@@ -153,9 +153,9 @@ fn schema_constraints_and_idempotency() {
             .unwrap(),
         1
     );
-    assert!(db.prepare("SELECT * FROM canon_session_queue").is_err());
+    assert!(db.prepare("SELECT * FROM canon_session_queue").is_ok());
     assert!(
         db.prepare("SELECT * FROM canon_session_queue_heads")
-            .is_err()
+            .is_ok()
     );
 }

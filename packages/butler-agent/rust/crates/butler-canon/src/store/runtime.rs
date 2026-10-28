@@ -4,6 +4,7 @@ mod progress;
 pub mod queries;
 use super::*;
 pub use feed::{catch_up, prepare};
+pub(crate) use progress::queue_outcome;
 pub use progress::{enrich, progress, project_works};
 pub type ProjectViews = std::collections::HashMap<String, Value>;
 use queries::Query;

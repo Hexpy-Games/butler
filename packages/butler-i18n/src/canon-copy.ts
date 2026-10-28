@@ -1,4 +1,10 @@
 export interface CanonCopy {
+  queue: {
+    step: (plan: string, epic: string) => string;
+    hold: (epic: string) => string;
+    takeHere: (epic: string, conversation: string) => string;
+    remove: string; proceed: string; openOther: string; take: string;
+  };
   inlineEdit: { title: string; description: string; unsaved: string; keep: string; discard: string; saved: string; current: string };
   attachFile: string; fileTooLarge: string; tooManyAttachments: string; saving: string; uploadingFile: string;
   searchPlan: string; clearSearch: string; noResults: string;

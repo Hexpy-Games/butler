@@ -1,3 +1,5 @@
+export type { CanonQueueView, CanonQueueItem, CanonQueueEdit, CanonQueueChanged, CanonQueueConflict, CanonHoldDecision, CanonHoldPanel, CanonTakeHerePanel, CanonStepOrigin } from "./canon-queue-contracts";
+
 /** Canon gateway wire contracts. Entity revisions are numeric CAS tokens. */
 export type CanonStatus = "planned" | "in_progress" | "in_review" | "blocked" | "done" | "cancelled";
 export type WorkTaskStatus = "draft" | "waiting" | "pending" | "running" | "in_review" | "held" | "failed" | "completed" | "blocked" | "paused" | "stopped" | "cancelled";

@@ -48,11 +48,26 @@ pub const APP_PERSON_ID: &str = "app-user";
 
 #[derive(Clone, Debug)]
 pub enum AppCanonOperation {
+    Queue {
+        session_id: String,
+        action: String,
+        input: Value,
+    },
+    StepTurnEnded {
+        op_id: String,
+        outcome: String,
+    },
+    SessionDeleted {
+        session_hint: String,
+        op_id: String,
+    },
+    BoundSessions,
     Link {
         work_id: String,
         session_id: Option<String>,
         new_session_id: String,
     },
+    PendingQueue,
     Pending {
         after: String,
     },

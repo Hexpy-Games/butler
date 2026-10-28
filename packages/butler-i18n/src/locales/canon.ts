@@ -1,6 +1,12 @@
 import type { CanonCopy } from "../canon-copy.ts";
 export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
+    queue: {
+      step: (plan, epic) => `계획 ‘${plan}’의 과제 ‘${epic}’를 처리합니다.`,
+      hold: epic => `‘${epic}’가 막혀 다음 과제를 멈췄습니다.`,
+      takeHere: (epic, conversation) => `‘${epic}’는 ‘${conversation}’ 대화에서 진행 중입니다(예정입니다). 여기서 할까요?`,
+      remove: "삭제", proceed: "그래도 진행", openOther: "그 대화 열기", take: "여기서 하기",
+    },
     inlineEdit: { title: "제목 수정", description: "설명 편집", unsaved: "변경 내용을 저장할까요?", keep: "계속 편집", discard: "저장 안 함", saved: "저장했습니다", current: "현재 값" },
     attachFile: "파일 첨부", fileTooLarge: "10MB 이하만 첨부할 수 있습니다",
     tooManyAttachments: "파일은 20개까지 첨부할 수 있습니다", saving: "저장 중", uploadingFile: "업로드 중",
@@ -47,6 +53,12 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
+    queue: {
+      step: (plan, epic) => `Processing epic ‘${epic}’ from plan ‘${plan}’.`,
+      hold: epic => `‘${epic}’ is blocked. Later epics are on hold.`,
+      takeHere: (epic, conversation) => `‘${epic}’ is running or queued in ‘${conversation}’. Do it here?`,
+      remove: "Delete", proceed: "Continue anyway", openOther: "Open that conversation", take: "Do it here",
+    },
     inlineEdit: { title: "Edit title", description: "Edit description", unsaved: "Save changes?", keep: "Keep editing", discard: "Discard", saved: "Saved", current: "Current value" },
     attachFile: "Attach file", fileTooLarge: "Files up to 10 MB",
     tooManyAttachments: "Attach up to 20 files", saving: "Saving", uploadingFile: "Uploading",

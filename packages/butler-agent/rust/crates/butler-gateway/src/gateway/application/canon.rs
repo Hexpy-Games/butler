@@ -85,7 +85,10 @@ pub(super) fn public_sessions(
         }
         Value::Object(fields) => {
             for (key, value) in fields {
-                if matches!(key.as_str(), "session_id" | "home_session_id") {
+                if matches!(
+                    key.as_str(),
+                    "session_id" | "home_session_id" | "other_session_id" | "other_session"
+                ) {
                     if let Some(owner) = value.as_str()
                         && let Some(chat) = sessions::identity::resolve_owner(db, owner)?
                     {

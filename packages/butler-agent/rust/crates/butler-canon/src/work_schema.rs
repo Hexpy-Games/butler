@@ -26,6 +26,7 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(include_str!("work_schema/tags.sql"))?;
     connection.execute_batch(include_str!("work_schema/support.sql"))?;
     connection.execute_batch(include_str!("work_schema/proposals.sql"))?;
+    connection.execute_batch(include_str!("work_schema/queue.sql"))?;
     let mut stmt = connection.prepare("PRAGMA table_info(canon_epic_work_links)")?;
     let columns = stmt
         .query_map([], |row| row.get::<_, String>(1))?
@@ -55,6 +56,8 @@ fn check_canon(db: &Connection) -> rusqlite::Result<()> {
         "canon_intents",
         "canon_cursors",
         "canon_session_epics",
+        "canon_session_queue",
+        "canon_session_queue_heads",
         "canon_epic_work_links",
     ] {
         if db

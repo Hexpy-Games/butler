@@ -15,6 +15,7 @@ pub use proposals::{
     select_target as select_canon_proposal_target, transition as transition_canon_proposal,
     turn_cards as canon_proposal_turn_cards,
 };
+pub mod queue;
 pub mod runtime;
 pub use api::{mark_outbox_published, read as read_api, write as write_api};
 pub use runtime::{
