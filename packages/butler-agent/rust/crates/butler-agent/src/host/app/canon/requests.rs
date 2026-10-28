@@ -15,6 +15,15 @@ pub(super) fn admit(
 ) -> ApplicationFuture<Value> {
     Box::pin(async move {
         let ctx = context(Some(delegate));
+        let read_ctx = ctx.clone();
+        let read_capability = capability.clone();
+        if let Some(result) = storage
+            .canon_read(move |db| store::grants::check(db, &read_ctx, &read_capability))
+            .await
+            .map_err(error)?
+        {
+            return Ok(result);
+        }
         storage
             .canon_write(move |tx| store::grants::admit(tx, &ctx, &capability))
             .await
@@ -43,39 +52,16 @@ pub(super) fn execute(
             let ctx = context(delegate);
             storage
                 .canon_write(move |tx| {
+                    require(tx, &ctx, resource)?;
                     let value = store::write_api(tx, &ctx, store_resource(resource), &id, input)?;
                     project(tx, resource, value, delegated)
                 })
                 .await
                 .map_err(error)
         } else {
+            let ctx = context(delegate);
             storage
-                .canon_read(move |db| {
-                    if resource == AppCanonResource::EpicProgress {
-                        return Ok(json!({"epic_id":id}));
-                    }
-                    if delegated && resource == AppCanonResource::Epic {
-                        return Ok(serde_json::to_value(store::public::epic(db, &id)?)?);
-                    }
-                    if delegated && resource == AppCanonResource::Canon {
-                        return store::page::list(db, &id, &json!({}));
-                    }
-                    if delegated && resource == AppCanonResource::Plan {
-                        let plan = store::read_plan(db, &id)?;
-                        return store::page::list(
-                            db,
-                            plan["project_id"].as_str().unwrap_or_default(),
-                            &json!({"plan_id":id}),
-                        );
-                    }
-                    let value = store::api::read_query(
-                        db,
-                        store_resource(resource),
-                        &id,
-                        &input.unwrap_or(json!({})),
-                    )?;
-                    project(db, resource, value, delegated)
-                })
+                .canon_read(move |db| read(db, resource, &id, input, &ctx))
                 .await
                 .map_err(error)
         }?;
@@ -104,4 +90,64 @@ fn project(
         )?)?);
     }
     Ok(value)
+}
+
+fn require(
+    db: &rusqlite::Connection,
+    ctx: &store::Context,
+    resource: AppCanonResource,
+) -> store::Result<()> {
+    if ctx.actor["origin"] != "mcp" {
+        return Ok(());
+    }
+    let capability = match resource {
+        AppCanonResource::EditEpic => "canon.epic.status",
+        AppCanonResource::Comment => "canon.epic.comment",
+        AppCanonResource::CreateEpic => "canon.epic.create",
+        AppCanonResource::ProposeSpec => "canon.spec.propose",
+        _ => "canon.read",
+    };
+    store::grants::require(db, ctx, capability)
+}
+
+fn read(
+    db: &rusqlite::Connection,
+    resource: AppCanonResource,
+    id: &str,
+    input: Option<Value>,
+    ctx: &store::Context,
+) -> store::Result<Value> {
+    let delegated = ctx.actor["origin"] == "mcp";
+    require(db, ctx, resource)?;
+    if delegated && resource == AppCanonResource::Activity {
+        return store::activity::mcp_page(
+            db,
+            id,
+            input.as_ref().and_then(|i| i["before"].as_i64()),
+        );
+    }
+    if resource == AppCanonResource::EpicProgress {
+        return Ok(json!({"epic_id":id}));
+    }
+    if delegated && resource == AppCanonResource::Epic {
+        return Ok(serde_json::to_value(store::public::epic(db, id)?)?);
+    }
+    if delegated && resource == AppCanonResource::Canon {
+        return store::page::list(db, id, &json!({}));
+    }
+    if delegated && resource == AppCanonResource::Plan {
+        let plan = store::read_plan(db, id)?;
+        return store::page::list(
+            db,
+            plan["project_id"].as_str().unwrap_or_default(),
+            &json!({"plan_id":id}),
+        );
+    }
+    let value = store::api::read_query(
+        db,
+        store_resource(resource),
+        id,
+        &input.unwrap_or(json!({})),
+    )?;
+    project(db, resource, value, delegated)
 }

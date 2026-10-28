@@ -42,6 +42,21 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
         )
         .map_err(|error| store_error(&error))?;
     }
+    for n in 0..60 {
+        let private = store::Context {
+            now: 2,
+            actor: json!({"person":"app-user","via":"butler","origin":"chat"}),
+        };
+        store::activity::append(
+            &tx,
+            &private,
+            "epic-000",
+            "proposal_opened",
+            &format!("Private {n}"),
+            None,
+        )
+        .map_err(|e| store_error(&e))?;
+    }
     tx.commit()?;
     drop(db);
     s.restart().await?;
@@ -55,6 +70,27 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
         }
         let page = call(&s, "canon_list", args).await?;
         assert!(page["epics"].as_array().unwrap().len() <= 100);
+        for item in page["epics"].as_array().unwrap() {
+            let keys = item
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                keys,
+                vec![
+                    "assignee",
+                    "id",
+                    "plan",
+                    "revision",
+                    "status",
+                    "tags",
+                    "title",
+                    "updated_at"
+                ]
+            );
+        }
         ids.extend(
             page["epics"]
                 .as_array()
@@ -81,6 +117,23 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
     let before = epic["activity_before"].as_i64().unwrap();
     assert_eq!(recent.last().unwrap()["seq"], before);
     let reply =
+        s.gw.http()
+            .get(format!(
+                "{}/canon/epics/epic-000/activity?before={before}",
+                s.gw.base
+            ))
+            .bearer_auth(&s.gw.token)
+            .header("X-Butler-Delegate-Client", "Claude Code")
+            .header("X-Butler-Delegate-Client-Name", "claude-code")
+            .send()
+            .await?;
+    assert_eq!(reply.status().as_u16(), 200);
+    let older_page: Value = reply.json().await?;
+    let older = older_page["data"]["activity"].as_array().unwrap();
+    assert_eq!(older.len(), 6);
+    assert!(older.iter().all(|r| r["seq"].as_i64().unwrap() < before));
+    assert!(older_page["data"]["activity_before"].is_null());
+    let reply =
         s.gw.get(&format!("/canon/epics/epic-000/activity?before={before}"))
             .await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
@@ -88,5 +141,39 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
     assert_eq!(older.len(), 6);
     assert!(older.iter().all(|r| r["seq"].as_i64().unwrap() < before));
     assert!(reply.data()["activity_before"].is_null());
+    s.finish().await
+}
+
+#[tokio::test]
+async fn cn_11_unscoped_list_excludes_archived_projects() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CN-11-ARCHIVED")?
+        .data_folder_token()
+        .start()
+        .await?;
+    let project = project(&s).await?;
+    trust(&s).await?;
+    let epic = call(
+        &s,
+        "canon_create_epic",
+        json!({"project":project,"title":"Archived epic"}),
+    )
+    .await?;
+    let plan =
+        s.gw.post(
+            &format!("/projects/{project}/canon/plans"),
+            json!({"title":"Archived plan"}),
+        )
+        .await?;
+    assert_eq!(plan.status, 201);
+    assert_eq!(
+        s.gw.post(&format!("/projects/{project}/archive"), json!({}))
+            .await?
+            .status,
+        200
+    );
+    let page = call(&s, "canon_list", json!({})).await?;
+    assert_eq!(page["epics"], json!([]), "{epic}");
+    assert_eq!(page["plans"], json!([]));
     s.finish().await
 }

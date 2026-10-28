@@ -42,9 +42,15 @@ pub fn comment(tx: &Transaction<'_>, ctx: &Context, id: &str, input: Value) -> R
         &json!({"kind":"activity","id":id,"project_id":epic["project_id"],
         "origin":if ctx.actor["origin"]=="mcp" {"mcp"} else if ctx.actor["via"]=="butler" {"butler"} else {"local"}}),
     )?;
-    Ok(json!({"id":id,"activity":page(tx,id,None)?["activity"]}))
+    Ok(json!({"id":id,"activity":page_visible(tx,id,None,ctx.actor["origin"]=="mcp")?["activity"]}))
 }
 pub fn page(db: &Connection, epic: &str, before: Option<i64>) -> Result<Value> {
+    page_visible(db, epic, before, false)
+}
+pub fn mcp_page(db: &Connection, epic: &str, before: Option<i64>) -> Result<Value> {
+    page_visible(db, epic, before, true)
+}
+fn page_visible(db: &Connection, epic: &str, before: Option<i64>, mcp: bool) -> Result<Value> {
     read_work(db, epic)?;
     // Each entity seeks its own history index; only 51 rows per entity can win.
     let mut entities = rows(
@@ -55,7 +61,7 @@ pub fn page(db: &Connection, epic: &str, before: Option<i64>) -> Result<Value> {
     entities.push(json!({"id":epic}));
     let mut items = Vec::new();
     for entity in entities {
-        items.extend(rows(db,"SELECT seq,entity_id,kind,summary,body,actor_json,at FROM canon_activity WHERE entity_id=?1 AND seq<?2 ORDER BY seq DESC LIMIT 51",params![text(&entity,"id")?,before.unwrap_or(i64::MAX)])?);
+        items.extend(rows(db,"SELECT seq,entity_id,kind,summary,body,actor_json,at FROM canon_activity WHERE entity_id=?1 AND seq<?2 AND (?3=0 OR kind NOT IN ('proposal_opened','proposal_applied','proposal_declined') OR COALESCE(json_extract(actor_json,'$.proposal_source'),json_extract(actor_json,'$.origin'))='mcp') ORDER BY seq DESC LIMIT 51",params![text(&entity,"id")?,before.unwrap_or(i64::MAX),mcp])?);
     }
     items.sort_by_key(|r| std::cmp::Reverse(r["seq"].as_i64()));
     let more = items.len() > 50;
@@ -73,11 +79,13 @@ pub fn page(db: &Connection, epic: &str, before: Option<i64>) -> Result<Value> {
 }
 
 pub(super) fn proposal(tx: &Transaction<'_>, ctx: &Context, row: &Value, kind: &str) -> Result<()> {
+    let mut ctx = ctx.clone();
+    ctx.actor["proposal_source"] = row["source"].clone();
     if let Some(changes) = row["document"]["changes"].as_array() {
         for change in changes.iter().filter(|c| c["op"] == "spec.edit") {
             append(
                 tx,
-                ctx,
+                &ctx,
                 text(change, "id")?,
                 kind,
                 text(row, "summary")?,

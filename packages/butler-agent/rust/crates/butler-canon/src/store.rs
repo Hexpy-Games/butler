@@ -52,6 +52,8 @@ pub enum Error {
     TagExists { existing: Value },
     #[error("epic is running")]
     Running,
+    #[error("permission denied")]
+    Permission,
     #[error("not found")]
     NotFound,
     #[error("invalid fractional rank")]

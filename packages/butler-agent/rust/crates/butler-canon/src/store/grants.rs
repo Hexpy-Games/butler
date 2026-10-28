@@ -37,6 +37,9 @@ fn printable(c: char) -> bool {
 }
 
 pub fn admit(tx: &Transaction<'_>, ctx: &Context, capability: &str) -> Result<Value> {
+    if let Some(result) = check(tx, ctx, capability)? {
+        return Ok(result);
+    }
     let client = text(&ctx.actor, "client")?;
     let person = text(&ctx.actor, "person")?;
     let old = rows(
@@ -45,28 +48,10 @@ pub fn admit(tx: &Transaction<'_>, ctx: &Context, capability: &str) -> Result<Va
         params![client, person],
     )?
     .pop();
-    if let Some(row) = &old {
-        let allowed: Vec<String> = serde_json::from_str(text(row, "allowed_json")?)?;
-        if matches!(row["state"].as_str(), Some("pending" | "allowed"))
-            && allowed.iter().any(|s| s == capability)
-        {
-            return Ok(json!({"allowed":true}));
-        }
-        if row["state"] == "denied" {
-            return Ok(json!({"allowed":false,"code":"permission"}));
-        }
-        if row["state"] == "pending" {
-            return Ok(json!({"allowed":false,"code":"trust_pending"}));
-        }
-    }
-    let id = old
-        .as_ref()
-        .and_then(|r| r["id"].as_str())
-        .map(str::to_owned)
-        .unwrap_or(crate::work_ids::IdGenerator::global_next(
-            crate::work_ids::IdKind::Grant,
-            ctx.now,
-        )?);
+    let id = match old.as_ref().and_then(|r| r["id"].as_str()) {
+        Some(id) => id.to_owned(),
+        None => crate::work_ids::IdGenerator::global_next(crate::work_ids::IdKind::Grant, ctx.now)?,
+    };
     let mut requested: Vec<String> = CAPABILITIES.iter().map(|s| (*s).into()).collect();
     if let Some(row) = &old {
         let allowed: Vec<String> = serde_json::from_str(text(row, "allowed_json")?)?;
@@ -133,4 +118,39 @@ pub(super) fn emit(
 ) -> Result<()> {
     tx.execute(sql::OUTBOX, params![topic, payload.to_string(), ctx.now])?;
     Ok(())
+}
+
+/// None means admission must upsert/reopen a grant on the writer lane.
+pub fn check(db: &Connection, ctx: &Context, capability: &str) -> Result<Option<Value>> {
+    let client = text(&ctx.actor, "client")?;
+    let person = text(&ctx.actor, "person")?;
+    let old = rows(
+        db,
+        "SELECT * FROM canon_mcp_grants WHERE client_name=?1 AND person=?2",
+        params![client, person],
+    )?
+    .pop();
+    if let Some(row) = &old {
+        let allowed: Vec<String> = serde_json::from_str(text(row, "allowed_json")?)?;
+        if matches!(row["state"].as_str(), Some("pending" | "allowed"))
+            && allowed.iter().any(|s| s == capability)
+        {
+            return Ok(Some(json!({"allowed":true})));
+        }
+        if row["state"] == "denied" {
+            return Ok(Some(json!({"allowed":false,"code":"permission"})));
+        }
+        if row["state"] == "pending" {
+            return Ok(Some(json!({"allowed":false,"code":"trust_pending"})));
+        }
+    }
+    Ok(None)
+}
+/// Recheck in the same snapshot/transaction as the delegated operation.
+pub fn require(db: &Connection, ctx: &Context, capability: &str) -> Result<()> {
+    if check(db, ctx, capability)?.is_some_and(|r| r["allowed"] == true) {
+        Ok(())
+    } else {
+        Err(Error::Permission)
+    }
 }

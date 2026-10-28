@@ -80,9 +80,20 @@ pub struct SpecBody {
     pub criteria: Vec<Criterion>,
 }
 #[derive(Debug, Serialize, Deserialize)]
+pub struct EpicSummary {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub revision: i64,
+    pub plan: Option<PlanRef>,
+    pub tags: Vec<Tag>,
+    pub assignee: Option<String>,
+    pub updated_at: i64,
+}
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Page {
     pub plans: Vec<Plan>,
-    pub epics: Vec<Epic>,
+    pub epics: Vec<EpicSummary>,
     pub cursor: Option<String>,
 }
 
@@ -108,6 +119,7 @@ pub fn project_epic(row: &Value, db: &Connection) -> Result<Epic> {
             s.id.clone(),
         )
     });
+    let history = activity::mcp_page(db, text(row, "id")?, None)?;
     Ok(Epic {
         id: text(row, "id")?.into(),
         project_id: text(row, "project_id")?.into(),
@@ -120,8 +132,8 @@ pub fn project_epic(row: &Value, db: &Connection) -> Result<Epic> {
         revision: row["revision"].as_i64().ok_or(Error::Invalid("revision"))?,
         tags: serde_json::from_value(row["tags"].clone())?,
         specs,
-        activity: serde_json::from_value(row["activity"].clone())?,
-        activity_before: row["activity_before"].as_i64(),
+        activity: serde_json::from_value(history["activity"].clone())?,
+        activity_before: history["activity_before"].as_i64(),
     })
 }
 fn specs(nodes: &Value) -> Result<Vec<Spec>> {

@@ -136,6 +136,7 @@ fn error(error: StorageError) -> GatewayApplicationError {
         return GatewayApplicationError::internal_from(error);
     };
     let status = match *code {
+        "permission" => 403,
         "conflict" | "tag_exists" | "running" => 409,
         "work_model_not_found" => 404,
         "invalid_rank" | "work_model_invalid" => 400,

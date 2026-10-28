@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 mod pagination;
 mod permissions;
+mod privacy;
 mod proposals;
 mod races;
 mod writes;
@@ -41,6 +42,10 @@ fn canon_only(value: &Value) {
                 canon_only(value);
             }
         }
+        Value::String(s) => assert!(
+            !s.contains("PRIVATE_CHAT_DRAFT_719"),
+            "chat draft escaped MCP boundary"
+        ),
         _ => {}
     }
 }
