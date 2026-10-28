@@ -188,3 +188,53 @@ async fn interrupted_write(point: &str) {
     owner.close().await.unwrap();
     std::fs::remove_dir_all(root).unwrap();
 }
+
+// test-category: race
+#[tokio::test]
+async fn download_snapshot_after_unlink_is_not_found() {
+    let root = std::env::temp_dir().join(format!("butler-file-sweep-{}", uuid::Uuid::new_v4()));
+    let owner = AppMessageFiles::new(&root, Arc::new(Clock));
+    let bytes = Bytes::from_static(b"complete original\n");
+    let written = owner
+        .write_upload(AppFileWrite {
+            name: "note.txt".into(),
+            mime_type: Some("text/plain".into()),
+            bytes: bytes.clone(),
+        })
+        .await
+        .unwrap();
+    let snapshot = AppMessageFileSnapshot {
+        title: written.title,
+        source_label: written.source_label,
+        deliverable: written.deliverable,
+        id: written.id,
+        owner_session_id: None,
+        message_id: None,
+        kind: written.kind,
+        mime_type: written.mime_type,
+        safe_name: written.safe_name,
+        size_bytes: written.size_bytes,
+        width: None,
+        height: None,
+        sha256: written.sha256,
+        storage_name: written.storage_name,
+        created_at: written.created_at,
+    };
+    assert_eq!(owner.read_original(snapshot.clone()).await.unwrap(), bytes);
+    // GET has its SQLite snapshot, but its file job has not run yet.
+    let download = owner.read_original(snapshot.clone());
+    owner.remove_original(snapshot.id.clone()).await.unwrap();
+    assert!(matches!(
+        download.await.unwrap_err(),
+        GatewayApplicationError::Public { status: 404, code, .. }
+            if code == "message_file_not_found"
+    ));
+    // Other filesystem failures must still surface as internal errors.
+    std::fs::create_dir(root.join("app-server/message-files").join(&snapshot.id)).unwrap();
+    assert!(matches!(
+        owner.read_original(snapshot).await.unwrap_err(),
+        GatewayApplicationError::Internal { .. }
+    ));
+    owner.close().await.unwrap();
+    std::fs::remove_dir_all(root).unwrap();
+}
