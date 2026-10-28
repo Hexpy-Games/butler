@@ -1,4 +1,6 @@
 //! Explicit rule owner: inventory, lease-bound journal and request recovery.
+#[cfg(feature = "e2e-fixtures")]
+mod capture_fixture;
 mod inventory;
 mod journal;
 mod lifetime;
@@ -110,8 +112,7 @@ impl RememberedRuleOwner {
             return Err(failure("rule_write_cancelled"));
         }
         let receipt = self.capture(input, None, None).await?;
-        let _ = self.drain_captures().await;
-        Ok(journal::settled_receipt(self.root(), receipt).await)
+        Ok(self.finish_capture(receipt).await)
     }
 
     /// Remember from a chat, including a lasting repeat of its session-scoped instruction.
@@ -125,8 +126,7 @@ impl RememberedRuleOwner {
             return Err(failure("rule_write_cancelled"));
         }
         let receipt = self.capture(input, None, Some(session)).await?;
-        let _ = self.drain_captures().await;
-        Ok(journal::settled_receipt(self.root(), receipt).await)
+        Ok(self.finish_capture(receipt).await)
     }
 
     /// Correct a selected rule without changing its immutable binding.
@@ -143,8 +143,18 @@ impl RememberedRuleOwner {
             return Err(failure("rule_write_cancelled"));
         }
         let receipt = self.capture(input, Some(target), None).await?;
-        let _ = self.drain_captures().await;
-        Ok(journal::settled_receipt(self.root(), receipt).await)
+        Ok(self.finish_capture(receipt).await)
+    }
+
+    async fn finish_capture(&self, receipt: RememberedRuleReceipt) -> RememberedRuleReceipt {
+        let drained = self.drain_inline_captures().await;
+        let receipt = journal::settled_receipt(self.root(), receipt).await;
+        // An inline drain can re-arm WORK after the consumer consumed an earlier notice.
+        // Settle this attempt's receipt before waking the background owner again.
+        if drained.is_err() && journal::has_work(&self.root()) {
+            crate::cognition::signal_memory_work();
+        }
+        receipt
     }
 
     /// Delete the selected saved rule only. Chats and archived revisions are kept.
@@ -180,7 +190,11 @@ impl RememberedRuleOwner {
         })
         .await
         .map_err(failure_source)??;
-        self.drain_captures().await?;
+        let drained = self.drain_captures().await;
+        if drained.is_err() && journal::has_work(&self.root()) {
+            crate::cognition::signal_memory_work();
+        }
+        drained?;
         // Read-only fast path means a restart with no pending operation takes no lease.
         let pending = self.root().join("pending.json");
         if !tokio::task::spawn_blocking(move || pending.try_exists())
