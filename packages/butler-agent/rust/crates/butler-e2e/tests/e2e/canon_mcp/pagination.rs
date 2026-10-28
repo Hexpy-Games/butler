@@ -67,7 +67,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
             &tx,
             &private,
             "epic-000",
-            "proposal_opened",
+            ["proposal_opened", "proposal_applied", "proposal_declined"][n % 3],
             &format!("Private {n}"),
             None,
         )

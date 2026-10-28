@@ -61,7 +61,7 @@ fn page_visible(db: &Connection, epic: &str, before: Option<i64>, mcp: bool) -> 
     entities.push(json!({"id":epic}));
     let mut items = Vec::new();
     for entity in entities {
-        items.extend(rows(db,"SELECT seq,entity_id,kind,summary,body,actor_json,at FROM canon_activity WHERE entity_id=?1 AND seq<?2 AND (?3=0 OR kind NOT IN ('proposal_opened','proposal_applied','proposal_declined') OR COALESCE(json_extract(actor_json,'$.proposal_source'),json_extract(actor_json,'$.origin'))='mcp') ORDER BY seq DESC LIMIT 51",params![text(&entity,"id")?,before.unwrap_or(i64::MAX),mcp])?);
+        items.extend(rows(db,"SELECT seq,entity_id,kind,summary,body,actor_json,at FROM canon_activity WHERE entity_id=?1 AND seq<?2 AND (?3=0 OR kind NOT GLOB 'proposal_*' OR COALESCE(json_extract(actor_json,'$.proposal_source'),json_extract(actor_json,'$.origin'))='mcp') ORDER BY seq DESC LIMIT 51",params![text(&entity,"id")?,before.unwrap_or(i64::MAX),mcp])?);
     }
     items.sort_by_key(|r| std::cmp::Reverse(r["seq"].as_i64()));
     let more = items.len() > 50;
