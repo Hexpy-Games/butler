@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
+import { timeBasedFiniteAnimationsSettled } from "./animation-settle.ts";
 import { createNativeAppServer } from "./native-app-server.ts";
 import { judgeScreenshotPair } from "./visual-judge.ts";
 import { smokeBrowserArgs } from "./smoke-browser.ts";
@@ -82,8 +83,7 @@ async function settleNewChat(page: Page, coastal: boolean): Promise<void> {
         complete: image.complete, width: image.naturalWidth, error: String(error) }), { cause: error }); }
     }));
   });
-  await page.waitForFunction(() => document.getAnimations().every(animation =>
-    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+  await page.waitForFunction(timeBasedFiniteAnimationsSettled);
   if (coastal) {
     await page.waitForFunction(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('[data-module="butler.shoreline"]');
