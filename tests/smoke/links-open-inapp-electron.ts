@@ -48,6 +48,31 @@ try {
   assert.deepEqual(await a.main("globalThis.externalLinks"), []);
   facts.push({ chatClick: "passed", tab, owner: "mine" });
 
+  async function linkPoint(context: "app" | "page", selector: string) {
+    const read = <T>(code: string) => context === "app"
+      ? a.page.expression<T>(code)
+      : a.main<T>(`${contents}.executeJavaScript(${JSON.stringify(code)})`);
+    const measure = `(()=>{const link=document.querySelector(${JSON.stringify(selector)});
+      if(!link)return null;
+      const rect=link.getBoundingClientRect(),point={x:rect.right-2,y:rect.y+rect.height/2};
+      return rect.width>0 && rect.height>0 && document.elementFromPoint(point.x,point.y)?.closest('a')===link
+        ? {rect:[rect.x,rect.y,rect.width,rect.height],point} : null;
+    })()`;
+    // Zoom and fixed positioning can trigger a later virtual-list layout.
+    // Wait for a hit-testable target whose rectangle survives two paint frames.
+    await waitBrowser(() => read<boolean>(`(async()=>{
+      const before=${measure};if(!before)return false;
+      for(let frame=0;frame<2;frame++){
+        await new Promise(done=>requestAnimationFrame(done));
+        const after=${measure};
+        if(!after || after.rect.some((value,index)=>value!==before.rect[index]))return false;
+      }
+      return true;
+    })()`), "link layout stable before input");
+    const measured = await read<{ point: { x:number;y:number } } | null>(measure);
+    assert.ok(measured, "link remains hit-testable before input");
+    return measured.point;
+  }
   async function menu(context: "app" | "page", theme: "light" | "dark", zoom = 1, edge = false) {
     const suffix = zoom === 1 && !edge ? "" : `-${edge ? "edge" : "zoom"}`;
     await a.main(`${electron}.app.focus({steal:true});${a.win}.show();${a.win}.focus();${a.win}.moveTop();${electron}.nativeTheme.themeSource=${JSON.stringify(theme)};globalThis.linkMenus=[]`);
@@ -59,22 +84,23 @@ try {
       await a.main(`${a.win}.webContents.setZoomFactor(${zoom})`);
       await waitBrowser(() => a.page.expression(`Math.abs(devicePixelRatio-${display.scaleFactor*zoom})<0.01`), "App zoom applied");
       if (edge) await a.page.expression(`Object.assign(document.querySelector(${JSON.stringify(chatLink)}).style,{position:'fixed',right:'16px',bottom:'16px',zIndex:'9999'})`);
-      const point = await a.page.expression<{ x: number; y: number }>(`(()=>{const r=document.querySelector(${JSON.stringify(chatLink)}).getBoundingClientRect();return {x:r.right-2,y:r.y+r.height/2}})()`);
+      const point = await linkPoint(context, chatLink);
       click = { x:point.x*zoom, y:point.y*zoom };
-      await a.page.rightClick(click.x, click.y);
+      // CDP input uses page CSS pixels; native menu geometry uses window DIPs.
+      await a.page.rightClick(point.x, point.y);
     } else {
       await a.click("브라우저"); await a.call("activate", { id: tab });
       await a.main(`${contents}.setZoomFactor(${zoom})`);
       await waitBrowser(() => a.main(`${contents}.executeJavaScript('Math.abs(devicePixelRatio-${display.scaleFactor*zoom})<0.01')`), "page zoom applied");
       if (edge) await a.main(`${contents}.executeJavaScript("Object.assign(document.querySelector('#plain').style,{position:'fixed',right:'16px',bottom:'16px'})")`);
-      const point = await a.main<{ x:number;y:number }>(`${contents}.executeJavaScript("(()=>{const r=document.querySelector('#plain').getBoundingClientRect();return {x:r.right-2,y:r.y+r.height/2}})()")`);
+      const point = await linkPoint(context, "#plain");
       const offset = await a.main<{ x:number;y:number }>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.getBounds()`);
       click = { x:offset.x+point.x*zoom, y:offset.y+point.y*zoom };
       // Reuse the App's attached CDP debugger instead of competing for a second session.
       await a.main(`(()=>{const c=${contents};if(!c.debugger.isAttached())c.debugger.attach('1.3');
         globalThis.linkInputError=null;
         globalThis.linkInput=Promise.all(['mouseMoved','mousePressed','mouseReleased'].map(type=>c.debugger.sendCommand('Input.dispatchMouseEvent',
-          {type,x:${point.x*zoom},y:${point.y*zoom},button:type==='mouseMoved'?'none':'right',buttons:type==='mousePressed'?2:0,clickCount:1})))
+          {type,x:${point.x},y:${point.y},button:type==='mouseMoved'?'none':'right',buttons:type==='mousePressed'?2:0,clickCount:1})))
           .catch(error=>{globalThis.linkInputError=String(error)})})()`);
     }
     await waitBrowser(() => a.main("globalThis.linkMenus.length>0"), "native link menu");
