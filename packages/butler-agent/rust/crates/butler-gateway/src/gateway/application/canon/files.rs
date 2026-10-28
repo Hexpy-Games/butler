@@ -185,6 +185,21 @@ async fn sweep_batch(
     app: &AppApplication,
     expire: bool,
 ) -> Result<(Vec<String>, bool), GatewayApplicationError> {
+    if !expire {
+        let queued = app
+            .storage
+            .read(|db| {
+                db.query_row("SELECT EXISTS(SELECT 1 FROM app_file_sweep)", [], |row| {
+                    row.get::<_, bool>(0)
+                })
+                .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        if !queued {
+            return Ok((Vec::new(), false));
+        }
+    }
     let now = app.dependencies.identity_clock.now_iso();
     app.storage
         .execute(move |db| {
