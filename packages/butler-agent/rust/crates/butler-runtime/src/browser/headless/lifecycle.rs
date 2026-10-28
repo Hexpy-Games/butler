@@ -177,9 +177,31 @@ impl Headless {
         // reap) even when the caller is gone, e.g. past a gateway deadline:
         // an abandoned launch would leave a browser running untracked.
         let headless = self.clone();
-        tokio::spawn(async move { headless.start().await })
+        self.wait_for_start(tokio::spawn(async move { headless.start().await }))
             .await
-            .unwrap_or_else(|_| Err(json!({"status":"unavailable","reason":"browser_unavailable"})))
+    }
+
+    async fn wait_for_start(
+        &self,
+        start: tokio::task::JoinHandle<Result<Arc<Browser>, Value>>,
+    ) -> Result<Arc<Browser>, Value> {
+        // Bound the whole preparation, including installation and launch.
+        // Dropping the join handle detaches startup; it still registers and reaps.
+        match tokio::time::timeout(INSTALL_WAIT, start).await {
+            Ok(result) => result.unwrap_or_else(|_| {
+                Err(json!({"status":"unavailable","reason":"browser_unavailable"}))
+            }),
+            Err(_) => Err(self.preparing()),
+        }
+    }
+
+    fn preparing(&self) -> Value {
+        let mut result = json!({"status":"unavailable","reason":"browser_installing",
+            "recovery":"The browser is being prepared for use. Retry browser_open shortly; nothing was opened."});
+        if let Some(Progress::Running { received, total }) = self.installer.progress() {
+            result["progress"] = json!({"received":received,"total":total});
+        }
+        result
     }
 
     async fn start(self: &Arc<Self>) -> Result<Arc<Browser>, Value> {
@@ -190,10 +212,9 @@ impl Headless {
         let executable = match self.installer.executable_within(INSTALL_WAIT).await {
             Progress::Ready(path) => path,
             Progress::Running { received, total } => {
-                return Err(
-                    json!({"status":"unavailable","reason":"browser_installing","progress":{"received":received,"total":total},
-                    "recovery":"The browser is being installed for its first use. Retry browser_open shortly; nothing was opened."}),
-                );
+                let mut result = self.preparing();
+                result["progress"] = json!({"received":received,"total":total});
+                return Err(result);
             }
             Progress::Failed(reason) => {
                 return Err(json!({"status":"unavailable","reason":reason}));
