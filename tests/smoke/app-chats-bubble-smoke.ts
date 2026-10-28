@@ -68,6 +68,7 @@ try {
       await page.close();
     }
   }
+  await assertViewportResize();
   // While a reply runs, 대화 names the current tool in its status line, counted as its timeline group would.
   for (const [locale, sessionId, expected] of [["ko", "general", "웹 검색 중 · 3개"], ["en", "general", "Web search · 3"], ["ko", "butler-client", null]] as const) {
     for (const width of [1280, 375]) {
@@ -256,4 +257,42 @@ function failedTranscript(kind: "partial" | "empty" | "stopped"): SessionView {
   if (kind !== "stopped") messages.push({ ...base, id: "failure", cursor: 3, status: "failed", safe_error_code: "provider_invalid_request",
     text: "모델 응답 중단" });
   return { ...view, messages };
+}
+
+async function assertViewportResize() {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 960 }, colorScheme: theme, reducedMotion: "reduce" });
+  try {
+    await installFixture(page, transcript("general"));
+    await page.goto(`http://chats-bubble.localhost/?visual=components&theme=${theme}&locale=ko`);
+    await page.locator('[data-test-class~="assistant-footer"] time').waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const result = await page.evaluate(async () => {
+      const scroller = document.querySelector<HTMLElement>('[data-test-class~="message-virtual-scroll"]')!;
+      const rows = () => [...scroller.querySelectorAll<HTMLElement>('[data-index]')];
+      const measure = () => ({
+        height: scroller.clientHeight,
+        keys: rows().map(row => row.dataset.index),
+        gap: scroller.getBoundingClientRect().bottom - rows().at(-1)!.getBoundingClientRect().bottom,
+        headroom: rows()[0]!.getBoundingClientRect().top - scroller.getBoundingClientRect().top,
+      });
+      await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+      const before = measure();
+      const after = await new Promise<ReturnType<typeof measure>>(resolve => {
+        const observer = new ResizeObserver(() => {
+          if (scroller.clientHeight === before.height) return;
+          observer.disconnect();
+          requestAnimationFrame(() => resolve(measure()));
+        });
+        observer.observe(scroller);
+        Object.assign(scroller.style, { flex: "none", height: `${before.height - 160}px` });
+      });
+      return { before, after };
+    });
+    console.log(JSON.stringify({ viewportResize: result, theme }));
+    assert(result.before.headroom > 160, "conversation stays short enough for bottom alignment");
+    assert.equal(result.after.height, result.before.height - 160);
+    assert.deepEqual(result.before.keys, ["0", "1", "2"], "both messages and the chat intro are rendered");
+    assert.deepEqual(result.after.keys, result.before.keys, "resize keeps the virtual range");
+    assert(Math.abs(result.after.gap - result.before.gap) < 1, "bottom alignment updates by the next frame after resize delivery");
+  } finally { await page.close(); }
 }
