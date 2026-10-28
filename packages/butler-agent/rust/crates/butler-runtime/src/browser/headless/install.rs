@@ -93,6 +93,15 @@ impl Installer {
         })
     }
 
+    /// Latest install progress, also available to callers waiting for startup.
+    pub(crate) fn progress(&self) -> Option<Progress> {
+        self.state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .map(|receiver| receiver.borrow().clone())
+    }
+
     fn directory(&self, artifact: &Artifact) -> PathBuf {
         self.source
             .cache_root
