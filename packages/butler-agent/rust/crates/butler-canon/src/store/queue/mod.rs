@@ -142,11 +142,11 @@ pub fn pending(db: &Connection) -> Result<Vec<Value>> {
     rows(db, sql::PENDING, [])
 }
 
-/// Only unresolved cancellation identities, through the pending index.
+/// Every row is an unresolved cancellation identity; terminal receipts delete it.
 pub fn cancellations(db: &Connection) -> Result<Value> {
     Ok(json!(rows(
         db,
-        "SELECT op_id,source_session_id FROM canon_step_cancellations INDEXED BY canon_cancellations_pending WHERE state='pending'",
+        "SELECT op_id,source_session_id FROM canon_step_cancellations",
         []
     )?))
 }

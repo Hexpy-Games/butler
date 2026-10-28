@@ -112,7 +112,8 @@ async fn stop_source(
 }
 
 /// Native turn completion publishes changes on the same watch as canon writes.
-/// Retry only indexed pending cancellations, without waiting on projection here.
+/// Retry unresolved cancellations without waiting on an in-flight move.
+/// Skipped identities remain durable for the next native/canon change.
 pub(super) async fn reconcile(app: &AppApplication) -> Result<(), GatewayApplicationError> {
     let pending = app
         .dependencies
@@ -125,12 +126,16 @@ pub(super) async fn reconcile(app: &AppApplication) -> Result<(), GatewayApplica
         .await?;
     for row in pending.as_array().into_iter().flatten() {
         let op = field(row, "op_id")?;
-        let _projection = app.canon_projection_locks.acquire(op.clone()).await;
+        let Some(_projection) = app.canon_projection_locks.try_acquire(op.clone()) else {
+            continue;
+        };
         let chat = app.owner_chat(field(row, "source_session_id")?).await?;
-        let _delivery = app
+        let Some(_delivery) = app
             .canon_projection_locks
-            .acquire(format!("canon-delivery:{chat}"))
-            .await;
+            .try_acquire(format!("canon-delivery:{chat}"))
+        else {
+            continue;
+        };
         if let Err(error) = stop_source(app, op, false).await {
             tracing::warn!(%error, "Canon source cancellation remains pending");
         }

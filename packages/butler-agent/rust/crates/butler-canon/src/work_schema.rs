@@ -46,6 +46,7 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
         connection.execute_batch("ALTER TABLE canon_session_epics ADD COLUMN is_home INTEGER NOT NULL DEFAULT 0 CHECK(is_home IN (0,1));
             UPDATE canon_session_epics SET is_home=1")?;
     }
+    drop_cancellation_state(connection)?;
     connection.execute_batch(include_str!("work_schema/indexes.sql"))
 }
 
@@ -79,6 +80,21 @@ fn check_canon(db: &Connection) -> rusqlite::Result<()> {
                 Some("canon migration violates foreign keys".into()),
             ));
         }
+    }
+    Ok(())
+}
+
+fn drop_cancellation_state(connection: &Connection) -> rusqlite::Result<()> {
+    let has_state: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('canon_step_cancellations') WHERE name='state')",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_state {
+        connection.execute_batch(
+            "DROP INDEX IF EXISTS canon_cancellations_pending;
+            ALTER TABLE canon_step_cancellations DROP COLUMN state",
+        )?;
     }
     Ok(())
 }

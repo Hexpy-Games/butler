@@ -40,8 +40,6 @@ CREATE INDEX IF NOT EXISTS canon_queue_intents_pending ON canon_intents(state) W
 CREATE TABLE IF NOT EXISTS canon_step_cancellations (
   op_id TEXT PRIMARY KEY NOT NULL,
   epic_id TEXT NOT NULL,
-  source_session_id TEXT NOT NULL,
-  state TEXT NOT NULL DEFAULT 'pending' CHECK(state='pending')
+  source_session_id TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS canon_cancellations_pending ON canon_step_cancellations(state);
 CREATE INDEX IF NOT EXISTS canon_cancellations_epic ON canon_step_cancellations(epic_id);
