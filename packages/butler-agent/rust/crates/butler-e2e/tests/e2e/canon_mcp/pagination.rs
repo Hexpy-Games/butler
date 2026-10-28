@@ -105,7 +105,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
                 item["status"],
                 if n == 0 { "in_progress" } else { "planned" }
             );
-            assert_eq!(item["revision"], if n == 0 { 1 } else { 0 });
+            assert_eq!(item["revision"], i64::from(n == 0));
             assert_eq!(item["updated_at"], if n == 0 { 2 } else { 1 });
             assert_eq!(item["tags"], json!([]));
             assert!(item["assignee"].is_null());
