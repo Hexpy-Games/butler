@@ -4,7 +4,7 @@ import { isPreviewRelease } from "./preview-policy.ts";
 import { stageElectronPackageSource } from "./electron-package-source.ts";
 import { createHash } from "node:crypto";
 import {
-  chmodSync, constants, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync,
+  chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -348,7 +348,6 @@ export function createMacDmg(input: { appBundle: string; artifactPath: string })
     if (copy.status !== 0) throw new Error(`mac App staging failed: ${copy.stderr.trim()}`);
     symlinkSync("/Applications", join(staging, "Applications"));
     rmSync(input.artifactPath, { force: true });
-    const created = join(workDir, "Butler.dmg");
     const result = spawnSync("hdiutil", [
       "create",
       "-volname",
@@ -359,14 +358,11 @@ export function createMacDmg(input: { appBundle: string; artifactPath: string })
       "-format",
       // LZMA: about a third smaller than UDZO; this DMG is also the update download.
       "ULMO",
-      created,
+      input.artifactPath,
     ], { encoding: "utf8" });
     if (result.status !== 0) {
       throw new Error(`mac app DMG creation failed: ${result.stderr.trim() || result.stdout.trim()}`);
     }
-    // hdiutil's helper can hold the created image lock indefinitely after returning.
-    // Publish a fresh file so consumers never open the image the helper holds.
-    copyFileSync(created, input.artifactPath, constants.COPYFILE_FICLONE);
   } finally {
     makeTreeRemovable(workDir);
     rmSync(workDir, { recursive: true, force: true });
