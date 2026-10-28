@@ -6,7 +6,6 @@ pub(super) mod folder;
 mod git;
 mod mutations;
 mod owner;
-pub(super) mod reference;
 pub(super) mod rows;
 pub(super) mod token;
 pub(super) mod workspace_folder;
