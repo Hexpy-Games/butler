@@ -158,7 +158,7 @@ export async function collectImage(tab, args) {
     const source = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001,
       [{ code: imageSourceScript({ url: args.url }) }]);
     if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
-    return { status: "ok", ...source };
+    return { status: source.reason ? "refused" : "ok", ...source };
   }
   const observation = tab.observation;
   if (!observation || observation.epoch !== epoch) return { status: "refused", reason: "stale_ref" };
