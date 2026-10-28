@@ -71,7 +71,6 @@ pub(super) fn migrate(
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
-         CREATE INDEX IF NOT EXISTS projects_active_name_idx ON projects(display_name) WHERE archived=0;
          CREATE UNIQUE INDEX IF NOT EXISTS chats_runtime_hint_idx
            ON chats(runtime_session_hint) WHERE runtime_session_hint IS NOT NULL;
          DROP INDEX IF EXISTS initiated_retry_chat_idx;
