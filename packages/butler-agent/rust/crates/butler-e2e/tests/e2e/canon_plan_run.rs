@@ -89,6 +89,15 @@ async fn cb_07_plan_run_three_epics_in_canon_order() -> Result<(), HarnessError>
     drop(db);
     script.release();
     wait_done(&s, &chat, 3).await?;
+    // Canon completion can precede the App's final reply projection.
+    for turn in s.gw.turns(&chat).await? {
+        s.gw.wait_terminal(
+            &chat,
+            turn["id"].as_str().unwrap(),
+            std::time::Duration::from_secs(60),
+        )
+        .await?;
+    }
     let messages = s.gw.messages(&chat).await?;
     assert!(messages.iter().all(|m| {
         m["role"] != "user"
