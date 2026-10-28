@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { waitBrowser, type browserAgentApp } from "./browser-agent-app";
 
 type App=Awaited<ReturnType<typeof browserAgentApp>>;
@@ -11,7 +12,14 @@ export async function browserArchiveCheck(app: App, url: string, evidence: strin
   const tab=await app.call<string>("create",{owner:`conversation:${session}`,url,profile:"signed_out"});
   await waitBrowser(()=>app.main<boolean>(`(()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)});return t.status==='idle' && !t.view.webContents.isLoading() && t.view.webContents.getURL()===t.url})()`),"user-opened tab loaded before handover");
   await app.call("control",{id:tab,holder:"agent"});
+  // Close the real pane before assigning a hidden viewport. Backend hide alone leaves
+  // its mounted slot publishing bounds that can overwrite the assignment below.
+  const locale = await app.page.expression<"ko-KR" | "en-US">("document.documentElement.lang");
+  await app.click(getAppCopy(locale).sidebar.newChat);
+  await waitBrowser(() => app.page.expression("!document.querySelector('[data-slot=browser-pane]')"), "browser pane unmounted");
   await app.call("hide");
+  await waitBrowser(() => app.main(`(()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)});
+    return !t.slot?.visible && !t.attached && !t.detachWait && !t.attachWait})()`), "browser slot teardown published and view detached");
   await app.main(`(()=>{const browser=globalThis.browserAgentSubject,t=browser.tabs.get(${JSON.stringify(tab)});browser.detach(t);t.bounds={x:0,y:0,width:700,height:500,scale:1,visible:false}})()`);
   const admin=JSON.parse(await Bun.file(join(app.gateway.butlerData,"app/runtime/auth/local-admin.json")).text()).secret as string;
   const listed=await app.gateway.api<{tabs:Array<{id:string}>}>("/internal/browser/calls",{method:"POST",headers:{"x-butler-admin":admin},body:JSON.stringify({op:"tabs.list",session,args:{}})});
