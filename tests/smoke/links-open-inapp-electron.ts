@@ -180,8 +180,17 @@ try {
   const frameHtml = `<a id="plain" href="${new URL("/next", fixture.url).href}">Preview link</a><form method="post" action="/__links_fixture__/post"><input name="intent" value="fixture"><button id="submit">Submit</button></form>`;
   await a.main(`(()=>{globalThis.framePosts=[];return ${a.win}.webContents.session.protocol.handle('http',async request=>{if(!new URL(request.url).pathname.startsWith('/__links_fixture__'))return ${electron}.net.fetch(request,{bypassCustomProtocolHandlers:true});if(request.method==='POST')globalThis.framePosts.push(await request.text());return new Response(${JSON.stringify(frameHtml)},{headers:{'content-type':'text/html'}})})})()`);
   await a.click(getAppCopy("ko-KR").space.general);
+  // A committed URL precedes the product's dom-ready interceptor installation.
+  // Observe before appending; the product's earlier listener submits its script
+  // first, so this frame's subsequent executeJavaScript click runs after it.
+  await a.main(`(()=>{globalThis.linkPreviewReady=false;const contents=${a.win}.webContents;
+    const created=(_event,{frame})=>frame.once('dom-ready',()=>{
+      if(frame.url!==${JSON.stringify(frameUrl)})return;
+      globalThis.linkPreviewReady=true;contents.removeListener('frame-created',created);
+    });contents.on('frame-created',created);
+  })()`);
   await a.page.expression(`(()=>{const frame=document.createElement('iframe');frame.id='link-preview';frame.src=${JSON.stringify(frameUrl)};document.body.append(frame)})()`);
-  await waitBrowser(() => a.main(`${a.win}.webContents.mainFrame.frames.some(f=>f.url===${JSON.stringify(frameUrl)})`), "preview frame loaded");
+  await waitBrowser(() => a.main("globalThis.linkPreviewReady"), "preview frame dom-ready");
   await a.main(`${a.win}.webContents.mainFrame.frames.find(f=>f.url===${JSON.stringify(frameUrl)}).executeJavaScript("document.querySelector('#plain').click()")`);
   await waitBrowser(async () => (await state()).tabs.length === before + 1, "preview link opens my tab");
   facts.push({ previewLink: "passed" });
