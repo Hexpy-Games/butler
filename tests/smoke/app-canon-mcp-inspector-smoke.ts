@@ -18,6 +18,7 @@ try {
   await server.api("/personalization", { method: "PATCH", body: JSON.stringify({ profile: { principal_name: "연우" } }) });
   const { project } = await server.api<{ project: { id: string } }>("/projects", post({ source: "scratch", display_name: "명세 검토" }));
   const epic = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, post({ title: "연결 도구의 검토", assignee: "app-user" }));
+  const other = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, post({ title: "다른 검토" }));
   const db = new Database(join(server.butlerData,"agent-runtime/btcc.sqlite"));
   db.run("INSERT INTO canon_spec_nodes(node_id,scope_kind,scope_ref,epic_id,concern_id,visibility,lifecycle,source,created_at,updated_at,created_by) VALUES('shared-spec','project',?,?,'공유 명세','canon','draft','local',1,1,'{}')",[project.id,epic.id]); db.close();
   const pending = await fetch(new URL("canon/list",server.url),{ headers: { ...server.authHeaders,...headers } });
@@ -26,6 +27,7 @@ try {
   await server.api(`/canon/mcp-grants/${grants[0]!.id}/allow`,post({}));
   await server.api(`/canon/epics/${epic.id}`,{ method: "PATCH",headers,body: JSON.stringify({ expected_revision: epic.revision,status: "in_progress" }) });
   await server.api(`/canon/epics/${epic.id}/comments`,{ ...post({ body: "내용을 검토했습니다\n전체 검토 의견" }),headers });
+  for (let n = 0; n < 105; n++) await server.api(`/canon/epics/${epic.id}/comments`, { ...post({ body: `이전 의견 ${n}` }), headers });
   await server.api("/canon/specs/shared-spec/proposals",{ ...post({ base_revision: 0,body: "# 명세 변경",summary: "검토할 변경" }),headers });
   const { session_id } = await server.api<{ session_id: string }>(`/canon/epics/${epic.id}/conversation`,post({}));
   browser = await launchSmokeBrowser();
@@ -43,13 +45,38 @@ try {
       const detail = aside.locator('[data-test-class="canon-epic-detail"]'); await detail.waitFor();
       if (!before) {
         await detail.getByRole("img",{ name: "연우 · Claude Code 작업 중",exact: true }).first().waitFor();
-        await detail.getByText("전체 검토 의견",{ exact: false }).waitFor();
+        await detail.locator('[data-slot="avatar-badge"] [data-name="claude"]').first().waitFor();
+        await detail.getByText("이전 의견 104",{ exact: true }).waitFor();
         assert.equal(await detail.locator('[data-test-class="canon-mcp-proposal"]').count(),1);
       }
       const name = `${before ? "before" : "after"}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`;
       await page.screenshot({ path: join(shots,`${name}-header.png`),animations: "disabled" });
       if (!before) { await auditCanonCardFocus(page,detail); await detail.locator('[data-test-class="canon-activity"]').scrollIntoViewIfNeeded(); }
       await page.screenshot({ path: join(shots,`${name}-activity.png`),animations: "disabled" });
+      if (!before) {
+        const activity = detail.locator('[data-test-class="canon-activity"]');
+        await activity.getByRole("button", { name: "더 보기", exact: true }).click();
+        const older = activity.getByText("이전 의견 20", { exact: true });
+        await older.waitFor();
+        const descriptions = () => activity.locator('[data-slot="activity-feed-title"]').locator("../..").locator(":scope > :last-child").allTextContents();
+        const loaded = await descriptions();
+        const newest = `새 검토 ${width} ${theme} ${wallpaper}`;
+        await server.api(`/canon/epics/${epic.id}/comments`, { ...post({ body: newest }), headers });
+        await activity.getByText(newest, { exact: true }).waitFor();
+        await older.waitFor();
+        assert.equal(await activity.getByRole("button", { name: "더 보기", exact: true }).count(), 1);
+        const refresh = page.waitForResponse(response => response.url().endsWith(`/canon/epics/${epic.id}`) && response.request().method() === "GET");
+        await server.api(`/canon/epics/${other.id}/comments`, { ...post({ body: "다른 에픽의 의견" }), headers });
+        await (await refresh).finished();
+        await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+        await older.waitFor();
+        const current = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
+        assert.equal(current.activity?.[0]?.body, newest);
+        assert.deepEqual(await descriptions(), [newest, ...loaded]);
+        await activity.getByRole("button", { name: "더 보기", exact: true }).click();
+        await activity.getByText("전체 검토 의견", { exact: false }).waitFor();
+        assert.equal(await activity.getByRole("button", { name: "더 보기", exact: true }).count(), 0);
+      }
       console.log(JSON.stringify({ result: "PASS",before,width,theme,wallpaper,embedded: true,clipped: 0 }));
     } finally { await context.close(); }
   }

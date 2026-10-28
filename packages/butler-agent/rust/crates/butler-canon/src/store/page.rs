@@ -9,28 +9,14 @@ struct Cursor {
     done: bool,
     phase: u8,
     after: String,
+    #[serde(default)]
+    after_project: String,
 }
 
 pub fn list(db: &Connection, project: &str, input: &Value) -> Result<Value> {
     let plan = input["plan_id"].as_str().map(str::to_owned);
     let done = input["include_done"].as_bool().unwrap_or(false);
-    let mut cursor = Cursor {
-        project: project.into(),
-        plan: plan.clone(),
-        done,
-        ..Default::default()
-    };
-    if let Some(encoded) = input["cursor"].as_str() {
-        let decoded = URL_SAFE_NO_PAD
-            .decode(encoded)
-            .map_err(|_| Error::Invalid("invalid cursor"))?;
-        let old: Cursor =
-            serde_json::from_slice(&decoded).map_err(|_| Error::Invalid("invalid cursor"))?;
-        if old.project != project || old.plan != plan || old.done != done {
-            return Err(Error::Invalid("cursor filters changed"));
-        }
-        cursor = old;
-    }
+    let mut cursor = cursor(project, plan.clone(), done, input)?;
     let mut plans = Vec::new();
     let epics = Vec::new();
     if let Some(plan_id) = &plan {
@@ -59,25 +45,56 @@ pub fn list(db: &Connection, project: &str, input: &Value) -> Result<Value> {
         cursor.after.clear();
     }
     let limit = 101 - plans.len();
-    let (predicate, value) = if let Some(plan) = &plan {
-        ("plan_id=?1 AND", plan.as_str())
-    } else if !project.is_empty() {
-        ("project_id=?1 AND", project)
+    let mut found = if plan.is_none() && project.is_empty() {
+        unscoped_page(db, input, &cursor, limit)?
     } else {
-        (
-            "project_id IN (SELECT value FROM json_each(?1)) AND",
-            projects.as_str(),
-        )
+        let (predicate, value) = if let Some(plan) = &plan {
+            ("e.plan_id=?1 AND", plan.as_str())
+        } else {
+            ("e.project_id=?1 AND", project)
+        };
+        let status = if done {
+            ""
+        } else {
+            "AND e.canon_status!='done'"
+        };
+        epics_page(db, predicate, status, value, &cursor.after, limit)?
     };
-    let status = if done { "" } else { "AND canon_status!='done'" };
-    let mut epics = epics_page(db, predicate, status, value, &cursor.after, limit)?;
+    let mut epics = summaries(db, &found)?;
     let more = plans.len() + epics.len() > 100;
     if more {
         epics.pop();
+        found.pop();
     }
+    cursor.after_project = found
+        .last()
+        .and_then(|e| e["project_id"].as_str())
+        .unwrap_or_default()
+        .to_owned();
     cursor.after = epics.last().map(|e| e.id.clone()).unwrap_or_default();
     output(plans, epics, more.then_some(cursor))
 }
+fn cursor(project: &str, plan: Option<String>, done: bool, input: &Value) -> Result<Cursor> {
+    let mut cursor = Cursor {
+        project: project.into(),
+        plan,
+        done,
+        ..Default::default()
+    };
+    if let Some(encoded) = input["cursor"].as_str() {
+        let decoded = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .map_err(|_| Error::Invalid("invalid cursor"))?;
+        let old: Cursor =
+            serde_json::from_slice(&decoded).map_err(|_| Error::Invalid("invalid cursor"))?;
+        if old.project != project || old.plan != cursor.plan || old.done != done {
+            return Err(Error::Invalid("cursor filters changed"));
+        }
+        cursor = old;
+    }
+    Ok(cursor)
+}
+
 fn output(
     plans: Vec<public::Plan>,
     epics: Vec<public::EpicSummary>,
@@ -132,11 +149,56 @@ fn epics_page(
     value: &str,
     after: &str,
     limit: usize,
-) -> Result<Vec<public::EpicSummary>> {
-    let sql = format!("SELECT e.id,e.title,e.canon_status AS status,e.revision,e.assignee,e.updated_at,p.id AS plan_id,p.title AS plan_title
-        FROM (SELECT * FROM canon_epics WHERE {predicate} id>?2 {status} ORDER BY id LIMIT ?3) e
-        LEFT JOIN canon_plans p ON p.id=e.plan_id ORDER BY e.id");
-    let found = rows(db, &sql, params![value, after, limit])?;
+) -> Result<Vec<Value>> {
+    let sql = format!("SELECT e.project_id,e.id,e.title,e.canon_status AS status,e.revision,e.assignee,e.updated_at,p.id AS plan_id,p.title AS plan_title
+        FROM canon_epics e LEFT JOIN canon_plans p ON p.id=e.plan_id
+        WHERE {predicate} e.id>?2 {status} ORDER BY e.id LIMIT ?3");
+    rows(db, &sql, params![value, after, limit])
+}
+
+/// Each project gets a bounded index seek; archived projects are never visited.
+pub const UNSCOPED_EPICS_PAGE: &str = "SELECT e.project_id,e.id,e.title,e.canon_status AS status,e.revision,e.assignee,e.updated_at,p.id AS plan_id,p.title AS plan_title
+    FROM canon_epics e LEFT JOIN canon_plans p ON p.id=e.plan_id
+    WHERE e.project_id=?1 AND e.id>?2 AND (?3 OR e.canon_status!='done')
+    ORDER BY e.project_id,e.id LIMIT ?4";
+
+fn unscoped_page(
+    db: &Connection,
+    input: &Value,
+    cursor: &Cursor,
+    limit: usize,
+) -> Result<Vec<Value>> {
+    let mut projects: Vec<&str> = input["project_ids"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    projects.sort_unstable();
+    projects.dedup();
+    let mut found = Vec::new();
+    for project in projects
+        .into_iter()
+        .filter(|p| *p >= cursor.after_project.as_str())
+    {
+        let after = if project == cursor.after_project {
+            cursor.after.as_str()
+        } else {
+            ""
+        };
+        found.extend(rows(
+            db,
+            UNSCOPED_EPICS_PAGE,
+            params![project, after, cursor.done, limit - found.len()],
+        )?);
+        if found.len() == limit {
+            break;
+        }
+    }
+    Ok(found)
+}
+
+fn summaries(db: &Connection, found: &[Value]) -> Result<Vec<public::EpicSummary>> {
     let ids = json!(found.iter().map(|r| &r["id"]).collect::<Vec<_>>()).to_string();
     let mut tags = std::collections::HashMap::<String, Vec<public::Tag>>::new();
     for mut row in rows(
@@ -153,7 +215,8 @@ fn epics_page(
             .push(serde_json::from_value(row)?);
     }
     found
-        .into_iter()
+        .iter()
+        .cloned()
         .map(|mut row| {
             row["plan"] = if row["plan_id"].is_null() {
                 Value::Null

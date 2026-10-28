@@ -10,5 +10,5 @@ export function CanonAvatar({ person, agent }: { person: string | null; agent?: 
   if (!person) return null;
   const self = person === LOCAL_PERSON_ID;
   const name = self ? localName : personLabel(person);
-  return <Avatar name={name} size="xs" tone={self ? "self" : "other"} badge={agent ? <AgentGlyph sourceKey="" /> : undefined} label={agent ? appCopy.canon.mcp.working(name, agent.via) : appCopy.canon.personLabel(name, self)} />;
+  return <Avatar name={name} size="xs" tone={self ? "self" : "other"} badge={agent ? <AgentGlyph sourceKey={agent.client} /> : undefined} label={agent ? appCopy.canon.mcp.working(name, agent.via) : appCopy.canon.personLabel(name, self)} />;
 }

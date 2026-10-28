@@ -301,12 +301,20 @@ async fn cb_12_proposal_upgrade_preserves_rows_and_indexes() -> Result<(), Harne
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = Connection::open(&path)?;
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT name FROM sqlite_schema WHERE name='canon_proposals_open'"
+        )?,
+        Vec::<Vec<Value>>::new()
+    );
     db.execute_batch("DROP TABLE canon_proposals;
         CREATE TABLE canon_proposals(id TEXT PRIMARY KEY NOT NULL,session_id TEXT NOT NULL,
         source_turn_id TEXT NOT NULL,source_call_id TEXT NOT NULL,project_id TEXT,
         summary TEXT NOT NULL,changes_json TEXT NOT NULL CHECK(json_valid(changes_json)),
         state TEXT NOT NULL CHECK(state IN('open','applied','cancelled','superseded','stale')),
         resolved_by TEXT CHECK(resolved_by IN('card','chat')),created_at TEXT NOT NULL,resolved_at TEXT);
+        CREATE INDEX canon_proposals_open ON canon_proposals(created_at) WHERE state='open';
         INSERT INTO canon_proposals VALUES('old','session','turn','call','project','summary',
         '{\"changes\":[]}', 'applied','card','created','resolved');")?;
     let columns = "id,session_id,source_turn_id,source_call_id,project_id,summary,changes_json,state,resolved_by,created_at,resolved_at";
@@ -331,10 +339,28 @@ async fn cb_12_proposal_upgrade_preserves_rows_and_indexes() -> Result<(), Harne
     ] {
         db.prepare(sql)?;
     }
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT name FROM sqlite_schema WHERE name='canon_proposals_open'"
+        )?,
+        Vec::<Vec<Value>>::new()
+    );
     let before = snapshot(&db)?;
+    db.execute_batch(
+        "CREATE INDEX canon_proposals_open ON canon_proposals(created_at) WHERE state='open';",
+    )?;
     drop(db);
     s.restart().await?;
     s.agent.terminate().await?;
-    assert_eq!(snapshot(&Connection::open(path)?)?, before);
+    let db = Connection::open(path)?;
+    assert_eq!(snapshot(&db)?, before);
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT name FROM sqlite_schema WHERE name='canon_proposals_open'"
+        )?,
+        Vec::<Vec<Value>>::new()
+    );
     s.finish().await
 }

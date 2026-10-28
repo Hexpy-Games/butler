@@ -15,7 +15,7 @@ export interface CanonTag extends EpicTag {
 export interface CanonTagCreateInput { name: string; color: CanonTagColor }
 export interface CanonTagEditInput { expected_revision: number; name?: string; color?: CanonTagColor }
 export interface CanonTagExists extends Error { code: "tag_exists"; status: 409; existing: CanonTag }
-export interface CanonAgent { person: string; via: string }
+export interface CanonAgent { person: string; via: string; client: string }
 export interface CanonActor { person?: string | null; via?: string | null; origin?: string; client?: string }
 export interface CanonActivity { seq: number; entity_id: string; kind: string; summary: string; body: string | null; actor: CanonActor; at: number }
 export interface CanonActivityPage { activity: CanonActivity[]; activity_before: number | null }

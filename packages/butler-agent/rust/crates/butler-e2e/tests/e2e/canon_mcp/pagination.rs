@@ -9,6 +9,14 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
         .await?;
     let project = project(&s).await?;
     trust(&s).await?;
+    let other =
+        s.gw.post(
+            "/projects",
+            json!({"source":"scratch","display_name":"Other project"}),
+        )
+        .await?;
+    assert_eq!(other.status, 201, "{}", other.text);
+    let other = other.data()["project"]["id"].as_str().unwrap().to_owned();
     s.agent.terminate().await?;
     let mut db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let tx = store::Transaction::new(db.transaction()?).map_err(|error| store_error(&error))?;
@@ -16,13 +24,17 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
         now: 1,
         actor: json!({"person":"app-user","via":"app"}),
     };
-    for n in 0..205 {
+    for n in 0..410 {
         store::create_work(
             &tx,
             &ctx,
             &store::NewWork {
                 id: format!("epic-{n:03}"),
-                project_id: project.clone(),
+                project_id: if n < 205 {
+                    project.clone()
+                } else {
+                    other.clone()
+                },
                 title: if n == 0 {
                     "Epic 0 ".repeat(100)
                 } else {
@@ -76,81 +88,94 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
     tx.commit()?;
     drop(db);
     s.restart().await?;
-    let started = std::time::Instant::now();
-    let mut cursor = Value::Null;
-    let mut ids = Vec::new();
-    loop {
-        let mut args = json!({"project":project});
-        if !cursor.is_null() {
-            args["cursor"] = cursor;
+    for scoped in [true, false] {
+        let started = std::time::Instant::now();
+        let mut cursor = Value::Null;
+        let mut ids = Vec::new();
+        loop {
+            let mut args = if scoped {
+                json!({"project":project})
+            } else {
+                json!({})
+            };
+            if !cursor.is_null() {
+                args["cursor"] = cursor;
+            }
+            let page = call(&s, "canon_list", args).await?;
+            assert!(page["epics"].as_array().unwrap().len() <= 100);
+            for item in page["epics"].as_array().unwrap() {
+                let n = item["id"]
+                    .as_str()
+                    .unwrap()
+                    .trim_start_matches("epic-")
+                    .parse::<usize>()
+                    .unwrap();
+                assert_eq!(
+                    item["title"],
+                    if n == 0 {
+                        "Epic 0 ".repeat(100)
+                    } else {
+                        format!("Epic {n}")
+                    }
+                );
+                assert_eq!(
+                    item["status"],
+                    if n == 0 { "in_progress" } else { "planned" }
+                );
+                assert_eq!(item["revision"], i64::from(n == 0));
+                assert_eq!(item["updated_at"], if n == 0 { 2 } else { 1 });
+                assert_eq!(item["tags"], json!([]));
+                assert!(item["assignee"].is_null());
+                assert!(item["plan"].is_null());
+                let mut keys = item
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                keys.sort_unstable();
+                assert_eq!(
+                    keys,
+                    vec![
+                        "assignee",
+                        "id",
+                        "plan",
+                        "revision",
+                        "status",
+                        "tags",
+                        "title",
+                        "updated_at"
+                    ]
+                );
+            }
+            ids.extend(
+                page["epics"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|e| e["id"].as_str().unwrap().to_owned()),
+            );
+            cursor = page["cursor"].clone();
+            if cursor.is_null() {
+                break;
+            }
         }
-        let page = call(&s, "canon_list", args).await?;
-        assert!(page["epics"].as_array().unwrap().len() <= 100);
-        for item in page["epics"].as_array().unwrap() {
-            let n = item["id"]
-                .as_str()
-                .unwrap()
-                .trim_start_matches("epic-")
-                .parse::<usize>()
-                .unwrap();
-            assert_eq!(
-                item["title"],
-                if n == 0 {
-                    "Epic 0 ".repeat(100)
-                } else {
-                    format!("Epic {n}")
-                }
-            );
-            assert_eq!(
-                item["status"],
-                if n == 0 { "in_progress" } else { "planned" }
-            );
-            assert_eq!(item["revision"], i64::from(n == 0));
-            assert_eq!(item["updated_at"], if n == 0 { 2 } else { 1 });
-            assert_eq!(item["tags"], json!([]));
-            assert!(item["assignee"].is_null());
-            assert!(item["plan"].is_null());
-            let mut keys = item
-                .as_object()
-                .unwrap()
-                .keys()
-                .map(String::as_str)
-                .collect::<Vec<_>>();
-            keys.sort_unstable();
-            assert_eq!(
-                keys,
-                vec![
-                    "assignee",
-                    "id",
-                    "plan",
-                    "revision",
-                    "status",
-                    "tags",
-                    "title",
-                    "updated_at"
-                ]
-            );
+        let mut expected: Vec<_> = (0..205).map(|n| format!("epic-{n:03}")).collect();
+        if !scoped {
+            let others = (205..410).map(|n| format!("epic-{n:03}"));
+            if project < other {
+                expected.extend(others);
+            } else {
+                expected.splice(0..0, others);
+            }
         }
-        ids.extend(
-            page["epics"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|e| e["id"].as_str().unwrap().to_owned()),
+        assert_eq!(ids, expected);
+        eprintln!(
+            "CN-11 complete scoped={scoped} {}-epic stdio pagination: {:?}",
+            ids.len(),
+            started.elapsed()
         );
-        cursor = page["cursor"].clone();
-        if cursor.is_null() {
-            break;
-        }
     }
-    assert_eq!(
-        ids,
-        (0..205).map(|n| format!("epic-{n:03}")).collect::<Vec<_>>()
-    );
-    eprintln!(
-        "CN-11 complete 205-epic stdio pagination: {:?}",
-        started.elapsed()
-    );
     let epic = call(&s, "canon_get_epic", json!({"epic_id":"epic-000"})).await?;
     let recent = epic["activity"].as_array().unwrap();
     assert_eq!(recent.len(), 50);

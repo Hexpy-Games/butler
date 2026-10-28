@@ -1,6 +1,7 @@
 use rusqlite::Connection;
 
 pub(super) fn upgrade(db: &Connection) -> rusqlite::Result<()> {
+    db.execute_batch("DROP INDEX IF EXISTS canon_proposals_open;")?;
     let migrated: bool = db.query_row(
         "SELECT EXISTS(SELECT 1 FROM pragma_table_info('canon_proposals') WHERE name='source')",
         [],

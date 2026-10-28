@@ -12,20 +12,30 @@ export function EpicActivity({ epic }: { epic: EpicDetail }) {
   const [page, setPage] = useState<CanonActivityPage>({ activity: epic.activity ?? [], activity_before: epic.activity_before ?? null });
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
+  const epicId = useRef(epic.id);
   useEffect(() => {
-    generation.current++;
-    setPage({ activity: epic.activity ?? [], activity_before: epic.activity_before ?? null });
-    return () => { generation.current++; };
+    if (epicId.current !== epic.id) {
+      generation.current++;
+      epicId.current = epic.id;
+      setBusy(false);
+      setPage({ activity: epic.activity ?? [], activity_before: epic.activity_before ?? null });
+    } else {
+      setPage(current => ({
+        activity: [...new Map([...current.activity, ...(epic.activity ?? [])].map(row => [row.seq, row])).values()].sort((a, b) => b.seq - a.seq),
+        activity_before: current.activity.length ? current.activity_before : epic.activity_before ?? null,
+      }));
+    }
   }, [epic]);
+  useEffect(() => () => { generation.current++; }, []);
   const more = async () => {
     if (busy || page.activity_before === null) return;
     const epoch = generation.current;
     setBusy(true);
     try {
       const older = await api<CanonActivityPage>(`/canon/epics/${encodeURIComponent(epic.id)}/activity?before=${page.activity_before}`);
-      if (epoch === generation.current) setPage(current => ({ activity: [...current.activity, ...older.activity], activity_before: older.activity_before }));
+      if (epoch === generation.current) setPage(current => ({ activity: [...new Map([...current.activity, ...older.activity].map(row => [row.seq, row])).values()].sort((a, b) => b.seq - a.seq), activity_before: older.activity_before }));
     } catch (error) { if (epoch === generation.current) notifyError(error, appCopy.interfaceFeedback.requestFailed); }
-    finally { setBusy(false); }
+    finally { if (epoch === generation.current) setBusy(false); }
   };
   const time = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   const relative = (at: number) => {

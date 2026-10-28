@@ -99,7 +99,10 @@ try {
     await page.getByRole("tab", { name: "보드", exact: true }).click();
     const card = page.locator(`[data-kanban-item="${epic.id}"]`);
     await card.waitFor();
-    if (!before) await card.getByRole("img", { name: "연우 · Claude Code 작업 중", exact: true }).waitFor();
+    if (!before) {
+      await card.getByRole("img", { name: "연우 · Claude Code 작업 중", exact: true }).waitFor();
+      await card.locator('[data-slot="avatar-badge"] [data-name="claude"]').waitFor();
+    }
     await capture("board-sidebar");
     const planGroup = page.locator(`[data-canon-group="${plan.id}"] [data-test-class="canon-sidebar-group"]`);
     const showSidebar = page.getByRole("button", { name: "사이드바 보기", exact: true });
