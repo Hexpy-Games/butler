@@ -1,6 +1,15 @@
 import type { CanonCopy } from "../canon-copy.ts";
 export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
+    mcp: {
+      trustTitle: client => `${client}에 캐논 권한을 줄까요?`, trustDescription: "요청한 권한을 확인하세요", client: "연결 대상", person: "대리하는 사람",
+      trustNotice: person => `이 도구는 ${person} 님 권한으로 일합니다. 작업 내부 기록과 대화는 볼 수 없습니다.`,
+      capabilities: { "canon.read": "계획·과제·명세 읽기", "canon.epic.status": "과제 상태 바꾸기", "canon.epic.comment": "과제에 댓글 달기", "canon.epic.create": "백로그에 과제 만들기", "canon.spec.propose": "명세 변경 제안" },
+      allow: "허용", deny: "거절", revoke: "권한 해제", remove: "지우기", revoked: "권한을 해제했습니다", deleted: "지웠습니다",
+      connectedTools: "버틀러에 연결된 도구", noTools: "연결된 도구가 없습니다", capabilityCount: count => `권한 ${count}개`,
+      states: { allowed: "허용됨", pending: "대기 중", denied: "거절됨", revoked: "해제됨" },
+      working: (person, via) => `${person} · ${via} 작업 중`, butler: "버틀러", activity: "활동", noActivity: "아직 활동이 없습니다", more: "더 보기", proposal: "명세 변경 제안", apply: "반영",
+    },
     inlineEdit: { title: "제목 수정", description: "설명 편집", unsaved: "변경 내용을 저장할까요?", keep: "계속 편집", discard: "저장 안 함", saved: "저장했습니다", current: "현재 값" },
     attachFile: "파일 첨부", fileTooLarge: "10MB 이하만 첨부할 수 있습니다",
     tooManyAttachments: "파일은 20개까지 첨부할 수 있습니다", saving: "저장 중", uploadingFile: "업로드 중",
@@ -47,6 +56,15 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
+    mcp: {
+      trustTitle: client => `Give ${client} canon access?`, trustDescription: "Review requested access", client: "Connected tool", person: "Acting for",
+      trustNotice: person => `This tool acts for ${person}. Internal task records and conversations stay private.`,
+      capabilities: { "canon.read": "Read Plans, Epics and Specs", "canon.epic.status": "Change Epic status", "canon.epic.comment": "Comment on Epics", "canon.epic.create": "Create backlog Epics", "canon.spec.propose": "Propose Spec changes" },
+      allow: "Allow", deny: "Deny", revoke: "Revoke", remove: "Delete", revoked: "Access revoked", deleted: "Deleted",
+      connectedTools: "Connected tools", noTools: "No connected tools", capabilityCount: count => `${count} capabilities`,
+      states: { allowed: "Allowed", pending: "Pending", denied: "Denied", revoked: "Revoked" },
+      working: (person, via) => `${person} · ${via} working`, butler: "Butler", activity: "Activity", noActivity: "No activity yet", more: "More", proposal: "Spec change proposal", apply: "Apply",
+    },
     inlineEdit: { title: "Edit title", description: "Edit description", unsaved: "Save changes?", keep: "Keep editing", discard: "Discard", saved: "Saved", current: "Current value" },
     attachFile: "Attach file", fileTooLarge: "Files up to 10 MB",
     tooManyAttachments: "Attach up to 20 files", saving: "Saving", uploadingFile: "Uploading",

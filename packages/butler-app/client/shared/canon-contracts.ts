@@ -15,7 +15,13 @@ export interface CanonTag extends EpicTag {
 export interface CanonTagCreateInput { name: string; color: CanonTagColor }
 export interface CanonTagEditInput { expected_revision: number; name?: string; color?: CanonTagColor }
 export interface CanonTagExists extends Error { code: "tag_exists"; status: 409; existing: CanonTag }
+export interface CanonAgent { person: string; via: string }
+export interface CanonActor { person?: string | null; via?: string | null; origin?: string; client?: string }
+export interface CanonActivity { seq: number; entity_id: string; kind: string; summary: string; body: string | null; actor: CanonActor; at: number }
+export interface CanonActivityPage { activity: CanonActivity[]; activity_before: number | null }
+export interface CanonMcpProposal { id: string; spec_id: string; summary: string; current_body: string | null; proposed_body: string; actor: CanonActor; base_revision: number; created_at: string }
 export interface CanonWork {
+  agent?: CanonAgent | null;
   tags: EpicTag[];
   id: string;
   project_id: string;
@@ -89,7 +95,7 @@ export interface CanonAttachment {
   size_bytes: number; sha256: string; url: string; signed_url?: string; created_at: string;
   width?: number | null; height?: number | null;
 }
-export interface EpicDetail extends EpicCard { attachments?: CanonAttachment[]; specs: SpecNode[]; tasks: WorkTask[] }
+export interface EpicDetail extends EpicCard { activity?: CanonActivity[]; activity_before?: number | null; proposals?: CanonMcpProposal[]; attachments?: CanonAttachment[]; specs: SpecNode[]; tasks: WorkTask[] }
 export interface EpicProgressSnapshot {
   epic_id: string;
   running: boolean;

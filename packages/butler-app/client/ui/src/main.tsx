@@ -34,6 +34,6 @@ void startApp(() => createRoot(rootElement).render(
         ? <Suspense fallback={null}><DesignSystemViewer /></Suspense>
         : renderAppSurface(visualMode)}
     </WallpaperModulesProvider>
-    <AppDialogs />
+    <AppDialogs showCanonTrust={visualMode !== "design-system"} />
   </ErrorBoundary>,
 ), visualMode);

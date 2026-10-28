@@ -1,6 +1,7 @@
 //! Transaction operations. The caller owns an IMMEDIATE transaction and must
 //! roll it back on any error. No operation commits, opens a DB, or starts work.
 pub mod activity;
+mod agents;
 pub mod api;
 mod attachments;
 pub mod grants;

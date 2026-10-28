@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS canon_activity (
  kind TEXT NOT NULL CHECK(kind IN('comment','status','created','proposal_opened','proposal_applied','proposal_declined')),
  summary TEXT NOT NULL, body TEXT, at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS canon_activity_status ON canon_activity(entity_id,seq DESC) WHERE kind='status';
 CREATE INDEX IF NOT EXISTS canon_activity_entity ON canon_activity(entity_id,seq DESC);
 CREATE INDEX IF NOT EXISTS canon_proposals_mcp_project ON canon_proposals(project_id,created_at) WHERE source='mcp' AND state='open';
 CREATE INDEX IF NOT EXISTS canon_epics_page ON canon_epics(project_id,id);

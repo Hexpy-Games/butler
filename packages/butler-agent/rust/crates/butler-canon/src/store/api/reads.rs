@@ -11,6 +11,7 @@ fn cards(db: &Connection, plan: Option<&str>, project: &str) -> Result<Vec<Value
     for work in &mut works {
         *work = public_work(db, work.take())?;
     }
+    super::super::agents::enrich(db, &mut works)?;
     Ok(works)
 }
 pub(super) fn backlog_revision(db: &Connection, project: &str) -> Result<i64> {
@@ -40,7 +41,9 @@ pub fn plan(db: &Connection, id: &str) -> Result<Value> {
 pub fn epic(db: &Connection, id: &str) -> Result<Value> {
     let mut work = epic_only(db, id)?;
     work["proposals"] = super::super::mcp_proposals::open(db, id)?;
-    public_work(db, work)
+    let mut works = [public_work(db, work)?];
+    super::super::agents::enrich(db, &mut works)?;
+    Ok(works[0].take())
 }
 /// Canon-only snapshot: no runtime owners, sessions, proposals or task reads.
 pub fn epic_only(db: &Connection, id: &str) -> Result<Value> {

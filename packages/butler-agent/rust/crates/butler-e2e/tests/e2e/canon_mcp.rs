@@ -1,5 +1,6 @@
 //! CN-10/11: external clients use only the loopback canon API through stdio MCP.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
+mod agent;
 mod pagination;
 mod permissions;
 mod privacy;
@@ -20,6 +21,7 @@ fn canon_only(value: &Value) {
             for (key, value) in o {
                 assert!(
                     ![
+                        "agent",
                         "task_counts",
                         "running",
                         "sessions",
