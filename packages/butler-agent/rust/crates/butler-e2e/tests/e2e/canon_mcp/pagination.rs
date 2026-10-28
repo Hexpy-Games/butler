@@ -23,7 +23,11 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
             &store::NewWork {
                 id: format!("epic-{n:03}"),
                 project_id: project.clone(),
-                title: format!("Epic {n}"),
+                title: if n == 0 {
+                    "Epic 0 ".repeat(100)
+                } else {
+                    format!("Epic {n}")
+                },
                 description: String::new(),
                 origin: butler_canon::work_types::Origin::Dialog,
             },
@@ -31,6 +35,18 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
         )
         .map_err(|error| store_error(&error))?;
     }
+    store::set_label(
+        &tx,
+        &store::Context {
+            now: 2,
+            ..ctx.clone()
+        },
+        "epic-000",
+        0,
+        butler_canon::work_types::CanonStatus::InProgress,
+        &store::UserAct::new("app-user"),
+    )
+    .map_err(|error| store_error(&error))?;
     for n in 0..55 {
         store::activity::append(
             &tx,
@@ -71,6 +87,29 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
         let page = call(&s, "canon_list", args).await?;
         assert!(page["epics"].as_array().unwrap().len() <= 100);
         for item in page["epics"].as_array().unwrap() {
+            let n = item["id"]
+                .as_str()
+                .unwrap()
+                .trim_start_matches("epic-")
+                .parse::<usize>()
+                .unwrap();
+            assert_eq!(
+                item["title"],
+                if n == 0 {
+                    "Epic 0 ".repeat(100)
+                } else {
+                    format!("Epic {n}")
+                }
+            );
+            assert_eq!(
+                item["status"],
+                if n == 0 { "in_progress" } else { "planned" }
+            );
+            assert_eq!(item["revision"], if n == 0 { 1 } else { 0 });
+            assert_eq!(item["updated_at"], if n == 0 { 2 } else { 1 });
+            assert_eq!(item["tags"], json!([]));
+            assert!(item["assignee"].is_null());
+            assert!(item["plan"].is_null());
             let mut keys = item
                 .as_object()
                 .unwrap()
@@ -131,7 +170,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
     assert_eq!(reply.status().as_u16(), 200);
     let older_page: Value = reply.json().await?;
     let older = older_page["data"]["activity"].as_array().unwrap();
-    assert_eq!(older.len(), 6);
+    assert_eq!(older.len(), 7);
     assert!(older.iter().all(|r| r["seq"].as_i64().unwrap() < before));
     assert!(older_page["data"]["activity_before"].is_null());
     let reply =
@@ -139,7 +178,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
             .await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
     let older = reply.data()["activity"].as_array().unwrap();
-    assert_eq!(older.len(), 6);
+    assert_eq!(older.len(), 7);
     assert!(older.iter().all(|r| r["seq"].as_i64().unwrap() < before));
     assert!(reply.data()["activity_before"].is_null());
     s.finish().await
