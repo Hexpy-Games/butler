@@ -56,9 +56,9 @@ pub(in crate::gateway::application) fn enqueue_attention(
 
 fn capability_label(kind: butler_turn::btcc::ApprovalActionKind, language: &str) -> &'static str {
     use butler_turn::btcc::ApprovalActionKind::{
-        CreateCanon, CreateWorktree, EditFiles, EditImage, GenerateImage, ManageSchedule,
-        NetworkCommand, Other, RestartService, RunCommand, StartConversation, SwitchFolder,
-        UpdateProject, UseConnector, WebRequest,
+        CreateWorktree, EditFiles, EditImage, GenerateImage, ManageSchedule, NetworkCommand, Other,
+        RestartService, RunCommand, StartConversation, SwitchFolder, UpdateProject, UseConnector,
+        WebRequest,
     };
     let (ko, en) = match kind {
         EditFiles => ("파일 수정", "Edit files"),
@@ -69,7 +69,6 @@ fn capability_label(kind: butler_turn::btcc::ApprovalActionKind, language: &str)
         GenerateImage => ("이미지 생성", "Generate image"),
         EditImage => ("이미지 편집", "Edit image"),
         ManageSchedule => ("예약 작업 관리", "Manage schedule"),
-        CreateCanon => ("프로젝트 항목 생성", "Create project item"),
         UpdateProject => ("프로젝트 기록 변경", "Update project records"),
         StartConversation => ("대화 시작", "Start conversation"),
         RestartService => ("버틀러 다시 시작", "Restart Butler"),

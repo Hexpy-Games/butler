@@ -17,7 +17,22 @@ pub(super) struct Inputs {
     pub response_language: String,
     pub continuation_budget_enabled: bool,
 }
-pub(super) async fn reminders(
+pub(super) async fn surface(
+    factory: &GuidedTurnFactoryAdapter,
+    turn: &TurnRecord,
+    phase: &mut GuidedPhaseSelection,
+) -> Result<
+    (
+        Vec<butler_turn::btcc::ModelRoundTool>,
+        Arc<Mutex<Reminders>>,
+    ),
+    BtccError,
+> {
+    let tools = factory.tool_surface(phase).await?;
+    let reminders = reminders(factory, turn, &phase.execution_policy.role).await?;
+    Ok((tools, reminders))
+}
+async fn reminders(
     factory: &GuidedTurnFactoryAdapter,
     turn: &TurnRecord,
     role: &PolicyRole,
@@ -25,11 +40,24 @@ pub(super) async fn reminders(
     if matches!(role, PolicyRole::Steward | PolicyRole::Worker) {
         return Ok(Arc::new(Mutex::new(Reminders::new(Vec::new()))));
     }
-    let entries = factory
+    let mut entries = factory
         .preparation
         .authority
         .ask_reminders(turn.session_id.clone(), turn.turn_id.clone())
         .await?;
+    let owner = turn.session_id.clone();
+    let mut canon = factory
+        .documents
+        .canon_storage()
+        .canon_read(move |db| {
+            butler_canon::store::open_canon_proposals(db, Some(&owner), 201, None, "en")
+        })
+        .await
+        .map_err(|e| BtccError::relayed(e.code(), e.message()))?;
+    for entry in &mut canon {
+        entry["resolved_at"] = serde_json::Value::Null;
+    }
+    entries.extend(canon);
     Ok(Arc::new(Mutex::new(Reminders::new(entries))))
 }
 pub(super) async fn state(

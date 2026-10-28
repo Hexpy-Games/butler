@@ -21,6 +21,13 @@ impl Reminders {
         entries.retain(|v| seen.insert(v["ask_id"].clone().to_string()));
         Self { entries }
     }
+    pub(in crate::host::guided) fn replace_canon(&mut self, entry: Option<Value>) {
+        self.entries.retain(|v| v["kind"] != "canon_proposal");
+        if let Some(entry) = entry {
+            self.entries.push(entry);
+        }
+    }
+
     pub(in crate::host::guided) fn remove(&mut self, ask_id: &str) {
         self.entries.retain(|v| v["ask_id"] != ask_id);
     }

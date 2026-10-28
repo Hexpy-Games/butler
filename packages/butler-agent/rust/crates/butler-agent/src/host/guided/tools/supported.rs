@@ -19,7 +19,9 @@ fn builtin(name: &str) -> bool {
     matches!(
         ToolName::parse(name),
         Some(
-            ToolName::AskUser
+            ToolName::CanonRead
+                | ToolName::CanonPropose
+                | ToolName::AskUser
                 | ToolName::ResolveAsk
                 | ToolName::ReadFile
                 | ToolName::RunCommand
@@ -76,7 +78,6 @@ fn builtin(name: &str) -> bool {
                 | ToolName::ListToolCapabilities
                 | ToolName::ListWorkStreams
                 | ToolName::UpdateWorkStreamState
-                | ToolName::CanonPropose
                 | ToolName::CreateAutomation
                 | ToolName::UpdateAutomation
                 | ToolName::ListAutomations

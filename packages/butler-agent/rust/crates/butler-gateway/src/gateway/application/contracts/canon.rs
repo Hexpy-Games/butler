@@ -63,6 +63,15 @@ pub enum AppCanonOperation {
 }
 
 pub trait AppCanonPort: Send + Sync + 'static {
+    fn proposal(&self, action: String, _input: Value) -> ApplicationFuture<Value> {
+        Box::pin(async move {
+            if matches!(action.as_str(), "open" | "turns" | "attention") {
+                Ok(serde_json::json!([]))
+            } else {
+                Err(GatewayApplicationError::internal())
+            }
+        })
+    }
     fn canon_operation(&self, _operation: AppCanonOperation) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

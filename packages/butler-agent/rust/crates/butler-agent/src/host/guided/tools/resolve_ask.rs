@@ -12,6 +12,21 @@ pub(super) async fn execute(
         Ok(input) => {
             let id = input.ask_id.clone();
             let has_other_tool_result = owner.state.lock().has_other_tool_result;
+            if input.ask_id.starts_with("canon:") {
+                let result = if let Some(refusal) = butler_turn::btcc::resolve_ask_guard(
+                    invocation.turn,
+                    has_other_tool_result,
+                    &input,
+                ) {
+                    refusal
+                } else {
+                    super::canon::request(owner,"resolve",json!({"id":input.ask_id.trim_start_matches("canon:"),"outcome":input.outcome,"by":"chat"})).await
+                };
+                if result["ok"] == true || result["error"]["code"] == "canon_conflict" {
+                    owner.binding.open_asks.lock().remove(&id);
+                }
+                return JsonDocument::from_value(&result).map_err(super::effect::wire_error);
+            }
             let result = owner
                 .authority
                 .resolve_ask(invocation.turn, has_other_tool_result, input)
