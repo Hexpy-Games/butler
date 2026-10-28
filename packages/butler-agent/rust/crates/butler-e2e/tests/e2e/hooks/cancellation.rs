@@ -21,15 +21,21 @@ async fn hooks_shutdown_kills_pretool_tree_and_recovers_two_followups() -> Resul
     let accepted = s.gw.say("general", "Start the held read.").await?;
     let active = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
     let deadline = Instant::now() + Duration::from_secs(10);
-    while !pids.exists() {
-        assert!(Instant::now() < deadline, "hook never spawned");
+    let pid_lines = loop {
+        match fs::read_to_string(&pids) {
+            Ok(lines) if lines.ends_with('\n') && lines.lines().count() == 2 => break lines,
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        assert!(Instant::now() < deadline, "hook never recorded both PIDs");
         tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    };
     for text in ["First follow-up.", "Second follow-up."] {
         let queued = s.gw.post("/session-queue", json!({"chat_id":"general","text":text,"client_message_id":uuid::Uuid::new_v4().to_string()})).await?;
         assert_eq!(queued.status, 202, "{queued:?}");
     }
-    let descendants: Vec<u32> = fs::read_to_string(&pids)?
+    let descendants: Vec<u32> = pid_lines
         .lines()
         .map(|p| p.trim().parse().unwrap())
         .collect();
