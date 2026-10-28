@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { tmpdir } from "node:os";
 import { captureLinkMenu, compileMenuInspector, nativeMenuBounds } from "../support/butler-platform/link-menu-smoke-capture.mjs";
+import { pageShownBeforeNativeInput } from "../support/electron-view-input";
 import { shellReady } from "../support/browser-shell-acceptance";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
@@ -48,6 +49,31 @@ try {
   assert.deepEqual(await a.main("globalThis.externalLinks"), []);
   facts.push({ chatClick: "passed", tab, owner: "mine" });
 
+  async function linkPoint(context: "app" | "page", selector: string) {
+    const read = <T>(code: string) => context === "app"
+      ? a.page.expression<T>(code)
+      : a.main<T>(`${contents}.executeJavaScript(${JSON.stringify(code)})`);
+    const measure = `(()=>{const link=document.querySelector(${JSON.stringify(selector)});
+      if(!link)return null;
+      const rect=link.getBoundingClientRect(),point={x:rect.right-2,y:rect.y+rect.height/2};
+      return rect.width>0 && rect.height>0 && document.elementFromPoint(point.x,point.y)?.closest('a')===link
+        ? {rect:[rect.x,rect.y,rect.width,rect.height],point} : null;
+    })()`;
+    // Zoom and fixed positioning can trigger a later virtual-list layout.
+    // Wait for a hit-testable target whose rectangle survives two paint frames.
+    await waitBrowser(() => read<boolean>(`(async()=>{
+      const before=${measure};if(!before)return false;
+      for(let frame=0;frame<2;frame++){
+        await new Promise(done=>requestAnimationFrame(done));
+        const after=${measure};
+        if(!after || after.rect.some((value,index)=>value!==before.rect[index]))return false;
+      }
+      return true;
+    })()`), "link layout stable before input");
+    const measured = await read<{ point: { x:number;y:number } } | null>(measure);
+    assert.ok(measured, "link remains hit-testable before input");
+    return measured.point;
+  }
   async function menu(context: "app" | "page", theme: "light" | "dark", zoom = 1, edge = false) {
     const suffix = zoom === 1 && !edge ? "" : `-${edge ? "edge" : "zoom"}`;
     await a.main(`${electron}.app.focus({steal:true});${a.win}.show();${a.win}.focus();${a.win}.moveTop();${electron}.nativeTheme.themeSource=${JSON.stringify(theme)};globalThis.linkMenus=[]`);
@@ -59,22 +85,24 @@ try {
       await a.main(`${a.win}.webContents.setZoomFactor(${zoom})`);
       await waitBrowser(() => a.page.expression(`Math.abs(devicePixelRatio-${display.scaleFactor*zoom})<0.01`), "App zoom applied");
       if (edge) await a.page.expression(`Object.assign(document.querySelector(${JSON.stringify(chatLink)}).style,{position:'fixed',right:'16px',bottom:'16px',zIndex:'9999'})`);
-      const point = await a.page.expression<{ x: number; y: number }>(`(()=>{const r=document.querySelector(${JSON.stringify(chatLink)}).getBoundingClientRect();return {x:r.right-2,y:r.y+r.height/2}})()`);
+      const point = await linkPoint(context, chatLink);
       click = { x:point.x*zoom, y:point.y*zoom };
-      await a.page.rightClick(click.x, click.y);
+      // CDP input uses page CSS pixels; native menu geometry uses window DIPs.
+      await a.page.rightClick(point.x, point.y);
     } else {
       await a.click("브라우저"); await a.call("activate", { id: tab });
+      await pageShownBeforeNativeInput(a, contents);
       await a.main(`${contents}.setZoomFactor(${zoom})`);
       await waitBrowser(() => a.main(`${contents}.executeJavaScript('Math.abs(devicePixelRatio-${display.scaleFactor*zoom})<0.01')`), "page zoom applied");
       if (edge) await a.main(`${contents}.executeJavaScript("Object.assign(document.querySelector('#plain').style,{position:'fixed',right:'16px',bottom:'16px'})")`);
-      const point = await a.main<{ x:number;y:number }>(`${contents}.executeJavaScript("(()=>{const r=document.querySelector('#plain').getBoundingClientRect();return {x:r.right-2,y:r.y+r.height/2}})()")`);
+      const point = await linkPoint(context, "#plain");
       const offset = await a.main<{ x:number;y:number }>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.getBounds()`);
       click = { x:offset.x+point.x*zoom, y:offset.y+point.y*zoom };
       // Reuse the App's attached CDP debugger instead of competing for a second session.
       await a.main(`(()=>{const c=${contents};if(!c.debugger.isAttached())c.debugger.attach('1.3');
         globalThis.linkInputError=null;
         globalThis.linkInput=Promise.all(['mouseMoved','mousePressed','mouseReleased'].map(type=>c.debugger.sendCommand('Input.dispatchMouseEvent',
-          {type,x:${point.x*zoom},y:${point.y*zoom},button:type==='mouseMoved'?'none':'right',buttons:type==='mousePressed'?2:0,clickCount:1})))
+          {type,x:${point.x},y:${point.y},button:type==='mouseMoved'?'none':'right',buttons:type==='mousePressed'?2:0,clickCount:1})))
           .catch(error=>{globalThis.linkInputError=String(error)})})()`);
     }
     await waitBrowser(() => a.main("globalThis.linkMenus.length>0"), "native link menu");
@@ -116,6 +144,7 @@ try {
     facts.push({ context, theme, zoom, edge, labels, distance, externalOpen: "stubbed" });
   }
   async function nativeClick(selector: string, button = "left", modifiers: string[] = []) {
+    await pageShownBeforeNativeInput(a, contents);
     const point = await a.main<{ x: number; y: number }>(`${contents}.executeJavaScript(${JSON.stringify(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)})`);
     await a.main(`${contents}.sendInputEvent(${JSON.stringify({ type: "mouseDown", ...point, button, clickCount: 1, modifiers })});${contents}.sendInputEvent(${JSON.stringify({ type: "mouseUp", ...point, button, clickCount: 1, modifiers })})`);
   }
@@ -154,8 +183,17 @@ try {
   const frameHtml = `<a id="plain" href="${new URL("/next", fixture.url).href}">Preview link</a><form method="post" action="/__links_fixture__/post"><input name="intent" value="fixture"><button id="submit">Submit</button></form>`;
   await a.main(`(()=>{globalThis.framePosts=[];return ${a.win}.webContents.session.protocol.handle('http',async request=>{if(!new URL(request.url).pathname.startsWith('/__links_fixture__'))return ${electron}.net.fetch(request,{bypassCustomProtocolHandlers:true});if(request.method==='POST')globalThis.framePosts.push(await request.text());return new Response(${JSON.stringify(frameHtml)},{headers:{'content-type':'text/html'}})})})()`);
   await a.click(getAppCopy("ko-KR").space.general);
+  // A committed URL precedes the product's dom-ready interceptor installation.
+  // Observe before appending; the product's earlier listener submits its script
+  // first, so this frame's subsequent executeJavaScript click runs after it.
+  await a.main(`(()=>{globalThis.linkPreviewReady=false;const contents=${a.win}.webContents;
+    const created=(_event,{frame})=>frame.once('dom-ready',()=>{
+      if(frame.url!==${JSON.stringify(frameUrl)})return;
+      globalThis.linkPreviewReady=true;contents.removeListener('frame-created',created);
+    });contents.on('frame-created',created);
+  })()`);
   await a.page.expression(`(()=>{const frame=document.createElement('iframe');frame.id='link-preview';frame.src=${JSON.stringify(frameUrl)};document.body.append(frame)})()`);
-  await waitBrowser(() => a.main(`${a.win}.webContents.mainFrame.frames.some(f=>f.url===${JSON.stringify(frameUrl)})`), "preview frame loaded");
+  await waitBrowser(() => a.main("globalThis.linkPreviewReady"), "preview frame dom-ready");
   await a.main(`${a.win}.webContents.mainFrame.frames.find(f=>f.url===${JSON.stringify(frameUrl)}).executeJavaScript("document.querySelector('#plain').click()")`);
   await waitBrowser(async () => (await state()).tabs.length === before + 1, "preview link opens my tab");
   facts.push({ previewLink: "passed" });
