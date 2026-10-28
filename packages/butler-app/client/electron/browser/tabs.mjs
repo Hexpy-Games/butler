@@ -24,7 +24,7 @@ import { resolveDialog, requestClose } from "./dialogs.mjs";
 import { protectPartition, wireTab } from "./tab-events.mjs";
 import { clearOffer } from "./signin-offer.mjs";
 import { drainStills } from "./still-delivery.mjs";
-import { attachView, capturePage } from "./view-capture.mjs";
+import { attachView, capturePage, detachView } from "./view-capture.mjs";
 
 /** One registry per App; no web view before Browser activation. */
 class UserBrowser {
@@ -97,8 +97,9 @@ class UserBrowser {
     if (tab?.id === this.activeId && !dragging) this.pointer.hide();
     if (tab?.attached && tab.view) {
       void this.capture(tab);
-      if (!tab.attached.isDestroyed()) tab.attached.contentView.removeChildView(tab.view);
-      tab.attached = null;
+      detachView(tab, () => {
+        if (this.tabs.get(tab.id) === tab && !tab.closing && !tab.closeRequested && tab.view && !tab.view.webContents.isDestroyed()) this.sync(tab);
+      });
     }
   }
   sync(tab) {
