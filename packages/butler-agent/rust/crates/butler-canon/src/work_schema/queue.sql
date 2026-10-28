@@ -22,6 +22,13 @@ CREATE TABLE IF NOT EXISTS canon_session_queue (
   result_reported_at INTEGER,
   PRIMARY KEY(session_id,epic_id)
 );
+CREATE TABLE IF NOT EXISTS canon_session_queue_chains (
+  session_id TEXT NOT NULL,
+  chain_id TEXT NOT NULL,
+  plan_id TEXT REFERENCES canon_plans(id) ON DELETE SET NULL,
+  PRIMARY KEY(session_id,chain_id)
+);
+CREATE INDEX IF NOT EXISTS canon_queue_running ON canon_session_queue(state,step_op_id) WHERE state='running' AND hold_reason IS NULL AND step_op_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS canon_queue_chain ON canon_session_queue(session_id,chain_id,step_index,stack_position);
 CREATE UNIQUE INDEX IF NOT EXISTS canon_queue_active_epic ON canon_session_queue(epic_id) WHERE state IN ('waiting','running','held');
 CREATE INDEX IF NOT EXISTS canon_queue_op ON canon_session_queue(step_op_id) WHERE step_op_id IS NOT NULL;

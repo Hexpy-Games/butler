@@ -12,6 +12,7 @@ pub(crate) struct Script {
     pub path: Mutex<String>,
     pub codes: Mutex<Vec<String>>,
     pub context_seen: AtomicBool,
+    pub(crate) step_seen: AtomicBool,
     pub(crate) quick: AtomicBool,
     pub(super) hold_steward: AtomicBool,
     pub(super) steward_held: Semaphore,
@@ -63,6 +64,7 @@ pub(super) async fn start(
         path: Mutex::new(String::new()),
         codes: Mutex::new(Vec::new()),
         context_seen: AtomicBool::new(false),
+        step_seen: AtomicBool::new(false),
         quick: AtomicBool::new(false),
         hold_steward: AtomicBool::new(false),
         steward_held: Semaphore::new(0),
@@ -108,6 +110,9 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         }
     }
     let context = body.to_string();
+    if context.contains("now, starting at Conception. Start a fresh Work for this epic") {
+        script.step_seen.store(true, Ordering::SeqCst);
+    }
     if context.contains("## Canon epics in this conversation")
         && context.contains("untrusted_content")
         && context.contains("Release checks")
@@ -202,12 +207,18 @@ fn sequence(script: &Script, outputs: &[Value], request: &str) -> Vec<(&'static 
         "record_work_review",
         json!({"subject":"plan","verdict":"accept","summary":"Covers the evidence"}),
     ));
-    calls.push(("read_file", json!({"path":*script.path.lock().unwrap()})));
+    calls.push((
+        "read_file",
+        json!({"requests":[{"path":*script.path.lock().unwrap()}]}),
+    ));
     let done = json!([{"action_key":"verify","status":"done"}]);
     calls.push(("record_work_checkpoint",json!({"action_updates":done,"public_summary":"Evidence checked","next_step":"Review evidence"})));
     if script.revise {
         calls.push(("record_work_review",json!({"subject":"result","verdict":"revise","summary":"Check again","corrections":["Verify once more"],"correction_scope":"execution","action_updates":[{"action_key":"verify","status":"active"}]})));
-        calls.push(("read_file", json!({"path":*script.path.lock().unwrap()})));
+        calls.push((
+            "read_file",
+            json!({"requests":[{"path":*script.path.lock().unwrap()}]}),
+        ));
         calls.push((
             "record_work_checkpoint",
             json!({"action_updates":done,"public_summary":"Rechecked","next_step":"Review"}),

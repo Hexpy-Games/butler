@@ -26,7 +26,14 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(include_str!("work_schema/tags.sql"))?;
     connection.execute_batch(include_str!("work_schema/support.sql"))?;
     connection.execute_batch(include_str!("work_schema/proposals.sql"))?;
+    let had_chains: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='canon_session_queue_chains')", [], |r|r.get(0))?;
     connection.execute_batch(include_str!("work_schema/queue.sql"))?;
+    if !had_chains {
+        connection.execute_batch("INSERT INTO canon_session_queue_chains(session_id,chain_id,plan_id)
+            SELECT q.session_id,q.chain_id,COALESCE(MIN(json_extract(i.payload_json,'$.plan_id')),CASE WHEN COUNT(DISTINCT e.plan_id)=1 THEN MIN(e.plan_id) END)
+            FROM canon_session_queue q INDEXED BY canon_queue_active_epic JOIN canon_epics e ON e.id=q.epic_id LEFT JOIN canon_intents i ON i.op_id=q.step_op_id
+            WHERE q.state IN ('waiting','running','held') GROUP BY q.session_id,q.chain_id")?;
+    }
     let mut stmt = connection.prepare("PRAGMA table_info(canon_epic_work_links)")?;
     let columns = stmt
         .query_map([], |row| row.get::<_, String>(1))?
@@ -58,6 +65,7 @@ fn check_canon(db: &Connection) -> rusqlite::Result<()> {
         "canon_session_epics",
         "canon_session_queue",
         "canon_session_queue_heads",
+        "canon_session_queue_chains",
         "canon_epic_work_links",
     ] {
         if db

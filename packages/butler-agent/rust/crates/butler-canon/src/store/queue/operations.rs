@@ -2,6 +2,9 @@ use super::*;
 
 pub fn request(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -> Result<Value> {
     let op = text(input, "op")?;
+    if op == "remove" {
+        return remove_request(tx, ctx, session, input);
+    }
     let epics = if op == "plan_run" {
         let plan = text(input, "plan_id")?;
         read_plan(tx, plan)?;
@@ -17,12 +20,6 @@ pub fn request(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value
         if let Some(other) = elsewhere(tx, session, epic)? {
             return held_elsewhere(tx, ctx, session, &other);
         }
-    }
-    if op == "remove" {
-        let mut input = input.clone();
-        input["op"] = json!("delete");
-        input["expected_graph_revision"] = json!(revision(tx, session)?);
-        return edit(tx, ctx, session, &input);
     }
     let head = format!("head:{session}:{}", revision(tx, session)? + 1);
     let existing = items(tx, session)?;
@@ -70,6 +67,25 @@ pub fn request(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value
     engine::ready(tx, ctx, session)?;
     view(tx, session, &runtime::ProjectViews::new())
 }
+fn remove_request(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    session: &str,
+    input: &Value,
+) -> Result<Value> {
+    let epic = text(input, "epic_id")?;
+    let item = rows(tx, sql::ITEM, params![session, epic])?;
+    if item.first().is_none_or(|i| i["state"] == "removed") {
+        return Ok(
+            json!({"ok":false,"error":{"code":"not_queued_here","message":"This epic is not queued in this conversation. Read this conversation's queue and select an item from it."}}),
+        );
+    }
+    let mut input = input.clone();
+    input["op"] = json!("delete");
+    input["expected_graph_revision"] = json!(revision(tx, session)?);
+    edit(tx, ctx, session, &input)
+}
+
 fn attach(
     tx: &Transaction<'_>,
     session: &str,
@@ -239,6 +255,10 @@ pub fn session_deleted(
         &json!({"session_id":session}),
         |tx| {
             tx.execute(sql::DELETE_QUEUE, [session])?;
+            tx.execute(
+                "DELETE FROM canon_session_queue_chains WHERE session_id=?1",
+                [session],
+            )?;
             tx.execute(sql::DELETE_BINDINGS, [session])?;
             changed(tx, ctx, session)?;
             tx.execute(sql::CANCEL_INTENTS, [session])?;

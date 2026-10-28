@@ -38,6 +38,7 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
         "start_now" => {
             let next = chain.detach(&id, &running)?;
             let head = format!("head:{session}:{}", rev + 1);
+            tx.execute(sql::INSERT_CHAIN, params![session, head, id.as_str()])?;
             tx.execute(sql::DETACH, params![session, id.as_str(), head])?;
             next
         }

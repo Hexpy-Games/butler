@@ -39,9 +39,13 @@ pub fn view(db: &Connection, session: &str, views: &runtime::ProjectViews) -> Re
             .clone();
         output.push(json!({"chain_id":id,"origin":origin,"steps":steps}));
     }
-    let plan = items
-        .first()
-        .and_then(|i| i["plan_id"].as_str())
+    let plans = items
+        .iter()
+        .map(|i| i["plan_id"].as_str())
+        .collect::<BTreeSet<_>>();
+    let plan = (plans.len() == 1)
+        .then_some(plans.first().copied().flatten())
+        .flatten()
         .map(|id| read_plan(db, id))
         .transpose()?
         .map(|p| json!({"id":p["id"],"title":p["title"]}));

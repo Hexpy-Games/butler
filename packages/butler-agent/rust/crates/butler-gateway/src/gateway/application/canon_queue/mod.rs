@@ -2,6 +2,7 @@
 mod delete;
 mod holds;
 pub(in crate::gateway::application) mod steps;
+mod taking;
 use super::*;
 pub(super) use delete::reconcile;
 use rusqlite::{OptionalExtension, params};
@@ -11,7 +12,7 @@ pub(in crate::gateway::application) use steps::turn_ended;
 pub(super) async fn execute(
     app: &AppApplication,
     action: &str,
-    mut input: Value,
+    input: Value,
 ) -> Result<Value, GatewayApplicationError> {
     let chat = field(&input, "session_id")?;
     let session = app.runtime_hint(&chat).await?;
@@ -35,24 +36,18 @@ pub(super) async fn execute(
     } else {
         None
     };
-    input = args;
-    let _source_guards = if action == "take" {
-        let (guards, source) = take_stop(app, &session, field(&input, "epic_id")?).await?;
-        input["source_session_id"] = source["session_id"].clone();
-        input["source_step_op_id"] = source["step_op_id"].clone();
-        guards
+    let result = if action == "take" {
+        taking::execute(app, &chat, &session, args).await?
     } else {
-        Vec::new()
+        app.dependencies
+            .canon
+            .canon_operation(AppCanonOperation::Queue {
+                session_id: session,
+                action: action.into(),
+                input: args,
+            })
+            .await?
     };
-    let result = app
-        .dependencies
-        .canon
-        .canon_operation(AppCanonOperation::Queue {
-            session_id: session,
-            action: action.into(),
-            input,
-        })
-        .await?;
     let mut result = result;
     app.storage
         .read(move |db| {
@@ -135,82 +130,6 @@ pub(super) async fn apply(
         })
         .await?;
     Ok(())
-}
-async fn take_stop(
-    app: &AppApplication,
-    session: &str,
-    epic: String,
-) -> Result<(Vec<tokio::sync::OwnedMutexGuard<()>>, Value), GatewayApplicationError> {
-    let owner = app
-        .dependencies
-        .canon
-        .canon_operation(AppCanonOperation::Queue {
-            session_id: session.to_owned(),
-            action: "owner".into(),
-            input: json!({"epic_id":epic}),
-        })
-        .await?;
-    if owner.is_null() || owner["session_id"] == session {
-        return Err(public(
-            409,
-            "conflict",
-            "Epic is no longer in another conversation.",
-        ));
-    }
-    let Some(op) = owner["step_op_id"].as_str() else {
-        return Ok((Vec::new(), owner));
-    };
-    let projection = app.canon_projection_locks.acquire(op.to_owned()).await;
-    let chat = app.owner_chat(field(&owner, "session_id")?).await?;
-    let delivery = app
-        .canon_projection_locks
-        .acquire(format!("canon-delivery:{chat}"))
-        .await;
-    let source = op.to_owned();
-    let row=app.storage.read(move|db|db.query_row("SELECT i.id,i.chat_id,t.id,q.id,q.state FROM app_initiated_messages i LEFT JOIN turns t ON t.user_message_id=i.message_id LEFT JOIN session_queued_messages q ON q.chat_id=i.chat_id AND q.client_message_id=i.message_id WHERE i.source_key=?1",[source],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?))).optional().map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
-    if let Some((id, _, turn, queued, state)) = row {
-        if matches!(state.as_deref(), Some("queued" | "failed")) {
-            if let Some(queued) = queued {
-                app.delete_session_queue_owned(queued).await?;
-            }
-        } else if let Some(turn) = turn {
-            stop(app, turn).await?;
-        }
-        app.storage
-            .execute(move |db| {
-                db.execute(
-                    "UPDATE app_initiated_messages SET state='withdrawn' WHERE id=?1",
-                    [id],
-                )
-                .map_err(AppStorageError::sqlite)?;
-                Ok(())
-            })
-            .await
-            .map_err(app_error)?;
-    }
-    Ok((vec![projection, delivery], owner))
-}
-async fn stop(app: &AppApplication, turn: String) -> Result<(), GatewayApplicationError> {
-    let changed = Arc::new(tokio::sync::Notify::new());
-    let signal = changed.clone();
-    let _subscription = app
-        .subscribers
-        .subscribe(Arc::new(move |_| signal.notify_one()));
-    let state = turn.clone();
-    let active=app.storage.read(move|db|db.query_row("SELECT state NOT IN ('delivered','cancelled','failed','runtime_fault') FROM turns WHERE id=?1",[state],|r|r.get::<_,bool>(0)).map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
-    if !active {
-        return Ok(());
-    }
-    app.cancel_turn_owned(turn.clone()).await?;
-    loop {
-        let notified = changed.notified();
-        let id = turn.clone();
-        let terminal=app.storage.read(move|db|db.query_row("SELECT state IN ('delivered','cancelled','failed','runtime_fault') FROM turns WHERE id=?1",[id],|r|r.get::<_,bool>(0)).map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
-        if terminal {
-            return Ok(());
-        }
-        tokio::select! {()=app.dependencies.service_shutdown.cancelled()=>return Err(GatewayApplicationError::internal()),()=notified=>{}}
-    }
 }
 
 fn field(input: &Value, key: &str) -> Result<String, GatewayApplicationError> {

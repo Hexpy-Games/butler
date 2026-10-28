@@ -48,7 +48,7 @@ pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
                 epic.as_str(),
                 revision(tx, session)?
             );
-            let plan = read_work(tx, epic.as_str())?["plan_id"]
+            let plan = item["plan_id"]
                 .as_str()
                 .map(|id| read_plan(tx, id))
                 .transpose()?;

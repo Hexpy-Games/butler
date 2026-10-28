@@ -32,12 +32,23 @@ pub(in crate::gateway::application) async fn reconcile(
                 .await?;
         }
     }
-    let turns=app.storage.read(|db| {
-        let mut stmt=db.prepare("SELECT t.id FROM app_initiated_messages i JOIN turns t ON t.user_message_id=i.message_id WHERE i.kind='canon_step'").map_err(AppStorageError::sqlite)?;
-        stmt.query_map([],|r|r.get::<_,String>(0)).map_err(AppStorageError::sqlite)?.collect::<Result<Vec<_>,_>>().map_err(AppStorageError::sqlite)
-    }).await.map_err(app_error)?;
-    for turn in turns {
-        steps::turn_ended(&app.storage, &app.dependencies.canon, turn).await?;
+    let running = app
+        .dependencies
+        .canon
+        .canon_operation(AppCanonOperation::Queue {
+            session_id: String::new(),
+            action: "running".into(),
+            input: json!({}),
+        })
+        .await?;
+    for item in running.as_array().into_iter().flatten() {
+        let op = field(item, "step_op_id")?;
+        let turn = app.storage.read(move |db| db.query_row(
+            "SELECT t.id FROM app_initiated_messages i JOIN turns t ON t.user_message_id=i.message_id WHERE i.source_key=?1 AND i.kind='canon_step'",
+            [op], |r|r.get::<_,String>(0)).optional().map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
+        if let Some(turn) = turn {
+            steps::turn_ended(&app.storage, &app.dependencies.canon, turn).await?;
+        }
     }
     Ok(())
 }

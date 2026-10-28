@@ -88,6 +88,7 @@ fn insert(
 ) -> Result<()> {
     let (origin, message) = provenance;
     bind_session(tx, ctx, epic, session)?;
+    tx.execute(sql::INSERT_CHAIN, params![session, chain, epic])?;
     tx.execute(
         sql::INSERT,
         params![session, epic, chain, ordinal(index)?, origin, message],
@@ -129,6 +130,11 @@ fn index(input: &Value, field: &str) -> Result<usize> {
 }
 fn ordinal(value: usize) -> Result<i64> {
     i64::try_from(value).map_err(|_| Error::Invalid("index"))
+}
+
+/// Startup examines only unresolved running steps, through the live-state index.
+pub fn running(db: &Connection) -> Result<Value> {
+    Ok(json!(rows(db, sql::RUNNING, [])?))
 }
 
 /// Queue intents preserve transaction insertion order, including bundle order.

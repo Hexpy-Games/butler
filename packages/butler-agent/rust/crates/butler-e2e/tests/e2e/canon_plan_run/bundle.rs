@@ -107,3 +107,56 @@ async fn cb_14_bundle_two_stewards_then_next() -> Result<(), HarnessError> {
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn bundle_two_epics_in_one_conversation() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, chat) =
+        crate::canon_link::setup("CB-BUNDLE-DIRECT", false, false).await?;
+    let (plan, epics) = plan(&s, &script, &first).await?;
+    data(
+        s.gw.post(
+            &format!("/sessions/{chat}/canon/queue"),
+            json!({"op":"plan_run","plan_id":plan}),
+        )
+        .await?,
+        200,
+    );
+    script.wait_held().await;
+    let view = data(
+        s.gw.get(&format!("/sessions/{chat}/canon/queue")).await?,
+        200,
+    );
+    data(s.gw.post(&format!("/sessions/{chat}/canon/queue/edits"), json!({"expected_graph_revision":view["graph_revision"],"op":"join_stack","epic_id":epics[2],"target_epic_id":epics[1]})).await?, 200);
+    script.release();
+    let view = wait_done(&s, &chat, 3).await?;
+    assert_eq!(
+        view["chains"][0]["steps"][1]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    for epic in &epics[1..] {
+        let (status, owner): (String,String) = db.query_row("SELECT w.status,l.session_id FROM canon_epic_work_links l JOIN btcc_guided_works w ON w.work_id=l.btcc_work_id WHERE l.epic_id=?1", [epic], |r|Ok((r.get(0)?,r.get(1)?)))?;
+        assert_eq!(status, "completed");
+        assert_eq!(owner, butler_gateway::gateway::app_session_hint(&chat));
+    }
+    assert_eq!(db.query_row::<i64,_,_>("SELECT count(DISTINCT btcc_work_id) FROM canon_epic_work_links WHERE epic_id IN (?1,?2)", rusqlite::params![epics[1],epics[2]], |r|r.get(0))?, 2);
+    assert_eq!(db.query_row::<i64,_,_>("SELECT count(*) FROM canon_session_queue WHERE state='held' OR hold_reason IS NOT NULL", [], |r|r.get(0))?, 0);
+    drop(db);
+    let app = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    assert_eq!(
+        app.query_row::<i64, _, _>(
+            "SELECT count(*) FROM app_initiated_messages WHERE kind='canon_hold'",
+            [],
+            |r| r.get(0)
+        )?,
+        0
+    );
+    drop(app);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

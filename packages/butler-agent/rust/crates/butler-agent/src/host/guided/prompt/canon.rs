@@ -21,7 +21,10 @@ pub(super) async fn read(state: &GuidedTextState, turn: &TurnRecord) -> Result<S
     if epics.is_empty() {
         return Ok(String::new());
     }
-    let step = turn.original_message.strip_prefix("canon:epic/").filter(|id| epics.iter().any(|epic| epic["epic_ref"] == format!("canon:epic/{id}"))).map(|id| format!("\nProcess canon:epic/{id} now, starting at Conception. Start a fresh Work for this epic with replace_work_plan start_new:true, retaining this epic ref. Do not resume a different epic's blocked Work.\n")).unwrap_or_default();
+    let origin = &turn.context["initiatedOrigin"];
+    let step = origin["epic_id"].as_str().filter(|_| origin["kind"] == "canon_step")
+        .filter(|id| epics.iter().any(|epic| epic["epic_ref"] == format!("canon:epic/{id}")))
+        .map(|id| format!("\nProcess canon:epic/{id} now, starting at Conception. Start a fresh Work for this epic with replace_work_plan start_new:true, retaining this epic ref. Do not resume a different epic's blocked Work.\n")).unwrap_or_default();
     Ok(format!(
         "{INSTRUCTIONS}\n{step}\n{}",
         json(&serde_json::json!(epics))?

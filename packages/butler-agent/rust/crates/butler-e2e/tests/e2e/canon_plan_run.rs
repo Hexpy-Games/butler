@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod boundaries;
 mod bundle;
 mod deletion;
 mod edits;
