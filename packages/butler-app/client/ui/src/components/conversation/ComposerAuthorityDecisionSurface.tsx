@@ -24,7 +24,7 @@ function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
     ? `${path.slice(0, 30)}…${path.slice(-25)}` : path;
   const display = decision.pathDetails?.includes(text) ? shorten(text)
     : text === decision.title ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : text;
-  return <Typo.Text title={text} aria-label={text}>{display}</Typo.Text>;
+  return display === text ? text : <span title={text} aria-label={text}>{display}</span>;
 }
 
 export function ComposerAuthorityDecisionSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision }) {

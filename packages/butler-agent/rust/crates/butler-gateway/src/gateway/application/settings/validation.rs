@@ -26,6 +26,7 @@ const UPDATE_KEYS: &[&str] = &[
     "follow_up_behavior",
     "multiline_send_behavior",
     "appearance_theme",
+    "text_size",
     "collapse_message_box",
     "show_thinking",
     "reduce_motion",
@@ -56,6 +57,12 @@ pub(super) fn is_request(value: &Value) -> bool {
     let Some(input) = value.as_object() else {
         return false;
     };
+    if input
+        .get("text_size")
+        .is_some_and(|value| !matches!(value.as_str(), Some("default" | "large" | "larger")))
+    {
+        return false;
+    }
     if !input.keys().all(|key| UPDATE_KEYS.contains(&key.as_str())) {
         return false;
     }

@@ -14,6 +14,7 @@ use butler_turn::btcc::{AuthorityDecisionInput, AuthorityError, PrincipalAuthori
 #[derive(Clone)]
 pub(crate) struct AuthorityHandoff {
     authority: Arc<PrincipalAuthority>,
+    continuity: Arc<crate::host::memory_jobs::continuity::Continuity>,
     queue: Arc<InboundQueue>,
     now_iso: Arc<dyn Fn() -> String + Send + Sync>,
 }
@@ -21,11 +22,13 @@ pub(crate) struct AuthorityHandoff {
 impl AuthorityHandoff {
     pub(crate) fn new(
         authority: Arc<PrincipalAuthority>,
+        continuity: Arc<crate::host::memory_jobs::continuity::Continuity>,
         queue: Arc<InboundQueue>,
         now_iso: Arc<dyn Fn() -> String + Send + Sync>,
     ) -> Self {
         Self {
             authority,
+            continuity,
             queue,
             now_iso,
         }
@@ -167,6 +170,16 @@ impl AppAuthorityHandoff for AuthorityHandoff {
                 .await
                 .map_err(authority_error)?;
             Ok((public_values(requests)?, public_values(answers)?))
+        })
+    }
+
+    fn delete_session_context(&self, runtime_session_id: String) -> ApplicationFuture<()> {
+        let owner = self.continuity.clone();
+        Box::pin(async move {
+            owner
+                .forget(&runtime_session_id)
+                .await
+                .map_err(GatewayApplicationError::internal_from)
         })
     }
 

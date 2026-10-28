@@ -1,6 +1,7 @@
 //! Deterministic, read-only history rendering with a bounded content-version cache.
-use crate::context::{ContextCode, ContextError, ContextResult, ConversationPromptContextPlan};
-use butler_turn::conversation::HistoryWindow;
+use crate::context::{ContextBudgetSnapshot, ContextResult, ConversationPromptContextPlan};
+use butler_models::models::TokenEstimateInput;
+use butler_turn::conversation::{HistoryWindow, omitted_history_notice as omitted_notice};
 use sha2::{Digest, Sha256};
 use std::{
     collections::VecDeque,
@@ -11,87 +12,104 @@ static RENDERED: LazyLock<Mutex<VecDeque<(String, String)>>> =
     LazyLock::new(|| Mutex::new(VecDeque::new()));
 const CACHE_TURNS: usize = 256;
 const VERBATIM_TURNS: usize = 4;
-const MAX_EXCERPT_CHARS: usize = 4_000;
+mod trim;
+pub(crate) use trim::HistoryStarts;
 
 pub(super) fn render(
     window: &HistoryWindow,
     plan: &ConversationPromptContextPlan,
     cap: usize,
-) -> ContextResult<String> {
+    snapshot: &ContextBudgetSnapshot<'_>,
+    model_ref: Option<&str>,
+    history: (&str, &HistoryStarts),
+) -> ContextResult<(String, Vec<String>)> {
+    let charge = |text: &str| {
+        snapshot
+            .estimate(TokenEstimateInput::Text(text), model_ref)
+            .map(|estimate| butler_core::json::saturating_usize(estimate.tokens.ceil()))
+    };
     let turns: Vec<_> = plan
         .optional_turns
         .iter()
         .rev()
         .chain(&plan.required_turns)
         .collect();
-    let mut rendered = render_cached(window, &turns)?;
-    let mut digest = window.digest.clone();
-    let mut summaries = String::new();
-    for summary in &plan.selected_summaries {
-        summaries.push_str(&format!(
-            "\nsummary {} seq {}-{}: {}",
-            summary.summary_id, summary.covers_from_seq, summary.covers_to_seq, summary.text
-        ));
-    }
-    let mut prefix = format!("{digest}{summaries}");
+    let rendered = render_cached(window, &turns)?;
+    let summaries = summaries(plan);
+    let key = format!("{}:{model_ref:?}:{cap}", history.0);
+    let (dropped, mut prefix) = trim::select(
+        window,
+        &turns,
+        &rendered,
+        &summaries,
+        cap,
+        &charge,
+        history.1.get(&key).as_ref(),
+    )?;
+    let mut rendered = rendered[dropped..].to_vec();
     let mut text = join(&prefix, &rendered);
-    if charged(&text)? > cap {
-        rendered = plan
-            .optional_turns
+    if !fits(&text, cap, &charge)? {
+        // Pathological individual turns can exceed the entire budget. Preserve
+        // four turn identities and both speakers, with explicit excerpt markers.
+        // Summaries must not crowd the newest request/reply.
+        if let Some(summaries) = prefix
+            .strip_suffix(&summaries)
+            .filter(|_| !summaries.is_empty())
+        {
+            prefix = summaries.trim_end_matches('\n').to_owned();
+        }
+        let room = cap.saturating_sub(charge(&prefix)?);
+        let per_turn = room / rendered.len().max(1);
+        rendered = turns
             .iter()
-            .rev()
-            .chain(&plan.required_turns)
-            .map(|turn| render_condensed(turn, window))
+            .skip(dropped)
+            .map(|turn| render_excerpted(turn, window, per_turn, &charge))
             .collect::<ContextResult<Vec<_>>>()?;
         text = join(&prefix, &rendered);
     }
-
-    let mut dropped = 0;
-    while charged(&text)? > cap && rendered.len() > VERBATIM_TURNS {
-        if let Some(turn) = turns.get(dropped) {
-            digest = extend_digest(&digest, turn, cap / 10);
-        }
-        dropped += 1;
-        rendered.remove(0);
-        prefix = format!("{digest}{summaries}");
-        text = join(&prefix, &rendered);
+    if !fits(&text, cap, &charge)? {
+        return Ok((String::new(), Vec::new()));
     }
-
-    // Keep stepping down the verbatim guarantee. Each removed turn joins the
-    // dropped-range digest, and retained turn strings remain content-local.
-    while charged(&text)? > cap && rendered.len() > 1 {
-        if let Some(turn) = turns.get(dropped) {
-            digest = extend_digest(&digest, turn, cap / 10);
-        }
-        dropped += 1;
-        rendered.remove(0);
-        prefix = format!("{digest}{summaries}");
-        text = join(&prefix, &rendered);
+    if let Some(turn) = turns.get(dropped) {
+        history.1.record(
+            key,
+            trim::HistoryStart {
+                first: turn.turn_id.as_ref().unwrap_or(&turn.id).clone(),
+                prefix,
+                summaries,
+            },
+        );
     }
+    let ids = turns
+        .iter()
+        .skip(dropped)
+        .map(|turn| turn.turn_id.as_ref().unwrap_or(&turn.id).clone())
+        .collect();
+    Ok((text, ids))
+}
 
-    if charged(&text)? > cap && rendered.len() == 1 {
-        let Some(turn) = turns.last() else {
-            return Ok(String::new());
-        };
-        // Summaries are optional and must not crowd the newest request/reply.
-        summaries.clear();
-        prefix = digest.clone();
-        rendered[0] = render_excerpted(turn, window, cap)?;
-        text = join(&prefix, &rendered);
-        if charged(&text)? > cap {
-            // The digest is older context. Keep the newest turn bounded even
-            // when the digest's escaping overhead consumes the remaining room.
-            prefix.clear();
-            text = join(&prefix, &rendered);
-        }
-    }
+fn summaries(plan: &ConversationPromptContextPlan) -> String {
+    plan.selected_summaries
+        .iter()
+        .map(|summary| {
+            format!(
+                "summary {} seq {}-{}: {}",
+                summary.summary_id, summary.covers_from_seq, summary.covers_to_seq, summary.text
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
-    if charged(&text)? > cap {
-        // The fixed envelope itself exceeds pathological caps; do not fail prompt
-        // assembly over history size.
-        return Ok(String::new());
-    }
-    Ok(text)
+fn fits(
+    text: &str,
+    cap: usize,
+    charge: &dyn Fn(&str) -> ContextResult<usize>,
+) -> ContextResult<bool> {
+    // Both local estimators charge at most one token per UTF-8 byte. This
+    // proves a small projection fits without initializing the tokenizer;
+    // larger projections still use the model's exact estimator.
+    Ok(text.len() <= cap || charge(text)? <= cap)
 }
 
 fn join(prefix: &str, turns: &[String]) -> String {
@@ -139,15 +157,21 @@ fn render_excerpted(
     turn: &crate::context::ConversationSemanticTurnAtom,
     window: &HistoryWindow,
     cap: usize,
+    charge: &dyn Fn(&str) -> ContextResult<usize>,
 ) -> ContextResult<String> {
     let completed = completed_at(window, turn);
     let mut low = 0;
-    let mut high = MAX_EXCERPT_CHARS.min(cap);
-    let target = cap.saturating_sub(cap / 5);
+    let mut high = turn
+        .messages
+        .iter()
+        .map(|m| m.text.encode_utf16().count())
+        .max()
+        .unwrap_or(0);
+    let target = cap.saturating_sub(2);
     while low < high {
         let middle = low + (high - low).div_ceil(2);
         let candidate = render_excerpted_at(turn, completed, middle)?;
-        if charged(&candidate)? <= target {
+        if charge(&candidate)? <= target {
             low = middle;
         } else {
             high = middle - 1;
@@ -305,17 +329,25 @@ pub(super) fn document(history: String) -> ContextResult<butler_turn::btcc::Cont
     })
 }
 
-fn charged(text: &str) -> ContextResult<usize> {
-    serde_json::to_string(text)
-        .map(|value| value.len() + "## Conversation history\n".len())
-        .map_err(|e| ContextError::new(ContextCode::ContextJsonError, e.to_string()))
+fn prefix_text(omitted: usize, digest: &str, summaries: &str) -> String {
+    let notice = if omitted > 0 {
+        omitted_notice(omitted)
+    } else {
+        String::new()
+    };
+    [notice.as_str(), digest, summaries]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn extend_digest(
     digest: &str,
     turn: &crate::context::ConversationSemanticTurnAtom,
     cap: usize,
-) -> String {
+    charge: &dyn Fn(&str) -> ContextResult<usize>,
+) -> ContextResult<String> {
     let request = turn
         .messages
         .iter()
@@ -331,20 +363,50 @@ fn extend_digest(
         turn.turn_id.as_deref().unwrap_or(&turn.id),
         request.get(..end).unwrap_or_default()
     );
-    let mut lines: VecDeque<_> = digest
-        .lines()
-        .map(str::to_owned)
-        .chain(std::iter::once(line))
-        .collect();
-    while lines
-        .iter()
-        .map(|s| serde_json::to_string(s).map_or(usize::MAX, |v| v.len() + 1))
-        .sum::<usize>()
-        > cap
-    {
-        lines.pop_front();
+    bounded_digest(
+        &[digest, &line]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        cap,
+        charge,
+    )
+}
+
+fn bounded_digest(
+    digest: &str,
+    cap: usize,
+    charge: &dyn Fn(&str) -> ContextResult<usize>,
+) -> ContextResult<String> {
+    if digest.is_empty() {
+        return Ok(String::new());
     }
-    lines.into_iter().collect::<Vec<_>>().join("\n")
+    let mut lines = digest
+        .lines()
+        .map(|line| Ok((line, charge(&format!("{line}\n"))?)))
+        .collect::<ContextResult<VecDeque<_>>>()?;
+    let mut used: usize = lines.iter().map(|(_, cost)| cost).sum();
+    while used > cap {
+        let Some((_, cost)) = lines.pop_front() else {
+            break;
+        };
+        used = used.saturating_sub(cost);
+    }
+    let mut text = lines
+        .iter()
+        .map(|(line, _)| *line)
+        .collect::<Vec<_>>()
+        .join("\n");
+    while !lines.is_empty() && charge(&text)? > cap {
+        lines.pop_front();
+        text = lines
+            .iter()
+            .map(|(line, _)| *line)
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    Ok(text)
 }
 
 fn render_cached(
@@ -374,7 +436,7 @@ fn render_cached(
                     .unwrap_or_default()
             )
         );
-        rendered.push(cached(&version, || render_turn(turn, completed))?);
+        rendered.push(cached(&version, || render_condensed(turn, window))?);
     }
     Ok(rendered)
 }

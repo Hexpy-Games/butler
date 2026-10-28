@@ -41,8 +41,17 @@ pub(in crate::gateway::application) fn project_failed(
     let code = error_token(metadata.get("safeErrorCode"));
     // A turn interrupted by a crash is failed but always retryable: the retry
     // resumes it from its durable state.
-    let retryable =
-        (code == "runtime_fault" && requested_retryable) || code == INTERRUPTED_TURN_CODE;
+    let resume = code == INTERRUPTED_TURN_CODE || (code == "runtime_fault" && requested_retryable);
+    let fresh = requested_retryable && !resume && !recorded_tool_work(db, turn)?;
+    let retryable = resume || fresh;
+    let retry_mode = if resume {
+        Some("resume")
+    } else if fresh {
+        Some("fresh")
+    } else {
+        None
+    };
+    let retry_current = code == "runtime_fault" && requested_retryable;
     let label = if code == "internal_recovery_required" {
         "Butler could not complete this turn.".into()
     } else {
@@ -51,11 +60,18 @@ pub(in crate::gateway::application) fn project_failed(
             .map(|v| short_text(&v, 240))
             .unwrap_or_else(|| "Butler could not complete this turn.".into())
     };
-    let existing: Option<String> = db.query_row("SELECT id FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1", params![chat,turn], |row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
+    super::stream_message::incomplete(db, subscribers, chat, turn, now)?;
+    let content = text(message.get("text")).unwrap_or_else(|| label.clone());
+    let existing: Option<String> = db.query_row("SELECT id FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status='failed' ORDER BY rowid DESC LIMIT 1", params![chat,turn], |row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
     let message_id = existing.as_deref().unwrap_or(&ids.message_id);
-    if existing.is_some() { db.execute("UPDATE messages SET text=?1,status='failed',safe_error_code=?2,retryable=?3,updated_at=?4 WHERE id=?5",params![label,code,retryable,now,message_id]) }
-    else { db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code,retryable) VALUES(?1,?2,?3,'assistant',?4,'failed',?5,?5,?6,?7)",params![message_id,chat,turn,label,now,code,retryable]) }
+    if existing.is_some() { db.execute("UPDATE messages SET text=?1,status='failed',safe_error_code=?2,retryable=?3,updated_at=?4 WHERE id=?5",params![content,code,retryable,now,message_id]) }
+    else { db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code,retryable) VALUES(?1,?2,?3,'assistant',?4,'failed',?5,?5,?6,?7)",params![message_id,chat,turn,content,now,code,retryable]) }
         .map_err(AppStorageError::sqlite)?;
+    db.execute(
+        "UPDATE messages SET retry_mode=?1,retry_with_current_controls=?2 WHERE id=?3",
+        params![retry_mode, retry_current, message_id],
+    )
+    .map_err(AppStorageError::sqlite)?;
     db.execute("UPDATE turns SET state=?1,safe_status_label=?2,safe_error_code=?3,retryable=?4,cancellable=0,updated_at=?5 WHERE id=?6",params![if code=="runtime_fault"{"runtime_fault"}else{"failed"},if code=="runtime_fault"{"Runtime fault"}else{"Failed"},code,retryable,now,turn]).map_err(AppStorageError::sqlite)?;
     events::append(
         db,
@@ -82,6 +98,23 @@ pub(in crate::gateway::application) fn project_failed(
         now,
     )?;
     Ok(())
+}
+
+/// Events are read through the turn index before terminal retention compacts them.
+/// Any admitted tool execution is conservatively treated as an effect, even a read.
+fn recorded_tool_work(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
+    db.query_row(
+        "SELECT tool_work_recorded OR EXISTS(SELECT 1 FROM events \
+         WHERE turn_id=?1 AND turn_id<>'' AND (\
+         (type='agent.turn_event' AND \
+          json_extract(payload_json,'$.event.payload.bridgePhase')='btcc_operation') OR \
+         (type='progress.summary' AND \
+          json_extract(payload_json,'$.row.bridge_phase')='btcc_operation'))) \
+         FROM turns WHERE id=?1",
+        [turn],
+        |row| row.get(0),
+    )
+    .map_err(AppStorageError::sqlite)
 }
 
 pub(super) fn project_cancelled(

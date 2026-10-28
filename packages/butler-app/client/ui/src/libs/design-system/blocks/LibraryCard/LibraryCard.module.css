@@ -135,7 +135,9 @@
   padding: 0 var(--space-xs);
   border: var(--border-hairline) solid
     color-mix(in srgb, var(--accent) 52%, var(--line));
-  border-radius: calc(var(--radius-control) - var(--border-width-strong));
+  border-radius: calc(
+    var(--radius-control) - var(--border-width-strong) / var(--ui-scale)
+  );
   outline: none;
   background: var(--surface-raised);
   box-shadow: var(--focus-ring);

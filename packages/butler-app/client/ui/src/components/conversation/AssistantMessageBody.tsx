@@ -1,5 +1,6 @@
 import { CanonProposalCard } from "../canon/CanonProposalCard.tsx";
 import { useButlerStore } from "@/app/store.ts";
+import { InitiatedApprovalLine } from "./InitiatedApprovalLine";
 import { InitiatedPanels } from "./InitiatedPanels";
 import { isGeneralChat } from "@/app/isGeneralChat";
 import { projectTurnActivity } from "@/app/conversation-progress";
@@ -44,7 +45,9 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
       />}
       <MessageLiveGroup live={liveActivity} kept={kept} bubble={bubble}>
         {bubble ? <>
-          {failureNotice ? <AssistantFailureNotice message={message} /> : message.text.trim() ? (
+          {message.initiated?.kind === "approval_needed" ? (
+            <MessageBubble><InitiatedApprovalLine origin={message.initiated} /></MessageBubble>
+          ) : failureNotice ? <AssistantFailureNotice message={message} /> : message.text.trim() || message.initiated?.kind === "work_failed" ? (
             <MessageBubble><AssistantReplyText message={message} refreshFileUrls={refreshFileUrls} /></MessageBubble>
           ) : null}
           {stewardProgress && <ErrorBoundary fallback={null}><StewardParentProgress progress={stewardProgress} /></ErrorBoundary>}
@@ -98,13 +101,14 @@ function AssistantAttachments({ message, children }: { message: MessageRecord; c
     {message.plan_document ? (
       <PlanDocumentMessage plan={message.plan_document} bubble={isGeneralChat(message.chat_id)} />
     ) : null}
-    {message.status === "cancelled" && (
+    {(message.status === "cancelled" || message.incomplete === true) && (
       <div role="status">
-        <Tag ariaLabel={appCopy.conversation.stoppedStatus}>
-          {appCopy.conversation.stoppedStatus}
+        <Tag ariaLabel={message.incomplete === true ? appCopy.conversation.incompleteStatus : appCopy.conversation.stoppedStatus}>
+          {message.incomplete === true ? appCopy.conversation.incompleteStatus : appCopy.conversation.stoppedStatus}
         </Tag>
       </div>
     )}
+    {message.failure_notice && <AssistantFailureNotice message={message.failure_notice} />}
     {children}
     {message.limitation_codes?.includes("message_file_unavailable") && (
       <Tag ariaLabel={appCopy.conversation.attachmentUnavailable}>

@@ -53,8 +53,8 @@ at the usual min height, grows line by line up to `--textarea-grow-max-lines`
 (twelve), then scrolls. It has no resize handle. Sizing is native
 (`field-sizing: content`), so there is no measuring pass and no jump while
 typing or during IME composition. Older engines measure scrollHeight on edits
-and width changes. A stable scrollbar gutter keeps the text width when the
-scrollbar appears. The height changes instantly without animation, so reduced
+and width changes. No scrollbar gutter is reserved: a classic scrollbar takes
+its width only once the text scrolls. The height changes instantly without animation, so reduced
 motion has nothing to turn off. Without `autoGrow` the Textarea is unchanged.
 
 ```tsx

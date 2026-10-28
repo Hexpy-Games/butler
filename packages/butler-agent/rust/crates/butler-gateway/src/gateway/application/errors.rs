@@ -30,11 +30,11 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "queued_message_identity_conflict"
         | "project_source_scope_changed"
         | "session_relocating"
-        | "session_model_unavailable"
         | "authority_queue_immutable"
         | "queued_message_cas_conflict"
         | "turn_not_cancellable"
         | "space_project_boundary"
+        | "session_model_unavailable"
         | "library_group_exists" => public(409, error.code(), &error.detail()),
         "message_file_wrong_session" => public(403, error.code(), &error.detail()),
         "document_not_found"

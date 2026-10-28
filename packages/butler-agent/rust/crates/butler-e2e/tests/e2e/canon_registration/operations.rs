@@ -27,6 +27,7 @@ async fn related_plan_epic_move_edit_and_reorder_use_the_board_cas_writers()
     run(&s,&script,&chat,"계획으로 옮겨",vec![("canon_propose",json!({"project_id":project,"summary":"과제 이동","changes":[{"op":"epic.move","id":id,"expected_revision":epic["revision"],"plan_id":plan_id}]}))]).await?;
     let plan = data(s.gw.get(&format!("/canon/plans/{plan_id}")).await?, 200);
     assert_eq!(plan["title"], "정식 릴리스");
+    assert_eq!(plan["due_on"], "2027-01-31");
     assert_eq!(plan["works"][0]["id"], id);
     run(&s,&script,&chat,"순서를 반영해",vec![("canon_propose",json!({"project_id":project,"summary":"순서 반영","changes":[{"op":"plan.reorder","id":plan_id,"expected_revision":plan["revision"],"work_ids":[id]}]}))]).await?;
     let plan = data(s.gw.get(&format!("/canon/plans/{plan_id}")).await?, 200);

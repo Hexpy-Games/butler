@@ -247,6 +247,8 @@ interface ConversationWorkCopy {
 interface ConversationCopy {
   chatsIntro: string;
   initiated: {
+    viewWork: string; needsApproval: string;
+    workFailed: (state: "retrying" | "failed" | undefined, reasonCode: string | undefined) => string;
     noThanks: string; soundsGood: string;
     created: (action: string) => string; skipped: (action: string) => string;
     continuing: (action: string) => string; paused: (action: string) => string;
@@ -302,6 +304,7 @@ interface ConversationCopy {
     checked: (time: string) => string;
   };
   work: ConversationWorkCopy;
+  incompleteStatus: string;
   stoppedStatus: string;
   attachmentUnavailable: string;
   /** File-type label on an attachment tile whose extension is unknown. */
@@ -1571,6 +1574,7 @@ export interface AppCopy {
       model: string;
       reasoning: string;
       theme: string;
+      textSize: string;
       showThinking: string;
       conversationBackground: string; conversationOverlay: string; conversationPlain: string;
       wallpaper: string;
@@ -1623,6 +1627,9 @@ export interface AppCopy {
       modifierEnterSendEnterNewline: (modifier: string) => string;
       enterSendShiftEnterNewline: string;
       system: string;
+      textSizeDefault: string;
+      textSizeLarge: string;
+      textSizeLarger: string;
       light: string;
       dark: string;
       local: string;

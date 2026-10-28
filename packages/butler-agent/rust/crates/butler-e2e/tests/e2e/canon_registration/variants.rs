@@ -31,30 +31,34 @@ async fn cp_04_no_project_chat_new_project_is_atomic_and_idempotent() -> Result<
 #[tokio::test]
 async fn cp_05_auto_applies_with_record_without_an_open_ask() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, script, server, project, chat) = setup("CP-05", Access::Auto).await?;
-    run(
-        &s,
-        &script,
-        &chat,
-        "이 문제를 과제로 등록해",
-        vec![("canon_propose", proposal(&project, "표시 오류"))],
-    )
-    .await?;
-    assert_eq!(asks(&s, &chat).await?["open_count"], 0);
-    let result = stub::results(&script)
-        .into_iter()
-        .find(|r| r["state"] == "applied")
-        .expect("applied result");
-    assert_bound(&s, &chat, &project, &epic_id(&result), "butler").await?;
-    let view = data(
-        s.gw.get(&format!("/session-view?session_id={chat}"))
-            .await?,
-        200,
-    );
-    let id = view["canon_proposals"][0]["proposal_id"].as_str().unwrap();
-    assert_eq!(read(&s, id).await?["resolved_by"], Value::Null);
-    server.abort();
-    s.finish().await
+    for access in [Access::Auto, Access::FullAccess] {
+        let (s, script, server, project, chat) = setup("CP-05", access).await?;
+        run(
+            &s,
+            &script,
+            &chat,
+            "이 문제를 과제로 등록해",
+            vec![("canon_propose", proposal(&project, "표시 오류"))],
+        )
+        .await?;
+        assert_eq!(asks(&s, &chat).await?["open_count"], 0);
+        assert_eq!(s.gw.approval_requests(&chat).await?, Vec::<Value>::new());
+        let result = stub::results(&script)
+            .into_iter()
+            .find(|r| r["state"] == "applied")
+            .expect("applied result");
+        assert_bound(&s, &chat, &project, &epic_id(&result), "butler").await?;
+        let view = data(
+            s.gw.get(&format!("/session-view?session_id={chat}"))
+                .await?,
+            200,
+        );
+        let id = view["canon_proposals"][0]["proposal_id"].as_str().unwrap();
+        assert_eq!(read(&s, id).await?["resolved_by"], Value::Null);
+        server.abort();
+        s.finish().await?;
+    }
+    Ok(())
 }
 #[tokio::test]
 async fn cp_06_read_only_tool_stays_visible_and_refuses() -> Result<(), HarnessError> {
@@ -82,6 +86,10 @@ async fn cp_06_read_only_tool_stays_visible_and_refuses() -> Result<(), HarnessE
             .any(|r| r["error"]["code"] == "read_only")
     );
     assert_eq!(asks(&s, &chat).await?["open_count"], 0);
+    assert_eq!(s.gw.approval_requests(&chat).await?, Vec::<Value>::new());
+    assert!(script.requests.lock().unwrap().iter().any(|request| {
+        butler_e2e::e2e::chatgpt_wire::tools(request).any(|tool| tool["name"] == "canon_propose")
+    }));
     let board = data(s.gw.get(&format!("/projects/{project}/canon")).await?, 200);
     assert_eq!(board["backlog"], json!([]));
     assert!(s.gw.messages(&chat).await?.iter().any(|m| {

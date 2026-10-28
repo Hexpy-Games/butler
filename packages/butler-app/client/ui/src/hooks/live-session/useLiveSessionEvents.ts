@@ -287,7 +287,7 @@ function notifyDesktopEvent(
   if (
     settings.assistant_messages &&
     isDeliveredAssistantMessage(event) &&
-    message?.initiated?.quiet !== true &&
+    message?.quiet !== true &&
     message?.id &&
     !messageIdsRef.current.has(message.id)
   ) {

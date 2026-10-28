@@ -1,7 +1,6 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Field, FieldLabel } from "../Field";
 import { Input } from "../Input";
-import { Stack } from "../Stack";
 import { Switch } from "../Switch";
 import { Label } from "./Label";
 
@@ -24,12 +23,12 @@ function text({ locale }: ShowcaseRenderContext) {
 export const stories: ShowcaseStory[] = [
   {
     // Product forms use FieldLabel (a Label inside Field); a bare Label names a lone control.
-    name: "Beside a switch",
+    name: "Above a switch (stacked switch field)",
     render: (context) => (
-      <Stack align="row" cross="center" gap="sm">
-        <Switch id="ds-label-developer-mode" defaultChecked />
+      <Field>
         <Label htmlFor="ds-label-developer-mode">{text(context).mode}</Label>
-      </Stack>
+        <Switch id="ds-label-developer-mode" defaultChecked />
+      </Field>
     ),
   },
   {
@@ -45,10 +44,10 @@ export const stories: ShowcaseStory[] = [
     name: "Disabled control",
     states: ["disabled"],
     render: (context) => (
-      <Stack align="row" cross="center" gap="sm">
-        <Switch id="ds-label-search" disabled />
+      <Field>
         <Label htmlFor="ds-label-search">{text(context).search}</Label>
-      </Stack>
+        <Switch id="ds-label-search" disabled />
+      </Field>
     ),
   },
 ];

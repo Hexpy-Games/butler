@@ -1,3 +1,4 @@
+import { workFailureLine } from "../work-failure.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -938,6 +939,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   conversation: {
     initiated: {
+      workFailed: (state, reasonCode) => workFailureLine("ko-KR", state, reasonCode),
+      viewWork: "작업 보기", needsApproval: "확인 필요",
       noThanks: "괜찮아요", soundsGood: "좋아요",
       created: action => `만들었어요 · ${action}`, skipped: action => `안 만들었어요 · ${action}`,
       continuing: action => `계속 받아요 · ${action}`, paused: action => `멈춰 뒀어요 · ${action}`, alreadyHandled: "이미 처리된 제안이에요", failed: "처리하지 못했어요. 다시 해 주세요.",
@@ -991,6 +994,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       imageCopied: "이미지를 복사했어요",
       checked: (time) => `${time} 확인`,
     },
+    incompleteStatus: "미완료",
     stoppedStatus: "중지됨",
     attachmentUnavailable: "첨부 파일을 찾을 수 없음",
     attachmentFileType: "파일",
@@ -1786,6 +1790,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       model: "모델",
       reasoning: "추론",
       theme: "테마",
+      textSize: "글자 크기",
       showThinking: "생각 내용 표시",
       conversationBackground: "대화창 배경",
       conversationOverlay: "배경 불투명도",
@@ -1840,6 +1845,9 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       modifierEnterSendEnterNewline: modifier => `${modifier} Enter 전송, Enter 줄바꿈`,
       enterSendShiftEnterNewline: "Enter 전송, Shift Enter 줄바꿈",
       system: "시스템",
+      textSizeDefault: "기본",
+      textSizeLarge: "크게",
+      textSizeLarger: "아주 크게",
       light: "라이트",
       dark: "다크",
       local: "사용자 지정",

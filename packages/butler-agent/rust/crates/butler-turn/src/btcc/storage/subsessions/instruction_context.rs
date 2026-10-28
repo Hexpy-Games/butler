@@ -47,3 +47,21 @@ impl SqliteSubsessionRepository {
 fn context_error(error: serde_json::Error) -> StorageError {
     StorageError::new(StorageCode::SubsessionPacketInvalid, error.to_string()).with_source(error)
 }
+
+/// Latest attendance, preserving connector provenance from the initial instruction.
+pub(super) fn current(
+    db: &rusqlite::Connection,
+    session: &str,
+    initial: Option<ScheduleRunContext>,
+) -> Result<Option<ScheduleRunContext>, StorageError> {
+    let raw: Option<String> = db.query_row(
+        "SELECT c.instruction_run_context_json FROM btcc_subsession_delegations c JOIN btcc_session_relations r USING(relation_id) WHERE r.child_session_id=?1",
+        [session], |r| r.get::<_, Option<String>>(0),
+    ).optional().map_err(StorageError::sqlite)?.flatten();
+    let Some(raw) = raw else {
+        return Ok(initial);
+    };
+    let mut run: ScheduleRunContext = serde_json::from_str(&raw).map_err(context_error)?;
+    run.connector_event |= initial.is_some_and(|r| r.connector_event);
+    Ok(Some(run))
+}

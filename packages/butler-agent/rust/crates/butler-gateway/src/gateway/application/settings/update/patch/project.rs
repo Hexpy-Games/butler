@@ -215,6 +215,7 @@ fn project_simple_fields(
         "follow_up_behavior",
         "multiline_send_behavior",
         "appearance_theme",
+        "text_size",
         "collapse_message_box",
         "show_thinking",
         "reduce_motion",

@@ -175,6 +175,8 @@ pub(super) const CLAIM_SQL: &str =
     "UPDATE session_queued_messages SET state='dispatching', claim_id=?1, \
                claim_owner=?2, claimed_at=?3, lease_expires_at=?4, updated_at=?3 \
              WHERE id=?5 AND chat_id=?6 AND state='queued'
+               AND (json_type(control_resolution_json,'$.subsession_result') IS 'object'
+                    OR NOT EXISTS (SELECT 1 FROM app_initiated_messages i WHERE i.chat_id=?6 AND i.kind='work_result' AND i.state='held' AND i.posting=1))
                AND NOT EXISTS (SELECT 1 FROM session_queued_messages active
                  WHERE active.chat_id=?6 AND active.state='dispatching')
                AND (?7=0 OR id=(SELECT next.id FROM session_queued_messages next

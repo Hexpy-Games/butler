@@ -87,7 +87,7 @@
   flex: none;
   place-items: center;
   border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: calc(3px / var(--ui-scale));
   color: var(--primary-foreground);
 }
 

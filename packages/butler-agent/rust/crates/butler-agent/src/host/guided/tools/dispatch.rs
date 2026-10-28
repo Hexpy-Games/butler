@@ -39,6 +39,9 @@ pub(super) async fn execute(
     if super::browser::supports(&call.name) {
         return super::browser::execute(owner, &invocation, call, call_id).await;
     }
+    if super::effect::routes_effect(&call.name) {
+        return super::effect::execute(owner, invocation, call, call_id).await;
+    }
     if super::direct_approval::supports(call) {
         return Box::pin(super::direct_approval::execute(
             owner, invocation, call, call_id,
@@ -165,8 +168,7 @@ async fn effect_or_read(
                 | ToolName::DeleteAutomation
                 | ToolName::RunDueAutomations
         )
-    ) || super::effect::routes_effect(&call.name)
-    {
+    ) {
         return super::effect::execute(owner, invocation, call, call_id).await;
     }
     if crate::host::guided::project_tools::GuidedProjectTools::supports(&call.name) {

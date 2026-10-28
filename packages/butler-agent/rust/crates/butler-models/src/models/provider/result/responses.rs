@@ -37,7 +37,7 @@ pub(super) fn decode(value: &Value, model: &str, provider: &str, round: u32) -> 
         })
         .collect();
     (
-        nonempty(text),
+        join_text(text),
         calls,
         Some(Value::Array(output)),
         (provider == "openai")

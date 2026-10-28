@@ -22,6 +22,7 @@ fn creation_matches_actual_legacy_controls_and_signature() {
                 models: vec!["anthropic/model".into()],
             }),
             subsession_result: Some(SubsessionResultContext {
+                child_session_id: None,
                 relation_id: " relation ".into(),
                 result_id: "result".into(),
                 safe_title: "Atlas  보고".into(),

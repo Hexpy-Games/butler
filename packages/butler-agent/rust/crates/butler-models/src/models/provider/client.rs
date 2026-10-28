@@ -192,6 +192,19 @@ impl ModelProvider {
             config,
             &prepared.prefix,
         )?;
+        if let Some(error) = result.raw.as_ref().and_then(|raw| {
+            result::stop::error(
+                &result.stop,
+                raw,
+                prepared.carrier,
+                &config.metadata.provider_id,
+                carrier(config).2,
+                false,
+            )
+        }) {
+            self.observations.failure(&error);
+            return Err(ModelRoundError::Provider(error));
+        }
         self.observations
             .response(&config.metadata.provider_id, &config.metadata.model_ref);
         Ok(result)

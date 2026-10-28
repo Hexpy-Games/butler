@@ -12,6 +12,7 @@ pub(super) async fn feedback(
     final_round.text = Some("Recovered".into());
     final_round.tool_calls.clear();
     final_round.output_truncated = false;
+    final_round.stop = butler_turn::btcc::ModelStop::Complete;
     final_round.assistant_message = None;
     let fixture = Fixture::new([result, final_round]);
     let outcome = fixture

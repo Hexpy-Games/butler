@@ -115,8 +115,11 @@ function install(win: any) {
       await target.contents.debugger.sendCommand("Input.dispatchMouseEvent", params);
       if (event.type === "mouseReleased") pressed = undefined;
     },
+    // Keys enter like a real keystroke: through the browser process, where `before-input-event`
+    // sees them first (pick mode and shortcuts handle keys there). CDP Input.dispatchKeyEvent
+    // reaches the page DOM without that event, so the App never sees the key.
     async key(key: string) {
-      const codes: Record<string, number> = { Enter: 13, Escape: 27, ArrowUp: 38 };
+      const codes: Record<string, string> = { Enter: "Enter", Escape: "Escape", ArrowUp: "Up" };
       if (!codes[key]) throw new Error(`Unsupported key: ${key}`);
       const target = views().findLast(v => v.contents.isFocused());
       if (!target) {
@@ -126,8 +129,8 @@ function install(win: any) {
         })));
         throw new Error(`No focused WebContents for key input: ${JSON.stringify(targets)}`);
       }
-      await connect(target.contents);
-      for (const type of ["keyDown", "keyUp"]) await target.contents.debugger.sendCommand("Input.dispatchKeyEvent", { type, key, code: key, windowsVirtualKeyCode: codes[key] });
+      // Enter also types its character, as the keystroke does.
+      for (const type of ["keyDown", ...(key === "Enter" ? ["char"] : []), "keyUp"]) target.contents.sendInputEvent({ type, keyCode: codes[key] });
     },
   };
   (globalThis as any)[Symbol.for("butler.smoke.view-input")] = state;

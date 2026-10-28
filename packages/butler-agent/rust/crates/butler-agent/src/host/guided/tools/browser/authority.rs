@@ -18,16 +18,24 @@ pub(super) async fn gate(
     target: &str,
 ) -> Result<Gate, ToolExecutionError> {
     if owner.schedule_run().is_some() && input["grant"].is_object() {
+        super::super::attention::skipped_input(
+            owner,
+            call,
+            input.clone(),
+            target,
+            "schedule_permission_required",
+        )
+        .await;
         return Ok(Gate::Pending(
-            super::super::turn_guard::unattended_feedback(owner, &call.name, target).await,
+            super::super::turn_guard::unattended_feedback(owner, &call.name, target),
         ));
     }
     if let Some(reference) = resume_reference(owner, occurrence) {
         return resumed_gate(owner, call, occurrence, input, target, reference).await;
     }
-    let admitted = owner
-        .authority
-        .admit(AuthorityAdmissionInput {
+    let admitted = super::super::attention::admit(
+        owner,
+        AuthorityAdmissionInput {
             owner_session_id: owner.binding.owner_session_id.clone(),
             source_session_id: owner.binding.source_session_id.clone(),
             source_turn_id: owner.binding.turn_id.clone(),
@@ -50,9 +58,10 @@ pub(super) async fn gate(
             }),
             honor_standing_permission: owner.taint() != TurnTaint::ConnectorEvent,
             unattended: owner.unattended(),
-        })
-        .await
-        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+        },
+    )
+    .await
+    .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
     Ok(match admitted {
         AuthorityAdmissionResult::Granted => Gate::Allowed(None, None),
         AuthorityAdmissionResult::Pending { request_ref, .. }
@@ -61,7 +70,7 @@ pub(super) async fn gate(
         ),
         // Nobody can answer a payment, sign-in, upload or commit card here.
         AuthorityAdmissionResult::Unattended => Gate::Pending(
-            super::super::turn_guard::unattended_feedback(owner, &call.name, target).await,
+            super::super::turn_guard::unattended_feedback(owner, &call.name, target),
         ),
         _ => Gate::Pending(json!({"ok":false,"error":"authority_request_denied"})),
     })

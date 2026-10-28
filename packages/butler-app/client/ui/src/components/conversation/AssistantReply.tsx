@@ -1,3 +1,5 @@
+import { appCopy, useAppLocale } from "@/app/copy";
+import { Typo } from "@/butler-ds";
 import type { MessageRecord } from "@/app/types";
 import type { RefreshFileUrls } from "@/hooks/useMessageFileSource";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -12,6 +14,10 @@ export function AssistantReply({ message, refreshFileUrls }: { message: MessageR
 }
 
 export function AssistantReplyText({ message, refreshFileUrls }: { message: MessageRecord; refreshFileUrls: RefreshFileUrls }) {
+  useAppLocale();
+  if (message.initiated?.kind === "work_failed") return <Typo.Body wrap="anywhere" data-test-class="initiated-work-failed">
+    {appCopy.conversation.initiated.workFailed(message.initiated.state, message.initiated.reason_code)}
+  </Typo.Body>;
   return <MessageMarkdown artifacts={message.artifacts} attachments={message.attachments}
     refreshFileUrls={refreshFileUrls} streaming={message.status === "streaming"} text={message.text} />;
 }

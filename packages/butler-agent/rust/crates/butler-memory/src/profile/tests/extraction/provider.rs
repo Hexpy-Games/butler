@@ -169,7 +169,7 @@ async fn actual_native_provider_loopback_reaches_profile_commit() {
     }]})
     .to_string();
     let body = serde_json::json!({
-        "id":"resp_profile","model":"gpt-5.5",
+        "id":"resp_profile","model":"gpt-5.5","status":"completed",
         "output":[{"type":"message","content":[{"type":"output_text","text":candidate}]}],
         "usage":{"input_tokens":3,"total_tokens":5}
     })

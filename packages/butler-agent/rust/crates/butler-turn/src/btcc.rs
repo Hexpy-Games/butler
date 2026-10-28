@@ -40,6 +40,7 @@ pub use storage::{
 };
 pub use task_graph_identity::{decode as decode_task_graph_id, encode as encode_task_graph_id};
 mod turn;
+pub use turn::runtime_failure_message;
 mod work;
 
 use std::sync::Arc;
@@ -94,7 +95,7 @@ pub use agent_loop::{
     GuidedPolicyDependencies, GuidedPresentation, GuidedTurnFactory, GuidedTurnInputs,
     GuidedTurnStart, JournalCloseout, JournalPort, LoopPhase, ModelRoundError, ModelRoundMessage,
     ModelRoundObserver, ModelRoundPort, ModelRoundRequest, ModelRoundResult, ModelRoundRole,
-    ModelRoundTool, ModelRoundToolCall, OperationResultMessageReferences,
+    ModelRoundTool, ModelRoundToolCall, ModelStop, OperationResultMessageReferences,
     OperationResultReplayFactory, OperationResultRuntime, OperationResultRuntimeFactory,
     OperationResultScope, PendingTool, ProductionAgentLoop, PromptImages, PromptPort,
     ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver, RenderedGuidedPrompt,

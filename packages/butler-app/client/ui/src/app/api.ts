@@ -60,6 +60,9 @@ export interface PowerState {
 }
 
 interface ButlerAppBridge extends PendingAsksBridge {
+  onTextSizeShortcut?: (handler: (command: "increase" | "decrease" | "reset") => void) => () => void;
+  initialTextSize?: SettingsView["text_size"];
+  setTextSize?: (value: SettingsView["text_size"]) => Promise<void>;
   log?: (row: { level: "DEBUG"; category: "http.client"; event: "image.fetch"; attrs: { url: string } }) => void;
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
   history?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
@@ -309,6 +312,20 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   const traceparent = requestTraceparent(options.headers);
   if (url.pathname === "/browser-history" || url.pathname.startsWith("/browser-history/")) return callBridge<T>(bridge, "history", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname === "/library" && method === "GET") return callBridge<T>(bridge,"listLibrary",Object.fromEntries(url.searchParams));
+  if (method === "POST" && ["/library/documents", "/library/blocks"].includes(url.pathname)) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, url.pathname === "/library/documents" ? "saveLibraryDocument" : "saveLibraryBlock", parseBody(options.body)));
+  }
+  if (/^\/documents(?:\/|$)/u.test(url.pathname)) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "documents", { path: url.pathname + url.search, method,
+      ...(options.body == null ? {} : { body: parseBody(options.body) }) }));
+  }
+  const previewView = method === "GET" ? url.pathname.match(/^\/previews\/([^/]+)\/view$/u) : null;
+  if (previewView) {
+    let previewId: string;
+    try { previewId = decodeURIComponent(previewView[1]!); }
+    catch { throw new Error("Invalid preview"); }
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getPreviewView", { previewId, query: url.search }));
+  }
   if (url.pathname === "/library" && method === "POST") return callBridge<T>(bridge,"saveLibrary",parseBody(options.body));
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
@@ -521,6 +538,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (["/logs", "/logs/config", "/logs/storage", "/logs/trace"].includes(url.pathname) || url.pathname.startsWith("/logs/trace/")) {
     return await callBridge<T>(bridge, "logs", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   }
+  if (method === "GET" && url.pathname === "/usage-history") {
+    return await callBridge<T>(bridge, "getUsageHistory", { query: url.search });
+  }
   if (method === "GET" && url.pathname === "/usage-monitor") {
     return await callBridge<T>(bridge, "getUsageMonitor", {
       // Preserve the joint session/range filter for the native bridge as well as HTTP.
@@ -593,7 +613,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       path: url.pathname, method,
       ...(options.body == null ? {} : { body: parseBody(options.body) }),
     });
-    return /^\/memory\/pattern-proposals(?:\/[^/]+)?$/u.test(url.pathname) ? unwrapBridgeResult<T>(result) : result as T;
+    return /^\/memory\/(?:pattern-proposals(?:\/[^/]+)?|consolidation)$/u.test(url.pathname) ? unwrapBridgeResult<T>(result) : result as T;
   }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);
   if (projectMatch && method === "PATCH") {

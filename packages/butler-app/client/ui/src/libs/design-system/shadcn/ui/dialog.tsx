@@ -13,6 +13,7 @@ import {
 } from "../../components/TintedGlass";
 import styles from "../../components/Dialog/Dialog.module.css";
 import { dsClass } from "../../lib/internal";
+import { publishScrollbarWidth } from "../../lib/scrollbarWidth";
 
 function Dialog({
   ...props
@@ -124,6 +125,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-contained={contained ? "" : undefined}
         onInteractOutside={contained ? (event) => { onInteractOutside?.(event); event.preventDefault(); } : onInteractOutside}
+        ref={publishScrollbarWidth}
         data-slot="dialog-content"
         data-motion={motion}
         data-glass="popover"

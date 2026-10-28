@@ -448,16 +448,33 @@ pub(super) fn estimate_tokens(
             source: TokenEstimatorKind::OpenaiTiktokenO200k,
         });
     }
-    let utf16 = text.encode_utf16().count() as f64;
     let (tokens, source) = if metadata.provider_id == "google" {
         (
-            (utf16 / 4.0).ceil(),
+            character_tokens(text, 4.0),
             TokenEstimatorKind::GeminiCharacterEstimate,
         )
     } else {
-        ((utf16 / 3.8).ceil(), TokenEstimatorKind::CharacterEstimate)
+        (
+            character_tokens(text, 3.8),
+            TokenEstimatorKind::CharacterEstimate,
+        )
     };
     Ok(TokenEstimate { tokens, source })
+}
+
+fn character_tokens(text: &str, divisor: f64) -> f64 {
+    let (mut wide, mut other) = (0usize, 0usize);
+    for c in text.chars() {
+        if matches!(c as u32, 0x1100..=0x11ff | 0x3000..=0x30ff | 0x3130..=0x318f
+            | 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xa960..=0xa97f | 0xac00..=0xd7af
+            | 0xd7b0..=0xd7ff | 0xf900..=0xfaff | 0xff00..=0xffef | 0x20000..=0x2ffff)
+        {
+            wide += 1;
+        } else {
+            other += c.len_utf16();
+        }
+    }
+    (wide as f64 + other as f64 / divisor).ceil()
 }
 
 #[cfg(test)]

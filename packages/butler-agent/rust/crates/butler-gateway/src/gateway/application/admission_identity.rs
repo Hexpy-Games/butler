@@ -18,18 +18,23 @@ pub(super) fn stable_client_id(
     let Some(value) = trimmed else {
         return Ok(format!("client-{}", clock.new_uuid()));
     };
+    Ok(canonical_client_id(value))
+}
+
+/// Canonical identity used by admission and durable custody lookups alike.
+pub(super) fn canonical_client_id(value: &str) -> String {
     if valid_client_uuid(value) {
-        return Ok(value.to_ascii_lowercase());
+        return value.to_ascii_lowercase();
     }
     let hash = format!("{:x}", Sha256::digest(value.as_bytes()));
-    Ok(format!(
+    format!(
         "client-{}-{}-4{}-8{}-{}",
         &hash[..8],
         &hash[8..12],
         &hash[13..16],
         &hash[17..20],
         &hash[20..32]
-    ))
+    )
 }
 
 fn valid_client_uuid(value: &str) -> bool {

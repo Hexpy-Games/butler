@@ -248,7 +248,7 @@
   flex: none;
   width: 48px;
   overflow: hidden;
-  border-radius: calc(var(--radius-control) - 2px);
+  border-radius: calc(var(--radius-control) - 2px / var(--ui-scale));
   box-shadow: var(--live-tab-ring, 0 0 0 var(--border-hairline) var(--line));
 }
 

@@ -32,6 +32,7 @@ mod outputs;
 mod question;
 mod resolve_ask;
 pub(in crate::host) use monitoring::MonitoringReaders;
+mod attention;
 mod profile;
 mod project_artifacts;
 mod project_source;
@@ -183,7 +184,7 @@ pub(crate) struct GuidedTools {
     resume: OnceCell<Mutex<ResumePool>>,
     authority_consumed: Mutex<bool>,
     turn_taint: Mutex<butler_turn::btcc::TurnTaint>,
-    attention_sent: Mutex<bool>,
+    attention_sent: Mutex<std::collections::HashSet<String>>,
     instruction_run: Mutex<Option<butler_turn::btcc::ScheduleRunContext>>,
 }
 
@@ -284,7 +285,7 @@ impl GuidedTools {
             app_endpoint,
             browser_http: OnceCell::new(),
             turn_taint: Mutex::new(binding.turn_guard.initial_taint),
-            attention_sent: Mutex::new(false),
+            attention_sent: Mutex::new(Default::default()),
             instruction_run: Mutex::new(None),
             binding,
             state: Mutex::new(resume::restored_state(restored)),

@@ -1,3 +1,4 @@
+import { workFailureLine } from "../work-failure.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -941,6 +942,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   conversation: {
     initiated: {
+      workFailed: (state, reasonCode) => workFailureLine("en-US", state, reasonCode),
+      viewWork: "View work", needsApproval: "Needs your OK",
       noThanks: "No thanks", soundsGood: "Sounds good",
       created: action => `Created · ${action}`, skipped: action => `Skipped · ${action}`,
       continuing: action => `Continuing · ${action}`, paused: action => `Paused · ${action}`, alreadyHandled: "This suggestion was already handled", failed: "Couldn't complete that. Please try again.",
@@ -994,6 +997,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       imageCopied: "Image copied",
       checked: (time) => `Checked ${time}`,
     },
+    incompleteStatus: "Incomplete",
     stoppedStatus: "Stopped",
     attachmentUnavailable: "Attachment unavailable",
     attachmentFileType: "File",
@@ -1782,6 +1786,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       model: "Model",
       reasoning: "Reasoning",
       theme: "Theme",
+      textSize: "Text size",
       showThinking: "Show thinking",
       conversationBackground: "Conversation background",
       conversationOverlay: "Overlay",
@@ -1836,6 +1841,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       modifierEnterSendEnterNewline: (modifier) => `${modifier} Enter sends, Enter inserts a newline`,
       enterSendShiftEnterNewline: "Enter sends, Shift Enter inserts newline",
       system: "System",
+      textSizeDefault: "Default",
+      textSizeLarge: "Large",
+      textSizeLarger: "Larger",
       light: "Light",
       dark: "Dark",
       stdio: "stdio",

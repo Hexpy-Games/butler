@@ -1,4 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
+ipcRenderer.on("butler:text-size", (_event, factor) => {
+  if (typeof factor === "number" && Number.isFinite(factor) && factor > 0) document.documentElement.style.setProperty("--ui-scale", String(factor));
+});
 
 // Capture links before nested message menus; non-web schemes keep their handlers.
 for (const type of ["click", "contextmenu"]) globalThis.window?.addEventListener(type, event => {
@@ -692,6 +695,17 @@ function writeAppUiStateCache(snapshot) {
 
 const butlerApp = Object.freeze({
   log: row => ipcRenderer.send("butler:app-log", row),
+  documents: ({ path, method = "GET", body } = {}) => {
+    method = String(method).toUpperCase();
+    const url = new URL(String(path ?? ""), "http://local");
+    const read = method === "GET" && /^\/documents\/[^/]+(?:\/revisions(?:\/[1-9][0-9]*)?|\/diff)?$/u.test(url.pathname);
+    const write = (method === "POST" && (url.pathname === "/documents" || /^\/documents\/[^/]+\/(restore|seen|blocks\/[0-9]+)$/u.test(url.pathname)))
+      || (method === "PUT" && /^\/documents\/[^/]+$/u.test(url.pathname));
+    if (!read && !write) throw new Error("Unsupported document route.");
+    return requestBridgeResult(url.pathname + url.search, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  },
+  saveLibraryDocument: (body) => requestBridgeResult("/library/documents", { method: "POST", body: JSON.stringify(body) }),
+  saveLibraryBlock: (body) => requestBridgeResult("/library/blocks", { method: "POST", body: JSON.stringify(body) }),
   organizeLibrary: ({ path, method, body }) => {
     const route = new URL(path, "http://butler.invalid");
     const allowed = /^\/library\/(groups|tags|facets|items)(\/|$)/.test(route.pathname);
@@ -875,6 +889,8 @@ const butlerApp = Object.freeze({
     const proposals = (method === "GET" && path === "/memory/pattern-proposals") ||
       (method === "POST" && /^\/memory\/pattern-proposals\/[A-Za-z0-9_-]+$/.test(path));
     if (proposals) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
+    const consolidation = path === "/memory/consolidation" && ["GET", "POST"].includes(method);
+    if (consolidation) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
     if (!existing && !reset && !patterns) throw new Error("Invalid memory path");
     return requestJson(path, { method, ...(body && method !== "GET" && method !== "HEAD" ? { body: JSON.stringify(body) } : {}) });
   },
@@ -1295,6 +1311,13 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  initialTextSize: process.argv.find(arg => arg.startsWith("--butler-text-size="))?.split("=")[1] ?? "default",
+  setTextSize: value => ipcRenderer.invoke("butler:set-text-size", value),
+  onTextSizeShortcut: handler => {
+    const listener = (_event, command) => handler(command);
+    ipcRenderer.on("butler:text-size-shortcut", listener);
+    return () => ipcRenderer.removeListener("butler:text-size-shortcut", listener);
+  },
   setNativeAppearanceTheme: ({ theme } = {}) => ipcRenderer.invoke("butler:set-native-appearance-theme", { theme }),
   getPersonalization: () => requestJson("/personalization"),
   getProfileImportPrompt: ({ locale } = {}) => {
@@ -1437,6 +1460,11 @@ const butlerApp = Object.freeze({
   subscribeLogs: (handlers = {}) => subscribeLogs(handlers),
   exportLogs: ({ since, includeBodies } = {}) =>
     ipcRenderer.invoke("butler:export-logs", { since, includeBodies: includeBodies === true }),
+  getUsageHistory: ({ query = "" } = {}) => {
+    const url = new URL(`/usage-history${String(query)}`, "http://local");
+    if (url.pathname !== "/usage-history") throw new Error("Unsupported usage history route.");
+    return requestJson(url.pathname + url.search, { method: "GET" });
+  },
   getUsageMonitor: ({ sessionId, sinceHours } = {}) => {
     const params = new URLSearchParams();
     if (sessionId) params.set("session_id", sessionId);
@@ -1507,6 +1535,13 @@ const butlerApp = Object.freeze({
   getMessageFileView: ({ fileId } = {}) => {
     if (typeof fileId !== "string" || !/^file-[0-9a-f-]{36}$/iu.test(fileId)) throw new Error("Invalid file");
     return requestBridgeResult(`/message-files/${encodeURIComponent(fileId)}/view`);
+  },
+  getPreviewView: ({ previewId, query = "" } = {}) => {
+    if (typeof previewId !== "string" || !/^p-[a-f0-9]{64}$/u.test(previewId)) throw new Error("Invalid preview");
+    const path = `/previews/${encodeURIComponent(previewId)}/view`;
+    const url = new URL(path + String(query), "http://local");
+    if (url.pathname !== path) throw new Error("Unsupported preview route.");
+    return requestBridgeResult(url.pathname + url.search);
   },
   getOutputView: ({ outputId, revision } = {}) => {
     if (typeof outputId !== "string" || !/^[a-f0-9]{64}$/u.test(outputId)) throw new Error("Invalid output");

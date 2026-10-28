@@ -181,6 +181,7 @@ async fn cp_01_card_applies_chat_origin_binds_without_moving_and_links_work()
     let id = draft(&s, &script, &chat, proposal(&project, "입력 오류")).await?;
     let card = read(&s, &id).await?;
     assert_eq!(card["state"], "open");
+    assert_eq!(s.gw.approval_requests(&chat).await?, Vec::<Value>::new());
     assert_eq!(card["epics"][0]["tags"][0]["new"], true);
     let result = accept(&s, &id).await?;
     assert_eq!(result["ok"], true, "{result}");

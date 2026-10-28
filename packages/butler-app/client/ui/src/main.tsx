@@ -1,3 +1,4 @@
+import { textSizeFactor } from "@/app/textSize";
 import { startApp } from "@/app/startApp";
 import { installUiCrashReporting } from "@/app/uiCrashReporting.ts";
 import { installWallpaperDiagnostics } from "@/app/wallpaperDiagnostics.ts";
@@ -8,6 +9,9 @@ import { WallpaperModulesProvider } from "@/components/common/WallpaperModulesPr
 import { AppDialogs } from "@/components/common/AppDialogs.tsx";
 import { renderAppSurface } from "@/app/renderAppSurface";
 import "@/butler-ds/tokens.css";
+
+const initialTextSize = window.butlerApp?.initialTextSize;
+if (initialTextSize) document.documentElement.style.setProperty("--ui-scale", String(textSizeFactor(initialTextSize)));
 
 const visualMode = typeof window !== "undefined"
   ? new URLSearchParams(window.location.search).get("visual")

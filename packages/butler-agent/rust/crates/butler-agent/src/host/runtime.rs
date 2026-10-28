@@ -1,10 +1,12 @@
 //! Native process composition. Domain policies stay behind their existing APIs.
 
 mod boundary;
+mod chat_context;
 mod contracts;
 mod defaults;
 pub(crate) use defaults::ensure_reply_language;
 mod attachments;
+mod delegation_access;
 pub(super) mod environment;
 mod mcp_owner;
 mod memory_bootstrap;
@@ -36,8 +38,8 @@ use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
 use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::context::{
-    ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
-    PromptAssembler, PromptDependencies, ToolOutput,
+    ConversationSessionReference, ConversationTools, PromptAssembler, PromptDependencies,
+    ToolOutput,
 };
 use butler_runtime::operations::MetricFiles;
 use butler_turn::btcc;
@@ -160,16 +162,16 @@ impl AgentRuntime {
             butler_memory::work_records::WorkRecordReader::new(&paths.data_root),
             collation.clone(),
         ));
-        let context_budget = Arc::new(ContextBudgetOwner::new(
-            models.configuration.clone(),
-            models.catalog.clone(),
-            environment.context_budget.clone(),
-        ));
-        let tool_output = super::open_tool_output(
-            paths.data_root.clone(),
-            context_budget.clone(),
+        let (context_budget, continuity, tool_output, conversation_context) = chat_context::open(
+            &paths,
+            (&environment.context_budget, &environment.cognition_paths),
+            &models,
+            &stores,
+            profile.clone(),
+            &observer,
             metric_files.clone(),
-        );
+        )
+        .await;
         let daily_cognition = Arc::new(
             DailyCognitionJobs::open(DailyCognitionOwners {
                 data_root: paths.data_root.clone(),
@@ -208,12 +210,6 @@ impl AgentRuntime {
             metric_files.clone(),
             vectors,
         );
-        let conversation_context = ContextConversation::new(
-            stores.conversations.clone(),
-            models.configuration.clone(),
-            models.catalog.clone(),
-            environment.context_budget,
-        );
         let conversation_tools = Arc::new(ConversationTools::new(
             paths.data_root.clone(),
             Arc::new(conversation_context.clone()),
@@ -234,14 +230,14 @@ impl AgentRuntime {
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         let memory_writes =
             memory_bootstrap::rule_owner(&paths, &environment.cognition_paths, &coordinator, stop);
-        let preparation = Arc::new(DefaultTurnPreparation::new(
-            stores.bindings.clone(),
-            stores.conversations.clone(),
+        let preparation = delegation_access::preparation(
+            &stores,
             documents.clone(),
             observer.clone(),
             prompt,
             models.configuration.clone(),
-        ));
+            app_endpoint.clone(),
+        );
         let authority = mcp_owner::authority(&plugins, &stores, &collation, now.clone());
         let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));
         let (project_work, canon) = work_ports::create(&stores.btcc, &project_ledger, now.clone());
@@ -396,6 +392,7 @@ impl AgentRuntime {
             bindings,
             models,
             context_budget,
+            continuity,
             context_compactions: repositories.context_compactions(),
             collation,
             progress,

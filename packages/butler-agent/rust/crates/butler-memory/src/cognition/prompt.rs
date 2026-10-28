@@ -67,7 +67,7 @@ impl CognitionPromptReader {
             .await
     }
 
-    /// The continuity notes of `session`.
+    /// The continuity notes keyed by a canonical conversation-store session id.
     pub async fn session_continuity(&self, session: String) -> CognitionResult<Option<String>> {
         let root = self.environment.memory_root(&self.data_root);
         self.owner

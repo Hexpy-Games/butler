@@ -78,8 +78,14 @@ async fn history_rollover_preserves_independent_stable_docs_breakpoint() -> Resu
     let mut rollovers = 0;
     for index in 0..16 {
         let begin = stub.requests.lock().unwrap().len();
-        s.turn("general", &format!("bounded history cache request {index}"))
-            .await?;
+        s.turn(
+            "general",
+            &format!(
+                "bounded history cache request {index}: {}end",
+                "cached history context ".repeat(1000)
+            ),
+        )
+        .await?;
         let request = stub.requests.lock().unwrap()[begin].clone();
         let blocks = request["messages"][0]["content"].as_array().unwrap();
         let docs = blocks[0]["text"].as_str().unwrap();
@@ -100,7 +106,7 @@ async fn history_rollover_preserves_independent_stable_docs_breakpoint() -> Resu
                 blocks[1]["text"]
                     .as_str()
                     .unwrap()
-                    .starts_with("dropped turn ")
+                    .starts_with("Older turns omitted: ")
             );
         }
         assert!(controls(&request) <= 4);

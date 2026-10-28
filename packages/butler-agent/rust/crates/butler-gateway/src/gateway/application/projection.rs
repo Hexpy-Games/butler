@@ -14,6 +14,8 @@ mod final_turn_events;
 mod handoffs;
 mod non_final;
 pub(in crate::gateway::application) use non_final::row_from_runtime_event;
+#[cfg(test)]
+pub(in crate::gateway::application) use non_final::terminal_tests::assert_terminal_projection_contracts;
 pub(super) use non_final::{
     FailedProjection, ProjectionIds, project_failed, settle_confirmed_stop,
 };
@@ -201,6 +203,7 @@ async fn project_final(
     let subscribers = context.subscribers.clone();
     let settled_chat = candidate.chat_id.clone();
     let settled_turn = candidate.turn_id.clone();
+    let facts = context.dependencies.settings_facts.snapshot()?;
     let projected = context
         .storage
         .execute(move |db| {
@@ -208,6 +211,8 @@ async fn project_final(
                 db,
                 &candidate,
                 final_result::FinalApply {
+                    facts: &facts,
+                    language: super::settings::ui_language(db, &facts)?,
                     files,
                     reply_id: &reply_id,
                     now: &now,

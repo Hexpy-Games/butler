@@ -18,19 +18,6 @@ pub enum MessageRole {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum MessageStatus {
-    Pending,
-    Sent,
-    Thinking,
-    Streaming,
-    Delivered,
-    Failed,
-    Retrying,
-    Cancelled,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
 pub enum TurnState {
     Queued,
     Accepted,
@@ -237,8 +224,12 @@ pub enum ChangedFileLineType {
     Deleted,
 }
 
+/// The server-selected action for a terminal failure.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MessageRecord {
+    /// Posted inside quiet hours: no OS notification. Omitted when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub quiet: bool,
     /// Open origin contract: S4 work results and S5 connector briefs add kinds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initiated: Option<Value>,
@@ -257,6 +248,8 @@ pub struct MessageRecord {
     pub role: MessageRole,
     pub text: String,
     pub status: MessageStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub incomplete: Option<bool>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -268,6 +261,10 @@ pub struct MessageRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limitations: Option<Vec<String>>,
     pub retryable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_mode: Option<RetryMode>,
+    #[serde(default)]
+    pub retry_with_current_controls: bool,
     pub cursor: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attachments: Option<Vec<MessageFileRef>>,
@@ -485,3 +482,7 @@ pub(super) struct ApiError<'a> {
 
 mod image_edit;
 pub use image_edit::{ImageEditRequest, MessageSendRequest};
+
+mod message_status;
+pub use message_status::MessageStatus;
+pub(super) use message_status::RetryMode;

@@ -1,4 +1,5 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import { Card } from "../Card";
 import { Input } from "../Input";
 import { NativeSelect, NativeSelectOption } from "../NativeSelect";
 import { Switch } from "../Switch";
@@ -82,15 +83,29 @@ export const stories: ShowcaseStory[] = [
     },
   },
   {
-    name: "Horizontal switch field",
+    // The default: a switch field stacks like an input.
+    name: "Switch field: stacked (default)",
     render: (context) => (
-      <Field orientation="horizontal">
+      <Field>
+        <FieldLabel htmlFor="ds-field-enabled">{text(context).enabled}</FieldLabel>
+        <FieldDescription>{text(context).enabledHint}</FieldDescription>
         <Switch id="ds-field-enabled" defaultChecked />
-        <FieldContent>
-          <FieldLabel htmlFor="ds-field-enabled">{text(context).enabled}</FieldLabel>
-          <FieldDescription>{text(context).enabledHint}</FieldDescription>
-        </FieldContent>
       </Field>
+    ),
+  },
+  {
+    // The exception: a phone layout, or a list item inside a closed container (a card, a list row).
+    name: "Switch field: row (phone or list item in a card)",
+    render: (context) => (
+      <Card padding="md">
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel htmlFor="ds-field-enabled-row">{text(context).enabled}</FieldLabel>
+            <FieldDescription>{text(context).enabledHint}</FieldDescription>
+          </FieldContent>
+          <Switch id="ds-field-enabled-row" defaultChecked />
+        </Field>
+      </Card>
     ),
   },
   {

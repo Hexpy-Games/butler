@@ -2,6 +2,10 @@ use super::*;
 use crate::gateway::MessageFileRef;
 
 impl crate::gateway::GatewayProjectDashboard for AppApplication {
+    fn resolve_project_reference(&self, reference: String) -> ApplicationFuture<Value> {
+        super::projects::reference::resolve(self.clone_handle(), reference)
+    }
+
     fn get_project_dashboard(&self, project_id: String) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.get_project_dashboard_owned(project_id).await })
