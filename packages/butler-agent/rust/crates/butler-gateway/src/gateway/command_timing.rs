@@ -27,14 +27,14 @@ impl CommandTiming {
         if !Self::enabled() {
             return;
         }
-        eprintln!(
+        butler_platform::stdio::diagnostic_line(format_args!(
             "command_gateway_duration_timing phase={phase} event={event} utc_us={} duration_us={}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_micros(),
             elapsed.as_micros()
-        );
+        ));
     }
 
     pub(crate) fn new(phase: &'static str) -> Self {
@@ -54,7 +54,7 @@ impl CommandTiming {
     pub(crate) fn mark(&self, event: &'static str) {
         if let Some(span) = &self.0 {
             let output = Instant::now();
-            eprintln!(
+            butler_platform::stdio::diagnostic_line(format_args!(
                 "command_gateway_timing phase={} id={} event={} utc_us={} elapsed_us={}",
                 span.phase,
                 span.id,
@@ -64,13 +64,13 @@ impl CommandTiming {
                     .unwrap_or_default()
                     .as_micros(),
                 span.started.elapsed().as_micros()
-            );
+            ));
             if output.elapsed().as_millis() >= 1 {
-                eprintln!(
+                butler_platform::stdio::diagnostic_line(format_args!(
                     "command_output_timing phase={} duration_us={}",
                     span.phase,
                     output.elapsed().as_micros()
-                );
+                ));
             }
         }
     }
