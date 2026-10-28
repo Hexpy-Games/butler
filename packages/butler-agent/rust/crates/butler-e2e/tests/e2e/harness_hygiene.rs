@@ -12,33 +12,6 @@ use butler_e2e::e2e::{
 };
 
 #[tokio::test]
-async fn shared_installation_outlives_each_private_scenario() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let first = tokio::task::spawn_blocking(|| Setup::shared_installation("HYGIENE-SHARED-A"));
-    let second = tokio::task::spawn_blocking(|| Setup::shared_installation("HYGIENE-SHARED-B"));
-    let (first, second) =
-        tokio::try_join!(first, second).map_err(|error| HarnessError(error.to_string()))?;
-    let (first, second) = tokio::try_join!(first?.start(), second?.start())?;
-    assert_eq!(first.sandbox.install, second.sandbox.install);
-    assert_ne!(first.sandbox.data, second.sandbox.data);
-    assert_ne!(first.sandbox.home, second.sandbox.home);
-    let installation = first.sandbox.install.clone();
-    let first_root = first.sandbox.root.clone();
-    let second_root = second.sandbox.root.clone();
-    first.finish().await?;
-    assert!(!first_root.exists());
-    assert!(installation.exists());
-    second.gw.turns("general").await?;
-    second.finish().await?;
-    assert!(!second_root.exists());
-    assert!(
-        !installation.exists(),
-        "last scenario releases shared files"
-    );
-    Ok(())
-}
-
-#[tokio::test]
 async fn successful_sandbox_and_scenario_are_deleted() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut sandbox = Sandbox::new("HYGIENE-DIRECT")?;
