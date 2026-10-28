@@ -45,6 +45,7 @@ async fn rules_old_cursors_exclude_corrected_and_forgotten_sources() -> Result<(
     for user in [forget::GLOBAL, forget::A] {
         let output = support::tool(&s, "general", user, "update_explicit_memory").await?;
         assert_eq!(output["ok"], true, "{output}");
+        support::committed(&s.sandbox.data, &output).await;
     }
     for row in support::active_rules(&s.sandbox.data) {
         support::projection(&s.sandbox.data, &row).await;
@@ -117,6 +118,7 @@ async fn rules_old_cursors_exclude_corrected_and_forgotten_sources() -> Result<(
             );
         }
         if name == "update_explicit_memory" {
+            support::committed(&s.sandbox.data, &output).await;
             let latest = support::active_rules(&s.sandbox.data)
                 .into_iter()
                 .find(|row| row["handle"] == retired["handle"])
