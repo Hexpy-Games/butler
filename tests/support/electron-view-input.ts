@@ -1,7 +1,7 @@
 import type { ShellApp } from "./browser-shell-acceptance";
 import { waitBrowser } from "./browser-agent-app";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export async function pageShownBeforeNativeInput(app: ShellApp, contents: string) {
   // Poll from outside the page: hidden documents can suspend rAF indefinitely.
@@ -25,7 +25,21 @@ export async function pageShownBeforeNativeInput(app: ShellApp, contents: string
     const expression = app.lastMain();
     const presentation = await nativeInputPresentation(app, contents).catch(diagnosticError => ({ error: String(diagnosticError) }));
     const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
-    if (evidence) writeFileSync(join(evidence, "native-input-failure.json"), JSON.stringify({ expression, presentation }, null, 2));
+    const failure: Record<string, unknown> = { expression, presentation };
+    const record = () => {
+      if (evidence) writeFileSync(join(evidence, "native-input-failure.json"), JSON.stringify(failure, null, 2));
+    };
+    // Persist the untouched failure before even inspecting other windows or trying remedies.
+    try {
+      record();
+      failure.environment = await nativeInputEnvironment(app);
+      record();
+      await nativeInputRemedies(app, contents, failure, record);
+    } catch (diagnosticError) {
+      failure.diagnosticError = String(diagnosticError);
+      try { record(); }
+      catch (recordError) { console.error("Could not record native input diagnostics:", recordError); }
+    }
     throw error;
   }
 }
@@ -48,6 +62,66 @@ async function nativeInputPresentation(app: ShellApp, contents: string) {
       page:await contents.executeJavaScriptInIsolatedWorld(9002,[{code:
         "({visibility:document.visibilityState,readyState:document.readyState,presentation:globalThis.nativeInputPresentation??null})"}])};
   })()`);
+}
+
+/** Failure-only inventory: keep display coordinates and window ordering intact. */
+async function nativeInputEnvironment(app: ShellApp) {
+  const root = resolve(process.env.BUTLER_SMOKE_ELECTRON_APP ?? "packages/butler-app/client/electron");
+  return app.main(`(() => {
+    const {BrowserWindow,screen}=process.getBuiltinModule('module').createRequire(${JSON.stringify(join(root, "package.json"))})('electron');
+    return {windows:BrowserWindow.getAllWindows().map(w=>({id:w.id,visible:w.isVisible(),
+      focused:w.isFocused(),bounds:w.getBounds(),isVisibleOnAllWorkspaces:w.isVisibleOnAllWorkspaces(),
+      displayId:screen.getDisplayMatching(w.getBounds()).id})),displays:screen.getAllDisplays(),
+      electron:process.versions.electron,chrome:process.versions.chrome,argv:process.argv};
+  })()`);
+}
+
+async function nativeInputRemedies(app: ShellApp, contents: string, failure: Record<string, unknown>, record: () => void) {
+  const page = () => app.main<any>(`${contents}.executeJavaScriptInIsolatedWorld(9002,[{code:${JSON.stringify(`(() => {
+    if (!globalThis.nativeInputVisibilityDiagnostic) {
+      const events=globalThis.nativeInputVisibilityDiagnostic=[];
+      document.addEventListener('visibilitychange',()=>events.push({visibility:document.visibilityState,at:performance.now()}));
+    }
+    return {visibility:document.visibilityState,presentation:globalThis.nativeInputPresentation??null,
+      events:[...globalThis.nativeInputVisibilityDiagnostic]};
+  })()`)} }])`);
+  const remedies: unknown[] = [];
+  failure.remedies = remedies;
+  for (const action of ["view-visible", "reattach", "invalidate", "window-bounds", "window-show-inactive", "window-focus"]) {
+    const result: Record<string, any> = { action };
+    remedies.push(result);
+    try {
+      result.before = await page();
+      try { await app.main(`(${nativeInputRemedy.toString()})(${contents},${JSON.stringify(action)})`); }
+      catch (error) { result.actionError = String(error); }
+      // Poll outside the renderer, just like the presentation wait: hidden pages suspend rAF.
+      // This bounded observation is diagnostic only; recovery never turns the failure green.
+      const deadline = Date.now() + 500;
+      do {
+        result.after = await page();
+        if (result.after.events.length > result.before.events.length) break;
+        await new Promise(done => setTimeout(done, 100));
+      } while (Date.now() < deadline);
+      result.visibilityChanged = result.after.events.length > result.before.events.length;
+    } catch (error) { result.error = String(error); }
+    record();
+  }
+}
+
+/** Serialized only after the original failure has been written. Preserve child order. */
+function nativeInputRemedy(contents: any, action: string) {
+  const browser = (globalThis as any).browserAgentSubject;
+  const tab = [...browser.tabs.values()].find((t: any) => t.view?.webContents === contents) as any;
+  if (!tab?.attached || tab.attached.isDestroyed()) throw new Error("No attached window for diagnostic remedy");
+  const win = tab.attached, view = tab.view;
+  if (action === "view-visible") { view.setVisible(false); view.setVisible(true); }
+  else if (action === "reattach") {
+    const index = win.contentView.children.indexOf(view);
+    win.contentView.removeChildView(view); win.contentView.addChildView(view, index);
+  } else if (action === "invalidate") contents.invalidate();
+  else if (action === "window-bounds") win.setBounds(win.getBounds());
+  else if (action === "window-show-inactive") win.showInactive();
+  else if (action === "window-focus") win.focus();
 }
 
 type Point = { x: number; y: number };
