@@ -46,7 +46,7 @@ This routine requires Ledger access and publication authorization. Codex workers
   Keep perf checks, but put each failure line at an incident-level threshold: the point where the result is a real problem. A path that normally takes about 10 ms fails at a few hundred ms, not at 11 or 20 ms. Base each line on today's measured normal, an order of magnitude above it or where a user would notice, whichever comes first. A small change below that line, such as 10 ms becoming 20 ms, is not a failure, not a fix task and not an issue. Existing product budgets the owner set stay: startup, idle disk writes ≤1 MB/60 s, 1 s refusal latency. Test timeouts detect hangs only.
   - Idle cost is performance too. Never preload, prewarm or keep a resident worker or process for a speculative speedup, such as loading a model or spawning a spare shell. Load on demand. A rare wait of a few seconds is acceptable; a constant background cost is not.
 - **Performance without cutting quality.** Meet a latency or throughput budget by doing less *work*, never by returning less *content*. Truncating, dropping fields, skipping items, lowering fidelity or serving stale cached data to pass a budget is a failure. Every timed perf check must also assert that the response is complete and correct (counts, order, latest state).
-- **Flaky tests.** Don't retry, skip, or mark tests ignored to get green. A test that fails on main without a code change gets a GitHub issue the same day and a fix within 48 hours. Re-run CI only with that issue linked in a PR comment.
+- **Main failures: fix it or don't file it.** Don't retry, skip, or mark tests ignored to get green. When a test fails on main without a code change, file a GitHub issue only together with a fix: the coordinator starts the fix task the same day, and the fix PR closes the issue with `Fixes #<n>`. One issue per root cause; comment on a matching open issue instead of filing another. Never file an issue only to justify a CI re-run; re-run only with that in-progress issue linked in a PR comment.
 - **Before pushing:** Fetch origin and merge your base if it moved, then run `scripts/prepush`; it must pass; if TS/UI changed, also follow the TypeScript validation rule.
 - **Pushing.** Push only when the task allows it. When the task includes a PR, after pushing confirm with `gh pr checks <n>` that checks started. GitHub runs no `pull_request` checks while a PR has merge conflicts.
 - **Final message:**
@@ -71,6 +71,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 ## Recurring mistakes (feedback log)
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
+
+- **2026-10-28: Fix it or don't file it.** An issue for a main failure exists only while its fix is under way; the fix PR closes it with `Fixes #<n>`.
+  - What happened: sessions filed an issue for each main failure to unlock a CI re-run, merged their own work and moved on. Nobody started the fixes, PRs that did fix them never closed them, and open issues went from 17 to 46 in eight days.
 
 - **2026-10-20: Never kill by name pattern on shared hosts.** `pkill`/`killall` are blocked in WSL Codex tasks. Kill only PIDs you started and recorded.
   - What happened: a verification agent ran `pkill -f "cargo test"` on the shared WSL host and could have killed other sessions' test runs. Earlier, an agent killed an owner-PC PowerShell PID it only guessed was its own.
