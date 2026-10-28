@@ -49,9 +49,10 @@ async fn gateway_port_pair_stays_reserved_between_processes() -> Result<(), Harn
     assert_eq!(s.gw.get("/health").await?.status, 200);
     s.finish().await?;
     assert!(
-        InstanceLock::try_exclusive(
-            butler_platform::shared_locks::open("butler-e2e-port-pairs", &name)?
-        )
+        InstanceLock::try_exclusive(butler_platform::shared_locks::open(
+            "butler-e2e-port-pairs",
+            &name
+        )?)
         .is_ok()
     );
     Ok(())
