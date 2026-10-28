@@ -84,6 +84,7 @@ pub mod process_priority;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;
+pub mod shared_locks;
 pub mod sqlite;
 pub mod stdio;
 pub mod storage_size;

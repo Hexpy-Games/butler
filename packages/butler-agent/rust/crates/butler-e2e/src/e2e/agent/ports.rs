@@ -1,10 +1,7 @@
 //! Gateway port pairs held across startup, shutdown and restart.
 use crate::e2e::{HarnessError, harness_error};
 use butler_platform::instance::{InstanceLock, LockError};
-use std::{
-    fs::OpenOptions,
-    sync::atomic::{AtomicU32, Ordering},
-};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 const FIRST: u32 = 20_000;
 const SPAN: u32 = 12_000;
@@ -43,16 +40,10 @@ pub fn free_port() -> Result<u16, HarnessError> {
 /// The file lock coordinates separate nextest processes and stays held while
 /// an Agent restarts. Socket probes alone leave both gaps unprotected.
 pub(super) fn reserve() -> Result<(u16, InstanceLock), HarnessError> {
-    let root = std::env::temp_dir().join("butler-e2e/port-pairs");
-    std::fs::create_dir_all(&root)?;
     for _ in 0..SPAN {
         let port = candidate()?;
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(root.join(format!("{port}.lock")))?;
+        let file =
+            butler_platform::shared_locks::open("butler-e2e-port-pairs", &format!("{port}.lock"))?;
         let lease = match InstanceLock::try_exclusive(file) {
             Ok(lease) => lease,
             Err(LockError::Busy) => continue,
