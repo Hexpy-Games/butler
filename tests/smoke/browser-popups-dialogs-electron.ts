@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser } from "../support/browser-agent-stub";
+import { pageShownBeforeNativeInput } from "../support/electron-view-input";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
@@ -39,6 +40,7 @@ const send = async (text: string) => {
 };
 const delivered = () => waitBrowser(async () => (await app.gateway.api<any>("/session-view?session_id=general")).latest_turn?.state === "delivered", "stub delivered");
 async function nativeClick(id: string, selector: string) {
+  await pageShownBeforeNativeInput(app, contents(id));
   await app.main(`(async()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)});const w=t.view.webContents;
     const point=await w.executeJavaScript(${JSON.stringify(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});n.scrollIntoView({block:'center'});const b=n.getBoundingClientRect();if(!n.contains(document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)))throw Error('target not hit-testable');return{x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)}})()`)});
     (t.popupWindow ?? ${app.win}).focus();w.focus();w.sendInputEvent({type:'mouseDown',...point,button:'left',clickCount:1});w.sendInputEvent({type:'mouseUp',...point,button:'left',clickCount:1});
@@ -110,7 +112,10 @@ try {
       await answer(mine, type !== "print", { value: "Owner answer" });
     }
     await nativeClick(mine, "#beforeunload");
-    if (name === "ko-light-1440") await app.main(`${contents(mine)}.sendInputEvent({type:'keyDown',keyCode:'W',modifiers:['control']})`);
+    if (name === "ko-light-1440") {
+      await pageShownBeforeNativeInput(app, contents(mine));
+      await app.main(`${contents(mine)}.sendInputEvent({type:'keyDown',keyCode:'W',modifiers:['control']})`);
+    }
     else await app.call("close", { id: mine });
     await waitBrowser(async () => (await state()).tabs.find(t => t.id === mine)?.dialog?.type === "beforeunload", "beforeunload anchored");
     await app.shot(`${name}-beforeunload`);

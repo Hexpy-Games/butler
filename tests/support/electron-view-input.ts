@@ -1,4 +1,24 @@
 import type { ShellApp } from "./browser-shell-acceptance";
+import { waitBrowser } from "./browser-agent-app";
+
+export async function pageShownBeforeNativeInput(app: ShellApp, contents: string) {
+  // Poll from outside the page: hidden documents can suspend rAF indefinitely.
+  // Each document/visibility transition must get its own two frame callbacks.
+  const code = `(()=>{
+    if (!globalThis.nativeInputPresentation) {
+      const state=globalThis.nativeInputPresentation={generation:0,ready:false};
+      const changed=()=>{
+        const generation=++state.generation;state.ready=false;
+        if(document.visibilityState==='visible') requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          if(state.generation===generation && document.visibilityState==='visible') state.ready=true;
+        }));
+      };
+      document.addEventListener('visibilitychange',changed);changed();
+    }
+    return document.visibilityState==='visible' && globalThis.nativeInputPresentation.ready;
+  })()`;
+  await waitBrowser(() => app.main(`${contents}.executeJavaScriptInIsolatedWorld(9002,[{code:${JSON.stringify(code)}}])`), "page shown before native input");
+}
 
 type Point = { x: number; y: number };
 

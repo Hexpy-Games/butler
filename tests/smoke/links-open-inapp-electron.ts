@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { tmpdir } from "node:os";
 import { captureLinkMenu, compileMenuInspector, nativeMenuBounds } from "../support/butler-platform/link-menu-smoke-capture.mjs";
+import { pageShownBeforeNativeInput } from "../support/electron-view-input";
 import { shellReady } from "../support/browser-shell-acceptance";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
@@ -64,6 +65,7 @@ try {
       await a.page.rightClick(click.x, click.y);
     } else {
       await a.click("브라우저"); await a.call("activate", { id: tab });
+      await pageShownBeforeNativeInput(a, contents);
       await a.main(`${contents}.setZoomFactor(${zoom})`);
       await waitBrowser(() => a.main(`${contents}.executeJavaScript('Math.abs(devicePixelRatio-${display.scaleFactor*zoom})<0.01')`), "page zoom applied");
       if (edge) await a.main(`${contents}.executeJavaScript("Object.assign(document.querySelector('#plain').style,{position:'fixed',right:'16px',bottom:'16px'})")`);
@@ -116,6 +118,7 @@ try {
     facts.push({ context, theme, zoom, edge, labels, distance, externalOpen: "stubbed" });
   }
   async function nativeClick(selector: string, button = "left", modifiers: string[] = []) {
+    await pageShownBeforeNativeInput(a, contents);
     const point = await a.main<{ x: number; y: number }>(`${contents}.executeJavaScript(${JSON.stringify(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)})`);
     await a.main(`${contents}.sendInputEvent(${JSON.stringify({ type: "mouseDown", ...point, button, clickCount: 1, modifiers })});${contents}.sendInputEvent(${JSON.stringify({ type: "mouseUp", ...point, button, clickCount: 1, modifiers })})`);
   }
