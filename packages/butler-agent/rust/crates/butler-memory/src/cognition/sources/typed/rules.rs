@@ -9,8 +9,8 @@ use super::write::{ExplicitMemoryUpdateInput, explicit_rule_revision, sha256};
 use super::{ExplicitRuleBinding, RuleOperation, read_binding};
 use crate::cognition::{
     CognitionCode, CognitionError, CognitionPathEnvironment, CognitionResult, CompletionPublisher,
-    MemoryGenerationTarget, assert_mutation_authority, ensure_data_authority,
-    resolve_active_generation,
+    MemoryGenerationTarget, active_memory_descriptor_exists, assert_mutation_authority,
+    ensure_data_authority, resolve_active_generation,
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 use inventory::Inventory;
@@ -106,6 +106,7 @@ impl RememberedRuleOwner {
         input: ExplicitMemoryUpdateInput,
         cancellation: CancellationToken,
     ) -> CognitionResult<RememberedRuleReceipt> {
+        self.wait_for_first_generation(cancellation.clone()).await?;
         if cancellation.is_cancelled() {
             return Err(failure("rule_write_cancelled"));
         }
@@ -121,6 +122,7 @@ impl RememberedRuleOwner {
         session: String,
         cancellation: CancellationToken,
     ) -> CognitionResult<RememberedRuleReceipt> {
+        self.wait_for_first_generation(cancellation.clone()).await?;
         if cancellation.is_cancelled() {
             return Err(failure("rule_write_cancelled"));
         }
@@ -136,6 +138,7 @@ impl RememberedRuleOwner {
         input: ExplicitMemoryUpdateInput,
         cancellation: CancellationToken,
     ) -> CognitionResult<RememberedRuleReceipt> {
+        self.wait_for_first_generation(cancellation.clone()).await?;
         if input.project_id != target.project_id {
             return Err(failure("rule_binding_mismatch"));
         }
@@ -193,11 +196,48 @@ impl RememberedRuleOwner {
         self.run(None, cancellation).await.map(|_| ())
     }
 
+    /// Fresh publication owns the writer gate before explicit writes are admitted.
+    /// Existing generations keep capture independent of owner transactions.
+    async fn wait_for_first_generation(
+        &self,
+        cancellation: CancellationToken,
+    ) -> CognitionResult<()> {
+        let owner = self.clone();
+        let executor = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || {
+            if active_memory_descriptor_exists(&owner.data_root, &owner.environment)? {
+                return Ok(());
+            }
+            // Both the descriptor probe and the coordinator's SQLite attempts
+            // run off Tokio workers, just like the mutation lease in run().
+            let lease = executor
+                .block_on(owner.coordinator.acquire(
+                    CognitionWriteAcquire {
+                        lock_path: owner.environment.consolidation_lock(&owner.data_root),
+                        purpose: Some("remembered_rule".into()),
+                        deadline_at_epoch_ms: None,
+                        cancellation: Some(cancellation),
+                    },
+                    CognitionWaitClass::Interactive,
+                ))
+                .map_err(CognitionError::from)?;
+            if let Some(lease) = lease {
+                lease.release(false).map_err(CognitionError::from)?;
+            }
+            // A cancelled/bounded wait or absent publisher leaves authority()
+            // responsible for reporting the actual generation state.
+            Ok(())
+        })
+        .await
+        .map_err(failure_source)?
+    }
+
     async fn run(
         &self,
         request: Option<transaction::Request>,
         cancellation: CancellationToken,
     ) -> CognitionResult<Option<RememberedRuleReceipt>> {
+        self.wait_for_first_generation(cancellation.clone()).await?;
         let owner = self.clone();
         tokio::task::spawn_blocking(move || owner.authority())
             .await
