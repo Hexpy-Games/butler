@@ -5,7 +5,39 @@ import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
 
+function captureFailureHandlingSource(variantExpression: string, evidenceFile: string): string {
+  return [
+    `const variant=${variantExpression},failureFile=${JSON.stringify(evidenceFile)};`,
+    "let round=0;",
+    "const read=value=>{try{return value()}catch(error){return {error:String(error)}}};",
+    "const failureSnapshot=async(label)=>{",
+    "  const attached=t?.attached,view=t?.view,contents=view?.webContents;",
+    "  const captures=read(()=>[...(t?.captures?.entries?.()??[])].map(([,startedHidden])=>({startedHidden})));",
+    "  const documentVisibilityState=contents?await contents.executeJavaScriptInIsolatedWorld(9001,[{code:'document.visibilityState'}])",
+    "    .catch(error=>'unavailable: '+String(error)):null;",
+    "  return {variant,round,label,",
+    "    attachedWindowId:attached?read(()=>attached.id??attached.getId()):null,",
+    "    attachedWindowVisible:attached?read(()=>attached.isVisible()):null,",
+    "    attachedWindowFocused:attached?read(()=>attached.isFocused()):null,",
+    "    viewVisible:view?read(()=>view.getVisible()):null,",
+    "    viewBounds:view?read(()=>view.getBounds()):null,slotBounds:t?.slot??null,",
+    "    detachWait:Boolean(t?.detachWait),attachWait:Boolean(t?.attachWait),placeHold:Boolean(t?.placeHold),",
+    "    inFlightCaptures:{count:Array.isArray(captures)?captures.length:null,startedHidden:captures},",
+    "    webContentsBeingCaptured:contents?read(()=>contents.isBeingCaptured()):null,documentVisibilityState};",
+    "};",
+    "const settles=async(label,promise)=>{let timer;const hung=new Promise((_,fail)=>{timer=setTimeout(async()=>{",
+    "  let snapshot;try{snapshot=await failureSnapshot(label)}catch(error){snapshot={variant,round,label,diagnosticError:String(error)}}",
+    "  const failure=new Error(label+' never settled; snapshot='+JSON.stringify(snapshot));",
+    "  try{process.getBuiltinModule('fs').writeFileSync(failureFile,JSON.stringify(snapshot,null,2))}",
+    "  catch(error){failure.message+='; evidence write failed: '+String(error)}",
+    "  fail(failure);",
+    "},10000)});",
+    "try{return await Promise.race([promise,hung])}finally{clearTimeout(timer)}};",
+  ].join("\n");
+}
+
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
+const failureFile = join(evidence, "capture-detach-failure.json");
 const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response(
   "<!doctype html><title>Capture fixture</title><style>html,body{margin:0;height:100%;background:#365bf5}</style>",
   { headers: { "content-type": "text/html" } }) });
@@ -22,10 +54,10 @@ try {
   // A capture may start in a visible window even when throttling is off. It must
   // finish in that window before the view moves to the hidden agent window, or back.
   for (const throttling of [false, true]) {
+    const diagnostics = captureFailureHandlingSource(JSON.stringify(`cross-window-${throttling}`), failureFile);
     facts[`cross-window-${throttling}`] = await app.main(`(async()=>{
       const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(id)}),source=${app.win};
-      const settles=async(label,promise)=>{let timer;try{return await Promise.race([promise,
-        new Promise((_,fail)=>{timer=setTimeout(()=>fail(new Error(label+' never settled')),10000)})])}finally{clearTimeout(timer)}};
+      ${diagnostics}
       await settles('initial capture',b.capture(t));
       t.view.webContents.setBackgroundThrottling(${throttling});t.driven=true;
       const first=b.capture(t);b.commandTab('covered',t.id,true);
@@ -49,13 +81,13 @@ try {
   // The bursts use the slot's own entry points: a gliding pane covers, moves and uncovers the page each frame;
   // a driven tab parks in the hidden agent window between frames; closing the area hides every tab.
   for (const variant of ["glide", "parked", "area"]) {
+    const diagnostics = captureFailureHandlingSource(JSON.stringify(variant), failureFile);
     facts[variant] = await app.main(`(async()=>{
       const b=globalThis.browserAgentSubject, t=b.tabs.get(${JSON.stringify(id)}), wait=ms=>new Promise(r=>setTimeout(r,ms));
-      const settles=async(label,promise)=>{let timer;const hung=new Promise((_,fail)=>{timer=setTimeout(()=>fail(new Error(label+' never settled')),10000)});
-        try{return await Promise.race([promise,hung])}finally{clearTimeout(timer)}};
+      ${diagnostics}
       const base={...t.slot}; let deferred=0;
       t.driven=${JSON.stringify(variant)}==='parked';
-      for(let round=0;round<5;round++){
+      for(round=0;round<5;round++){
         for(let i=0;i<20;i++){
           const slot={...base,x:base.x+(i%5)*7,width:base.width-(i%5)*7};
           if(${JSON.stringify(variant)}==='area'){b.hide();if(t.detachWait) deferred++;b.areaVisible=true;b.commandTab('bounds',t.id,slot);}
