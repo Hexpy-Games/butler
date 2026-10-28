@@ -1,5 +1,5 @@
-import { useCallback, type RefObject } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useState, type RefObject } from "react";
+import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
 import type { MessageRecord } from "@/app/types.ts";
 import { MESSAGE_LIST_TOP_PADDING } from "../conversationUtils";
 
@@ -45,7 +45,9 @@ export function useMessageVirtualizer({
     [queuedStart, showTurnActivity, visibleMessages],
   );
 
+  const { viewportHeight: measuredViewportHeight, observeViewportRect } = useMessageViewport();
   const rowVirtualizer = useVirtualizer({
+    observeElementRect: observeViewportRect,
     count: itemCount,
     getScrollElement,
     getItemKey,
@@ -58,7 +60,7 @@ export function useMessageVirtualizer({
 
   const virtualContentHeight = Math.max(headerHeight, rowVirtualizer.getTotalSize());
   const viewportHeight =
-    rowVirtualizer.scrollRect?.height ?? scrollRef.current?.clientHeight ?? 0;
+    measuredViewportHeight ?? rowVirtualizer.scrollRect?.height ?? scrollRef.current?.clientHeight ?? 0;
   const naturalTopOffset = Math.max(
     MESSAGE_LIST_TOP_PADDING,
     viewportHeight - virtualContentHeight - bottomReserve,
@@ -109,4 +111,17 @@ function estimateMessageRowSize(
     return Math.max(140, Math.min(520, 96 + estimatedLines * 26));
   }
   return 58;
+}
+
+function useMessageViewport() {
+  const [viewportHeight, setViewportHeight] = useState<number>();
+  const observeViewportRect = useCallback<typeof observeElementRect<HTMLDivElement>>(
+    (instance, callback) => observeElementRect(instance, (rect) => {
+      callback(rect);
+      // Height changes must render even when the virtual range stays the same.
+      setViewportHeight(rect.height);
+    }),
+    [],
+  );
+  return { viewportHeight, observeViewportRect };
 }
