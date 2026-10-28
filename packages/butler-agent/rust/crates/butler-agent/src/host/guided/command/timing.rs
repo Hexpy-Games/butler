@@ -24,7 +24,7 @@ impl CommandTiming {
 
     pub(in crate::host) fn mark(&self, event: &'static str) {
         if let Some(started) = self.started {
-            eprintln!(
+            butler_platform::stdio::diagnostic_line(format_args!(
                 "command_phase_timing phase={} id={} event={} utc_us={} elapsed_us={}",
                 self.phase,
                 self.id,
@@ -34,7 +34,7 @@ impl CommandTiming {
                     .unwrap_or_default()
                     .as_micros(),
                 started.elapsed().as_micros()
-            );
+            ));
         }
     }
 }
