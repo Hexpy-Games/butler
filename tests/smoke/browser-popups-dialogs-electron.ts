@@ -79,6 +79,20 @@ async function popupShot(name: string, parent: string) {
   if (!name.includes("allowed-once")) await waitBrowser(() => app.main(`${contents(parent)}.executeJavaScript("document.querySelector('#result').textContent !== 'Ready'")`), "postMessage returns to opener");
   console.log(`popup passed ${name}`);
 }
+function approvalLayout() {
+  const card = document.querySelector('[data-test-class="composer-authority-decision"]')!;
+  // The DS MessageRow body is the transcript content column, outside the reply bubble's width cap.
+  const body = card.closest('[data-test-class="message-body"]')!;
+  const style = getComputedStyle(body);
+  const title = card.querySelector('[data-slot="composer-decision-subject"] [data-slot="clickable"] label')!;
+  return { width: card.getBoundingClientRect().width,
+    contentWidth: body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+    titleLines: title.getBoundingClientRect().height / parseFloat(getComputedStyle(title).lineHeight) };
+}
+function assertApprovalLayout(layout: ReturnType<typeof approvalLayout>) {
+  assert.ok(layout.width >= layout.contentWidth * .95, `approval fills transcript body: ${JSON.stringify(layout)}`);
+  assert.ok(layout.titleLines <= 3, `approval title fits three lines: ${JSON.stringify(layout)}`);
+}
 try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light", access_mode: "full_access" }) });
   await app.page.reload(); await app.click("Browser");
@@ -202,6 +216,7 @@ try {
     await app.main(`${app.win}.setContentSize(${width},900)`); await app.page.reload();
     await app.click(getAppCopy(appLocaleFromLanguage(locale)).space.general);
     await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="composer-authority-decision"]')));
+    assertApprovalLayout(await app.page.evaluate(approvalLayout));
     assert.equal(await app.main(`[...globalThis.browserAgentSubject.tabs.values()].some(t=>t.attached===${app.win})`), false, "no native page obscures the conversation approval");
     await app.shot(`${locale}-${theme}-${width}-agent-confirm-approval`);
   }
@@ -216,6 +231,7 @@ try {
       await phone.getByRole("button", { name: getAppCopy(appLocaleFromLanguage(locale)).space.general, exact: true }).click();
       await phone.getByRole("button", { name: locale === "ko" ? "이번만 허용" : "Allow once", exact: true }).waitFor();
       assert.ok((await phone.locator('[data-test-class="composer-authority-decision"]').innerText()).includes("Continue?"));
+      assertApprovalLayout(await phone.evaluate(approvalLayout));
       assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await phone.screenshot({ path: join(evidence, `${locale}-${theme}-390-agent-confirm-approval.png`) });
     }
