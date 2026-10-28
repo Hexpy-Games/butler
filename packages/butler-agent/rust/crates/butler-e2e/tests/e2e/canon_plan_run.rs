@@ -14,6 +14,7 @@ mod holds;
 mod lifecycle;
 mod ordering;
 mod queries;
+mod take_recovery;
 mod taking;
 use butler_e2e::e2e::HarnessError;
 use fixture::*;

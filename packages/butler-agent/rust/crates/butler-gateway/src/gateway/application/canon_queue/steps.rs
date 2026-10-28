@@ -7,18 +7,6 @@ pub(super) async fn apply(
     payload: Value,
 ) -> Result<(), GatewayApplicationError> {
     let owner = field(&payload, "session_id")?;
-    let current = app
-        .dependencies
-        .canon
-        .canon_operation(AppCanonOperation::Queue {
-            session_id: owner.clone(),
-            action: "owner".into(),
-            input: json!({"epic_id":payload["epic_id"]}),
-        })
-        .await?;
-    if current["session_id"] != owner || current["step_op_id"] != op {
-        return Ok(());
-    }
     let chat = app.owner_chat(owner).await?;
     let id = format!("canon-step-{}", butler_turn::btcc::digest_identity(op));
     let message = super::super::admission_identity::canonical_client_id(&id);
@@ -41,17 +29,19 @@ pub(in crate::gateway::application) async fn deliver(
     id: String,
 ) -> Result<(), GatewayApplicationError> {
     let key = id.clone();
-    let (chat, text, state) = app
+    let (chat, text, state, op, raw) = app
         .storage
         .read(move |db| {
             db.query_row(
-                "SELECT chat_id,text,state FROM app_initiated_messages WHERE id=?1",
+                "SELECT chat_id,text,state,source_key,payload_json FROM app_initiated_messages WHERE id=?1",
                 [key],
                 |r| {
                     Ok((
                         r.get::<_, String>(0)?,
                         r.get::<_, String>(1)?,
                         r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, String>(4)?,
                     ))
                 },
             )
@@ -64,6 +54,15 @@ pub(in crate::gateway::application) async fn deliver(
         .acquire(format!("canon-delivery:{chat}"))
         .await;
     if state != "held" {
+        return Ok(());
+    }
+    let payload: Value =
+        serde_json::from_str(&raw).map_err(GatewayApplicationError::internal_from)?;
+    if !owns_step(app, &op, &payload).await? {
+        app.storage.execute(move |db| {
+            db.execute("UPDATE app_initiated_messages SET state='withdrawn' WHERE id=?1 AND state='held'", [id]).map_err(AppStorageError::sqlite)?;
+            Ok(())
+        }).await.map_err(app_error)?;
         return Ok(());
     }
     let Some(_posting) = super::super::initiated::posting::Reservation::claim(app, id.clone())
@@ -87,6 +86,24 @@ pub(in crate::gateway::application) async fn deliver(
         Ok(())
     }).await.map_err(app_error)
 }
+async fn owns_step(
+    app: &AppApplication,
+    op: &str,
+    payload: &Value,
+) -> Result<bool, GatewayApplicationError> {
+    let owner = field(payload, "session_id")?;
+    let current = app
+        .dependencies
+        .canon
+        .canon_operation(AppCanonOperation::Queue {
+            session_id: owner.clone(),
+            action: "owner".into(),
+            input: json!({"epic_id":payload["epic_id"]}),
+        })
+        .await?;
+    Ok(current["session_id"] == owner && current["step_op_id"] == op)
+}
+
 /// A durable terminal receipt. Startup and projection call the same operation.
 pub(in crate::gateway::application) async fn turn_ended(
     storage: &super::super::storage::AppStorage,

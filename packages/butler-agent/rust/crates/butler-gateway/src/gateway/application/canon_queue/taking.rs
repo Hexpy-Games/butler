@@ -1,7 +1,7 @@
 use super::*;
 
 /// Release the source identity atomically with the move. Both delivery locks
-/// stay held until Stop confirms cancellation, so the target cannot start early.
+/// stay held through Stop; a failed Stop leaves cancellation to normal recovery.
 pub(super) async fn execute(
     app: &AppApplication,
     chat: &str,
@@ -52,8 +52,10 @@ pub(super) async fn execute(
             input,
         })
         .await?;
-    if let Some(op) = owner["step_op_id"].as_str() {
-        stop_source(app, op.to_owned()).await?;
+    if let Some(op) = owner["step_op_id"].as_str()
+        && let Err(error) = stop_source(app, op.to_owned()).await
+    {
+        tracing::warn!(%error, "Canon move committed; source Stop deferred to recovery");
     }
     drop((projection, deliveries));
     Ok(result)
