@@ -75,12 +75,25 @@ async fn locked_cancel_does_not_block_replay_and_next_change_delivers() -> Resul
     assert_eq!(s.gw.turns(&target).await?, [] as [serde_json::Value; 0]);
     assert!(!taking.is_finished());
     app.execute_batch("DROP TRIGGER delay_terminal")?;
-    // A later change settles Stop and delivers the moved step exactly once.
-    data(
-        s.gw.post(&format!("/turns/{source_turn}/cancel"), json!({}))
-            .await?,
-        202,
+    // The native Stop has finished; release the App receipt suppressed by the
+    // trigger. An unrelated event wakes execute's terminal wait. The next
+    // native change must then retry the other skipped cancellation identity.
+    assert_eq!(
+        canon.query_row::<i64, _, _>(
+            "SELECT count(*) FROM btcc_turns WHERE semantic_state='cancelled'",
+            [],
+            |r| r.get(0)
+        )?,
+        1
     );
+    app.execute(
+        "UPDATE turns SET state='cancelled' WHERE id=?1",
+        [&source_turn],
+    )?;
+    let changed = s.gw.say(&independent, "What does this mean?").await?;
+    let changed = butler_e2e::e2e::scenario::accepted_turn_id(&changed)?;
+    s.gw.wait_terminal(&independent, &changed, Duration::from_secs(30))
+        .await?;
     data(
         tokio::time::timeout(Duration::from_secs(30), taking)
             .await
