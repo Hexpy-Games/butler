@@ -1,4 +1,3 @@
-import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { shellReady } from "./browser-shell-acceptance";
 import { strict as assert } from "node:assert";
 import { writeFileSync } from "node:fs";
@@ -7,12 +6,12 @@ import { waitBrowser, type browserAgentApp } from "./browser-agent-app";
 
 type App=Awaited<ReturnType<typeof browserAgentApp>>;
 /** Trusted UI input covers artifact entry, group focus and DS drag handover. */
-export async function browserOutputEntry(app:App,evidence:string) {
+export async function browserOutputEntry(app:App,evidence:string,sessionId:string,sessionTitle:string) {
   await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({language:"en",appearance_theme:"light"})});
   await app.page.reload();
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="app-sidebar"]')));
   await shellReady(app, "en");
-  await app.page.clickText(getAppCopy("en-US").space.general,'[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]');
+  await app.page.clickText(sessionTitle,'[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]');
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message-artifact-list"] [aria-label="Browser task"]')));
   await app.page.clickText("Browser task",'[data-test-class="message-artifact-list"] *');
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="artifact-viewer"] iframe')));
@@ -20,16 +19,16 @@ export async function browserOutputEntry(app:App,evidence:string) {
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-area"]')));
   const state=await app.call<{activeId:string;tabs:Array<{id:string;owner:string;agent:boolean}>}>("state");
   const opened=state.tabs.find(tab=>tab.id===state.activeId)!;
-  assert.equal(opened.owner,"conversation:general");assert.equal(opened.agent,false);
+  assert.equal(opened.owner,`conversation:${sessionId}`);assert.equal(opened.agent,false);
   assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-split][data-pane-open] [data-slot=adaptive-shell-split-chat] [data-test-class~=conversation]'))"),true,"artifact entry opens its real conversation frame");
   assert.equal(await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-right-open')"),"false","artifact entry closes the inspector");
   await app.call("close",{id:opened.id});
   writeFileSync(join(evidence,"public-artifact-entry.json"),JSON.stringify({opened,conversationFrame:true},null,2));
 }
 
-export async function browserUiChecks(app:App,agentTab:string,evidence:string) {
+export async function browserUiChecks(app:App,agentTab:string,evidence:string,sessionId:string) {
   const url=await app.main<string>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agentTab)}).url`);
-  const anchor=await app.call<string>("create",{owner:"conversation:general",url,profile:"signed_out"});
+  const anchor=await app.call<string>("create",{owner:`conversation:${sessionId}`,url,profile:"signed_out"});
   const opened={id:anchor};
   const webgl=await app.main(`(async()=>{const tabs=globalThis.browserAgentSubject.tabs;const test=async id=>tabs.get(id).view.webContents.executeJavaScript("(()=>{const gl=document.createElement('canvas').getContext('webgl');const enabled=Boolean(gl);gl?.getExtension('WEBGL_lose_context')?.loseContext();return enabled})()");return {user:await test(${JSON.stringify(opened.id)}),agent:await test(${JSON.stringify(agentTab)})}})()`);
   assert.deepEqual(webgl,{user:true,agent:true},"WebGL is enabled for both user and agent tabs");
@@ -39,7 +38,7 @@ export async function browserUiChecks(app:App,agentTab:string,evidence:string) {
   await dragTo(app,'mine',evidence);
   await waitBrowser(async()=>(await app.call<{tabs:Array<{id:string;owner:string}>}>("state")).tabs.find(tab=>tab.id===agentTab)?.owner==='mine',"DS drag to my tabs");
   await dragTo(app,'conversation',evidence);
-  await waitBrowser(async()=>(await app.call<{tabs:Array<{id:string;owner:string}>}>("state")).tabs.find(tab=>tab.id===agentTab)?.owner==='conversation:general',"DS drag back to conversation");
+  await waitBrowser(async()=>(await app.call<{tabs:Array<{id:string;owner:string}>}>("state")).tabs.find(tab=>tab.id===agentTab)?.owner===`conversation:${sessionId}`,"DS drag back to conversation");
   const handover=await app.call<{tabs:Array<{id:string;owner:string;holder:string}>}>("state");
   assert.equal(handover.tabs.find(tab=>tab.id===agentTab)?.holder,'agent');
   await app.call("control",{id:agentTab,holder:"agent"});

@@ -27,6 +27,7 @@ export async function soakBrowser(
   evidence: string,
   send: (text: string) => Promise<void>,
   delivered: () => Promise<void>,
+  sessionId: string,
 ) {
   const video = process.env.BUTLER_BROWSER_SOAK_VIDEO;
   assert.ok(video, "explicit video URL required for the soak");
@@ -83,7 +84,7 @@ export async function soakBrowser(
   }
   }catch(error){
     const mainHealth=await app.main("({rss:process.memoryUsage().rss,loopMaxMs:globalThis.browserAgentLoop.max/1e6})").catch(()=>null);
-    const turn=await app.gateway.api<{latest_turn?:{state:string}}>("/session-view?session_id=general").then(view=>view.latest_turn?.state).catch(()=>null);
+    const turn=await app.gateway.api<{latest_turn?:{state:string}}>(`/session-view?session_id=${sessionId}`).then(view=>view.latest_turn?.state).catch(()=>null);
     writeFileSync(join(evidence,"soak-failure.json"),JSON.stringify({stage,error:String(error),mainHealth,turn,elapsedMs:Date.now()-started,completeLoops:rows.length},null,2));
     throw error;
   }
