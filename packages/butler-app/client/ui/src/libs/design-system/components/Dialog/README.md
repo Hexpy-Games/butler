@@ -39,6 +39,12 @@ Product engineers, design-system maintainers, and coding agents can use it when 
   `height="full"` makes the cap its height, so a `scroll-body` whose body is
   short or empty (an empty task graph) fills it instead of collapsing to a strip.
   Without it nothing changes.
+- A dialog that is only a header and its actions (a confirmation) is never
+  shorter than a confirmation with one line of description: a title-only header
+  keeps the height of a title, `--space-2` and one `--typo-body-line-height`
+  line, with the title centred in it. A header with a description already fills
+  it and renders unchanged. Do not add spacers or padding to make a short
+  confirm taller.
 - Use ScrollArea for independently scrolling bodies. Do not mask the entire
   modal surface, which would also fade its border, header and shadow.
 - A dialog reserves no scrollbar gutter. When one that scrolls itself
