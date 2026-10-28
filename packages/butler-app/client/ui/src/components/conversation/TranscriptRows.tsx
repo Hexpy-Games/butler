@@ -7,7 +7,7 @@ import { QueuedMessageItem } from "./QueuedMessageItem";
 import type { useMessageList } from "./hooks/useMessageList";
 import type { useMessageListLayout } from "./hooks/useMessageListLayout";
 import type { useQueuedConversation } from "./hooks/useQueuedConversation";
-import type { useConversationRequest } from "./ConversationRequestContext";
+import { ConversationRequestSlot, type useConversationRequest } from "./ConversationRequestContext";
 import type { LiveTurnActivity } from "./TurnActivityPanel";
 
 interface TranscriptRowsProps {
@@ -36,7 +36,7 @@ export function TranscriptRows({ list, layout, queue, request, anchored, enterin
     </MessageRow>;
     if (request?.active && !anchored && virtualRow.index === requestIndex) return <MessageRow key="pending-request" role="assistant"
       index={virtualRow.index} rowRef={rowVirtualizer.measureElement} offsetY={virtualRow.start + topOffset}>
-      <div ref={request.setTarget} data-test-class="conversation-request" />
+      <ConversationRequestSlot setTarget={request.setTarget} />
     </MessageRow>;
     const queued = queue.items[virtualRow.index - messageItemCount];
     if (queued) return <QueuedMessageItem key={`queued-${queued.key}`} item={queued} queue={queue}

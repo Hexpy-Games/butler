@@ -2,7 +2,7 @@ import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import { usePendingAsks } from "../session-info/usePendingAsks.ts";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ComposerQuestionPanel } from "@/butler-ds";
+import { ComposerQuestionPanel, Stack } from "@/butler-ds";
 import { useComposerDecision } from "./hooks/useComposerDecision";
 import { ComposerAuthorityDecisionSurface } from "./ComposerAuthorityDecisionSurface";
 import { ComposerPlanDecisionSurface } from "./ComposerPlanDecisionSurface";
@@ -63,5 +63,12 @@ export function useConversationDecision(isComposing: boolean, enabled: boolean) 
 
 export function ConversationRequestAnchor({ messageId }: { messageId: string }) {
   const slot = useConversationRequest();
-  return slot?.active && slot.sourceMessageId === messageId ? <div ref={slot.setTarget} data-test-class="conversation-request" data-request-source-message={messageId} /> : null;
+  return slot?.active && slot.sourceMessageId === messageId ? <ConversationRequestSlot setTarget={slot.setTarget} messageId={messageId} /> : null;
+}
+
+/** Inline-size-contained panels need the row's width, including in bubble rows. */
+export function ConversationRequestSlot({ setTarget, messageId }: { setTarget: RequestSlot["setTarget"]; messageId?: string }) {
+  return <Stack.Item alignSelf="stretch">
+    <div ref={setTarget} data-test-class="conversation-request" data-request-source-message={messageId} />
+  </Stack.Item>;
 }
