@@ -14,6 +14,17 @@ pub fn append(
         params![entity,ctx.actor.to_string(),kind,summary,body,ctx.now])?;
     Ok(())
 }
+/// Preserve display summaries while recording status transitions without text parsing.
+pub fn status(tx: &Transaction<'_>, ctx: &Context, id: &str, from: &str, to: &str) -> Result<()> {
+    append(
+        tx,
+        ctx,
+        id,
+        "status",
+        &format!("{from}→{to}"),
+        Some(&json!({"from":from,"to":to}).to_string()),
+    )
+}
 pub fn comment(tx: &Transaction<'_>, ctx: &Context, id: &str, input: Value) -> Result<Value> {
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -68,6 +79,18 @@ fn page_visible(db: &Connection, epic: &str, before: Option<i64>, mcp: bool) -> 
     items.truncate(50);
     for row in &mut items {
         row["actor"] = serde_json::from_str(text(row, "actor_json")?)?;
+        if row["kind"] == "status" {
+            if !mcp {
+                if let Some(data) = row["body"]
+                    .as_str()
+                    .and_then(|body| serde_json::from_str::<Value>(body).ok())
+                {
+                    row["from"] = data["from"].clone();
+                    row["to"] = data["to"].clone();
+                }
+            }
+            row["body"] = Value::Null;
+        }
         if let Some(o) = row.as_object_mut() {
             o.remove("actor_json");
         }

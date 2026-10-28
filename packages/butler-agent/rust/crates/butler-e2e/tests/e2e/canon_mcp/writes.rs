@@ -52,6 +52,12 @@ async fn cn_11_mcp_updates_comments_creates_and_proposes() -> Result<(), Harness
     )
     .await?;
     assert_eq!(updated["status"], "in_progress");
+    let app = s.gw.get(&format!("/canon/epics/{id}")).await?;
+    assert_eq!(app.data()["activity"][0]["from"], "planned");
+    assert_eq!(app.data()["activity"][0]["to"], "in_progress");
+    assert!(updated["activity"][0].get("from").is_none());
+    assert!(updated["activity"][0].get("to").is_none());
+    assert!(updated["activity"][0]["body"].is_null());
     let conflict = call(
         &s,
         "canon_update_epic_status",

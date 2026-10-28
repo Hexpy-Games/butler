@@ -209,18 +209,7 @@ pub fn set_label(
     )?;
     event(tx, ctx, "work", id, expected_revision + 1, "label")?;
     if old["canon_status"] != label.as_str() {
-        activity::append(
-            tx,
-            ctx,
-            id,
-            "status",
-            &format!(
-                "{}→{}",
-                old["canon_status"].as_str().unwrap_or_default(),
-                label.as_str()
-            ),
-            None,
-        )?;
+        activity::status(tx, ctx, id, text(&old, "canon_status")?, label.as_str())?;
     }
     read_work(tx, id)
 }

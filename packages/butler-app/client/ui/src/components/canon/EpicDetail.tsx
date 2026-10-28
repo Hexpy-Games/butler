@@ -33,7 +33,10 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, onRefresh, title
       <KeyValueRow valueTextSize="caption" label={copy.status} value={<Tooltip wrap label={tasks?.running ? `${copy.running} · ${copy.runningCancel}` : undefined} side="top"><NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
         {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value} disabled={Boolean(tasks?.running && (value === "done" || value === "cancelled"))}>{label}</NativeSelectOption>)}
       </NativeSelect></Tooltip>} />
-      <KeyValueRow valueTextSize="caption" label={copy.assignee} value={<Stack inline align="row" cross="center" gap="xs"><CanonAvatar agent={epic.agent} person={epic.assignee} /><Box minWidth="0" shrink>{epic.agent && <Typo.Caption wrap="anywhere">{copy.mcp.working(epic.agent.person === LOCAL_PERSON_ID ? person : epic.agent.person, epic.agent.via)}</Typo.Caption>}<CanonPersonSelect compact value={epic.assignee} disabled={busy} onChange={assignee => void onWrite({ assignee })} /></Box></Stack>} />
+      <KeyValueRow valueTextSize="caption" label={copy.assignee} value={<Stack gap="xs" cross="end" minWidth="0">
+        <Stack inline align="row" cross="center" gap="xs" minWidth="0" maxWidth="full"><CanonAvatar agent={epic.agent} person={epic.assignee} /><Stack gap="none" minWidth="0" shrink><CanonPersonSelect compact value={epic.assignee} disabled={busy} onChange={assignee => void onWrite({ assignee })} /></Stack></Stack>
+        {epic.agent && <Typo.Caption tone="secondary" align="end" wrap="anywhere">{copy.mcp.working(epic.agent.person === LOCAL_PERSON_ID ? person : epic.agent.person, epic.agent.via)}</Typo.Caption>}
+      </Stack>} />
       <KeyValueRow valueTextSize="caption" label={copy.plan} value={<Stack inline align="row" cross="center" gap="xs">
         <Box minWidth="0" shrink>
         <CanonPlanSelect compact plans={plans} value={epic.plan_id} disabled={busy}

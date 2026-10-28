@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
-import type { CanonActivityPage, EpicDetail } from "@/app/canonApi.ts";
+import type { CanonActivity, CanonActivityPage, EpicDetail } from "@/app/canonApi.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { ActivityFeed, Button, ButtonContainer, Stack, Typo } from "@/butler-ds";
@@ -47,8 +47,21 @@ export function EpicActivity({ epic }: { epic: EpicDetail }) {
   return <Stack gap="sm" data-test-class="canon-activity">
     <ActivityFeed title={copy.activity} emptyLabel={copy.noActivity} items={page.activity.map(row => ({
       id: String(row.seq), title: canonActorLabel(row.actor, person), meta: relative(row.at),
-      description: <Typo.Text wrap="pre">{row.kind === "comment" ? row.body ?? row.summary : row.summary}</Typo.Text>,
+      description: <Typo.Text wrap="pre">{activityDescription(row)}</Typo.Text>,
     }))} />
     {page.activity_before !== null && <ButtonContainer size="sm" justify="end"><Button size="sm" variant="ghost" disabled={busy} onClick={() => void more()}>{copy.more}</Button></ButtonContainer>}
   </Stack>;
+}
+
+function activityDescription(row: CanonActivity): string {
+  const copy = appCopy.canon;
+  switch (row.kind) {
+    case "status": return row.from && row.to ? `${copy.statuses[row.from]} → ${copy.statuses[row.to]}` : row.summary;
+    case "created": return copy.mcp.createdActivity;
+    case "comment": return row.body ?? row.summary;
+    case "proposal_opened": return `${copy.mcp.proposal} · ${row.summary}`;
+    case "proposal_applied": return copy.mcp.appliedActivity;
+    case "proposal_declined": return copy.mcp.declinedActivity;
+    default: return row.summary;
+  }
 }

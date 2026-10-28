@@ -132,14 +132,7 @@ fn advance_label(tx: &Transaction<'_>, ctx: &Context, id: &str, target: &str) ->
         return Err(Error::Running);
     }
     tx.execute(Query::AdvanceLabel.sql(), params![id, target, ctx.now])?;
-    activity::append(
-        tx,
-        ctx,
-        id,
-        "status",
-        &format!("{}→{target}", text(&row, "canon_status")?),
-        None,
-    )?;
+    activity::status(tx, ctx, id, text(&row, "canon_status")?, target)?;
     event(
         tx,
         ctx,
