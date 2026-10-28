@@ -58,24 +58,24 @@ async fn validate_scope(
     app: &AppApplication,
     request: &AppCanonRequest,
 ) -> Result<(), GatewayApplicationError> {
-    use AppCanonResource::*;
+    use AppCanonResource::{
+        Activity, AllowGrant, BacklogOrder, Canon, Comment, CreateEpic, CreatePlan, CreateTag,
+        DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants, List, Plan,
+        PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+    };
     let project = match request.resource {
         Grants | AllowGrant | DenyGrant | RevokeGrant => return Ok(()),
         List if request.id.is_empty() => return Ok(()),
-        List => request.id.clone(),
-        Spec | ProposeSpec | Activity | Comment => {
+        Spec | ProposeSpec | Activity | Comment | Plan | EditPlan | PlanOrder | Epic
+        | EpicProgress | EditEpic | EditTag | DeleteTag => {
             app.dependencies
                 .canon
                 .project_scope(request.resource, request.id.clone())
                 .await?
         }
-        Plan | EditPlan | PlanOrder | Epic | EpicProgress | EditEpic | EditTag | DeleteTag => {
-            app.dependencies
-                .canon
-                .project_scope(request.resource, request.id.clone())
-                .await?
+        List | Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => {
+            request.id.clone()
         }
-        Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => request.id.clone(),
     };
     let exists = app
         .storage

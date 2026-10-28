@@ -87,9 +87,9 @@ pub struct Page {
 }
 
 pub fn epic(db: &Connection, id: &str) -> Result<Epic> {
-    project_epic(api::epic_only(db, id)?, db)
+    project_epic(&api::epic_only(db, id)?, db)
 }
-pub fn project_epic(row: Value, db: &Connection) -> Result<Epic> {
+pub fn project_epic(row: &Value, db: &Connection) -> Result<Epic> {
     let plan = row["plan_id"]
         .as_str()
         .map(|id| {
@@ -109,11 +109,11 @@ pub fn project_epic(row: Value, db: &Connection) -> Result<Epic> {
         )
     });
     Ok(Epic {
-        id: text(&row, "id")?.into(),
-        project_id: text(&row, "project_id")?.into(),
-        title: text(&row, "title")?.into(),
-        description: text(&row, "description")?.into(),
-        status: text(&row, "canon_status")?.into(),
+        id: text(row, "id")?.into(),
+        project_id: text(row, "project_id")?.into(),
+        title: text(row, "title")?.into(),
+        description: text(row, "description")?.into(),
+        status: text(row, "canon_status")?.into(),
         assignee: row["assignee"].as_str().map(str::to_owned),
         plan,
         order: row["plan_rank"].as_str().map(str::to_owned),

@@ -57,16 +57,18 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
                 parts.as_slice(),
                 ["canon", "list" | "mcp-grants"]
                     | ["canon", "mcp-grants", _, "allow" | "deny" | "revoke"]
-                    | ["canon", "specs", _]
                     | ["canon", "specs", _, "proposals"]
-                    | ["canon", "epics", _, "comments" | "activity"]
+                    | ["canon", "epics", _, "comments" | "activity" | "progress"]
                     | ["sessions", _, "canon", _]
                     | ["projects", _, "canon"]
                     | ["projects", _, "canon", "plans" | "epics" | "tags" | "files"]
                     | ["projects", _, "canon", "backlog", "order"]
-                    | ["canon", "proposals" | "plans" | "epics" | "tags", _]
+                    | [
+                        "canon",
+                        "specs" | "proposals" | "plans" | "epics" | "tags",
+                        _
+                    ]
                     | ["canon", "plans", _, "order"]
-                    | ["canon", "epics", _, "progress"]
             ),
             Handler::Canon,
         ),

@@ -160,6 +160,6 @@ async fn cn_10_first_canon_call_asks_trust_then_lists() -> Result<(), HarnessErr
     s.finish().await
 }
 
-fn store_error(error: butler_canon::store::Error) -> HarnessError {
+fn store_error(error: &butler_canon::store::Error) -> HarnessError {
     butler_e2e::e2e::harness_error(error.to_string())
 }

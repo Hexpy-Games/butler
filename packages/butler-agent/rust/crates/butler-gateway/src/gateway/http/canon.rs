@@ -35,7 +35,9 @@ async fn resources(
     parts: &[&str],
 ) -> Result<Response, HttpError> {
     let delegate = delegate(request.headers())?;
-    use crate::gateway::AppCanonResource::*;
+    use crate::gateway::AppCanonResource::{
+        Activity, CreateEpic, CreatePlan, CreateTag, Grants, List,
+    };
     let (resource, id) = resource(request.method(), parts)?;
     let mut id = subsessions::decode_component(id)?;
     let query = query(request.uri())?;
@@ -55,10 +57,10 @@ async fn resources(
     let data = state
         .application
         .canon(AppCanonRequest {
-            delegate,
             resource,
             id,
             input,
+            delegate,
         })
         .await?;
     let status = if matches!(resource, CreatePlan | CreateEpic | CreateTag) {
@@ -118,7 +120,11 @@ fn resource<'a>(
     method: &Method,
     parts: &[&'a str],
 ) -> Result<(crate::gateway::AppCanonResource, &'a str), HttpError> {
-    use crate::gateway::AppCanonResource::*;
+    use crate::gateway::AppCanonResource::{
+        Activity, AllowGrant, BacklogOrder, Canon, Comment, CreateEpic, CreatePlan, CreateTag,
+        DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants, List, Plan,
+        PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+    };
     Ok(match (method, parts) {
         (&Method::GET, ["canon", "list"]) => (List, ""),
         (&Method::GET, ["canon", "mcp-grants"]) => (Grants, ""),

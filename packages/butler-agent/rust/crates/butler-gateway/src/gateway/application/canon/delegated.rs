@@ -6,7 +6,9 @@ pub(super) async fn prepare(
     app: &AppApplication,
     request: &mut AppCanonRequest,
 ) -> Result<(), GatewayApplicationError> {
-    use AppCanonResource::*;
+    use AppCanonResource::{
+        Activity, Canon, Comment, CreateEpic, EditEpic, Epic, List, Plan, ProposeSpec, Spec,
+    };
     if let Some(delegate) = &mut request.delegate {
         delegate.name = sanitize(&delegate.name);
         delegate.title = sanitize(&delegate.title);
@@ -42,26 +44,49 @@ pub(super) async fn prepare(
     if (request.resource == List || (request.resource == CreateEpic && request.delegate.is_some()))
         && !request.id.is_empty()
     {
-        let requested = request.id.clone();
-        let ids=app.storage.read(move |db| {
-            use rusqlite::OptionalExtension;
-            if let Some(id)=db.query_row("SELECT id FROM projects WHERE id=?1 AND archived=0",[&requested],|r|r.get::<_,String>(0)).optional().map_err(AppStorageError::sqlite)? {return Ok(vec![id]);}
-            db.prepare("SELECT id FROM projects WHERE display_name=?1 AND archived=0 ORDER BY id LIMIT 2").map_err(AppStorageError::sqlite)?
-                .query_map([requested],|r|r.get::<_,String>(0)).map_err(AppStorageError::sqlite)?.collect::<rusqlite::Result<Vec<_>>>().map_err(AppStorageError::sqlite)
-        }).await.map_err(app_error)?;
-        request.id = match ids.as_slice() {
-            [id] => id.clone(),
-            [] => return Err(public(404, "project_not_found", "Project not found.")),
-            _ => {
-                return Err(public(
-                    400,
-                    "invalid_arguments",
-                    "프로젝트 ID를 지정해 주세요.",
-                ));
-            }
-        };
+        request.id = resolve_project(app, request.id.clone()).await?;
     }
     Ok(())
+}
+async fn resolve_project(
+    app: &AppApplication,
+    requested: String,
+) -> Result<String, GatewayApplicationError> {
+    let ids = app
+        .storage
+        .read(move |db| {
+            use rusqlite::OptionalExtension;
+            let by_id = db
+                .query_row(
+                    "SELECT id FROM projects WHERE id=?1 AND archived=0",
+                    [&requested],
+                    |r| r.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(AppStorageError::sqlite)?;
+            if let Some(id) = by_id {
+                return Ok(vec![id]);
+            }
+            let mut statement=db.prepare(
+            "SELECT id FROM projects WHERE display_name=?1 AND archived=0 ORDER BY id LIMIT 2",
+        ).map_err(AppStorageError::sqlite)?;
+            statement
+                .query_map([requested], |r| r.get::<_, String>(0))
+                .map_err(AppStorageError::sqlite)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(AppStorageError::sqlite)
+        })
+        .await
+        .map_err(app_error)?;
+    match ids.as_slice() {
+        [id] => Ok(id.clone()),
+        [] => Err(public(404, "project_not_found", "Project not found.")),
+        _ => Err(public(
+            400,
+            "invalid_arguments",
+            "프로젝트 ID를 지정해 주세요.",
+        )),
+    }
 }
 fn status_only(input: Option<&Value>) -> bool {
     input.and_then(Value::as_object).is_some_and(|o| {

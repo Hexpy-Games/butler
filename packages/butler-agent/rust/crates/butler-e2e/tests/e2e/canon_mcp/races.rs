@@ -24,7 +24,7 @@ async fn cn_11_concurrent_canon_edits_have_one_winner() -> Result<(), HarnessErr
             json!({"expected_revision":epic["revision"],"title":"Second"})
         )
     );
-    let mut results = vec![a?, b?];
+    let mut results = [a?, b?];
     results.sort_by_key(|r| r.status);
     assert_eq!((results[0].status, results[1].status), (200, 409));
     let winner = s.gw.get(&path).await?;

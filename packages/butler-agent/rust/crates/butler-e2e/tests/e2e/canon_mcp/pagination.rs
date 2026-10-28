@@ -11,7 +11,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
     trust(&s).await?;
     s.agent.terminate().await?;
     let mut db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let tx = store::Transaction::new(db.transaction()?).map_err(store_error)?;
+    let tx = store::Transaction::new(db.transaction()?).map_err(|error| store_error(&error))?;
     let ctx = store::Context {
         now: 1,
         actor: json!({"person":"app-user","via":"app"}),
@@ -29,7 +29,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
             },
             &store::Registration::Canon(store::UserAct::new("app-user")),
         )
-        .map_err(store_error)?;
+        .map_err(|error| store_error(&error))?;
     }
     for n in 0..55 {
         store::activity::append(
@@ -40,7 +40,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
             &format!("Comment {n}"),
             Some("Full body"),
         )
-        .map_err(store_error)?;
+        .map_err(|error| store_error(&error))?;
     }
     tx.commit()?;
     drop(db);

@@ -42,8 +42,8 @@ impl McpServer {
         result(
             async {
                 let client = Client::local(self, &context).await?;
-                let query = list_query(args);
-                decode::<CanonPage>(client.get(&format!("/canon/list?{}", query)).await?)
+                let query = list_query(&args);
+                decode::<CanonPage>(client.get(&format!("/canon/list?{query}")).await?)
             }
             .await,
         )
@@ -205,7 +205,7 @@ impl McpServer {
     }
 }
 
-fn list_query(args: args::List) -> String {
+fn list_query(args: &args::List) -> String {
     let mut query = url::form_urlencoded::Serializer::new(String::new());
     for (key, value) in json!(args).as_object().into_iter().flatten() {
         if !value.is_null() {

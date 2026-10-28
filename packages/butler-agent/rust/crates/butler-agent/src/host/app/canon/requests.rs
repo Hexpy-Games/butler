@@ -100,7 +100,7 @@ fn project(
         )
     {
         return Ok(serde_json::to_value(store::public::project_epic(
-            value, db,
+            &value, db,
         )?)?);
     }
     Ok(value)

@@ -23,10 +23,10 @@ async fn cn_11_mcp_proposals_preserve_chat_drafts_and_private_specs() -> Result<
     s.agent.terminate().await?;
     let mut db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     db.execute("INSERT INTO canon_spec_nodes(node_id,scope_kind,scope_ref,epic_id,concern_id,visibility,lifecycle,source,created_at,updated_at,created_by) VALUES('private-spec','session','private-session',?1,'Private design','private','draft','local',1,1,'{}')",[id])?;
-    let tx = store::Transaction::new(db.transaction()?).map_err(store_error)?;
+    let tx = store::Transaction::new(db.transaction()?).map_err(|error| store_error(&error))?;
     store::create_canon_proposal(&tx,&store::Context{now:1,actor:json!({"person":"app-user","via":"butler","origin":"chat"})},
         &json!({"id":"conversation-proposal","session_id":"owner","source_turn_id":"turn","source_call_id":"call","project_id":project,"summary":"Conversation draft","created_at":"2026-01-01T00:00:00Z",
-            "document":{"changes":[{"op":"spec.edit","id":"shared-spec","expected_revision":0,"body":"Conversation design"}]}})).map_err(store_error)?;
+            "document":{"changes":[{"op":"spec.edit","id":"shared-spec","expected_revision":0,"body":"Conversation design"}]}})).map_err(|error|store_error(&error))?;
     tx.commit()?;
     drop(db);
     s.restart().await?;

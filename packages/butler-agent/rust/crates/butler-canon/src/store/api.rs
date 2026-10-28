@@ -12,6 +12,11 @@ use crate::{
     work_queries::Query,
     work_types::*,
 };
+use Resource::{
+    Activity, AllowGrant, BacklogOrder, Canon, Comment, CreateEpic, CreatePlan, CreateTag,
+    DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, Grants, List, Plan, PlanOrder,
+    ProposeSpec, RevokeGrant, Spec, Tags,
+};
 pub use reads::{canon, epic, epic_only, plan};
 
 #[derive(Clone, Copy, Debug)]
@@ -42,15 +47,13 @@ pub enum Resource {
 
 /// Identity-only PK lookups, shared by reads and edits before App project checks.
 pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<String> {
-    use Resource::*;
     let sql = match resource {
         List | Grants | AllowGrant | DenyGrant | RevokeGrant => return Ok(id.into()),
         Spec | ProposeSpec => {
             "SELECT scope_ref FROM canon_spec_nodes WHERE node_id=?1 AND scope_kind='project' AND visibility='canon'"
         }
-        Activity | Comment => sql::EPIC_SCOPE,
+        Activity | Comment | Epic | EditEpic => sql::EPIC_SCOPE,
         Plan | EditPlan | PlanOrder => sql::PLAN_SCOPE,
-        Epic | EditEpic => sql::EPIC_SCOPE,
         EditTag | DeleteTag => sql::TAG_SCOPE,
         Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => {
             return Ok(id.to_owned());
@@ -62,7 +65,6 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
 }
 
 pub fn read(db: &Connection, resource: Resource, id: &str) -> Result<Value> {
-    use Resource::*;
     match resource {
         Spec => mcp_proposals::spec(db, id),
         Activity => activity::page(db, id, None),
@@ -92,7 +94,6 @@ pub fn write(
     id: &str,
     input: Value,
 ) -> Result<Value> {
-    use Resource::*;
     match resource {
         List => page::list(tx, id, &input),
         Spec => mcp_proposals::spec(tx, id),

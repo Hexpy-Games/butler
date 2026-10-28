@@ -8,7 +8,7 @@ pub(super) async fn seed_spec(
 ) -> Result<(), HarnessError> {
     s.agent.terminate().await?;
     let mut db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let tx = store::Transaction::new(db.transaction()?).map_err(store_error)?;
+    let tx = store::Transaction::new(db.transaction()?).map_err(|error| store_error(&error))?;
     let ctx = store::Context {
         now: 1,
         actor: json!({"person":"app-user","via":"app"}),
@@ -27,7 +27,7 @@ pub(super) async fn seed_spec(
         &node,
         &store::Registration::Canon(store::UserAct::new("app-user")),
     )
-    .map_err(store_error)?;
+    .map_err(|error| store_error(&error))?;
     tx.commit()?;
     drop(db);
     s.restart().await

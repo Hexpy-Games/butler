@@ -100,10 +100,10 @@ pub(in crate::gateway::application) async fn upload(
     super::validate_scope(
         app,
         &AppCanonRequest {
-            delegate: None,
             resource: AppCanonResource::Canon,
             id: project,
             input: None,
+            delegate: None,
         },
     )
     .await?;
