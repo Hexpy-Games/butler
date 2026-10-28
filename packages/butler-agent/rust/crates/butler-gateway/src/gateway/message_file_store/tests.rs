@@ -62,6 +62,7 @@ async fn source_artifact_is_stored_once_with_original_metadata() {
         .unwrap(),
         b"native artifact\n"
     );
+    download_snapshot_after_unlink_is_not_found(&owner, file, &root).await;
     owner.close().await.unwrap();
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -187,4 +188,47 @@ async fn interrupted_write(point: &str) {
     );
     owner.close().await.unwrap();
     std::fs::remove_dir_all(root).unwrap();
+}
+
+// Continue the same original's lifecycle through a GET that loses to cleanup.
+async fn download_snapshot_after_unlink_is_not_found(
+    owner: &AppMessageFiles,
+    file: &MaterializedResponderFile,
+    root: &Path,
+) {
+    let snapshot = AppMessageFileSnapshot {
+        title: file.title.clone(),
+        source_label: file.source_label.clone(),
+        deliverable: file.deliverable,
+        id: file.id.clone(),
+        owner_session_id: None,
+        message_id: None,
+        kind: file.kind.clone(),
+        mime_type: file.mime_type.clone(),
+        safe_name: file.safe_name.clone(),
+        size_bytes: file.size_bytes,
+        width: None,
+        height: None,
+        sha256: file.sha256.clone(),
+        storage_name: file.storage_name.clone(),
+        created_at: file.created_at.clone(),
+    };
+    assert_eq!(
+        owner.read_original(snapshot.clone()).await.unwrap(),
+        Bytes::from_static(b"native artifact\n")
+    );
+    // GET has its SQLite snapshot, but its file job has not run yet.
+    let download = owner.read_original(snapshot.clone());
+    owner.remove_original(snapshot.id.clone()).await.unwrap();
+    assert!(matches!(
+        download.await.unwrap_err(),
+        GatewayApplicationError::Public { status: 404, code, .. }
+            if code == "message_file_not_found"
+    ));
+    // Other filesystem failures must still surface as internal errors.
+    std::fs::create_dir(root.join("app-server/message-files").join(&snapshot.id)).unwrap();
+    assert!(matches!(
+        owner.read_original(snapshot).await.unwrap_err(),
+        GatewayApplicationError::Internal { .. }
+    ));
 }
