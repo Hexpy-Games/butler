@@ -319,10 +319,13 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)
     }
-    /// Whether the session has unfinished subsession execution.
-    pub async fn has_unfinished_execution(&self, session_id: &str) -> Result<bool, BtccError> {
+    /// Non-terminal turn ids, revisions and automatic authority resume flags.
+    pub async fn unfinished_execution_turns(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<(String, u64, bool)>, BtccError> {
         self.repository
-            .has_unfinished_execution(session_id.to_owned())
+            .unfinished_execution_turns(session_id.to_owned())
             .await
             .map_err(BtccError::from)
     }

@@ -46,7 +46,8 @@ pub(super) fn reserve(
     let tx = db.savepoint().map_err(sqlite_error)?;
     let view = space::read_view(&tx).map_err(app_error)?;
     let (session, destination, source_parent) = validate_target(&tx, request, &view)?;
-    if snapshot.active_execution || snapshot.open_child {
+    if snapshot.active_execution || !snapshot.unfinished_turn_ids.is_empty() || snapshot.open_child
+    {
         return Err(relocation_error(
             "session_busy",
             "진행 중인 작업과 대기 메시지가 끝난 뒤 이동할 수 있습니다.",

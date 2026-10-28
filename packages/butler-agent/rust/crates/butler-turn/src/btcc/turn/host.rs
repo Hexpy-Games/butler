@@ -104,6 +104,11 @@ impl Coordinator {
         result
     }
 
+    /// Includes preparation, session-tail waits and final delivery.
+    pub(crate) fn has_active_session_execution(&self, session_id: &str) -> bool {
+        self.state.lock().session_tails.contains_key(session_id)
+    }
+
     pub(crate) fn interrupt_turn(&self, turn_id: &str) {
         self.facade.runtime.interrupt(turn_id);
     }
