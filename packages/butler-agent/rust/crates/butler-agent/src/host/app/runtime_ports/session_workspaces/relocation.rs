@@ -23,6 +23,7 @@ impl AppRelocationHost for AppSessionWorkspaces {
     fn inspect(&self, runtime_session_id: String) -> ApplicationFuture<AppRelocationSnapshot> {
         let bindings = self.bindings.clone();
         let subsessions = self.subsessions.clone();
+        let btcc = self.btcc.clone();
         Box::pin(async move {
             let binding = bindings
                 .get_by_session_id(&runtime_session_id)
@@ -30,13 +31,25 @@ impl AppRelocationHost for AppSessionWorkspaces {
                 .map_err(GatewayApplicationError::internal_from)?
                 .as_ref()
                 .map(to_app_binding);
-            let active_execution = subsessions
-                .has_unfinished_execution(&runtime_session_id)
+            // A resumed authority turn can run without an App queue row. Observe
+            // its flight between stable durable revisions, before trusting history.
+            let before = subsessions
+                .unfinished_execution_turns(&runtime_session_id)
                 .await
                 .map_err(GatewayApplicationError::internal_from)?;
+            let running = btcc.has_active_session_execution(&runtime_session_id);
+            let after = subsessions
+                .unfinished_execution_turns(&runtime_session_id)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+            let active_execution = running
+                || before != after
+                || after.iter().any(|(_, _, continuation)| *continuation);
+            let unfinished_turn_ids = after.into_iter().map(|(id, _, _)| id).collect();
             let open_child = has_open_child(&subsessions, runtime_session_id).await?;
             Ok(AppRelocationSnapshot {
                 binding,
+                unfinished_turn_ids,
                 active_execution,
                 open_child,
             })

@@ -9,6 +9,7 @@ use serde_json::json;
 use std::time::{Duration, Instant};
 mod interrupted;
 mod ownership;
+mod requires_e2e_fixtures;
 mod support;
 use support::{
     ordered_message_ids, seed_history, seed_interrupted_output_transfer, verify_rotated_permissions,
