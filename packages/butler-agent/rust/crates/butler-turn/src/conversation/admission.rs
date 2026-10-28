@@ -292,9 +292,12 @@ impl ConversationAdmissionTurn {
                 }),
             })
             .await?;
-        if status == "complete"
-            && let (Some(inbound), Some(outbound)) = (request, assistant)
-        {
+        if let Some(inbound) = request {
+            let outbound = if status == "complete" {
+                assistant.unwrap_or_default()
+            } else {
+                String::new()
+            };
             // Diagnostic only: memory catch-up reconciles canonical outcomes
             // whose notice was not accepted.
             let _ignored_observation = self

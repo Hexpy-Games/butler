@@ -66,11 +66,7 @@ pub(super) async fn dependencies(
         identity_clock,
         approval_claims: Arc::new(AppApprovalClaimsAdapter::new(runtime.authority.clone())),
         queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),
-        authority_handoff: Arc::new(AuthorityHandoff::new(
-            runtime.authority.clone(),
-            owners.queue.clone(),
-            Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
-        )),
+        authority_handoff: authority_handoff(context, owners),
         session_workspaces: session_workspaces.clone(),
         relocation_host: session_workspaces,
         session_work_progress: Arc::new(AppSessionProgress::new(
@@ -135,5 +131,14 @@ fn settings_mutations(context: &Context<'_>) -> Arc<AppSettingsMutation> {
         context.installation.clone(),
         context.data_root.to_path_buf(),
         context.runtime.daily_cognition.gate.clone(),
+    ))
+}
+
+fn authority_handoff(context: Context<'_>, owners: &AppServerOwners) -> Arc<AuthorityHandoff> {
+    Arc::new(AuthorityHandoff::new(
+        context.runtime.authority.clone(),
+        context.runtime.continuity.clone(),
+        owners.queue.clone(),
+        Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
     ))
 }

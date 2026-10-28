@@ -3,6 +3,7 @@ pub(super) mod consolidation;
 pub(super) mod consolidation_phase;
 pub(super) mod consolidation_schedule;
 pub(super) mod context_maintenance;
+pub(crate) mod continuity;
 pub(super) mod daily;
 pub(super) mod daily_schedule;
 pub(super) mod maintain_phase;

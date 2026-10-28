@@ -85,6 +85,7 @@ pub trait CognitionPromptPort: Send + Sync {
         &'a self,
         input: &'a PromptProjectionInput<'a>,
     ) -> ContextFuture<'a, Option<String>>;
+    /// `input.session_id` is the canonical conversation-store id for this projection.
     fn session_continuity<'a>(
         &'a self,
         input: &'a PromptProjectionInput<'a>,

@@ -122,7 +122,7 @@ impl AppApplication {
         session_id: String,
         permanent: bool,
     ) -> Result<AppSessionActionResult, GatewayApplicationError> {
-        let _target = self.read_session_row(session_id.clone()).await?;
+        let target = self.read_session_row(session_id.clone()).await?;
         if session_id == "general" {
             return Err(public(
                 409,
@@ -162,6 +162,10 @@ impl AppApplication {
             .map_err(app_error)?;
         self.collect_session_outputs(session).await?;
         if permanent {
+            self.dependencies
+                .authority_handoff
+                .delete_session_context(target.session_hint)
+                .await?;
             let _files = self.canon_file_lifetimes.lock().await;
             super::super::canon::files::sweep(self, false).await?;
         }

@@ -12,8 +12,8 @@ use butler_models::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
 };
 use butler_turn::btcc::{
-    AttachmentKind, AttachmentRef, Peer, PeerKind, Sender, SessionRole, TurnMessage, TurnRequest,
-    TurnRoute, TurnTrigger,
+    AdmissionContextPort, AttachmentKind, AttachmentRef, Peer, PeerKind, Sender, SessionRole,
+    TurnMessage, TurnRequest, TurnRoute, TurnTrigger,
 };
 use butler_turn::conversation::*;
 use butler_turn::workspace::{
@@ -188,6 +188,10 @@ async fn butler_and_steward_assemblies_keep_sections_producer_order_and_fallback
     let steward_binding = binding(WorkspaceRole::Steward);
     let assembly = assembler
         .build_butler_context_assembly(&request, &butler_binding)
+        .await
+        .unwrap();
+    let assembly = assembler
+        .include_recent(&request, &butler_binding, assembly)
         .await
         .unwrap();
     let host_environment = butler_platform::launcher::runtime_prompt_environment();

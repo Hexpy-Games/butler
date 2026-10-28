@@ -105,8 +105,10 @@ impl AppApplication {
             .execute(move |db| project_session_ids(db, &query_id))
             .await
             .map_err(app_error)?;
+        let mut runtime_sessions = Vec::new();
         for session_id in sessions {
             let runtime_session_id = self.runtime_hint(&session_id).await?;
+            runtime_sessions.push(runtime_session_id.clone());
             self.dependencies
                 .authority_handoff
                 .close_self_session(
@@ -122,7 +124,8 @@ impl AppApplication {
         }
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
-        self.storage
+        let result = self
+            .storage
             .execute(move |db| {
                 lifecycle_project(
                     db,
@@ -135,7 +138,16 @@ impl AppApplication {
                 )
             })
             .await
-            .map_err(app_error)
+            .map_err(app_error)?;
+        if action == ProjectLifecycle::PermanentDelete {
+            for session in runtime_sessions {
+                self.dependencies
+                    .authority_handoff
+                    .delete_session_context(session)
+                    .await?;
+            }
+        }
+        Ok(result)
     }
 }
 

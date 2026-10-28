@@ -27,7 +27,7 @@ pub(super) fn assert_budget() {
             continue;
         }
         if key == "phase_minimal|butler|direct" {
-            assert!(tokens(text) <= 182, "direct prefix grew");
+            assert!(tokens(text) <= 199, "direct prefix grew");
             continue;
         }
         let budgets: Value =
