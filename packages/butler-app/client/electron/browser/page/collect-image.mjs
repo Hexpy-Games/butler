@@ -20,7 +20,8 @@ export async function imageSource({ ref, obs, epoch, url }) {
   const result = { source_url: url ?? (image?.currentSrc || image?.src || background || ""),
     alt: image?.alt || element.getAttribute("aria-label") || element.textContent?.trim() || "",
     nearby_text: element.parentElement?.innerText || "" };
-  if (url && !image) return { ...result, ...requestContext(element) };
+  // Unavailable page pixels leave URL fetching and address checks to the gateway.
+  if (url && (!image || !image.complete || !image.naturalWidth)) return { ...result, ...requestContext(image || element) };
   let pixels = image;
   if (!pixels && background) {
     pixels = new Image();
@@ -40,7 +41,10 @@ export async function imageSource({ ref, obs, epoch, url }) {
     if (!pixels.complete || !pixels.naturalWidth) {
       await Promise.race([pixels.decode(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 10000); })]);
     }
-  } catch { return { reason: "image_not_loaded", recovery: "Wait for the image to load, observe again, then collect its ref or a visible region." }; }
+  } catch {
+    if (url) return { ...result, source_url: url, ...requestContext(image || element) };
+    return { reason: "image_not_loaded", recovery: "Wait for the image to load, observe again, then collect its ref or a visible region." };
+  }
   finally { clearTimeout(timer); }
   result.width = pixels.naturalWidth; result.height = pixels.naturalHeight;
   // Keep embedded raster bytes without a CSP-controlled fetch.

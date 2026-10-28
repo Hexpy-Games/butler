@@ -42,9 +42,16 @@ async fn general_clears_after_app_quit_interrupted_a_reply() -> Result<(), Harne
     s.gw.wait_terminal("general", &first, Duration::from_secs(30))
         .await?;
     let served = server.chat_requests().len();
-    let cut = accepted_turn_id(&s.gw.say("general", "Tell me more.").await?)?;
+    let cut_text = "Tell me more.";
+    let cut = accepted_turn_id(&s.gw.say("general", cut_text).await?)?;
     let deadline = Instant::now() + Duration::from_secs(20);
-    while server.chat_requests().len() == served {
+    // Background memory rounds share the server; wait for this reply's request.
+    while !server.chat_requests().iter().skip(served).any(|request| {
+        request["stream"] == true
+            && butler_e2e::e2e::matching::key("/v1/chat/completions", request, &Default::default())
+                .user_request
+                == cut_text
+    }) {
         assert!(Instant::now() < deadline, "reply never reached the model");
         tokio::time::sleep(Duration::from_millis(10)).await;
     }

@@ -60,12 +60,16 @@ async fn collected_source(
             .and_then(|raw| STANDARD.decode(raw).ok())
             .ok_or("invalid_image")
     });
-    let original = || {
+    let original = || async {
+        if source_url.is_empty() {
+            return Err("invalid_image");
+        }
         butler_runtime::browser::fetch_image(
             source_url,
             result["referer"].as_str().unwrap_or(""),
             result["user_agent"].as_str().unwrap_or(""),
         )
+        .await
     };
     let capture_ratio = result["pixel_ratio"]
         .as_f64()
