@@ -73,6 +73,22 @@ async fn image_collect_loaded_formats_and_session_context() -> Result<(), Harnes
         )
         .await?;
         assert_eq!(image["status"], "ok", "{name}: {image}");
+        if name == "protected" {
+            let url = reqwest::Url::parse(started["url"].as_str().unwrap())
+                .unwrap()
+                .join("/protected")
+                .unwrap();
+            let by_url = call(
+                &admin,
+                "general",
+                "tab.image_collect",
+                tab,
+                json!({"url":url.as_str()}),
+            )
+            .await?;
+            assert_eq!(by_url["status"], "ok", "loaded URL: {by_url}");
+            assert_eq!(by_url["id"], image["id"], "URL keeps page pixels");
+        }
         let bytes = s.gw.get(image["url"].as_str().unwrap()).await?;
         assert_eq!(bytes.status, 200);
         assert!(image["width"].as_u64().unwrap() > 0);
@@ -96,6 +112,16 @@ async fn image_collect_loaded_formats_and_session_context() -> Result<(), Harnes
             )?;
         }
     }
+    let empty = call(
+        &admin,
+        "general",
+        "tab.image_collect",
+        tab,
+        json!({"url":""}),
+    )
+    .await?;
+    assert_eq!(empty["status"], "refused", "{empty}");
+    assert_eq!(empty["reason"], "invalid_image", "{empty}");
     call(
         &admin,
         "general",
