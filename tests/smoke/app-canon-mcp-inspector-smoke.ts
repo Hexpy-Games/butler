@@ -1,5 +1,6 @@
 // test-category: security
 import { strict as assert } from "node:assert";
+import { assertActivityTimes, assertNeutralAgentMark } from "../support/canon-mcp-layout.ts";
 import { captureRegion } from "../support/canon-mcp-crops.ts";
 import { captureActivitySample } from "../support/canon-mcp-activity-capture.ts";
 import { mkdirSync } from "node:fs";
@@ -53,7 +54,7 @@ try {
       const detail = aside.locator('[data-test-class="canon-epic-detail"]'); await detail.waitFor();
       if (!before) {
         await detail.getByRole("img",{ name: "연우 · Claude Code 작업 중",exact: true }).first().waitFor();
-        await detail.locator('[data-slot="avatar-badge"] [data-name="claude"]').first().waitFor();
+        await assertNeutralAgentMark(detail);
         await detail.getByText("검토 기준과 예외 상황을 정리했습니다.",{ exact: true }).first().waitFor();
         assert.equal(await detail.locator('[data-test-class="canon-mcp-proposal"]').count(),1);
       }
@@ -88,6 +89,7 @@ try {
         await activity.getByRole("button", { name: "더 보기", exact: true }).click();
         await activity.getByText("권한 변경 시 안내도 함께 살펴보겠습니다.", { exact: false }).waitFor();
         assert.equal(await activity.getByRole("button", { name: "더 보기", exact: true }).count(), 0);
+        await assertActivityTimes(activity);
       }
       if (crops && !before) await captureActivitySample(page, server, epic.id, shots,
         `after-activity-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`);

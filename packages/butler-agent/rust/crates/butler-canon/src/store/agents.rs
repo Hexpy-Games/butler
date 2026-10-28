@@ -10,7 +10,7 @@ pub(super) fn enrich(db: &Connection, epics: &mut [Value]) -> Result<()> {
             WHERE entity_id=e.id AND kind='status' ORDER BY seq DESC LIMIT 1)
         WHERE e.canon_status IN ('in_progress','in_review') AND json_extract(a.actor_json,'$.origin')='mcp'", [ids])? {
         let actor: Value = serde_json::from_str(text(&row, "actor_json")?)?;
-        actors.insert(text(&row,"id")?.to_owned(), json!({"person":actor["person"],"via":actor["via"],"client":actor["client"]}));
+        actors.insert(text(&row,"id")?.to_owned(), json!({"person":actor["person"],"via":actor["via"]}));
     }
     for epic in epics {
         epic["agent"] = actors.remove(text(epic, "id")?).unwrap_or(Value::Null);

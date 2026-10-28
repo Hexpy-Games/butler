@@ -2,7 +2,7 @@ import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { decideCanonGrant, useCanonGrants } from "@/app/canonTrust.ts";
 import { notifyError } from "@/app/notifications.ts";
-import { Button, ButtonContainer, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, KeyValueRow, ListRow, Notice, ScrollArea, Stack } from "@/butler-ds";
+import { Button, ButtonContainer, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, KeyValueRow, Notice, ScrollArea, Stack, Typo } from "@/butler-ds";
 import { useCanonPersonName } from "./useCanonPersonName.ts";
 export function CanonTrustDialog() {
   useAppLocale();
@@ -24,9 +24,11 @@ export function CanonTrustDialog() {
     <DialogHeader><DialogTitle>{copy.trustTitle(grant.client_title)}</DialogTitle>
       <DialogDescription>{copy.trustDescription}</DialogDescription></DialogHeader>
     <ScrollArea fill><Stack gap="sm">
-      <KeyValueRow label={copy.client} value={grant.client_title} />
-      <KeyValueRow label={copy.person} value={person} />
-      {grant.requested.map(capability => <ListRow key={capability} title={copy.capabilities[capability] ?? capability} />)}
+      <KeyValueRow label={copy.client} value={null} detailLayout="stack" detailAlign="start"
+        description={<Stack as="span" gap="none" cross="start"><Typo.Body as="span" tone="primary">{grant.client_title}</Typo.Body></Stack>} />
+      <KeyValueRow label={copy.person} value={null} detailLayout="stack" detailAlign="start"
+        description={<Stack as="span" gap="none" cross="start"><Typo.Body as="span" tone="primary">{person}</Typo.Body></Stack>} />
+      {grant.requested.map(capability => <Typo.Body key={capability}>{copy.capabilities[capability] ?? capability}</Typo.Body>)}
       <Notice tone="info" message={copy.trustNotice(person)} />
     </Stack></ScrollArea>
     <DialogFooter><ButtonContainer size="sm" justify="end">

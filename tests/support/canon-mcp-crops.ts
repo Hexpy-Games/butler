@@ -7,6 +7,8 @@ import type { Locator, Page } from "playwright";
 /** Owner-review crops preserve the real layout and verify the PNG device scale. */
 export async function captureRegion(page: Page, directory: string, name: string,
   regions: Locator[], options: { focus?: boolean; toast?: boolean } = {}) {
+  const selected = process.env.BUTLER_SMOKE_CROP_STATES?.split(",");
+  if (selected && !selected.includes(name.split("-").slice(1, -3).join("-"))) return;
   await page.evaluate(() => document.fonts.ready);
   await regions[0]!.scrollIntoViewIfNeeded();
   await page.mouse.move(0, 0);

@@ -46,7 +46,7 @@ async fn cn_14_agent_mark_follows_latest_status_change() -> Result<(), HarnessEr
     )
     .await?;
     let id = epic["id"].as_str().unwrap();
-    let expected = json!({"person":"app-user","via":"Claude Code","client":"claude-code"});
+    let expected = json!({"person":"app-user","via":"Claude Code"});
     let current = status(&s, id, "in_progress").await?;
     mark(&s, &project, id, expected.clone()).await?;
     let comment =

@@ -1,5 +1,6 @@
 // test-category: security
 import { strict as assert } from "node:assert";
+import { assertActivityTimes, assertNeutralAgentMark, assertTrustLayout } from "../support/canon-mcp-layout.ts";
 import { captureRegion } from "../support/canon-mcp-crops.ts";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -85,6 +86,7 @@ try {
       await dialog.waitFor();
       await dialog.getByText("연우", { exact: true }).waitFor();
       for (const label of Object.values(c.canon.mcp.capabilities)) await dialog.getByText(label, { exact: true }).waitFor();
+      await assertTrustLayout(dialog, Object.values(c.canon.mcp.capabilities));
       await focus.audit(dialog);
     }
     if (!before) {
@@ -114,12 +116,31 @@ try {
     await card.waitFor();
     if (!before) {
       await card.getByRole("img", { name: "연우 · Claude Code 작업 중", exact: true }).waitFor();
-      await card.locator('[data-slot="avatar-badge"] [data-name="claude"]').waitFor();
+      await assertNeutralAgentMark(card);
     }
     const hideSidebar = page.getByRole("button", { name: c.titlebar.hideLeftPanel, exact: true });
     if (crops && Number(widthText) < 600 && await hideSidebar.isVisible()) await hideSidebar.click();
     if (!before) await focus.audit(card);
     await capture("board-card", [card]);
+    if (!before) {
+      const neutral = await assertNeutralAgentMark(card);
+      const arbitraryHeaders = { ...headers, "X-Butler-Delegate-Client": "Local Tool", "X-Butler-Delegate-Client-Name": "unlisted-tool" };
+      const pending = await fetch(new URL("canon/list", server.url), { headers: { ...server.authHeaders, ...arbitraryHeaders } });
+      assert.equal(pending.status, 403);
+      const arbitraryDialog = page.getByRole("dialog", { name: c.canon.mcp.trustTitle("Local Tool"), exact: true });
+      await arbitraryDialog.getByRole("button", { name: c.canon.mcp.allow, exact: true }).click();
+      await arbitraryDialog.waitFor({ state: "detached" });
+      const current = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
+      await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", headers: arbitraryHeaders, body: JSON.stringify({ expected_revision: current.revision, status: "in_review" }) });
+      await card.getByRole("img", { name: "연우 · Local Tool 작업 중", exact: true }).waitFor();
+      assert.equal(await assertNeutralAgentMark(card), neutral, "Known and arbitrary clients use the same neutral mark");
+      const changed = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
+      assert.deepEqual(changed.agent, { person: "app-user", via: "Local Tool" });
+      await delegated(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: changed.revision, status: "in_progress" }) });
+      await card.getByRole("img", { name: "연우 · Claude Code 작업 중", exact: true }).waitFor();
+      const arbitraryGrant = (await grants()).grants.find(item => item.client_title === "Local Tool"); assert(arbitraryGrant);
+      await server.api(`/canon/mcp-grants/${arbitraryGrant.id}/revoke`, post({}));
+    }
     if (crops && Number(widthText) < 600 && await sidebar.isVisible()) await sidebar.click();
     if (!before) await focus.audit(page.locator(`[data-canon-epic="${epic.id}"]`));
     await capture("sidebar-row", [page.locator(`[data-canon-epic="${epic.id}"]`)]);
@@ -172,11 +193,13 @@ try {
       await proposals.waitFor({ state: "hidden" });
       if (crops) await page.unroute(refreshPath);
       assert.equal((await delegated<{ body: string }>("/canon/specs/shared-spec")).body, "# 검토 기준\n- 연결 권한을 확인합니다.\n- 변경 이력을 남깁니다.\n- 충돌 시 다시 검토합니다.");
+      await assertActivityTimes(detail.locator('[data-test-class="canon-activity"]'));
       // Canon events refresh activity and agent state while the inspector stays mounted.
       const current = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
       await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: current.revision, status: "in_review" }) });
       await page.waitForFunction(() => !document.querySelector('[data-test-class="canon-epic-detail"] [aria-label="연우 · Claude Code 작업 중"]'));
       await headerRegions[0]!.scrollIntoViewIfNeeded();
+      await focus.audit(detail);
       await capture("inspector-cleared", headerRegions);
     }
     await page.goto(server.url);
@@ -209,6 +232,7 @@ try {
       assert.equal(request.status, 403);
       const englishDialog = page.getByRole("dialog", { name: en.canon.mcp.trustTitle("Claude Code"), exact: true });
       await englishDialog.waitFor();
+      await assertTrustLayout(englishDialog, Object.values(en.canon.mcp.capabilities));
       await focus.audit(englishDialog);
       await capture("trust-en", [englishDialog]);
       await englishDialog.getByRole("button", { name: en.canon.mcp.allow, exact: true }).click();

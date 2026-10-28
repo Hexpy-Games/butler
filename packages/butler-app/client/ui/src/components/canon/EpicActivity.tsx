@@ -3,7 +3,7 @@ import { api } from "@/app/api.ts";
 import type { CanonActivity, CanonActivityPage, EpicDetail } from "@/app/canonApi.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
-import { ActivityFeed, Button, ButtonContainer, Stack, Typo } from "@/butler-ds";
+import { Activity, ActivityFeed, ArrowRight, Button, ButtonContainer, CheckIcon, FileText, MessageSquare, Plus, Stack, Typo, XIcon } from "@/butler-ds";
 import { canonActorLabel } from "./canonActorLabel.ts";
 import { useCanonPersonName } from "./useCanonPersonName.ts";
 export function EpicActivity({ epic }: { epic: EpicDetail }) {
@@ -46,7 +46,7 @@ export function EpicActivity({ epic }: { epic: EpicDetail }) {
   const copy = appCopy.canon.mcp;
   return <Stack gap="sm" data-test-class="canon-activity">
     <ActivityFeed title={copy.activity} emptyLabel={copy.noActivity} items={page.activity.map(row => ({
-      id: String(row.seq), title: canonActorLabel(row.actor, person), meta: relative(row.at),
+      id: String(row.seq), icon: activityIcon(row.kind), title: canonActorLabel(row.actor, person), meta: relative(row.at),
       description: <Typo.Text wrap="pre">{activityDescription(row)}</Typo.Text>,
     }))} />
     {page.activity_before !== null && <ButtonContainer size="sm" justify="end"><Button size="sm" variant="ghost" disabled={busy} onClick={() => void more()}>{copy.more}</Button></ButtonContainer>}
@@ -64,4 +64,11 @@ function activityDescription(row: CanonActivity): string {
     case "proposal_declined": return copy.mcp.declinedActivity;
     default: return row.summary;
   }
+}
+
+function activityIcon(kind: string) {
+  const icons: Record<string, typeof Activity> = { comment: MessageSquare, status: ArrowRight, created: Plus,
+    proposal_opened: FileText, proposal_applied: CheckIcon, proposal_declined: XIcon };
+  const Icon = icons[kind] ?? Activity;
+  return <Icon size="md" aria-hidden="true" />;
 }

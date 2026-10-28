@@ -3,6 +3,8 @@ import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import type { CanonActivityPage, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
+import { auditCanonCardFocus } from "./canon-registration-cards.ts";
+import { assertActivityTimes } from "./canon-mcp-layout.ts";
 import { captureRegion } from "./canon-mcp-crops.ts";
 
 /** A compact capture fixture; the smoke verifies real paging before this runs. */
@@ -34,6 +36,8 @@ export async function captureActivitySample(page: Page, server: NativeAppServerH
     await region.getByText("과제를 만들었습니다", { exact: true }).waitFor();
     await region.getByText("명세 변경 제안 · 검토 기준 보강", { exact: true }).waitFor();
     assert.doesNotMatch(await region.innerText(), /in_progress|planned/u);
+    await assertActivityTimes(region);
+    await auditCanonCardFocus(page, region);
     await captureRegion(page, directory, name, [region]);
   } finally { await page.unroute(path); }
 }
