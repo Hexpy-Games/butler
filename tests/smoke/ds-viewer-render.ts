@@ -179,6 +179,12 @@ async function captureComponent(page: Page, url: string, componentName: string, 
     `[data-ds-detail="${componentName.replace(/"/gu, '\\"')}"] [data-ds-examples]`,
   );
   await component.waitFor({ state: "visible", timeout: STEP_TIMEOUT_MS });
+  // Finite asynchronous showcases opt in; permanent loading examples remain capturable.
+  await page.waitForFunction(
+    (root) => root !== null && !root.querySelector('[data-ds-async][aria-busy="true"], [data-ds-async] [aria-busy="true"]'),
+    await component.elementHandle(),
+    { timeout: STEP_TIMEOUT_MS },
+  );
   await page.evaluate(async () => {
     await document.fonts.ready;
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
