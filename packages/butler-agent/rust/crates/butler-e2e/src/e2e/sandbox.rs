@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::binary::{agent_binary, resource_source};
+mod installation;
 mod retention;
 use super::executable;
 use super::{HarnessError, harness_error};
@@ -22,6 +23,8 @@ pub struct Sandbox {
     pub home: PathBuf,
     pub logs: PathBuf,
     directory: retention::Directory,
+    // Kept after the scenario directory so its immutable files outlive cleanup.
+    installation: Option<std::sync::Arc<Sandbox>>,
 }
 
 impl Sandbox {
@@ -65,6 +68,7 @@ impl Sandbox {
             binary,
             resources,
             directory,
+            installation: None,
         };
         for dir in [
             &sandbox.data,

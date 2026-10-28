@@ -42,7 +42,7 @@ pub(super) async fn setup_at(
     HarnessError,
 > {
     let (url, script, server) = stub::start(rejects, revise).await?;
-    let setup = Setup::new(name)?
+    let setup = Setup::shared_installation(name)?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", &url);
     let setup = if let Some(now) = now {

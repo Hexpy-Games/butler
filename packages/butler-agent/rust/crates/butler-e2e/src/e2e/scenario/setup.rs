@@ -33,6 +33,11 @@ impl Setup {
         Ok(Self::from_sandbox(id, Sandbox::new(id)?))
     }
 
+    /// Private scenario state with an installation shared until the last user exits.
+    pub fn shared_installation(id: &str) -> Result<Self, HarnessError> {
+        Ok(Self::from_sandbox(id, Sandbox::shared_installation(id)?))
+    }
+
     /// Independent data/provider/home using a caller-owned immutable installation.
     pub fn with_installation(id: &str, installation: &Sandbox) -> Result<Self, HarnessError> {
         Ok(Self::from_sandbox(
