@@ -63,3 +63,36 @@ async fn cn_10_gateway_sanitizes_identity_and_keeps_allowed_capabilities_while_p
     assert_eq!(delegated(&s, "/canon/list", "Connector").await?.0, 200);
     s.finish().await
 }
+
+#[tokio::test]
+async fn cn_10_revoked_client_cannot_commit_a_write() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CN-10-REVOKED-WRITE")?
+        .data_folder_token()
+        .start()
+        .await?;
+    let project = project(&s).await?;
+    trust(&s).await?;
+    let epic = call(
+        &s,
+        "canon_create_epic",
+        json!({"project":project,"title":"Revocation check"}),
+    )
+    .await?;
+    let grants = s.gw.get("/canon/mcp-grants").await?;
+    let id = grants.data()["grants"][0]["id"].as_str().unwrap();
+    decide(&s, id, "revoke").await?;
+    let write = call(
+        &s,
+        "canon_update_epic_status",
+        json!({"epic_id":epic["id"],"expected_revision":epic["revision"],"status":"in_progress"}),
+    )
+    .await?;
+    assert_eq!(write["error"]["code"], "trust_pending");
+    let current =
+        s.gw.get(&format!("/canon/epics/{}", epic["id"].as_str().unwrap()))
+            .await?;
+    assert_eq!(current.data()["revision"], epic["revision"]);
+    assert_eq!(current.data()["canon_status"], "planned");
+    s.finish().await
+}

@@ -35,20 +35,21 @@ pub fn list(db: &Connection, project: &str, input: &Value) -> Result<Value> {
     let epics = Vec::new();
     if let Some(plan_id) = &plan {
         let row = read_plan(db, plan_id)?;
-        let active = db
-            .query_row(
-                "SELECT archived=0 FROM projects WHERE id=?1",
-                [text(&row, "project_id")?],
-                |r| r.get::<_, bool>(0),
-            )
-            .optional()?
-            .unwrap_or(false);
-        if !active || (!project.is_empty() && row["project_id"] != project) {
+        let active = input["project_ids"]
+            .as_array()
+            .is_some_and(|ids| ids.contains(&row["project_id"]));
+        if (project.is_empty() && !active) || (!project.is_empty() && row["project_id"] != project)
+        {
             return Err(Error::NotFound);
         }
     }
+    let projects = input
+        .get("project_ids")
+        .cloned()
+        .unwrap_or(json!([]))
+        .to_string();
     if cursor.phase == 0 {
-        plans = plans_page(db, project, plan.as_deref(), &cursor.after)?;
+        plans = plans_page(db, project, plan.as_deref(), &cursor.after, &projects)?;
         if plans.len() > 100 {
             plans.truncate(100);
             cursor.after = plans.last().map(|p| p.id.clone()).unwrap_or_default();
@@ -64,8 +65,8 @@ pub fn list(db: &Connection, project: &str, input: &Value) -> Result<Value> {
         ("project_id=?1 AND", project)
     } else {
         (
-            "?1='' AND EXISTS (SELECT 1 FROM projects WHERE id=canon_epics.project_id AND archived=0) AND",
-            "",
+            "project_id IN (SELECT value FROM json_each(?1)) AND",
+            projects.as_str(),
         )
     };
     let status = if done { "" } else { "AND canon_status!='done'" };
@@ -97,14 +98,19 @@ fn plans_page(
     project: &str,
     plan: Option<&str>,
     after: &str,
+    projects: &str,
 ) -> Result<Vec<public::Plan>> {
     let found = if let Some(plan) = plan {
-        rows(db, "SELECT * FROM canon_plans WHERE id=?1", [plan])?
+        rows(
+            db,
+            "SELECT * FROM canon_plans WHERE id=?1 AND (?2!='' OR project_id IN (SELECT value FROM json_each(?3)))",
+            params![plan, project, projects],
+        )?
     } else if project.is_empty() {
         rows(
             db,
-            "SELECT * FROM canon_plans WHERE id>?1 AND EXISTS (SELECT 1 FROM projects WHERE id=canon_plans.project_id AND archived=0) ORDER BY id LIMIT 101",
-            [after],
+            "SELECT * FROM canon_plans WHERE id>?1 AND project_id IN (SELECT value FROM json_each(?2)) ORDER BY id LIMIT 101",
+            params![after, projects],
         )?
     } else {
         rows(

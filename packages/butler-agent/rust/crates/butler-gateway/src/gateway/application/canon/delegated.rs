@@ -46,6 +46,24 @@ pub(super) async fn prepare(
     {
         request.id = resolve_project(app, request.id.clone()).await?;
     }
+    if request.resource == List && request.id.is_empty() {
+        let projects = app
+            .storage
+            .read(|db| {
+                let mut statement = db
+                    .prepare("SELECT id FROM projects WHERE archived=0 ORDER BY id")
+                    .map_err(AppStorageError::sqlite)?;
+                statement
+                    .query_map([], |r| r.get::<_, String>(0))
+                    .map_err(AppStorageError::sqlite)?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+                    .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        request.input.get_or_insert_with(|| serde_json::json!({}))["project_ids"] =
+            serde_json::json!(projects);
+    }
     Ok(())
 }
 async fn resolve_project(

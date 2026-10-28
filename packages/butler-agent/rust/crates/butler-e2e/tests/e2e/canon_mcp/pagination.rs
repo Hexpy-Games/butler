@@ -71,12 +71,13 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
         let page = call(&s, "canon_list", args).await?;
         assert!(page["epics"].as_array().unwrap().len() <= 100);
         for item in page["epics"].as_array().unwrap() {
-            let keys = item
+            let mut keys = item
                 .as_object()
                 .unwrap()
                 .keys()
                 .map(String::as_str)
                 .collect::<Vec<_>>();
+            keys.sort_unstable();
             assert_eq!(
                 keys,
                 vec![
