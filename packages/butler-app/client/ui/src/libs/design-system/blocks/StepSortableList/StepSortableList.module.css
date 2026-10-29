@@ -36,6 +36,7 @@
 
 /* Row: [grip] [number or status glyph] [title ... meta] / [caption] [⋯]. */
 .row {
+  container: step-row / inline-size;
   display: flex;
   min-width: 0;
   gap: var(--space-sm);
@@ -127,9 +128,20 @@
   flex: none;
 }
 
+/* A narrow row (a phone, a narrow pane) gives the title the empty grip slot
+   and ⋯ room of a row without those controls (a pinned running head):
+   there the title matters more than lining up with the rows around it. */
+@container step-row (width < 28rem) {
+  .leadControl:empty,
+  .menuRoom {
+    display: none;
+  }
+}
+
 /* A fanned 묶음's card: the title (two lines, the step number on the first
    card), then the control line: grip · caption · ⋯. */
 .fanCard {
+  container: step-fan-card / inline-size;
   display: grid;
   min-width: 0;
   gap: var(--space-xs);
@@ -172,6 +184,31 @@
 
 .lineLead {
   margin-inline-start: calc(-1 * var(--space-xs));
+}
+
+/* A narrow fan card (two per view on a phone) gives the caption its own
+   line under the title; the grip and ⋯ share the line below it, far enough
+   down that their hit areas (and focus rings) clear the caption. */
+@container step-fan-card (width < 15rem) {
+  .controlLine {
+    flex-wrap: wrap;
+    row-gap: calc(
+      (
+          max(var(--control-height-md), var(--control-hit-target)) -
+            var(--typo-caption-line-height)
+        ) /
+        2 + var(--focus-ring-room)
+    );
+  }
+
+  .lineCaption {
+    flex-basis: 100%;
+    order: -1;
+  }
+
+  .lineMenu {
+    margin-inline-start: auto;
+  }
 }
 
 /* A card dragged out of a fanned 묶음 stays dimmed in place, all but the

@@ -25,7 +25,10 @@ drawn with `StackDeck`. Stacks never nest. It does not change
 `--space-xs`; running and pinned rows keep its slot empty and, without a
 trailing control, keep the ⋯ room so statuses line up. A fanned 묶음's card is
 compact: the title (two lines, the marker on the first card only), then
-grip · caption · ⋯. Done rows are muted. The title truncates; the `more`
+grip · caption · ⋯; a fan card narrower than 15rem (two per view on a phone)
+puts the caption on its own line, with grip and ⋯ on the line below. A row
+narrower than 28rem drops the empty grip slot and ⋯ room of a pinned row, so
+its title gets that width. Done rows are muted. The title truncates; the `more`
 slot after it (a collapsed 묶음's count, ko: 외 N건) never does.
 
 A single step's card is not interactive; only its grip and ⋯ are. A 묶음's
