@@ -6,8 +6,8 @@ import { CriteriaProgress } from "./CriteriaProgress.tsx";
 import { CriterionRow } from "./CriterionRow.tsx";
 import type { CriteriaCount } from "@/app/canonApi.ts";
 export function SpecTree({ nodes, criteria, onRefresh, compact = false }: { nodes: SpecNode[]; criteria?: CriteriaCount | null; onRefresh: () => Promise<void>; compact?: boolean }) {
-  return <Section data-test-class="canon-spec-tree" title={compact ? <Typo.Caption tone="secondary" weight="medium">{appCopy.canon.specs}</Typo.Caption> : appCopy.canon.specs} gap="sm">
-    <CriteriaProgress criteria={criteria} />
+  return <Section data-test-class="canon-spec-tree" title={criteria ? undefined : compact ? <Typo.Caption tone="secondary" weight="medium">{appCopy.canon.specs}</Typo.Caption> : appCopy.canon.specs} gap="sm">
+    <CriteriaProgress criteria={criteria} label={appCopy.canon.specs} />
     {nodes.length ? nodes.map(node => <SpecNodeRow key={node.node_id} node={node} onRefresh={onRefresh} />) : <Typo.Caption tone="secondary">{appCopy.canon.noSpecs}</Typo.Caption>}
   </Section>;
 }

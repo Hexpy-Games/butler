@@ -10,14 +10,15 @@ import { auditCanonCardFocus } from "../support/canon-registration-cards.ts";
 import { openCanonBoard } from "../support/canon-board-scenarios.ts";
 import { openPlan } from "../support/canon-sidebar-scenarios.ts";
 import { selectBoardPlan } from "../support/canon-board-selector.ts";
-import { seedCriteria, publishCriteria } from "../support/canon-criteria-fixture.ts";
-import { verifyCriteriaInteractions, verifyEnglishCriteria, verifyChildCriteria, type Capture } from "../support/canon-criteria-interactions.ts";
+import { closeCanonAside } from "../support/canon-board-aside.ts";
+import { criteriaText, seedCriteria, publishCriteria } from "../support/canon-criteria-fixture.ts";
+import { verifyCriteriaInteractions, verifyCriteriaLayout, verifyCountOnly, verifyZeroAndNullCriteria, verifyEnglishCriteria, verifyChildCriteria, type Capture } from "../support/canon-criteria-interactions.ts";
 const cases = [390, 1440].flatMap(w => ["light", "dark"].flatMap(t => ["plain", "wallpaper"].map(bg => `${w}-${t}-${bg}`)));
 if (await runMcpMatrix(cases, "BUTLER_CANON_CRITERIA_CASE", import.meta.path)) process.exit(0);
 const [widthText, theme, background] = process.env.BUTLER_CANON_CRITERIA_CASE!.split("-");
 const width = Number(widthText), wallpaper = background === "wallpaper";
 const before = process.env.BUTLER_SMOKE_BASELINE === "1";
-const directory = "/tmp/canon-criteria-crops";
+const directory = process.env.BUTLER_CRITERIA_CROPS ?? "/tmp/canon-criteria-crops";
 mkdirSync(directory, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
 let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
@@ -40,7 +41,7 @@ try {
     await aside.waitFor();
     const detail = aside.locator('[data-test-class="canon-epic-detail"]'); await detail.waitFor();
     const capture: Capture = async (state, region, focus = false, surface = false) => {
-      if (wallpaper && !surface) return;
+      if (wallpaper && state !== "inspector-spec") return;
       await page.waitForFunction(() => document.querySelectorAll('[data-sonner-toast]').length === 0);
       console.log(`capture ${state}`);
       try {
@@ -55,12 +56,10 @@ try {
     // Before has the same disclosure tree but no test marker or confirmation control.
     const specRegion = before ? detail.locator("section").filter({ hasText: "검토 기준" }).first() : tree;
     const captureSessionInfo = async () => {
-      const concern = specRegion.getByRole("button", { name: "검토 기준", exact: true });
-      await concern.click();
-      await capture("session-info", [aside.locator('[data-session-section="task"]').getByText("과제", { exact: true }), specRegion], false, true);
-      await concern.click();
+      const workMeter = detail.getByRole("progressbar", { name: "작업", exact: true }).locator("..");
+      await capture("session-info", [workMeter, specRegion], false, true);
     };
-    await capture("inspector-spec", specRegion, false, true);
+    if (!before) await verifyCriteriaLayout(tree, "session-info");
     if (before) await capture("criterion-unconfirmed", specRegion.getByText("VB-03", { exact: true }).locator(".."), false, true);
     if (!before) {
       await verifyCriteriaInteractions(page, server, fixture, detail, capture);
@@ -68,6 +67,7 @@ try {
       const meter = section.locator('[data-test-class="canon-criteria-progress"]');
       assert.equal(await meter.count(), 1);
       await meter.getByRole("progressbar", { name: "1/2 확인", exact: true }).waitFor();
+      await verifyCriteriaLayout(tree, "session-info-confirmed");
       await captureSessionInfo();
       await publishCriteria(server, fixture);
       await tree.getByRole("button", { name: "VB-03 확인됨", exact: true }).waitFor();
@@ -83,28 +83,44 @@ try {
       await tree.getByRole("button", { name: "VB-03 미확인", exact: true }).waitFor();
       await tree.getByRole("progressbar", { name: "0/2 확인", exact: true }).waitFor();
       await capture("revision-reset", tree, false, true);
+      await publishCriteria(server, fixture);
+      await tree.getByText(criteriaText, { exact: true }).waitFor();
       await auditCanonCardFocus(page, tree);
     } else await captureSessionInfo();
     await page.locator('[data-test-class="session-info-toggle"]').click();
     await aside.waitFor({ state: "hidden" });
-    if (!wallpaper) {
+    {
       await openCanonBoard(page); await selectBoardPlan(page, "검토 기준 정리");
       const card = page.locator(`[data-kanban-item="${fixture.epic}"]`);
       await card.waitFor();
-      if (!before) await card.getByRole("progressbar", { name: "0/2 확인", exact: true }).waitFor();
+      if (!before) await verifyCountOnly(card);
       await capture("board-card", card);
       const empty = page.locator(`[data-kanban-item="${fixture.empty}"]`); await empty.waitFor();
       assert.equal(await empty.getByRole("progressbar").count(), 0);
       await capture("no-criteria", empty);
+      await card.getByRole("button").first().click();
+      const inspectorTree = page.locator('[data-slot="management-page-aside"] [data-test-class="canon-spec-tree"]');
+      await inspectorTree.waitFor();
+      if (!before) { await verifyCriteriaLayout(inspectorTree, "inspector-spec"); await auditCanonCardFocus(page, inspectorTree); }
+      await capture("inspector-spec", inspectorTree, false, true);
+      await closeCanonAside(page);
+      await empty.getByRole("button").first().click();
+      const emptyTree = page.locator('[data-slot="management-page-aside"] [data-test-class="canon-spec-tree"]');
+      await emptyTree.getByText("명세", { exact: true }).waitFor();
+      assert.equal(await emptyTree.getByRole("progressbar").count(), 0, "No criteria keeps the heading without a meter");
+      await closeCanonAside(page);
       await openPlan(page, fixture.plan);
       const row = page.locator(`[data-sortable-id="${fixture.epic}"]`); await row.waitFor();
-      if (!before) await row.getByRole("progressbar", { name: "0/2 확인", exact: true }).waitFor();
+      if (!before) await verifyCountOnly(row);
       await capture("plan-overview", row);
       const emptyRow = page.locator(`[data-sortable-id="${fixture.empty}"]`); await emptyRow.waitFor();
       assert.equal(await emptyRow.getByRole("progressbar").count(), 0);
     }
     if (!before) await verifyChildCriteria(page, server, fixture, capture);
-    if (!before && width === 1440 && theme === "light" && !wallpaper) await verifyEnglishCriteria(page, server);
+    if (!before && width === 1440 && theme === "light" && !wallpaper) {
+      await verifyZeroAndNullCriteria(page, server, fixture);
+      await verifyEnglishCriteria(page, server);
+    }
     assert.equal(server.stubModelCalls.length, 0);
     console.log(JSON.stringify({ result: "PASS", before, width, theme, background, clipped: 0 }));
   } finally { await context.close(); }

@@ -19,12 +19,15 @@ export function CriterionRow({ node, criterion, onRefresh }: {
     finally { pending.current = false; setBusy(false); }
   };
   return <Box padding="xs" data-test-class="canon-criterion" data-criterion-id={criterion.criterion_id}>
-    <Stack align="row" cross="start" gap="sm">
-      <Stack gap="xs" grow minWidth="0"><Typo.Code>{criterion.criterion_id}</Typo.Code><Typo.Body wrap="anywhere">{criterion.text}</Typo.Body></Stack>
-      <Stack shrink={false}><IconButton label={appCopy.canon.criterionState(criterion.criterion_id, criterion.confirmed)}
-        pressed={criterion.confirmed} aria-disabled={busy} onClick={() => void toggle()}>
-        <RollingSwap itemKey={String(criterion.confirmed)}>{criterion.confirmed ? <SuccessCheck ring animate={false} /> : <Circle size="sm" />}</RollingSwap>
-      </IconButton></Stack>
+    <Stack gap="xs">
+      <Stack align="row" cross="center" justify="between">
+        <Typo.Code>{criterion.criterion_id}</Typo.Code>
+        <IconButton label={appCopy.canon.criterionState(criterion.criterion_id, criterion.confirmed)}
+          pressed={criterion.confirmed} tone={criterion.confirmed ? "butler" : "default"} aria-disabled={busy} onClick={() => void toggle()}>
+          <RollingSwap itemKey={String(criterion.confirmed)}>{criterion.confirmed ? <SuccessCheck ring animate={false} /> : <Circle size="sm" />}</RollingSwap>
+        </IconButton>
+      </Stack>
+      <Typo.Body wrap="anywhere">{criterion.text}</Typo.Body>
     </Stack>
   </Box>;
 }
