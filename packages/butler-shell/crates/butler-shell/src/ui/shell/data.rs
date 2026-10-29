@@ -40,6 +40,29 @@ impl Shell {
         .detach();
     }
 
+    /// Receives filesystem-driven attach changes on gpui's executor.
+    pub(crate) fn attach(
+        &mut self,
+        mut attachment: crate::ui::source::agent::Attachment,
+        cx: &mut Context<Self>,
+    ) {
+        self.connection_task = Some(cx.spawn(async move |this, cx| {
+            while let Some(source) = attachment.next().await {
+                if this
+                    .update(cx, |this, cx| {
+                        this.lost(cx);
+                        this.source = source;
+                        this.sync_composer(cx);
+                        this.connect(cx);
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        }));
+    }
+
     /// A fresh snapshot: the first page of chats, then live updates after its cursor.
     pub(super) fn connect(&mut self, cx: &mut Context<Self>) {
         if self.source.is_some() {
@@ -78,7 +101,7 @@ impl Shell {
             return;
         };
         let mut live = source.live(after);
-        cx.spawn(async move |this, cx| {
+        self.live_task = Some(cx.spawn(async move |this, cx| {
             while let Some(event) = live.next().await {
                 let current = this.update(cx, |this, cx| {
                     if this.store.epoch() != epoch {
@@ -96,8 +119,7 @@ impl Shell {
                     this.lost(cx);
                 }
             });
-        })
-        .detach();
+        }));
     }
 
     fn apply(&mut self, epoch: u64, event: crate::ui::source::LiveEvent, cx: &mut Context<Self>) {
@@ -211,6 +233,7 @@ impl Shell {
 
     /// The agent went away: back to the disconnected state.
     fn lost(&mut self, cx: &mut Context<Self>) {
+        self.live_task = None;
         self.source = None;
         self.store.lost();
         self.sync_composer(cx);
@@ -238,7 +261,7 @@ impl Shell {
         });
     }
 
-    pub(super) fn send(&mut self, text: String, cx: &mut Context<Self>) {
+    pub(crate) fn send(&mut self, text: String, cx: &mut Context<Self>) {
         let Some(source) = self.source.clone() else {
             return;
         };
@@ -285,7 +308,7 @@ impl Shell {
         );
     }
 
-    pub(super) fn stop(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn stop(&mut self, cx: &mut Context<Self>) {
         let (Some(turn), Some(source)) = (self.store.running().cloned(), self.source.clone())
         else {
             return;
@@ -299,7 +322,7 @@ impl Shell {
 
     /// Answers the open chat's request. The card shows the answer as pending and stays until
     /// the agent takes it; on failure it is ready again and the list is re-read.
-    pub(super) fn answer(
+    pub(crate) fn answer(
         &mut self,
         request: &RequestRef,
         decision: Decision,

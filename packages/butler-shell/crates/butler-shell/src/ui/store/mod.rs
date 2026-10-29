@@ -42,7 +42,8 @@ pub(crate) struct Store {
     authority: HashMap<SessionId, Vec<AuthorityCard>>,
     pending: HashSet<RequestRef>,
     /// The last durable event applied; live updates resume after it.
-    cursor: Option<EventCursor>,
+    pub(crate) cursor: Option<EventCursor>,
+    message_snapshots: HashMap<SessionId, EventCursor>,
 }
 
 impl Store {
@@ -119,6 +120,8 @@ impl Store {
 
     /// A message window arrived; true when its chat is still open. Its running turn is taken.
     pub(crate) fn messages_loaded(&mut self, chat: &ChatRef, page: &MessagePage) -> bool {
+        self.message_snapshots
+            .insert(chat.session.clone(), page.events);
         self.set_running(&chat.chat, page.running.clone());
         self.selected.as_ref() == Some(chat)
     }
@@ -188,7 +191,16 @@ impl Store {
             self.cursor = Some(cursor);
         }
         match event.update {
-            LiveUpdate::Message { session, message } => return Applied::Message(session, message),
+            LiveUpdate::Message { session, message } => {
+                if event.cursor.is_some_and(|c| {
+                    self.message_snapshots
+                        .get(&session)
+                        .is_some_and(|snapshot| c <= *snapshot)
+                }) {
+                    return Applied::Store;
+                }
+                return Applied::Message(session, message);
+            }
             LiveUpdate::Turn { chat, running } => self.set_running(&chat, running),
             LiveUpdate::Authority { session, cards } => self.authority_loaded(session, cards),
             LiveUpdate::Chat(summary) => {
@@ -210,5 +222,6 @@ impl Store {
         self.authority.clear();
         self.pending.clear();
         self.cursor = None;
+        self.message_snapshots.clear();
     }
 }

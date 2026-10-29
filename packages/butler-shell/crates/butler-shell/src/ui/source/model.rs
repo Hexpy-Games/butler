@@ -2,10 +2,6 @@
 //! sessions are separate ids, lists page with opaque keyset cursors, every snapshot carries the
 //! event cursor live updates continue from, and authority requests keep the gateway's typed
 //! approval as it was sent.
-#![allow(
-    dead_code,
-    reason = "the agent client adapter (W3) builds these from butler-shell-client; until then only the harness and tests do"
-)]
 use gpui::SharedString;
 
 /// Chat identity as the agent names it.
@@ -165,7 +161,7 @@ pub(crate) struct Operation {
     pub(crate) command: Option<SharedString>,
 }
 
-/// One thing a request touches; never an absolute path.
+/// One target exactly as the gateway sends it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Target {
     pub(crate) kind: SharedString,
@@ -176,6 +172,8 @@ pub(crate) struct Target {
 /// The gateway's `approval`, typed but unchanged: the card shows these strings as sent.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Approval {
+    /// Complete gateway approval, retained without dropping fields.
+    pub(crate) wire: Option<serde_json::Value>,
     pub(crate) action_kind: SharedString,
     pub(crate) operation: Option<Operation>,
     pub(crate) targets: Vec<Target>,
@@ -191,7 +189,12 @@ impl Approval {
     /// The exact action text: the command as sent, else the first example, else the first
     /// target, each unchanged.
     pub(crate) fn action(&self) -> Option<SharedString> {
-        let command = self.operation.as_ref().and_then(|o| o.command.clone());
+        let exact = self
+            .wire
+            .as_ref()
+            .and_then(|v| v["operation"]["command"].as_str())
+            .map(|s| s.to_owned().into());
+        let command = exact.or_else(|| self.operation.as_ref().and_then(|o| o.command.clone()));
         command
             .or_else(|| self.examples.first().cloned())
             .or_else(|| {
@@ -214,6 +217,10 @@ pub(crate) struct AuthorityCard {
 
 /// How far an allow reaches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    dead_code,
+    reason = "UI offers allow once only; scoped allows are not exposed"
+)]
 pub(crate) enum AllowScope {
     Conversation,
     Site,
@@ -232,10 +239,12 @@ pub(crate) struct QuestionAnswer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Decision {
     AllowOnce,
+    #[expect(dead_code, reason = "UI offers allow once only")]
     Allow(AllowScope),
     Deny,
     /// Suggest a different approach (exact instruction).
     Modify(String),
+    #[expect(dead_code, reason = "question UI directs answers to the existing App")]
     Answer(Vec<QuestionAnswer>),
 }
 

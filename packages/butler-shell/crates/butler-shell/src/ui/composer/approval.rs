@@ -155,7 +155,7 @@ fn actions(
         "modify",
         s.modify,
         false,
-        live(ComposerEvent::Modify(card.clone())),
+        live(ComposerEvent::Modify(Box::new(card.clone()))),
         cx,
     );
     let deny = button(
@@ -216,7 +216,7 @@ pub(super) fn panel(
                 .flex()
                 .flex_col()
                 .child(text(label, typo::CAPTION, FontWeight::NORMAL, t.text3))
-                .child(text(action, typo::LABEL, FontWeight::MEDIUM, t.text)),
+                .child(crate::ui::exact_action::exact_action(action, &t, 1.)),
         )
         .children(risk);
     let mut more = div()

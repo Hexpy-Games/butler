@@ -1,6 +1,6 @@
 # The experimental gpui desktop shell (실험). A separate workspace from
 # packages/butler-agent/rust: it pins gpui to the Butler fork of gpui-ce (tag
-# butler-lens-2) and links no agent crate yet.
+# butler-lens-2) and adapts the UI-independent agent client.
 [workspace]
 members = ["crates/*"]
 resolver = "3"

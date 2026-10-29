@@ -1,7 +1,7 @@
 //! butler-shell (실험): Butler's experimental native desktop shell on gpui.
 //!
-//! The UI reads data only through [`ui::source::Source`]; this build attaches none yet, so it
-//! opens in the disconnected state.
+//! The UI reads data only through [`ui::source::Source`], attached to the local agent
+//! with an owned background runtime and filesystem-driven discovery.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ui;
@@ -30,6 +30,12 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
         ..Default::default()
     };
     let code_font = ui::theme::code_font(&cx.text_system().all_font_names());
+    let args: Vec<_> = std::env::args_os().collect();
+    let data = args
+        .windows(2)
+        .find(|p| p[0] == "--data")
+        .map(|p| std::path::PathBuf::from(&p[1]));
+    let attachment = ui::source::agent::Attachment::start(data);
     let window = cx.open_window(options, move |window, cx| {
         // Butler's Electron window uses the acrylic material; where the platform has none the
         // shell paints an opaque fallback.
@@ -42,7 +48,11 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
             code_font,
             locale,
         };
-        cx.new(|cx| Shell::new(options, window, cx))
+        cx.new(|cx| {
+            let mut shell = Shell::new(options, window, cx);
+            shell.attach(attachment, cx);
+            shell
+        })
     })?;
     window.update(cx, |view, window, cx| {
         window.focus(&view.focus_handle(), cx);

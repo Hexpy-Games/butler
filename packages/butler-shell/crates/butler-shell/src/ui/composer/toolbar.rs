@@ -91,14 +91,14 @@ impl Composer {
         let access = Pill {
             id: "access",
             glyph: Some(("shield-question", self.theme.accent_text)),
-            label: context.permission,
+            label: self.theme.strings.control_label(context.permission),
             detail: None,
         };
         let model = Pill {
             id: "model",
             glyph: None,
             label: context.model,
-            detail: Some(context.effort),
+            detail: Some(self.theme.strings.control_label(context.effort)),
         };
         vec![
             self.pill(access).into_any_element(),

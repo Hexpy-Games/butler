@@ -26,7 +26,7 @@ pub(crate) struct LoadOlder(pub(crate) ChatRef, pub(crate) MessageCursor);
 pub(crate) struct Chat {
     pub(crate) theme: Theme,
     open: Option<ChatRef>,
-    messages: Vec<Message>,
+    pub(crate) messages: Vec<Message>,
     older: Option<MessageCursor>,
     asked_older: bool,
     /// Messages that arrived live, and when (they play the insert motion once).

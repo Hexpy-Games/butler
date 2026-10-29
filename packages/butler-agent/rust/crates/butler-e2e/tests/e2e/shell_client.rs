@@ -16,6 +16,7 @@ use serde_json::json;
 use std::time::Duration;
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 
+mod create;
 mod paging;
 mod retention;
 mod transport;

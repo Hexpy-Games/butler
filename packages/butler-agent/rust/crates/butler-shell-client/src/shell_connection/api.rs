@@ -6,6 +6,22 @@ use reqwest::Method;
 use serde_json::{Value, json};
 
 impl ShellClient {
+    /// Read the session's effective permission, model and reasoning controls.
+    pub async fn session_controls(&self, session: &str) -> Result<Value, Error> {
+        self.json(Method::GET, &["sessions", session, "controls"], &[], None)
+            .await
+    }
+
+    /// Create a local chat and return the complete session record.
+    pub async fn create_session(&self, title: Option<&str>) -> Result<Value, Error> {
+        let mut body = json!({"kind":"chat", "workspace_mode":"local"});
+        if let Some(title) = title {
+            body["title"] = title.into();
+        }
+        self.json(Method::POST, &["sessions"], &[], Some(&body))
+            .await
+    }
+
     /// Read one page of chats; never fetches a full list internally.
     pub async fn list_chats(&self, page: PageRequest) -> Result<Page, Error> {
         self.list("chats", page).await

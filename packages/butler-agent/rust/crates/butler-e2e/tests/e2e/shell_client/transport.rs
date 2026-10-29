@@ -74,7 +74,7 @@ async fn credential(State(state): State<Refresh>, headers: axum::http::HeaderMap
     assert_eq!(headers.get("authorization").unwrap(), "Bearer new");
     state.observed.lock().unwrap().push(200);
     Response::new(Body::from(
-        json!({"data":{"items":[],"next_cursor":null}}).to_string(),
+        json!({"data":{"items":[],"next_cursor":null,"event_cursor":0}}).to_string(),
     ))
 }
 

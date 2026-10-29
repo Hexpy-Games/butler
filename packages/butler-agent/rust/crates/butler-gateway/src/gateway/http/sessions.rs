@@ -22,6 +22,7 @@ use crate::gateway::{
 
 pub(super) async fn chats(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
     let page = page_params(&state, uri)?;
+    let cursor = state.application.latest_event_cursor().await?;
     let chats = state
         .application
         .list_chats(page.clone().map(|mut page| {
@@ -33,7 +34,10 @@ pub(super) async fn chats(state: Arc<HttpState>, uri: &Uri) -> Result<Response, 
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: page_response(chats, page, None, &state.session_cursor_secret)?,
+            data: with_cursor(
+                page_response(chats, page, None, &state.session_cursor_secret)?,
+                cursor,
+            ),
         },
     )
 }
@@ -46,6 +50,7 @@ pub(super) async fn list(state: Arc<HttpState>, uri: &Uri) -> Result<Response, H
         .cloned();
     let project_id = params.get("project_id").cloned();
     let page = page_params(&state, uri)?;
+    let cursor = state.application.latest_event_cursor().await?;
     let sessions = state
         .application
         .list_sessions(
@@ -61,12 +66,15 @@ pub(super) async fn list(state: Arc<HttpState>, uri: &Uri) -> Result<Response, H
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: page_response(
-                sessions,
-                page,
-                Some("sessions"),
-                &state.session_cursor_secret,
-            )?,
+            data: with_cursor(
+                page_response(
+                    sessions,
+                    page,
+                    Some("sessions"),
+                    &state.session_cursor_secret,
+                )?,
+                cursor,
+            ),
         },
     )
 }
@@ -249,4 +257,12 @@ fn decode_cursor(token: &str, secret: &str, scope: &str) -> Result<AppListCursor
         return Err(resync());
     }
     Ok(cursor)
+}
+
+// Unpaged Electron responses keep their existing envelope shape.
+fn with_cursor(mut data: Value, cursor: u64) -> Value {
+    if data.get("items").is_some() {
+        data["event_cursor"] = cursor.into();
+    }
+    data
 }

@@ -3,8 +3,8 @@
 //! dialog sits over the chat card above a veil (its glass samples, and refracts, the dimmed
 //! content); a click outside closes it, and wheel scrolling over it moves the chat behind.
 use gpui::{
-    AnyElement, AppContext as _, Bounds, Context, Entity, FontWeight, MouseButton, Pixels,
-    ScrollWheelEvent, Window, div, prelude::*, px,
+    AnyElement, AppContext as _, Bounds, Context, Entity, MouseButton, Pixels, ScrollWheelEvent,
+    Window, div, prelude::*, px,
 };
 
 use super::Shell;
@@ -14,7 +14,6 @@ use crate::ui::glass;
 use crate::ui::input::TextInput;
 use crate::ui::source::{AuthorityCard, Decision};
 use crate::ui::theme::{Theme, alpha};
-use crate::ui::widgets::text;
 
 /// The dialog's bottom sits this far above the composer's top.
 const ABOVE_COMPOSER: f32 = 110.;
@@ -38,12 +37,7 @@ fn body(action: gpui::SharedString, input: Entity<TextInput>) -> crate::ui::dial
         div()
             .flex()
             .flex_col()
-            .child(text(
-                action.clone(),
-                (13. * s, 18. * s),
-                FontWeight::NORMAL,
-                t.text2,
-            ))
+            .child(crate::ui::exact_action::exact_action(action.clone(), t, s))
             .child(field)
             .into_any_element()
     })

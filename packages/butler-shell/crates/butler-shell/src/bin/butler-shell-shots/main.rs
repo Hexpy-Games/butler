@@ -15,6 +15,7 @@
 mod ui;
 
 mod fixture;
+mod live;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -159,7 +160,16 @@ fn main() -> ExitCode {
         .nth(1)
         .map(PathBuf::from)
         .ok_or_else(|| anyhow!("usage: butler-shell-shots <dir>"));
-    match dir.and_then(|dir| run(&dir)) {
+    let args: Vec<_> = std::env::args_os().collect();
+    let data = args
+        .windows(2)
+        .find(|p| p[0] == "--data")
+        .map(|p| PathBuf::from(&p[1]));
+    let dark = args.iter().any(|a| a == "--dark");
+    match dir.and_then(|dir| match data {
+        Some(data) => live::run(&dir, data, dark),
+        None => run(&dir),
+    }) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("butler-shell-shots: {error:#}");

@@ -2,7 +2,8 @@
 //! authority requests and sends what the UI does; it mirrors `butler-shell-client`
 //! (`list_chats`, `message_window`, `authority_requests`, `live_events(cursor)`,
 //! `post_message` with a client message id, `cancel_turn`, `answer_authority`) and is adapted
-//! to it in a later step. Without a source the shell shows its disconnected state.
+//! by `agent`. Without a source the shell shows its disconnected state.
+pub(crate) mod agent;
 pub(crate) mod model;
 
 use futures::future::LocalBoxFuture;
@@ -17,7 +18,6 @@ pub(crate) use model::{
 
 /// Why a request failed, in the UI's terms (no credential or wire detail).
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code, reason = "the agent client adapter (W3) reports these")]
 pub(crate) enum SourceError {
     /// The agent is not running or the connection dropped.
     Disconnected,

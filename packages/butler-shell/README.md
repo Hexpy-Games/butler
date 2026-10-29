@@ -8,8 +8,9 @@ Electron app and is not shipped.
 - gpui comes from the Butler fork of gpui-ce, pinned to tag `butler-lens-2`
   (`https://github.com/Hexpy-Games/gpui-ce`). The fork adds the Liquid Glass lens and
   the Windows Acrylic window material.
-- The UI reads data only through `source::Source`. No agent connection is wired yet, so
-  the app opens in its disconnected state.
+- The UI reads data through `source::Source`, backed by `butler-shell-client`.
+  It attaches to the instance in `--data`, `BUTLER_DATA`, or the platform data directory,
+  and watches instance changes while disconnected. It never starts an agent.
 
 ## Build and run
 
@@ -29,6 +30,13 @@ one PNG per state:
 ```sh
 cargo run --release -p butler-shell --features shots --bin butler-shell-shots -- <dir>
 ```
+
+For a real isolated agent, pass `<dir> --data <data-dir>` (and optionally `--dark`).
+The live harness accepts commands on stdin: `connected`, `open <chat>`, `new`,
+`send <text>`, `answer <text>`, `approval`, `exact <text>`, `modify`, `allow`, `deny`,
+`cancel`, `disconnected`, `shot <name>` and `quit`. Each completed command prints
+`LIVE OK`. The main Rust workspace's `butler-e2e` example `gpui_shell` drives these
+with a local stub provider, stops/restarts its own agent, and saves both themes.
 
 ## Tests
 

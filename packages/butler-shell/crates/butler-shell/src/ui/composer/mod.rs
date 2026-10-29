@@ -32,7 +32,7 @@ pub(crate) enum ComposerEvent {
     Stop,
     Answer(RequestRef, Decision),
     /// The owner wants to suggest a change to this request.
-    Modify(AuthorityCard),
+    Modify(Box<AuthorityCard>),
 }
 
 pub(crate) struct Composer {

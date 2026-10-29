@@ -24,6 +24,13 @@ required-features = ["shots"]
 shots = ["gpui/test-support", "dep:gpui_wgpu"]
 
 [dependencies]
+butler-shell-client = { path = "../../../butler-agent/rust/crates/butler-shell-client" }
+butler-platform = { path = "../../../butler-agent/rust/crates/butler-platform" }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros", "net"] }
+notify = "=9.0.0-rc.6"
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+
 anyhow.workspace = true
 futures.workspace = true
 gpui.workspace = true

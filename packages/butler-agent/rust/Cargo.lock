@@ -963,6 +963,7 @@ dependencies = [
 name = "butler-e2e"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "arrow-array",
  "axum",
  "base64 0.22.1",

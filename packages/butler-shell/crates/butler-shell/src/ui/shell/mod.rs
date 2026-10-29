@@ -60,6 +60,8 @@ pub(crate) struct Shell {
     card_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     focus: FocusHandle,
     subscriptions: Vec<Subscription>,
+    live_task: Option<gpui::Task<()>>,
+    connection_task: Option<gpui::Task<()>>,
 }
 
 impl HasHover for Shell {
@@ -126,6 +128,8 @@ impl Shell {
             card_bounds: Rc::new(Cell::new(None)),
             focus,
             subscriptions,
+            live_task: None,
+            connection_task: None,
         };
         shell.sync_composer(cx);
         shell.connect(cx);

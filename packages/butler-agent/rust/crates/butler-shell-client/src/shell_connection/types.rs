@@ -55,6 +55,8 @@ impl PageRequest {
 /// A bounded list of complete wire records; no fields are removed.
 #[derive(Debug, Deserialize)]
 pub struct Page {
+    /// Durable cursor captured before the list read, for lossless live continuation.
+    pub event_cursor: u64,
     /// Complete chat/session records.
     pub items: Vec<Value>,
     /// Opaque snapshot/keyset cursor for the next page, or None at the end.

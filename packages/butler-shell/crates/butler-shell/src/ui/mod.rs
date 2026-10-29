@@ -5,6 +5,7 @@ pub(crate) mod chat;
 pub(crate) mod cliptop;
 pub(crate) mod composer;
 pub(crate) mod dialog;
+pub(crate) mod exact_action;
 pub(crate) mod glass;
 pub(crate) mod i18n;
 pub(crate) mod input;

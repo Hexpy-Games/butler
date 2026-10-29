@@ -165,6 +165,7 @@ fn command_card() -> AuthorityCard {
         kind: CardKind::Command,
         reason: "배포 전에 release 빌드가 깨지지 않는지 확인합니다.".into(),
         approval: Some(Approval {
+            wire: None,
             action_kind: "command".into(),
             operation: Some(Operation {
                 tool: "shell".into(),
