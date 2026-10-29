@@ -10,6 +10,7 @@ pub enum AppCanonResource {
     Activity,
     Comment,
     ProposeSpec,
+    CheckCriterion,
     Grants,
     AllowGrant,
     DenyGrant,
