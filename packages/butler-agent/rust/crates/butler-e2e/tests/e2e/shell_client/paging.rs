@@ -69,6 +69,24 @@ async fn check_pages(
         baseline.data().as_array().unwrap()
     };
     assert_eq!(rows.len(), 6);
+    // Unpaged timestamp ties retain main's insertion order. Keyset pages
+    // deliberately use id DESC, so choose later-page mutations in that order.
+    let mut rows: Vec<_> = rows.iter().collect();
+    rows.sort_by_key(|row| {
+        std::cmp::Reverse((
+            sessions && row["pinned"].as_bool().unwrap_or(false),
+            row["updated_at"].as_str().unwrap().to_owned(),
+            row["created_at"].as_str().unwrap().to_owned(),
+            row["id"].as_str().unwrap().to_owned(),
+        ))
+    });
+    assert_eq!(
+        first.items.iter().map(|row| &row["id"]).collect::<Vec<_>>(),
+        rows.iter()
+            .take(2)
+            .map(|row| &row["id"])
+            .collect::<Vec<_>>()
+    );
     let changed = rows[3]["id"].as_str().unwrap();
     let archived = rows[4]["id"].as_str().unwrap();
     crate::chats_initiated::support::clock(clock, now).await?;
