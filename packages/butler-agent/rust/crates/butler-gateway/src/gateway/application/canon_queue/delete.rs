@@ -5,6 +5,7 @@ pub(in crate::gateway::application) async fn reconcile(
     app: &AppApplication,
 ) -> Result<(), GatewayApplicationError> {
     app.dependencies.executor_readiness.wait_ready().await?;
+    replay_deletes(app).await?;
     let sessions = app
         .dependencies
         .canon
@@ -52,4 +53,67 @@ pub(in crate::gateway::application) async fn reconcile(
         }
     }
     Ok(())
+}
+
+/// The App delete and this receipt share a transaction, so failed canon writes
+/// remain recoverable on the next real change, even across process loss.
+pub(in crate::gateway::application) async fn complete_delete(
+    app: &AppApplication,
+    op: String,
+) -> Result<(), GatewayApplicationError> {
+    let _guard = app.canon_projection_locks.acquire(op.clone()).await;
+    let key = op.clone();
+    let hint = app
+        .storage
+        .read(move |db| {
+            db.query_row(
+                "SELECT session_hint FROM app_canon_session_deletes WHERE op_id=?1",
+                [key],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(AppStorageError::sqlite)
+        })
+        .await
+        .map_err(app_error)?;
+    let Some(session_hint) = hint else {
+        return Ok(());
+    };
+    app.dependencies
+        .canon
+        .canon_operation(AppCanonOperation::SessionDeleted {
+            session_hint,
+            op_id: op.clone(),
+        })
+        .await?;
+    app.storage
+        .execute(move |db| {
+            db.execute("DELETE FROM app_canon_session_deletes WHERE op_id=?1", [op])
+                .map_err(AppStorageError::sqlite)?;
+            Ok(())
+        })
+        .await
+        .map_err(app_error)
+}
+
+pub(super) async fn replay_deletes(app: &AppApplication) -> Result<(), GatewayApplicationError> {
+    let mut after = String::new();
+    loop {
+        let cursor = after.clone();
+        let ops = app.storage.read(move |db| {
+            db.prepare("SELECT op_id FROM app_canon_session_deletes WHERE op_id>?1 ORDER BY op_id LIMIT 128")
+                .map_err(AppStorageError::sqlite)?.query_map([cursor], |r| r.get::<_,String>(0))
+                .map_err(AppStorageError::sqlite)?.collect::<Result<Vec<_>,_>>()
+                .map_err(AppStorageError::sqlite)
+        }).await.map_err(app_error)?;
+        if ops.is_empty() {
+            return Ok(());
+        }
+        for op in ops {
+            after = op.clone();
+            if let Err(error) = complete_delete(app, op).await {
+                tracing::warn!(op_id = %after, %error, "Canon session delete remains pending");
+            }
+        }
+    }
 }

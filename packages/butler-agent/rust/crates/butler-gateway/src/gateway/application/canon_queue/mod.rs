@@ -5,7 +5,7 @@ mod locks;
 pub(in crate::gateway::application) mod steps;
 mod taking;
 use super::*;
-pub(super) use delete::reconcile;
+pub(super) use delete::{complete_delete, reconcile};
 use locks::ReplayLocks;
 use rusqlite::{OptionalExtension, params};
 use serde_json::json;
@@ -145,12 +145,14 @@ fn field(input: &Value, key: &str) -> Result<String, GatewayApplicationError> {
 }
 
 pub(super) async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
+    delete::replay_deletes(app).await?;
     taking::reconcile(app).await?;
+    let mut after = 0;
     loop {
         let pending = app
             .dependencies
             .canon
-            .canon_operation(AppCanonOperation::PendingQueue)
+            .canon_operation(AppCanonOperation::PendingQueue { after })
             .await?;
         let pending = pending
             .as_array()
@@ -159,7 +161,12 @@ pub(super) async fn replay(app: &AppApplication) -> Result<(), GatewayApplicatio
             return Ok(());
         }
         for intent in pending {
-            apply(app, intent.clone()).await?;
+            after = intent["replay_cursor"]
+                .as_i64()
+                .ok_or_else(GatewayApplicationError::internal)?;
+            if let Err(error) = apply(app, intent.clone()).await {
+                tracing::error!(op_id = %intent["op_id"], %error, "Canon queue intent failed");
+            }
         }
     }
 }

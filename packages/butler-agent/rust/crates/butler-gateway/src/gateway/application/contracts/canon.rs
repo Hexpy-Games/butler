@@ -82,7 +82,9 @@ pub enum AppCanonOperation {
         session_id: Option<String>,
         new_session_id: String,
     },
-    PendingQueue,
+    PendingQueue {
+        after: i64,
+    },
     Pending {
         after: String,
     },

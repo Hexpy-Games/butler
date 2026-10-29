@@ -37,8 +37,8 @@ pub(super) fn execute(
                 })
                 .await
                 .map_err(error),
-            AppCanonOperation::PendingQueue => storage
-                .canon_read(move |db| Ok(json!(store::queue::pending(db)?)))
+            AppCanonOperation::PendingQueue { after } => storage
+                .canon_read(move |db| Ok(json!(store::queue::pending(db, after)?)))
                 .await
                 .map_err(error),
             AppCanonOperation::Pending { after } => storage

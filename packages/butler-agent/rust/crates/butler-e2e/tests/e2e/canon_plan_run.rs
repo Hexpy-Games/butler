@@ -7,6 +7,7 @@
 )]
 mod boundaries;
 mod bundle;
+mod delete_replay;
 mod deletion;
 mod edits;
 mod fixture;

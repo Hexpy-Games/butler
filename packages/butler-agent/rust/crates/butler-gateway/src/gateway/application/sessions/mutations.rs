@@ -2,9 +2,9 @@ use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 use super::read;
+use crate::gateway::GatewayApplicationError;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{AppApplication, app_error, events, storage::AppStorageError};
-use crate::gateway::{AppCanonOperation, GatewayApplicationError};
 use butler_core::public_text::trim_js_whitespace;
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -163,12 +163,7 @@ impl AppApplication {
         if permanent {
             #[cfg(feature = "e2e-fixtures")]
             super::super::canon::hold(self, "canon_session_delete").await?;
-            self.dependencies
-                .canon
-                .canon_operation(AppCanonOperation::SessionDeleted {
-                    session_hint: target.session_hint.clone(),
-                    op_id: format!("session-delete:{session}"),
-                })
+            super::super::canon_queue::complete_delete(self, format!("session-delete:{session}"))
                 .await?;
         }
         self.collect_session_outputs(session).await?;
@@ -258,6 +253,11 @@ fn delete_permanently(
     tx.execute(
         "DELETE FROM app_initiated_messages WHERE chat_id=?1",
         [session_id],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    tx.execute(
+        "INSERT INTO app_canon_session_deletes(op_id,session_hint) VALUES(?1,?2)",
+        params![format!("session-delete:{session_id}"), session.session_hint],
     )
     .map_err(AppStorageError::sqlite)?;
     tx.execute("DELETE FROM chats WHERE id=?", [session_id])

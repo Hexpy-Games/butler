@@ -119,22 +119,41 @@ pub(super) async fn reconcile(app: &AppApplication) -> Result<(), GatewayApplica
         })
         .await?;
     for row in pending.as_array().into_iter().flatten() {
-        let op = field(row, "op_id")?;
-        let Some(_projection) = app.canon_projection_locks.try_acquire(op.clone()) else {
-            continue;
-        };
-        let chat = app.owner_chat(field(row, "source_session_id")?).await?;
-        let Some(_delivery) = app
-            .canon_projection_locks
-            .try_acquire(format!("canon-delivery:{chat}"))
-        else {
-            continue;
-        };
-        if let Err(error) = stop_source(app, op, false).await {
-            tracing::warn!(%error, "Canon source cancellation remains pending");
+        if let Err(error) = reconcile_one(app, row).await {
+            tracing::warn!(op_id = %row["op_id"], %error, "Canon source cancellation remains pending");
         }
     }
     Ok(())
+}
+
+async fn reconcile_one(app: &AppApplication, row: &Value) -> Result<(), GatewayApplicationError> {
+    let op = field(row, "op_id")?;
+    let Some(_projection) = app.canon_projection_locks.try_acquire(op.clone()) else {
+        return Ok(());
+    };
+    let owner = field(row, "source_session_id")?;
+    let chat = app
+        .storage
+        .read(move |db| sessions::identity::resolve_owner(db, &owner))
+        .await
+        .map_err(app_error)?;
+    let Some(chat) = chat else {
+        app.dependencies
+            .canon
+            .canon_operation(AppCanonOperation::StepTurnEnded {
+                op_id: op,
+                outcome: "cancelled".into(),
+            })
+            .await?;
+        return Ok(());
+    };
+    let Some(_delivery) = app
+        .canon_projection_locks
+        .try_acquire(format!("canon-delivery:{chat}"))
+    else {
+        return Ok(());
+    };
+    stop_source(app, op, false).await
 }
 
 async fn stop(app: &AppApplication, turn: String) -> Result<(), GatewayApplicationError> {

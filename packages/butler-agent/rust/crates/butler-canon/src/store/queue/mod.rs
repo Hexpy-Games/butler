@@ -138,8 +138,8 @@ pub fn running(db: &Connection) -> Result<Value> {
 }
 
 /// Queue intents preserve transaction insertion order, including bundle order.
-pub fn pending(db: &Connection) -> Result<Vec<Value>> {
-    rows(db, sql::PENDING, [])
+pub fn pending(db: &Connection, after: i64) -> Result<Vec<Value>> {
+    rows(db, sql::PENDING, [after])
 }
 
 /// Every row is an unresolved cancellation identity; terminal receipts delete it.
