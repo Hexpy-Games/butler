@@ -23,6 +23,9 @@ mod diagnostics;
 #[path = "shutdown_order/memory.rs"]
 mod memory;
 
+#[path = "shutdown_order/shared_locks.rs"]
+mod shared_locks;
+
 #[tokio::test]
 async fn gateway_port_pair_stays_reserved_between_processes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
