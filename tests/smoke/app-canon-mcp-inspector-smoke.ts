@@ -23,7 +23,7 @@ let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 const headers = { "X-Butler-Delegate-Client": "Claude Code", "X-Butler-Delegate-Client-Name": "claude-code" };
 try {
-  await server.api("/personalization", { method: "PATCH", body: JSON.stringify({ profile: { principal_name: "연우" } }) });
+  await server.api("/personalization", { method: "PATCH", body: JSON.stringify({ profile: { principal_name: "하늘" } }) });
   const { project } = await server.api<{ project: { id: string } }>("/projects", post({ source: "scratch", display_name: "명세 검토" }));
   const epic = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, post({ title: "연결 도구의 검토", assignee: "app-user" }));
   const other = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, post({ title: "다른 검토" }));
@@ -53,7 +53,7 @@ try {
       if (!await aside.isVisible()) await page.locator('[data-test-class="session-info-toggle"]').click();
       const detail = aside.locator('[data-test-class="canon-epic-detail"]'); await detail.waitFor();
       if (!before) {
-        await detail.getByRole("img",{ name: "연우 · Claude Code 작업 중",exact: true }).first().waitFor();
+        await detail.getByRole("img",{ name: "하늘 · Claude Code 작업 중",exact: true }).first().waitFor();
         await assertNeutralAgentMark(detail);
         await detail.getByText("검토 기준과 예외 상황을 정리했습니다.",{ exact: true }).first().waitFor();
         assert.equal(await detail.locator('[data-test-class="canon-mcp-proposal"]').count(),1);

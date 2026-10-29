@@ -1,6 +1,7 @@
 // test-category: security
 import { strict as assert } from "node:assert";
 import { assertActivityTimes, assertNeutralAgentMark, assertTrustLayout } from "../support/canon-mcp-layout.ts";
+import { delayCanonGrantRevoke } from "../support/canon-mcp-grant-race.ts";
 import { captureRegion } from "../support/canon-mcp-crops.ts";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -35,7 +36,7 @@ try {
     await server.api("/settings", { method: "PATCH", body: JSON.stringify(onboardingCompletedPatch(settings.onboarding, now, now)) });
   }
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, wallpaper: { source: surface === "wallpaper" ? { kind: "live", module: "butler.silk" } : { kind: "none" }, motion: "paused", pauseOnBattery: false } }) });
-  await server.api("/personalization", { method: "PATCH", body: JSON.stringify({ profile: { principal_name: "연우" } }) });
+  await server.api("/personalization", { method: "PATCH", body: JSON.stringify({ profile: { principal_name: "하늘" } }) });
   const { project } = await server.api<{ project: { id: string } }>("/projects", post({ source: "scratch", display_name: "캐논 보드" }));
   const plan = await server.api<PlanDetail>(`/projects/${project.id}/canon/plans`, post({ title: "도구 연결" }));
   const epic = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, post({ title: "명세 검토", plan_id: plan.id, assignee: "app-user" }));
@@ -44,6 +45,7 @@ try {
   db.close();
   browser = await launchSmokeBrowser();
   const context = await browser.newContext({ viewport: { width: Number(widthText), height: 1000 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
+  let delayedRevoke: Awaited<ReturnType<typeof delayCanonGrantRevoke>> | undefined;
   let failedPage: import("playwright").Page | undefined;
   try {
     await server.signIn(context);
@@ -81,10 +83,11 @@ try {
     const pendingRead = await fetch(new URL("canon/list", server.url), { headers: { ...server.authHeaders, ...headers } });
     assert.equal(pendingRead.status, 403);
     const grant = (await grants()).grants[0]!; assert(grant);
+    if (!before && !crops) delayedRevoke = await delayCanonGrantRevoke(page, grant.id);
     const dialog = page.getByRole("dialog", { name: "Claude Code에 캐논 권한을 줄까요?", exact: true });
     if (!before) {
       await dialog.waitFor();
-      await dialog.getByText("연우", { exact: true }).waitFor();
+      await dialog.getByText("하늘", { exact: true }).waitFor();
       for (const label of Object.values(c.canon.mcp.capabilities)) await dialog.getByText(label, { exact: true }).waitFor();
       await assertTrustLayout(dialog, Object.values(c.canon.mcp.capabilities));
       await focus.audit(dialog);
@@ -115,7 +118,7 @@ try {
     const card = page.locator(`[data-kanban-item="${epic.id}"]`);
     await card.waitFor();
     if (!before) {
-      await card.getByRole("img", { name: "연우 · Claude Code 작업 중", exact: true }).waitFor();
+      await card.getByRole("img", { name: "하늘 · Claude Code 작업 중", exact: true }).waitFor();
       await assertNeutralAgentMark(card);
     }
     const hideSidebar = page.getByRole("button", { name: c.titlebar.hideLeftPanel, exact: true });
@@ -132,12 +135,12 @@ try {
       await arbitraryDialog.waitFor({ state: "detached" });
       const current = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
       await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", headers: arbitraryHeaders, body: JSON.stringify({ expected_revision: current.revision, status: "in_review" }) });
-      await card.getByRole("img", { name: "연우 · Local Tool 작업 중", exact: true }).waitFor();
+      await card.getByRole("img", { name: "하늘 · Local Tool 작업 중", exact: true }).waitFor();
       assert.equal(await assertNeutralAgentMark(card), neutral, "Known and arbitrary clients use the same neutral mark");
       const changed = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
       assert.deepEqual(changed.agent, { person: "app-user", via: "Local Tool" });
       await delegated(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: changed.revision, status: "in_progress" }) });
-      await card.getByRole("img", { name: "연우 · Claude Code 작업 중", exact: true }).waitFor();
+      await card.getByRole("img", { name: "하늘 · Claude Code 작업 중", exact: true }).waitFor();
       const arbitraryGrant = (await grants()).grants.find(item => item.client_title === "Local Tool"); assert(arbitraryGrant);
       await server.api(`/canon/mcp-grants/${arbitraryGrant.id}/revoke`, post({}));
     }
@@ -151,7 +154,7 @@ try {
     await page.getByRole("menuitem", { name: "계획 개요", exact: true }).click();
     const overview = page.locator('[data-test-class="canon-plan-overview"]');
     await overview.waitFor();
-    if (!before) await overview.getByRole("img", { name: "연우 · Claude Code 작업 중", exact: true }).waitFor();
+    if (!before) await overview.getByRole("img", { name: "하늘 · Claude Code 작업 중", exact: true }).waitFor();
     await page.getByRole("menuitem", { name: "계획 개요", exact: true }).waitFor({ state: "detached" });
     if (!before) await focus.audit(overview);
     await capture("plan-overview", [overview.locator('[data-test-class="canon-plan-epics"]')]);
@@ -197,7 +200,7 @@ try {
       // Canon events refresh activity and agent state while the inspector stays mounted.
       const current = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
       await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: current.revision, status: "in_review" }) });
-      await page.waitForFunction(() => !document.querySelector('[data-test-class="canon-epic-detail"] [aria-label="연우 · Claude Code 작업 중"]'));
+      await page.waitForFunction(() => !document.querySelector('[data-test-class="canon-epic-detail"] [aria-label="하늘 · Claude Code 작업 중"]'));
       await headerRegions[0]!.scrollIntoViewIfNeeded();
       await focus.audit(detail);
       await capture("inspector-cleared", headerRegions);
@@ -221,6 +224,11 @@ try {
     if (!before) { await dialog.waitFor(); await dialog.getByRole("button", { name: "거절", exact: true }).click(); await dialog.waitFor({ state: "hidden" }); }
     else await server.api(`/canon/mcp-grants/${grant.id}/deny`,post({}));
     if (!before) { await connected.getByText("거절됨", { exact: true }).waitFor(); await focus.audit(connected); }
+    if (delayedRevoke) {
+      delayedRevoke.release(); await delayedRevoke.settled;
+      await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+      assert(await connected.getByText("거절됨", { exact: true }).isVisible(), "A late revoke response must retain the newer denied grant");
+    }
     if (!before) await capture("settings-denied", [connected]);
     if (!before) { await connected.getByRole("button", { name: "지우기", exact: true }).click(); await connected.getByText(c.canon.mcp.noTools, { exact: true }).waitFor(); }
     if (!before) {
@@ -251,5 +259,5 @@ try {
   } catch (error) {
     await failedPage?.screenshot({ path: join(shots, `failure-${process.env.BUTLER_CANON_MCP_CASE}.png`) });
     throw error;
-  } finally { await context.close(); }
+  } finally { delayedRevoke?.release(); await context.close(); }
 } finally { await browser?.close(); await server.stop(); }

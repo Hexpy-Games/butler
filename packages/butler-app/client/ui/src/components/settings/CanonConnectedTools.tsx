@@ -5,14 +5,14 @@ import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { Box, Button, ListRow, SettingsSection, Stack, Tag } from "@/butler-ds";
 export function CanonConnectedTools() {
   useAppLocale();
-  const { grants, failed, refresh, remove } = useCanonGrants();
+  const { grants, failed, refresh } = useCanonGrants();
   const [busy, setBusy] = useState<string | null>(null);
   const copy = appCopy.canon.mcp;
   const revoke = async (grant: CanonGrant) => {
     if (busy) return;
     setBusy(grant.id);
     try {
-      await decideCanonGrant(grant.id, "revoke"); remove(grant.id);
+      await decideCanonGrant(grant.id, "revoke"); await refresh();
       notifyStatus(grant.state === "denied" ? copy.deleted : copy.revoked);
     } catch (error) { notifyError(error, appCopy.interfaceFeedback.requestFailed); }
     finally { setBusy(null); }

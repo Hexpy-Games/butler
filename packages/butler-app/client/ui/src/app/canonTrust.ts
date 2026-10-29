@@ -39,6 +39,5 @@ export function useCanonGrants(pendingOnly = false) {
     listeners.add(refresh);
     return () => { generation.current++; listeners.delete(refresh); };
   }, [refresh]);
-  const remove = (id: string) => { generation.current++; setGrants(rows => rows?.filter(g => g.id !== id) ?? null); };
-  return { grants, failed, refresh, remove };
+  return { grants, failed, refresh };
 }

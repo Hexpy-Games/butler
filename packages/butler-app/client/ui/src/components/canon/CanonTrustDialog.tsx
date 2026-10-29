@@ -6,7 +6,7 @@ import { Button, ButtonContainer, Dialog, DialogContent, DialogDescription, Dial
 import { useCanonPersonName } from "./useCanonPersonName.ts";
 export function CanonTrustDialog() {
   useAppLocale();
-  const { grants, remove, refresh } = useCanonGrants(true);
+  const { grants, refresh } = useCanonGrants(true);
   const person = useCanonPersonName();
   const [busy, setBusy] = useState(false);
   const grant = grants?.[0];
@@ -15,7 +15,7 @@ export function CanonTrustDialog() {
   const decide = async (action: "allow" | "deny") => {
     if (busy) return;
     setBusy(true);
-    try { await decideCanonGrant(grant.id, action); remove(grant.id); await refresh(); }
+    try { await decideCanonGrant(grant.id, action); await refresh(); }
     catch (error) { notifyError(error, appCopy.interfaceFeedback.requestFailed); }
     finally { setBusy(false); }
   };

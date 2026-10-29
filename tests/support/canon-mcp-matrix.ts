@@ -35,7 +35,7 @@ export async function assertAssigneeLayout(detail: Locator) {
   const select = row.getByRole("combobox", { name: "담당", exact: true });
   const avatar = await row.getByRole("img").boundingBox();
   const control = await select.boundingBox();
-  const caption = await row.getByText("연우 · Claude Code 작업 중", { exact: true }).boundingBox();
+  const caption = await row.getByText("하늘 · Claude Code 작업 중", { exact: true }).boundingBox();
   assert(avatar && control && caption);
   assert(Math.abs(avatar.y + avatar.height / 2 - control.y - control.height / 2) < 1, "Avatar and select are vertically centered");
   assert(caption.y >= control.y + control.height, "Agent caption is below the select");
