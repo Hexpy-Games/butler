@@ -188,8 +188,11 @@ async fn no_first_response_by_total_fails_once() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-/// A stream that stops after its first chunk is a stall: the idle limit
-/// ends it long before the total, and the round is retried as before.
+/// A stream that stops after its first output chunk is a stall: the idle
+/// limit ends it long before the total, and the round is retried as before.
+/// This is the retried stall after real output that TURN-05 covered before
+/// lifecycle events stopped counting as output (TURN-05's stall now comes
+/// before any output and is a first-response timeout).
 #[tokio::test]
 async fn stall_after_first_response_is_retried() -> Result<(), HarnessError> {
     butler_e2e::gate!();

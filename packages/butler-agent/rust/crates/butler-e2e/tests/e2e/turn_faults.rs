@@ -18,6 +18,13 @@ use butler_e2e::e2e::scenario::Setup;
 use serde_json::{Value, json};
 
 /// TURN-05 — Broken stream: truncation, reset, stall.
+///
+/// A cut or reset stream is retried once and delivered. The stall is
+/// injected after three lifecycle events (`response.created`,
+/// `response.in_progress`, `response.output_item.added`) and before any
+/// output, so it is a first-response timeout: one request, no resend, a
+/// retryable failure. A stall after real output (retried by the idle limit)
+/// is covered by FIRST-RESPONSE-03 in `provider_first_response.rs`.
 #[tokio::test]
 async fn turn_05_broken_stream_never_delivers_partial_text() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -67,24 +74,32 @@ async fn turn_05_broken_stream_never_delivers_partial_text() -> Result<(), Harne
         let exchange = s.provider()?.exchange_for(prompt, 0)?;
         s.provider()?.inject(Fault::once(exchange, transform))?;
         let started = Instant::now();
+        let before = rounds_for(&s.provider()?.requests(), prompt);
         eprintln!("TURN-05 injecting {kind}");
         let (turn_id, turn) = s.turn("general", prompt).await?;
+        let sent = rounds_for(&s.provider()?.requests(), prompt) - before;
         eprintln!(
-            "TURN-05 {kind}: {} after {:?}",
+            "TURN-05 {kind}: {} after {:?}, {sent} requests",
             turn_state(&turn),
             started.elapsed()
         );
         let state = turn_state(&turn).to_owned();
-        assert!(
-            matches!(state.as_str(), "failed" | "delivered"),
-            "{kind}: {turn}"
-        );
         if *kind == "stall" {
+            assert_eq!(state, "failed", "{kind}: {turn}");
+            assert_eq!(
+                turn["safe_error_code"], "provider_first_response_timeout",
+                "{turn}"
+            );
+            assert_eq!(turn["retryable"], true, "{turn}");
+            assert_eq!(sent, 1, "the stalled request was resent");
             butler_e2e::assert_wall_clock_budget!(
                 started.elapsed(),
                 Duration::from_secs(40),
                 "stall not bounded"
             );
+        } else {
+            assert_eq!(state, "delivered", "{kind}: {turn}");
+            assert_eq!(sent, 2, "{kind}: one failed request and one retry");
         }
         assert_no_partial_answer(&s.gw, kind, &turn_id, &state).await?;
         assert!(s.gw.healthy().await);
@@ -92,6 +107,16 @@ async fn turn_05_broken_stream_never_delivers_partial_text() -> Result<(), Harne
         assert_eq!(bystander.status, 200);
     }
     s.finish().await
+}
+
+/// Turn-round requests carrying `prompt` (session titles quote the prompt
+/// too, and are not rounds).
+fn rounds_for(requests: &[Value], prompt: &str) -> usize {
+    requests
+        .iter()
+        .filter(|r| !butler_e2e::e2e::provider::is_title_request(r))
+        .filter(|r| r.to_string().contains(prompt))
+        .count()
 }
 
 /// A turn that ended `state` after a `kind` fault persisted no half answer
