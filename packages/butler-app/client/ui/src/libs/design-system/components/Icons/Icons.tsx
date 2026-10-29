@@ -14,15 +14,16 @@ import {
   ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowUpDownIcon, AttachmentIcon,
   BookOpen01Icon, BotIcon, Briefcase01Icon, BubbleChatIcon, Cancel01Icon, CancelCircleIcon,
   CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
-  Copy01Icon, Heading01Icon, LeftToRightListBulletIcon, TextBoldIcon, CubeIcon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
+  Copy01Icon, Heading01Icon, LeftToRightListBulletIcon, TextBoldIcon, CubeIcon, Eraser01Icon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
   FilterIcon, Flag02Icon, FloppyDiskIcon, Folder01Icon, Folder02Icon, FolderAddIcon, GitBranchIcon,
   Globe02Icon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
   MessageAdd01Icon, MinusSignIcon, Moon02Icon, MoreHorizontalIcon as MoreHorizontalGlyph,
-  Note01Icon, PaintBrush02Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
+  Note01Icon, PaintBrush02Icon, PaintBrush04Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
   Rocket01Icon, Search01Icon, SecurityCheckIcon, SecurityIcon, SentIcon, ServerStack01Icon,
   Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon,
-  TerminalIcon, Tick02Icon, Time03Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
+  TerminalIcon, Tick02Icon, Time03Icon, Undo02Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
+  ZoomInAreaIcon, ZoomOutAreaIcon,
 } from "@hugeicons/core-free-icons";
 
 export { ICON_SIZE, type IconProps, type IconSize } from "./iconBase";
@@ -36,6 +37,8 @@ export const AlertCircle = createIcon(AlertCircleIcon);
 /** A reminder card with a checklist: opens 세션 정보 (Session info), the conversation's side pane. */
 export const AppleReminder = createIcon(AppleReminderIcon);
 export const Archive = createIcon(ArchiveIcon);
+/** Paints a mask region (MaskCanvas brush). */
+export const Brush = createIcon(PaintBrush04Icon);
 export const CheckCircle2 = createIcon(CheckmarkCircle02Icon);
 export const CheckList = createIcon(CheckListIcon);
 export const CircleAlert = AlertCircle;
@@ -68,6 +71,8 @@ export const Database = createIcon(DatabaseIcon);
 export const GripVertical = createIcon(DragDropVerticalIcon);
 export const DragHandle = GripVertical;
 export const Eye = createIcon(ViewIcon);
+/** Removes painted mask (MaskCanvas eraser). */
+export const Eraser = createIcon(Eraser01Icon);
 export const Expand = createIcon(ExpandIcon);
 export const FileText = createIcon(File02Icon);
 /** A flag on a pole: a milestone or goal in a plan. */
@@ -125,8 +130,11 @@ export const Square = createIcon(SquareIcon);
 export const Sun = createIcon(Sun03Icon);
 export const Terminal = createIcon(TerminalIcon);
 export const Trash2 = createIcon(Delete02Icon);
+export const Undo = createIcon(Undo02Icon);
 export const UserRound = createIcon(UserCircleIcon);
 export const Wrench = createIcon(Wrench01Icon);
+export const ZoomIn = createIcon(ZoomInAreaIcon);
+export const ZoomOut = createIcon(ZoomOutAreaIcon);
 export const X = createIcon(Cancel01Icon);
 export const XIcon = X;
 

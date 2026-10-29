@@ -985,7 +985,16 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
         open: (site) => `Open ${site} page`,
       },
     },
+    imageTools: {
+      model: "Model", off: "Off", apiKey: "API key", apiKeyOnly: "API key only", defaultQuality: "Default quality",
+      quality: { low: "Low", medium: "Medium", high: "High", xhigh: "Very high", max: "Max" },
+      size: "Size", qualityLabel: "Quality", prompt: "Prompt", default: "Default", edit: "Edit", download: "Download",
+      editor: "Image editor", brush: "Brush", eraser: "Eraser", brushSize: "Brush size", undo: "Undo",
+      original: "Original", compare: "Hold to compare", versions: "Versions", version: (n) => `Version ${n}`,
+      instruction: "What should change?", send: "Send", readOnly: "Read-only", noModel: "No image model", failed: "Couldn't edit",
+    },
     imageViewer: {
+      zoomIn: "Zoom in", zoomOut: "Zoom out",
       viewImage: (name) => `View image: ${name}`,
       close: "Close",
       previous: "Previous image",
@@ -1187,6 +1196,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     queuedPosition: (position, total) => `Queued · ${position} of ${total}`,
     contextDetails: "Show context details",
     usage: {
+      imagesTitle: "Image models", imagesGenerated: "Generated", imagesEdited: "Edited", imagesCost: "Est. cost", imagesTotal: "Total",
       overviewTitle: "Recent usage", historyTitle: "Activity",
       lifetimeTokens: "Lifetime tokens", busiestDay: "Busiest day", longestTask: "Longest task",
       longestStreak: "Longest streak", currentStreak: "Current streak",
@@ -1465,7 +1475,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     sectionAliases: {
       memory: ["instructions", "chat memory", "profile", "project memory", "reset", "free up space", "storage"],
       general: ["basics", "general settings", "conversation", "smart groups", "sidebar", "default permission", "reset everything"],
-      models: ["model settings", "workers", "backup models", "api keys"],
+      models: ["이미지", "image", "model settings", "workers", "backup models", "api keys"],
       appearance: ["theme", "display", "design", "message box", "composer", "conversation", "conversation background", "chat background", "overlay"],
       server: ["connection", "project folder"],
       updates: ["upgrade", "new version"],
@@ -1505,6 +1515,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     pageSections: {
       noticedPatterns: "What Butler noticed",
+      imageModels: "Image model",
       accessibility: "Accessibility",
       instructions: "Instructions",
       chatMemory: "Chat memory",

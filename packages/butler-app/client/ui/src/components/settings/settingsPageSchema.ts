@@ -59,6 +59,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
+    { id: "image-models", kind: "form", fields: ["image-model", "image-credential", "image-quality", "image-key-save", "hosted-credential-select", "hosted-credential-label", "hosted-api-key"] },
     { id: "advanced-models", kind: "form", fields: [] },
     { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
   ],
@@ -80,6 +81,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   usage: [
     { id: "usage-overview", kind: "status", fields: [] },
     { id: "usage-history", kind: "status", fields: [] },
+    { id: "usage-images", kind: "status", fields: [] },
     { id: "usage-providers", kind: "status", fields: [] },
     { id: "usage-scope-tokens", kind: "list", fields: [] },
     { id: "usage-model-tokens", kind: "list", fields: [] },

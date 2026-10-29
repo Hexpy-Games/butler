@@ -720,6 +720,22 @@ const butlerApp = Object.freeze({
   saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
   deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),
   librarySnapshot: (id) => requestJson(`/library/${encodeURIComponent(id)}/snapshot`),
+  imageModelSettings: ({ method = "GET", body } = {}) => {
+    if (!["GET", "PUT"].includes(method)) throw new Error("invalid_image_settings_method");
+    return requestBridgeResult("/settings/image-model", { method, ...(method === "PUT" ? { body: JSON.stringify(body) } : {}) });
+  },
+  imageAssetInfo: ({ path }) => {
+    if (!/^\/message-assets\/img_[a-z0-9]{10}(?:[a-z0-9]{2})?\/(meta|versions)$/u.test(path)) throw new Error("invalid_image_asset_route");
+    return requestBridgeResult(path);
+  },
+  uploadImageMask: ({ session, image, bytes }) => {
+    if (typeof session !== "string" || !/^img_[a-z0-9]{10}(?:[a-z0-9]{2})?$/u.test(image)
+      || !(bytes instanceof Uint8Array) || bytes.length > 50 * 1024 * 1024) throw new Error("invalid_image_mask");
+    return requestBridgeResult(`/message-assets/masks?${new URLSearchParams({ session, for: image })}`, {
+      method: "POST", headers: { "content-type": "image/png" }, body: Buffer.from(bytes),
+    });
+  },
+  saveImageAsset: ({ id, suggestedName }) => ipcRenderer.invoke("butler:save-image-asset", { id, suggestedName }),
   protocolVersion: "butler.app.v1",
   signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
   setupWindowReady: () => ipcRenderer.invoke("butler:setup-window-ready"),
@@ -1061,7 +1077,7 @@ const butlerApp = Object.freeze({
       body: form,
     });
   },
-  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments, traceparent }) => requestBridgeResult("/messages", {
+  sendMessage: ({ chatId, text, contentParts, imageEdit, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments, traceparent }) => requestBridgeResult("/messages", {
     method: "POST",
     headers: traceHeaders(traceparent),
     body: JSON.stringify({
@@ -1069,6 +1085,7 @@ const butlerApp = Object.freeze({
       text,
       client_message_id: clientMessageId,
       content_parts: contentParts,
+      image_edit: imageEdit,
       model,
       reasoning_effort: reasoningEffort,
       access_mode: accessMode,
@@ -1134,13 +1151,14 @@ const butlerApp = Object.freeze({
       },
     );
   },
-  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments, traceparent }) => requestBridgeResult("/session-queue", {
+  queueMessage: ({ chatId, text, contentParts, imageEdit, model, reasoningEffort, accessMode, planMode, attachments, traceparent }) => requestBridgeResult("/session-queue", {
     method: "POST",
     headers: traceHeaders(traceparent),
     body: JSON.stringify({
       chat_id: chatId,
       text,
       content_parts: contentParts,
+      image_edit: imageEdit,
       model,
       reasoning_effort: reasoningEffort,
       access_mode: accessMode,
@@ -1148,12 +1166,13 @@ const butlerApp = Object.freeze({
       attachments,
     }),
   }),
-  updateQueuedMessage: ({ queuedMessageId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) =>
+  updateQueuedMessage: ({ queuedMessageId, text, contentParts, imageEdit, model, reasoningEffort, accessMode, planMode, attachments }) =>
     requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}`, {
       method: "PATCH",
       body: JSON.stringify({
         text,
         content_parts: contentParts,
+        image_edit: imageEdit,
         model,
         reasoning_effort: reasoningEffort,
         access_mode: accessMode,
@@ -1465,6 +1484,10 @@ const butlerApp = Object.freeze({
     if (url.pathname !== "/usage-history") throw new Error("Unsupported usage history route.");
     return requestJson(url.pathname + url.search, { method: "GET" });
   },
+  getImageUsage: ({ days = 7 } = {}) => {
+    const params = new URLSearchParams({ days: String(days) });
+    return requestJson(`/usage/images?${params.toString()}`);
+  },
   getUsageMonitor: ({ sessionId, sinceHours } = {}) => {
     const params = new URLSearchParams();
     if (sessionId) params.set("session_id", sessionId);
@@ -1485,6 +1508,7 @@ const butlerApp = Object.freeze({
     if (!["allow", "deny", "revoke"].includes(action)) throw new Error("Invalid grant action");
     return requestCanonWrite(`/canon/mcp-grants/${encodeURIComponent(id)}/${action}`, "POST", {});
   },
+  checkCanonCriterion: ({ id, criterionId, body }) => requestCanonWrite(`/canon/specs/${encodeURIComponent(id)}/criteria/${encodeURIComponent(criterionId)}`, "POST", body),
   getCanonActivity: ({ id, before }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}/activity${before == null ? "" : `?before=${encodeURIComponent(before)}`}`),
   getCanonProposal: ({ id }) => requestBridgeResult(`/canon/proposals/${encodeURIComponent(id)}`),
   resolveCanonProposal: ({ id, body }) => requestCanonWrite(`/canon/proposals/${encodeURIComponent(id)}`, "POST", body),

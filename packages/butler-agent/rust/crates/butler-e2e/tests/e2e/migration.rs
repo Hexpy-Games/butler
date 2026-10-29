@@ -136,6 +136,8 @@ async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessEr
              DROP TABLE app_general_history;
              DROP INDEX messages_chat_rowid_idx;
              DROP INDEX chats_archived_idx;
+             DROP INDEX chats_order_idx;
+             DROP INDEX sessions_order_idx;
              ALTER TABLE chats DROP COLUMN pinned;
              ALTER TABLE chats DROP COLUMN archived;
              ALTER TABLE chats ADD COLUMN legacy_note TEXT;
@@ -189,6 +191,8 @@ fn assert_current_ownership_schema(s: &Scenario) -> Result<(), HarnessError> {
         ("table", "app_general_history"),
         ("index", "messages_chat_rowid_idx"),
         ("index", "chats_archived_idx"),
+        ("index", "chats_order_idx"),
+        ("index", "sessions_order_idx"),
     ] {
         let count: i64 = db.query_row(
             "SELECT COUNT(*) FROM sqlite_schema WHERE type=?1 AND name=?2",

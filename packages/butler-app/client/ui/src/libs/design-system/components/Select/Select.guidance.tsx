@@ -92,6 +92,7 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Option labels are nouns; the placeholder asks (Choose a model), it is not an option.",
     "Icons are optional and decorative: give every option one or none, so labels stay aligned.",
+    "presentation=\"auto\" opens it as a BottomSheet below 768px (\"sheet\" always); the app-wide default is \"popover\".",
   ],
   accessibility: [
     "Name the trigger with aria-label or a Field label; typeahead and arrow keys work without motion delays.",

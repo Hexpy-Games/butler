@@ -454,7 +454,7 @@ try {
     return route.fulfill({ status: 404, json: { ok: false, error: { code: "not_found" } } });
   });
   for (const theme of ["light", "dark"] as const) await auditShelf(page, { width: 344, height: 480, theme, background: "plain" });
-  for (const [width, height] of [[1280, 860], [390, 844], [985, 662], [1280, 800]]) {
+  for (const [width, height] of [[1280, 860], [390, 844], [985, 662], [1280, 800], [1440, 1100]]) {
     for (const theme of ["light", "dark"] as const) {
       for (const background of ["plain", "wallpaper"] as const) {
         const only = process.env.BUTLER_FOCUS_RING_CELL;

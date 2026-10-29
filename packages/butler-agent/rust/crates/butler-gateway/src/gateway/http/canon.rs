@@ -36,7 +36,7 @@ async fn resources(
 ) -> Result<Response, HttpError> {
     let delegate = delegate(request.headers())?;
     use crate::gateway::AppCanonResource::{
-        Activity, CreateEpic, CreatePlan, CreateTag, Grants, List,
+        Activity, CheckCriterion, CreateEpic, CreatePlan, CreateTag, Grants, List,
     };
     let (resource, id) = resource(request.method(), parts)?;
     let mut id = subsessions::decode_component(id)?;
@@ -44,7 +44,7 @@ async fn resources(
     if resource == List {
         id = query["project"].as_str().unwrap_or_default().into();
     }
-    let input = if matches!(resource, List | Activity | Grants) {
+    let mut input = if matches!(resource, List | Activity | Grants) {
         Some(query)
     } else if request.method() == Method::GET {
         None
@@ -54,6 +54,18 @@ async fn resources(
         let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
         Some(serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?)
     };
+    if resource == CheckCriterion
+        && let ["canon", "specs", _, "criteria", criterion] = parts
+    {
+        let body = input
+            .as_mut()
+            .and_then(serde_json::Value::as_object_mut)
+            .ok_or_else(HttpError::invalid_json)?;
+        body.insert(
+            "criterion_id".into(),
+            serde_json::json!(subsessions::decode_component(criterion)?),
+        );
+    }
     let data = state
         .application
         .canon(AppCanonRequest {
@@ -121,9 +133,9 @@ fn resource<'a>(
     parts: &[&'a str],
 ) -> Result<(crate::gateway::AppCanonResource, &'a str), HttpError> {
     use crate::gateway::AppCanonResource::{
-        Activity, AllowGrant, BacklogOrder, Canon, Comment, CreateEpic, CreatePlan, CreateTag,
-        DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants, List, Plan,
-        PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+        Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
+        CreateTag, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants,
+        List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
     };
     Ok(match (method, parts) {
         (&Method::GET, ["canon", "list"]) => (List, ""),
@@ -132,6 +144,7 @@ fn resource<'a>(
         (&Method::POST, ["canon", "mcp-grants", id, "deny"]) => (DenyGrant, *id),
         (&Method::POST, ["canon", "mcp-grants", id, "revoke"]) => (RevokeGrant, *id),
         (&Method::GET, ["canon", "specs", id]) => (Spec, *id),
+        (&Method::POST, ["canon", "specs", id, "criteria", _]) => (CheckCriterion, *id),
         (&Method::POST, ["canon", "specs", id, "proposals"]) => (ProposeSpec, *id),
         (&Method::POST, ["canon", "epics", id, "comments"]) => (Comment, *id),
         (&Method::GET, ["canon", "epics", id, "activity"]) => (Activity, *id),

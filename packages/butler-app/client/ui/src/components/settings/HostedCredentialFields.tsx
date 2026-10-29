@@ -18,7 +18,7 @@ interface HostedCredentialFieldsProps {
   apiBaseUrl: string;
   apiKey: string;
   credentialLabel: string;
-  chatgpt: ComponentProps<typeof ChatGptSignInCard>;
+  chatgpt?: ComponentProps<typeof ChatGptSignInCard>;
   showApiBaseUrl?: boolean;
   onApiBaseUrlChange: (value: string) => void;
   onAuthMethodChange: (value: ProviderAuthMethod) => void;
@@ -112,7 +112,7 @@ export function HostedCredentialFields({
           ) : null}
         </>
       ) : null}
-      {authMethod === "chatgpt_oauth" ? (
+      {authMethod === "chatgpt_oauth" && chatgpt ? (
         <ChatGptSignInCard {...chatgpt} />
       ) : null}
     </>

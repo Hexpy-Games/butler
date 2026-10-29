@@ -18,10 +18,11 @@ import ci_rust_inputs
 import ci_runtime_crates
 import ci_tool_path
 import ci_receipts
+import ci_shell
 from ci_main_baseline import latest_main_run
 from urllib.parse import urlencode
 
-GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
+GROUPS = ('shell', 'rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
 WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts',
@@ -63,23 +64,15 @@ WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions
 # Lint-only inputs have no product consumer. Matching consumer rules below also
 # apply: integration reuse hashes must observe release-only workflow changes.
 CI_LINT_ONLY = (
-    '.github/workflows/ci-windows-main-failure.yml',
-    '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
+    '.github/workflows/ci-windows-main-failure.yml', '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
     '.github/workflows/post-release-verify.yml', '.github/workflows/macos-release-recovery.yml',
-    '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml',
-    '.github/workflows/ds-approval.yml', '.github/workflows/ci-store-maintenance.yml',
-    '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
-    '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
-    '.github/scripts/ci-changes.py', '.github/scripts/ci_parts.py',
-    '.github/scripts/ci_consumer_test_support.py',
-    '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
-    '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
-    '.github/scripts/ci_runtime_crates.py', '.github/scripts/runtime-crates.json',
-    '.github/scripts/ci_runtime_tests.py',
-    '.github/scripts/ci_ds_approval_tests.py',
-    '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
-    '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py',
-    '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
+    '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml', '.github/workflows/ds-approval.yml', '.github/workflows/ci-store-maintenance.yml',
+    '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py', '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
+    '.github/scripts/ci-changes.py', '.github/scripts/ci_parts.py', '.github/scripts/ci_consumer_test_support.py',
+    '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
+    '.github/scripts/ci_runtime_crates.py', '.github/scripts/runtime-crates.json', '.github/scripts/ci_runtime_tests.py',
+    '.github/scripts/ci_ds_approval_tests.py', '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
+    '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py', '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
     '.github/workflows/issue-links.yml', '.github/scripts/issue_links.py',
 )
 # Integration packaging keys include Rust/UI and transitive producer inputs.
@@ -88,10 +81,8 @@ CI_CONSUMERS = (
     # Lint publishes both workflow and license receipts. Its tested scripts and
     # their transitive imports must invalidate the license receipt as well.
     (('licenses',), (
-        '.github/scripts/test-*.py', '.github/scripts/ds-approval.py',
-        '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
-        '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
-        '.github/scripts/check-gate.py', '.github/scripts/ci_tool_path.py',
+        '.github/scripts/test-*.py', '.github/scripts/ds-approval.py', '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
+        '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py', '.github/scripts/check-gate.py', '.github/scripts/ci_tool_path.py',
         '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
@@ -148,19 +139,23 @@ def matches(path, patterns):
 
 
 def github_categories(path):
+    if path == '.github/workflows/shell.yml':
+        return {'shell'}
     if path.endswith('.md') or path.startswith('.github/releases/'):
         return set()
     # This orchestrator owns all groups, unlike the reusable rust-* jobs.
     if path == '.github/workflows/rust-quality.yml':
-        return set(GROUPS)
+        return set(GROUPS) - {'shell'}
     groups = {group for consumers, patterns in CI_CONSUMERS
               if matches(path, patterns) for group in consumers}
     if matches(path, CI_LINT_ONLY):
         groups.add('workflows')
-    return groups or set(GROUPS)  # Unknown CI inputs fail closed.
+    return groups or (set(GROUPS) - {'shell'})  # Unknown legacy CI inputs fail closed.
 
 
 def categories(path, event=None):
+    if path.startswith('packages/butler-shell/'):
+        return {'shell'}
     if path.startswith('.github/'):
         return github_categories(path)
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
@@ -198,7 +193,9 @@ def categories(path, event=None):
     # Unknown executable/configuration inputs fail closed, rather than silently
     # leaving a new package or tool untested. Assets/readme are product assets.
     if not result and not path.startswith('assets/readme/'):
-        result = set(GROUPS) - {'workflows'}
+        result = set(GROUPS) - {'workflows', 'shell'}
+    if path.startswith('packages/butler-agent/rust/tools/source-check/'):
+        result.add('shell')
     return result
 
 
@@ -390,6 +387,7 @@ def select(event, workflow):
         command('git', 'cat-file', '-e', f'{base}^{{commit}}')
     paths = [] if full else changed(base)
     required = set(GROUPS) if full else set().union(*(categories(p, os.environ['GITHUB_EVENT_NAME']) for p in paths))
+    ci_shell.select(required, full, workflow, base, event, changed, categories, command)
     current = hashes(base or 'full')
     label = any(label['name'] == 'ci:windows-native' for label in pr.get('labels', []))
     native_required = (full or label or any(windows_native(p) or windows_runtime(p, os.environ['GITHUB_EVENT_NAME']) for p in paths) or

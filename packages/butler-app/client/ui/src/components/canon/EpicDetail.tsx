@@ -53,7 +53,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, onRefresh, title
     <EpicSessionSummary epic={epic} tasks={tasks} />
     {showConversation && epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
       onClick={() => { if (epic.home_session_id) void useButlerStore.getState().openSession(epic.home_session_id); }}>{copy.openConversation}</Button></ButtonContainer>}
-    <SpecTree nodes={epic.specs} compact={compact} />
+    <SpecTree nodes={epic.specs} criteria={epic.criteria} onRefresh={onRefresh} compact={compact} />
     <EpicMcpProposals epic={epic} onRefresh={onRefresh} />
     <EpicActivity epic={epic} />
   </Stack>;

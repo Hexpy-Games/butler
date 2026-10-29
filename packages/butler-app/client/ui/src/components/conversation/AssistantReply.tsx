@@ -1,5 +1,6 @@
 import { appCopy, useAppLocale } from "@/app/copy";
 import { Typo } from "@/butler-ds";
+import { GeneratedImages } from "../images/GeneratedImages";
 import type { MessageRecord } from "@/app/types";
 import type { RefreshFileUrls } from "@/hooks/useMessageFileSource";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -9,6 +10,7 @@ import { AnswerBlocks } from "./AnswerBlocks";
 export function AssistantReply({ message, refreshFileUrls }: { message: MessageRecord; refreshFileUrls: RefreshFileUrls }) {
   return <>
     <AssistantReplyText message={message} refreshFileUrls={refreshFileUrls} />
+    <GeneratedImages message={message} />
     <AnswerBlocks sets={message.answer_blocks} messageId={message.id} replyText={message.text} sessionId={message.chat_id} turnId={message.turn_id} />
   </>;
 }
