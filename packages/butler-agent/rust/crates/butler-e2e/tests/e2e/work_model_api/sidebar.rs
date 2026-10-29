@@ -207,6 +207,14 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         |r| r.get(0),
     )?;
     assert_eq!(pending, 0);
+    assert_eq!(
+        btcc.query_row::<i64, _, _>(
+            "SELECT count(*) FROM canon_session_epics WHERE session_id=?1 AND epic_id=?2",
+            rusqlite::params![owner, other["id"].as_str()],
+            |r| r.get(0)
+        )?,
+        1
+    );
     drop(btcc);
     s.finish().await
 }

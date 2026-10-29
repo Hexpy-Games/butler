@@ -61,6 +61,8 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
                     | ["canon", "specs", _, "criteria", _]
                     | ["canon", "epics", _, "comments" | "activity" | "progress"]
                     | ["sessions", _, "canon", _]
+                    | ["sessions", _, "canon", "queue", "edits"]
+                    | ["sessions", _, "canon", "queue", "holds" | "take", _]
                     | ["projects", _, "canon"]
                     | ["projects", _, "canon", "plans" | "epics" | "tags" | "files"]
                     | ["projects", _, "canon", "backlog", "order"]

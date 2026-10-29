@@ -113,6 +113,7 @@ tool_names! {
     ReplaceWorkPlan = "replace_work_plan",
     AskUser = "ask_user",
     CanonRead = "canon_read",
+    CanonQueue = "canon_queue",
     CanonPropose = "canon_propose",
     ResolveAsk = "resolve_ask",
     RequestServiceRestart = "request_service_restart",

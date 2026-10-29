@@ -6,6 +6,7 @@ use butler_core::tool_protocol::ToolName;
 impl GuidedTools {
     pub(crate) fn supports(name: &str) -> bool {
         connector(name)
+            || canon(name)
             || builtin(name)
             || documents::supports(name)
             || browser::supports(name)
@@ -19,9 +20,7 @@ fn builtin(name: &str) -> bool {
     matches!(
         ToolName::parse(name),
         Some(
-            ToolName::CanonRead
-                | ToolName::CanonPropose
-                | ToolName::AskUser
+            ToolName::AskUser
                 | ToolName::ResolveAsk
                 | ToolName::ReadFile
                 | ToolName::RunCommand
@@ -106,5 +105,12 @@ fn connector(name: &str) -> bool {
                 | ToolName::ConnectorRuleSet
                 | ToolName::ConnectorTriage
         )
+    )
+}
+
+fn canon(name: &str) -> bool {
+    matches!(
+        ToolName::parse(name),
+        Some(ToolName::CanonRead | ToolName::CanonPropose | ToolName::CanonQueue)
     )
 }

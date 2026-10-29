@@ -10,7 +10,7 @@ mod delegation;
 mod mcp_running;
 mod plans;
 mod recovery;
-mod stub;
+pub(super) mod stub;
 mod window;
 use butler_e2e::e2e::{
     HarnessError,
@@ -28,10 +28,11 @@ fn data(reply: butler_e2e::e2e::gateway::Reply, status: u16) -> Value {
     let mut body = reply.body;
     body["data"].take()
 }
-async fn setup(
+pub(super) async fn setup_at(
     name: &str,
     rejects: bool,
     revise: bool,
+    now: Option<&str>,
 ) -> Result<
     (
         Scenario,
@@ -43,12 +44,16 @@ async fn setup(
     HarnessError,
 > {
     let (url, script, server) = stub::start(rejects, revise).await?;
-    let s = Setup::new(name)?
+    let setup = Setup::new(name)?
         .data_folder_token()
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", &url)
-        .start()
-        .await?;
+        .env("BUTLER_CHATGPT_API_BASE_URL", &url);
+    let setup = if let Some(now) = now {
+        setup.env("BUTLER_E2E_APP_NOW", now)
+    } else {
+        setup
+    };
+    let s = setup.start().await?;
     let evidence = s.sandbox.workspace.join("evidence.txt");
     std::fs::write(&evidence, "Release evidence is complete.")?;
     *script.path.lock().unwrap() = evidence.to_string_lossy().into_owned();
@@ -358,4 +363,21 @@ fn work_records(
         snapshots.push(records);
     }
     Ok(snapshots)
+}
+
+pub(super) async fn setup(
+    name: &str,
+    rejects: bool,
+    revise: bool,
+) -> Result<
+    (
+        Scenario,
+        Arc<stub::Script>,
+        tokio::task::JoinHandle<()>,
+        String,
+        String,
+    ),
+    HarnessError,
+> {
+    setup_at(name, rejects, revise, None).await
 }

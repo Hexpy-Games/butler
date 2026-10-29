@@ -92,3 +92,43 @@ async fn restart() -> Result<(), HarnessError> {
     held.answer();
     s.finish().await
 }
+
+#[tokio::test]
+async fn stop_after_send_now_pauses_cancelling_turn() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (mut stub, setup) = Stub::setup().await?;
+    let (mut barrier, address) = Barrier::start().await;
+    let s = setup.env("BUTLER_TEST_PAUSE_ADDR", address).start().await?;
+    stub.attach(&s)?;
+    let running = s.gw.say_turn("general", ORIGINAL).await?;
+    let held = stub.next().await;
+    let correction = queue(&s, CORRECTION).await?;
+    sent(&s, &correction).await?;
+    let mut cancelling = barrier.held().await;
+    let turn = s.gw.turn("general", &running).await?.unwrap();
+    assert_eq!(turn_state(&turn), "cancelling", "{turn}");
+    for _ in 0..2 {
+        let stop =
+            s.gw.post(&format!("/turns/{running}/cancel"), json!({}))
+                .await?;
+        assert_eq!(stop.status, 202, "{}", stop.text);
+        let queued = s.gw.get("/session-queue?chat_id=general").await?;
+        assert_eq!(queued.status, 200, "{}", queued.text);
+        assert_eq!(queued.data()["paused"], true, "{}", queued.text);
+        assert_eq!(queued.data()["queued_messages"][0]["id"], correction);
+        assert_eq!(queued.data()["queued_messages"][0]["state"], "queued");
+    }
+    cancelling.write_all(b"1").await?;
+    let turn =
+        s.gw.wait_terminal("general", &running, Duration::from_secs(30))
+            .await?;
+    assert_eq!(turn_state(&turn), "cancelled", "{turn}");
+    assert_eq!(s.gw.turns("general").await?.len(), 1);
+    assert_eq!(
+        s.gw.get("/session-queue?chat_id=general").await?.data()["paused"],
+        true
+    );
+    assert_eq!(cancel_count(&s), 1);
+    held.answer();
+    s.finish().await
+}
