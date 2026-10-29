@@ -13,7 +13,7 @@ use butler_turn::btcc::{ModelRoundError, ProviderBodyAdmissionPort, ProviderRequ
 use super::diagnostics;
 use super::provider::{ProviderClock, ProviderRoundPolicy};
 use super::request_admission::PreparedRequestAdmission;
-use super::request_guard::{GuardError, RequestPolicy, TimeoutKind, run_guarded};
+use super::request_guard::{GuardError, RequestPolicy, run_guarded};
 
 #[derive(Clone, Copy)]
 pub(super) enum ResponseMode {
@@ -185,17 +185,9 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
         Err(GuardError::Cancelled) => Err(ModelRoundError::Provider(Box::new(
             diagnostics::cancelled(provider, api),
         ))),
-        Err(GuardError::Timeout(kind)) => {
-            Err(ModelRoundError::Provider(Box::new(diagnostics::timeout(
-                provider,
-                api,
-                match kind {
-                    TimeoutKind::FirstResponse => "first_response",
-                    TimeoutKind::Total => "total",
-                    TimeoutKind::Idle => "idle",
-                },
-            ))))
-        }
+        Err(GuardError::Timeout(kind)) => Err(ModelRoundError::Provider(Box::new(
+            diagnostics::timeout(provider, api, kind.label()),
+        ))),
     }
 }
 

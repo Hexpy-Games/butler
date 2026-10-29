@@ -28,6 +28,17 @@ pub(super) enum TimeoutKind {
     Idle,
 }
 
+impl TimeoutKind {
+    /// The `timeout_kind` a provider error reports.
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::FirstResponse => "first_response",
+            Self::Total => "total",
+            Self::Idle => "idle",
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum GuardError<E> {
     Cancelled,

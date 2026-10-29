@@ -43,17 +43,14 @@ pub(super) async fn response(
             None
         }
         Pace::StallFirstAfterOneChunk => {
-            let first = stream::iter([Ok::<_, Infallible>(Bytes::from(chunk(
-                &model,
-                json!("Partial "),
-            )))]);
+            let first = stream::iter([Ok::<_, Infallible>(Bytes::from(chunk(&model, "Partial ")))]);
             Some(event_stream(Body::from_stream(
                 first.chain(stream::pending()),
             )))
         }
         Pace::Endless(every) => {
             let words = stream::unfold((), move |()| {
-                let frame = chunk(&model, json!("more "));
+                let frame = chunk(&model, "more ");
                 async move {
                     tokio::time::sleep(every).await;
                     Some((Ok::<_, Infallible>(Bytes::from(frame)), ()))
@@ -64,7 +61,7 @@ pub(super) async fn response(
     }
 }
 
-fn chunk(model: &str, content: Value) -> String {
+fn chunk(model: &str, content: &str) -> String {
     let event = json!({
         "id": "chatcmpl-e2e-paced", "object": "chat.completion.chunk", "created": 1_759_000_000,
         "model": model, "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": null}]
