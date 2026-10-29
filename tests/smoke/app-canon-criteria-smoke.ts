@@ -12,7 +12,7 @@ import { openPlan } from "../support/canon-sidebar-scenarios.ts";
 import { selectBoardPlan } from "../support/canon-board-selector.ts";
 import { closeCanonAside } from "../support/canon-board-aside.ts";
 import { criteriaText, seedCriteria, publishCriteria } from "../support/canon-criteria-fixture.ts";
-import { verifyCriteriaInteractions, verifyCriteriaLayout, verifyCountOnly, verifyZeroAndNullCriteria, verifyEnglishCriteria, verifyChildCriteria, type Capture } from "../support/canon-criteria-interactions.ts";
+import { verifyCriteriaInteractions, verifyCriteriaLayout, verifyCountOnly, verifyZeroAndNullCriteria, verifyEnglishCriteria, verifyChildCriteria, trackSpecHeading, verifySpecHeadingStill, type Capture } from "../support/canon-criteria-interactions.ts";
 const cases = [390, 1440].flatMap(w => ["light", "dark"].flatMap(t => ["plain", "wallpaper"].map(bg => `${w}-${t}-${bg}`)));
 if (await runMcpMatrix(cases, "BUTLER_CANON_CRITERIA_CASE", import.meta.path)) process.exit(0);
 const [widthText, theme, background] = process.env.BUTLER_CANON_CRITERIA_CASE!.split("-");
@@ -31,6 +31,7 @@ try {
   try {
     await server.signIn(context);
     const page = await context.newPage();
+    await trackSpecHeading(page);
     await page.addInitScript(id => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({ schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), active_session_id: id, left_open: true, right_open: true, session_info_open: true })), fixture.session);
     await page.goto(server.url);
     await page.locator('[data-test-class~="mac-window"]').waitFor();
@@ -59,7 +60,12 @@ try {
       const workMeter = detail.getByRole("progressbar", { name: "작업", exact: true }).locator("..");
       await capture("session-info", [workMeter, specRegion], false, true);
     };
-    if (!before) await verifyCriteriaLayout(tree, "session-info");
+    if (!before) {
+      // The summary's environment section is the last to land above the spec.
+      await aside.locator('[data-session-section="environment"]').waitFor();
+      await verifySpecHeadingStill(page);
+      await verifyCriteriaLayout(tree, "session-info");
+    }
     if (before) await capture("criterion-unconfirmed", specRegion.getByText("VB-03", { exact: true }).locator(".."), false, true);
     if (!before) {
       await verifyCriteriaInteractions(page, server, fixture, detail, capture);
