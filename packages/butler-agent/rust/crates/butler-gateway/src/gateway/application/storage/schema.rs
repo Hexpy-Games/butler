@@ -70,8 +70,6 @@ pub(super) fn migrate(
     documents::create(connection)?;
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
-         CREATE INDEX IF NOT EXISTS chats_order_idx ON chats(archived,updated_at DESC,created_at DESC,id DESC);
-         CREATE INDEX IF NOT EXISTS sessions_order_idx ON chats(archived,pinned DESC,updated_at DESC,created_at DESC,id DESC);
          CREATE INDEX IF NOT EXISTS projects_canon_name ON projects(display_name,id) WHERE archived=0;
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
          CREATE UNIQUE INDEX IF NOT EXISTS chats_runtime_hint_idx
@@ -104,6 +102,11 @@ pub(super) fn migrate(
     run_backfills_once(connection)?;
     migration::settle_ended_turn_messages(connection)?;
     migrate_app_features(connection, butler_data)?;
+    // Ordering indexes depend on the final chat columns, after all migrations.
+    connection.execute_batch(
+        "CREATE INDEX IF NOT EXISTS chats_order_idx ON chats(archived,updated_at DESC,created_at DESC,id DESC);
+         CREATE INDEX IF NOT EXISTS sessions_order_idx ON chats(archived,pinned DESC,updated_at DESC,created_at DESC,id DESC)",
+    ).map_err(AppStorageError::sqlite)?;
     Ok(())
 }
 

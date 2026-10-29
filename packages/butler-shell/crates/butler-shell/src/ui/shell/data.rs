@@ -11,6 +11,7 @@ use super::Shell;
 use crate::ui::chat::LoadOlder;
 use crate::ui::source::{
     ChatRef, ClientMessageId, Decision, EventCursor, Fetch, RequestRef, SourceError,
+    agent::MonitorSignal,
 };
 use crate::ui::store::{Applied, ChatsLoad};
 
@@ -85,6 +86,9 @@ impl Shell {
                 match result {
                     Ok(page) => {
                         if let Some(after) = this.store.chats_loaded(&load, page) {
+                            if let Some(monitor) = &this.rediscover {
+                                let _ = monitor.send(MonitorSignal::SnapshotLoaded);
+                            }
                             this.subscribe(load.epoch, after, cx);
                             this.reload_open_chat(cx);
                         }
@@ -242,7 +246,7 @@ impl Shell {
         if self.source.take().is_some()
             && let Some(retry) = &self.rediscover
         {
-            let _ = retry.send(());
+            let _ = retry.send(MonitorSignal::Retry);
         }
         self.store.lost();
         self.sync_composer(cx);

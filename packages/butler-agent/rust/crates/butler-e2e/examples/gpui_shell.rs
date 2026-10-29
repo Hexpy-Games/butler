@@ -6,6 +6,8 @@ use tokio::{
     io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader},
     process::{Child, ChildStdin, Command},
 };
+#[path = "gpui_shell/activity.rs"]
+mod activity;
 #[path = "gpui_shell/proxy.rs"]
 mod proxy;
 #[path = "gpui_shell/replay.rs"]
@@ -122,10 +124,14 @@ async fn run(binary: &Path, dir: &Path, dark: bool) -> anyhow::Result<()> {
     for decision in ["allow", "deny", "cancel"] {
         let out = dir.join(decision);
         tokio::fs::create_dir_all(&out).await?;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        let clock = listener.local_addr()?.to_string();
+        drop(listener);
         let setup = Setup::new("GPUI-LIVE")?
             .data_folder_token()
             .access(Access::AskAlways)
             .env("BUTLER_APP_SERVER_PORT", "0")
+            .env("BUTLER_E2E_APP_CLOCK_ADDRESS", &clock)
             .stub_cassette(stub::cassette()?);
         let mut s = setup
             .start()
@@ -142,7 +148,7 @@ async fn run(binary: &Path, dir: &Path, dark: bool) -> anyhow::Result<()> {
         s.agent
             .launch
             .set_env("BUTLER_APP_SERVER_PORT", s.agent.launch.port.to_string());
-        let result = scenario(binary, &out, dark, decision, &mut s).await;
+        let result = scenario(binary, &out, dark, decision, &mut s, &clock).await;
         let diagnostics = if result.is_err() {
             diagnostics(&s, &out).await
         } else {
@@ -167,6 +173,7 @@ async fn scenario(
     dark: bool,
     decision: &str,
     s: &mut butler_e2e::e2e::scenario::Scenario,
+    clock: &str,
 ) -> anyhow::Result<()> {
     seed_roles(s).await?;
     let proxy = proxy::Proxy::start(s.gw.base.clone()).await?;
@@ -179,12 +186,14 @@ async fn scenario(
             "open general",
             "roles",
             "shot open",
-            "new",
         ] {
             h.command(command).await?;
         }
+        let (older, newer) = activity::prepare(s, &mut h, clock).await?;
         h.command(&format!("send {}", stub::PROMPT)).await?;
         h.command("approval").await?;
+        h.command(&format!("before {older} {newer}")).await?;
+        h.command("shot activity-reordered").await?;
         h.command(&format!("exact {}", stub::ACTION)).await?;
         h.command("shot approval").await?;
         h.command("modify").await?;

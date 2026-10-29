@@ -33,6 +33,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             s.disconnected().is_none() && s.store.cursor.is_some() && !s.store.chats.is_empty()
         }),
         "left" => left(h, arg),
+        "before" => before(h, arg),
         "stable" => stable(h),
         "attached" => attached(h),
         "controls" => wait(h, |s, app| {
@@ -132,6 +133,20 @@ pub(super) fn run(dir: &Path, data: std::path::PathBuf, dark: bool) -> anyhow::R
         io::stdout().flush()?;
     }
     Ok(())
+}
+
+/// Both rows must be present, in the requested sidebar order.
+fn before(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let (first, second) = arg.split_once(' ').context("before <first> <second>")?;
+    wait(h, |s, _| {
+        let position = |id: &str| {
+            s.store
+                .chats
+                .iter()
+                .position(|row| row.chat.chat.0.as_ref() == id)
+        };
+        matches!((position(first), position(second)), (Some(a), Some(b)) if a < b)
+    })
 }
 
 /// Observe beyond the former five-second reconnect cycle after another client deletes.

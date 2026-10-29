@@ -38,10 +38,15 @@ pub(crate) struct Agent {
     presentation: Rc<presentation::Presentation>,
 }
 
+pub(crate) enum MonitorSignal {
+    Retry,
+    SnapshotLoaded,
+}
+
 pub(crate) struct Attachment {
     worker: Arc<Worker>,
     changes: mpsc::UnboundedReceiver<Option<ShellClient>>,
-    pub(crate) retry: tokio::sync::mpsc::UnboundedSender<()>,
+    pub(crate) retry: tokio::sync::mpsc::UnboundedSender<MonitorSignal>,
 }
 impl Attachment {
     pub(crate) fn start(data: Option<PathBuf>) -> Self {

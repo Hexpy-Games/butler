@@ -63,7 +63,7 @@ pub(crate) struct Shell {
     subscriptions: Vec<Subscription>,
     live_task: Option<gpui::Task<()>>,
     connection_task: Option<gpui::Task<()>>,
-    rediscover: Option<tokio::sync::mpsc::UnboundedSender<()>>,
+    rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
 }
 
 impl HasHover for Shell {

@@ -8,12 +8,14 @@ use std::{
 };
 use tokio::sync::mpsc::UnboundedReceiver;
 
+use super::MonitorSignal;
+
 const INSTANCE: &str = "butler-agent-native-service.json";
 
 pub(super) async fn monitor(
     data: Option<PathBuf>,
     output: mpsc::UnboundedSender<Option<ShellClient>>,
-    mut retries: UnboundedReceiver<()>,
+    mut retries: UnboundedReceiver<MonitorSignal>,
 ) {
     let data = data
         .or_else(|| {
@@ -69,11 +71,20 @@ pub(super) async fn monitor(
             return;
         }
         identity = next;
-        force = tokio::select! {
-            retry = retries.recv() => { if retry.is_none() { return; } true }
-            event = changed(&mut receive, &state, &auth) => { if !event { return; } backoff = Duration::from_millis(100); false }
+        force = loop {
+            tokio::select! {
+                signal = retries.recv() => match signal {
+                    Some(MonitorSignal::SnapshotLoaded) => backoff = Duration::from_millis(100),
+                    Some(MonitorSignal::Retry) => break true,
+                    None => return,
+                },
+                event = changed(&mut receive, &state, &auth) => {
+                    if !event { return; }
+                    backoff = Duration::from_millis(100);
+                    break false;
+                }
+            }
         };
-        while retries.try_recv().is_ok() {}
         while receive.try_recv().is_ok() {}
     }
 }
