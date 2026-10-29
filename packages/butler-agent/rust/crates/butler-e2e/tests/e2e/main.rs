@@ -310,3 +310,4 @@ mod chats_proposals;
 mod chats_work;
 
 mod canon_mcp;
+mod shell_client;

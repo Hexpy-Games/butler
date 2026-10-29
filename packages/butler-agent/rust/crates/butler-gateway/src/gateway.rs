@@ -66,6 +66,8 @@ pub use application::{
     AppDocumentCommand, AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite,
     AppGrantRef, AppGrantView, AppIdentityClock, AppLedgerSourceRequest, AppLibraryChange,
     AppLibraryCommand, AppLibraryQuery, AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot,
+    AppListCursor, AppListPage,
+
     AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts,
     AppModelMetadata, AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
     AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,

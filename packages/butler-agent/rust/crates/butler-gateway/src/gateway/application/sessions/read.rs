@@ -1,3 +1,4 @@
+use crate::gateway::AppListPage;
 use rusqlite::{Connection, OptionalExtension, Row, params_from_iter};
 use serde_json::Value;
 
@@ -144,20 +145,22 @@ pub(in crate::gateway::application) fn session(
     Ok(summary)
 }
 
-pub(super) fn chats(db: &Connection) -> Result<Vec<AppChatSummary>, AppStorageError> {
-    let mut statement = db
-        .prepare_cached(
-            r"
-SELECT id,title,kind,project_id,created_at,updated_at FROM chats
-WHERE archived=0 AND NOT EXISTS(
-  SELECT 1 FROM app_session_branches b
-  WHERE b.target_session_id=chats.id AND b.state='prepared')
-ORDER BY updated_at DESC,created_at DESC
-",
-        )
-        .map_err(AppStorageError::sqlite)?;
+pub(super) fn chats(
+    db: &Connection,
+    page: Option<&AppListPage>,
+) -> Result<Vec<AppChatSummary>, AppStorageError> {
+    let mut params = Vec::new();
+    let tail = list_after(page, false, &mut params);
+    let sql = format!(
+        "SELECT c.id,c.title,c.kind,c.project_id,c.created_at,c.updated_at FROM chats c \
+         WHERE {tail} AND NOT EXISTS(SELECT 1 FROM app_session_branches b \
+         WHERE b.target_session_id=c.id AND b.state='prepared') \
+         ORDER BY c.updated_at DESC,c.created_at DESC,c.id DESC LIMIT ?"
+    );
+    params.push(page.map_or(-1, |page| i64::from(page.limit)).into());
+    let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     let rows = statement
-        .query_map([], |row| {
+        .query_map(params_from_iter(params), |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -189,20 +192,34 @@ pub(super) fn sessions(
     kind: Option<&str>,
     project_id: Option<&str>,
 ) -> Result<Vec<AppSessionSummary>, AppStorageError> {
+    sessions_page(db, kind, project_id, None)
+}
+
+pub(super) fn sessions_page(
+    db: &Connection,
+    kind: Option<&str>,
+    project_id: Option<&str>,
+    page: Option<AppListPage>,
+) -> Result<Vec<AppSessionSummary>, AppStorageError> {
+    let mut params = Vec::new();
+    let tail = list_after(page.as_ref(), true, &mut params);
     let mut sql = format!(
-        "{SESSION_SELECT} WHERE c.archived=0 AND NOT EXISTS(\
+        "{SESSION_SELECT} WHERE {tail} AND NOT EXISTS(\
       SELECT 1 FROM app_session_branches b WHERE b.target_session_id=c.id AND b.state='prepared')"
     );
-    let mut params = Vec::new();
     if let Some(kind) = kind.filter(|value| !value.is_empty()) {
         sql.push_str(" AND c.kind=?");
-        params.push(kind);
+        params.push(kind.to_owned().into());
     }
     if let Some(project_id) = project_id.filter(|value| !value.is_empty()) {
         sql.push_str(" AND c.project_id=?");
-        params.push(project_id);
+        params.push(project_id.to_owned().into());
     }
-    sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC");
+    sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC,c.id DESC");
+    if let Some(page) = page {
+        sql.push_str(" LIMIT ?");
+        params.push(i64::from(page.limit).into());
+    }
     let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params_from_iter(params), session_row)
@@ -325,4 +342,29 @@ fn preview(preview: Option<&str>) -> Option<String> {
                 text.to_owned()
             }
         })
+}
+
+// Seek against live rows using the last returned tuple, even if that row changes.
+fn list_after(
+    page: Option<&AppListPage>,
+    pinned: bool,
+    params: &mut Vec<rusqlite::types::Value>,
+) -> String {
+    let mut tail = "c.archived=0".to_owned();
+    if let Some(cursor) = page.map(|page| &page.cursor)
+        && let Some(after) = &cursor.after
+    {
+        if pinned {
+            tail.push_str(" AND (c.pinned,c.updated_at,c.created_at,c.id) < (?,?,?,?)");
+            params.push(i64::from(cursor.pinned).into());
+        } else {
+            tail.push_str(" AND (c.updated_at,c.created_at,c.id) < (?,?,?)");
+        }
+        params.extend([
+            cursor.updated_at.clone().into(),
+            cursor.created_at.clone().into(),
+            after.clone().into(),
+        ]);
+    }
+    tail
 }

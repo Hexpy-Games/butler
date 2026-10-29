@@ -24,7 +24,6 @@ impl GatewayApplication for AppApplication {
     fn get_usage_history(&self) -> ApplicationFuture<Value> {
         super::monitoring::history::read(self.clone_handle())
     }
-
     fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         self.usage_monitor_query(query)
     }
@@ -133,9 +132,8 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.branch_source_owned(session_id).await })
     }
-    fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.list_chats().await })
+    fn list_chats(&self, page: Option<AppListPage>) -> ApplicationFuture<Vec<AppChatSummary>> {
+        self.list_chats_read(page)
     }
     fn read_user_work(&self) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
@@ -190,9 +188,9 @@ impl GatewayApplication for AppApplication {
         &self,
         kind: Option<String>,
         project_id: Option<String>,
+        page: Option<AppListPage>,
     ) -> ApplicationFuture<Vec<AppSessionSummary>> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.list_sessions(kind, project_id).await })
+        self.list_sessions_read(kind, project_id, page)
     }
     fn list_automations(
         &self,
