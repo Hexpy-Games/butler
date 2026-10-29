@@ -15,7 +15,7 @@ from refresh import fetch, license_files
 
 
 def cargo(root, *args):
-    return subprocess.check_output(['cargo', *args, '--locked'], cwd=root, text=True)
+    return subprocess.check_output(['cargo', *args, '--locked'], cwd=root, text=True, encoding="utf-8")
 
 
 def collect(root, target):
@@ -83,7 +83,7 @@ def write_notices(evidence, destination):
              "JSON.parse(s).forEach(validateLicense);"
     subprocess.run(['node', '--input-type=module', '-e', policy],
                    cwd=Path(__file__).resolve().parents[2], input=json.dumps(components),
-                   text=True, check=True)
+                   text=True, encoding="utf-8", check=True)
     destination.mkdir(parents=True, exist_ok=True)
     sections = ['Experimental shell third-party notices',
                 'Locked runtime and build dependencies; full license evidence in licenses/.']
@@ -95,9 +95,9 @@ def write_notices(evidence, destination):
         sections.append(f"\n{package['name']} {package['version']}\n{license_id}\n{source}")
         for index, (label, text) in enumerate(files):
             name = folder / f'{index:03d}-{Path(label).name}'
-            name.write_text(text, encoding='utf-8')
+            name.write_text(text, encoding='utf-8', newline='\n')
             sections.append(f'License: {name.relative_to(destination).as_posix()}')
-    (destination / 'THIRD-PARTY-NOTICES').write_text('\n'.join(sections) + '\n', encoding='utf-8')
+    (destination / 'THIRD-PARTY-NOTICES').write_text('\n'.join(sections) + '\n', encoding='utf-8', newline='\n')
     print(f'Packaged license evidence for {len(evidence)} Cargo dependencies')
 
 
