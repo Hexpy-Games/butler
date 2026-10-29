@@ -110,6 +110,20 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  {
+    // presentation="auto": a BottomSheet below 768px, the anchored list above.
+    name: "Bottom sheet on phones (presentation=\"auto\")",
+    widths: ["375", "app"],
+    render: ({ locale }) => (
+      <Select defaultValue="one">
+        <SelectTrigger aria-label={labels[locale].choose}><SelectValue /></SelectTrigger>
+        <SelectContent presentation="auto">
+          <SelectItem value="one">{labels[locale].one}</SelectItem>
+          <SelectItem value="two">{labels[locale].two}</SelectItem>
+        </SelectContent>
+      </Select>
+    ),
+  },
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
