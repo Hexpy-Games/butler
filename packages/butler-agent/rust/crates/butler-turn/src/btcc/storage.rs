@@ -68,13 +68,13 @@ pub use repository::BtccRepositories;
 pub use subsessions::{
     COMPLETE_WORKER_SQL, ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata,
     EnvelopeMessage, EnvelopePeer, EnvelopeRaw, EnvelopeRouting, EnvelopeSender,
-    NativeStewardContext, PacketExecutionMode, PacketPlanAction, PacketWorkerProfile,
-    ParentResultInput, ParentResultRoute, ParentWorkRef, RESET_DIRECTION_DISPATCH_SQL,
-    RESTORE_WAITING_DIRECTION_SQL, RETRY_WORKER_SQL, RUNNING_WORKERS_SQL,
-    SqliteSubsessionRepository, StewardResultInput, StoredSubsessionDelegation,
-    StoredSubsessionDirection, SubsessionCreate, SubsessionDispatchState, SubsessionPacket,
-    WAITING_WORKERS_SQL, WORKER_RESULT_MARKER_SQL, WORKER_TURN_UNSETTLED_SQL, WorkerResultInput,
-    enqueued_workers_sql, subsession_result_id,
+    NativeStewardContext, OPEN_SUBTASKS_SQL, PacketExecutionMode, PacketPlanAction,
+    PacketWorkerProfile, ParentResultInput, ParentResultRoute, ParentWorkRef,
+    RESET_DIRECTION_DISPATCH_SQL, RESTORE_WAITING_DIRECTION_SQL, RETRY_WORKER_SQL,
+    RUNNING_WORKERS_SQL, SqliteSubsessionRepository, StewardResultInput,
+    StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionCreate,
+    SubsessionDispatchState, SubsessionPacket, WAITING_WORKERS_SQL, WORKER_RESULT_MARKER_SQL,
+    WORKER_TURN_UNSETTLED_SQL, WorkerResultInput, enqueued_workers_sql, subsession_result_id,
 };
 pub use tool_journal::{
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,

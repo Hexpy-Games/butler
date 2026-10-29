@@ -266,6 +266,32 @@ impl AppApplication {
         Ok(chats)
     }
 
+    /// Open subtasks onto their listed parents through one bounded indexed read.
+    async fn load_subtasks(
+        &self,
+        sessions: &mut [AppSessionSummary],
+    ) -> Result<(), GatewayApplicationError> {
+        let mut by_parent = std::collections::HashMap::<String, Vec<_>>::new();
+        for subtask in self
+            .dependencies
+            .subsessions
+            .open_subtasks(sessions.iter().map(|s| s.session_hint.clone()).collect())
+            .await?
+        {
+            by_parent
+                .entry(subtask.parent_session_id.clone())
+                .or_default()
+                .push(subtask);
+        }
+        for session in sessions {
+            session.subtasks = by_parent
+                .get(&session.session_hint)
+                .cloned()
+                .unwrap_or_default();
+        }
+        Ok(())
+    }
+
     /// Source Work progress is projected by the required external Steward reader.
     pub(crate) async fn list_sessions(
         &self,
@@ -290,6 +316,7 @@ impl AppApplication {
             .await?
             .into_iter()
             .collect::<std::collections::HashSet<_>>();
+        self.load_subtasks(&mut sessions).await?;
         self.load_pending_ask_attention(&mut sessions).await?;
         for session in &mut sessions {
             session.running_delegated_work = running.contains(&session.session_hint);

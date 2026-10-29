@@ -325,23 +325,29 @@ pub(super) fn permission_records(
     many(db, &format!("{ROW} {PERMISSION_FILTER}"), &[&owner])
 }
 
-pub(super) const ATTENTION_SQL: &str = "SELECT a.owner_session_id FROM json_each(?1) p \
+pub(super) const ATTENTION_SQL: &str = "SELECT a.owner_session_id,a.source_session_id=a.owner_session_id FROM json_each(?1) p \
          JOIN btcc_authority_requests a ON a.owner_session_id=p.value \
          JOIN btcc_turns t ON t.turn_id=a.source_turn_id \
          WHERE a.close_reason IS NULL AND a.decision='pending' \
          AND t.semantic_state='admitted' AND t.suspension_reason='authority_pending' \
-         UNION SELECT a.owner_session_id FROM json_each(?1) p \
+         UNION SELECT a.owner_session_id,1 FROM json_each(?1) p \
          JOIN btcc_authority_requests a INDEXED BY idx_btcc_questions_deferred ON a.owner_session_id=p.value \
          WHERE a.capability='ask_user' AND a.decision='modified' AND a.close_reason IS NULL \
          AND a.outcome_receipt_json IS NULL \
          AND json_extract(CASE WHEN a.capability='ask_user' THEN a.private_alternative_input END,'$.status')='deferred'";
 
-pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityResult<Vec<String>> {
+/// Owners waiting on a decision, each with whether one of its asks is its own
+/// (`true`) rather than only delegated work's. Deferred questions count as
+/// the owner's own: no delegated row shows them.
+pub(super) fn attention_owners(
+    db: &Connection,
+    owners: &[String],
+) -> AuthorityResult<Vec<(String, bool)>> {
     let owners = serde_json::to_string(owners)
         .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
     let mut statement = db.prepare_cached(ATTENTION_SQL).map_err(sql)?;
     statement
-        .query_map([owners], |row| row.get(0))
+        .query_map([owners], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(sql)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql)

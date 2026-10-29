@@ -134,13 +134,19 @@ impl AppApplication {
         &self,
         sessions: &mut [super::AppSessionSummary],
     ) -> Result<(), GatewayApplicationError> {
-        let mut attention = self
+        let mut attention = std::collections::HashSet::new();
+        let mut own = std::collections::HashSet::new();
+        for (owner, own_ask) in self
             .dependencies
             .authority_handoff
             .attention_sessions(sessions.iter().map(|s| s.session_hint.clone()).collect())
             .await?
-            .into_iter()
-            .collect::<std::collections::HashSet<_>>();
+        {
+            if own_ask {
+                own.insert(owner.clone());
+            }
+            attention.insert(owner);
+        }
         let canon = self
             .dependencies
             .canon
@@ -149,17 +155,39 @@ impl AppApplication {
                 json!({"sessions":sessions.iter().map(|s|&s.session_hint).collect::<Vec<_>>()}),
             )
             .await?;
-        attention.extend(
-            canon
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .map(str::to_owned),
-        );
+        // Canon proposals are the conversation's own asks.
+        for owner in canon
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
+            own.insert(owner.to_owned());
+            attention.insert(owner.to_owned());
+        }
         for session in sessions {
             session.attention_required = attention.contains(&session.session_hint);
+            let delegated = session
+                .subtasks
+                .iter()
+                .any(|subtask| subtask.state == butler_turn::btcc::SubtaskState::NeedsApproval);
+            session.attention_source = attention_source(
+                session.attention_required,
+                own.contains(&session.session_hint),
+                delegated,
+            );
         }
         Ok(())
+    }
+}
+
+/// Attention no subtask row shows stays the conversation's own, so the
+/// parent row keeps its mark whenever nothing else would.
+fn attention_source(required: bool, own: bool, delegated: bool) -> Option<&'static str> {
+    match (required, own || !delegated, delegated) {
+        (false, _, _) => None,
+        (true, true, true) => Some("both"),
+        (true, true, false) => Some("self"),
+        (true, false, _) => Some("subtask"),
     }
 }

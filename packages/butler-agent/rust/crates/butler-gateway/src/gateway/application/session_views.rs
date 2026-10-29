@@ -76,6 +76,7 @@ impl AppApplication {
         insert_messages(&mut view, &messages, message_page.has_more, event_cursor)?;
         copy(&mut view, "workers", &subsessions);
         copy(&mut view, "steward_children", &subsessions);
+        copy(&mut view, "subtasks", &subsessions);
         view.insert("work_streams".into(), work_streams);
         view.insert("branch".into(), branch);
         view.insert("epic_ids".into(), json!(session.epic_ids));
@@ -171,6 +172,7 @@ impl AppApplication {
         view.insert("work_streams".into(), work_streams);
         copy_as(&mut view, "worker_activity", "workers", &subsessions);
         copy(&mut view, "steward_children", &subsessions);
+        copy(&mut view, "subtasks", &subsessions);
         view.insert(
             "staleness".into(),
             json!({"state":"fresh","updated_at":self.dependencies.identity_clock.now_iso(),"source":"app-server"}),
