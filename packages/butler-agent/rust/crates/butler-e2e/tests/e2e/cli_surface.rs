@@ -90,7 +90,9 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
     assert_eq!(version_flag["supportsJson"], false);
     let usage = help["data"]["usage"].as_str().unwrap();
     assert!(usage.contains("예약 작업") && usage.contains("schedule"));
-    assert!(usage.contains("설치 / Install: https://butler.hexpy.games/help/getting-started/install/"));
+    assert!(
+        usage.contains("설치 / Install: https://butler.hexpy.games/help/getting-started/install/")
+    );
     assert!(usage.contains("butler --version, -V"));
     let config_help = launch
         .command()
