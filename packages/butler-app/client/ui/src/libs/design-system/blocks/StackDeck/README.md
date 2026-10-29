@@ -31,26 +31,25 @@ ring nor the running halo covers an edge. The edges sit inside the toggle, so a
 tap on one opens the deck. An edge that joins slides in from behind
 (`--motion-slow`, emphasized).
 
-## Fanned
+## Open
 
-The cards sit side by side to the right in the same row, in a horizontal
-`ScrollArea` whose edge padding is given back, so the first card rests on the
-column edge. Two cards fill the row; with more it scrolls. 140 ms after a
-scroll stops (never while a pointer or finger is down) the row settles on the
-nearest whole card. At rest a clip shows only whole cards plus focus-ring room,
-and a mirrored edge marks each card out of view at either end (up to three per
-side); while the row moves the clip lifts and the ScrollArea edge fades show
-the cut. Each card has the same toggle (aria-expanded=true); tapping a card, or Escape,
-folds the cards back. Focus follows the toggle between states.
+The cards sit in one column below the front card's place, in order, each a
+full-width row card, `--space-xs` apart (more than the focus-ring room, so no
+card covers another's ring or running halo; nothing clips). Each card has the
+same toggle (aria-expanded=true); tapping a card, or Escape, stacks the cards
+again. Focus follows the toggle between states.
 
 `expanded` / `onExpandedChange` control the state; `defaultExpanded` starts it
-fanned. `interactive={false}` (during a drag) renders no toggle and no hover.
+open. `interactive={false}` (during a drag) renders no toggle and no hover.
 `cardListeners` forwards pointer handlers per card (`null`: the collapsed deck),
 for example a drag sensor's.
 
 ## Motion
 
-- Fan-out: card i slides in from the first card's place (i card widths to the
-  left), fading in, on `--motion-slow` with the emphasized curve.
-- Fold: the reverse, then the collapsed deck.
-- Reduced motion: no travel; the deck folds at once.
+- Open: card i slides down from the front card's place into its own (a FLIP
+  `translate`), passing behind the cards before it and fading in over the
+  first third, on `--motion-slow` with the emphasized curve. The front card
+  stays put; rows below the deck take the new height at once.
+- Stack: the reverse (each card slides up behind the front card, fading over
+  the last third), then the collapsed deck.
+- Reduced motion: no travel; the cards fade in and out in place.

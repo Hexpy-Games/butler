@@ -23,10 +23,10 @@ drawn with `StackDeck`. Stacks never nest. It does not change
 `[grip] [number or status glyph] [title (more) ........ meta] / [caption] [⋯]` on a
 `Card padding="md"`. The grip leads (SortableCardItem's order), pulled back by
 `--space-xs`; running and pinned rows keep its slot empty and, without a
-trailing control, keep the ⋯ room so statuses line up. A fanned 묶음's card is
-compact: the title (two lines, the marker on the first card only), then
-grip · caption · ⋯; a fan card narrower than 15rem (two per view on a phone)
-puts the caption on its own line, with grip and ⋯ on the line below. A row
+trailing control, keep the ⋯ room so statuses line up. An open 묶음 is a
+column of these rows, one full-width card per item, read as one step: they
+share the step's indent, and the step number shows on the first card only
+(the others keep its room, so titles line up). A row
 narrower than 28rem drops the empty ⋯ room of a pinned row (the grip slot
 stays, so numbers line up within a chain). Done rows are muted. The title
 gets its line first: when title, `more` (a collapsed 묶음's count, ko: 외 N건)
@@ -56,11 +56,12 @@ applies one; `canDrop` refuses targets.
 ## Drag
 
 - Pointer: a card or its grip, after 4 px (touch: 180 ms press). A collapsed
-  묶음 drags as one step; a fanned card drags out alone (split). Running and
+  묶음 drags as one step; a card of an open 묶음 drags out alone (split) and
+  stays dimmed in place. Running and
   pinned items never drag, and a pinned head takes no joins and nothing before it.
 - Between steps: an accent `Separator` where the new step would go.
 - Resting on a step for 250 ms (`STEP_SORTABLE_JOIN_DWELL`): a `NavDropTarget`
-  group ring; the drop joins its 묶음. Fanned 묶음 take gaps only.
+  group ring; the drop joins its 묶음. Open 묶음 take gaps only.
 - Hit zones are the step boxes frozen at drag start, so feedback never moves them.
 - The source stays in place at half strength, all but its grip's focus ring
   (a keyboard move keeps focus there).

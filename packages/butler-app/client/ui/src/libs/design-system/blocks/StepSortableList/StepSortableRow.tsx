@@ -11,7 +11,7 @@ export interface StepSortableRowProps {
   context: StepSortableRowContext;
   /** The grip's drag: one item, or the whole step (a collapsed 묶음). Null: no grip (pinned). */
   grip: { dragId: string; label: string; movable: boolean } | null;
-  /** Show the marker (a fanned 묶음 shows the step number on its first card only). */
+  /** Show the marker (an open 묶음 shows the step number on its first card only; the others keep its room). */
   marker?: boolean;
 }
 
@@ -27,33 +27,17 @@ function Trailing({ children, className }: { children: ReactNode; className: str
 }
 
 /**
- * One row (a single step's card or a collapsed 묶음's front):
+ * One row (a single step's card, a collapsed 묶음's front, or a card of an open 묶음):
  * `[grip] [number or status glyph] [title (more) ........ meta] / [caption] [⋯]`; the meta, then `more`,
- * wrap before the title truncates.
- * A fanned 묶음's card is compact: the title (two lines), then grip · caption · ⋯.
+ * wrap before the title truncates. A card dragged out of an open 묶음 stays dimmed in place.
  */
 export function StepSortableRow({ item, context, grip, marker = true }: StepSortableRowProps) {
   const scope = useStepSortableScope();
   const slots = scope.renderItem(item, context);
   const dragging = !context.lifted && scope.view.itemIds.includes(item.id) && scope.view.mode !== null;
   const muted = item.done ? "secondary" : undefined;
-  if (context.expanded) {
-    return (
-      <div className={styles.fanCard} data-step-item={item.id} data-dragging={dragging || undefined}>
-        <div className={styles.fanTitle}>
-          {marker && slots.marker ? <IconSlot size="md" minHeight="line" tone="tertiary">{slots.marker}</IconSlot> : null}
-          <Typo.Body lineClamp={2} tone={muted}>{slots.title}</Typo.Body>
-        </div>
-        <div className={styles.controlLine}>
-          {grip?.movable ? <div className={styles.lineLead}><Grip grip={grip} lifted={context.lifted} /></div> : null}
-          <div className={styles.lineCaption}><Typo.Caption tone="secondary" truncate>{slots.caption}</Typo.Caption></div>
-          {slots.trailing && !context.lifted ? <Trailing className={styles.lineMenu}>{slots.trailing}</Trailing> : null}
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className={styles.row} data-step-item={item.id}>
+    <div className={styles.row} data-step-item={item.id} data-dragging={dragging || undefined}>
       <div className={styles.leadControl}><Grip grip={grip} lifted={context.lifted} /></div>
       <IconSlot size="md" minHeight="line" tone="tertiary">{marker ? slots.marker : null}</IconSlot>
       <div className={styles.text}>

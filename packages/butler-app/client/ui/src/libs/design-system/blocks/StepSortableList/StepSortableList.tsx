@@ -38,7 +38,7 @@ export interface StepSortableListProps<TItem extends StepSortableItem>
 const QUIET = () => undefined;
 const ANNOUNCEMENTS = { onDragStart: QUIET, onDragMove: QUIET, onDragOver: QUIET, onDragEnd: QUIET, onDragCancel: QUIET };
 
-/** Fanned 묶음 by first item id. */
+/** Open 묶음 by first item id. */
 function useFanned() {
   const [fanned, setState] = useState<ReadonlySet<string>>(() => new Set());
   const setFanned = useCallback((id: string, open: boolean) => setState((current) => {
@@ -52,7 +52,7 @@ function useFanned() {
 
 /**
  * Ordered chains of steps (a head, then its follow-ups): drop between steps for a new step, rest
- * on a step (250 ms) to join its 묶음, move between chains, drag out of a fanned 묶음 to split
+ * on a step (250 ms) to join its 묶음, move between chains, drag out of an open 묶음 to split
  * it. Pointer drags start on a card or its grip; the keyboard drags from the grip. The block
  * reports semantic edits; the product owns the order.
  */

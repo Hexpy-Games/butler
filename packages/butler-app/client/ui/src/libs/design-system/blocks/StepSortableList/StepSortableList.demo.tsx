@@ -37,8 +37,7 @@ function rowSlots(context: ShowcaseRenderContext, chains: readonly StepSortableC
     const head = place.stepIndex === 0;
     const live = task.status === "running" || task.status === "review";
     const before = head ? null : chain.steps[place.stepIndex - 1]![0]! as DemoTask;
-    const caption = place.lifted && place.outcome ? (place.outcome === "join" ? copy.join : copy.newStep)
-      : place.expanded && !live && !task.done ? copy.status[task.status] : stateCaption(copy, task, before);
+    const caption = place.lifted && place.outcome ? (place.outcome === "join" ? copy.join : copy.newStep) : stateCaption(copy, task, before);
     const front = place.count > 1 && !place.expanded;
     const [start, unstack, remove] = copy.menu;
     return {

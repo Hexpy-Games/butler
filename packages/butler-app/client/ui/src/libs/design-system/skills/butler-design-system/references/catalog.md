@@ -223,7 +223,6 @@
 | A sidebar group | `NavSection` | `Section` |
 | A sidebar list | `SidebarShell` | `ScrollArea` |
 | A sidebar navigation row | `NavRow` | `Clickable` |
-| A sideways strip of tiles to scroll | `ScrollArea` | `StackDeck` |
 | A single back step | `IconButton` | `Breadcrumb` |
 | A single button | `Button` | `ButtonContainer` |
 | A single caption | `Typo.Caption` | `MetaList` |
@@ -605,6 +604,7 @@
 | Rows inside a panel | `ListRow` | `CardList` |
 | Rows of data in panels and lists (automations, artifacts, models) | `ListRow` |  |
 | Rows of the sidebar tree | `NavDropTarget` | `StepSortableList` |
+| Rows that open to show detail under them | `Collapsible` | `StackDeck` |
 | Rows that should not wrap, or need grow/truncate | `Stack` | `Inline` |
 | Rows with custom content | `NavRow` | `SettingsNav` |
 | Run now with scheduled alternatives | `SplitButton` |  |
@@ -2340,14 +2340,14 @@ A pending user bubble for a follow-up sent while a turn runs, with its position,
 
 `import { StackDeck } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/StackDeck`
 
-A 묶음 (stack) of cards that run together: one full-width row with hairline edges behind it, fanned out to the right in the same row on a tap.
+A 묶음 (stack) of cards that run together: one full-width row with hairline edges behind it, opened on a tap into a column of full-width cards in order.
 
 - Use for: Several items that share one place in an order (tasks that run together in one step)
 - Use for: A compact row that still shows that it holds more, and whether they are running
 - Not for: Items that each need their own row → `CardList`
 - Not for: Ordered steps people reorder and group by dragging → `StepSortableList`
-- Not for: A sideways strip of tiles to scroll → `ScrollArea`
-- Tokens: `--worker-active`, `--line`, `--line-strong`, `--border-hairline`, `--radius-control`, `--space-xs`, `--space-sm`, `--scroll-fade-size`, `--focus-ring-room`, `--motion-slow`, `--motion-fast`, `--motion-ease-emphasized`, `--motion-ease-standard`
+- Not for: Rows that open to show detail under them → `Collapsible`
+- Tokens: `--worker-active`, `--line`, `--line-strong`, `--border-hairline`, `--radius-control`, `--space-xs`, `--focus-ring-room`, `--motion-slow`, `--motion-fast`, `--motion-ease-emphasized`, `--motion-ease-standard`
 
 ### StatusChecklist
 
@@ -2372,7 +2372,7 @@ Ordered chains of steps, each step one item or a flat 묶음 (StackDeck), reorde
 - Not for: One flat list people reorder → `SortableCardList`
 - Not for: Items moving between status lanes → `KanbanBoard`
 - Not for: Rows of the sidebar tree → `NavDropTarget`
-- Tokens: `--space-sm`, `--space-md`, `--space-xs`, `--space-3xl`, `--control-height-md`, `--control-hit-target`, `--typo-body-line-height`, `--typo-caption-line-height`, `--shadow-drag-lift`, `--motion-base`, `--motion-ease-spring`, `--radius-control`
+- Tokens: `--space-sm`, `--space-md`, `--space-xs`, `--space-3xl`, `--control-height-md`, `--control-hit-target`, `--typo-body-line-height`, `--shadow-drag-lift`, `--motion-base`, `--motion-ease-spring`, `--radius-control`
 
 ### TodoProgressPanel
 

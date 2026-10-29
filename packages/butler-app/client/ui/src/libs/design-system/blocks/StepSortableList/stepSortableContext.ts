@@ -13,7 +13,7 @@ export interface StepSortableRowContext {
   stepNumber: number;
   /** Items in the row's step (two or more: a 묶음; the collapsed front says “외 N건”). */
   count: number;
-  /** A card of a fanned 묶음 (the compact card anatomy: title, then grip · caption · ⋯). */
+  /** A card of an open 묶음 (a full-width row in the 묶음's column; no `more`, the number on its first card only). */
   expanded: boolean;
   /** The lifted copy under the pointer. */
   lifted: boolean;

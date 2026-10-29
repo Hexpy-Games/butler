@@ -142,85 +142,11 @@
   }
 }
 
-/* A fanned 묶음's card: the title (two lines, the step number on the first
-   card), then the control line: grip · caption · ⋯. */
-.fanCard {
-  container: step-fan-card / inline-size;
-  display: grid;
-  min-width: 0;
-  gap: var(--space-xs);
-}
-
-.fanTitle {
-  display: flex;
-  min-width: 0;
-  gap: var(--space-sm);
-  align-items: flex-start;
-}
-
-.fanTitle > :last-child {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.controlLine {
-  display: flex;
-  min-width: 0;
-  gap: var(--space-sm);
-  align-items: center;
-}
-
-.lineCaption {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-/* The grip leads the control line, pulled back like the row's; ⋯ ends it.
-   Both are as tall as the caption line: their hit areas overhang it, so the
-   card keeps a row's height. */
-.lineLead,
-.lineMenu {
-  display: flex;
-  height: var(--typo-caption-line-height);
-  flex: none;
-  align-items: center;
-}
-
-.lineLead {
-  margin-inline-start: calc(-1 * var(--space-xs));
-}
-
-/* A narrow fan card (two per view on a phone) gives the caption its own
-   line under the title; the grip and ⋯ share the line below it, far enough
-   down that their hit areas (and focus rings) clear the caption. */
-@container step-fan-card (width < 15rem) {
-  .controlLine {
-    flex-wrap: wrap;
-    row-gap: calc(
-      (
-          max(var(--control-height-md), var(--control-hit-target)) -
-            var(--typo-caption-line-height)
-        ) /
-        2 + var(--focus-ring-room)
-    );
-  }
-
-  .lineCaption {
-    flex-basis: 100%;
-    order: -1;
-  }
-
-  .lineMenu {
-    margin-inline-start: auto;
-  }
-}
-
-/* A card dragged out of a fanned 묶음 stays dimmed in place, all but the
+/* A card dragged out of an open 묶음 stays dimmed in place, all but the
    grip's focus ring (a keyboard move keeps focus there): its glyph fades
    instead of its button. */
-.fanCard[data-dragging] > :not(.controlLine),
-.fanCard[data-dragging] .controlLine > :not(.lineLead),
-.fanCard[data-dragging] .lineLead svg {
+.row[data-dragging] > :not(.leadControl),
+.row[data-dragging] .grip svg {
   opacity: 0.5;
 }
 

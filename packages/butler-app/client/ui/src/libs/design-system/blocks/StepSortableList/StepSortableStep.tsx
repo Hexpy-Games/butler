@@ -26,7 +26,8 @@ interface StepSortableStepProps {
 
 /**
  * One step: a single item's card, or a 묶음 as a StackDeck (collapsed: the whole step drags as
- * one; fanned: each card drags on its own, out of the 묶음). A pointer resting on the step for
+ * one; open: a column of full-width cards under one indent and one step number, each dragging on
+ * its own, out of the 묶음). A pointer resting on the step for
  * the dwell rings it (NavDropTarget group) to join it. A lifted step stays in place at half
  * strength (`data-lifted`), all but its grip's focus ring.
  */

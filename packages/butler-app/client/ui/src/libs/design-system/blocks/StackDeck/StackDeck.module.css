@@ -9,10 +9,11 @@
    shape in front of it (the first from the card grown by the focus-ring
    room, which is also the running halo's spread), so the card's fills never
    reach an edge and the halo leaves every edge in view. The edges sit inside
-   the toggle, so a click on one opens the deck. On the open row the same
-   edges mark cards scrolled out of view, at whichever end they are hidden. */
+   the toggle, so a click on one opens the deck. */
 .deck {
   --stack-deck-peek-step: var(--space-xs);
+  /* Stacking layers of an open column (cards past the eighth share one). */
+  --stack-deck-layers: 8;
 
   min-width: 0;
 }
@@ -74,37 +75,37 @@ button.toggle
 }
 
 .peek[data-i="1"],
-.fan[data-i="1"] {
+.item[data-i="1"] {
   --stack-deck-i: 1;
 }
 
 .peek[data-i="2"],
-.fan[data-i="2"] {
+.item[data-i="2"] {
   --stack-deck-i: 2;
 }
 
 .peek[data-i="3"],
-.fan[data-i="3"] {
+.item[data-i="3"] {
   --stack-deck-i: 3;
 }
 
-.fan[data-i="0"] {
+.item[data-i="0"] {
   --stack-deck-i: 0;
 }
 
-.fan[data-i="4"] {
+.item[data-i="4"] {
   --stack-deck-i: 4;
 }
 
-.fan[data-i="5"] {
+.item[data-i="5"] {
   --stack-deck-i: 5;
 }
 
-.fan[data-i="6"] {
+.item[data-i="6"] {
   --stack-deck-i: 6;
 }
 
-.fan[data-i="7"] {
+.item[data-i="7"] {
   --stack-deck-i: 7;
 }
 
@@ -128,17 +129,6 @@ button.toggle
   transition: border-color var(--motion-fast) var(--motion-ease-standard);
 }
 
-/* Cards hidden off the start of an open row: the same edge, mirrored. */
-.peek[data-side="start"] {
-  border-inline-start: var(--border-hairline) solid var(--line);
-  border-inline-end: 0;
-  border-start-start-radius: var(--radius-control);
-  border-end-start-radius: var(--radius-control);
-  border-start-end-radius: 0;
-  border-end-end-radius: 0;
-  inset-inline: auto var(--stack-deck-peek-offset);
-}
-
 /* The edges answer the pointer with the card (they are part of its toggle). */
 .front:hover .peek {
   border-color: var(--line-strong);
@@ -149,40 +139,21 @@ button.toggle
   border-color: var(--worker-active);
 }
 
-/* Fanned out: the cards side by side in the same row, in a horizontal
-   ScrollArea. Its edge padding is given back on both sides so the first
-   card rests on the column edge like the rows above and below; two cards
-   fill the row exactly, and more scroll. At rest the row shows only whole
-   cards (plus focus-ring room): a card out of view is marked by an edge,
-   not a sliver. */
-.fanRow {
-  position: relative;
+/* Open: the cards in one column at the full row width, in order. The gap
+   is wider than the focus-ring room, so no card covers another's ring or
+   running halo, and nothing here clips. Each card stacks under the one
+   before it, so while the cards slide (StackDeckColumn) they pass behind
+   the front card. */
+.column {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
   isolation: isolate;
 }
 
-.fanFrame {
-  margin-inline: calc(-1 * var(--scroll-fade-size));
-  clip-path: inset(
-    calc(-1 * var(--focus-ring-room))
-      calc(var(--scroll-fade-size) - var(--focus-ring-room))
-  );
-  container-type: inline-size;
-}
-
-/* While the row moves, the edge fades show the cut; at rest only whole
-   cards (and the edges for the hidden ones) remain. */
-.fanFrame[data-scrolling] {
-  clip-path: none;
-}
-
-.fan {
-  display: flex;
-  width: calc((100cqi - 2 * var(--scroll-fade-size) - var(--space-sm)) / 2);
-  flex: none;
-}
-
-.fan > * {
-  flex: 1 1 auto;
+.item {
+  position: relative;
+  z-index: calc(var(--stack-deck-layers) - var(--stack-deck-i));
   min-width: 0;
 }
 
@@ -191,34 +162,11 @@ button.toggle
   .peek[data-entering] {
     animation: peek-in var(--motion-slow) var(--motion-ease-emphasized) both;
   }
-
-  /* Fan out: card i starts on the first card (i card widths to the left). */
-  .fan {
-    animation: fan-out var(--motion-slow) var(--motion-ease-emphasized) both;
-  }
-
-  .fan[data-folding] {
-    animation: fan-in var(--motion-slow) var(--motion-ease-emphasized) both;
-  }
 }
 
 @keyframes peek-in {
   from {
     opacity: 0;
     translate: calc(-2 * var(--stack-deck-peek-step)) 0;
-  }
-}
-
-@keyframes fan-out {
-  from {
-    opacity: 0;
-    translate: calc((-100% - var(--space-sm)) * var(--stack-deck-i)) 0;
-  }
-}
-
-@keyframes fan-in {
-  to {
-    opacity: 0;
-    translate: calc((-100% - var(--space-sm)) * var(--stack-deck-i)) 0;
   }
 }

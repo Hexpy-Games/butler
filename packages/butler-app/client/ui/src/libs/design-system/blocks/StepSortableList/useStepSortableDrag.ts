@@ -21,7 +21,7 @@ export interface StepSortableDragView {
 
 export interface StepSortableDragOptions {
   chains: readonly StepSortableChain[];
-  /** Fanned 묶음 (by first item id): they take gaps only, no joins. */
+  /** Open 묶음 (by first item id): they take gaps only, no joins. */
   fanned: ReadonlySet<string>;
   onEdit: (edit: StepSortableEdit) => void;
   canDrop?: (edit: StepSortableEdit) => boolean;
@@ -58,7 +58,7 @@ function targetOfHit(hit: DropZoneHit<string> | null, steps: Map<string, StepKey
 /**
  * Step boxes in layout position, frozen when the drag starts (the gap line added later never
  * moves the zones). The dragged step itself is left out unless an item leaves its 묶음 (then it
- * takes gaps only); fanned 묶음 take gaps only.
+ * takes gaps only); open 묶음 take gaps only.
  */
 function measureSteps(root: HTMLElement, itemIds: readonly string[], fanned: ReadonlySet<string>) {
   const steps = new Map<string, StepKey>();
@@ -176,7 +176,7 @@ function useKeyboardDrag(session: Session) {
     const payload = activeId ? payloadOf(chains, activeId, labels) : null;
     if (!payload) return;
     const all = keyboardTargets(chains);
-    // Fanned 묶음 take gaps only, as with the pointer.
+    // Open 묶음 take gaps only, as with the pointer.
     const visits = (candidate: StepSortableTarget) => candidate.kind === "gap"
       || !fanned.has(chains.find((chain) => chain.id === candidate.chainId)!.steps[candidate.stepIndex]![0]!.id);
     const own: StepSortableTarget = { chainId: chains[payload.at.chainIndex]!.id, stepIndex: payload.at.stepIndex, kind: "join" };

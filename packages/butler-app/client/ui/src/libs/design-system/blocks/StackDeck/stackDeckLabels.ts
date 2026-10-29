@@ -1,8 +1,8 @@
 /** Accessible names of a StackDeck. The product container passes localized labels. */
 export interface StackDeckLabels {
-  /** The collapsed deck (a button that fans the cards out): `count` cards, `front` the first one's name. */
+  /** The collapsed deck (a button that opens the cards into a column): `count` cards, `front` the first one's name. */
   expand: (count: number, front: string) => string;
-  /** A fanned card (a button that stacks the cards again). */
+  /** A card of the open column (a button that stacks the cards again). */
   fold: (item: string) => string;
 }
 

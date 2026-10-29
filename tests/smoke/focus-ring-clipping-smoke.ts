@@ -324,11 +324,11 @@ async function auditCell(page: Page, cell: Cell) {
   await page.goto(`${base}?visual=design-system&page=blocks/KanbanBoard&theme=${cell.theme}&locale=ko`);
   await page.locator('[data-slot="kanban-drag-scope"] [data-kanban-item]').first().waitFor();
   await auditScope(page, cell, "kanban-drag-board", '[data-slot="kanban-drag-scope"]', 40);
-  // StackDeck (DS viewer story): fanned decks of six whose rows scroll sideways, settle on whole cards and clip at rest.
+  // StackDeck (DS viewer story): open decks of two, four and six cards, each card a toggle in one column.
   await page.goto(`${base}?visual=design-system&page=blocks/StackDeck&theme=${cell.theme}&locale=ko`);
-  const deckStory = '[data-ds-story="Four or more cards (edge markers)"]';
-  await page.locator(`${deckStory} [data-slot="stack-deck-fan"]`).first().waitFor();
-  await auditScope(page, cell, "stack-deck-fanned", deckStory, 40);
+  const deckStory = '[data-ds-story="Expanded"]';
+  await page.locator(`${deckStory} [data-slot="stack-deck-list"]`).first().waitFor();
+  await auditScope(page, cell, "stack-deck-open", deckStory, 40);
   // StepSortableList (DS viewer story): grips, a collapsed 묶음 (the deck toggle) and ⋯ menus in two chains.
   await page.goto(`${base}?visual=design-system&page=blocks/StepSortableList&theme=${cell.theme}&locale=ko`);
   const stepStory = '[data-ds-story="Multiple chains"]';
