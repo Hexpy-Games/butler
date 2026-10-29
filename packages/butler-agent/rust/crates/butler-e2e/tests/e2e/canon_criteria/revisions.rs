@@ -10,12 +10,13 @@ async fn decisions_carry_only_while_id_and_text_survive_every_revision() -> Resu
         &s,
         2,
         &[
-            ("VB-03", "변경 내용을 확인할 수 있다"),
             ("VB-04", "확인한 사람을 기록한다"),
+            ("VB-03", "변경 내용을 확인할 수 있다"),
         ],
     )?;
     s.restart().await?;
-    count(&s, &epic, 1, 2).await?;
+    let carried = count(&s, &epic, 1, 2).await?;
+    assert_eq!(carried["specs"][0]["criteria"][0]["confirmed"], true);
     s.agent.terminate().await?;
     publish(
         &s,
@@ -56,7 +57,7 @@ async fn decisions_carry_only_while_id_and_text_survive_every_revision() -> Resu
     let empty =
         s.gw.post(
             &format!("/projects/{project}/canon/epics"),
-            json!({"title":"명세가 없는 과제"}),
+            json!({"title":"명세가 없는 과제","assignee":"app-user"}),
         )
         .await?;
     assert_eq!(empty.status, 201, "{}", empty.text);
@@ -79,5 +80,49 @@ async fn decisions_carry_only_while_id_and_text_survive_every_revision() -> Resu
             assert_eq!(row.get("criteria"), Some(&Value::Null));
         }
     }
+    null_surfaces(&s, project, &epic, empty.data()["id"].as_str().unwrap()).await?;
     s.finish().await
+}
+
+async fn null_surfaces(
+    s: &Scenario,
+    project: &str,
+    epic: &str,
+    empty: &str,
+) -> Result<(), HarnessError> {
+    let sidebar =
+        s.gw.get(&format!("/projects/{project}/canon/sidebar"))
+            .await?;
+    assert_eq!(sidebar.status, 200, "{}", sidebar.text);
+    let rows = sidebar.data()["groups"][0]["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    for row in rows {
+        assert_eq!(row.get("criteria"), Some(&Value::Null));
+    }
+    let plan =
+        s.gw.post(
+            &format!("/projects/{project}/canon/plans"),
+            json!({"title":"빈 명세"}),
+        )
+        .await?;
+    assert_eq!(plan.status, 201, "{}", plan.text);
+    let plan = plan.data()["id"].as_str().unwrap();
+    for id in [epic, empty] {
+        let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
+        let moved =
+            s.gw.patch(
+                &format!("/canon/epics/{id}"),
+                json!({"expected_revision":detail.data()["revision"],"plan_id":plan}),
+            )
+            .await?;
+        assert_eq!(moved.status, 200, "{}", moved.text);
+    }
+    let detail = s.gw.get(&format!("/canon/plans/{plan}")).await?;
+    assert_eq!(detail.status, 200, "{}", detail.text);
+    let works = detail.data()["works"].as_array().unwrap();
+    assert_eq!(works.len(), 2);
+    for work in works {
+        assert_eq!(work.get("criteria"), Some(&Value::Null));
+    }
+    Ok(())
 }

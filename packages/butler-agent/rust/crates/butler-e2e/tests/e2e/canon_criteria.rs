@@ -8,6 +8,7 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 mod active;
 mod privacy;
+mod queries;
 mod revisions;
 mod tree;
 

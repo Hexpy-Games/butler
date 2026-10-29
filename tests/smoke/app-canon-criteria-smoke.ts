@@ -100,6 +100,8 @@ try {
       const row = page.locator(`[data-sortable-id="${fixture.epic}"]`); await row.waitFor();
       if (!before) await row.getByRole("progressbar", { name: "0/2 확인", exact: true }).waitFor();
       await capture("plan-overview", row);
+      const emptyRow = page.locator(`[data-sortable-id="${fixture.empty}"]`); await emptyRow.waitFor();
+      assert.equal(await emptyRow.getByRole("progressbar").count(), 0);
     }
     if (!before) await verifyChildCriteria(page, server, fixture, capture);
     if (!before && width === 1440 && theme === "light" && !wallpaper) await verifyEnglishCriteria(page, server);
