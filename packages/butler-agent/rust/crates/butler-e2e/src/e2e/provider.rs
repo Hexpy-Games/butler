@@ -336,6 +336,20 @@ impl Provider {
         lock(&self.state.requests).clone()
     }
 
+    /// How many interactive requests were seen so far; with
+    /// [`Provider::requests_since`] a caller reads only the new ones.
+    pub fn request_count(&self) -> usize {
+        lock(&self.state.requests).len()
+    }
+
+    /// The interactive requests seen after the first `start`.
+    pub fn requests_since(&self, start: usize) -> Vec<Value> {
+        lock(&self.state.requests)
+            .get(start..)
+            .map(<[Value]>::to_vec)
+            .unwrap_or_default()
+    }
+
     /// Background meaning calls have their own strict stub contract and trace.
     pub fn memory_requests(&self) -> Vec<Value> {
         lock(&self.state.memory_requests).clone()

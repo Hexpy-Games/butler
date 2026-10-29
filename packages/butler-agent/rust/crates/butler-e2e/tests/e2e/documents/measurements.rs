@@ -54,7 +54,7 @@ async fn document_request_measurements() -> Result<(), HarnessError> {
         "POST /messages admission with 20 edited documents: {:.3} ms",
         elapsed.as_secs_f64() * 1000.0
     );
-    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(60))
             .await?;

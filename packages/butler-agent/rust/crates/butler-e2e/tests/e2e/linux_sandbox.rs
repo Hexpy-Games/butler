@@ -21,7 +21,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     gateway::turn_state,
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use butler_platform::command_sandbox::{self, Invocation};
 use serde_json::{Value, json};
@@ -255,7 +255,7 @@ async fn admission(abi_cap: Option<u32>) -> Result<(), HarnessError> {
                 }),
             )],
         );
-        let id = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+        let id = s.gw.say_turn(&chat, prompt).await?;
         if capped {
             let turn =
                 s.gw.wait_turn(

@@ -107,7 +107,7 @@ async fn hooks_allow_cannot_bypass_permission_and_resume_preserves_id() -> Resul
             "Change my App wallpaper to the Silk live wallpaper, app-wide.",
         )
         .await?;
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_turn(
             "general",

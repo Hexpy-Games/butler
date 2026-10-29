@@ -175,7 +175,7 @@ async fn shop_complete_results_auto_input_does_not_exceed_off() -> Result<(), Ha
                 .await?;
         assert_eq!(reply.status, 200, "{}", reply.text);
         let (host, actions) = host::start(&s).await?;
-        let id = butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say("general", TASK).await?)?;
+        let id = s.gw.say_turn("general", TASK).await?;
         let turn =
             s.gw.wait_turn(
                 "general",

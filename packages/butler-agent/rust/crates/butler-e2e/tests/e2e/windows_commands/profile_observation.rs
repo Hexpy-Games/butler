@@ -3,7 +3,7 @@ use super::observation_stub as provider;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::{tool_rows, turn_state},
-    scenario::{Access, Setup, accepted_turn_id, turn_timeout},
+    scenario::{Access, Setup, turn_timeout},
 };
 use serde_json::Value;
 use std::{
@@ -105,7 +105,7 @@ async fn replay(
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1");
     let s = setup.start().await?;
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
-    let id = accepted_turn_id(&accepted)?;
+    let id = s.gw.accepted_turn(&accepted).await?;
     if access == Access::AskAlways {
         super::observation::approve_exact(&s, &id, &command).await?;
     }
@@ -312,7 +312,7 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
         .start()
         .await?;
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
-    let id = accepted_turn_id(&accepted)?;
+    let id = s.gw.accepted_turn(&accepted).await?;
     super::observation::approve_exact(&s, &id, command).await?;
     let terminal =
         s.gw.wait_terminal("general", &id, Duration::from_secs(15))

@@ -26,7 +26,7 @@ async fn cn_11_mcp_running_guard_applies_to_every_caller() -> Result<(), Harness
     script.release();
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        &s.gw.accepted_turn(&turn).await?,
         Duration::from_secs(60),
     )
     .await?;

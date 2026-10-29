@@ -4,7 +4,7 @@ use super::{approve, assert_counts, delivered, outputs, paused};
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use serde_json::json;
 
@@ -120,7 +120,7 @@ async fn external_content_web_requests_ask_with_exact_targets() -> Result<(), Ha
         "attachments":[{"file_id":file_id}]}),
         )
         .await?;
-    let turn = accepted_turn_id(response.data())?;
+    let turn = s.gw.accepted_turn(response.data()).await?;
     delivered(&s, "general", &turn).await?;
     assert_counts(&s, &turn, 0, 0)?;
     let results = outputs(&s, "general", &turn, &script, "Read-only web request.").await?;
@@ -300,7 +300,7 @@ async fn auto_project_read_then_web_search_needs_no_approval() -> Result<(), Har
             call("search", "web_search", &json!({"query":content})),
         ],
     );
-    let turn = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+    let turn = s.gw.say_turn(&chat, prompt).await?;
     delivered(&s, &chat, &turn).await?;
     assert_counts(&s, &turn, 0, 0)?;
     let output = outputs(&s, &chat, &turn, &script, prompt).await?;

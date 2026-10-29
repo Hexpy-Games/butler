@@ -5,7 +5,29 @@ import type { NativeAppServerHandle } from "./native-app-server.ts";
 import { seedChildCriteria, type CriteriaFixture } from "./canon-criteria-fixture.ts";
 import { auditCanonCardFocus } from "./canon-registration-cards.ts";
 
-export type Capture = (state: string, region: Locator | Locator[], focus?: boolean, surface?: boolean) => Promise<void>;
+/** Records the first spec heading's top on every frame from its first paint, so a section landing above it later is caught. */
+export async function trackSpecHeading(page: Page) {
+  await page.addInitScript(() => {
+    const tops: number[] = [];
+    Object.assign(window, { specHeadingTops: tops });
+    const sample = () => {
+      const tree = document.querySelector('[data-test-class="canon-spec-tree"]');
+      const heading = tree && [...tree.querySelectorAll("*")].find(node => node.childElementCount === 0 && node.textContent === "명세");
+      const top = heading?.getBoundingClientRect().top;
+      if (top !== undefined && top !== tops.at(-1)) tops.push(top);
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+}
+
+export async function verifySpecHeadingStill(page: Page) {
+  const tops = await page.evaluate(() => (window as unknown as { specHeadingTops: number[] }).specHeadingTops);
+  assert(tops.length > 0, "The spec heading was sampled");
+  assert(tops.every(top => Math.abs(top - tops[0]!) <= 1), `The spec heading moved after first paint: ${tops.map(Math.round).join(" → ")}`);
+}
+
+export type Capture =(state: string, region: Locator | Locator[], focus?: boolean, surface?: boolean) => Promise<void>;
 export async function verifyCriteriaLayout(tree: Locator, surface: string) {
   await tree.page().evaluate(() => document.fonts.ready);
   const heading = tree.getByText("명세", { exact: true });

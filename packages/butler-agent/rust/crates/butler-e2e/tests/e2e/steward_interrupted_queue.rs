@@ -6,10 +6,7 @@
     reason = "test assertions"
 )]
 use super::steward_presentation::{self, stub};
-use butler_e2e::e2e::{
-    HarnessError,
-    scenario::{Scenario, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, scenario::Scenario};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 use std::{
@@ -110,7 +107,7 @@ async fn interrupted_queue(crash: bool) -> Result<(), HarnessError> {
         ),
         1
     );
-    let held = accepted_turn_id(&s.gw.say("general", stub::HOLD_PARENT).await?)?;
+    let held = s.gw.say_turn("general", stub::HOLD_PARENT).await?;
     tokio::time::timeout(Duration::from_secs(20), script.parent_held.notified())
         .await
         .unwrap();

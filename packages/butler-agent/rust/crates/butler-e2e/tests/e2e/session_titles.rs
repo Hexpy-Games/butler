@@ -345,7 +345,7 @@ async fn title_07_queued_followup_does_not_generate_again() -> Result<(), Harnes
     .await
     .expect("first title missing")?;
     turn_reply.release();
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(&first)?;
+    let id = s.gw.accepted_turn(&first).await?;
     assert_eq!(
         s.gw.wait_terminal(&chat, &id, Duration::from_secs(5))
             .await?["state"],
@@ -411,7 +411,7 @@ async fn title_09_attachment_only_first_message_is_titled() -> Result<(), Harnes
             "client_message_id": uuid::Uuid::new_v4().to_string(),
         }))
         .await?;
-    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal(&chat, &turn_id, Duration::from_secs(10))
             .await?;

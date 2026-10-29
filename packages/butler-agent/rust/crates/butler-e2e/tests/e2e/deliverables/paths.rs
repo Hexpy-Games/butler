@@ -18,7 +18,7 @@ async fn external_working_file_stays_readable_without_a_drawer_item() -> Result<
         "text":"Write an external working file.","access_mode":"full_access",
         "client_message_id":uuid::Uuid::new_v4().to_string()}))
             .await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     s.gw.wait_terminal(
         "general",
         &turn,

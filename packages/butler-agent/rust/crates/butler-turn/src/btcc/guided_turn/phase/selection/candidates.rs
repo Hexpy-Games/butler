@@ -34,7 +34,7 @@ pub(super) fn provider_candidates(
     for tool in authorized {
         if matches!(
             tool.name.as_str(),
-            "generate_image" | "edit_image" | "canon_read" | "canon_propose"
+            "generate_image" | "edit_image" | "canon_read" | "canon_propose" | "canon_queue"
         ) || tool.name == ToolName::UpdateTodoList
             || BROWSER_CORE.contains(&tool.name.as_str())
             || tool.effect_boundary.as_deref() == Some("turn_local")

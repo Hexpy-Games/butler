@@ -67,6 +67,8 @@ impl ProjectionContext {
     }
 
     async fn finish_terminal_turn(&self, turn: String) -> Result<(), GatewayApplicationError> {
+        super::canon_queue::turn_ended(&self.storage, &self.dependencies.canon, turn.clone())
+            .await?;
         self.retention_wake.turn(turn).await?;
         self.wake_queued_automations();
         Ok(())

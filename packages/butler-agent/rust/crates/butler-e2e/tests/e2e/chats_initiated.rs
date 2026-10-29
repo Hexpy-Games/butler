@@ -8,7 +8,7 @@
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Scenario, Setup, accepted_turn_id},
+    scenario::{Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};

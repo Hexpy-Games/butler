@@ -12,11 +12,7 @@ pub(crate) mod host;
 mod model;
 mod resume;
 
-use butler_e2e::e2e::{
-    HarnessError,
-    scenario::{Setup, accepted_turn_id},
-    security::AdminClient,
-};
+use butler_e2e::e2e::{HarnessError, scenario::Setup, security::AdminClient};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -50,7 +46,7 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     let log = host.log.clone();
     let parallel_opens = host.parallel_opens.clone();
     let served = tokio::spawn(host.serve());
-    let turn = accepted_turn_id(&s.gw.say("general", PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", PROMPT).await?;
     let done =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
             .await?;

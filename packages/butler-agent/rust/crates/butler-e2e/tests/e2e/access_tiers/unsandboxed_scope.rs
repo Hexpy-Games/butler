@@ -5,7 +5,7 @@ use super::{approve, delivered, outputs};
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::{path::Path, sync::Arc, time::Duration};
@@ -126,7 +126,7 @@ async fn submit(
 ) -> Result<(String, Value), HarnessError> {
     script.rounds.lock().unwrap().insert(prompt.into(), vec![call(prompt, "run_command",
         &json!({"command":form.command,"cwd":form.cwd,"summary":"Run step","state_effect":effect}))]);
-    let turn = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+    let turn = s.gw.say_turn(chat, prompt).await?;
     let state =
         s.gw.wait_turn(
             chat,

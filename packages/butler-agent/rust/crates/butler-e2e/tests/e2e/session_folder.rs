@@ -19,7 +19,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     gateway::{tool_rows, turn_state},
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use butler_platform::secure_fs::Canonical as _;
 use serde_json::{Value, json};
@@ -80,7 +80,7 @@ fn authority_count(s: &Scenario, turn: &str) -> Result<u64, HarnessError> {
 }
 
 async fn settle(s: &Scenario, chat: &str, prompt: &str) -> Result<(String, Value), HarnessError> {
-    let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+    let id = s.gw.say_turn(chat, prompt).await?;
     let turn =
         s.gw.wait_turn(
             chat,

@@ -91,7 +91,7 @@ pub(super) fn pause(
     connection
         .execute_cached(
             "INSERT INTO session_queue_pauses(chat_id,turn_id,created_at) VALUES(?1,?2,?3) \
-             ON CONFLICT(chat_id) DO UPDATE SET turn_id=excluded.turn_id,created_at=excluded.created_at",
+             ON CONFLICT(chat_id) DO NOTHING",
             params![chat_id, turn_id, now],
         )
         .map_err(AppStorageError::sqlite)?;

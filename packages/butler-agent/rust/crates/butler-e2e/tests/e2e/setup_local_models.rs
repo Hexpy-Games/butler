@@ -23,7 +23,7 @@ use butler_e2e::e2e::events::{LiveEvents, event_turn_id};
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
 use butler_e2e::e2e::fixtures;
 use butler_e2e::e2e::gateway::turn_state;
-use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use serde_json::{Value, json};
 
 /// A fresh install that finds `ollama` (and no LM Studio: its address is a
@@ -178,7 +178,7 @@ async fn streamed_turn(s: &Scenario) -> Result<(String, Vec<String>), HarnessErr
     let accepted =
         s.gw.say("general", "Say something about local models.")
             .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(60))
             .await?;
@@ -254,7 +254,7 @@ async fn setup_04_retried_stream_does_not_repeat_text() -> Result<(), HarnessErr
     let accepted =
         s.gw.say("general", "Say something about local models.")
             .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn = live
         .wait_turn(
             &s.gw,
@@ -342,7 +342,7 @@ async fn setup_04_stop_during_a_stream_retry_keeps_no_cut_text() -> Result<(), H
     let accepted =
         s.gw.say("general", "Say something about local models.")
             .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(30);
     let retried = || {
         server

@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
 use butler_e2e::e2e::provider::Pacing;
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use serde_json::{Value, json};
 
 const LONG: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
@@ -52,7 +52,7 @@ async fn stop_with_a_queued_message(s: &Scenario) -> Result<(), HarnessError> {
         cap_ms: 300,
         min_ms: 200,
     });
-    let running = accepted_turn_id(&s.gw.say("general", LONG).await?)?;
+    let running = s.gw.say_turn("general", LONG).await?;
     let deadline = Instant::now() + Duration::from_secs(20);
     while s.provider()?.served() == 0 {
         assert!(Instant::now() < deadline, "provider not reached");
