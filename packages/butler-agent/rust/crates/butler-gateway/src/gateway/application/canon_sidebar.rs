@@ -266,6 +266,7 @@ pub(super) fn start(app: &AppApplication) {
     });
 }
 async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
+    tracing::debug!("Canon replay pass");
     super::canon_proposals::recover(app).await?;
     super::canon_queue::replay(app).await?;
     conversations(app).await

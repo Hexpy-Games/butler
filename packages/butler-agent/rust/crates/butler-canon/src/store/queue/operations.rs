@@ -263,6 +263,12 @@ pub fn session_deleted(
             tx.execute(sql::DELETE_BINDINGS, [session])?;
             changed(tx, ctx, session)?;
             tx.execute(sql::CANCEL_INTENTS, [session])?;
+            tx.execute(sql::CANCEL_OTHER_INTENTS, [session])?;
+            // A deleted source has no turn left to stop. Keep the committed move
+            // and use the normal terminal receipt to unblock its current owner.
+            for cancellation in rows(tx, sql::SOURCE_CANCELLATIONS, [session])? {
+                engine::turn_ended(tx, ctx, text(&cancellation, "op_id")?, "cancelled")?;
+            }
             tx.execute(sql::DELETE_HEAD, [session])?;
             Ok(())
         },

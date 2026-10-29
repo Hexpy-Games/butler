@@ -44,10 +44,30 @@ async fn session_delete_removes_queue_and_bindings() -> Result<(), HarnessError>
         1,
         "archive retains queue"
     );
+    let other = data(
+        s.gw.post("/sessions", json!({"title":"Other","kind":"chat"}))
+            .await?,
+        201,
+    );
+    let other = other["session"]["id"].as_str().unwrap();
+    let offer = uuid::Uuid::new_v4().to_string();
+    let app = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    app.execute_batch("CREATE TRIGGER reject_offer BEFORE INSERT ON app_initiated_messages WHEN NEW.kind='canon_take_here' BEGIN SELECT RAISE(ABORT,'projection unavailable'); END;")?;
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    db.execute("INSERT INTO canon_intents(op_id,kind,payload_json,state,revision,created_at) VALUES(?1,'canon_take_here',?2,'pending',1,0)", rusqlite::params![offer,json!({"session_id":butler_gateway::gateway::app_session_hint(other),"other_session_id":butler_gateway::gateway::app_session_hint(&chat),"epic_id":first,"epic_title":"Release","state":"pending"}).to_string()])?;
     data(
         s.gw.delete(&format!("/sessions/{chat}?permanent=true"))
             .await?,
         200,
+    );
+    app.execute_batch("DROP TRIGGER reject_offer")?;
+    assert_eq!(
+        db.query_row::<String, _, _>(
+            "SELECT state FROM canon_intents WHERE op_id=?1",
+            [&offer],
+            |r| r.get(0)
+        )?,
+        "applied"
     );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     assert_eq!(

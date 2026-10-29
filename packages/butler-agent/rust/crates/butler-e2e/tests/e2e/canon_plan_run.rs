@@ -16,6 +16,7 @@ mod lifecycle;
 mod locking;
 mod ordering;
 mod queries;
+mod replay_errors;
 mod take_recovery;
 mod taking;
 use butler_e2e::e2e::HarnessError;
