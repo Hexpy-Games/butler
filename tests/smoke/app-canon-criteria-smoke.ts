@@ -11,7 +11,7 @@ import { openCanonBoard } from "../support/canon-board-scenarios.ts";
 import { openPlan } from "../support/canon-sidebar-scenarios.ts";
 import { selectBoardPlan } from "../support/canon-board-selector.ts";
 import { seedCriteria, publishCriteria } from "../support/canon-criteria-fixture.ts";
-import { verifyCriteriaInteractions, verifyEnglishCriteria, type Capture } from "../support/canon-criteria-interactions.ts";
+import { verifyCriteriaInteractions, verifyEnglishCriteria, verifyChildCriteria, type Capture } from "../support/canon-criteria-interactions.ts";
 const cases = [390, 1440].flatMap(w => ["light", "dark"].flatMap(t => ["plain", "wallpaper"].map(bg => `${w}-${t}-${bg}`)));
 if (await runMcpMatrix(cases, "BUTLER_CANON_CRITERIA_CASE", import.meta.path)) process.exit(0);
 const [widthText, theme, background] = process.env.BUTLER_CANON_CRITERIA_CASE!.split("-");
@@ -101,6 +101,7 @@ try {
       if (!before) await row.getByRole("progressbar", { name: "0/2 확인", exact: true }).waitFor();
       await capture("plan-overview", row);
     }
+    if (!before) await verifyChildCriteria(page, server, fixture, capture);
     if (!before && width === 1440 && theme === "light" && !wallpaper) await verifyEnglishCriteria(page, server);
     assert.equal(server.stubModelCalls.length, 0);
     console.log(JSON.stringify({ result: "PASS", before, width, theme, background, clipped: 0 }));

@@ -47,3 +47,18 @@ export async function publishCriteria(server: NativeAppServerHandle, fixture: Cr
   }));
   assert.equal(result.ok, true, JSON.stringify(result));
 }
+
+export function seedChildCriteria(server: NativeAppServerHandle, fixture: CriteriaFixture) {
+  const node = "review-child", body = "# 보관\n- VB-05 확인 기록을 다시 찾을 수 있다";
+  const hash = createHash("sha256").update(body).digest("hex");
+  const db = new Database(join(server.butlerData, "agent-runtime/btcc.sqlite"));
+  try {
+    db.transaction(() => {
+      db.run("INSERT INTO canon_spec_nodes(node_id,scope_kind,scope_ref,epic_id,parent_node_id,concern_id,visibility,lifecycle,source,revision,created_at,updated_at,created_by) VALUES(?,'project',?,?,?,'기록 보관','canon','active','local',2,1,1,'{}')", [node, fixture.project, fixture.epic, fixture.node]);
+      db.run("INSERT INTO canon_spec_bodies VALUES(?,?,?)", [hash, Bun.zstdCompressSync(body), Buffer.byteLength(body)]);
+      db.run("INSERT INTO canon_spec_revisions VALUES(?,1,?,'markdown','active')", [node, hash]);
+      db.run("INSERT INTO canon_spec_criteria VALUES(?,1,'VB-05','보관','확인 기록을 다시 찾을 수 있다')", [node]);
+      db.run("UPDATE canon_spec_nodes SET active_revision=1 WHERE node_id=?", [node]);
+    })();
+  } finally { db.close(); }
+}

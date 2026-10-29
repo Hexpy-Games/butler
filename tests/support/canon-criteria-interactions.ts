@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import type { Locator, Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CriteriaFixture } from "./canon-criteria-fixture.ts";
+import { seedChildCriteria, type CriteriaFixture } from "./canon-criteria-fixture.ts";
 import { auditCanonCardFocus } from "./canon-registration-cards.ts";
 
 export type Capture = (state: string, region: Locator | Locator[], focus?: boolean, surface?: boolean) => Promise<void>;
@@ -63,6 +63,21 @@ export async function verifyCriteriaInteractions(page: Page, server: NativeAppSe
   assert.deepEqual(current.criteria, { confirmed: 1, total: 2 });
 }
 
+export async function verifyChildCriteria(page: Page, server: NativeAppServerHandle, fixture: CriteriaFixture, capture: Capture) {
+  seedChildCriteria(server, fixture);
+  await page.goto(server.url);
+  const toggle = page.locator('[data-test-class="session-info-toggle"]'); await toggle.waitFor();
+  if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
+  const tree = page.locator('[data-test-class="canon-spec-tree"]');
+  await tree.getByRole("progressbar", { name: "0/3 확인", exact: true }).waitFor();
+  await tree.getByRole("button", { name: "VB-05 미확인", exact: true }).click();
+  await tree.getByRole("button", { name: "VB-05 확인됨", exact: true }).waitFor();
+  await tree.getByRole("progressbar", { name: "1/3 확인", exact: true }).waitFor();
+  assert.equal(await page.locator('[data-session-section="task"] [data-test-class="canon-criteria-progress"]').count(), 1);
+  await capture("child-criterion-confirmed", tree, false, true);
+  await auditCanonCardFocus(page, tree);
+}
+
 export async function verifyEnglishCriteria(page: Page, server: NativeAppServerHandle) {
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en" }) });
   await page.goto(server.url);
@@ -72,5 +87,5 @@ export async function verifyEnglishCriteria(page: Page, server: NativeAppServerH
   const control = tree.getByRole("button", { name: "VB-03 not confirmed", exact: true });
   await control.waitFor(); await control.focus(); await page.keyboard.press("Space");
   await tree.getByRole("button", { name: "VB-03 confirmed", exact: true }).waitFor();
-  await tree.getByRole("progressbar", { name: "1/2 confirmed", exact: true }).waitFor();
+  await tree.getByRole("progressbar", { name: "2/3 confirmed", exact: true }).waitFor();
 }

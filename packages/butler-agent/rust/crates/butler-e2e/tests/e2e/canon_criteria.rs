@@ -8,6 +8,7 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 mod active;
 mod revisions;
+mod tree;
 
 fn err(e: &store::Error) -> HarnessError {
     HarnessError(e.to_string())

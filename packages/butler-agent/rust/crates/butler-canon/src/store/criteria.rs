@@ -3,13 +3,26 @@ use super::*;
 use rusqlite::{params, params_from_iter};
 use std::collections::HashMap;
 
+/// The recursive work table contains only nodes displayed in each epic's tree.
 /// Replaced with a bounded placeholder list, never an interpolated input value.
-pub const COUNTS: &str = "SELECT e.id,c.criterion_id,ch.node_id IS NOT NULL AS confirmed
- FROM canon_epics e JOIN canon_spec_nodes n ON n.node_id=e.spec_node_id
- JOIN canon_spec_criteria c ON c.node_id=n.node_id
- AND c.revision=n.active_revision
- LEFT JOIN canon_criterion_checks ch ON ch.node_id=c.node_id AND ch.criterion_id=c.criterion_id AND ch.text=c.text
- WHERE e.id IN (?1)";
+pub const COUNTS: &str = "WITH RECURSIVE tree(id,node_id,active_revision) AS (
+ SELECT e.id,n.node_id,n.active_revision FROM canon_epics e
+ JOIN canon_spec_nodes n ON n.epic_id=e.id AND n.parent_node_id IS NULL
+ WHERE e.id IN (?1)
+ UNION ALL
+ SELECT t.id,n.node_id,n.active_revision FROM tree t
+ JOIN canon_spec_nodes n ON n.parent_node_id=t.node_id AND n.epic_id=t.id
+ ) SELECT t.id,c.criterion_id,ch.node_id IS NOT NULL AS confirmed
+ FROM tree t CROSS JOIN canon_spec_criteria c ON c.node_id=t.node_id AND c.revision=t.active_revision
+ LEFT JOIN canon_criterion_checks ch ON ch.node_id=c.node_id AND ch.criterion_id=c.criterion_id AND ch.text=c.text";
+
+pub fn counts_query(size: usize) -> String {
+    let placeholders = (1..=size)
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    COUNTS.replace("?1", &placeholders)
+}
 
 pub fn enrich(db: &Connection, epics: &mut [Value]) -> Result<()> {
     for batch in epics.chunks_mut(400) {
@@ -17,16 +30,8 @@ pub fn enrich(db: &Connection, epics: &mut [Value]) -> Result<()> {
             .iter()
             .map(|e| text(e, "id"))
             .collect::<Result<Vec<_>>>()?;
-        let placeholders = (1..=ids.len())
-            .map(|i| format!("?{i}"))
-            .collect::<Vec<_>>()
-            .join(",");
         let mut counts = HashMap::<String, (u64, u64)>::new();
-        for row in rows(
-            db,
-            &COUNTS.replace("?1", &placeholders),
-            params_from_iter(ids),
-        )? {
+        for row in rows(db, &counts_query(ids.len()), params_from_iter(ids))? {
             let count = counts.entry(text(&row, "id")?.into()).or_default();
             count.0 += u64::from(row["confirmed"] == 1);
             count.1 += 1;
