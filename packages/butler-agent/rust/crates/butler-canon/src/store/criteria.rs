@@ -1,4 +1,4 @@
-//! App-only human decisions and indexed, batched latest-root projections.
+//! App-only human decisions and indexed, batched active-tree projections.
 use super::*;
 use rusqlite::{params, params_from_iter};
 use std::collections::HashMap;
@@ -7,7 +7,7 @@ use std::collections::HashMap;
 pub const COUNTS: &str = "SELECT e.id,c.criterion_id,ch.node_id IS NOT NULL AS confirmed
  FROM canon_epics e JOIN canon_spec_nodes n ON n.node_id=e.spec_node_id
  JOIN canon_spec_criteria c ON c.node_id=n.node_id
- AND c.revision=(SELECT MAX(revision) FROM canon_spec_revisions WHERE node_id=n.node_id)
+ AND c.revision=n.active_revision
  LEFT JOIN canon_criterion_checks ch ON ch.node_id=c.node_id AND ch.criterion_id=c.criterion_id AND ch.text=c.text
  WHERE e.id IN (?1)";
 
@@ -85,7 +85,7 @@ pub fn toggle(tx: &Transaction<'_>, ctx: &Context, node_id: &str, input: Value) 
         return Err(Error::NotFound);
     }
     cas(&node, "revision", input.expected_revision)?;
-    let revision = latest(tx, node_id)?.ok_or(Error::NotFound)?;
+    let revision = node["active_revision"].as_i64().ok_or(Error::NotFound)?;
     let criterion = one(
         tx,
         "SELECT * FROM canon_spec_criteria WHERE node_id=?1 AND revision=?2 AND criterion_id=?3",
@@ -128,7 +128,7 @@ pub fn toggle(tx: &Transaction<'_>, ctx: &Context, node_id: &str, input: Value) 
     Ok(json!({"node_id":node_id,"criterion_id":input.criterion_id,"confirmed":input.confirmed}))
 }
 
-/// Drop changed or removed decisions on publication so reverting text cannot resurrect them.
+/// Drop changed or removed decisions when a publication becomes active.
 pub(super) fn reconcile(tx: &Transaction<'_>, node: &str, revision: i64) -> Result<()> {
     tx.execute("DELETE FROM canon_criterion_checks WHERE node_id=?1 AND NOT EXISTS (
         SELECT 1 FROM canon_spec_criteria c WHERE c.node_id=?1 AND c.revision=?2

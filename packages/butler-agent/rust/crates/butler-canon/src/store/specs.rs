@@ -102,7 +102,6 @@ pub fn publish_spec(
             ],
         )?;
     }
-    criteria::reconcile(tx, node_id, publication.revision)?;
     tx.execute(sql::NODE_BUMP, params![node_id, ctx.now, expected_revision])?;
     event(
         tx,
@@ -138,6 +137,7 @@ pub fn activate_spec(
     if let Some(old) = expected_active_revision {
         tx.execute(sql::SPEC_STATE, params![node_id, old, "inactive"])?;
     }
+    criteria::reconcile(tx, node_id, revision)?;
     tx.execute(sql::SPEC_STATE, params![node_id, revision, "active"])?;
     tx.execute(
         sql::ACTIVATE,

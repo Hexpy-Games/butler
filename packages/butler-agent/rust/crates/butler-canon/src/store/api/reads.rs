@@ -75,7 +75,7 @@ fn spec_tree(db: &Connection, nodes: &[Value], parent: Option<&str>) -> Result<V
         node["criteria"] = json!(super::super::criteria::for_revision(
             db,
             id,
-            node["latest_revision"].as_i64()
+            node["active_revision"].as_i64()
         )?);
         node["children"] = json!(spec_tree(db, nodes, Some(id))?);
         result.push(node);

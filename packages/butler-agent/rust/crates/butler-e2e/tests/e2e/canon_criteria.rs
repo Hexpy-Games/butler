@@ -6,6 +6,7 @@ use butler_e2e::e2e::{
     scenario::{Scenario, Setup},
 };
 use serde_json::{Value, json};
+mod active;
 mod revisions;
 
 fn err(e: &store::Error) -> HarnessError {
@@ -74,17 +75,38 @@ fn publish(s: &Scenario, revision: i64, criteria: &[(&str, &str)]) -> Result<(),
         now: revision,
         actor: json!({"person":"app-user","via":"app"}),
     };
+    publish_node(&tx, &ctx, "criteria-spec", revision, criteria)?;
+    tx.commit()?;
+    Ok(())
+}
+fn publish_node(
+    tx: &store::Transaction<'_>,
+    ctx: &store::Context,
+    node: &str,
+    revision: i64,
+    criteria: &[(&str, &str)],
+) -> Result<(), HarnessError> {
+    let expected: i64 = tx.query_row(
+        "SELECT revision FROM canon_spec_nodes WHERE node_id=?1",
+        [node],
+        |r| r.get(0),
+    )?;
+    let active: Option<i64> = tx.query_row(
+        "SELECT active_revision FROM canon_spec_nodes WHERE node_id=?1",
+        [node],
+        |r| r.get(0),
+    )?;
     let body = criteria
         .iter()
         .map(|(id, text)| format!("- {id} {text}"))
         .collect::<Vec<_>>()
         .join("\n");
-    let hash = store::put_body(&tx, &body).map_err(|e| err(&e))?;
+    let hash = store::put_body(tx, &body).map_err(|e| err(&e))?;
     store::publish_spec(
-        &tx,
-        &ctx,
-        "criteria-spec",
-        revision - 1,
+        tx,
+        ctx,
+        node,
+        expected,
         &store::Publication {
             revision,
             body_hash: hash,
@@ -100,15 +122,14 @@ fn publish(s: &Scenario, revision: i64, criteria: &[(&str, &str)]) -> Result<(),
         },
     )
     .map_err(|e| err(&e))?;
-    // Deliberately leave publications inactive: counts and controls use the latest revision.
-    tx.commit()?;
+    store::activate_spec(tx, ctx, node, expected + 1, active, revision).map_err(|e| err(&e))?;
     Ok(())
 }
 async fn toggle(s: &Scenario, confirmed: bool, revision: i64) -> Result<(), HarnessError> {
     let reply =
         s.gw.post(
             "/canon/specs/criteria-spec/criteria/VB-03",
-            json!({"confirmed":confirmed,"expected_revision":revision}),
+            json!({"confirmed":confirmed,"expected_revision":revision * 2}),
         )
         .await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
@@ -200,7 +221,7 @@ async fn app_toggle_counts_activity_permissions_and_revision_conflict() -> Resul
         s.gw.send_with(
             reqwest::Method::POST,
             "/canon/specs/criteria-spec/criteria/VB-03",
-            Some(json!({"confirmed":false,"expected_revision":1}).to_string()),
+            Some(json!({"confirmed":false,"expected_revision":2}).to_string()),
             Some(&s.gw.token),
             &[
                 ("X-Butler-Delegate-Client", "External editor"),
