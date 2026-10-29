@@ -10,6 +10,8 @@ export interface DemoTask extends StepSortableItem {
   /** The one-line progress of a running task. */
   progress?: string;
   time?: string;
+  /** What a done task produced. */
+  result?: string;
 }
 
 /** Story copy (the work-tab mockup's tasks). */
@@ -19,14 +21,20 @@ export const STEP_DEMO_COPY = {
     menu: ["Start now", "Unstack", "Delete"], after: (title: string) => `After ${title}`, join: "Run together", newStep: "New step",
     status: { running: "Running", review: "In review", pending: "Waiting", held: "Paused", done: "Done", failed: "Failed" },
     titles: ["Write the report", "Turn it into slides", "Make a summary", "Write the talk script", "Research competitors", "Send the summary email"],
-    progress: ["Drafting chapter 3", "Reading 7 sources"], time: ["12 min", "4 min"],
+    progress: ["Drafting chapter 3", "Building slide 6 of 12", "Picking the key points", "Drafting the opening", "Reading 7 sources", "Drafting the email"],
+    result: ["12-page report", "12 slides", "One-page summary", "5-minute script", "9 sources compared", "Sent to 3 people"],
+    time: ["12 min", "6 min", "3 min", "5 min", "4 min", "1 min"],
+    notStarted: "Not started", pausedByYou: "You paused it", pausedBefore: "Previous step paused",
   },
   "ko-KR": {
     chains: ["보고서", "조사"], more: (count: number) => `외 ${count}건`, menuLabel: (title: string) => `‘${title}’ 메뉴`,
     menu: ["지금 시작", "묶음 풀기", "삭제"], after: (title: string) => `${title} 끝나면`, join: "함께 진행", newStep: "새 단계로",
     status: { running: "진행 중", review: "검토 중", pending: "대기", held: "멈춤", done: "완료", failed: "실패" },
     titles: ["보고서 작성", "PPT로 정리", "요약본 만들기", "발표 대본 쓰기", "경쟁사 자료 조사", "요약 메일 보내기"],
-    progress: ["3장 초안 쓰는 중", "자료 7건 읽는 중"], time: ["12분", "4분"],
+    progress: ["3장 초안 쓰는 중", "슬라이드 12장 중 6장째", "핵심 문장 고르는 중", "도입부 쓰는 중", "자료 7건 읽는 중", "메일 초안 쓰는 중"],
+    result: ["보고서 12쪽", "슬라이드 12장", "요약 1쪽", "대본 5분 분량", "자료 9건 비교", "3명에게 보냄"],
+    time: ["12분", "6분", "3분", "5분", "4분", "1분"],
+    notStarted: "시작 전", pausedByYou: "직접 멈춤", pausedBefore: "앞 단계 멈춤",
   },
 } as const;
 
@@ -55,12 +63,13 @@ const STATUS_CODES: Array<[string, DemoStatus]> = [["!", "running"], ["~", "revi
 
 export function demoChains(locale: ShowcaseRenderContext["locale"], shape: DemoShape): StepSortableChain<DemoTask>[] {
   const copy = STEP_DEMO_COPY[locale];
-  let live = 0;
+  // Each task's own progress, time and result (by its letter), so a caption always matches its row.
   const task = (code: string): DemoTask => {
     const status = STATUS_CODES.find(([mark]) => code.slice(1).includes(mark))?.[1] ?? "pending";
     const running = status === "running" || status === "review";
-    const extra = running ? { progress: copy.progress[live % 2], time: copy.time[live++ % 2] } : {};
-    return { id: code[0]!, label: copy.titles[code.charCodeAt(0) - 97]!, status, running, done: status === "done", ...extra };
+    const at = code.charCodeAt(0) - 97;
+    const extra = running ? { progress: copy.progress[at], time: copy.time[at] } : status === "done" ? { result: copy.result[at] } : {};
+    return { id: code[0]!, label: copy.titles[at]!, status, running, done: status === "done", ...extra };
   };
   return shape.map((steps, index) => ({
     id: `chain-${index}`, label: copy.chains[index]!, title: shape.length > 1 ? copy.chains[index] : undefined,

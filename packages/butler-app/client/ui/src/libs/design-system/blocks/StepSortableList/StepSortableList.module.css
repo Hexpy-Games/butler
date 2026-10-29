@@ -81,12 +81,16 @@
   gap: var(--space-xs);
 }
 
+/* The title gets the line first. When the title, the 묶음 count (외 N건)
+   and the meta do not fit, the meta wraps to its own line (still at the
+   end), then the count wraps under the title; the title truncates only
+   when it alone is wider than the line. */
 .titleLine {
   display: flex;
   min-width: 0;
-  gap: var(--space-sm);
+  flex-wrap: wrap;
+  column-gap: var(--space-sm);
   align-items: center;
-  justify-content: space-between;
 }
 
 .titleLine > :first-child {
@@ -94,11 +98,16 @@
   flex: 1 1 auto;
 }
 
-/* The title truncates; the 묶음 count after it (외 N건) never does. */
+.titleLine > :not(:first-child) {
+  flex: none;
+  margin-inline-start: auto;
+}
+
 .title {
   display: flex;
   min-width: 0;
-  gap: var(--space-xs);
+  flex-wrap: wrap;
+  column-gap: var(--space-xs);
   align-items: baseline;
 }
 
@@ -108,10 +117,6 @@
 }
 
 .title > :not(:first-child) {
-  flex: none;
-}
-
-.titleLine > :not(:first-child) {
   flex: none;
 }
 
@@ -128,11 +133,10 @@
   flex: none;
 }
 
-/* A narrow row (a phone, a narrow pane) gives the title the empty grip slot
-   and ⋯ room of a row without those controls (a pinned running head):
-   there the title matters more than lining up with the rows around it. */
+/* A narrow row (a phone, a narrow pane) gives the title the empty ⋯ room
+   of a row without one (a pinned running row). The grip slot stays, so
+   numbers and titles still line up within a chain. */
 @container step-row (width < 28rem) {
-  .leadControl:empty,
   .menuRoom {
     display: none;
   }

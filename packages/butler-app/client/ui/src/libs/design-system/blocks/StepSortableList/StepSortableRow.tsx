@@ -28,7 +28,8 @@ function Trailing({ children, className }: { children: ReactNode; className: str
 
 /**
  * One row (a single step's card or a collapsed 묶음's front):
- * `[grip] [number or status glyph] [title (more) ........ meta] / [caption] [⋯]`; the title truncates, `more` never.
+ * `[grip] [number or status glyph] [title (more) ........ meta] / [caption] [⋯]`; the meta, then `more`,
+ * wrap before the title truncates.
  * A fanned 묶음's card is compact: the title (two lines), then grip · caption · ⋯.
  */
 export function StepSortableRow({ item, context, grip, marker = true }: StepSortableRowProps) {

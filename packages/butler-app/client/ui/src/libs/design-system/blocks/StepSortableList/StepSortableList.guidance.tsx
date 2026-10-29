@@ -51,7 +51,8 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: [
-    "Row slots follow the work-tab row: number (follow-ups) or status glyph (heads), title, `more` (a collapsed 묶음's count, ko: 외 N건; the title truncates, the count never does), short meta (Running · 12 min, Waiting, Paused), one caption line, ⋯ (Start now, Unstack, Delete). Running rows have no ⋯; their room stays, except on a row narrower than 28rem, where the title takes the empty grip slot and ⋯ room. A fan card narrower than 15rem puts its caption on its own line.",
+    "Each caption says the row's own state, never the meta's status word again: progress while running, the result when done, why a held row waits.",
+    "Row slots follow the work-tab row: number (follow-ups) or status glyph (heads), title, `more` (a collapsed 묶음's count, ko: 외 N건; it never truncates), short meta (Running · 12 min, Waiting, Paused), one caption line, ⋯ (Start now, Unstack, Delete). Running rows have no ⋯; their room stays, except on a row narrower than 28rem, where the title takes the empty ⋯ room (the grip slot stays, so numbers line up). The title gets its line first: the meta, then the count, wrap before the title truncates. A fan card narrower than 15rem puts its caption on its own line.",
     "The lifted copy's context says what a drop does now (`outcome`); say it in its caption (ko: 함께 진행 / 새 단계로).",
     "Pass localized `labels` (StepSortableLabels) and `deckLabels`; English is the default.",
   ],
