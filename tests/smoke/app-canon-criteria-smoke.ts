@@ -11,8 +11,7 @@ import { openCanonBoard } from "../support/canon-board-scenarios.ts";
 import { openPlan } from "../support/canon-sidebar-scenarios.ts";
 import { selectBoardPlan } from "../support/canon-board-selector.ts";
 import { seedCriteria, publishCriteria } from "../support/canon-criteria-fixture.ts";
-import { verifyCriteriaInteractions, verifyEnglishCriteria } from "../support/canon-criteria-interactions.ts";
-import type { Locator } from "playwright";
+import { verifyCriteriaInteractions, verifyEnglishCriteria, type Capture } from "../support/canon-criteria-interactions.ts";
 const cases = [390, 1440].flatMap(w => ["light", "dark"].flatMap(t => ["plain", "wallpaper"].map(bg => `${w}-${t}-${bg}`)));
 if (await runMcpMatrix(cases, "BUTLER_CANON_CRITERIA_CASE", import.meta.path)) process.exit(0);
 const [widthText, theme, background] = process.env.BUTLER_CANON_CRITERIA_CASE!.split("-");
@@ -40,12 +39,12 @@ try {
     if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
     await aside.waitFor();
     const detail = aside.locator('[data-test-class="canon-epic-detail"]'); await detail.waitFor();
-    const capture = async (state: string, region: Locator, focus = false, surface = false) => {
+    const capture: Capture = async (state, region, focus = false, surface = false) => {
       if (wallpaper && !surface) return;
       await page.waitForFunction(() => document.querySelectorAll('[data-sonner-toast]').length === 0);
       console.log(`capture ${state}`);
       try {
-        await captureRegion(page, directory, `${before ? "before" : "after"}-${state}-${width}-${theme}${surface ? `-${background}` : ""}`, [region], { focus });
+        await captureRegion(page, directory, `${before ? "before" : "after"}-${state}-${width}-${theme}${surface ? `-${background}` : ""}`, Array.isArray(region) ? region : [region], { focus });
       } catch (error) {
         console.error({ state, asideVisible: await aside.isVisible(), detailCount: await detail.count(), body: (await page.locator("body").innerText()).slice(-3000) });
         await page.screenshot({ path: `/tmp/canon-criteria-${state}-failure.png` });
@@ -55,13 +54,21 @@ try {
     const tree = detail.locator('[data-test-class="canon-spec-tree"]');
     // Before has the same disclosure tree but no test marker or confirmation control.
     const specRegion = before ? detail.locator("section").filter({ hasText: "검토 기준" }).first() : tree;
+    const captureSessionInfo = async () => {
+      const concern = specRegion.getByRole("button", { name: "검토 기준", exact: true });
+      await concern.click();
+      await capture("session-info", [aside.locator('[data-session-section="task"]').getByText("과제", { exact: true }), specRegion], false, true);
+      await concern.click();
+    };
     await capture("inspector-spec", specRegion, false, true);
     if (before) await capture("criterion-unconfirmed", specRegion.getByText("VB-03", { exact: true }).locator(".."), false, true);
     if (!before) {
       await verifyCriteriaInteractions(page, server, fixture, detail, capture);
-      const meter = aside.locator('[data-test-class="canon-criteria-progress"]').first();
+      const section = aside.locator('[data-session-section="task"]');
+      const meter = section.locator('[data-test-class="canon-criteria-progress"]');
+      assert.equal(await meter.count(), 1);
       await meter.getByRole("progressbar", { name: "1/2 확인", exact: true }).waitFor();
-      await capture("session-info", meter, false, true);
+      await captureSessionInfo();
       await publishCriteria(server, fixture);
       await tree.getByRole("button", { name: "VB-03 확인됨", exact: true }).waitFor();
       await page.reload();
@@ -77,7 +84,7 @@ try {
       await tree.getByRole("progressbar", { name: "0/2 확인", exact: true }).waitFor();
       await capture("revision-reset", tree, false, true);
       await auditCanonCardFocus(page, tree);
-    } else await capture("session-info", detail.locator(":scope > :nth-child(1)"), false, true);
+    } else await captureSessionInfo();
     await page.locator('[data-test-class="session-info-toggle"]').click();
     await aside.waitFor({ state: "hidden" });
     if (!wallpaper) {

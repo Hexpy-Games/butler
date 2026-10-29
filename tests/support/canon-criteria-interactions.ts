@@ -5,7 +5,7 @@ import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { CriteriaFixture } from "./canon-criteria-fixture.ts";
 import { auditCanonCardFocus } from "./canon-registration-cards.ts";
 
-type Capture = (state: string, region: Locator, focus?: boolean, surface?: boolean) => Promise<void>;
+export type Capture = (state: string, region: Locator | Locator[], focus?: boolean, surface?: boolean) => Promise<void>;
 export async function verifyCriteriaInteractions(page: Page, server: NativeAppServerHandle, fixture: CriteriaFixture, detail: Locator, capture: Capture) {
   const tree = detail.locator('[data-test-class="canon-spec-tree"]');
   const row = tree.locator('[data-criterion-id="VB-03"]');
@@ -25,7 +25,9 @@ export async function verifyCriteriaInteractions(page: Page, server: NativeAppSe
   await page.keyboard.press("Space"); assert((await update).ok());
   const confirmed = row.getByRole("button", { name: "VB-03 확인됨", exact: true });
   await confirmed.waitFor();
-  await tree.getByRole("progressbar", { name: "1/2 확인", exact: true }).waitFor();
+  const sectionMeters = page.locator('[data-session-section="task"] [data-test-class="canon-criteria-progress"]');
+  assert.equal(await sectionMeters.count(), 1);
+  await sectionMeters.getByRole("progressbar", { name: "1/2 확인", exact: true }).waitFor();
   await page.waitForFunction(() => (window as unknown as { criteriaMotion: string[] }).criteriaMotion.some(name => name.includes("rolling-swap-in")));
   await capture("criterion-confirmed", row, false, true);
   await detail.getByText("VB-03 확인", { exact: true }).waitFor();
