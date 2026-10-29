@@ -982,7 +982,16 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         open: (site) => `${site} 페이지 열기`,
       },
     },
+    imageTools: {
+      model: "모델", off: "사용 안 함", apiKey: "API 키", apiKeyOnly: "API 키 전용", defaultQuality: "기본 품질",
+      quality: { low: "낮음", medium: "보통", high: "높음", xhigh: "매우 높음", max: "최고" },
+      size: "크기", qualityLabel: "품질", prompt: "프롬프트", default: "기본", edit: "편집", download: "다운로드",
+      editor: "이미지 편집", brush: "브러시", eraser: "지우개", brushSize: "브러시 크기", undo: "실행 취소",
+      original: "원본", compare: "길게 눌러 비교", versions: "버전", version: (n) => `버전 ${n}`,
+      instruction: "무엇을 바꿀까요?", send: "보내기", readOnly: "읽기 전용", noModel: "이미지 모델 없음", failed: "편집하지 못했어요",
+    },
     imageViewer: {
+      zoomIn: "확대", zoomOut: "축소",
       viewImage: (name) => `이미지 크게 보기: ${name}`,
       close: "닫기",
       previous: "이전 이미지",
@@ -1470,7 +1479,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     sectionAliases: {
       memory: ["지침", "대화 기억", "프로필", "프로젝트 기억", "초기화", "공간 정리", "저장 공간"],
       general: ["기본", "일반 설정", "대화", "스마트 그룹", "사이드바", "기본 권한", "전체 초기화"],
-      models: ["모델 설정", "작업자", "예비 모델", "API 키"],
+      models: ["이미지", "image", "모델 설정", "작업자", "예비 모델", "API 키"],
       appearance: ["테마", "화면 설정", "디자인", "입력창", "컴포저", "대화창", "대화창 배경", "대화 배경", "배경 불투명도"],
       server: ["연결", "프로젝트 폴더"],
       updates: ["업그레이드", "새 버전"],
@@ -1510,6 +1519,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     pageSections: {
       noticedPatterns: "버틀러가 알아챈 것",
+      imageModels: "이미지 모델",
       accessibility: "접근성",
       instructions: "지침",
       chatMemory: "대화 기억",

@@ -4,7 +4,7 @@ import { isAbsolutePath } from "@/app/approvalTargets.ts";
 import type { ApprovalActionKind } from "@/app/approvalRequest.ts";
 import type { ApprovalRisk } from "@/app/types.ts";
 import {
-  Button, ButtonContainer, Clock3, ComposerDecisionPanel, Folder, GitBranch, Globe2, ListChecks, McpServer,
+  ImageIcon, Pencil, Button, ButtonContainer, Clock3, ComposerDecisionPanel, Folder, GitBranch, Globe2, ListChecks, McpServer,
   MessageSquarePlus, RefreshCcw, ShieldCheck, SplitButton, Tag, Terminal, Typo, type TagTone,
 } from "@/butler-ds";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
@@ -12,7 +12,7 @@ import { ComposerBrowserHandoffSurface } from "./ComposerBrowserHandoffSurface";
 
 /** What the request touches, at a glance: a folder for file edits (as in the README demo), a terminal for commands. */
 const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
-  edit_files: Folder, run_command: Terminal, network_command: Globe2, web_request: Globe2, use_connector: McpServer,
+  generate_image: ImageIcon, edit_image: Pencil, edit_files: Folder, run_command: Terminal, network_command: Globe2, web_request: Globe2, use_connector: McpServer,
   manage_schedule: Clock3, update_project: ListChecks, start_conversation: MessageSquarePlus,
   restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, other: ShieldCheck,
 };
@@ -40,8 +40,8 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     title={decision.title}
     details={decision.details}
     renderText={(text) => approvalPathText(text, decision)}
-    detailsShowMoreLabel={decision.actionKind === "manage_schedule" ? undefined : appCopy.conversation.messageActions.showMore}
-    detailsShowLessLabel={decision.actionKind === "manage_schedule" ? undefined : appCopy.conversation.messageActions.showLess}
+    detailsShowMoreLabel={decision.actionKind === "manage_schedule" || decision.actionKind === "generate_image" || decision.actionKind === "edit_image" ? undefined : appCopy.conversation.messageActions.showMore}
+    detailsShowLessLabel={decision.actionKind === "manage_schedule" || decision.actionKind === "generate_image" || decision.actionKind === "edit_image" ? undefined : appCopy.conversation.messageActions.showLess}
     onOpen={decision.onOpenSource}
     error={decision.error}
     aside={<>
