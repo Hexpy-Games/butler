@@ -11,6 +11,29 @@ SPEC.loader.exec_module(changes)
 
 
 class ShellSelection(unittest.TestCase):
+    # test-category: format-pin
+    def test_checks_and_experimental_packaging_run_independently(self):
+        workflow = (Path(__file__).resolve().parents[1] / 'workflows/shell.yml').read_text()
+        shell = workflow.split('  shell:\n', 1)[1].split('  package:\n', 1)[0]
+        package = workflow.split('  package:\n', 1)[1]
+        self.assertIn('    needs: changes\n', package)
+        self.assertIn(
+            "    if: github.event_name == 'workflow_dispatch' || "
+            "(github.event_name == 'push' && github.ref == 'refs/heads/main' && "
+            "needs.changes.outputs.shell == 'true')\n",
+            package,
+        )
+        self.assertNotRegex(shell, r'\bcargo check\b')
+        self.assertIn(
+            'cargo clippy --locked --workspace --all-targets --profile test -- -D warnings',
+            shell,
+        )
+        self.assertIn(
+            "cache-on-failure: ${{ github.event_name == 'push' && "
+            "github.ref == 'refs/heads/main' }}",
+            shell,
+        )
+
     # test-category: pure-logic
     def test_shell_has_only_explicit_inputs(self):
         paths = changes.command('git', 'ls-files').splitlines()

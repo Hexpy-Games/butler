@@ -61,7 +61,50 @@ def load(pkg, name):
     finally:
         close(p)
 import argparse, struct, hashlib, datetime, re
-parser = argparse.ArgumentParser(description='Regenerate frozen ICU 78.1 / TZ2026c prompt data; developer-only macOS utility')
+
+def posix_offset(seconds):
+    # POSIX TZ strings count hours west of UTC.
+    sign = '-' if seconds > 0 else ''
+    hours, rest = divmod(abs(seconds), 3600)
+    minutes, seconds = divmod(rest, 60)
+    return sign + str(hours) + (f':{minutes:02}' if minutes or seconds else '') + (f':{seconds:02}' if seconds else '')
+
+def numeric(offset):
+    # The numeric designation IANA uses where no abbreviation is established
+    # (+09, +0530, -0330); ICU types carry no abbreviation.
+    sign = '-' if offset < 0 else '+'
+    hours, rest = divmod(abs(offset), 3600)
+    minutes, seconds = divmod(rest, 60)
+    return f'{sign}{hours:02}' + (f'{minutes:02}' if minutes or seconds else '') + (f'{seconds:02}' if seconds else '')
+
+def fixed_footer(offset, isdst, abbreviation):
+    """The TZif footer that keeps one local time type after the last transition.
+
+    ICU keeps the final type of a zone without an annual rule forever, but a
+    TZif without a footer leaves every later time undefined (RFC 8536 3.3), so
+    readers such as tz-rs find no local time type for it.
+    """
+    name = abbreviation if re.fullmatch(r'[A-Za-z]{3,}', abbreviation) else f'<{abbreviation}>'
+    if not isdst:
+        return f'{name}{posix_offset(offset)}'.encode()
+    # Permanent DST (RFC 8536 3.3.1): DST starts January 1 at 00:00 and ends
+    # December 31 at 24:00 plus the one-hour difference to standard time.
+    return f'{name}{posix_offset(offset - 3600)}{name},0/0,J365/25'.encode()
+
+def write_pack(out, rows, version):
+    rows.sort(key=lambda r: r[0].lower())
+    blob = bytearray(b'BTZ2') + struct.pack('<I', len(rows))
+    manifest = []
+    for name, can, data in rows:
+        n = name.encode()
+        a = can.encode()
+        blob += struct.pack('<HHI', len(n), len(a), len(data)) + n + a + data
+        manifest.append({'name': name, 'canonical': can, 'sha256': hashlib.sha256(data).hexdigest()})
+    (out / f'source-{version}.btz').write_bytes(blob)
+    (out / 'provenance.json').write_text(json.dumps({'source': 'macOS ICU resource zoneinfo64 and /usr/share/zoneinfo POSIX future rules', 'version': version, 'actual_icu': '78.1', 'reported_bun_icu': '74.2', 'sha256': hashlib.sha256(blob).hexdigest(), 'records': manifest}, indent=2) + '\n')
+    return blob
+
+parser = argparse.ArgumentParser(description='Regenerate frozen ICU 78.1 prompt data from the host tzdata; developer-only macOS utility')
 parser.add_argument('--zoneinfo', type=pathlib.Path, required=True)
 parser.add_argument('--output', type=pathlib.Path, required=True)
 args = parser.parse_args()
@@ -71,7 +114,9 @@ version = (c.c_uint8 * 4)()
 L.u_getVersion(version)
 assert list(version) == [78, 1, 0, 0], 'Review a new ICU baseline before updating generated data'
 z = load(None, b'zoneinfo64')
-assert z['TZVersion'] == '2026c' and (args.zoneinfo / '+VERSION').read_text().strip() == '2026c'
+tz_version = z['TZVersion']
+# ICU rules and the zoneinfo footers must come from one tzdata release.
+assert (args.zoneinfo / '+VERSION').read_text().strip() == tz_version, tz_version
 U = c.POINTER(c.c_uint16)
 L.ucal_getCanonicalTimeZoneID.argtypes = [U, c.c_int32, U, c.c_int32, c.POINTER(c.c_int8), E]
 L.ucal_getCanonicalTimeZoneID.restype = c.c_int32
@@ -143,7 +188,7 @@ for name in z['Names']:
         data = z['Zones'][index]
     can = canonical(name)
     offsets = data['typeOffsets']
-    types = [(offsets[i] + offsets[i + 1], int(offsets[i + 1] != 0), 'LMT') for i in range(0, len(offsets), 2)]
+    types = [(offsets[i] + offsets[i + 1], int(offsets[i + 1] != 0), numeric(offsets[i] + offsets[i + 1])) for i in range(0, len(offsets), 2)]
     times = pairs(data.get('transPre32', [])) + data.get('trans', []) + pairs(data.get('transPost32', []))
     mapping = list(data.get('typeMap', []))
     assert len(times) == len(mapping)
@@ -168,27 +213,23 @@ for name in z['Names']:
             assert not times or times[-1] < anchor
             times.append(anchor)
             mapping.append(types.index(t))
-    first = header(0, 1) + struct.pack('>iBB', types[0][0], types[0][1], 0) + b'LMT\x00'
+    else:
+        footer = fixed_footer(*types[mapping[-1] if mapping else 0])
+    initial = types[0][2].encode() + b'\0'
+    first = header(0, 1, len(initial)) + struct.pack('>iBB', types[0][0], types[0][1], 0) + initial
     abbreviations = bytearray()
     type_bytes = bytearray()
     for offset, isdst, abbreviation in types:
-        index = len(abbreviations)
-        abbreviations.extend(abbreviation.encode() + b'\0')
+        label = abbreviation.encode() + b'\0'
+        index = abbreviations.find(label) if label in abbreviations else len(abbreviations)
+        if index == len(abbreviations):
+            abbreviations.extend(label)
         assert index < 256
         type_bytes.extend(struct.pack('>iBB', offset, isdst, index))
     second = header(len(times), len(types), len(abbreviations)) + b''.join(struct.pack('>q', v) for v in times) + bytes(mapping) + type_bytes + abbreviations + b'\n' + footer + b'\n'
     rows.append((name, can, first + second))
 assert not footer_missing, footer_missing
-rows.sort(key=lambda r: r[0].lower())
-blob = bytearray(b'BTZ2') + struct.pack('<I', len(rows))
-manifest = []
-for name, can, data in rows:
-    n = name.encode()
-    a = can.encode()
-    blob += struct.pack('<HHI', len(n), len(a), len(data)) + n + a + data
-    manifest.append({'name': name, 'canonical': can, 'sha256': hashlib.sha256(data).hexdigest()})
-(out / 'source-2026c.btz').write_bytes(blob)
-(out / 'provenance.json').write_text(json.dumps({'source': 'macOS ICU resource zoneinfo64 and /usr/share/zoneinfo POSIX future rules', 'version': '2026c', 'actual_icu': '78.1', 'reported_bun_icu': '74.2', 'sha256': hashlib.sha256(blob).hexdigest(), 'records': manifest}, indent=2) + '\n')
+blob = write_pack(out, rows, tz_version)
 meta = load(None, b'metaZones')['metazoneInfo']
 names = load(b'icudt78l-zone', b'root')['zoneStrings']
 for key, value in load(b'icudt78l-zone', b'en')['zoneStrings'].items():
