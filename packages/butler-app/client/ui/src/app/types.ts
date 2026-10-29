@@ -127,6 +127,13 @@ export interface AppModelSummary {
 
 export type ChatGptSignInKind = "default" | "new_account" | "enable_plan";
 
+export interface ChatGptAccountView {
+  status: "signed_out" | "legacy_sign_in_required" | "sign_in_required" | "plan_off" | "signed_in";
+  label: string | null;
+  plan_notice_pending: boolean;
+  legacy_prompt_pending: boolean;
+}
+
 export type ProviderAuthMethod = "api_key" | "chatgpt_oauth";
 
 /** Where a saved API key is kept (#217). */

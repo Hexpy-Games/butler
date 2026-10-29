@@ -9,6 +9,7 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    let queue = call.name == ToolName::CanonQueue;
     let writing = call.name == ToolName::CanonPropose;
     let decision = super::access::for_kind(
         owner,
@@ -18,7 +19,9 @@ pub(super) async fn execute(
             CapabilityKind::InternalRead
         },
     );
-    if matches!(decision, AccessDecision::Deny(_)) {
+    if matches!(decision, AccessDecision::Deny(_))
+        || (queue && owner.binding.access_mode == butler_turn::btcc::AccessMode::ReadOnly)
+    {
         return super::dispatch::encoded(
             &json!({"ok":false,"error":{"code":"read_only","message":"This conversation is read-only, so canon cannot change. Tell the user in one sentence; they can change the permission level."}}),
         );
@@ -28,7 +31,13 @@ pub(super) async fn execute(
     };
     let result = request(
         owner,
-        if writing { "propose" } else { "read" },
+        if queue {
+            "queue"
+        } else if writing {
+            "propose"
+        } else {
+            "read"
+        },
         json!({"session_id":session,
         "turn_id":owner.binding.turn_id,"call_id":call_id,"arguments":call.arguments,
         "apply":writing && decision==AccessDecision::Allow}),

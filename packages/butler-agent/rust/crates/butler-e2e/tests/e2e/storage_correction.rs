@@ -9,7 +9,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     gateway::turn_state,
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use butler_platform::secure_fs;
 use notify::{RecursiveMode, Watcher};
@@ -34,7 +34,7 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
-    let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
+    let id = s.gw.say_turn("general", stub::REQUEST).await?;
     tokio::time::timeout(Duration::from_secs(30), script.held.notified())
         .await
         .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;

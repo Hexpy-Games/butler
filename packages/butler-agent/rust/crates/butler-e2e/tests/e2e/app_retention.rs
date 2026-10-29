@@ -10,7 +10,7 @@ use butler_platform::sqlite;
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::gateway::turn_state;
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, cassette::Cassette};
 use rusqlite::Connection;
 
@@ -59,7 +59,7 @@ pub(super) async fn wait_retention_settled(s: &Scenario) -> Duration {
 async fn delivered_in(s: &Scenario) -> Result<(Duration, String), HarnessError> {
     let started = Instant::now();
     let accepted = s.gw.say("general", NUMBERS).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(120))
             .await?;

@@ -31,7 +31,7 @@ def license_links(component):
             vcs = directory / ".cargo_vcs_info.json"
             if not vcs.is_file() or "/tree/" not in component["source"]:
                 continue
-            prefix = json.loads(vcs.read_text()).get("path_in_vcs", "")
+            prefix = json.loads(vcs.read_text(encoding="utf-8")).get("path_in_vcs", "")
             links = [component["source"].replace("/tree/", "/blob/") + "/"
                      + "/".join(part for part in (prefix, label) if part)
                      for label in component["files"] if (directory / label).is_file()]

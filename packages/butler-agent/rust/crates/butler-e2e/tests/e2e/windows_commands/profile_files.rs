@@ -3,7 +3,7 @@ use super::capability_stub::{self as provider, Case};
 use butler_e2e::e2e::{
     HarnessError,
     gateway::{tool_rows, turn_state},
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::{
@@ -89,7 +89,7 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
     loop {
         script.select(case.clone());
         let accepted = s.gw.say("general", "다운로드 폴더 정리해줘").await?;
-        let id = accepted_turn_id(&accepted)?;
+        let id = s.gw.accepted_turn(&accepted).await?;
         if access == Access::AskAlways {
             super::file_paths::approve(&s, &id, &case, &script).await?;
         }

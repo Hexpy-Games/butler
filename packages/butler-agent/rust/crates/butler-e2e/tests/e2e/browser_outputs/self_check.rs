@@ -197,8 +197,7 @@ async fn output_check_shutdown_preserves_active_input_and_drains_followup()
         .send()
         .await?;
     assert_eq!(host.status(), 200);
-    let running =
-        butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say("general", "Publish").await?)?;
+    let running = s.gw.say_turn("general", "Publish").await?;
     let mut frame = String::new();
     while !frame.contains("output.check") {
         let chunk = tokio::time::timeout(std::time::Duration::from_secs(8), host.chunk())
@@ -265,8 +264,7 @@ async fn output_check_host_disconnect_settles_turn_and_followup() -> Result<(), 
         .send()
         .await?;
     assert_eq!(host.status(), 200);
-    let running =
-        butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say("general", "Publish").await?)?;
+    let running = s.gw.say_turn("general", "Publish").await?;
     let mut frame = String::new();
     while !frame.contains("output.check") {
         let chunk = tokio::time::timeout(std::time::Duration::from_secs(8), host.chunk())

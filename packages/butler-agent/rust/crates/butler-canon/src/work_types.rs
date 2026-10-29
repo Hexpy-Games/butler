@@ -18,6 +18,8 @@ macro_rules! ids {
     )+};
 }
 ids!(PlanId, WorkId, TaskId, SpecNodeId, SessionId, OperationId);
+/// Canon chains use epic identities; retain the existing chain wire representation.
+pub use TaskId as EpicId;
 
 macro_rules! vocabulary {
     ($name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {

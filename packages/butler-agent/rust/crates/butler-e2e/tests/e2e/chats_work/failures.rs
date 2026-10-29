@@ -117,7 +117,9 @@ async fn quiet_backoff_does_not_block_user_and_capped_retry_notice_is_once()
     app(&s)?.execute("UPDATE app_initiated_messages SET attempts=10,next_attempt_at='2026-10-27T13:03:00.000Z' WHERE kind='work_result'", [])?;
     clock(&address, "2026-10-27T13:00:00.000Z").await?;
     let started = Instant::now();
-    let turn = accepted_turn_id(&s.gw.say("general", "Continue after the evidence.").await?)?;
+    let turn =
+        s.gw.say_turn("general", "Continue after the evidence.")
+            .await?;
     s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
         .await?;
     eprintln!("SS6 backoff_user_ms={}", started.elapsed().as_millis());
@@ -159,7 +161,7 @@ async fn runtime_handles_permanent_result_failure_and_reclaims_handoff() -> Resu
     butler_e2e::gate!();
     let (url, script, server) = stub::start(false, true).await?;
     let (s, _) = setup("SS6-RUNTIME-FAILED", &url).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Prepare evidence.").await?)?;
+    let turn = s.gw.say_turn("general", "Prepare evidence.").await?;
     tokio::time::timeout(Duration::from_secs(30), script.held.acquire())
         .await
         .unwrap()
@@ -250,7 +252,7 @@ async fn unavailable_model_is_held_until_controls_change() -> Result<(), Harness
     butler_e2e::gate!();
     let (url, script, server) = stub::start(false, true).await?;
     let (s, address) = setup("SS6-MODEL-RECOVERY", &url).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Prepare evidence.").await?)?;
+    let turn = s.gw.say_turn("general", "Prepare evidence.").await?;
     tokio::time::timeout(Duration::from_secs(30), script.held.acquire())
         .await
         .unwrap()
@@ -345,7 +347,7 @@ async fn deleted_custom_chat_model_falls_back_when_work_completes() -> Result<()
     butler_e2e::gate!();
     let (url, script, server) = stub::start(false, true).await?;
     let (s, _) = setup("SS6-MODEL-DELETION", &url).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Prepare evidence.").await?)?;
+    let turn = s.gw.say_turn("general", "Prepare evidence.").await?;
     tokio::time::timeout(Duration::from_secs(30), script.held.acquire())
         .await
         .unwrap()

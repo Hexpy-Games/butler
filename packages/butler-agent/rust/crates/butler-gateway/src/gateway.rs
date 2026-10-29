@@ -5,6 +5,11 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
+/// The admission identity stored for a client message ID, for fixtures that seed admissions.
+#[cfg(feature = "test-support")]
+pub fn admission_client_id(value: &str) -> String {
+    application::canonical_client_id(value)
+}
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 #[cfg(feature = "test-support")]
 pub use application::storage::testing as storage_testing;

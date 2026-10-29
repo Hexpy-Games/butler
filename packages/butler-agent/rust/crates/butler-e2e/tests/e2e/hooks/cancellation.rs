@@ -19,7 +19,7 @@ async fn hooks_shutdown_kills_pretool_tree_and_recovers_two_followups() -> Resul
     )?;
     let mut s = setup.start().await?;
     let accepted = s.gw.say("general", "Start the held read.").await?;
-    let active = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let active = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(10);
     let pid_lines = loop {
         match fs::read_to_string(&pids) {

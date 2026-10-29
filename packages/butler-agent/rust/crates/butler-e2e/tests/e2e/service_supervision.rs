@@ -10,7 +10,7 @@ use butler_e2e::e2e::{
     cassette::Cassette,
     faults::{Fault, Transform},
     gateway::turn_state,
-    scenario::{Scenario, Setup, accepted_turn_id},
+    scenario::{Scenario, Setup},
     stop_intent::{StopOnDrop, instance_record},
 };
 use butler_platform::{
@@ -177,7 +177,7 @@ async fn exercise(managed: bool, replacement: bool) -> Result<(), HarnessError> 
     let pid = u32::try_from(record["pid"].as_u64().unwrap()).unwrap();
     s.provider()?
         .inject(Fault::once(0, Transform::StallAfter(6)))?;
-    let id = accepted_turn_id(&s.gw.say("general", LONG).await?)?;
+    let id = s.gw.say_turn("general", LONG).await?;
     let deadline = Instant::now() + Duration::from_secs(10);
     while s.provider()?.served() == 0 {
         assert!(Instant::now() < deadline);

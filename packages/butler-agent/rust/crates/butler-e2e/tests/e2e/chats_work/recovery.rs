@@ -113,7 +113,7 @@ async fn queued_result_keeps_files_until_its_consuming_turn_finishes() -> Result
     butler_e2e::gate!();
     let (url, script, server) = stub::start(false, true).await?;
     let (s, _) = setup("SS6-QUEUED-FILES", &url).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Prepare evidence.").await?)?;
+    let turn = s.gw.say_turn("general", "Prepare evidence.").await?;
     tokio::time::timeout(Duration::from_secs(30), script.held.acquire())
         .await
         .unwrap()
@@ -122,11 +122,9 @@ async fn queued_result_keeps_files_until_its_consuming_turn_finishes() -> Result
     s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
         .await?;
     script.parent_hold.store(true, Ordering::SeqCst);
-    let busy = accepted_turn_id(
-        &s.gw
-            .say("general", "Keep this conversation active.")
-            .await?,
-    )?;
+    let busy =
+        s.gw.say_turn("general", "Keep this conversation active.")
+            .await?;
     tokio::time::timeout(Duration::from_secs(30), script.parent_held.acquire())
         .await
         .unwrap()

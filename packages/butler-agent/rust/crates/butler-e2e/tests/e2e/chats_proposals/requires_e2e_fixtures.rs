@@ -111,9 +111,9 @@ async fn queued_proposal_and_report_follow_the_active_turn_and_followup() -> Res
     patterns::run(&s).await?;
     assert_eq!(messages(&s).await?, [] as [Value; 0]);
     let held = s.provider()?.hold_next_reply("Prepare the current answer.");
-    let first = butler_e2e::e2e::scenario::accepted_turn_id(
-        &s.gw.say("general", "Prepare the current answer.").await?,
-    )?;
+    let first =
+        s.gw.say_turn("general", "Prepare the current answer.")
+            .await?;
     s.gw.wait_turn(
         "general",
         &first,

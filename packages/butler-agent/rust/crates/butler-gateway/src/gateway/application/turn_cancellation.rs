@@ -88,6 +88,7 @@ impl AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
         let chat = chat_id.clone();
+        let reported_turn = turn_id.clone();
         let settled = self
             .storage
             .execute(move |db| {
@@ -106,6 +107,8 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         if settled {
+            super::canon_queue::turn_ended(&self.storage, &self.dependencies.canon, reported_turn)
+                .await?;
             self.queue_wake.chat(chat_id).await?;
             if self
                 .automation_queued
@@ -251,7 +254,7 @@ fn mark_cancelling(
     queue_after: QueueAfterCancel,
 ) -> Result<(), AppStorageError> {
     tx.execute(
-        "UPDATE turns SET state='cancelling',safe_status_label='Stopping',safe_error_code=NULL,retryable=0,cancellable=0,updated_at=?1 WHERE id=?2 AND state NOT IN ('cancelled','delivered','failed','runtime_fault')",
+        "UPDATE turns SET state='cancelling',safe_status_label='Stopping',safe_error_code=NULL,retryable=0,cancellable=0,updated_at=?1 WHERE id=?2 AND state NOT IN ('cancelling','cancelled','delivered','failed','runtime_fault')",
         params![now, turn_id],
     )
     .map_err(AppStorageError::sqlite)?;

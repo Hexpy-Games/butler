@@ -6,11 +6,14 @@ mod initiated;
 pub use image_usage::{AppImageUsageCommand, ImageUsageOperation, ImageUsageRecord};
 mod canon;
 mod canon_proposals;
+pub(crate) mod canon_queue;
 pub(crate) mod canon_sidebar;
 mod data_reset;
 pub use assets::{AppAssetCommand, GeneratedAssetKind, composite, mask_bounds};
 mod admission;
 mod admission_identity;
+#[cfg(feature = "test-support")]
+pub(crate) use admission_identity::canonical_client_id;
 mod answer_drafts;
 mod authority_permissions;
 mod authority_recovery;

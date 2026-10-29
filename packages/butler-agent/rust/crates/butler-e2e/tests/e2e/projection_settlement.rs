@@ -6,11 +6,7 @@
     reason = "test assertions"
 )]
 use butler_e2e::e2e::{
-    HarnessError,
-    cassette::Cassette,
-    events::LiveEvents,
-    gateway::turn_state,
-    scenario::{Setup, accepted_turn_id},
+    HarnessError, cassette::Cassette, events::LiveEvents, gateway::turn_state, scenario::Setup,
 };
 use std::time::{Duration, Instant};
 
@@ -41,7 +37,7 @@ async fn settlement(previous_turns: usize) -> Result<(), HarnessError> {
         .await?;
     seed_terminal_turns(&s.sandbox.data, previous_turns)?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
-    let id = accepted_turn_id(&s.gw.say("general", &prompt).await?)?;
+    let id = s.gw.say_turn("general", &prompt).await?;
     let queue = s.sandbox.data.join("runtime/inbound-events");
     let database = s.sandbox.data.join("app-server/butler-client.sqlite");
     let deadline = Instant::now() + Duration::from_secs(15);

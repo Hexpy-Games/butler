@@ -6,11 +6,7 @@
     reason = "test assertions"
 )]
 pub(super) mod stub;
-use butler_e2e::e2e::{
-    HarnessError,
-    scenario::{Setup, accepted_turn_id},
-    security::AdminClient,
-};
+use butler_e2e::e2e::{HarnessError, scenario::Setup, security::AdminClient};
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -105,7 +101,7 @@ async fn browser_usage_stub_turn_releases_each_completed_call() -> Result<(), Ha
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let mut host = Host::attach(admin).await?;
     let accepted = s.gw.say("general", "Use browser then finish").await?;
-    let turn = accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     for op in ["tab.open", "tab.observe", "tab.observe"] {
         let frame = host.dispatch().await?;
         assert_eq!(frame["op"], op);
@@ -143,7 +139,7 @@ async fn browser_usage_failure_and_timeout_release() -> Result<(), HarnessError>
         .await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let mut host = Host::attach(admin).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Use browser then finish").await?)?;
+    let turn = s.gw.say_turn("general", "Use browser then finish").await?;
     let open = host.dispatch().await?;
     host.snapshot(true).await?;
     host.result(
@@ -183,7 +179,7 @@ async fn browser_usage_user_cancel_releases_active_open() -> Result<(), HarnessE
         .await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let mut host = Host::attach(admin).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Use browser then finish").await?)?;
+    let turn = s.gw.say_turn("general", "Use browser then finish").await?;
     let open = host.dispatch().await?;
     assert_eq!(open["op"], "tab.open");
     // Open has no tab id yet: cancellation must still release its exact use.
@@ -267,7 +263,7 @@ async fn browser_usage_turn_error_emits_finish() -> Result<(), HarnessError> {
         .await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let mut host = Host::attach(admin).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Use browser then finish").await?)?;
+    let turn = s.gw.say_turn("general", "Use browser then finish").await?;
     for op in ["tab.open", "tab.observe", "tab.observe"] {
         let frame = host.dispatch().await?;
         assert_eq!(frame["op"], op);
@@ -342,7 +338,7 @@ async fn browser_usage_user_cancel_mid_action_releases() -> Result<(), HarnessEr
         .await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let mut host = Host::attach(admin).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Use browser then finish").await?)?;
+    let turn = s.gw.say_turn("general", "Use browser then finish").await?;
     let open = host.dispatch().await?;
     host.snapshot(true).await?;
     host.result(

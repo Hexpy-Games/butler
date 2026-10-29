@@ -7,19 +7,22 @@ use std::sync::{
 };
 use tokio::sync::Semaphore;
 
-pub(super) struct Script {
+pub(crate) struct Script {
     pub epics: Mutex<Vec<String>>,
     pub path: Mutex<String>,
     pub codes: Mutex<Vec<String>>,
     pub context_seen: AtomicBool,
-    pub(super) quick: AtomicBool,
+    pub(crate) step_seen: AtomicBool,
+    pub(crate) quick: AtomicBool,
     pub(super) hold_steward: AtomicBool,
     pub(super) steward_held: Semaphore,
     pub(super) steward_release: Semaphore,
-    pub(super) delegate: AtomicBool,
+    pub(crate) delegate: AtomicBool,
     pub(super) hold_report: AtomicBool,
     reporting: Semaphore,
     report_release: Semaphore,
+    pub(crate) blocked: Mutex<Vec<String>>,
+    pub(crate) queue_request: Mutex<Option<Value>>,
     rejects: bool,
     revise: bool,
     held: Semaphore,
@@ -38,14 +41,14 @@ impl Script {
         self.report_release.add_permits(1);
     }
 
-    pub(super) async fn wait_held(&self) {
+    pub(crate) async fn wait_held(&self) {
         tokio::time::timeout(Duration::from_secs(30), self.held.acquire())
             .await
             .expect("model reached checkpoint")
             .unwrap()
             .forget();
     }
-    pub(super) fn release(&self) {
+    pub(crate) fn release(&self) {
         self.released.store(true, Ordering::SeqCst);
         self.release.add_permits(1);
     }
@@ -61,6 +64,7 @@ pub(super) async fn start(
         path: Mutex::new(String::new()),
         codes: Mutex::new(Vec::new()),
         context_seen: AtomicBool::new(false),
+        step_seen: AtomicBool::new(false),
         quick: AtomicBool::new(false),
         hold_steward: AtomicBool::new(false),
         steward_held: Semaphore::new(0),
@@ -69,6 +73,8 @@ pub(super) async fn start(
         hold_report: AtomicBool::new(false),
         reporting: Semaphore::new(0),
         report_release: Semaphore::new(0),
+        blocked: Mutex::new(Vec::new()),
+        queue_request: Mutex::new(None),
         rejects,
         revise,
         held: Semaphore::new(0),
@@ -104,6 +110,9 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         }
     }
     let context = body.to_string();
+    if context.contains("now, starting at Conception. Start a fresh Work for this epic") {
+        script.step_seen.store(true, Ordering::SeqCst);
+    }
     if context.contains("## Canon epics in this conversation")
         && context.contains("untrusted_content")
         && context.contains("Release checks")
@@ -117,12 +126,26 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     }
     let n = outputs.len();
     let delegated = script.delegate.load(Ordering::SeqCst);
-    let mut calls = if script.quick.load(Ordering::SeqCst) {
+    let key = butler_e2e::e2e::matching::key(
+        "/codex/responses",
+        &body,
+        &butler_e2e::e2e::sanitize::Placeholders::default(),
+    );
+    let mut calls = if key.user_request == "Queue this epic" || key.user_request == "Run this plan"
+    {
+        script
+            .queue_request
+            .lock()
+            .unwrap()
+            .clone()
+            .map(|args| vec![("canon_queue", args)])
+            .unwrap_or_default()
+    } else if script.quick.load(Ordering::SeqCst) || key.user_request == "What does this mean?" {
         Vec::new()
     } else if delegated {
         delegated::sequence(&script, &body, &outputs)
     } else {
-        sequence(&script, &outputs)
+        sequence(&script, &outputs, &key.user_request)
     };
     let (name, args) = if n < calls.len() {
         calls.remove(n)
@@ -140,8 +163,13 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         script.reporting.add_permits(1);
         script.report_release.acquire().await.unwrap().forget();
     }
+    let text = if script.quick.load(Ordering::SeqCst) {
+        "Which evidence should I check?"
+    } else {
+        "Release checks: verified the evidence and completed the report."
+    };
     let item = if name.is_empty() {
-        json!({"type":"message","id":"canon-report","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Release checks: verified the evidence and completed the report.","annotations":[]}]})
+        json!({"type":"message","id":"canon-report","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
     } else {
         json!({"type":"function_call","id":format!("canon-flow-{n}"),"call_id":format!("canon-flow-{n}"),"name":name,"arguments":args.to_string(),"status":"completed"})
     };
@@ -150,12 +178,21 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         crate::token_cache::wire(&item),
     )
 }
-fn sequence(script: &Script, outputs: &[Value]) -> Vec<(&'static str, Value)> {
+fn sequence(script: &Script, outputs: &[Value], request: &str) -> Vec<(&'static str, Value)> {
     let epics = script.epics.lock().unwrap();
-    let a = format!("canon:epic/{}", epics[0]);
+    let selected = request
+        .strip_prefix("canon:epic/")
+        .or_else(|| {
+            request
+                .strip_prefix("Process canon:epic/")
+                .and_then(|s| s.split_whitespace().next())
+        })
+        .filter(|id| epics.iter().any(|e| e == id))
+        .unwrap_or(&epics[0]);
+    let a = format!("canon:epic/{selected}");
     let b = format!("canon:epic/{}", epics[1]);
     let mut calls = Vec::new();
-    let plan = |refs: Value| json!({"objective":"Verify the release evidence","execution_mode":"direct","governing_refs":refs,"actions":[{"action_key":"verify","description":"Verify release evidence"}],"checks":["Evidence was read and checked"]});
+    let plan = |refs: Value| json!({"objective":"Verify the release evidence","execution_mode":"direct","start_new":request.starts_with("canon:epic/"),"governing_refs":refs,"actions":[{"action_key":"verify","description":"Verify release evidence"}],"checks":["Evidence was read and checked"]});
     if script.rejects {
         calls.push(("replace_work_plan", plan(json!([a, b]))));
         calls.push(("replace_work_plan", plan(json!(["canon:epic/unbound"]))));
@@ -170,12 +207,18 @@ fn sequence(script: &Script, outputs: &[Value]) -> Vec<(&'static str, Value)> {
         "record_work_review",
         json!({"subject":"plan","verdict":"accept","summary":"Covers the evidence"}),
     ));
-    calls.push(("read_file", json!({"path":*script.path.lock().unwrap()})));
+    calls.push((
+        "read_file",
+        json!({"requests":[{"path":*script.path.lock().unwrap()}]}),
+    ));
     let done = json!([{"action_key":"verify","status":"done"}]);
     calls.push(("record_work_checkpoint",json!({"action_updates":done,"public_summary":"Evidence checked","next_step":"Review evidence"})));
     if script.revise {
         calls.push(("record_work_review",json!({"subject":"result","verdict":"revise","summary":"Check again","corrections":["Verify once more"],"correction_scope":"execution","action_updates":[{"action_key":"verify","status":"active"}]})));
-        calls.push(("read_file", json!({"path":*script.path.lock().unwrap()})));
+        calls.push((
+            "read_file",
+            json!({"requests":[{"path":*script.path.lock().unwrap()}]}),
+        ));
         calls.push((
             "record_work_checkpoint",
             json!({"action_updates":done,"public_summary":"Rechecked","next_step":"Review"}),
@@ -198,6 +241,11 @@ fn sequence(script: &Script, outputs: &[Value]) -> Vec<(&'static str, Value)> {
         })
         .cloned()
         .unwrap_or(Value::Null);
-    calls.push(("record_work_disposition",json!({"work_id":work,"disposition":"completed","summary":"Evidence verified","action_updates":done,"remaining_actions":[],"followups":[]})));
+    let disposition = if script.blocked.lock().unwrap().iter().any(|e| e == selected) {
+        "blocked"
+    } else {
+        "completed"
+    };
+    calls.push(("record_work_disposition",json!({"work_id":work,"disposition":disposition,"summary":"Evidence verified","action_updates":done,"remaining_actions":[],"followups":[]})));
     calls
 }

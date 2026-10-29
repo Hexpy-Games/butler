@@ -3,7 +3,7 @@ use super::{cases::Case, files, host::Log, score};
 use butler_e2e::e2e::{
     HarnessError,
     gateway::{TERMINAL, turn_id_of, turn_state},
-    scenario::{Scenario, accepted_turn_id},
+    scenario::Scenario,
 };
 use serde_json::{Value, json};
 use std::{
@@ -49,7 +49,7 @@ pub(crate) async fn run(
         }
         let delegations = snapshot(s, false).await?["delegations"].as_u64().unwrap();
         let turn_start = Instant::now();
-        let parent = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+        let parent = s.gw.say_turn(&chat, prompt).await?;
         let turn_delegated;
         (last, turn_delegated, waiting, timed_out) = wait_turn(
             s,

@@ -22,7 +22,7 @@ pub(super) fn stable_client_id(
 }
 
 /// Canonical identity used by admission and durable custody lookups alike.
-pub(super) fn canonical_client_id(value: &str) -> String {
+pub(crate) fn canonical_client_id(value: &str) -> String {
     if valid_client_uuid(value) {
         return value.to_ascii_lowercase();
     }

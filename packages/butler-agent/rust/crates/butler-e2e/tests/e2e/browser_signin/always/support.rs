@@ -1,9 +1,4 @@
-use butler_e2e::e2e::{
-    HarnessError,
-    cassette::Cassette,
-    gateway::turn_state,
-    scenario::{Scenario, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, cassette::Cassette, gateway::turn_state, scenario::Scenario};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -36,7 +31,7 @@ pub(super) fn cassette(calls: Vec<(&str, Value)>) -> Result<Cassette, HarnessErr
 }
 
 pub(super) async fn begin(s: &Scenario, session: &str) -> Result<String, HarnessError> {
-    accepted_turn_id(&s.gw.say(session, ASK).await?)
+    s.gw.say_turn(session, ASK).await
 }
 
 pub(super) async fn delivered(s: &Scenario, session: &str, id: &str) -> Result<(), HarnessError> {

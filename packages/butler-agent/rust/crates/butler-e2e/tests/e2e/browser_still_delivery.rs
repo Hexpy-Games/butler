@@ -1,12 +1,7 @@
 //! Late stills retain act/step order and every pending item survives restart as a fact.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use base64::{Engine, engine::general_purpose::STANDARD};
-use butler_e2e::e2e::{
-    HarnessError,
-    cassette::Cassette,
-    scenario::{Setup, accepted_turn_id},
-    security::AdminClient,
-};
+use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup, security::AdminClient};
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -40,7 +35,7 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
         200
     );
     let accepted = s.gw.say("general", "Browser still delivery").await?;
-    let turn = accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     let mut buffer = String::new();
     let frame = serve_until_act(&mut stream, &mut buffer, &admin).await?;
     let id = frame["id"].as_str().unwrap();

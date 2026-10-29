@@ -4,9 +4,7 @@
 //! transcript, events, logs or the data folder. Keychain opt-in (see fill.rs).
 use super::fill::{CANARY, keychain_opt_in};
 use super::host::{admin, attach, call, snapshot, tab};
-use butler_e2e::e2e::{
-    HarnessError, cassette::Cassette, gateway::turn_state, scenario::accepted_turn_id,
-};
+use butler_e2e::e2e::{HarnessError, cassette::Cassette, gateway::turn_state};
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -81,7 +79,7 @@ async fn sign_in_asks_hands_mfa_to_the_user_and_resumes() -> Result<(), HarnessE
     )
     .await?;
 
-    let id = accepted_turn_id(&s.gw.say("general", ASK).await?)?;
+    let id = s.gw.say_turn("general", ASK).await?;
     let card = waiting_card(&s, &id).await?;
     let operation = &card["approval"]["operation"];
     assert_eq!(operation["tool"], "browser_sign_in", "{card}");

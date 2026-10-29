@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use butler_core::json::{CanonicalKeyOrder, canonical_json};
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
-use butler_e2e::e2e::scenario::{Access, Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Access, Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, nonce};
 
 use super::access_tiers::{approve, delivered, paused};
@@ -59,7 +59,7 @@ async fn send(s: &Scenario, text: &str, access_mode: &str) -> Result<Value, Harn
         s.gw.send_message(json!({"chat_id": "general", "text": text,
             "access_mode": access_mode, "client_message_id": uuid::Uuid::new_v4().to_string()}))
             .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal(
             "general",

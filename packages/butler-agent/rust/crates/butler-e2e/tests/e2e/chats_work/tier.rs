@@ -20,7 +20,7 @@ async fn changed_parent(mode: &str) -> Result<(), HarnessError> {
     };
     set_mode(&s, initial).await?;
     script.tier.store(true, std::sync::atomic::Ordering::SeqCst);
-    let turn = accepted_turn_id(&s.gw.say("general", "Prepare evidence.").await?)?;
+    let turn = s.gw.say_turn("general", "Prepare evidence.").await?;
     tokio::time::timeout(Duration::from_secs(30), script.held.acquire())
         .await
         .unwrap()
@@ -68,7 +68,7 @@ async fn changed_parent(mode: &str) -> Result<(), HarnessError> {
     }
     wait_count(&s, "work_result", 1).await?;
     *script.relation.lock().unwrap() = relation;
-    let followup = accepted_turn_id(&s.gw.say("general", "Check again.").await?)?;
+    let followup = s.gw.say_turn("general", "Check again.").await?;
     s.gw.wait_terminal("general", &followup, Duration::from_secs(30))
         .await?;
     let expected = "ask_first";

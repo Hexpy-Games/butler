@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use butler_e2e::e2e::config::{Credential, LiveProvider};
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, live, nonce};
 use serde_json::{Value, json};
 
@@ -240,7 +240,7 @@ async fn live_06_image_reaches_provider() -> Result<(), HarnessError> {
         .send_message(json!({"chat_id": "general", "text": prompt,
             "client_message_id": uuid::Uuid::new_v4().to_string(), "attachments": [{"file_id": file_id}]}))
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(300))
             .await?;
@@ -302,7 +302,7 @@ async fn live_08_cancel_real_stream() -> Result<(), HarnessError> {
             "Write a 1500-word essay about the history of tea.",
         )
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     tokio::time::sleep(Duration::from_secs(3)).await;
     let cancel =
         s.gw.post(&format!("/turns/{turn_id}/cancel"), json!({}))

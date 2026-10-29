@@ -7,6 +7,13 @@ pub(in crate::gateway::application) fn origin(
     db: &Connection,
     id: &str,
 ) -> Result<Option<Value>, AppStorageError> {
+    let step: Option<String> = db.query_row("SELECT i.payload_json FROM messages m JOIN turns t ON t.id=m.turn_id JOIN app_initiated_messages i ON i.message_id=t.user_message_id WHERE m.id=?1 AND m.role='assistant' AND i.kind='canon_step'",[id],|r|r.get(0)).optional().map_err(AppStorageError::sqlite)?;
+    if let Some(raw) = step {
+        let payload: Value = serde_json::from_str(&raw).map_err(super::outbox::json_error)?;
+        return Ok(Some(
+            json!({"kind":"canon_step","quiet":false,"plan_title":payload["untrusted_content"]["plan_title"],"epic_title":payload["untrusted_content"]["epic_title"],"epic_id":payload["epic_id"]}),
+        ));
+    }
     let work: Option<String> = db.query_row(
         "SELECT json_extract(t.execution_controls_json,'$.subsession_result') FROM messages m JOIN turns t ON t.id=m.turn_id WHERE m.id=?1 AND m.role='assistant' AND json_valid(t.execution_controls_json) AND json_extract(t.execution_controls_json,'$.subsession_result.child_session_id') IS NOT NULL",
         [id], |r| r.get(0)).optional().map_err(AppStorageError::sqlite)?;

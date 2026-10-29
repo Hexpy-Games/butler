@@ -15,7 +15,7 @@ use std::time::Duration;
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer};
 use butler_e2e::e2e::gateway::turn_state;
-use butler_e2e::e2e::scenario::{Scenario, accepted_turn_id};
+use butler_e2e::e2e::scenario::Scenario;
 use serde_json::{Value, json};
 
 use super::setup_local_models::{use_local_model, with_local_server};
@@ -53,7 +53,7 @@ async fn refusing_server(id: &str, error: Value) -> Result<(FakeServer, Scenario
 /// The terminal turn and its assistant message for `text`.
 async fn turn(s: &Scenario, text: &str) -> Result<(Value, Value), HarnessError> {
     let accepted = s.gw.say("general", text).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(60))
             .await?;

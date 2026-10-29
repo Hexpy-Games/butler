@@ -3,7 +3,7 @@ use super::{forget, support};
 use butler_e2e::e2e::{
     HarnessError,
     faults::{Fault, Transform},
-    scenario::{Fixture, Setup, accepted_turn_id},
+    scenario::{Fixture, Setup},
 };
 use serde_json::json;
 use std::time::Duration;
@@ -34,7 +34,7 @@ async fn rules_stale_snapshot_refuses_mutation_and_io_failure_recovers() -> Resu
         .add_placeholder("TARGET", original["handle"].as_str().unwrap());
     s.provider()?
         .inject(Fault::first_call(STALE, Transform::StallAfter(0)))?;
-    let stalled = accepted_turn_id(&s.gw.say("general", STALE).await?)?;
+    let stalled = s.gw.say_turn("general", STALE).await?;
     support::until(|| {
         s.provider()
             .unwrap()

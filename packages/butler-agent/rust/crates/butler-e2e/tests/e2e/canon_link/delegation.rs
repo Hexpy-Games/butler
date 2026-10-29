@@ -13,7 +13,7 @@ async fn cb_02_15_one_call_parent_settles_from_steward_result() -> Result<(), Ha
         .expect("Worker reached its first model round");
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?,
+        &s.gw.accepted_turn(&accepted).await?,
         Duration::from_secs(30),
     )
     .await?;

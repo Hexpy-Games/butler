@@ -34,6 +34,7 @@ pub(super) fn list(
          COALESCE(safe_error_code, '') <> 'turn_cancelled')) \
          AND (state='failed' OR CASE WHEN json_valid(control_resolution_json) \
          THEN json_extract(control_resolution_json,'$.subsession_result') END IS NULL) \
+         AND NOT EXISTS (SELECT 1 FROM app_initiated_messages ci WHERE ci.message_id=session_queued_messages.client_message_id AND ci.kind='canon_step') \
          ORDER BY rowid ASC",
         )
         .map_err(AppStorageError::sqlite)?;

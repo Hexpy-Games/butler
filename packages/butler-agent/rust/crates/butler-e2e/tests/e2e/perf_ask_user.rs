@@ -11,7 +11,7 @@ use super::ask_user::{history, stub};
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Scenario, Setup, accepted_turn_id},
+    scenario::{Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -21,7 +21,7 @@ async fn pending(name: &str) -> Result<(Scenario, String, Value), HarnessError> 
         .stub_cassette(stub::cassette()?)
         .start()
         .await?;
-    let turn = accepted_turn_id(&s.gw.say("general", stub::PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", stub::PROMPT).await?;
     let parked =
         s.gw.wait_turn(
             "general",

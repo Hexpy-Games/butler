@@ -14,7 +14,7 @@ use butler_e2e::e2e::{
     HarnessError,
     events::LiveEvents,
     gateway::turn_state,
-    scenario::{Scenario, Setup, accepted_turn_id},
+    scenario::{Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -107,7 +107,7 @@ async fn pa_02_global_approval_and_question_have_titles_and_stable_paging()
     let (s, _, server) = setup("PA-02").await?;
     let a = chat(&s, "Review chat").await?;
     let b = chat(&s, "Next step chat").await?;
-    let id = accepted_turn_id(&s.gw.say(&a, stub::APPROVE).await?)?;
+    let id = s.gw.say_turn(&a, stub::APPROVE).await?;
     let turn =
         s.gw.wait_turn(
             &a,
