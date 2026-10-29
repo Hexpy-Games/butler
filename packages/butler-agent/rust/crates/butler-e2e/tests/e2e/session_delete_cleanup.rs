@@ -1,5 +1,7 @@
 //! A committed deletion attempts all cleanup and recovers without idle work.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod archive;
+
 use butler_e2e::e2e::{
     HarnessError,
     scenario::{Scenario, Setup},
@@ -202,8 +204,19 @@ async fn failed_step_runs_rest_and_recovers_on_restart() -> Result<(), HarnessEr
     fail_delete(&s, &deleted).await?;
     s.agent.terminate().await?;
     outputs(&s)?.execute_batch("DROP TRIGGER fail_delete")?;
+    let cursor = app(&s)?.query_row("SELECT COALESCE(MAX(id),0) FROM events", [], |r| r.get(0))?;
     s.gw = s.agent.start_again().await?;
     recovered(&s, &deleted)?;
+    // The subscription startup check publishes quota asynchronously. Measure
+    // idle only after its durable event, rather than racing that startup work.
+    let quota = butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, cursor).await?;
+    let provider = s.model.provider();
+    quota
+        .wait_for(Duration::from_secs(10), |event| {
+            event["type"] == "provider_quota_updated" && event["payload"]["provider_id"] == provider
+        })
+        .await?;
+    drop(quota);
     let mut watch = crate::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
     let db = app(&s)?;
     let before: i64 = db.query_row("PRAGMA data_version", [], |r| r.get(0))?;
