@@ -103,6 +103,7 @@ pub(in crate::gateway::application) async fn upload(
             resource: AppCanonResource::Canon,
             id: project,
             input: None,
+            delegate: None,
         },
     )
     .await?;

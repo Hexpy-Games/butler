@@ -14,7 +14,12 @@ pub const DRAFT_MESSAGE: &str = "Shown as a draft card. Nothing is written until
 
 pub fn get(db: &Connection, id: &str) -> Result<Value> {
     let mut row = one(db, queries::GET, [id])?;
-    row["document"] = serde_json::from_str(text(&row, "changes_json")?)?;
+    let document: Value = serde_json::from_str(text(&row, "changes_json")?)?;
+    row["document"] = if document.is_array() {
+        json!({"changes":document})
+    } else {
+        document
+    };
     Ok(row)
 }
 
@@ -55,6 +60,7 @@ pub fn create(tx: &Transaction<'_>, ctx: &Context, row: &Value) -> Result<Value>
             row["created_at"].as_str()
         ],
     )?;
+    activity::proposal(tx, ctx, &get(tx, id)?, "proposal_opened")?;
     notify(tx, ctx, &get(tx, id)?)?;
     Ok(json!({"ok":true,"state":"draft",
         "ask_id":format!("canon:{id}"),"message":DRAFT_MESSAGE}))
@@ -79,6 +85,13 @@ pub fn transition(
     }
     tx.execute(queries::RESOLVE, params![id, state, by, iso(tx, ctx.now)?])?;
     let row = get(tx, id)?;
+    if let Some(kind) = match state {
+        "applied" => Some("proposal_applied"),
+        "cancelled" => Some("proposal_declined"),
+        _ => None,
+    } {
+        activity::proposal(tx, ctx, &row, kind)?;
+    }
     notify(tx, ctx, &row)?;
     Ok(row)
 }
@@ -87,7 +100,7 @@ pub fn bind(tx: &Transaction<'_>, ctx: &Context, epic: &str, session: &str) -> R
     super::entities::bind_session_with_home(tx, ctx, epic, session, false)
 }
 
-fn iso(db: &Connection, now: i64) -> Result<String> {
+pub(super) fn iso(db: &Connection, now: i64) -> Result<String> {
     Ok(db.query_row(
         "SELECT strftime('%Y-%m-%dT%H:%M:%fZ',?1/1000.0,'unixepoch')",
         [now],
@@ -95,6 +108,21 @@ fn iso(db: &Connection, now: i64) -> Result<String> {
     )?)
 }
 fn notify(tx: &Transaction<'_>, ctx: &Context, row: &Value) -> Result<()> {
+    if row["source"] == "mcp" {
+        for change in row["document"]["changes"].as_array().into_iter().flatten() {
+            api::outbox(
+                tx,
+                ctx,
+                "spec_node",
+                text(change, "id")?,
+                one(tx, super::sql::NODE, [text(change, "id")?])?["revision"]
+                    .as_i64()
+                    .ok_or(Error::Invalid("revision"))?,
+                &json!({"proposal_id":row["id"]}),
+            )?;
+        }
+        return Ok(());
+    }
     let count: i64 = tx.query_row(queries::COUNT, [text(row, "session_id")?], |r| r.get(0))?;
     let payload = json!({"session_id":row["session_id"],"ask_id":format!("canon:{}",text(row,"id")?),
         "proposal_id":row["id"],"kind":"canon_proposal","state":row["state"],"open_count":count});

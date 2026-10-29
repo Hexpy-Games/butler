@@ -82,6 +82,7 @@ pub(super) async fn attachments(
                     resource: AppCanonResource::Epic,
                     id: id.into(),
                     input: None,
+                    delegate: None,
                 })
                 .await?["description"]
                 .as_str()
@@ -116,6 +117,7 @@ pub(super) async fn attachments(
                 resource: AppCanonResource::CreateEpic,
                 id: String::new(),
                 input: Some(json!({"description":description})),
+                delegate: None,
             },
         )
         .await?;
@@ -141,6 +143,7 @@ pub(super) async fn canon_read(
                 resource: AppCanonResource::Canon,
                 id: project,
                 input: None,
+                delegate: None,
             },
         )
         .await?;
@@ -194,6 +197,7 @@ async fn shared_view(
             resource,
             id: id.into(),
             input: None,
+            delegate: None,
         },
     )
     .await?;

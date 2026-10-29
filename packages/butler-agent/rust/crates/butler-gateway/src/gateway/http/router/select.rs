@@ -55,13 +55,20 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
         (
             matches!(
                 parts.as_slice(),
-                ["sessions", _, "canon", _]
+                ["canon", "list" | "mcp-grants"]
+                    | ["canon", "mcp-grants", _, "allow" | "deny" | "revoke"]
+                    | ["canon", "specs", _, "proposals"]
+                    | ["canon", "epics", _, "comments" | "activity" | "progress"]
+                    | ["sessions", _, "canon", _]
                     | ["projects", _, "canon"]
                     | ["projects", _, "canon", "plans" | "epics" | "tags" | "files"]
                     | ["projects", _, "canon", "backlog", "order"]
-                    | ["canon", "proposals" | "plans" | "epics" | "tags", _]
+                    | [
+                        "canon",
+                        "specs" | "proposals" | "plans" | "epics" | "tags",
+                        _
+                    ]
                     | ["canon", "plans", _, "order"]
-                    | ["canon", "epics", _, "progress"]
             ),
             Handler::Canon,
         ),

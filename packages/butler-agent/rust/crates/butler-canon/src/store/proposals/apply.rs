@@ -23,7 +23,13 @@ pub fn apply(
         return Err(Error::Invalid("new project requires an epic"));
     }
     tx.execute_batch("SAVEPOINT proposal_apply")?;
-    let result = batch(tx, ctx, project, text(&row, "session_id")?, changes);
+    let result = batch(
+        tx,
+        ctx,
+        project,
+        row["session_id"].as_str().unwrap_or_default(),
+        changes,
+    );
     let result = match result {
         Ok(value) => {
             tx.execute_batch("RELEASE proposal_apply")?;
