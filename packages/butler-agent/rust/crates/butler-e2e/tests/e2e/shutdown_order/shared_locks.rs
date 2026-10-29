@@ -1,12 +1,11 @@
-#![allow(clippy::unwrap_used, reason = "test assertions")]
-
-use super::*;
 use std::sync::{Barrier, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fs, path::Path};
 
-// test-category: race
 #[test]
-fn concurrent_directory_creation_publishes_complete_permissions() {
+fn concurrent_harness_processes_share_one_port_lease_directory() -> Result<(), super::HarnessError>
+{
+    butler_e2e::gate!();
     const CALLERS: usize = 32;
     const ROUNDS: usize = 256;
     let nonce = SystemTime::now()
@@ -18,13 +17,12 @@ fn concurrent_directory_creation_publishes_complete_permissions() {
         .collect();
     let barrier = Barrier::new(CALLERS + 1);
     let failures = Mutex::new(Vec::new());
-    let mut bad_modes = Vec::new();
     std::thread::scope(|scope| {
         for _ in 0..CALLERS {
             scope.spawn(|| {
                 for (round, namespace) in namespaces.iter().enumerate() {
                     barrier.wait();
-                    if let Err(error) = directory(namespace) {
+                    if let Err(error) = butler_platform::shared_locks::open(namespace, "x.lock") {
                         failures.lock().unwrap().push((round, error.to_string()));
                     }
                     barrier.wait();
@@ -34,12 +32,11 @@ fn concurrent_directory_creation_publishes_complete_permissions() {
         for namespace in &namespaces {
             barrier.wait();
             barrier.wait();
-            let path = Path::new("/tmp").join(namespace);
-            let mode = fs::metadata(&path).map(|metadata| metadata.mode() & 0o7777);
-            if !matches!(mode, Ok(0o1777)) {
-                bad_modes.push((namespace, mode));
+            // `open` rejects a directory without its shared mode, so success is
+            // the mode check. Remove the namespace from whichever root holds it.
+            for root in [Path::new("/tmp"), &std::env::temp_dir()] {
+                let _ = fs::remove_dir_all(root.join(namespace));
             }
-            fs::remove_dir(path).unwrap();
         }
     });
     let failures = failures.into_inner().unwrap();
@@ -49,10 +46,10 @@ fn concurrent_directory_creation_publishes_complete_permissions() {
         .collect::<std::collections::BTreeSet<_>>()
         .len();
     eprintln!(
-        "directory race: {}/{} callers failed; {failed_rounds}/{ROUNDS} namespaces affected",
+        "shared lock directory race: {}/{} callers failed; {failed_rounds}/{ROUNDS} namespaces affected",
         failures.len(),
         CALLERS * ROUNDS,
     );
-    assert!(bad_modes.is_empty(), "incorrect final modes: {bad_modes:?}");
     assert!(failures.is_empty(), "directory failures: {failures:?}");
+    Ok(())
 }

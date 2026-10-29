@@ -8,10 +8,6 @@ use std::{
 
 use rustix::fs::{CWD, Mode, OFlags, RenameFlags, openat, renameat_with};
 
-#[cfg(test)]
-#[path = "unix_tests.rs"]
-mod tests;
-
 fn directory(namespace: &str) -> io::Result<File> {
     let path = Path::new("/tmp").join(namespace);
     let directory = match open_directory(&path) {
