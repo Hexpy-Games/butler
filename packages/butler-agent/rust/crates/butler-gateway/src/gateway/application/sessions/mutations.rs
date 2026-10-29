@@ -122,7 +122,10 @@ impl AppApplication {
         session_id: String,
         permanent: bool,
     ) -> Result<AppSessionActionResult, GatewayApplicationError> {
-        let target = self.read_session_row(session_id.clone()).await?;
+        if permanent {
+            super::delete_cleanup::replay(self).await;
+        }
+        self.read_session_row(session_id.clone()).await?;
         if session_id == "general" {
             return Err(public(
                 409,
@@ -160,14 +163,12 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
-        self.collect_session_outputs(session).await?;
         if permanent {
-            self.dependencies
-                .authority_handoff
-                .delete_session_context(target.session_hint)
+            super::delete_cleanup::complete(self, session).await?;
+        } else {
+            self.collect_session_outputs(session).await?;
+            self.assets_owned(super::super::AppAssetCommand::Sweep)
                 .await?;
-            let _files = self.canon_file_lifetimes.lock().await;
-            super::super::canon::files::sweep(self, false).await?;
         }
         Ok(result)
     }
@@ -244,6 +245,11 @@ fn delete_permanently(
             "일반 채널은 보관하거나 삭제할 수 없습니다.",
         ));
     }
+    tx.execute(
+        "INSERT INTO app_session_delete_cleanups(session_id,session_hint) VALUES(?1,?2)",
+        params![session_id, session.session_hint],
+    )
+    .map_err(AppStorageError::sqlite)?;
     tx.execute("DELETE FROM chats WHERE id=?", [session_id])
         .map_err(AppStorageError::sqlite)?;
     let event = events::append_unpublished(

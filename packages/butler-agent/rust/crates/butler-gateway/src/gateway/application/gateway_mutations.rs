@@ -132,11 +132,7 @@ impl GatewayMutationCommands for AppApplication {
         permanent: bool,
     ) -> ApplicationFuture<AppSessionActionResult> {
         let this = self.clone_handle();
-        Box::pin(async move {
-            let result = this.delete_session_owned(id, permanent).await?;
-            this.assets_owned(AppAssetCommand::Sweep).await?;
-            Ok(result)
-        })
+        Box::pin(async move { this.delete_session_owned(id, permanent).await })
     }
     fn mutate_space(
         &self,

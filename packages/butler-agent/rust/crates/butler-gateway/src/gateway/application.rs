@@ -365,6 +365,7 @@ impl AppApplication {
         automation_scheduler.initialize(self.clone_handle())?;
         self.watch_wallpaper_modules().await;
         authority_recovery::retry(self).await;
+        sessions::delete_cleanup::replay(self).await;
         setup_events::start(self);
         self.quota_events.start(self.clone_handle());
         subsession_events::start(self);

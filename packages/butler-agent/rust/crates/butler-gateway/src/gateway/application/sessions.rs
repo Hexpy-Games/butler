@@ -3,6 +3,7 @@
 pub(super) mod canon;
 mod clear;
 mod contracts;
+pub(super) mod delete_cleanup;
 pub(super) mod identity;
 mod mutations;
 pub(super) use mutations::compare_and_set_title;
