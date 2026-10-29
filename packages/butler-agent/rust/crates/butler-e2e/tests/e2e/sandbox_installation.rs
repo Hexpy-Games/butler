@@ -196,6 +196,28 @@ fn sandbox_setup_measurement() -> Result<(), HarnessError> {
     Ok(())
 }
 
+#[test]
+fn immutable_installation_resolves_relative_source_aliases() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        butler_platform::command_sandbox::FixtureInstallation::HARD_LINKS,
+        "hard-link source aliases"
+    );
+    let mut sandbox = Sandbox::new("INSTALL-SOURCE-ALIAS")?;
+    let input = sandbox.root.join("input");
+    fs::create_dir(&input)?;
+    fs::write(input.join("payload"), b"complete resource")?;
+    butler_platform::secure_fs::symlink(Path::new("payload"), &input.join("alias"))?;
+    let target = sandbox.resources.join("aliased-resource");
+    installation::install(&input.join("alias"), &target, Access::Immutable)?;
+    assert!(fs::symlink_metadata(&target)?.is_file());
+    assert_eq!(fs::read(&target)?, b"complete resource");
+    assert!(fs::metadata(&target)?.permissions().readonly());
+    assert!(fs::OpenOptions::new().write(true).open(&target).is_err());
+    sandbox.mark_success();
+    Ok(())
+}
+
 fn assert_complete_resources(source: &Path, target: &Path) -> Result<(), HarnessError> {
     for entry in fs::read_dir(source)? {
         let entry = entry?;

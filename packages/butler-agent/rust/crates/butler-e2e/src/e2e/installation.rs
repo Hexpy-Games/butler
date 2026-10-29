@@ -79,7 +79,11 @@ fn link_readonly(
 ) -> io::Result<()> {
     // A chmod on a link changes its source too. Protect before sharing; if
     // protection is unavailable, use an independent copy instead.
-    let mut permissions = fs::metadata(source)?.permissions();
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata.is_symlink() {
+        return link_readonly(&fs::canonicalize(source)?, target, link);
+    }
+    let mut permissions = metadata.permissions();
     if !permissions.readonly() {
         permissions.set_readonly(true);
         fs::set_permissions(source, permissions)?;
