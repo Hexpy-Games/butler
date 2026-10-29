@@ -13,7 +13,6 @@ import os
 import re
 import subprocess
 import tempfile
-import threading
 import tomllib
 import urllib.error
 import urllib.request
@@ -30,8 +29,6 @@ TARGETS = {
     "x86_64-pc-windows-msvc": "Unsigned Windows x64 Agent preview",
 }
 SIBLING_LICENSES = {}
-FETCHES = {}
-FETCHES_LOCK = threading.Lock()
 
 
 def run(*args):
@@ -49,35 +46,12 @@ def cache_text(destination, text):
         temporary = Path(output.name)
     try:
         temporary.write_text(text, encoding="utf-8", newline="\n")
-        try:
-            temporary.replace(destination)
-        except (PermissionError, FileExistsError):
-            # Another process may have published an atomic entry while we fetched.
-            # An empty entry is complete too: it records a 404 response.
-            if not destination.is_file():
-                raise
-            return destination.read_text(encoding="utf-8")
-        return text
+        temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)
 
 
 def fetch(url):
-    with FETCHES_LOCK:
-        pending = FETCHES.get(url)
-        owner = pending is None
-        if owner:
-            pending = concurrent.futures.Future()
-            FETCHES[url] = pending
-    if owner:
-        try:
-            pending.set_result(fetch_text(url))
-        except BaseException as error:
-            pending.set_exception(error)
-    return pending.result()
-
-
-def fetch_text(url):
     cache = Path(tempfile.gettempdir()) / "butler-license-evidence"
     cache.mkdir(parents=True, exist_ok=True)
     saved = cache / digest(url.encode())
@@ -87,10 +61,12 @@ def fetch_text(url):
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
             text = response.read().decode("utf-8")
-            return cache_text(saved, text) or None
+            cache_text(saved, text)
+            return text
     except urllib.error.HTTPError as error:
         if error.code == 404:
-            return cache_text(saved, "") or None
+            cache_text(saved, "")
+            return None
         raise RuntimeError(f"License evidence fetch failed: {url}: HTTP {error.code}") from error
 
 
