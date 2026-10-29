@@ -12,8 +12,8 @@ export function SessionInfoActions() {
   const open = useButlerStore(state => state.sessionInfoOpen);
   const graphEnabled = useButlerStore(state => state.taskGraphEnabled);
   const [graphOpen, setGraphOpen] = useState(false);
-  const { ids, asks } = useSessionSectionsModel();
-  const indicator = Boolean(asks?.open_count);
+  const { ids, asks, subtasks } = useSessionSectionsModel();
+  const indicator = Boolean(asks?.open_count) || subtasks.some(subtask => subtask.state === "needs_approval");
   const c = appCopy.sessionInfo;
   return <ButtonContainer size="icon-sm">
     {graphEnabled && <Dialog open={graphOpen} onOpenChange={next => { void (async () => { if (!next || await leaveCanonEditor()) setGraphOpen(next); })(); }}>

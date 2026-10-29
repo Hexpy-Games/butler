@@ -229,7 +229,8 @@ try {
     });
     const row = page.locator('[data-test-class="app-sidebar"] [data-test-class="tree-row"]').first();
     const spinner = row.locator('[data-slot="spinner"]');
-    const pill = page.locator('[data-test-class="steward-progress-capsule"]');
+    // The transcript card's observer action; the composer capsule is gone.
+    const pill = page.locator('[data-test-class="steward-observer-action"]').first();
     const dialog = page.locator('[data-test-class="steward-observer-dialog"]');
     const capture = async (state: string) => {
       await page.evaluate(() => document.fonts.ready);
@@ -303,7 +304,7 @@ try {
     await dialog.getByRole("button", { name: "Stop", exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('[data-test-class="steward-observer-dialog"] button:disabled'));
     assert(stopRequested, "Stop used the public cancellation endpoint");
-    assert.equal(await pill.count(), 1, "request acceptance is not terminal confirmation");
+    assert.equal(await dialog.getByRole("button", { name: "Stop", exact: true }).count(), 1, "request acceptance is not terminal confirmation");
     phase = "cancelled";
     await page.evaluate(async ({ childId, createdAt }) => {
       (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
@@ -315,7 +316,6 @@ try {
           const modal = document.querySelector('[data-test-class="steward-observer-dialog"]');
           if (![...modal?.querySelectorAll("button") ?? []].some(button => button.textContent?.trim() === "Stop") &&
               !modal?.querySelector('[data-test-class~="current-turn-status"]') &&
-              !document.querySelector('[data-test-class="steward-progress-capsule"]') &&
               !document.querySelector('[data-test-class="app-sidebar"] [data-slot="spinner"]')) {
             done();
             return true;
@@ -346,7 +346,7 @@ try {
       await page.evaluate(childId => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
         id: 101, type: "subsession.changed", payload: { session_id: "general", child_session_id: childId },
       }), child.session_id);
-      await pill.waitFor({ state: "detached" });
+      await spinner.waitFor({ state: "detached" });
       assert.equal(await spinner.count(), 0, `${terminal} clears the row`);
     }
     assert.deepEqual(pageErrors, [], "no uncaught bridge errors");

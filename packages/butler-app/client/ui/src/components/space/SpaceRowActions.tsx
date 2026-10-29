@@ -11,11 +11,13 @@ import { SpaceRowMenu } from "./SpaceRowMenu";
  * Project navigation stays visible; the disclosure chevron gives way to the row
  * menu on hover. A folded group holding an unread chat rests on the unread dot.
  */
-export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
+export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange, nested = false }: {
   row: SpaceRowData;
   collapsible: boolean;
   menuOpen: boolean;
   onMenuChange(open: boolean): void;
+  /** The row shows its unfinished subtasks beneath it. */
+  nested?: boolean;
 }) {
   useAppLocale();
   const expanded = useOrganization(s => !s.collapsed.includes(row.node.key));
@@ -25,7 +27,7 @@ export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
   // The dot keeps the rest slot until its exit fade ends; then the chevron returns.
   const [dotMounted, setDotMounted] = useState(showDot);
   if (showDot && !dotMounted) setDotMounted(true);
-  const menu = <SpaceRowMenu row={row} open={menuOpen} onOpenChange={onMenuChange} />;
+  const menu = <SpaceRowMenu row={row} nested={nested} open={menuOpen} onOpenChange={onMenuChange} />;
   if (row.node.kind === "session") return menu;
   return (
     <ButtonContainer size="icon-sm" wrap={false}

@@ -662,8 +662,6 @@ export interface AppCopy {
     grantedItems: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;
-    reportPreparing: (title: string) => string;
-    progressDetails: (title: string, activity: string, progress: string | null) => string;
     viewActivity: (title: string) => string;
     more: (title: string, count: number) => string;
     deleteItem: (title: string) => string;
@@ -700,7 +698,6 @@ export interface AppCopy {
     userSkills: string;
     projectSkills: string;
     noSkills: string;
-    activeWork: string;
     allowedConversation: string;
     grantScopeTag: string;
     grantCommandScope: string;
