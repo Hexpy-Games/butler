@@ -9,7 +9,7 @@ type ApprovalRequestCopy = AppCopy["interfaceTemplates"]["approvalRequest"];
 
 /** The `approval.action_kind` values the agent sends (#277). */
 export const APPROVAL_ACTION_KINDS = [
-  "edit_files", "run_command", "network_command", "web_request", "use_connector", "manage_schedule",
+  "generate_image", "edit_image", "edit_files", "run_command", "network_command", "web_request", "use_connector", "manage_schedule",
   "update_project", "start_conversation", "restart_service", "create_worktree", "switch_folder", "other",
 ] as const;
 export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
@@ -109,6 +109,7 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
     .filter((target): target is string => typeof target === "string" && Boolean(target.trim()));
   const browser_steps = normalizeBrowserSteps(value.browser_steps);
   return { tool: value.tool, access: value.access, targets,
+    ...(normalizeImageOperation(value.image) ? { image: normalizeImageOperation(value.image) } : {}),
     ...(typeof value.browser_tab === "string" ? { browser_tab: value.browser_tab } : {}),
     ...(browser_steps ? { browser_steps } : {}),
     ...(typeof value.sign_in_step === "string" ? { sign_in_step: value.sign_in_step } : {}),
@@ -146,7 +147,7 @@ export function approvalRequestView(
   // A tool without a readable label reads as its action kind's sentence, never its internal name.
   const label = operation ? toolLabels[operation.tool] : undefined;
   return {
-    title: operation && label && !SENTENCE_KINDS.has(actionKind) ? copy.operation(label, operation.access === "read_only")
+    title: actionKind === "generate_image" || actionKind === "edit_image" ? sentence(actionKind, approval, workspace, copy) : operation && label && !SENTENCE_KINDS.has(actionKind) ? copy.operation(label, operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
@@ -195,6 +196,12 @@ const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_sche
 
 /** The exact operation, as the local decision shows it. */
 function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): string[] {
+  if (operation.image) {
+    const image = operation.image, c = appCopy.conversation.imageTools;
+    const quality = c.quality[image.quality as keyof typeof c.quality] ?? image.quality;
+    return [`${c.model}: ${image.model}`, `${c.size}: ${image.size === "auto" ? c.default : image.size}`,
+      `${c.qualityLabel}: ${image.quality === "auto" ? c.default : quality}`, `${c.prompt}: ${image.prompt}`];
+  }
   return [...(operation.command ? [operation.command] : []),
     ...operation.targets.map((target, index) => index === 0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
     ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
@@ -205,6 +212,8 @@ function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, 
 function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace: string | null, copy: ApprovalRequestCopy): string {
   const outside = approval.targets.some(target => target.kind === "outside");
   switch (kind) {
+    case "generate_image": return appCopy.guided.tools.generate_image;
+    case "edit_image": return appCopy.guided.tools.edit_image;
     case "edit_files": return outside ? copy.editFilesOutside(approval.count) : copy.editFiles(approval.count, workspace);
     case "run_command": return outside ? copy.runCommandOutside : copy.runCommand(workspace);
     case "web_request": return copy.webRequest;
@@ -296,4 +305,12 @@ function isAccessMode(value: unknown): value is AccessMode {
 function accessLabel(mode: AccessMode): string {
   const p = appCopy.permissions;
   return { auto: p.auto, read_only: p.readOnly, ask_first: p.askAlways, ask_except_reads: p.askFirst, full_access: p.fullAccess }[mode];
+}
+
+function normalizeImageOperation(value: unknown): import("./types").ImageApprovalOperation | undefined {
+  if (!isRecord(value) || !["action", "model", "model_ref", "size", "quality", "prompt"].every(key => typeof value[key] === "string")
+    || !Array.isArray(value.images) || !value.images.every(id => typeof id === "string")) return;
+  return { action: value.action as string, model: value.model as string, model_ref: value.model_ref as string,
+    size: value.size as string, quality: value.quality as string, prompt: value.prompt as string, images: value.images as string[],
+    ...(typeof value.mask === "string" ? { mask: value.mask } : {}) };
 }

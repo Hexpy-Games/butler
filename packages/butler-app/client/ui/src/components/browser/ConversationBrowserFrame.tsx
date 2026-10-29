@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ImageEditor } from "../images/ImageEditor";
+import { closeImageEditor, useImageEditorState } from "../images/imageEditorState";
 import { chromeEnvironment } from "@/app/chromeEnvironment";
 import { appCopy } from "@/app/copy";
 import { useFileViewerState } from "@/app/fileViewerState";
@@ -18,16 +20,24 @@ import { useBrowserShellState } from "./browserShellState";
 export function ConversationBrowserFrame({ sessionId, pane, chatWidth, notice }: {
   sessionId: string; pane: RightSlotPane; chatWidth: number; notice?: ReactNode;
 }) {
+  const target = useImageEditorState(s => s.target);
+  const [mobile, setMobile] = useState(() => matchMedia("(max-width: 767px)").matches);
+  useEffect(() => { const media = matchMedia("(max-width: 767px)"); const change = () => setMobile(media.matches);
+    media.addEventListener("change", change); return () => media.removeEventListener("change", change); }, []);
+  useEffect(() => { if (target && target.session !== sessionId) closeImageEditor(); }, [target, sessionId]);
+  const editing = target?.session === sessionId ? target : undefined;
+  const editor = editing ? <ImageEditor key={`${editing.session}:${editing.asset.id}`} session={sessionId} initial={editing.asset} /> : undefined;
   const drawer = useAdaptiveDrawer(chromeEnvironment());
-  if (!pane && !drawer) return <AdaptiveShellCard><Stack fill gap="none">{notice}<Conversation /></Stack></AdaptiveShellCard>;
+  if (editor && mobile) return <AdaptiveShellCard>{editor}</AdaptiveShellCard>;
+  if (!pane && !drawer && !editor) return <AdaptiveShellCard><Stack fill gap="none">{notice}<Conversation /></Stack></AdaptiveShellCard>;
   // A phone has no room beside the chat: the viewer takes the workspace, and its back button returns to the chat
   // (the files stay open behind '파일 보기').
-  if (drawer && pane === "viewer") return <FileViewerPane documentPage={renderDocument} sessionId={sessionId} notice={notice}
+  if (!editor && drawer && pane === "viewer") return <FileViewerPane documentPage={renderDocument} sessionId={sessionId} notice={notice}
     onBack={() => useFileViewerState.getState().setShown(sessionId, false)} />;
-  return <Stack fill gap="none">{notice}<AdaptiveShellSplit paneOpen={pane !== null} chatWidth={chatWidth}
+  return <Stack fill gap="none">{notice}<AdaptiveShellSplit paneOpen={pane !== null || Boolean(editor)} chatWidth={chatWidth}
     onChatWidthChange={useBrowserShellState.getState().setChatWidth} resizeLabel={appCopy.browser.resizeChat} resizeHint={appCopy.titlebar.dragToResize}
-    chat={<Conversation />} pane={pane === "browser" ? <BrowserArea sessionId={sessionId} />
-      : pane === "viewer" ? <FileViewerPane documentPage={renderDocument} sessionId={sessionId} /> : undefined} /></Stack>;
+    chat={<Conversation />} pane={editor ?? (pane === "browser" ? <BrowserArea sessionId={sessionId} />
+      : pane === "viewer" ? <FileViewerPane documentPage={renderDocument} sessionId={sessionId} /> : undefined)} /></Stack>;
 }
 
 /** A document in the viewer: the viewer's back and close sit in the document's own title row. */
