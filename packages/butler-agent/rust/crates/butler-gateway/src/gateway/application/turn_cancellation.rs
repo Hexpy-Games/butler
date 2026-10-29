@@ -253,7 +253,7 @@ fn mark_cancelling(
     now: &str,
     queue_after: QueueAfterCancel,
 ) -> Result<(), AppStorageError> {
-    let changed = tx.execute(
+    tx.execute(
         "UPDATE turns SET state='cancelling',safe_status_label='Stopping',safe_error_code=NULL,retryable=0,cancellable=0,updated_at=?1 WHERE id=?2 AND state NOT IN ('cancelling','cancelled','delivered','failed','runtime_fault')",
         params![now, turn_id],
     )
@@ -264,8 +264,7 @@ fn mark_cancelling(
     )
     .map_err(AppStorageError::sqlite)?;
     match queue_after {
-        QueueAfterCancel::Pause if changed > 0 => queue::pause(tx, chat_id, turn_id, now),
-        QueueAfterCancel::Pause => Ok(()),
+        QueueAfterCancel::Pause => queue::pause(tx, chat_id, turn_id, now),
         QueueAfterCancel::KeepRunning => queue::resume(tx, chat_id),
     }
 }

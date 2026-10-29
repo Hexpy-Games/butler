@@ -49,10 +49,8 @@ pub(in crate::gateway::application) async fn deliver(
         })
         .await
         .map_err(app_error)?;
-    let _delivery = app
-        .canon_projection_locks
-        .acquire(format!("canon-delivery:{chat}"))
-        .await;
+    let mut guards = ReplayLocks::new(app);
+    guards.acquire(format!("canon-delivery:{chat}")).await;
     if state != "held" {
         return Ok(());
     }

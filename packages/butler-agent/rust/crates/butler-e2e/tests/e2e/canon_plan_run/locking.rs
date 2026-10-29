@@ -3,8 +3,7 @@ use rusqlite::Connection;
 use std::time::{Duration, Instant};
 
 #[tokio::test]
-async fn locked_cancel_does_not_block_replay_and_next_change_delivers() -> Result<(), HarnessError>
-{
+async fn locked_cancel_does_not_block_replay_and_unlock_delivers() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server, epic, source) =
         crate::canon_link::setup("CB-TAKE-LOCK", false, false).await?;
@@ -44,7 +43,7 @@ async fn locked_cancel_does_not_block_replay_and_next_change_delivers() -> Resul
     assert_eq!(pending(&canon)?, 1);
     // A second unresolved identity represents a source step which crashed
     // before App projection. Its op guard is free but the same delivery guard
-    // is held by take, so it too must survive until a later change.
+    // is held by take, so it too must be retried when take releases it.
     canon.execute(
         "INSERT INTO canon_step_cancellations(op_id,epic_id,source_session_id) VALUES(?1,?2,?3)",
         rusqlite::params![
@@ -74,26 +73,51 @@ async fn locked_cancel_does_not_block_replay_and_next_change_delivers() -> Resul
     assert_eq!(pending(&canon)?, 2);
     assert_eq!(s.gw.turns(&target).await?, [] as [serde_json::Value; 0]);
     assert!(!taking.is_finished());
-    app.execute_batch("DROP TRIGGER delay_terminal")?;
-    // The native Stop has finished; release the App receipt suppressed by the
-    // trigger. An unrelated event wakes execute's terminal wait. The next
-    // native change must then retry the other skipped cancellation identity.
-    assert_eq!(
-        canon.query_row::<i64, _, _>(
+    // Native cancellation is asynchronous even after the independent turn ends.
+    // Keep the App receipt blocked until native Stop has actually completed.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let cancelled = canon.query_row::<i64, _, _>(
             "SELECT count(*) FROM btcc_turns WHERE semantic_state='cancelled'",
             [],
-            |r| r.get(0)
+            |r| r.get(0),
+        )?;
+        if cancelled == 1 {
+            break;
+        }
+        assert!(Instant::now() < deadline, "native Stop did not complete");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // Model an already reconciled source terminal receipt. The second skipped
+    // identity must still gate the target, and execute's duplicate receipt is
+    // now a no-op: only lock release can guarantee the retry.
+    let source_op: String = app.query_row(
+        "SELECT i.source_key FROM app_initiated_messages i JOIN turns t ON t.user_message_id=i.message_id WHERE t.id=?1",
+        [&source_turn], |r| r.get(0),
+    )?;
+    assert_eq!(
+        canon.execute(
+            "DELETE FROM canon_step_cancellations WHERE op_id=?1",
+            [&source_op]
         )?,
         1
     );
+    assert_eq!(pending(&canon)?, 1);
+    app.execute_batch("DROP TRIGGER delay_terminal")?;
+    // Wake execute's terminal wait with an App-only event, so no native write
+    // can mask a missing lock-release signal.
     app.execute(
         "UPDATE turns SET state='cancelled' WHERE id=?1",
         [&source_turn],
     )?;
-    let changed = s.gw.say(&independent, "What does this mean?").await?;
-    let changed = butler_e2e::e2e::scenario::accepted_turn_id(&changed)?;
-    s.gw.wait_terminal(&independent, &changed, Duration::from_secs(30))
-        .await?;
+    data(
+        s.gw.patch(
+            &format!("/sessions/{independent}"),
+            json!({"title":"Renamed"}),
+        )
+        .await?,
+        200,
+    );
     data(
         tokio::time::timeout(Duration::from_secs(30), taking)
             .await
@@ -101,10 +125,6 @@ async fn locked_cancel_does_not_block_replay_and_next_change_delivers() -> Resul
             .expect("take task")?,
         200,
     );
-    let changed = s.gw.say(&independent, "What does this mean?").await?;
-    let changed = butler_e2e::e2e::scenario::accepted_turn_id(&changed)?;
-    s.gw.wait_terminal(&independent, &changed, Duration::from_secs(30))
-        .await?;
     let turn = first_turn(&s, &target).await?;
     s.gw.wait_terminal(&target, &turn, Duration::from_secs(30))
         .await?;

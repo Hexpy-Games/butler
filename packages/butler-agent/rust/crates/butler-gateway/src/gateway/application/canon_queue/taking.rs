@@ -2,7 +2,7 @@ use super::*;
 
 /// Release the source identity atomically with the move. Both delivery locks
 /// stay held through Stop. The move records cancellation durably and gates the
-/// target until a terminal receipt clears it; startup and turn changes retry it.
+/// target until a terminal receipt clears it; lock release also wakes replay.
 pub(super) async fn execute(
     app: &AppApplication,
     chat: &str,
@@ -26,21 +26,15 @@ pub(super) async fn execute(
             "Epic is no longer in another conversation.",
         ));
     }
-    let projection = if let Some(op) = owner["step_op_id"].as_str() {
-        Some(app.canon_projection_locks.acquire(op.to_owned()).await)
-    } else {
-        None
-    };
+    let mut guards = ReplayLocks::new(app);
+    if let Some(op) = owner["step_op_id"].as_str() {
+        guards.acquire(op.to_owned()).await;
+    }
     let source_chat = app.owner_chat(field(&owner, "session_id")?).await?;
     let mut chats = [source_chat, chat.to_owned()];
     chats.sort();
-    let mut deliveries = Vec::new();
     for chat in chats {
-        deliveries.push(
-            app.canon_projection_locks
-                .acquire(format!("canon-delivery:{chat}"))
-                .await,
-        );
+        guards.acquire(format!("canon-delivery:{chat}")).await;
     }
     input["source_session_id"] = owner["session_id"].clone();
     input["source_step_op_id"] = owner["step_op_id"].clone();
@@ -58,7 +52,7 @@ pub(super) async fn execute(
     {
         tracing::warn!(%error, "Canon move committed; source Stop deferred to recovery");
     }
-    drop((projection, deliveries));
+    drop(guards);
     Ok(result)
 }
 
@@ -113,7 +107,7 @@ async fn stop_source(
 
 /// Native turn completion publishes changes on the same watch as canon writes.
 /// Retry unresolved cancellations without waiting on an in-flight move.
-/// Skipped identities remain durable for the next native/canon change.
+/// Skipped identities remain durable; their lock holder wakes us on release.
 pub(super) async fn reconcile(app: &AppApplication) -> Result<(), GatewayApplicationError> {
     let pending = app
         .dependencies

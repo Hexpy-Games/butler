@@ -118,6 +118,9 @@ pub trait AppCanonPort: Send + Sync + 'static {
     fn project_scope(&self, _resource: AppCanonResource, _id: String) -> ApplicationFuture<String> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    /// Retry durable pending work after its application locks become available.
+    /// This is a memory-only signal, with no database mutation.
+    fn wake_replay(&self) {}
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
         None
     }

@@ -78,6 +78,9 @@ impl AppCanonPort for AppCanon {
                 .map_err(error)
         })
     }
+    fn wake_replay(&self) {
+        self.storage.notify_changes();
+    }
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
         Some(self.storage.subscribe_changes())
     }

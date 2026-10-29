@@ -1,10 +1,12 @@
 //! Authenticated queue acts, runtime identity resolution and intent replay.
 mod delete;
 mod holds;
+mod locks;
 pub(in crate::gateway::application) mod steps;
 mod taking;
 use super::*;
 pub(super) use delete::reconcile;
+use locks::ReplayLocks;
 use rusqlite::{OptionalExtension, params};
 use serde_json::json;
 pub(in crate::gateway::application) use steps::turn_ended;
@@ -110,7 +112,8 @@ pub(super) async fn apply(
     intent: Value,
 ) -> Result<(), GatewayApplicationError> {
     let op = field(&intent, "op_id")?;
-    let _guard = app.canon_projection_locks.acquire(op.clone()).await;
+    let mut guards = ReplayLocks::new(app);
+    guards.acquire(op.clone()).await;
     let raw = field(&intent, "payload_json")?;
     let payload: Value =
         serde_json::from_str(&raw).map_err(GatewayApplicationError::internal_from)?;
