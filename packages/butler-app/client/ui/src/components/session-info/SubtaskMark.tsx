@@ -27,5 +27,6 @@ export function SubtaskMark({ parentId, subtask, size, onActionHover }: {
   if (subtask.state === "needs_approval") return <IconSlot size={size} minHeight="line" passive role="status"
     aria-label={subtaskStateLabel(subtask.state)} data-test-class="subtask-attention"><CircleAlert size={iconSize} /></IconSlot>;
   const progress = subtaskProgress(subtask);
-  return progress ? <Typo.Caption tone="secondary" numeric="tabular" wrap="nowrap" data-test-class="subtask-progress">{progress}</Typo.Caption> : null;
+  // The row's name says the step in words; the digits are decoration.
+  return progress ? <Typo.Caption tone="secondary" numeric="tabular" wrap="nowrap" aria-hidden data-test-class="subtask-progress">{progress}</Typo.Caption> : null;
 }

@@ -1,15 +1,25 @@
-import { useAppLocale } from "@/app/copy.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { SubtaskView } from "@/app/types.ts";
-import { NavRow, Separator, Stack } from "@/butler-ds";
+import { Eye, IconButton, NavRow, NavRowSwap, Separator, Stack } from "@/butler-ds";
 import { SubtaskMark } from "../session-info/SubtaskMark.tsx";
-import { openSubtask } from "../session-info/subtasks.ts";
+import { openSubtask, subtaskStatus } from "../session-info/subtasks.ts";
 
-/** One unfinished subtask on one sidebar line; the reserved icon column lines its title up with the parent's. */
+/**
+ * One unfinished subtask on one sidebar line; the reserved icon column lines its title up with the parent's.
+ * The trailing slot has the parent's shape: a status mark resting in a row-action swap (or the resume
+ * action itself), so every mark centres on the parent's spinner column at every sidebar density.
+ */
 function SubtaskLine({ parentId, subtask }: { parentId: string; subtask: SubtaskView }) {
   useAppLocale();
-  return <NavRow dataTestClass="subtask-line" reserveIcon label={subtask.title} ariaLabel={subtask.title}
-    actionsVisibility="visible" actions={<SubtaskMark parentId={parentId} subtask={subtask} size="sidebar" />}
-    onClick={() => void openSubtask(parentId, subtask)} />;
+  const open = () => void openSubtask(parentId, subtask);
+  const mark = <SubtaskMark parentId={parentId} subtask={subtask} size="sidebar" />;
+  const actions = subtask.state === "paused" ? mark : (
+    <NavRowSwap rest={mark}>
+      <IconButton label={appCopy.interfaceDetails.progressDetails} onClick={open}><Eye size="sm" /></IconButton>
+    </NavRowSwap>
+  );
+  return <NavRow dataTestClass="subtask-line" reserveIcon label={subtask.title} ariaLabel={subtask.title} ariaDescription={subtaskStatus(subtask)}
+    actionsVisibility="visible" actions={actions} onClick={open} />;
 }
 
 /** The parent's unfinished subtasks beside a zero-width guide line on the parent row's start edge. */
