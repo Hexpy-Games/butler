@@ -18,8 +18,7 @@ impl Scenario {
         timeout: Duration,
     ) -> Result<(String, Value), HarnessError> {
         tokio::time::timeout(timeout, async {
-            let accepted = self.gw.say(chat, text).await?;
-            let turn_id = resolve(self, chat, &accepted).await?;
+            let turn_id = self.send_input(chat, text).await?;
             let turn = self.gw.wait_terminal(chat, &turn_id, timeout).await?;
             Ok((turn_id, turn))
         })
@@ -29,6 +28,20 @@ impl Scenario {
                 "turn in {chat} did not complete within {timeout:?}"
             ))
         })?
+    }
+
+    /// Sends once and returns that input's turn ID without waiting for the
+    /// turn to finish; a queued admission is followed to its linked turn.
+    pub async fn send_input(&self, chat: &str, text: &str) -> Result<String, HarnessError> {
+        let accepted = self.gw.say(chat, text).await?;
+        let timeout = Duration::from_secs(turn_timeout());
+        tokio::time::timeout(timeout, resolve(self, chat, &accepted))
+            .await
+            .map_err(|_| {
+                harness_error(format!(
+                    "input in {chat} was not linked to a turn within {timeout:?}"
+                ))
+            })?
     }
 }
 
