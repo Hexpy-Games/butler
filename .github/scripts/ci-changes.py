@@ -387,7 +387,7 @@ def select(event, workflow):
         command('git', 'cat-file', '-e', f'{base}^{{commit}}')
     paths = [] if full else changed(base)
     required = set(GROUPS) if full else set().union(*(categories(p, os.environ['GITHUB_EVENT_NAME']) for p in paths))
-    ci_shell.select(required, full, workflow, base, event, changed, categories)
+    ci_shell.select(required, full, workflow, base, event, changed, categories, command)
     current = hashes(base or 'full')
     label = any(label['name'] == 'ci:windows-native' for label in pr.get('labels', []))
     native_required = (full or label or any(windows_native(p) or windows_runtime(p, os.environ['GITHUB_EVENT_NAME']) for p in paths) or

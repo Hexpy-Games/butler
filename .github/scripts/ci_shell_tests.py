@@ -39,3 +39,16 @@ class ShellSelection(unittest.TestCase):
                 changes.ci_shell.select(required, True, 'shell.yml', None, {'before': 'base'},
                                         lambda base: [path], changes.categories)
                 self.assertEqual('shell' in required, expected)
+
+    # test-category: pure-logic
+    def test_new_branch_push_compares_with_the_default_branch(self):
+        for path, expected in [('README.md', False), ('.github/workflows/shell.yml', True)]:
+            with self.subTest(path=path), patch.dict(os.environ, GITHUB_EVENT_NAME='push'):
+                required = set(changes.GROUPS)
+                diff = lambda base: [path] if base == 'fork' else []
+                with patch.object(changes, 'command', return_value='fork') as command:
+                    changes.ci_shell.select(required, True, 'shell.yml', '0' * 40,
+                                            {'repository': {'default_branch': 'main'}},
+                                            diff, changes.categories, command)
+                command.assert_called_once_with('git', 'merge-base', 'HEAD', 'origin/main')
+                self.assertEqual('shell' in required, expected)
