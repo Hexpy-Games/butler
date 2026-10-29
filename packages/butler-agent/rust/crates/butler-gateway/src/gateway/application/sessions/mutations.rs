@@ -1,7 +1,7 @@
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
-use super::read;
+use super::{cleanup, read};
 use crate::gateway::GatewayApplicationError;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{AppApplication, app_error, events, storage::AppStorageError};
@@ -270,12 +270,7 @@ fn delete_permanently(
             "일반 채널은 보관하거나 삭제할 수 없습니다.",
         ));
     }
-    tx.execute(
-        "INSERT INTO app_session_delete_cleanups(session_id,kind,session_hint) VALUES(?1,'delete',?2) \
-         ON CONFLICT(session_id) DO UPDATE SET kind='delete',session_hint=excluded.session_hint",
-        params![session_id, session.session_hint],
-    )
-    .map_err(AppStorageError::sqlite)?;
+    cleanup::record_delete(&tx, session_id, &session.session_hint)?;
     tx.execute("DELETE FROM chats WHERE id=?", [session_id])
         .map_err(AppStorageError::sqlite)?;
     let event = events::append_unpublished(

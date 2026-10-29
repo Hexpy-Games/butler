@@ -278,11 +278,7 @@ fn delete_project_chats(
     let sessions = project_session_ids(&tx, &project.id)?;
     for session in &sessions {
         let hint = identity::runtime_hint(&tx, session)?;
-        tx.execute(
-            "INSERT INTO app_session_delete_cleanups(session_id,kind,session_hint) VALUES(?1,'delete',?2) \
-             ON CONFLICT(session_id) DO UPDATE SET kind='delete',session_hint=excluded.session_hint",
-            params![session, hint],
-        ).map_err(AppStorageError::sqlite)?;
+        cleanup::record_delete(&tx, session, &hint)?;
     }
     tx.execute("DELETE FROM chats WHERE project_id=?", [&project.id])
         .map_err(AppStorageError::sqlite)?;

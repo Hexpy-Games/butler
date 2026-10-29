@@ -8,9 +8,6 @@ use std::sync::Arc;
 
 const PAGE_SIZE: usize = 100;
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug, thiserror::Error)]
 #[error("session cleanup failures: {0:?}")]
 struct CleanupFailures(Vec<(String, GatewayApplicationError)>);
@@ -32,7 +29,7 @@ pub(super) async fn complete_locked(
         .storage
         .read(move |db| {
             db.query_row(
-                "SELECT d.kind,d.session_hint,COALESCE(c.archived,0) \
+                "SELECT d.kind,d.session_hint,COALESCE(c.archived,0),d.generation \
                  FROM app_session_delete_cleanups d LEFT JOIN chats c ON c.id=d.session_id \
                  WHERE d.session_id=?1",
                 [id],
@@ -41,6 +38,7 @@ pub(super) async fn complete_locked(
                         row.get::<_, String>(0)?,
                         row.get::<_, Option<String>>(1)?,
                         row.get::<_, bool>(2)?,
+                        row.get::<_, i64>(3)?,
                     ))
                 },
             )
@@ -49,11 +47,13 @@ pub(super) async fn complete_locked(
         })
         .await
         .map_err(app_error)?;
-    let Some((kind, hint, archived)) = record else {
+    let Some((kind, hint, archived, generation)) = record else {
         return Ok(());
     };
     let results = match (kind.as_str(), hint) {
-        ("archive", _) if !archived => return clear_record(app, session_id).await,
+        ("archive", _) if !archived => {
+            return clear_record(app, session_id, kind, generation).await;
+        }
         ("archive", _) => vec![(
             "outputs",
             app.collect_session_outputs(session_id.clone()).await,
@@ -71,7 +71,7 @@ pub(super) async fn complete_locked(
         }
     }
     combine_failures(failures)?;
-    clear_record(app, session_id).await
+    clear_record(app, session_id, kind, generation).await
 }
 
 fn combine_failures(
@@ -132,16 +132,23 @@ async fn delete_steps(
 async fn clear_record(
     app: &AppApplication,
     session_id: String,
+    kind: String,
+    generation: i64,
 ) -> Result<(), GatewayApplicationError> {
     let id = session_id.clone();
     let result = app
         .storage
-        .execute(move |db| {
-            clear_record_in(db, &id)?;
-            Ok(())
-        })
+        .execute(move |db| clear_record_in(db, &id, &kind, generation))
         .await
-        .map_err(app_error);
+        .map_err(app_error)
+        .and_then(|cleared| {
+            if cleared == 0 {
+                // The newer record still needs its own cleanup, under this lock.
+                Err(GatewayApplicationError::internal())
+            } else {
+                Ok(())
+            }
+        });
     if let Err(error) = &result {
         eprintln!("[session-cleanup] session={session_id} clearing record failed: {error:?}");
     }
@@ -180,10 +187,31 @@ pub(in crate::gateway::application) async fn replay(app: &AppApplication) {
     }
 }
 
-fn clear_record_in(db: &rusqlite::Connection, id: &str) -> Result<usize, AppStorageError> {
+// A project delete can replace debt without taking this session lock, even
+// with the same kind when a client has recreated a chat with its old ID.
+pub(in crate::gateway::application) fn clear_record_in(
+    db: &rusqlite::Connection,
+    id: &str,
+    kind: &str,
+    generation: i64,
+) -> Result<usize, AppStorageError> {
     db.execute(
-        "DELETE FROM app_session_delete_cleanups WHERE session_id=?1",
-        [id],
+        "DELETE FROM app_session_delete_cleanups WHERE session_id=?1 AND kind=?2 AND generation=?3",
+        rusqlite::params![id, kind, generation],
     )
     .map_err(AppStorageError::sqlite)
+}
+
+pub(in crate::gateway::application) fn record_delete(
+    db: &rusqlite::Connection,
+    session: &str,
+    hint: &str,
+) -> Result<(), AppStorageError> {
+    db.execute(
+        "INSERT INTO app_session_delete_cleanups(session_id,kind,session_hint) VALUES(?1,'delete',?2) \
+         ON CONFLICT(session_id) DO UPDATE SET kind='delete',session_hint=excluded.session_hint, \
+         generation=app_session_delete_cleanups.generation+1",
+        rusqlite::params![session, hint],
+    ).map_err(AppStorageError::sqlite)?;
+    Ok(())
 }

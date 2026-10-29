@@ -98,3 +98,10 @@ fn failed_wal_sync_after_commit_keeps_writer() -> Result<(), Box<dyn std::error:
     }
     run("sync")
 }
+
+// test-category: race
+#[test]
+fn cleanup_acknowledgment_preserves_replaced_records() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    run("cleanup")
+}

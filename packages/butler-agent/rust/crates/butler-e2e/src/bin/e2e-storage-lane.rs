@@ -18,6 +18,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "storage_lane/cleanup.rs"]
+mod cleanup;
+
 type Published = Arc<Mutex<Vec<String>>>;
 
 fn main() {
@@ -28,6 +31,7 @@ fn main() {
         "barrier" => failed_commit(&path, true),
         "commit" => failed_commit(&path, false),
         "sync" => failed_wal_sync(&path),
+        "cleanup" => cleanup::run(&path),
         other => panic!("unknown scenario: {other}"),
     }
 }
