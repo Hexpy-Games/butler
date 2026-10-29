@@ -60,5 +60,5 @@ export const guidance: ShowcaseGuidance = {
     "Edges are decorative (aria-hidden). Open: the cards slide down from behind the front card; stack: they slide back. Reduced motion: no travel, the cards fade in and out in place.",
   ],
   tokens: ["--worker-active", "--line", "--line-strong", "--border-hairline", "--radius-control", "--space-xs",
-    "--focus-ring-room", "--motion-slow", "--motion-fast", "--motion-ease-emphasized", "--motion-ease-standard"],
+    "--focus-ring-room", "--motion-slow", "--motion-fast", "--motion-ease-emphasized", "--motion-ease-accelerate", "--motion-ease-standard"],
 };

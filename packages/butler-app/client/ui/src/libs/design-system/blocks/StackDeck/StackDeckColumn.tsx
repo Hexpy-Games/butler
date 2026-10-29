@@ -35,7 +35,11 @@ function slide(column: HTMLElement | null, direction: "open" | "fold"): Animatio
     const frames = direction === "open"
       ? [stacked, { opacity: 1, offset: 0.35 }, placed]
       : [placed, { opacity: 1, offset: 0.65 }, stacked];
-    const animation = animateMotion(card, frames, { duration: "slow", easing: "emphasized", fill: direction === "fold" ? "forwards" : undefined });
+    // Opening settles into place (emphasized); stacking speeds up into the front card (accelerate), so
+    // the collapsed deck follows the moment the cards arrive.
+    const animation = direction === "open"
+      ? animateMotion(card, frames, { duration: "slow", easing: "emphasized" })
+      : animateMotion(card, frames, { duration: "slow", easing: "accelerate", fill: "forwards" });
     return animation ? [animation] : [];
   });
 }

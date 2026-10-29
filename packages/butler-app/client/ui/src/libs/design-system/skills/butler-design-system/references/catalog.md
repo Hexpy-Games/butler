@@ -2347,7 +2347,7 @@ A 묶음 (stack) of cards that run together: one full-width row with hairline ed
 - Not for: Items that each need their own row → `CardList`
 - Not for: Ordered steps people reorder and group by dragging → `StepSortableList`
 - Not for: Rows that open to show detail under them → `Collapsible`
-- Tokens: `--worker-active`, `--line`, `--line-strong`, `--border-hairline`, `--radius-control`, `--space-xs`, `--focus-ring-room`, `--motion-slow`, `--motion-fast`, `--motion-ease-emphasized`, `--motion-ease-standard`
+- Tokens: `--worker-active`, `--line`, `--line-strong`, `--border-hairline`, `--radius-control`, `--space-xs`, `--focus-ring-room`, `--motion-slow`, `--motion-fast`, `--motion-ease-emphasized`, `--motion-ease-accelerate`, `--motion-ease-standard`
 
 ### StatusChecklist
 

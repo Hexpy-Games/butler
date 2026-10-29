@@ -50,6 +50,6 @@ for example a drag sensor's.
   `translate`), passing behind the cards before it and fading in over the
   first third, on `--motion-slow` with the emphasized curve. The front card
   stays put; rows below the deck take the new height at once.
-- Stack: the reverse (each card slides up behind the front card, fading over
-  the last third), then the collapsed deck.
+- Stack: the reverse on the accelerate curve (each card speeds up behind the
+  front card, fading over the last third), then the collapsed deck.
 - Reduced motion: no travel; the cards fade in and out in place.
