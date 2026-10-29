@@ -7,6 +7,7 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 mod active;
+mod privacy;
 mod revisions;
 mod tree;
 
@@ -235,10 +236,6 @@ async fn app_toggle_counts_activity_permissions_and_revision_conflict() -> Resul
     toggle(&s, false, 1).await?;
     let detail = count(&s, &epic, 0, 2).await?;
     assert_eq!(detail["activity"][0]["kind"], "criterion_unconfirmed");
-    // MCP projection stays unchanged: no count and no confirmation fields.
-    super::canon_mcp::trust(&s).await?;
-    let external = super::canon_mcp::call(&s, "canon_get_epic", json!({"epic_id":epic})).await?;
-    assert!(external.get("criteria").is_none());
-    assert!(!external.to_string().contains("\"confirmed\""));
+    privacy::assert_surfaces(&s, &project, plan, &epic).await?;
     s.finish().await
 }
