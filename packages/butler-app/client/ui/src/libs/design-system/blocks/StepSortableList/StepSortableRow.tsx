@@ -28,7 +28,7 @@ function Trailing({ children, className }: { children: ReactNode; className: str
 
 /**
  * One row (a single step's card or a collapsed 묶음's front):
- * `[grip] [number or status glyph] [title ........ meta] / [caption] [⋯]`.
+ * `[grip] [number or status glyph] [title (more) ........ meta] / [caption] [⋯]`; the title truncates, `more` never.
  * A fanned 묶음's card is compact: the title (two lines), then grip · caption · ⋯.
  */
 export function StepSortableRow({ item, context, grip, marker = true }: StepSortableRowProps) {
@@ -57,7 +57,10 @@ export function StepSortableRow({ item, context, grip, marker = true }: StepSort
       <IconSlot size="md" minHeight="line" tone="tertiary">{marker ? slots.marker : null}</IconSlot>
       <div className={styles.text}>
         <div className={styles.titleLine}>
-          <Typo.Body truncate tone={muted}>{slots.title}</Typo.Body>
+          <div className={styles.title}>
+            <Typo.Body truncate tone={muted}>{slots.title}</Typo.Body>
+            {slots.more ? <Typo.Body tone="tertiary" wrap="nowrap">{slots.more}</Typo.Body> : null}
+          </div>
           {slots.meta ? <Typo.Caption tone="tertiary" numeric="tabular" wrap="nowrap">{slots.meta}</Typo.Caption> : null}
         </div>
         {slots.caption ? <Typo.Caption tone={item.done ? "tertiary" : "secondary"} truncate>{slots.caption}</Typo.Caption> : null}

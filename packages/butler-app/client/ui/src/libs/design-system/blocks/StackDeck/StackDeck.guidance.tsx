@@ -15,10 +15,10 @@ function TogetherDeck() {
   return (
     <StackDeck items={TASKS} renderCard={(item, { index, count, expanded }) => (
       <Stack gap="xs">
-        <Typo.Body truncate>
-          {item.label}
-          {!expanded && index === 0 ? <Typo.Text tone="tertiary"> +{count - 1}</Typo.Text> : null}
-        </Typo.Body>
+        <Stack align="row" gap="xs">
+          <Typo.Body truncate>{item.label}</Typo.Body>
+          {!expanded && index === 0 ? <Typo.Body tone="tertiary" wrap="nowrap" shrink={false}>+{count - 1} more</Typo.Body> : null}
+        </Stack>
         <Typo.Caption tone="secondary" truncate>After Write the report</Typo.Caption>
       </Stack>
     )} />
@@ -44,12 +44,12 @@ export const guidance: ShowcaseGuidance = {
     {
       do: { caption: "One deck per step; a tap fans it out in the same row, a tap on a card stacks it again.", render: () => <TogetherDeck /> },
       dont: { caption: "Cards piled with hand-made offsets: no fan-out, no running edges, no keyboard access.", render: () => (
-        <Card padding="md"><Typo.Body>Turn it into slides +2</Typo.Body></Card>
+        <Card padding="md"><Typo.Body>Turn it into slides +2 more</Typo.Body></Card>
       ) },
     },
   ],
   content: [
-    "Card content is the item's own row (title, meta, one caption line); the collapsed front adds the count (ko: “외 N건”).",
+    "Card content is the item's own row (title, meta, one caption line); the collapsed front adds the count (ko: “외 N건”, en: “+N more”) outside the truncating title, so the count always shows.",
     "Pass localized `labels`: `expand(count, front)` names the collapsed deck (ko: “PPT로 정리 외 2건, 펼치기”), `fold(item)` each fanned card (ko: “PPT로 정리, 접기”).",
   ],
   accessibility: [

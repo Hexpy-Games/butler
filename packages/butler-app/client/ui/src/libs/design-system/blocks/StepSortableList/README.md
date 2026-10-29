@@ -20,12 +20,13 @@ drawn with `StackDeck`. Stacks never nest. It does not change
 
 ## Rows
 
-`[grip] [number or status glyph] [title ........ meta] / [caption] [⋯]` on a
+`[grip] [number or status glyph] [title (more) ........ meta] / [caption] [⋯]` on a
 `Card padding="md"`. The grip leads (SortableCardItem's order), pulled back by
 `--space-xs`; running and pinned rows keep its slot empty and, without a
 trailing control, keep the ⋯ room so statuses line up. A fanned 묶음's card is
 compact: the title (two lines, the marker on the first card only), then
-grip · caption · ⋯. Done rows are muted.
+grip · caption · ⋯. Done rows are muted. The title truncates; the `more`
+slot after it (a collapsed 묶음's count, ko: 외 N건) never does.
 
 A single step's card is not interactive; only its grip and ⋯ are. A 묶음's
 cards each carry `StackDeck`'s toggle, a sibling of the grip and ⋯ (no
@@ -56,6 +57,8 @@ applies one; `canDrop` refuses targets.
 - Resting on a step for 250 ms (`STEP_SORTABLE_JOIN_DWELL`): a `NavDropTarget`
   group ring; the drop joins its 묶음. Fanned 묶음 take gaps only.
 - Hit zones are the step boxes frozen at drag start, so feedback never moves them.
+- The source stays in place at half strength, all but its grip's focus ring
+  (a keyboard move keeps focus there).
 - The lifted copy is the row itself on the opaque raised surface with the drag
   shadow (`lift-in`), portaled to `<body>` with the list's theme, hanging
   `--space-3xl` below the pointer so the target stays in view. Its row context

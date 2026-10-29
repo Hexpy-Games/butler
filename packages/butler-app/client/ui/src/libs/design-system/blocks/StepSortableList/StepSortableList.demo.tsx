@@ -29,12 +29,13 @@ function rowSlots(context: ShowcaseRenderContext, chains: readonly StepSortableC
     const previous = head ? null : chain.steps[place.stepIndex - 1]![0]!.label;
     const caption = place.lifted && place.outcome ? (place.outcome === "join" ? copy.join : copy.newStep)
       : place.expanded ? (live && task.progress ? task.progress : copy.status[task.status])
-        : head ? task.progress ?? copy.status[task.status] : copy.after(previous!);
+        : head || live ? task.progress ?? copy.status[task.status] : copy.after(previous!);
     const front = place.count > 1 && !place.expanded;
     const [start, unstack, remove] = copy.menu;
     return {
       marker: <Marker status={task.status} number={head ? undefined : place.stepIndex} />,
-      title: front ? <>{task.label} <Typo.Text tone="tertiary">{copy.more(place.count - 1)}</Typo.Text></> : task.label,
+      title: task.label,
+      more: front ? copy.more(place.count - 1) : undefined,
       meta: live && task.time ? `${copy.status[task.status]} · ${task.time}` : copy.status[task.status],
       caption,
       trailing: task.running ? undefined : (

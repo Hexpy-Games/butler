@@ -15,7 +15,7 @@ export interface DemoTask extends StepSortableItem {
 /** Story copy (the work-tab mockup's tasks). */
 export const STEP_DEMO_COPY = {
   "en-US": {
-    chains: ["Report", "Research"], more: (count: number) => `+${count}`, menuLabel: (title: string) => `${title} menu`,
+    chains: ["Report", "Research"], more: (count: number) => `+${count} more`, menuLabel: (title: string) => `${title} menu`,
     menu: ["Start now", "Unstack", "Delete"], after: (title: string) => `After ${title}`, join: "Run together", newStep: "New step",
     status: { running: "Running", review: "In review", pending: "Waiting", held: "Paused", done: "Done", failed: "Failed" },
     titles: ["Write the report", "Turn it into slides", "Make a summary", "Write the talk script", "Research competitors", "Send the summary email"],

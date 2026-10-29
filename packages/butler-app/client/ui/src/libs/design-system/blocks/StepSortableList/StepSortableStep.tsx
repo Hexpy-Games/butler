@@ -27,7 +27,8 @@ interface StepSortableStepProps {
 /**
  * One step: a single item's card, or a 묶음 as a StackDeck (collapsed: the whole step drags as
  * one; fanned: each card drags on its own, out of the 묶음). A pointer resting on the step for
- * the dwell rings it (NavDropTarget group) to join it.
+ * the dwell rings it (NavDropTarget group) to join it. A lifted step stays in place at half
+ * strength (`data-lifted`), all but its grip's focus ring.
  */
 export function StepSortableStep({ chain, step, stepIndex }: StepSortableStepProps) {
   const scope = useStepSortableScope();
@@ -48,9 +49,8 @@ export function StepSortableStep({ chain, step, stepIndex }: StepSortableStepPro
   }, [joining, frozen]);
   return (
     <li ref={element} className={styles.step} data-follow={stepIndex > 0 || undefined} data-step-chain={chain.id} data-step-index={stepIndex}
-      data-step-items={step.map((item) => item.id).join(" ")}>
-      <NavDropTarget drop={joining ? "group" : undefined} dragging={lifted}
-        indicator={{ top: 0, height: frozen ?? measured }}>
+      data-step-items={step.map((item) => item.id).join(" ")} data-lifted={lifted || undefined}>
+      <NavDropTarget drop={joining ? "group" : undefined} indicator={{ top: 0, height: frozen ?? measured }}>
         {single ? (
           <div data-step-card="">
             <Card padding="md" activity={first.running ? "running" : undefined} {...scope.cardListeners(itemDragId(first.id))}>

@@ -26,6 +26,8 @@ export interface StepSortableRowSlots {
   /** Step number or status glyph, in the leading icon slot. */
   marker?: ReactNode;
   title: ReactNode;
+  /** How many more a collapsed 묶음 holds (ko: 외 N건), right after the title; the title truncates, this never does. */
+  more?: ReactNode;
   /** Short status after the title, at the end of the title line (진행 중 · 12분, 대기, 멈춤). */
   meta?: ReactNode;
   /** One read-only line under the title (progress, or “<previous> 끝나면”). */
