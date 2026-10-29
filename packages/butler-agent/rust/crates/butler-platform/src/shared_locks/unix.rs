@@ -14,13 +14,13 @@ mod tests;
 
 fn directory(namespace: &str) -> io::Result<File> {
     let path = Path::new("/tmp").join(namespace);
-    publish_directory(&path)?;
-    let directory = File::from(openat(
-        rustix::fs::CWD,
-        &path,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-        Mode::empty(),
-    )?);
+    let directory = match open_directory(&path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            publish_directory(&path)?;
+            open_directory(&path)?
+        }
+        opened => opened?,
+    };
     if directory.metadata()?.mode() & 0o7777 != 0o1777 {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
@@ -28,6 +28,15 @@ fn directory(namespace: &str) -> io::Result<File> {
         ));
     }
     Ok(directory)
+}
+
+fn open_directory(path: &Path) -> io::Result<File> {
+    Ok(File::from(openat(
+        CWD,
+        path,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?))
 }
 
 struct UnpublishedDirectory(PathBuf);
