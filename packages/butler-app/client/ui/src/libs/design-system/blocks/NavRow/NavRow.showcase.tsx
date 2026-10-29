@@ -15,6 +15,7 @@ import { SidebarShell } from "../SidebarShell";
 import { NavRow } from "./NavRow";
 import { NavRowSwap } from "./NavRowSwap";
 import { NAV_ROW_SURFACE_VARIANTS, NavRowSurface } from "./fixtures/NavRowSurface";
+import { nestedRowsStory } from "./fixtures/NavRowNested";
 
 export const meta: ShowcaseMeta = {
   title: "NavRow",
@@ -40,9 +41,7 @@ const labels = {
   },
 } as const;
 
-function text({ locale }: ShowcaseRenderContext) {
-  return labels[locale];
-}
+const text = ({ locale }: ShowcaseRenderContext) => labels[locale];
 
 type Copy = ReturnType<typeof text>;
 
@@ -131,6 +130,7 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  nestedRowsStory,
   {
     name: "Label-only rows (load more, settings back, skills)",
     render: (context) => (

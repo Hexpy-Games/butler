@@ -141,6 +141,43 @@ export async function markDeltas(sidebar: Locator): Promise<Record<string, numbe
   });
 }
 
+export type DensityDeltas = Record<string, { line: number; title: number; marks: Record<string, number> }>;
+
+/**
+ * Per sidebar density (the shell's attribute switched in place, then restored): the guide line's
+ * x-centre minus the parent icon's, the first child title's x minus the parent title's, and each
+ * child mark's x-centre minus the parent spinner's.
+ */
+export async function densityDeltas(sidebar: Locator): Promise<DensityDeltas> {
+  return sidebar.evaluate(root => {
+    const shell = root.closest("[data-sidebar-density]") ?? root.querySelector("[data-sidebar-density]")!;
+    const original = shell.getAttribute("data-sidebar-density")!;
+    const lines = root.querySelector('[data-test-class="subtask-lines"]')!;
+    const parent = lines.previousElementSibling!;
+    const centre = (node: Element) => { const box = node.getBoundingClientRect(); return box.left + box.width / 2; };
+    const round = (value: number) => Math.round(value * 100) / 100;
+    const result: Record<string, { line: number; title: number; marks: Record<string, number> }> = {};
+    for (const density of ["compact", "comfortable", "touch"]) {
+      shell.setAttribute("data-sidebar-density", density);
+      // A Separator child (the older composition) draws its rule on its own left edge.
+      const separator = lines.querySelector('[data-slot="separator"], [role="separator"]');
+      const rule = getComputedStyle(lines, "::before");
+      const guide = separator ? separator.getBoundingClientRect().left
+        : lines.getBoundingClientRect().left + parseFloat(rule.left) + parseFloat(rule.marginLeft || "0") + parseFloat(rule.width) / 2;
+      const label = (row: Element) => row.querySelector('[data-slot="nav-row-label"]')!.getBoundingClientRect().left;
+      const spinner = centre(parent.querySelector('[data-slot="spinner"]')!);
+      const marks: Record<string, number> = {};
+      for (const mark of lines.querySelectorAll('[data-test-class="subtask-progress"], [data-test-class="subtask-attention"], [data-test-class="subtask-resume"]')) {
+        marks[mark.getAttribute("data-test-class")!.replace("subtask-", "")] = round(centre(mark) - spinner);
+      }
+      result[density] = { line: round(guide - centre(parent.querySelector('[data-slot="nav-row-icon"]')!)),
+        title: round(label(lines.querySelector('[data-test-class="subtask-line"]')!) - label(parent)), marks };
+    }
+    shell.setAttribute("data-sidebar-density", original);
+    return result;
+  });
+}
+
 /** The x delta between a parent row's title and each nested subtask title. */
 export async function titleDeltas(sidebar: Locator): Promise<number[]> {
   return sidebar.evaluate(root => {

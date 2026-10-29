@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import type { Locator, Page } from "playwright";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
-import { COPY, hoverInset, installSubtaskPage, replaySubtasks, subtaskFixtures, markDeltas, titleDeltas, type SubtaskReplay } from "../support/session-subtasks-fixtures.ts";
+import { COPY, hoverInset, installSubtaskPage, replaySubtasks, subtaskFixtures, densityDeltas, markDeltas, titleDeltas, type SubtaskReplay } from "../support/session-subtasks-fixtures.ts";
 import { SESSION_INFO_COPY } from "../../packages/butler-i18n/src/locales/session-info.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
@@ -126,13 +126,23 @@ async function subtaskScreens(parentId: string) {
   await page.close();
 }
 
-/** Every child mark (working, alert, resume) centres on the parent spinner's column, ±0.5px. */
+/**
+ * Every child mark (working, alert, resume) centres on the parent spinner, ±0.5px, at the app's
+ * sidebar density. The guide line centres on the parent icon and child titles start at the
+ * parent title at every DS density (the shell's density switched in place).
+ */
 async function verifyMarkColumn(page: Page, width: string) {
   const deltas = await markDeltas(sidebar(page));
   results[`markDeltas${width}`] = deltas;
   assert.deepEqual(Object.keys(deltas).sort(), ["attention", "progress", "resume"], "every state has a mark");
+  const densities = await densityDeltas(sidebar(page));
+  results[`densityDeltas${width}`] = densities;
   for (const [mark, delta] of Object.entries(deltas)) {
     assert(Math.abs(delta) <= 0.5, `${mark} centres on the parent spinner at ${width}: ${delta}px`);
+  }
+  for (const [density, { line, title }] of Object.entries(densities)) {
+    assert(Math.abs(line) <= 0.5, `guide line centres on the parent icon at ${width} ${density}: ${line}px`);
+    assert(Math.abs(title) <= 0.5, `child title starts at the parent title at ${width} ${density}: ${title}px`);
   }
 }
 

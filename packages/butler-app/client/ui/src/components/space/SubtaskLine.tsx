@@ -1,6 +1,6 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { SubtaskView } from "@/app/types.ts";
-import { Eye, IconButton, NavRow, NavRowSwap, Separator, Stack } from "@/butler-ds";
+import { Eye, IconButton, NavRow, NavRowChildren, NavRowSwap } from "@/butler-ds";
 import { SubtaskMark } from "../session-info/SubtaskMark.tsx";
 import { openSubtask, subtaskStatus } from "../session-info/subtasks.ts";
 
@@ -22,13 +22,10 @@ function SubtaskLine({ parentId, subtask }: { parentId: string; subtask: Subtask
     actionsVisibility="visible" actions={actions} onClick={open} />;
 }
 
-/** The parent's unfinished subtasks beside a zero-width guide line on the parent row's start edge. */
+/** The parent's unfinished subtasks, joined to it by a guide line on its icon column. */
 export function SubtaskLines({ parentId, subtasks }: { parentId: string; subtasks: SubtaskView[] }) {
   if (subtasks.length === 0) return null;
-  return <Stack align="row" cross="stretch" gap="none" data-test-class="subtask-lines">
-    <Separator orientation="vertical" space="none" />
-    <Stack gap="none" grow minWidth="0">
-      {subtasks.map(subtask => <SubtaskLine key={subtask.session_id} parentId={parentId} subtask={subtask} />)}
-    </Stack>
-  </Stack>;
+  return <NavRowChildren dataTestClass="subtask-lines">
+    {subtasks.map(subtask => <SubtaskLine key={subtask.session_id} parentId={parentId} subtask={subtask} />)}
+  </NavRowChildren>;
 }
