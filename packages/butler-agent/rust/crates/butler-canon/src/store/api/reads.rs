@@ -11,6 +11,7 @@ fn cards(db: &Connection, plan: Option<&str>, project: &str) -> Result<Vec<Value
     for work in &mut works {
         *work = public_work(db, work.take())?;
     }
+    super::super::agents::enrich(db, &mut works)?;
     Ok(works)
 }
 pub(super) fn backlog_revision(db: &Connection, project: &str) -> Result<i64> {
@@ -38,10 +39,22 @@ pub fn plan(db: &Connection, id: &str) -> Result<Value> {
     Ok(plan)
 }
 pub fn epic(db: &Connection, id: &str) -> Result<Value> {
-    let mut work = canon_row(read_work(db, id)?)?;
+    let mut work = epic_only(db, id)?;
+    work["proposals"] = super::super::mcp_proposals::open(db, id)?;
+    let mut works = [public_work(db, work)?];
+    super::super::agents::enrich(db, &mut works)?;
+    Ok(works[0].take())
+}
+/// Canon-only snapshot: no runtime owners, sessions, proposals or task reads.
+pub fn epic_only(db: &Connection, id: &str) -> Result<Value> {
+    let mut work = read_work(db, id)?;
     let nodes = rows(db, Query::WorkSpecNodes.sql(), [id])?;
+    let history = super::super::activity::page(db, id, None)?;
+    work["activity"] = history["activity"].clone();
+    work["activity_before"] = history["activity_before"].clone();
     work["specs"] = json!(spec_tree(db, &nodes, None)?);
-    public_work(db, work)
+    work["tags"] = json!(rows(db, sql::EPIC_TAGS, [id])?);
+    Ok(work)
 }
 fn spec_tree(db: &Connection, nodes: &[Value], parent: Option<&str>) -> Result<Vec<Value>> {
     let mut result = Vec::new();

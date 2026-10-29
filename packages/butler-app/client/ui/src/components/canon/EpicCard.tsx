@@ -17,7 +17,7 @@ export function EpicCard({ epic, ordinal, selected, onSelect }: {
       <Stack align="row" cross="center" gap="sm">
         <CanonEpicActivity epic={epic} />
         <Typo.Body data-test-class="canon-epic-title" truncate shrink minWidth="0">{epic.title}</Typo.Body>
-        <Stack shrink={false}><CanonAvatar person={epic.assignee} /></Stack>
+        <Stack shrink={false}><CanonAvatar agent={epic.agent} person={epic.assignee} /></Stack>
       </Stack>
       <CanonTagList tags={epic.tags} limit={3} />
       {caption && <Typo.Caption numeric="tabular" tone="secondary">{caption}</Typo.Caption>}

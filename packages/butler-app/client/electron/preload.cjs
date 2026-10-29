@@ -1480,6 +1480,12 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);
   },
+  getCanonGrants: ({ state }) => requestBridgeResult(`/canon/mcp-grants${state === "pending" ? "?state=pending" : ""}`),
+  decideCanonGrant: ({ id, action }) => {
+    if (!["allow", "deny", "revoke"].includes(action)) throw new Error("Invalid grant action");
+    return requestCanonWrite(`/canon/mcp-grants/${encodeURIComponent(id)}/${action}`, "POST", {});
+  },
+  getCanonActivity: ({ id, before }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}/activity${before == null ? "" : `?before=${encodeURIComponent(before)}`}`),
   getCanonProposal: ({ id }) => requestBridgeResult(`/canon/proposals/${encodeURIComponent(id)}`),
   resolveCanonProposal: ({ id, body }) => requestCanonWrite(`/canon/proposals/${encodeURIComponent(id)}`, "POST", body),
   getCanonSidebar: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon/sidebar`),

@@ -1,4 +1,14 @@
 export interface CanonCopy {
+  mcp: {
+    trustTitle: (client: string) => string; trustDescription: string; client: string; person: string; requestedPermissions: string;
+    trustNotice: (person: string) => string; capabilities: Record<string, string>;
+    allow: string; deny: string; revoke: string; remove: string; revoked: string; deleted: string;
+    connectedTools: string; noTools: string; capabilityCount: (count: number) => string;
+    states: Record<"allowed" | "pending" | "denied" | "revoked", string>;
+    working: (person: string, via: string) => string; butler: string;
+    createdActivity: string; appliedActivity: string; declinedActivity: string;
+    activity: string; noActivity: string; more: string; proposal: string; apply: string;
+  };
   inlineEdit: { title: string; description: string; unsaved: string; keep: string; discard: string; saved: string; current: string };
   attachFile: string; fileTooLarge: string; tooManyAttachments: string; saving: string; uploadingFile: string;
   searchPlan: string; clearSearch: string; noResults: string;
