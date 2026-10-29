@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use super::binary::{agent_binary, resource_source};
 mod retention;
-use super::executable;
+use super::installation::{self, Access};
 use super::{HarnessError, harness_error};
 pub use retention::FAILURE_LIMIT;
 
@@ -28,15 +28,24 @@ impl Sandbox {
     /// Creates a fresh sandbox under the system temp dir. The directory is
     /// removed on success; the last five failures are retained and printed.
     pub fn new(scenario: &str) -> Result<Self, HarnessError> {
-        Self::allocate(scenario, None)
+        Self::allocate(scenario, None, Access::Immutable)
+    }
+
+    /// Declare installation writes before allocation; no shared inode is writable.
+    pub fn mutates_installation(scenario: &str) -> Result<Self, HarnessError> {
+        Self::allocate(scenario, None, Access::Mutable)
     }
 
     /// The caller keeps this immutable installation alive through all children.
     pub fn with_installation(scenario: &str, installation: &Self) -> Result<Self, HarnessError> {
-        Self::allocate(scenario, Some(installation))
+        Self::allocate(scenario, Some(installation), Access::Immutable)
     }
 
-    fn allocate(scenario: &str, installation: Option<&Self>) -> Result<Self, HarnessError> {
+    fn allocate(
+        scenario: &str,
+        installation: Option<&Self>,
+        access: Access,
+    ) -> Result<Self, HarnessError> {
         let base = std::env::temp_dir().join("butler-e2e");
         fs::create_dir_all(&base)?;
         // Canonical path: macOS temp dirs are symlinks, and the product resolves them.
@@ -53,7 +62,7 @@ impl Sandbox {
                 installation.binary.clone(),
             )
         } else {
-            prepare_installation(&root)?
+            prepare_installation(&root, access)?
         };
         let sandbox = Self {
             data: root.join("data"),
@@ -97,43 +106,38 @@ impl Sandbox {
     }
 }
 
-fn prepare_installation(root: &Path) -> Result<(PathBuf, PathBuf, PathBuf), HarnessError> {
+fn prepare_installation(
+    root: &Path,
+    access: Access,
+) -> Result<(PathBuf, PathBuf, PathBuf), HarnessError> {
     let install = root.join("install");
     let resources = install.join("resources");
     let binary = install
         .join("bin")
         .join(format!("butler-agent{}", std::env::consts::EXE_SUFFIX));
+    if access == Access::Immutable
+        && butler_platform::command_sandbox::FixtureInstallation::HARD_LINKS
+    {
+        let snapshot = installation::snapshot::prepare()?;
+        snapshot.install(&install)?;
+        return Ok((install, resources, binary));
+    }
     fs::create_dir_all(install.join("bin"))?;
-    // A copy (an APFS clone), never a hard link: macOS reports a process's
-    // executable (proc_pidpath) under the name its file was last looked
-    // up by, so sandboxes sharing one inode see each other's paths, and
-    // the product's instance identity check then refuses the CLI's
-    // gateway control requests (`gateway_control_identity_invalid`).
+    // Writable installations and hosts without safe hard links use private copies.
     let source = agent_binary()?;
-    executable::copy(&source, &binary).map_err(|error| {
+    installation::install(&source, &binary, access).map_err(|error| {
         harness_error(format!(
             "copy E2E agent {} to {}: {error}",
             source.display(),
             binary.display()
         ))
     })?;
-    butler_platform::command_sandbox::copy_command_helper(
-        source
-            .parent()
-            .ok_or_else(|| harness_error("agent has no parent"))?,
-        binary
-            .parent()
-            .ok_or_else(|| harness_error("installed agent has no parent"))?,
-    )
-    .map_err(|error| {
-        harness_error(format!(
-            "copy E2E command helper from {} to {}: {error}",
-            source.display(),
-            binary.display()
-        ))
-    })?;
+    if let Some(helper) = butler_platform::command_sandbox::FixtureInstallation::command_helper() {
+        let source = source.with_file_name(helper);
+        installation::install(&source, &binary.with_file_name(helper), access)?;
+    }
     let source = resource_source();
-    copy_tree(&source, &resources).map_err(|error| {
+    installation::install_tree(&source, &resources, access).map_err(|error| {
         harness_error(format!(
             "copy E2E resources {} to {}: {error}",
             source.display(),
@@ -141,10 +145,15 @@ fn prepare_installation(root: &Path) -> Result<(PathBuf, PathBuf, PathBuf), Harn
         ))
     })?;
     fs::create_dir_all(resources.join("app-client/dist"))?;
-    fs::write(
-        resources.join("app-client/dist/index.html"),
-        "<!doctype html><title>e2e</title>",
-    )?;
+    let index = resources.join("app-client/dist/index.html");
+    if !index.exists() {
+        fs::write(&index, "<!doctype html><title>e2e</title>")?;
+    }
+    if access == Access::Immutable {
+        let mut permissions = fs::metadata(&index)?.permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&index, permissions)?;
+    }
     Ok((install, resources, binary))
 }
 
