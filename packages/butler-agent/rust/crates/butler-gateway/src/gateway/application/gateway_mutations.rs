@@ -98,7 +98,11 @@ impl GatewayMutationCommands for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move {
             let result = this.delete_project_owned(id, permanent).await?;
-            this.assets_owned(AppAssetCommand::Sweep).await?;
+            this.assets_owned(AppAssetCommand::Sweep)
+                .await
+                .map_err(|error| {
+                    error.after_commit_with_sessions(result.deleted_sessions.clone())
+                })?;
             Ok(result)
         })
     }

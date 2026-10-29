@@ -19,6 +19,9 @@ pub struct AppProjectUpdate {
 #[derive(Clone, Debug, Serialize)]
 pub struct AppProjectActionResult {
     pub project: AppProjectSummary,
+    /// Browser owners to close after this committed mutation; never part of the wire response.
+    #[serde(skip)]
+    pub(crate) deleted_sessions: Vec<String>,
 }
 
 impl AppApplication {
@@ -142,9 +145,9 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         if action == ProjectLifecycle::PermanentDelete {
-            cleanup::complete_all(self, deleted_sessions)
+            cleanup::complete_all(self, deleted_sessions.clone())
                 .await
-                .map_err(GatewayApplicationError::after_commit)?;
+                .map_err(|error| error.after_commit_with_sessions(deleted_sessions))?;
         }
         Ok(result)
     }
@@ -203,7 +206,10 @@ fn update_project(
     let event = append_project_event(&tx, "project.updated", &project, clock)?;
     tx.commit().map_err(AppStorageError::sqlite)?;
     events::publish(subscribers, &event);
-    Ok(AppProjectActionResult { project })
+    Ok(AppProjectActionResult {
+        project,
+        deleted_sessions: Vec::new(),
+    })
 }
 
 fn lifecycle_project(
@@ -254,7 +260,13 @@ fn lifecycle_project(
     if let Some(event) = deleted_event {
         events::publish(subscribers, &event);
     }
-    Ok((AppProjectActionResult { project }, Vec::new()))
+    Ok((
+        AppProjectActionResult {
+            project,
+            deleted_sessions: Vec::new(),
+        },
+        Vec::new(),
+    ))
 }
 
 fn delete_project_chats(
@@ -279,7 +291,13 @@ fn delete_project_chats(
     let event = append_project_event(&tx, "project.permanently_deleted", &project, clock)?;
     tx.commit().map_err(AppStorageError::sqlite)?;
     events::publish(subscribers, &event);
-    Ok((AppProjectActionResult { project }, sessions))
+    Ok((
+        AppProjectActionResult {
+            project,
+            deleted_sessions: sessions.clone(),
+        },
+        sessions,
+    ))
 }
 
 fn read_project(db: &Connection, id: &str) -> Result<AppProjectSummary, AppStorageError> {

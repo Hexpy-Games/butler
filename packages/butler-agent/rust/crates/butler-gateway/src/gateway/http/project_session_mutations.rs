@@ -116,14 +116,16 @@ async fn project_route(
         let permanent = query(uri)
             .get("permanent")
             .is_some_and(|value| value == "true");
+        let result = state
+            .application
+            .delete_project(super::subsessions::decode_component(encoded)?, permanent)
+            .await;
+        let data = close_project_owners(&state, result).await?;
         return json(
             StatusCode::OK,
             ApiEnvelope {
                 protocol_version: APP_PROTOCOL_VERSION,
-                data: state
-                    .application
-                    .delete_project(super::subsessions::decode_component(encoded)?, permanent)
-                    .await?,
+                data,
             },
         )
         .map(Some);
@@ -238,6 +240,27 @@ async fn session_lifecycle(
         .map(Some);
     }
     Ok(None)
+}
+
+async fn close_project_owners(
+    state: &HttpState,
+    result: Result<crate::gateway::AppProjectActionResult, GatewayApplicationError>,
+) -> Result<crate::gateway::AppProjectActionResult, HttpError> {
+    let sessions = match &result {
+        Ok(data) => data.deleted_sessions.as_slice(),
+        Err(error) => error.committed_sessions(),
+    };
+    let mut closed = Ok(());
+    for id in sessions {
+        let outcome = super::browser_host::agent_calls::close_owner(state, id).await;
+        if closed.is_ok() {
+            closed = outcome;
+        }
+    }
+    // Attempt every committed owner and preserve the application's error first.
+    let data = result?;
+    closed?;
+    Ok(data)
 }
 
 async fn close_committed_owner<T>(
