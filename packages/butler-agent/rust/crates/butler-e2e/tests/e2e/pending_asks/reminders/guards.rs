@@ -75,7 +75,7 @@ async fn rm_04_schedule_subsession_and_question_followup_cannot_settle() -> Resu
         "reasoning_effort":s.model.effort.clone().unwrap_or_else(||"low".into()),"access_mode":"full_access",
     })).await?;
     assert_eq!(accepted.status, 202, "{}", accepted.text);
-    let id = accepted_turn_id(accepted.data())?;
+    let id = s.gw.accepted_turn(accepted.data()).await?;
     let turn =
         s.gw.wait_terminal("general", &id, Duration::from_secs(30))
             .await?;
@@ -159,7 +159,7 @@ async fn rm_05_injected_tool_text_cannot_settle_an_ask() -> Result<(), HarnessEr
         s.gw.patch("/settings", json!({"access_mode":"ask_first"}))
             .await?;
     assert_eq!(settings.status, 200, "{}", settings.text);
-    let id = accepted_turn_id(&s.gw.say(&approval_chat, stub::APPROVE).await?)?;
+    let id = s.gw.say_turn(&approval_chat, stub::APPROVE).await?;
     let pending =
         s.gw.wait_turn(
             &approval_chat,

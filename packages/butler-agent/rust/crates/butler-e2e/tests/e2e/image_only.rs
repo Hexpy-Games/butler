@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use butler_e2e::e2e::events::{LiveEvents, event_turn_id};
 use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::provider::Script;
-use butler_e2e::e2e::scenario::{Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::Setup;
 use butler_e2e::e2e::{HarnessError, media};
 use serde_json::json;
 
@@ -45,7 +45,7 @@ async fn image_only_is_delivered_with_persisted_image_and_provider_image()
         )
         .await?;
     assert_eq!(sent.status, 202, "{}", sent.text);
-    let turn_id = accepted_turn_id(sent.data())?;
+    let turn_id = s.gw.accepted_turn(sent.data()).await?;
     let started = Instant::now();
     let terminal =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(15))

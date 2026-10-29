@@ -148,7 +148,7 @@ async fn cb_01_03_06_10_16_linked_pipeline_feedback_and_two_epics() -> Result<()
     script.release();
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        &s.gw.accepted_turn(&turn).await?,
         Duration::from_secs(60),
     )
     .await?;
@@ -203,7 +203,7 @@ async fn cb_01_03_06_10_16_linked_pipeline_feedback_and_two_epics() -> Result<()
     let turn = s.gw.say(&chat, "Process the documentation epic").await?;
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        &s.gw.accepted_turn(&turn).await?,
         Duration::from_secs(60),
     )
     .await?;
@@ -213,7 +213,7 @@ async fn cb_01_03_06_10_16_linked_pipeline_feedback_and_two_epics() -> Result<()
     let turn = s.gw.say(&chat, "Verify the release epic again").await?;
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        &s.gw.accepted_turn(&turn).await?,
         Duration::from_secs(60),
     )
     .await?;
@@ -297,7 +297,7 @@ async fn auto_labels_respect_person_rank_and_reporting_finish() -> Result<(), Ha
         script.finish_report();
         s.gw.wait_terminal(
             &chat,
-            &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+            &s.gw.accepted_turn(&turn).await?,
             Duration::from_secs(60),
         )
         .await?;
@@ -319,7 +319,7 @@ async fn auto_labels_respect_person_rank_and_reporting_finish() -> Result<(), Ha
             let turn = s.gw.say(&chat, "What does this mean?").await?;
             s.gw.wait_terminal(
                 &chat,
-                &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+                &s.gw.accepted_turn(&turn).await?,
                 Duration::from_secs(30),
             )
             .await?;

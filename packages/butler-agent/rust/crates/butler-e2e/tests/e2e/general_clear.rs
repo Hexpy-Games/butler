@@ -1,7 +1,8 @@
 //! Clear the permanent channel through the authenticated public App route.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+use super::ask_user;
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
-use butler_e2e::e2e::scenario::{Fixture, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Fixture, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures};
 use butler_platform::sqlite;
 use rusqlite::{OpenFlags, params};
@@ -72,7 +73,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         .to_owned();
     let sent = s.gw.post("/messages", json!({"chat_id":"general","text":"Remember the cleararchiveunique marker.","client_message_id":"saved-before-clear","attachments":[{"file_id":saved_file}]})).await?;
     assert_eq!(sent.status, 202, "{}", sent.text);
-    let initial_turn = accepted_turn_id(sent.data())?;
+    let initial_turn = s.gw.accepted_turn(sent.data()).await?;
     s.gw.wait_terminal("general", &initial_turn, Duration::from_secs(30))
         .await?;
     let upload =
@@ -250,7 +251,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     let served = server.chat_requests().len();
     let sent = s.gw.post("/messages", json!({"chat_id":"general","text":"A fresh conversation.","client_message_id":"pending-after-clear","attachments":[{"file_id":pending_file}]})).await?;
     assert_eq!(sent.status, 202, "{}", sent.text);
-    let sent_turn = accepted_turn_id(sent.data())?;
+    let sent_turn = s.gw.accepted_turn(sent.data()).await?;
     s.gw.wait_terminal("general", &sent_turn, Duration::from_secs(30))
         .await?;
     let attached: String = db.query_row(
@@ -280,7 +281,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         "SELECT conversation_session_id FROM conversation_bindings WHERE gateway='app' AND external_session_id=?1", params![hint], |row| row.get(0),
     )?;
     assert_ne!(fresh, before);
-    let running = accepted_turn_id(&s.gw.say("general", "Still running.").await?)?;
+    let running = s.gw.say_turn("general", "Still running.").await?;
     let refused =
         s.gw.post(
             "/sessions/general/clear",
@@ -368,7 +369,7 @@ async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result
         json!([])
     );
     verify_rotated_permissions(&s, archive).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", super::ask_user::stub::PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", ask_user::stub::PROMPT).await?;
     s.gw.wait_turn(
         "general",
         &turn,

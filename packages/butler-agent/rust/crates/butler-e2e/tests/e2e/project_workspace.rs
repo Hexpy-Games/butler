@@ -93,7 +93,7 @@ pub(super) async fn bind_project(s: &mut Scenario, folder: &Path) -> Result<Stri
 
 async fn result(s: &Scenario, chat: &str, prompt: &str) -> Result<Value, HarnessError> {
     let before = s.provider()?.requests().len();
-    let id = s.send_input(chat, prompt).await?;
+    let id = s.gw.say_turn(chat, prompt).await?;
     let deadline = Instant::now() + Duration::from_secs(60);
     let request = loop {
         let requests = s.gw.approval_requests(chat).await?;
@@ -157,7 +157,7 @@ async fn approve_write(
     file: &Path,
     expected: &str,
 ) -> Result<(), HarnessError> {
-    let id = s.send_input(chat, prompt).await?;
+    let id = s.gw.say_turn(chat, prompt).await?;
     let deadline = Instant::now() + Duration::from_secs(60);
     let request = loop {
         let page = s.gw.approval_requests(chat).await?;
@@ -403,8 +403,8 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
             settings.data()["default_project_workspace_label"],
             folder.file_name().unwrap().to_str().unwrap()
         );
-        let id = s
-            .send_input(
+        let id =
+            s.gw.say_turn(
                 "general",
                 &format!("List my default project folder {index}."),
             )

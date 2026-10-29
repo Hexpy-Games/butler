@@ -14,7 +14,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     gateway::tool_rows,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Instant};
@@ -364,7 +364,7 @@ async fn schedule_clamp(
             ),
         ],
     );
-    let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+    let id = s.gw.say_turn(chat, prompt).await?;
     delivered(s, chat, &id).await?;
     assert_counts(s, &id, 0, 0)?;
     assert!(
@@ -422,7 +422,7 @@ async fn guarded_commands(
         let prompt = "Search project keys.";
         script.rounds.lock().unwrap().insert(prompt.into(), vec![call("grep-command", "run_command",
             &json!({"command":"grep -r KEY .","summary":"Search keys","state_effect":"read_only"}))]);
-        let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+        let id = s.gw.say_turn(chat, prompt).await?;
         delivered(s, chat, &id).await?;
         assert_counts(s, &id, 0, 0)?;
         let output = outputs(s, chat, &id, script, prompt).await?;

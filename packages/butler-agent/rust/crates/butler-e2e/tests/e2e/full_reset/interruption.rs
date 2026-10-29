@@ -154,8 +154,7 @@ async fn reset_03_active_and_queued_turns_never_resume() -> Result<(), HarnessEr
         min_ms: 0,
     });
     let live = butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, 0).await?;
-    let running =
-        butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say("general", &prompt).await?)?;
+    let running = s.gw.say_turn("general", &prompt).await?;
     live.wait_for(Duration::from_secs(10), |event| {
         event["type"] == "message.updated"
             && event["payload"]["message"]["turn_id"] == running

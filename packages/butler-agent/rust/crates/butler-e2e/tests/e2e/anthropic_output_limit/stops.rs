@@ -279,7 +279,7 @@ async fn unrecognized_stop_offers_user_retry() -> Result<(), HarnessError> {
         s.gw.post(&format!("/turns/{id}/retry-current"), json!({}))
             .await?;
     assert_eq!(retry.status, 202, "{}", retry.text);
-    let next = butler_e2e::e2e::scenario::accepted_turn_id(retry.data())?;
+    let next = s.gw.accepted_turn(retry.data()).await?;
     assert_ne!(next, id);
     let recovered =
         s.gw.wait_terminal("general", &next, Duration::from_secs(turn_timeout()))
@@ -299,10 +299,7 @@ async fn unrecognized_stop_offers_user_retry() -> Result<(), HarnessError> {
         s.gw.post(&format!("/turns/{id}/retry-current"), json!({}))
             .await?;
     assert_eq!(repeated.status, 202, "{}", repeated.text);
-    assert_eq!(
-        butler_e2e::e2e::scenario::accepted_turn_id(repeated.data())?,
-        next
-    );
+    assert_eq!(s.gw.accepted_turn(repeated.data()).await?, next);
     assert_eq!(
         s.gw.messages("general")
             .await?

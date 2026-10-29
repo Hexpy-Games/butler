@@ -1,7 +1,7 @@
 //! A reply cut short by an app quit is history, not pending work: General clears
 //! and the archived failure stays final.
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
-use butler_e2e::e2e::scenario::{Fixture, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Fixture, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures};
 use serde_json::json;
 use std::time::{Duration, Instant};
@@ -38,12 +38,12 @@ async fn general_clears_after_app_quit_interrupted_a_reply() -> Result<(), Harne
         )
         .await?;
     assert_eq!(settings.status, 200, "{}", settings.text);
-    let first = accepted_turn_id(&s.gw.say("general", "Hello there.").await?)?;
+    let first = s.gw.say_turn("general", "Hello there.").await?;
     s.gw.wait_terminal("general", &first, Duration::from_secs(30))
         .await?;
     let served = server.chat_requests().len();
     let cut_text = "Tell me more.";
-    let cut = accepted_turn_id(&s.gw.say("general", cut_text).await?)?;
+    let cut = s.gw.say_turn("general", cut_text).await?;
     let deadline = Instant::now() + Duration::from_secs(20);
     // Background memory rounds share the server; wait for this reply's request.
     while !server.chat_requests().iter().skip(served).any(|request| {
@@ -72,7 +72,7 @@ async fn general_clears_after_app_quit_interrupted_a_reply() -> Result<(), Harne
         [] as [serde_json::Value; 0]
     );
     assert!(s.gw.messages(&archive).await?.len() >= 3);
-    let fresh = accepted_turn_id(&s.gw.say("general", "A fresh start.").await?)?;
+    let fresh = s.gw.say_turn("general", "A fresh start.").await?;
     s.gw.wait_terminal("general", &fresh, Duration::from_secs(30))
         .await?;
     let messages = s.gw.messages("general").await?;

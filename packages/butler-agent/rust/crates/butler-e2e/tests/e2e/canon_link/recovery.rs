@@ -28,7 +28,7 @@ async fn next_epic(s: &Scenario, script: &stub::Script, chat: &str) -> Result<()
     let turn = s.gw.say(chat, "Process the documentation epic").await?;
     s.gw.wait_terminal(
         chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        &s.gw.accepted_turn(&turn).await?,
         Duration::from_secs(60),
     )
     .await?;
@@ -72,7 +72,7 @@ async fn deleted_epic_link_is_quarantined_without_stopping_canon_events() -> Res
     script.release();
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        &s.gw.accepted_turn(&turn).await?,
         Duration::from_secs(60),
     )
     .await?;
@@ -105,7 +105,7 @@ async fn unreadable_project_work_keeps_canon_reads_and_other_epic_events_availab
     script.release();
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        &s.gw.accepted_turn(&turn).await?,
         Duration::from_secs(60),
     )
     .await?;

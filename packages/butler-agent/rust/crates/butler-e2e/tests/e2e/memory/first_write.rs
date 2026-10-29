@@ -1,10 +1,6 @@
 //! The first explicit write waits for fresh generation publication.
 use super::super::memory_wiring_more::support;
-use butler_e2e::e2e::{
-    HarnessError,
-    cassette::Cassette,
-    scenario::{Setup, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use rusqlite::OptionalExtension;
 use serde_json::json;
 use std::{path::PathBuf, time::Duration};
@@ -36,7 +32,7 @@ async fn mem_03_explicit_write_waits_for_first_generation() -> Result<(), Harnes
         .data
         .join("cognition/memory/active-generation.json");
     assert!(!descriptor.exists(), "bootstrap ran despite hold");
-    let turn_id = accepted_turn_id(&s.gw.say("general", ASK).await?)?;
+    let turn_id = s.gw.say_turn("general", ASK).await?;
     // Observe the product's durable tool receipt, including an already completed
     // failure so the unfixed path reports its result instead of timing out.
     let (status, result) = started_write(s.sandbox.data.clone(), turn_id.clone()).await;

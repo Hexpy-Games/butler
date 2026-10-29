@@ -14,7 +14,7 @@ use super::{approve, assert_counts, delivered, outputs, paused};
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::{
@@ -76,7 +76,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
             call("read", "read_file", &json!({"requests":[{"path":"a.txt"}]})),
         ],
     );
-    let id = accepted_turn_id(&s.gw.say(&chat, EDIT).await?)?;
+    let id = s.gw.say_turn(&chat, EDIT).await?;
     if !contained {
         let turn =
             s.gw.wait_turn(&chat, &id, &["waiting_for_form"], Duration::from_secs(20))
@@ -173,7 +173,7 @@ async fn sandbox_holds(
             ),
         ],
     );
-    let id = accepted_turn_id(&s.gw.say(chat, ESCAPE).await?)?;
+    let id = s.gw.say_turn(chat, ESCAPE).await?;
     delivered(s, chat, &id).await?;
     assert_counts(s, &id, 0, 0)?;
     let published = s.sandbox.data.join("artifacts/generated/published");
@@ -326,7 +326,7 @@ async fn external_content_reasks(
     delivered(s, chat, &id).await?;
     assert_counts(s, &id, 1, 0)?;
 
-    let id = accepted_turn_id(&s.gw.say(chat, rounds[1].0).await?)?;
+    let id = s.gw.say_turn(chat, rounds[1].0).await?;
     delivered(s, chat, &id).await?;
     assert_counts(s, &id, 0, 0)?;
 

@@ -50,7 +50,7 @@ async fn startup_refusal_leaves_no_queued_input_and_ready_chat_gets_title()
     .await?;
     let chat = chat(&s, &provisional(&prompt), &prompt).await?;
     let sent = s.gw.say(&chat, &prompt).await?;
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(&sent)?;
+    let id = s.gw.accepted_turn(&sent).await?;
     assert!(sent["queued"].is_null(), "{sent}");
     wait_title(&s, &chat, TITLE).await?;
     let turn =

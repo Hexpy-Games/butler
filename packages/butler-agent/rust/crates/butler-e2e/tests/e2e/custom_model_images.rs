@@ -10,7 +10,7 @@ use butler_e2e::e2e::fake_servers::{
     ChatBehavior, FakeServer, LOCAL_MODEL, LocalCapabilities, carries_image,
 };
 use butler_e2e::e2e::gateway::{Reply, turn_state};
-use butler_e2e::e2e::scenario::{Scenario, accepted_turn_id};
+use butler_e2e::e2e::scenario::Scenario;
 use butler_e2e::e2e::{HarnessError, media};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -55,7 +55,7 @@ async fn terminal(s: &Scenario, reply: &Reply) -> Result<Value, HarnessError> {
     assert_eq!(reply.status, 202, "{}", reply.text);
     s.gw.wait_terminal(
         "general",
-        &accepted_turn_id(reply.data())?,
+        &s.gw.accepted_turn(reply.data()).await?,
         Duration::from_secs(30),
     )
     .await

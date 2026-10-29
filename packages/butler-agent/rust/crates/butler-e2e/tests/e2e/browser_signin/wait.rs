@@ -3,10 +3,7 @@
 //! another tab's changes never resume it, and the hand-back does.
 use super::host::{admin, attach, snapshot, tab};
 use super::tool::waiting_card;
-use butler_e2e::e2e::{
-    HarnessError, cassette::Cassette, gateway::turn_state, scenario::Setup,
-    scenario::accepted_turn_id,
-};
+use butler_e2e::e2e::{HarnessError, cassette::Cassette, gateway::turn_state, scenario::Setup};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 
@@ -43,7 +40,7 @@ async fn wait_for_user_card_names_the_site_and_resumes_on_hand_back() -> Result<
     };
     snapshot(&admin, tabs("user")).await?;
 
-    let id = accepted_turn_id(&s.gw.say("general", ASK).await?)?;
+    let id = s.gw.say_turn("general", ASK).await?;
     let card = waiting_card(&s, &id).await?;
     let operation = &card["approval"]["operation"];
     assert_eq!(operation["tool"], "browser_wait_for_user", "{card}");

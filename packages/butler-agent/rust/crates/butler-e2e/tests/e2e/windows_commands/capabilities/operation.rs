@@ -30,7 +30,7 @@ pub(super) async fn observe_operation(
     let live = butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, 0).await?;
     let accepted = s.gw.say(chat, provider::PROMPT).await?;
     script.mark("say_returned");
-    let id = accepted_turn_id(&accepted)?;
+    let id = s.gw.accepted_turn(&accepted).await?;
     let turn = live
         .wait_turn(
             &s.gw,
