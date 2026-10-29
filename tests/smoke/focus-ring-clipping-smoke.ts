@@ -129,17 +129,26 @@ async function openSidebar(page: Page) {
 }
 
 /** Starts keyboard order just before `selector` so Tab enters it first. */
+const tabbable = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Parks focus just before the scope's first keyboard stop. The anchor sits
+ * inside the scope, so parking never moves focus out of it: focus leaving a
+ * popover or menu dismisses it, and its controls unmount mid-walk.
+ */
 async function focusBefore(page: Page, selector: string) {
-  await page.evaluate((selector) => {
+  await page.evaluate(({ selector, tabbable }) => {
     const scope = document.querySelector(selector);
     if (!scope) throw new Error(`missing ${selector}`);
+    const first = scope.matches(tabbable) ? scope : scope.querySelector(tabbable) ?? scope;
     const anchor = document.createElement("span");
     anchor.tabIndex = -1;
+    anchor.style.position = "absolute";
     anchor.setAttribute("data-focus-audit-anchor", "");
-    scope.parentElement!.insertBefore(anchor, scope);
+    first.parentElement!.insertBefore(anchor, first);
     anchor.focus();
     anchor.addEventListener("blur", () => anchor.remove(), { once: true });
-  }, selector);
+  }, { selector, tabbable });
 }
 
 async function auditScope(page: Page, cell: Cell, screen: string, selector: string, maxStops = 120) {
@@ -174,8 +183,7 @@ async function auditArrows(page: Page, cell: Cell, screen: string, steps: number
  * probed on every frame from focus on, while the fade catches up, and settled.
  */
 async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope: string) {
-  const count = await page.evaluate((scope) => {
-    const tabbable = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+  const count = await page.evaluate(({ scope, tabbable }) => {
     const scrollers = [...document.querySelectorAll<HTMLElement>(`${scope} [data-scroll-fade]`)].filter((element) => {
       const x = element.dataset.scrollFade === "x";
       const overflow = x ? element.scrollWidth - element.clientWidth : element.scrollHeight - element.clientHeight;
@@ -183,7 +191,7 @@ async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope:
     });
     scrollers.forEach((element, index) => element.setAttribute("data-focus-audit-scroller", String(index)));
     return scrollers.length;
-  }, scope);
+  }, { scope, tabbable });
   for (let index = 0; index < count; index += 1) {
     for (const edge of ["start", "end"] as const) {
       const scroller = `[data-focus-audit-scroller="${index}"]`;
