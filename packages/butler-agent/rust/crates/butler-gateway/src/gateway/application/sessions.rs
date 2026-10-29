@@ -1,9 +1,9 @@
 //! App-owned session rows and source-shaped navigation reads.
 
 pub(super) mod canon;
+pub(super) mod cleanup;
 mod clear;
 mod contracts;
-pub(super) mod delete_cleanup;
 pub(super) mod identity;
 mod mutations;
 pub(super) use mutations::compare_and_set_title;

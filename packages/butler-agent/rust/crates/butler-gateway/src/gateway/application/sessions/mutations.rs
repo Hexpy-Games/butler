@@ -38,6 +38,10 @@ impl AppApplication {
             ));
         }
         let archived = input.archived.unwrap_or(false);
+        if archived {
+            super::cleanup::replay(self).await;
+        }
+        let cleanup_guard = self.session_cleanup_locks.acquire(session_id.clone()).await;
         self.read_session_row(session_id.clone()).await?;
         if archived {
             if session_id == "general" {
@@ -68,7 +72,7 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         if archived {
-            self.collect_session_outputs(session_id).await?;
+            super::cleanup::complete_locked(self, session_id, &cleanup_guard).await?;
         }
         Ok(updated)
     }
@@ -78,6 +82,8 @@ impl AppApplication {
         session_id: String,
         title: Option<String>,
     ) -> Result<AppSessionActionResult, GatewayApplicationError> {
+        super::cleanup::replay(self).await;
+        let cleanup_guard = self.session_cleanup_locks.acquire(session_id.clone()).await;
         self.read_session_row(session_id.clone()).await?;
         if session_id == "general" {
             return Err(public(
@@ -113,7 +119,7 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
-        self.collect_session_outputs(session_id).await?;
+        super::cleanup::complete_locked(self, session_id, &cleanup_guard).await?;
         Ok(result)
     }
 
@@ -122,9 +128,8 @@ impl AppApplication {
         session_id: String,
         permanent: bool,
     ) -> Result<AppSessionActionResult, GatewayApplicationError> {
-        if permanent {
-            super::delete_cleanup::replay(self).await;
-        }
+        super::cleanup::replay(self).await;
+        let cleanup_guard = self.session_cleanup_locks.acquire(session_id.clone()).await;
         self.read_session_row(session_id.clone()).await?;
         if session_id == "general" {
             return Err(public(
@@ -163,10 +168,8 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
-        if permanent {
-            super::delete_cleanup::complete(self, session).await?;
-        } else {
-            self.collect_session_outputs(session).await?;
+        super::cleanup::complete_locked(self, session, &cleanup_guard).await?;
+        if !permanent {
             self.assets_owned(super::super::AppAssetCommand::Sweep)
                 .await?;
         }
@@ -221,6 +224,7 @@ fn mutate_session(
         ));
     }
     let title = title.unwrap_or(current.title);
+    let archive_requested = archived == Some(true);
     let archived = archived.unwrap_or(current.archived);
     let now = clock.now_iso();
     tx.execute(
@@ -228,6 +232,20 @@ fn mutate_session(
         params![title, i32::from(archived), now, session_id],
     )
     .map_err(AppStorageError::sqlite)?;
+    if !archived {
+        tx.execute(
+            "DELETE FROM app_session_delete_cleanups WHERE session_id=?1 AND kind='archive'",
+            [session_id],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    } else if archive_requested {
+        tx.execute(
+            "INSERT INTO app_session_delete_cleanups(session_id,kind) VALUES(?1,'archive') \
+             ON CONFLICT(session_id) DO NOTHING",
+            [session_id],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    }
     finish_update(tx, subscribers, session_id, clock)
 }
 
@@ -246,7 +264,8 @@ fn delete_permanently(
         ));
     }
     tx.execute(
-        "INSERT INTO app_session_delete_cleanups(session_id,session_hint) VALUES(?1,?2)",
+        "INSERT INTO app_session_delete_cleanups(session_id,kind,session_hint) VALUES(?1,'delete',?2) \
+         ON CONFLICT(session_id) DO UPDATE SET kind='delete',session_hint=excluded.session_hint",
         params![session_id, session.session_hint],
     )
     .map_err(AppStorageError::sqlite)?;
