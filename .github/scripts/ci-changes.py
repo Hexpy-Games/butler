@@ -18,10 +18,11 @@ import ci_rust_inputs
 import ci_runtime_crates
 import ci_tool_path
 import ci_receipts
+import ci_shell
 from ci_main_baseline import latest_main_run
 from urllib.parse import urlencode
 
-GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
+GROUPS = ('shell', 'rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
 WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts',
@@ -142,25 +143,26 @@ CI_CONSUMERS = (
 LICENSE_INPUTS = set(json.loads((Path(__file__).resolve().parents[2] /
                                 'deploy/licenses/catalog.json').read_text(encoding='utf-8'))['inputs'])
 
-
 def matches(path, patterns):
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
 
-
 def github_categories(path):
+    if path == '.github/workflows/shell.yml':
+        return {'shell'}
     if path.endswith('.md') or path.startswith('.github/releases/'):
         return set()
     # This orchestrator owns all groups, unlike the reusable rust-* jobs.
     if path == '.github/workflows/rust-quality.yml':
-        return set(GROUPS)
+        return set(GROUPS) - {'shell'}
     groups = {group for consumers, patterns in CI_CONSUMERS
               if matches(path, patterns) for group in consumers}
     if matches(path, CI_LINT_ONLY):
         groups.add('workflows')
-    return groups or set(GROUPS)  # Unknown CI inputs fail closed.
-
+    return groups or (set(GROUPS) - {'shell'})  # Unknown legacy CI inputs fail closed.
 
 def categories(path, event=None):
+    if path.startswith('packages/butler-shell/'):
+        return {'shell'}
     if path.startswith('.github/'):
         return github_categories(path)
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
@@ -198,22 +200,20 @@ def categories(path, event=None):
     # Unknown executable/configuration inputs fail closed, rather than silently
     # leaving a new package or tool untested. Assets/readme are product assets.
     if not result and not path.startswith('assets/readme/'):
-        result = set(GROUPS) - {'workflows'}
+        result = set(GROUPS) - {'workflows', 'shell'}
+    if path.startswith('packages/butler-agent/rust/tools/source-check/'):
+        result.add('shell')
     return result
-
 
 def windows_native(path):
     return matches(path, WINDOWS)
-
 
 def windows_runtime(path, event=None):
     # Crates the Windows agent links, from the checked-in Cargo graph closure.
     return 'rust' in categories(path, event) and ci_runtime_crates.selects(path, ci_rust_inputs.consumes)
 
-
 def command(*args):
     return subprocess.check_output(args, text=True).strip()
-
 
 def changed(base, head='HEAD'):
     # Diff from the merge base so commits that reached the base branch after
@@ -226,7 +226,6 @@ def changed(base, head='HEAD'):
     raw = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', base, head])
     return raw.decode().split('\0')[:-1]
 
-
 def hashes(base):
     digests = {group: hashlib.sha256(b'ci-inputs-v1') for group in GROUPS}
     raw = subprocess.check_output(['git', 'ls-tree', '-rz', 'HEAD'])
@@ -238,9 +237,7 @@ def hashes(base):
             digests[group].update(entry + b'\0')
     return {group: digest.hexdigest() for group, digest in digests.items()}
 
-
 trusted_run = ci_receipts.trusted_run
-
 
 def api_items(path, key):
     pages = json.loads(command('gh', 'api', path, '--paginate', '--slurp'))
@@ -390,6 +387,7 @@ def select(event, workflow):
         command('git', 'cat-file', '-e', f'{base}^{{commit}}')
     paths = [] if full else changed(base)
     required = set(GROUPS) if full else set().union(*(categories(p, os.environ['GITHUB_EVENT_NAME']) for p in paths))
+    ci_shell.select(required, full, workflow, base, event, changed, categories)
     current = hashes(base or 'full')
     label = any(label['name'] == 'ci:windows-native' for label in pr.get('labels', []))
     native_required = (full or label or any(windows_native(p) or windows_runtime(p, os.environ['GITHUB_EVENT_NAME']) for p in paths) or

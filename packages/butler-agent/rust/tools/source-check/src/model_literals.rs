@@ -6,15 +6,16 @@ use std::{
 };
 use syn::visit::Visit;
 
+use crate::function_length::{canonical, production_files};
+use crate::modules::load;
+
 pub(crate) fn check(root: &Path, sources: &[PathBuf]) -> Result<bool, String> {
-    let catalog = sources
-        .iter()
-        .find(|path| path.ends_with("models/catalog/static_data.rs"))
-        .ok_or_else(|| "model literal check requires the bundled catalog".to_owned())?;
-    let catalog_path = catalog.with_file_name("static-catalog.json");
-    let data: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(catalog_path).map_err(|error| error.to_string())?,
-    )
+    // The checker owns its policy catalog. Scanning a different workspace must
+    // neither require that workspace to copy it nor disable later checks.
+    // Embed it so the same rule also works when running a relocated binary.
+    let data: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../crates/butler-models/src/models/catalog/static-catalog.json"
+    ))
     .map_err(|error| error.to_string())?;
     let ids = data["models"]
         .as_array()
@@ -24,8 +25,12 @@ pub(crate) fn check(root: &Path, sources: &[PathBuf]) -> Result<bool, String> {
         .flatten()
         .map(str::to_owned)
         .collect::<HashSet<_>>();
+    let production = production_files(root, load)?;
     let mut failed = false;
     for path in sources {
+        if !production.contains(&canonical(path)?) {
+            continue;
+        }
         let name = path.to_string_lossy().replace('\\', "/");
         if name.contains("/catalog/")
             || name.contains("/butler-e2e/")

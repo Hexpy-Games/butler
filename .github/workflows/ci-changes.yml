@@ -22,6 +22,9 @@ on:
       tier:
         description: CI tier
         value: ${{ jobs.paths.outputs.tier }}
+      shell:
+        description: Selected shell inputs
+        value: ${{ jobs.paths.outputs.shell }}
       rust:
         description: Selected rust inputs
         value: ${{ jobs.paths.outputs.rust }}
@@ -73,6 +76,7 @@ jobs:
       artifacts: ${{ steps.paths.outputs.artifacts }}
       candidate: ${{ steps.paths.outputs.candidate }}
       tier: ${{ steps.paths.outputs.tier }}
+      shell: ${{ steps.paths.outputs.shell }}
       rust: ${{ steps.paths.outputs.rust }}
       ui: ${{ steps.paths.outputs.ui }}
       site: ${{ steps.paths.outputs.site }}

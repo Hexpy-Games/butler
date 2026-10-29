@@ -17,7 +17,6 @@ SPEC = importlib.util.spec_from_file_location('changes', ROOT / 'ci-changes.py')
 changes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(changes)
 
-
 class Paths(unittest.TestCase):
     # test-category: pure-logic
     def test_responsible_jobs_and_workflow_fail_closed(self):
@@ -44,7 +43,7 @@ class Paths(unittest.TestCase):
             '.github/pull_request_template.md': set(),
             '.github/workflows/windows.yml': {'rust', 'ui', 'package'},
             'packages/butler-agent/rust/scripts/check_host_links.py': {'rust', 'package', 'install', 'linux-package', 'signing'},
-            'new-build-config.ini': set(changes.GROUPS) - {'workflows'},
+            'new-build-config.ini': set(changes.GROUPS) - {'workflows', 'shell'},
         }
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         lint = workflow.split('  lint:\n', 1)[1].split('  gate:\n', 1)[0]
@@ -63,14 +62,16 @@ class Paths(unittest.TestCase):
     # test-category: pure-logic
     def test_github_inputs_follow_consumers_and_unknowns_fail_closed(self):
         from ci_consumer_test_support import consumer_groups
-        for path, groups in consumer_groups(changes.GROUPS).items():
+        for path, groups in consumer_groups(set(changes.GROUPS) - {'shell'}).items():
             with self.subTest(path=path):
-                self.assertGreaterEqual(changes.categories(path), groups)
+                # The experimental workspace has its own explicit input contract.
+                if path != '.github/workflows/shell.yml':
+                    self.assertGreaterEqual(changes.categories(path), groups)
         for path in ['.github/workflows/new-check.yml',
                      '.github/actions/new-setup/action.yml',
                      '.github/scripts/new-helper.py', '.github/actionlint.yaml']:
             with self.subTest(path=path):
-                self.assertEqual(changes.categories(path), set(changes.GROUPS))
+                self.assertEqual(changes.categories(path), set(changes.GROUPS) - {'shell'})
         for path in ['.github/releases/v1.2.3.md',
                      '.github/actions/windows-runner-setup/README.md']:
             self.assertEqual(changes.categories(path), set())
@@ -119,7 +120,7 @@ jobs:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content)
             with patch.object(consumers, 'ROOT', root):
-                derived = consumers.consumer_groups(changes.GROUPS)
+                derived = consumers.consumer_groups(set(changes.GROUPS) - {'shell'})
             native = {'package', 'rust', 'ui'}
             self.assertEqual(derived['.github/workflows/child.yml'], native)
             self.assertEqual(derived['.github/actions/setup/action.yaml'], native)
@@ -204,7 +205,6 @@ jobs:
                 self.assertNotEqual(updated['ui'], changes.hashes(base)['ui'])
             finally:
                 os.chdir(original)
-
 
     def test_changed_ignores_base_branch_commits_after_the_fork(self):
         original = Path.cwd()
@@ -492,6 +492,7 @@ from ci_windows_cascade_tests import WindowsCascade
 from ci_input_tests import DerivedInputs
 from ci_tier_tests import Precision, ApprovedTiers
 from ci_ds_approval_tests import DSApproval, DSApprovalWiring
+from ci_shell_tests import ShellSelection
 from ci_runtime_tests import WindowsRuntimeSelection, SkippedIsNotPass
 
 
