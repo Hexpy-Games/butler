@@ -115,9 +115,15 @@ fn prepare_installation(
     let binary = install
         .join("bin")
         .join(format!("butler-agent{}", std::env::consts::EXE_SUFFIX));
+    if access == Access::Immutable
+        && butler_platform::command_sandbox::FixtureInstallation::HARD_LINKS
+    {
+        let snapshot = installation::snapshot::prepare()?;
+        snapshot.install(&install)?;
+        return Ok((install, resources, binary));
+    }
     fs::create_dir_all(install.join("bin"))?;
-    // Every scenario owns its installation paths. Immutable files use protected
-    // hard links where safe, then kernel copies, then unsynced streamed copies.
+    // Writable installations and hosts without safe hard links use private copies.
     let source = agent_binary()?;
     installation::install(&source, &binary, access).map_err(|error| {
         harness_error(format!(

@@ -23,7 +23,7 @@ async fn offline_tarball_install_tier_l() -> Result<(), HarnessError> {
 async fn install(force_l: bool) -> Result<(), HarnessError> {
     let started = std::time::Instant::now();
     let (url, script, server) = stub::start().await?;
-    let mut setup = test_support_agent(Setup::new("LINUX-NPM-TARBALL")?)?
+    let mut setup = test_support_agent(Setup::mutates_installation("LINUX-NPM-TARBALL")?)?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));

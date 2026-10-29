@@ -163,22 +163,6 @@ pub fn trampoline() -> Result<(), Box<dyn std::error::Error>> {
     linux::trampoline()
 }
 
-/// Copies the command helper next to a relocated agent (e.g. isolated E2E installs).
-pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result<()> {
-    #[cfg(target_os = "linux")]
-    std::fs::copy(
-        source.join("butler-sandbox"),
-        destination.join("butler-sandbox"),
-    )?;
-    #[cfg(windows)]
-    std::fs::copy(
-        source.join("butler-sandbox.exe"),
-        destination.join("butler-sandbox.exe"),
-    )?;
-    let _ = (source, destination);
-    Ok(())
-}
-
 /// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows
 /// runs them in Windows PowerShell 5.1, whose syntax differs.
 pub const POSIX_SHELL: bool = shell::POSIX;

@@ -1,5 +1,6 @@
 //! Per-scenario immutable links, or independent writable installation files.
 use std::{fs, io, path::Path};
+pub mod snapshot;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Access {
@@ -13,7 +14,12 @@ pub fn install(source: &Path, target: &Path, access: Access) -> io::Result<()> {
         source,
         target,
         access,
-        |from, to| fs::hard_link(from, to),
+        |_, _| {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "independent copy",
+            ))
+        },
         |from, to| fs::copy(from, to).map(|_| ()),
     )
 }
@@ -30,7 +36,8 @@ pub fn install_with(
     super::executable::publish_path(target, |staging| {
         if access == Access::Immutable
             && butler_platform::command_sandbox::FixtureInstallation::HARD_LINKS
-            && link_readonly(source, staging, link).is_ok()
+            && fs::metadata(source)?.permissions().readonly()
+            && link(source, staging).is_ok()
         {
             return Ok(());
         }
@@ -59,34 +66,34 @@ pub fn install_with(
 }
 
 pub fn install_tree(source: &Path, target: &Path, access: Access) -> io::Result<()> {
+    tree(source, target, access, false)
+}
+
+/// Only harness-owned, already protected snapshots may supply shared inodes.
+fn link_tree(source: &Path, target: &Path) -> io::Result<()> {
+    tree(source, target, Access::Immutable, true)
+}
+
+fn tree(source: &Path, target: &Path, access: Access, links: bool) -> io::Result<()> {
     fs::create_dir_all(target)?;
     for entry in fs::read_dir(source)? {
         let entry = entry?;
         let path = target.join(entry.file_name());
         if entry.file_type()?.is_dir() {
-            install_tree(&entry.path(), &path, access)?;
+            tree(&entry.path(), &path, access, links)?;
         } else if entry.file_type()?.is_file() {
-            install(&entry.path(), &path, access)?;
+            if links {
+                install_with(
+                    &entry.path(),
+                    &path,
+                    access,
+                    |from, to| fs::hard_link(from, to),
+                    |from, to| fs::copy(from, to).map(|_| ()),
+                )?;
+            } else {
+                install(&entry.path(), &path, access)?;
+            }
         }
     }
     Ok(())
-}
-
-fn link_readonly(
-    source: &Path,
-    target: &Path,
-    link: impl FnOnce(&Path, &Path) -> io::Result<()>,
-) -> io::Result<()> {
-    // A chmod on a link changes its source too. Protect before sharing; if
-    // protection is unavailable, use an independent copy instead.
-    let metadata = fs::symlink_metadata(source)?;
-    if metadata.is_symlink() {
-        return link_readonly(&fs::canonicalize(source)?, target, link);
-    }
-    let mut permissions = metadata.permissions();
-    if !permissions.readonly() {
-        permissions.set_readonly(true);
-        fs::set_permissions(source, permissions)?;
-    }
-    link(source, target)
 }
