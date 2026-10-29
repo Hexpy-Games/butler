@@ -81,6 +81,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   usage: [
     { id: "usage-overview", kind: "status", fields: [] },
     { id: "usage-history", kind: "status", fields: [] },
+    { id: "usage-images", kind: "status", fields: [] },
     { id: "usage-providers", kind: "status", fields: [] },
     { id: "usage-scope-tokens", kind: "list", fields: [] },
     { id: "usage-model-tokens", kind: "list", fields: [] },
