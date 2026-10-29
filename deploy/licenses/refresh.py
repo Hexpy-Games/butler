@@ -12,6 +12,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import tomllib
 import urllib.error
 import urllib.request
@@ -39,8 +40,8 @@ def digest(data):
 
 
 def fetch(url):
-    cache = Path("/tmp/butler-license-evidence")
-    cache.mkdir(exist_ok=True)
+    cache = Path(tempfile.gettempdir()) / "butler-license-evidence"
+    cache.mkdir(parents=True, exist_ok=True)
     saved = cache / digest(url.encode())
     if saved.exists():
         value = saved.read_text()
