@@ -178,8 +178,7 @@ async fn take_failed_cancel_is_durable_and_never_runs_twice() -> Result<(), Harn
     let wake = wake["session"]["id"].as_str().unwrap();
     // An unrelated turn ends; its existing native change notification retries
     // the indexed cancellation, without a restart, timer or manual Stop.
-    let accepted = s.gw.say(wake, "What does this mean?").await?;
-    let wake_turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let wake_turn = s.gw.say_turn(wake, "What does this mean?").await?;
     s.gw.wait_terminal(wake, &wake_turn, Duration::from_secs(30))
         .await?;
     let source_result =

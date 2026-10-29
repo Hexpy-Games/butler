@@ -55,7 +55,7 @@ async fn cb_07_plan_run_three_epics_in_canon_order() -> Result<(), HarnessError>
     let turn = s.gw.say(&chat, "Run this plan").await?;
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        &s.gw.accepted_turn(&turn).await?,
         std::time::Duration::from_secs(60),
     )
     .await?;

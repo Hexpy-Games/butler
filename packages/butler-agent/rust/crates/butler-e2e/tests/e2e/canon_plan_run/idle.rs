@@ -99,8 +99,7 @@ async fn cancelling_queue_changes_and_idle_write_nothing() -> Result<(), Harness
 }
 
 async fn pulse(s: &butler_e2e::e2e::scenario::Scenario, chat: &str) -> Result<(), HarnessError> {
-    let accepted = s.gw.say(chat, "What does this mean?").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.say_turn(chat, "What does this mean?").await?;
     s.gw.wait_terminal(chat, &turn, Duration::from_secs(30))
         .await?;
     Ok(())

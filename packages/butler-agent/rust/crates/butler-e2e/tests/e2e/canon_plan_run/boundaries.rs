@@ -10,7 +10,7 @@ async fn user_epic_text_is_not_a_step() -> Result<(), HarnessError> {
     let accepted = s.gw.say(&chat, &format!("canon:epic/{first}")).await?;
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?,
+        &s.gw.accepted_turn(&accepted).await?,
         std::time::Duration::from_secs(30),
     )
     .await?;
@@ -28,7 +28,7 @@ async fn user_epic_text_is_not_a_step() -> Result<(), HarnessError> {
         .await?,
         200,
     );
-    let original = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let original = s.gw.accepted_turn(&accepted).await?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     let step = loop {
         if let Some(turn) =
@@ -81,7 +81,7 @@ async fn remove_elsewhere_returns_feedback_without_take_card() -> Result<(), Har
     let accepted = s.gw.say(other, "Queue this epic").await?;
     s.gw.wait_terminal(
         other,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?,
+        &s.gw.accepted_turn(&accepted).await?,
         std::time::Duration::from_secs(30),
     )
     .await?;

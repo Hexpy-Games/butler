@@ -8,7 +8,7 @@ async fn session_delete_removes_queue_and_bindings() -> Result<(), HarnessError>
     let started = s.gw.say(&chat, "Process the release epic").await?;
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&started)?,
+        &s.gw.accepted_turn(&started).await?,
         std::time::Duration::from_secs(60),
     )
     .await?;

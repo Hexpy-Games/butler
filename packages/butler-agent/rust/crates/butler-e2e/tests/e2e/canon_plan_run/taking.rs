@@ -67,7 +67,7 @@ async fn canon_queue_refused_in_readonly() -> Result<(), HarnessError> {
     let accepted = s.gw.say(&chat, "Queue this epic").await?;
     s.gw.wait_terminal(
         &chat,
-        &butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?,
+        &s.gw.accepted_turn(&accepted).await?,
         std::time::Duration::from_secs(30),
     )
     .await?;
