@@ -126,6 +126,7 @@ mod tests {
             let source = format!("#[tokio::test] async fn scenario() {{ {body} }}");
             assert_eq!(crate::e2e_gate::ungated(&source).unwrap().len(), violations);
         }
+        crate::model_literals::assert_file_coverage();
         let marked = "// test-category: race\n#[test]\nfn a() {}\n";
         let doc_then_marker = "/// Why.\n// test-category: format-pin\n#[tokio::test(flavor = \"multi_thread\")]\nasync fn a() {}\n";
         let between_attributes = "#[cfg(unix)]\n// test-category: security\n#[test]\nfn a() {}\n";

@@ -20,6 +20,9 @@ outputs:
   tier:
     description: CI tier
     value: ${{ steps.paths.outputs.tier }}
+  shell:
+    description: Selected shell inputs
+    value: ${{ steps.paths.outputs.shell }}
   rust:
     description: Selected rust inputs
     value: ${{ steps.paths.outputs.rust }}

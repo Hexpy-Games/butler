@@ -1,0 +1,22 @@
+[package]
+name = "butler-shell-client"
+description = "UI-independent connection to an existing local Butler agent."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+butler-log = { path = "../butler-log" }
+butler-platform = { path = "../butler-platform" }
+reqwest.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
