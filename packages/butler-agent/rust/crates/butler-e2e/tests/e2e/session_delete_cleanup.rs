@@ -1,6 +1,7 @@
 //! A committed deletion attempts all cleanup and recovers without idle work.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod archive;
+mod project_delete_owners;
 mod project_owner;
 
 use butler_e2e::e2e::{

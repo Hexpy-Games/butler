@@ -428,6 +428,23 @@ test("an absent session.updated delegates unarchive visibility to one canonical 
     .toBe("최신 복원 제목");
 });
 
+test("project permanent deletion refreshes canonical navigation without an HTTP result", async () => {
+  const canonical = initialNavigation();
+  canonical.projects = canonical.projects.filter((project) => project.id !== "project-one");
+  navigationRefreshSnapshots.push(canonical);
+  await renderHarness();
+  deliverEvent(0, {
+    id: 43,
+    type: "project.permanently_deleted",
+    created_at: new Date().toISOString(),
+    payload: { project: storeState.navigation.projects[0] },
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(1);
+  expect(storeState.navigation.projects.map((project) => project.id)).toEqual(["project-two"]);
+  expect(subscriptions).toHaveLength(1);
+});
+
 test("reconnect and reconcile-required events refresh canonical navigation through one stream", async () => {
   await renderHarness();
   subscriptions[0]?.onError(new Error("temporary disconnect"));

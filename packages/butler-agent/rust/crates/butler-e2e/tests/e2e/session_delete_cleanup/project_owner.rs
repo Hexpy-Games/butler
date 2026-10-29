@@ -138,7 +138,9 @@ async fn failed_cleanup_still_closes_owner() -> Result<(), HarnessError> {
     Ok(())
 }
 
-async fn owner_notice(host: &mut reqwest::Response) -> Result<serde_json::Value, HarnessError> {
+pub(super) async fn owner_notice(
+    host: &mut reqwest::Response,
+) -> Result<serde_json::Value, HarnessError> {
     tokio::time::timeout(Duration::from_secs(8), async {
         let mut buffer = String::new();
         loop {

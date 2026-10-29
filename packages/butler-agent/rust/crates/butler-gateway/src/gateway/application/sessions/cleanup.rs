@@ -8,6 +8,9 @@ use std::sync::Arc;
 
 const PAGE_SIZE: usize = 100;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, thiserror::Error)]
 #[error("session cleanup failures: {0:?}")]
 struct CleanupFailures(Vec<(String, GatewayApplicationError)>);
@@ -134,11 +137,7 @@ async fn clear_record(
     let result = app
         .storage
         .execute(move |db| {
-            db.execute(
-                "DELETE FROM app_session_delete_cleanups WHERE session_id=?1",
-                [id],
-            )
-            .map_err(AppStorageError::sqlite)?;
+            clear_record_in(db, &id)?;
             Ok(())
         })
         .await
@@ -179,4 +178,12 @@ pub(in crate::gateway::application) async fn replay(app: &AppApplication) {
             return;
         }
     }
+}
+
+fn clear_record_in(db: &rusqlite::Connection, id: &str) -> Result<usize, AppStorageError> {
+    db.execute(
+        "DELETE FROM app_session_delete_cleanups WHERE session_id=?1",
+        [id],
+    )
+    .map_err(AppStorageError::sqlite)
 }
