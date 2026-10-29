@@ -7,14 +7,13 @@ use std::{
 use syn::visit::Visit;
 
 pub(crate) fn check(root: &Path, sources: &[PathBuf]) -> Result<bool, String> {
-    let catalog = sources
-        .iter()
-        .find(|path| path.ends_with("models/catalog/static_data.rs"))
-        .ok_or_else(|| "model literal check requires the bundled catalog".to_owned())?;
-    let catalog_path = catalog.with_file_name("static-catalog.json");
-    let data: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(catalog_path).map_err(|error| error.to_string())?,
-    )
+    // The checker owns its policy catalog. Scanning a different workspace must
+    // neither require that workspace to copy it nor disable later checks.
+    // include_str! fails at build time if the catalog source is missing;
+    // relocated binaries enforce the same rule without a runtime path lookup.
+    let data: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../crates/butler-models/src/models/catalog/static-catalog.json"
+    ))
     .map_err(|error| error.to_string())?;
     let ids = data["models"]
         .as_array()
@@ -135,4 +134,39 @@ fn model_id(value: &str) -> bool {
             .is_some_and(|tail| tail.starts_with(|ch: char| ch.is_ascii_digit()))
     }) || value.as_bytes().first() == Some(&b'o')
         && value.as_bytes().get(1).is_some_and(u8::is_ascii_digit)
+}
+
+#[cfg(test)]
+pub(crate) fn assert_file_coverage() {
+    let root = std::env::temp_dir().join(format!("model-literal-coverage-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let literal = "const MODEL: &str = \"gpt-6-luna\";";
+    // The same file exclusions apply to agent and independent workspace roots.
+    for workspace in ["agent", "shell"] {
+        let workspace = root.join(workspace);
+        for file in [
+            "crates/demo/examples/sample.rs",
+            "crates/demo/benches/sample.rs",
+            "crates/demo/src/orphan.rs",
+            "crates/demo/src/test_support.rs",
+        ] {
+            let path = workspace.join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, literal).unwrap();
+            assert!(check(&workspace, &[path]).unwrap(), "{file}");
+        }
+        for file in ["crates/demo/src/tests.rs", "crates/demo/tests/sample.rs"] {
+            let path = workspace.join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, literal).unwrap();
+            assert!(!check(&workspace, &[path]).unwrap(), "{file}");
+        }
+        let path = workspace.join("crates/demo/src/lib.rs");
+        std::fs::write(&path, format!("#[cfg(test)] mod tests {{ {literal} }}")).unwrap();
+        assert!(!check(&workspace, std::slice::from_ref(&path)).unwrap());
+        std::fs::write(&path, "#[cfg(test)] mod test_support;").unwrap();
+        let support = workspace.join("crates/demo/src/test_support.rs");
+        assert!(check(&workspace, &[path, support]).unwrap());
+    }
+    std::fs::remove_dir_all(root).unwrap();
 }
