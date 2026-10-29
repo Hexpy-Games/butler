@@ -19,6 +19,9 @@ pub(super) struct Entry {
 
 impl Entry {
     fn hold(&self, gate: &super::gate::Gate, db: &Connection) -> Result<Hold, AppStorageError> {
+        if self.kind == "canon_step" {
+            return Ok(Hold::Free);
+        }
         if self.kind == "work_result" {
             gate.work_hold(&self.chat, self.bypass_quiet_hours)
         } else {
@@ -27,7 +30,7 @@ impl Entry {
     }
 }
 
-pub(super) fn enqueue(
+pub(in crate::gateway::application) fn enqueue(
     db: &Connection,
     identity: (&str, &str),
     source: &str,
@@ -91,6 +94,10 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         if !free {
+            return Ok(());
+        }
+        if entry.kind == "canon_step" {
+            super::super::canon_queue::steps::deliver(self, entry.id.clone()).await?;
             return Ok(());
         }
         if entry.kind == "work_result" {
@@ -181,7 +188,7 @@ fn post(
     Ok(())
 }
 
-pub(super) fn update_payload(
+pub(in crate::gateway::application) fn update_payload(
     db: &Connection,
     source: &str,
     payload: &Value,

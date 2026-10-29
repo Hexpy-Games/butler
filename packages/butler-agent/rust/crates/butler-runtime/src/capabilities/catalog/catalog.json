@@ -7635,6 +7635,52 @@
       }
     },
     {
+      "name": "canon_queue",
+      "effectBoundary": "none",
+      "category": "canon",
+      "tags": [
+        "canon"
+      ],
+      "durable": false,
+      "definition": {
+        "type": "function",
+        "name": "canon_queue",
+        "description": "Queue canon epics in this conversation only when the user explicitly asks to process them. plan_run processes the plan's unfinished epics in canon order. after places an epic in the step following target_epic_id; together joins its step. start_now starts a new head; remove removes a waiting epic. Each step starts its own Butler turn; linked Work is created by that turn, starting at Conception. No approval card is needed for this local act; read-only refuses it. Never call this merely because an epic is bound, a plan exists, or work completed. A held_elsewhere result offers the user a choice; do not take another conversation's epic without that choice.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "type": "string",
+              "enum": [
+                "plan_run",
+                "after",
+                "together",
+                "start_now",
+                "remove"
+              ]
+            },
+            "plan_id": {
+              "type": "string"
+            },
+            "epic_id": {
+              "type": "string"
+            },
+            "target_epic_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        "effectBoundary": "none",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      }
+    },
+    {
       "name": "canon_propose",
       "effectBoundary": "project_record",
       "category": "canon",
@@ -7820,7 +7866,8 @@
     "complete_project_work",
     "generate_image",
     "edit_image",
-    "canon_propose"
+    "canon_propose",
+    "canon_queue"
   ],
   "workTracking": [
     "update_todo_list",
@@ -13931,6 +13978,43 @@
         ]
       },
       "effectBoundary": "project_record",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "canon_queue": {
+      "type": "function",
+      "name": "canon_queue",
+      "description": "Queue canon epics in this conversation only when the user explicitly asks to process them. plan_run processes the plan's unfinished epics in canon order. after places an epic in the step following target_epic_id; together joins its step. start_now starts a new head; remove removes a waiting epic. Each step starts its own Butler turn; linked Work is created by that turn, starting at Conception. No approval card is needed for this local act; read-only refuses it. Never call this merely because an epic is bound, a plan exists, or work completed. A held_elsewhere result offers the user a choice; do not take another conversation's epic without that choice.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "plan_run",
+              "after",
+              "together",
+              "start_now",
+              "remove"
+            ]
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "epic_id": {
+            "type": "string"
+          },
+          "target_epic_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "effectBoundary": "none",
       "concurrencySafe": false,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"

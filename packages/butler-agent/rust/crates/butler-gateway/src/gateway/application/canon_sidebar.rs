@@ -250,6 +250,9 @@ pub(super) fn start(app: &AppApplication) {
     };
     let app = app.clone_handle();
     tokio::spawn(async move {
+        if let Err(error) = startup(&app).await {
+            tracing::error!(%error, "Canon queue startup reconciliation failed");
+        }
         loop {
             changes.borrow_and_update();
             if let Err(error) = replay(&app).await {
@@ -264,6 +267,15 @@ pub(super) fn start(app: &AppApplication) {
 }
 async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
     super::canon_proposals::recover(app).await?;
+    super::canon_queue::replay(app).await?;
+    conversations(app).await
+}
+async fn startup(app: &AppApplication) -> Result<(), GatewayApplicationError> {
+    super::canon_proposals::recover(app).await?;
+    conversations(app).await?;
+    super::canon_queue::reconcile(app).await
+}
+async fn conversations(app: &AppApplication) -> Result<(), GatewayApplicationError> {
     let mut after = String::new();
     loop {
         let rows = app
@@ -284,6 +296,12 @@ async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
                 .as_str()
                 .ok_or_else(GatewayApplicationError::internal)?
                 .to_owned();
+            if matches!(
+                row["kind"].as_str(),
+                Some("canon_step" | "canon_hold" | "canon_take_here")
+            ) {
+                continue;
+            }
             if row["kind"] == "canon_conversation"
                 && let Err(error) = apply(app, row.clone()).await
             {

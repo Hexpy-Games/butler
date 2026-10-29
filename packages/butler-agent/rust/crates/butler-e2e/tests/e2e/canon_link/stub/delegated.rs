@@ -31,6 +31,12 @@ pub(super) fn sequence(
             json!({"subject":subject,"verdict":"accept","summary":"Evidence verified"}),
         )
     };
+    let epics = script.epics.lock().unwrap().clone();
+    let selected = key
+        .user_request
+        .strip_prefix("canon:epic/")
+        .filter(|id| epics.iter().any(|e| e == id))
+        .unwrap_or(&epics[0]);
     if !worker && !steward {
         return if returning {
             vec![]
@@ -40,7 +46,7 @@ pub(super) fn sequence(
                 json!({
                     "request":"Verify release evidence", "safe_title":"Evidence review",
                     "checks":["Evidence verified"],
-                    "epic_ref":format!("canon:epic/{}", script.epics.lock().unwrap()[0])
+                    "epic_ref":format!("canon:epic/{}", selected)
                 }),
             )]
         };
@@ -55,7 +61,7 @@ pub(super) fn sequence(
             "steward"
         };
         let refs = if !worker && !steward {
-            json!([format!("canon:epic/{}", script.epics.lock().unwrap()[0])])
+            json!([format!("canon:epic/{}", selected)])
         } else {
             json!([])
         };

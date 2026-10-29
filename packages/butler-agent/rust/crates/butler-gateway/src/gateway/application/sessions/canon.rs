@@ -85,6 +85,13 @@ impl AppApplication {
             .canon
             .session_epics(vec![turn.session_id.clone()])
             .await?;
+        let message = turn.message_id.clone();
+        let origin = self
+            .storage
+            .read(move |db| super::super::initiated::origin(db, &message))
+            .await
+            .map_err(app_error)?;
+        turn.app_turn_context["initiatedOrigin"] = serde_json::json!(origin);
         turn.app_turn_context["session"]["epicIds"] =
             serde_json::json!(epics.into_iter().next().unwrap_or_default());
         Ok(turn)

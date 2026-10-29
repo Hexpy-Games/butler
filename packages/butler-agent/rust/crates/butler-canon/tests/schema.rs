@@ -29,6 +29,43 @@ fn every_request_query_uses_its_index() {
         assert!(plan.contains(query.index()), "{query:?}: {plan}");
         assert!(!plan.contains("SCAN canon_"), "{query:?}: {plan}");
     }
+    queue_intent_queries_seek_their_lookup_keys(&db);
+}
+
+fn queue_intent_queries_seek_their_lookup_keys(db: &Connection) {
+    use butler_canon::store::queue::sql::INTENT_LOOKUPS;
+    for (sql, expected) in INTENT_LOOKUPS {
+        let plan = queue_plan(db, sql);
+        eprintln!("{sql}\n{plan}");
+        assert!(plan.lines().any(|line| line == *expected), "{sql}: {plan}");
+        let index = expected.split_whitespace().nth(4).unwrap();
+        db.execute_batch("SAVEPOINT missing_index").unwrap();
+        db.execute_batch(&format!("DROP INDEX {index}")).unwrap();
+        let without = queue_plan(db, sql);
+        eprintln!("without {index}: {without}");
+        assert!(
+            !without.lines().any(|line| line == *expected),
+            "missing index went undetected: {sql}: {without}"
+        );
+        db.execute_batch("ROLLBACK TO missing_index; RELEASE missing_index")
+            .unwrap();
+    }
+    db.execute_batch("INSERT INTO canon_intents(op_id,kind,payload_json,state,created_at) VALUES('saved','canon_take_here','{\"session_id\":\"chat\",\"epic_id\":\"epic\",\"state\":\"pending\"}','pending',1)").unwrap();
+    let before = db.total_changes();
+    work_schema::ensure(db).unwrap();
+    assert_eq!(db.total_changes(), before, "startup must not rewrite rows");
+}
+
+fn queue_plan(db: &Connection, sql: &str) -> String {
+    let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+    let n = stmt.parameter_count();
+    stmt.query_map(params_from_iter(std::iter::repeat_n(Value::Null, n)), |r| {
+        r.get::<_, String>(3)
+    })
+    .unwrap()
+    .collect::<rusqlite::Result<Vec<_>>>()
+    .unwrap()
+    .join("\n")
 }
 
 // test-category: format-pin
@@ -153,9 +190,9 @@ fn schema_constraints_and_idempotency() {
             .unwrap(),
         1
     );
-    assert!(db.prepare("SELECT * FROM canon_session_queue").is_err());
+    assert!(db.prepare("SELECT * FROM canon_session_queue").is_ok());
     assert!(
         db.prepare("SELECT * FROM canon_session_queue_heads")
-            .is_err()
+            .is_ok()
     );
 }

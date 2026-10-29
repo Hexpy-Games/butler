@@ -135,6 +135,7 @@ impl ProjectWorkRepository {
         let mut prior_view = prior.view.clone();
         if is_open(&prior_view) {
             prior_view.status = WorkStatus::Abandoned;
+            prior_view.latest_disposition = None;
         }
         prior_view.updated_at = at.to_owned();
         self.manifest_update(super::write::ManifestPublicationInput {

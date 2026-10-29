@@ -1,4 +1,10 @@
 export interface CanonCopy {
+  queue: {
+    step: (plan: string, epic: string) => string;
+    hold: (epic: string) => string;
+    takeHere: (epic: string, conversation: string) => string;
+    remove: string; proceed: string; openOther: string; take: string;
+  };
   criteriaCount: (confirmed: number, total: number) => string;
   criterionState: (id: string, confirmed: boolean) => string;
   criterionActivity: (id: string, confirmed: boolean) => string;
