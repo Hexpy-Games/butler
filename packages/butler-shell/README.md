@@ -5,7 +5,7 @@ Electron app and is not shipped.
 
 - Its own Cargo workspace (not part of `packages/butler-agent/rust`), with the same
   toolchain and lints.
-- gpui comes from the Butler fork of gpui-ce, pinned to tag `butler-lens-1`
+- gpui comes from the Butler fork of gpui-ce, pinned to tag `butler-lens-2`
   (`https://github.com/Hexpy-Games/gpui-ce`). The fork adds the Liquid Glass lens and
   the Windows Acrylic window material.
 - The UI reads data only through `source::Source`. No agent connection is wired yet, so
@@ -22,14 +22,17 @@ On macOS the lens needs gpui's wgpu renderer, which the crate enables
 
 ## Headless shots
 
-The harness renders the shell connected to an in-memory fixture and disconnected, light
-and dark, at 1x:
+`butler-shell-shots` renders the shell connected to an in-memory fixture (a chat, an approval,
+the suggest-a-change dialog, a question, a new chat) and disconnected, light and dark, at 1x,
+one PNG per state:
 
 ```sh
-cargo test --release -p butler-shell -- --ignored shots
+cargo run --release -p butler-shell --features shots --bin butler-shell-shots -- <dir>
 ```
 
-PNGs go to `target/shots`, or to `BUTLER_SHELL_SHOT_DIR` when it is set.
+## Tests
+
+`cargo test -p butler-shell` runs the data store's tests against a fake source.
 
 ## Licences
 

@@ -10,14 +10,28 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[[bin]]
+name = "butler-shell"
+path = "src/main.rs"
+
+# The headless shot harness (see src/bin/butler-shell-shots); the W5 smoke drives it.
+[[bin]]
+name = "butler-shell-shots"
+path = "src/bin/butler-shell-shots/main.rs"
+required-features = ["shots"]
+
+[features]
+shots = ["gpui/test-support", "dep:gpui_wgpu"]
+
 [dependencies]
 anyhow.workspace = true
 futures.workspace = true
 gpui.workspace = true
 # macos-wgpu: the glass lens is drawn by the wgpu renderer (Metal's renderer has no lens).
 gpui_platform = { workspace = true, features = ["macos-wgpu"] }
+gpui_wgpu = { workspace = true, features = ["test-support"], optional = true }
+sys-locale.workspace = true
 unicode-segmentation.workspace = true
 
 [dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
-gpui_wgpu = { workspace = true, features = ["test-support"] }
+futures = { workspace = true, features = ["executor"] }
