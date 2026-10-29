@@ -72,7 +72,9 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         if archived {
-            super::cleanup::complete_locked(self, session_id, &cleanup_guard).await?;
+            super::cleanup::complete_locked(self, session_id, &cleanup_guard)
+                .await
+                .map_err(GatewayApplicationError::after_commit)?;
         }
         Ok(updated)
     }
@@ -119,7 +121,9 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
-        super::cleanup::complete_locked(self, session_id, &cleanup_guard).await?;
+        super::cleanup::complete_locked(self, session_id, &cleanup_guard)
+            .await
+            .map_err(GatewayApplicationError::after_commit)?;
         Ok(result)
     }
 
@@ -168,10 +172,13 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
-        super::cleanup::complete_locked(self, session, &cleanup_guard).await?;
+        super::cleanup::complete_locked(self, session, &cleanup_guard)
+            .await
+            .map_err(GatewayApplicationError::after_commit)?;
         if !permanent {
             self.assets_owned(super::super::AppAssetCommand::Sweep)
-                .await?;
+                .await
+                .map_err(GatewayApplicationError::after_commit)?;
         }
         Ok(result)
     }

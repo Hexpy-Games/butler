@@ -17,6 +17,10 @@ pub enum FailureClass {
 #[error("permanent request failure")]
 struct PermanentFailure(#[source] GatewayApplicationError);
 
+#[derive(Debug, thiserror::Error)]
+#[error("request committed before cleanup failed")]
+struct CommittedFailure(#[source] GatewayApplicationError);
+
 /// A gateway application failure as the HTTP layer reports it.
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum GatewayApplicationError {
@@ -65,6 +69,22 @@ impl GatewayApplicationError {
             Self::Public { source, .. } | Self::Internal { source } => *source = Some(cause),
         }
         self
+    }
+
+    /// Marks failures from work performed after a durable lifecycle commit.
+    pub(crate) fn after_commit(mut self) -> Self {
+        let cause = Arc::new(CommittedFailure(self.clone()));
+        match &mut self {
+            Self::Public { source, .. } | Self::Internal { source } => *source = Some(cause),
+        }
+        self
+    }
+
+    pub(crate) fn committed(&self) -> bool {
+        let (Self::Public { source, .. } | Self::Internal { source }) = self;
+        source
+            .as_ref()
+            .is_some_and(|cause| cause.is::<CommittedFailure>())
     }
 
     /// A failure shown to the client.

@@ -1,6 +1,7 @@
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
+use super::super::sessions::{cleanup, identity};
 use super::{AppApplication, AppProjectSummary, rows};
 use crate::gateway::GatewayApplicationError;
 use crate::gateway::application::storage::AppStorageCode;
@@ -99,16 +100,17 @@ impl AppApplication {
         display_name: Option<String>,
         pinned: Option<bool>,
     ) -> Result<AppProjectActionResult, GatewayApplicationError> {
+        if action == ProjectLifecycle::PermanentDelete {
+            cleanup::replay(self).await;
+        }
         let query_id = project_id.clone();
         let sessions = self
             .storage
             .execute(move |db| project_session_ids(db, &query_id))
             .await
             .map_err(app_error)?;
-        let mut runtime_sessions = Vec::new();
         for session_id in sessions {
             let runtime_session_id = self.runtime_hint(&session_id).await?;
-            runtime_sessions.push(runtime_session_id.clone());
             self.dependencies
                 .authority_handoff
                 .close_self_session(
@@ -124,7 +126,7 @@ impl AppApplication {
         }
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
-        let result = self
+        let (result, deleted_sessions) = self
             .storage
             .execute(move |db| {
                 lifecycle_project(
@@ -140,12 +142,9 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         if action == ProjectLifecycle::PermanentDelete {
-            for session in runtime_sessions {
-                self.dependencies
-                    .authority_handoff
-                    .delete_session_context(session)
-                    .await?;
-            }
+            cleanup::complete_all(self, deleted_sessions)
+                .await
+                .map_err(GatewayApplicationError::after_commit)?;
         }
         Ok(result)
     }
@@ -215,21 +214,13 @@ fn lifecycle_project(
     display_name: Option<&str>,
     pinned: Option<bool>,
     clock: &dyn crate::gateway::application::AppIdentityClock,
-) -> Result<AppProjectActionResult, AppStorageError> {
+) -> Result<(AppProjectActionResult, Vec<String>), AppStorageError> {
     let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     let row = rows::any_by_id(&tx, project_id)?.ok_or_else(|| {
         AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found.")
     })?;
     if action == ProjectLifecycle::PermanentDelete {
-        let project = rows::summary(row, None);
-        tx.execute("DELETE FROM chats WHERE project_id=?", [project_id])
-            .map_err(AppStorageError::sqlite)?;
-        tx.execute("DELETE FROM projects WHERE id=?", [project_id])
-            .map_err(AppStorageError::sqlite)?;
-        let event = append_project_event(&tx, "project.permanently_deleted", &project, clock)?;
-        tx.commit().map_err(AppStorageError::sqlite)?;
-        events::publish(subscribers, &event);
-        return Ok(AppProjectActionResult { project });
+        return delete_project_chats(tx, subscribers, rows::summary(row, None), clock);
     }
     let display_name = display_name
         .map(trim_js_whitespace)
@@ -263,7 +254,32 @@ fn lifecycle_project(
     if let Some(event) = deleted_event {
         events::publish(subscribers, &event);
     }
-    Ok(AppProjectActionResult { project })
+    Ok((AppProjectActionResult { project }, Vec::new()))
+}
+
+fn delete_project_chats(
+    tx: rusqlite::Savepoint<'_>,
+    subscribers: &events::EventSubscribers,
+    project: AppProjectSummary,
+    clock: &dyn crate::gateway::application::AppIdentityClock,
+) -> Result<(AppProjectActionResult, Vec<String>), AppStorageError> {
+    let sessions = project_session_ids(&tx, &project.id)?;
+    for session in &sessions {
+        let hint = identity::runtime_hint(&tx, session)?;
+        tx.execute(
+            "INSERT INTO app_session_delete_cleanups(session_id,kind,session_hint) VALUES(?1,'delete',?2) \
+             ON CONFLICT(session_id) DO UPDATE SET kind='delete',session_hint=excluded.session_hint",
+            params![session, hint],
+        ).map_err(AppStorageError::sqlite)?;
+    }
+    tx.execute("DELETE FROM chats WHERE project_id=?", [&project.id])
+        .map_err(AppStorageError::sqlite)?;
+    tx.execute("DELETE FROM projects WHERE id=?", [&project.id])
+        .map_err(AppStorageError::sqlite)?;
+    let event = append_project_event(&tx, "project.permanently_deleted", &project, clock)?;
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    events::publish(subscribers, &event);
+    Ok((AppProjectActionResult { project }, sessions))
 }
 
 fn read_project(db: &Connection, id: &str) -> Result<AppProjectSummary, AppStorageError> {

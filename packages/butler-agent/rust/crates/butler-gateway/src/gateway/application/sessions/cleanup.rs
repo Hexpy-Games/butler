@@ -10,7 +10,7 @@ const PAGE_SIZE: usize = 100;
 
 #[derive(Debug, thiserror::Error)]
 #[error("session cleanup failures: {0:?}")]
-struct CleanupFailures(Vec<(&'static str, GatewayApplicationError)>);
+struct CleanupFailures(Vec<(String, GatewayApplicationError)>);
 
 async fn complete(app: &AppApplication, session_id: String) -> Result<(), GatewayApplicationError> {
     let guard = app.session_cleanup_locks.acquire(session_id.clone()).await;
@@ -64,9 +64,16 @@ pub(super) async fn complete_locked(
     for (step, result) in results {
         if let Err(error) = result {
             eprintln!("[session-cleanup] session={session_id} step={step} failed: {error:?}");
-            failures.push((step, error));
+            failures.push((step.to_owned(), error));
         }
     }
+    combine_failures(failures)?;
+    clear_record(app, session_id).await
+}
+
+fn combine_failures(
+    failures: Vec<(String, GatewayApplicationError)>,
+) -> Result<(), GatewayApplicationError> {
     if let Some((_, first)) = failures.first() {
         // Preserve the first failure's HTTP mapping; attach every cause for logs.
         let mut error = first.clone();
@@ -75,7 +82,20 @@ pub(super) async fn complete_locked(
         *source = Some(Arc::new(CleanupFailures(failures)));
         return Err(error);
     }
-    clear_record(app, session_id).await
+    Ok(())
+}
+
+pub(in crate::gateway::application) async fn complete_all(
+    app: &AppApplication,
+    sessions: Vec<String>,
+) -> Result<(), GatewayApplicationError> {
+    let mut failures = Vec::new();
+    for session in sessions {
+        if let Err(error) = complete(app, session.clone()).await {
+            failures.push((session, error));
+        }
+    }
+    combine_failures(failures)
 }
 
 async fn delete_steps(

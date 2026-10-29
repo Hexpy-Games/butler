@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json, query, read_body_with_limit};
 use crate::gateway::{
-    AppProjectUpdate, AppSessionUpdate,
+    AppProjectUpdate, AppSessionUpdate, GatewayApplicationError,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
@@ -149,14 +149,19 @@ async fn session_route(
                 "Session update contains unsupported fields.",
             )
         })?;
+        let id = super::subsessions::decode_component(encoded)?;
+        let archive = input.archived == Some(true);
+        let result = state.application.update_session(id.clone(), input).await;
+        let data = if archive {
+            close_committed_owner(&state, &id, result).await?
+        } else {
+            result?
+        };
         return json(
             StatusCode::OK,
             ApiEnvelope {
                 protocol_version: APP_PROTOCOL_VERSION,
-                data: state
-                    .application
-                    .update_session(super::subsessions::decode_component(encoded)?, input)
-                    .await?,
+                data,
             },
         )
         .map(Some);
@@ -174,8 +179,8 @@ async fn session_lifecycle(
         && let Some(encoded) = action_id(path, "/sessions/", "/archive")
     {
         let id = super::subsessions::decode_component(encoded)?;
-        let data = state.application.archive_session(id.clone(), None).await?;
-        super::browser_host::agent_calls::close_owner(&state, &id).await?;
+        let result = state.application.archive_session(id.clone(), None).await;
+        let data = close_committed_owner(&state, &id, result).await?;
         return json(
             StatusCode::OK,
             ApiEnvelope {
@@ -218,11 +223,11 @@ async fn session_lifecycle(
             .get("permanent")
             .is_some_and(|value| value == "true");
         let id = super::subsessions::decode_component(encoded)?;
-        let data = state
+        let result = state
             .application
             .delete_session(id.clone(), permanent)
-            .await?;
-        super::browser_host::agent_calls::close_owner(&state, &id).await?;
+            .await;
+        let data = close_committed_owner(&state, &id, result).await?;
         return json(
             StatusCode::OK,
             ApiEnvelope {
@@ -233,6 +238,26 @@ async fn session_lifecycle(
         .map(Some);
     }
     Ok(None)
+}
+
+async fn close_committed_owner<T>(
+    state: &HttpState,
+    id: &str,
+    result: Result<T, GatewayApplicationError>,
+) -> Result<T, HttpError> {
+    let closed = if result
+        .as_ref()
+        .err()
+        .is_none_or(GatewayApplicationError::committed)
+    {
+        super::browser_host::agent_calls::close_owner(state, id).await
+    } else {
+        Ok(())
+    };
+    // Always close committed owners, preserving the application failure if both fail.
+    let data = result?;
+    closed?;
+    Ok(data)
 }
 
 fn project_patch(value: &Value) -> Result<AppProjectUpdate, HttpError> {
