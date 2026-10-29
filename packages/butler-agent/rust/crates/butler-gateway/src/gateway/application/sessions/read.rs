@@ -144,7 +144,10 @@ pub(in crate::gateway::application) fn session(
     Ok(summary)
 }
 
-pub(super) fn chats(db: &Connection) -> Result<Vec<AppChatSummary>, AppStorageError> {
+pub(super) fn chats(
+    db: &Connection,
+    page: Option<(u32, u32)>,
+) -> Result<Vec<AppChatSummary>, AppStorageError> {
     let mut statement = db
         .prepare_cached(
             r"
@@ -152,21 +155,26 @@ SELECT id,title,kind,project_id,created_at,updated_at FROM chats
 WHERE archived=0 AND NOT EXISTS(
   SELECT 1 FROM app_session_branches b
   WHERE b.target_session_id=chats.id AND b.state='prepared')
-ORDER BY updated_at DESC,created_at DESC
+ORDER BY updated_at DESC,created_at DESC,id DESC LIMIT ?1 OFFSET ?2
 ",
         )
         .map_err(AppStorageError::sqlite)?;
     let rows = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<String>>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, String>(5)?,
-            ))
-        })
+        .query_map(
+            page.map_or((-1, 0), |(limit, offset)| {
+                (i64::from(limit), i64::from(offset))
+            }),
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            },
+        )
         .map_err(AppStorageError::sqlite)?;
     rows.map(|row| {
         let (id, title, kind, project_id, created_at, updated_at) =
@@ -189,6 +197,15 @@ pub(super) fn sessions(
     kind: Option<&str>,
     project_id: Option<&str>,
 ) -> Result<Vec<AppSessionSummary>, AppStorageError> {
+    sessions_page(db, kind, project_id, None)
+}
+
+pub(super) fn sessions_page(
+    db: &Connection,
+    kind: Option<&str>,
+    project_id: Option<&str>,
+    page: Option<(u32, u32)>,
+) -> Result<Vec<AppSessionSummary>, AppStorageError> {
     let mut sql = format!(
         "{SESSION_SELECT} WHERE c.archived=0 AND NOT EXISTS(\
       SELECT 1 FROM app_session_branches b WHERE b.target_session_id=c.id AND b.state='prepared')"
@@ -202,7 +219,11 @@ pub(super) fn sessions(
         sql.push_str(" AND c.project_id=?");
         params.push(project_id);
     }
-    sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC");
+    sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC,c.id DESC");
+    if let Some((limit, offset)) = page {
+        // Integers supplied by the bounded HTTP parser, never request strings.
+        sql.push_str(&format!(" LIMIT {limit} OFFSET {offset}"));
+    }
     let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params_from_iter(params), session_row)

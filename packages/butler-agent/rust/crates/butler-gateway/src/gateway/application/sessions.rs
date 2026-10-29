@@ -243,11 +243,14 @@ impl AppApplication {
         Ok(())
     }
 
-    pub(crate) async fn list_chats(&self) -> Result<Vec<AppChatSummary>, GatewayApplicationError> {
+    pub(crate) async fn list_chats(
+        &self,
+        page: Option<(u32, u32)>,
+    ) -> Result<Vec<AppChatSummary>, GatewayApplicationError> {
         let (mut chats, owners) = self
             .storage
-            .read(|db| {
-                let chats = read::chats(db)?;
+            .read(move |db| {
+                let chats = read::chats(db, page)?;
                 let owners = chats
                     .iter()
                     .map(|c| identity::runtime_hint(db, &c.id))
@@ -272,9 +275,23 @@ impl AppApplication {
         kind: Option<String>,
         project_id: Option<String>,
     ) -> Result<Vec<AppSessionSummary>, GatewayApplicationError> {
+        self.list_sessions_page(kind, project_id, None).await
+    }
+
+    pub(crate) async fn list_sessions_page(
+        &self,
+        kind: Option<String>,
+        project_id: Option<String>,
+        page: Option<(u32, u32)>,
+    ) -> Result<Vec<AppSessionSummary>, GatewayApplicationError> {
         let mut sessions = self
             .storage
-            .read(move |db| read::sessions(db, kind.as_deref(), project_id.as_deref()))
+            .read(move |db| match page {
+                None => read::sessions(db, kind.as_deref(), project_id.as_deref()),
+                Some(page) => {
+                    read::sessions_page(db, kind.as_deref(), project_id.as_deref(), Some(page))
+                }
+            })
             .await
             .map_err(app_error)?;
         self.load_session_epics(&mut sessions).await?;

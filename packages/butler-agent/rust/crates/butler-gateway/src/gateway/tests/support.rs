@@ -188,7 +188,7 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<AppCreateSessionResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>> {
+    fn list_chats(&self, _page: Option<(u32, u32)>) -> ApplicationFuture<Vec<AppChatSummary>> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn read_navigation(&self) -> ApplicationFuture<Value> {
@@ -221,6 +221,7 @@ impl GatewayApplication for TestApplication {
         &self,
         _: Option<String>,
         _: Option<String>,
+        _: Option<(u32, u32)>,
     ) -> ApplicationFuture<Vec<AppSessionSummary>> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

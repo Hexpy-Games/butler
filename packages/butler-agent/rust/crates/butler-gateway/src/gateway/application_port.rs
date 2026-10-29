@@ -89,7 +89,7 @@ pub trait GatewayApplication:
     fn branch_source(&self, _session_id: String) -> ApplicationFuture<AppBranchSourceLocation> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>>;
+    fn list_chats(&self, page: Option<(u32, u32)>) -> ApplicationFuture<Vec<AppChatSummary>>;
     fn read_navigation(&self) -> ApplicationFuture<serde_json::Value>;
     fn read_user_work(&self) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
@@ -144,6 +144,7 @@ pub trait GatewayApplication:
         &self,
         kind: Option<String>,
         project_id: Option<String>,
+        page: Option<(u32, u32)>,
     ) -> ApplicationFuture<Vec<AppSessionSummary>>;
     fn list_automations(
         &self,

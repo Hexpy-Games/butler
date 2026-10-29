@@ -15,13 +15,17 @@ use crate::gateway::{
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
-pub(super) async fn chats(state: Arc<HttpState>) -> Result<Response, HttpError> {
-    let chats = state.application.list_chats().await?;
+pub(super) async fn chats(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
+    let page = page_params(uri)?;
+    let chats = state
+        .application
+        .list_chats(page.map(|(limit, offset)| (limit + 1, offset)))
+        .await?;
     json(
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: chats,
+            data: page_response(chats, page, None)?,
         },
     )
 }
@@ -33,12 +37,20 @@ pub(super) async fn list(state: Arc<HttpState>, uri: &Uri) -> Result<Response, H
         .filter(|kind| matches!(kind.as_str(), "chat" | "project"))
         .cloned();
     let project_id = params.get("project_id").cloned();
-    let sessions = state.application.list_sessions(kind, project_id).await?;
+    let page = page_params(uri)?;
+    let sessions = state
+        .application
+        .list_sessions(
+            kind,
+            project_id,
+            page.map(|(limit, offset)| (limit + 1, offset)),
+        )
+        .await?;
     json(
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: serde_json::json!({"sessions":sessions}),
+            data: page_response(sessions, page, Some("sessions"))?,
         },
     )
 }
@@ -47,7 +59,7 @@ pub(super) async fn project_list(state: Arc<HttpState>, uri: &Uri) -> Result<Res
     let project_id = query(uri).get("project_id").cloned();
     let sessions = state
         .application
-        .list_sessions(Some("project".into()), project_id.clone())
+        .list_sessions(Some("project".into()), project_id.clone(), None)
         .await?;
     let mut data = serde_json::json!({"sessions": sessions});
     if let Some(project_id) = project_id {
@@ -126,4 +138,46 @@ fn parse_request(value: &Value) -> Option<AppCreateSessionRequest> {
         },
         workspace_mode,
     })
+}
+
+fn page_params(uri: &Uri) -> Result<Option<(u32, u32)>, HttpError> {
+    let params = query(uri);
+    if !params.contains_key("limit") && !params.contains_key("offset") {
+        return Ok(None);
+    }
+    let invalid = || HttpError::public(400, "invalid_page", "Invalid page.");
+    let limit = params
+        .get("limit")
+        .map(|s| s.parse::<u32>())
+        .transpose()
+        .map_err(|_| invalid())?
+        .unwrap_or(50);
+    let offset = params
+        .get("offset")
+        .map(|s| s.parse::<u32>())
+        .transpose()
+        .map_err(|_| invalid())?
+        .unwrap_or(0);
+    if !(1..=200).contains(&limit) {
+        return Err(invalid());
+    }
+    Ok(Some((limit, offset)))
+}
+
+fn page_response<T: serde::Serialize>(
+    mut items: Vec<T>,
+    page: Option<(u32, u32)>,
+    key: Option<&str>,
+) -> Result<Value, HttpError> {
+    if let Some((limit, offset)) = page {
+        let next = (items.len() > limit as usize)
+            .then(|| offset.checked_add(limit))
+            .flatten();
+        items.truncate(limit as usize);
+        return Ok(serde_json::json!({"items":items,"next_offset":next}));
+    }
+    match key {
+        Some(key) => Ok(serde_json::json!({key: items})),
+        None => serde_json::to_value(items).map_err(|_| HttpError::Internal),
+    }
 }

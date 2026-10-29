@@ -53,6 +53,7 @@ zip.workspace = true
 zstd = "0.13.3"
 
 [dev-dependencies]
+butler-shell-client = { path = "../butler-shell-client" }
 butler-memory = { path = "../butler-memory" }
 
 [lints]

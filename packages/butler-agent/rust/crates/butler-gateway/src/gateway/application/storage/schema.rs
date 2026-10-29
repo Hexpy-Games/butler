@@ -70,6 +70,8 @@ pub(super) fn migrate(
     documents::create(connection)?;
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
+         CREATE INDEX IF NOT EXISTS chats_order_idx ON chats(archived,updated_at DESC,created_at DESC,id DESC);
+         CREATE INDEX IF NOT EXISTS sessions_order_idx ON chats(archived,pinned DESC,updated_at DESC,created_at DESC,id DESC);
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
          CREATE UNIQUE INDEX IF NOT EXISTS chats_runtime_hint_idx
            ON chats(runtime_session_hint) WHERE runtime_session_hint IS NOT NULL;

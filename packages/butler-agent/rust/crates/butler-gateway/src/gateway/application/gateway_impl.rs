@@ -133,9 +133,9 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.branch_source_owned(session_id).await })
     }
-    fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>> {
+    fn list_chats(&self, page: Option<(u32, u32)>) -> ApplicationFuture<Vec<AppChatSummary>> {
         let this = self.clone_handle();
-        Box::pin(async move { this.list_chats().await })
+        Box::pin(async move { this.list_chats(page).await })
     }
     fn read_user_work(&self) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
@@ -190,9 +190,10 @@ impl GatewayApplication for AppApplication {
         &self,
         kind: Option<String>,
         project_id: Option<String>,
+        page: Option<(u32, u32)>,
     ) -> ApplicationFuture<Vec<AppSessionSummary>> {
         let this = self.clone_handle();
-        Box::pin(async move { this.list_sessions(kind, project_id).await })
+        Box::pin(async move { this.list_sessions_page(kind, project_id, page).await })
     }
     fn list_automations(
         &self,
