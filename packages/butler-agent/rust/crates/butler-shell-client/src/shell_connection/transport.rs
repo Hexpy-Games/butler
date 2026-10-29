@@ -1,9 +1,3 @@
-// Local authenticated gateway IPC; this is not runtime/model HTTP egress.
-#![allow(
-    clippy::disallowed_methods,
-    clippy::disallowed_types,
-    reason = "UI-independent loopback gateway transport; credentials must not enter runtime HTTP logs"
-)]
 use crate::Error;
 use reqwest::{Method, Response, Url};
 use serde::de::DeserializeOwned;
@@ -19,7 +13,7 @@ pub struct ShellClient {
 pub(crate) struct Inner {
     pub(crate) data: PathBuf,
     pub(crate) endpoint: Url,
-    pub(crate) http: reqwest::Client,
+    pub(crate) http: butler_log::http::Client,
     token: Mutex<String>,
 }
 impl fmt::Debug for ShellClient {
@@ -31,10 +25,11 @@ impl fmt::Debug for ShellClient {
 }
 impl ShellClient {
     pub(crate) fn new(data: PathBuf, endpoint: Url, token: String) -> Result<Self, Error> {
-        let http = reqwest::Client::builder()
+        let http = butler_log::http::loopback()
             .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
+            .redirect(butler_log::http::RedirectPolicy::none())
             .connect_timeout(Duration::from_secs(5))
+            .read_timeout(Duration::from_secs(45))
             .build()
             .map_err(|_| Error::Connection)?;
         Ok(Self {
@@ -83,6 +78,9 @@ impl ShellClient {
         }
         let next = current.clone();
         drop(current);
+        if next == token {
+            return Err(Error::Authentication);
+        }
         checked(self.send(method, url, body, live, &next).await?)
     }
     async fn send(
@@ -93,7 +91,12 @@ impl ShellClient {
         live: bool,
         token: &str,
     ) -> Result<Response, Error> {
-        let mut request = self.inner.http.request(method, url).bearer_auth(token);
+        let mut request = self
+            .inner
+            .http
+            .request(method, url)
+            .phase(butler_log::http::Phase::current().sensitive())
+            .bearer_auth(token);
         if !live {
             request = request.timeout(Duration::from_secs(30));
         }
@@ -126,6 +129,8 @@ impl ShellClient {
 fn checked(response: Response) -> Result<Response, Error> {
     if response.status().is_success() {
         Ok(response)
+    } else if response.status().as_u16() == 401 {
+        Err(Error::Authentication)
     } else {
         Err(Error::Http(response.status().as_u16()))
     }

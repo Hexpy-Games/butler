@@ -26,6 +26,7 @@ pub use reads::AppSessionReadResult;
 
 use super::events::EventSubscribers;
 use super::{AppApplication, AppStorageError, GatewayApplicationError, app_error};
+use crate::gateway::AppListPage;
 use crate::gateway::application::storage::AppStorageCode;
 use rusqlite::Connection;
 use tokio_util::sync::CancellationToken;
@@ -243,14 +244,49 @@ impl AppApplication {
         Ok(())
     }
 
+    pub(crate) fn list_chats_read(
+        &self,
+        page: Option<AppListPage>,
+    ) -> crate::gateway::ApplicationFuture<Vec<AppChatSummary>> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.list_chats(page).await })
+    }
+
+    pub(crate) fn list_sessions_read(
+        &self,
+        kind: Option<String>,
+        project_id: Option<String>,
+        page: Option<AppListPage>,
+    ) -> crate::gateway::ApplicationFuture<Vec<AppSessionSummary>> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.list_sessions_page(kind, project_id, page).await })
+    }
+
+    pub(crate) fn list_revision_read(&self) -> crate::gateway::ApplicationFuture<i64> {
+        let this = self.clone_handle();
+        Box::pin(async move {
+            this.storage
+                .read(|db| {
+                    db.query_row(
+                        "SELECT revision FROM app_list_revision WHERE id=1",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .map_err(AppStorageError::sqlite)
+                })
+                .await
+                .map_err(app_error)
+        })
+    }
+
     pub(crate) async fn list_chats(
         &self,
-        page: Option<(u32, u32)>,
+        page: Option<AppListPage>,
     ) -> Result<Vec<AppChatSummary>, GatewayApplicationError> {
         let (mut chats, owners) = self
             .storage
             .read(move |db| {
-                let chats = read::chats(db, page)?;
+                let chats = read::chats(db, page.as_ref())?;
                 let owners = chats
                     .iter()
                     .map(|c| identity::runtime_hint(db, &c.id))
@@ -282,7 +318,7 @@ impl AppApplication {
         &self,
         kind: Option<String>,
         project_id: Option<String>,
-        page: Option<(u32, u32)>,
+        page: Option<AppListPage>,
     ) -> Result<Vec<AppSessionSummary>, GatewayApplicationError> {
         let mut sessions = self
             .storage

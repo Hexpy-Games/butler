@@ -44,22 +44,22 @@ struct State {
     cursor: u64,
     response: Option<reqwest::Response>,
     decoder: Decoder,
-    ready: VecDeque<Value>,
-    recovery: Option<u64>,
+    ready: VecDeque<(Value, bool)>,
+    recovery: Option<(u64, Option<Value>)>,
     backoff: Duration,
     stopped: bool,
 }
 impl State {
     async fn next(&mut self) -> Result<LiveEvent, Error> {
         loop {
-            if let Some(raw) = self.ready.pop_front() {
-                if let Some(event) = self.accept(raw)? {
+            if let Some((raw, replayed)) = self.ready.pop_front() {
+                if let Some(event) = self.accept(raw, replayed)? {
                     return Ok(event);
                 }
                 continue;
             }
-            if let Some(target) = self.recovery {
-                if let Err(error) = self.recover(target).await
+            if let Some((target, _)) = &self.recovery {
+                if let Err(error) = self.recover(*target).await
                     && !retryable(&error)
                 {
                     return Err(error);
@@ -80,7 +80,12 @@ impl State {
                 None => return Err(Error::Connection),
             };
             match chunk {
-                Ok(Some(bytes)) => self.ready.extend(self.decoder.push(&bytes)?),
+                Ok(Some(bytes)) => self.ready.extend(
+                    self.decoder
+                        .push(&bytes)?
+                        .into_iter()
+                        .map(|raw| (raw, false)),
+                ),
                 Ok(None) | Err(_) => self.disconnect(),
             }
         }
@@ -98,7 +103,7 @@ impl State {
         self.response = None;
         self.decoder = Decoder::default();
     }
-    fn accept(&mut self, raw: Value) -> Result<Option<LiveEvent>, Error> {
+    fn accept(&mut self, raw: Value, replayed: bool) -> Result<Option<LiveEvent>, Error> {
         let name = raw
             .get("type")
             .and_then(Value::as_str)
@@ -108,7 +113,7 @@ impl State {
             let target = raw["payload"]["high_water_cursor"]
                 .as_u64()
                 .ok_or(Error::Protocol)?;
-            self.recovery = Some(target);
+            self.recovery = Some((target, None));
             self.ready.clear();
             self.disconnect();
             return Ok(None);
@@ -117,8 +122,8 @@ impl State {
             if id <= self.cursor {
                 return Ok(None);
             }
-            if id != self.cursor + 1 {
-                self.recovery = Some(id);
+            if !replayed && id != self.cursor + 1 {
+                self.recovery = Some((id, Some(raw)));
                 self.ready.clear();
                 self.disconnect();
                 return Ok(None);
@@ -152,18 +157,20 @@ impl State {
                 return Err(error);
             }
         };
-        if page.events.is_empty()
-            || page
-                .events
-                .iter()
-                .enumerate()
-                .any(|(index, event)| event["id"].as_u64() != Some(self.cursor + index as u64 + 1))
-        {
+        if page.events.is_empty() {
+            // Only an explicit reconcile target which the server can no longer
+            // replay requires a UI reload. Numeric holes alone mean nothing.
+            if let Some((_, Some(raw))) = self.recovery.take() {
+                self.ready.push_back((raw, true));
+                return Ok(());
+            }
             self.stopped = true;
             return Err(Error::EventGap(self.cursor));
         }
-        // Do not advance to the server's high water before delivering every event.
-        self.ready.extend(page.events);
+        // /events is authoritative: retained ids are ordered, not contiguous.
+        // Tag replay rows so accepting them cannot trigger the same recovery.
+        self.ready
+            .extend(page.events.into_iter().map(|raw| (raw, true)));
         Ok(())
     }
 }

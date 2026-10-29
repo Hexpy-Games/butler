@@ -1,4 +1,5 @@
 use crate::{AttachState, Error, ShellClient};
+use butler_platform::instance::{process_executable, process_start, same_executable};
 use butler_platform::process_control::{Liveness, liveness};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -10,6 +11,8 @@ struct Instance {
     schema: String,
     nonce: String,
     pid: u32,
+    process_start: String,
+    executable: String,
     state: String,
     app_enabled: bool,
     app_endpoint: Option<String>,
@@ -57,10 +60,8 @@ fn discover(data: Option<PathBuf>) -> Result<Discovery, Error> {
         || record.state != "ready"
         || !record.app_enabled
         || record.pid == 0
-        || !matches!(
-            liveness(record.pid),
-            Liveness::Running | Liveness::OtherOwner
-        )
+        || !matches!(liveness(record.pid), Liveness::Running)
+        || !identity_matches(&record)
     {
         return Ok(None);
     }
@@ -69,6 +70,18 @@ fn discover(data: Option<PathBuf>) -> Result<Discovery, Error> {
     };
     let token = read_token(&data)?;
     Ok(Some((data, endpoint, token)))
+}
+
+fn identity_matches(record: &Instance) -> bool {
+    let Ok(Some(start)) = process_start(record.pid) else {
+        return false;
+    };
+    let Ok(Some(executable)) = process_executable(record.pid) else {
+        return false;
+    };
+    !record.executable.is_empty()
+        && start == record.process_start
+        && same_executable(&record.executable, &executable)
 }
 
 fn local_endpoint(value: &str) -> Option<reqwest::Url> {

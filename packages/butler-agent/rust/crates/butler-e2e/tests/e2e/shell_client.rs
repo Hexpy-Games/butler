@@ -16,7 +16,9 @@ use serde_json::json;
 use std::time::Duration;
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 
-mod scale;
+mod paging;
+mod retention;
+mod transport;
 
 async fn start(id: &str, rounds: usize, access: Access) -> Result<Scenario, TestError> {
     let setup = Setup::new(id)?
@@ -60,6 +62,7 @@ async fn missing_stale_and_disabled_records_open_no_socket() -> Result<(), TestE
     std::fs::create_dir_all(path.parent().unwrap())?;
     for (pid, state, enabled) in [
         (u32::MAX, "ready", true),
+        (std::process::id(), "ready", true),
         (std::process::id(), "starting", true),
         (std::process::id(), "ready", false),
     ] {
@@ -67,6 +70,7 @@ async fn missing_stale_and_disabled_records_open_no_socket() -> Result<(), TestE
             &path,
             serde_json::to_vec(&json!({
                 "schema":"butler.native-agent-service-instance.v1", "nonce":"stale", "pid":pid,
+                "process_start":"wrong-start", "executable":butler_platform::instance::process_executable(pid).ok().flatten(),
                 "state":state,"app_enabled":enabled,"app_endpoint":format!("http://{}",listener.local_addr()?)
             }))?,
         )?;
@@ -97,17 +101,22 @@ async fn attach_page_send_stream_rotate_and_resume() -> Result<(), TestError> {
             201
         );
     }
-    let first = client.list_chats(PageRequest::new(2, 0)?).await?;
-    let second = client.list_chats(PageRequest::new(2, 2)?).await?;
+    let first = client.list_chats(PageRequest::new(2, None)?).await?;
+    let second = client
+        .list_chats(PageRequest::new(2, first.next_cursor.clone())?)
+        .await?;
     assert_eq!(first.items.len(), 2);
     assert_eq!(second.items.len(), 2);
+    assert!(first.next_cursor.is_some());
+    assert!(second.next_cursor.is_none());
+    assert_eq!(first.items.len() + second.items.len(), 4);
     assert!(
         first
             .items
             .iter()
             .all(|a| !second.items.iter().any(|b| a["id"] == b["id"]))
     );
-    let sessions = client.list_sessions(PageRequest::new(2, 0)?).await?;
+    let sessions = client.list_sessions(PageRequest::new(2, None)?).await?;
     assert_eq!(sessions.items.len(), 2);
     let mut events = client.live_events(0);
     let accepted = client
@@ -142,10 +151,15 @@ async fn attach_page_send_stream_rotate_and_resume() -> Result<(), TestError> {
     );
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     admin.rotate().await?;
+    assert_eq!(
+        s.gw.get("/chats").await?.status,
+        401,
+        "the cached credential must actually be rejected"
+    );
     // Client still holds the old token: this request must receive 401 and reload.
     assert_eq!(
         client
-            .list_chats(PageRequest::new(2, 0)?)
+            .list_chats(PageRequest::new(2, None)?)
             .await?
             .items
             .len(),

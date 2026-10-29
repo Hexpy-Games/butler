@@ -22,6 +22,9 @@ pub enum Error {
     /// Network failure (details deliberately omitted).
     #[error("agent connection failed")]
     Connection,
+    /// The gateway rejected both the cached credential and its refresh.
+    #[error("agent authentication failed")]
+    Authentication,
     /// HTTP failure after the single permitted credential refresh.
     #[error("agent returned HTTP {0}")]
     Http(u16),
@@ -34,18 +37,18 @@ pub enum Error {
 }
 
 /// Bounded list request, ordered as the gateway orders chats or sessions.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PageRequest {
     pub(crate) limit: u32,
-    pub(crate) offset: u32,
+    pub(crate) cursor: Option<String>,
 }
 impl PageRequest {
-    /// Request 1..=200 records from a zero-based offset.
-    pub fn new(limit: u32, offset: u32) -> Result<Self, Error> {
+    /// Request 1..=200 records after an opaque cursor; None starts a traversal.
+    pub fn new(limit: u32, cursor: Option<String>) -> Result<Self, Error> {
         if !(1..=200).contains(&limit) {
             return Err(Error::InvalidPage);
         }
-        Ok(Self { limit, offset })
+        Ok(Self { limit, cursor })
     }
 }
 
@@ -54,8 +57,8 @@ impl PageRequest {
 pub struct Page {
     /// Complete chat/session records.
     pub items: Vec<Value>,
-    /// Offset for the next request, or None at the end.
-    pub next_offset: Option<u32>,
+    /// Opaque snapshot/keyset cursor for the next page, or None at the end.
+    pub next_cursor: Option<String>,
 }
 
 /// One bounded message window, in ascending row cursor order.

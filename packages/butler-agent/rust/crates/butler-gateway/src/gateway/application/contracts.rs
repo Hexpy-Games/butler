@@ -1,4 +1,6 @@
 //! Required composition ports and owned App transport values.
+mod list_page;
+pub use list_page::{AppListCursor, AppListPage};
 mod artifacts;
 mod authority;
 pub use authority::*;

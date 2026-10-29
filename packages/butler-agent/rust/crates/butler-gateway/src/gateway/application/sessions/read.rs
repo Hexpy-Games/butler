@@ -1,3 +1,4 @@
+use crate::gateway::AppListPage;
 use rusqlite::{Connection, OptionalExtension, Row, params_from_iter};
 use serde_json::Value;
 
@@ -146,35 +147,34 @@ pub(in crate::gateway::application) fn session(
 
 pub(super) fn chats(
     db: &Connection,
-    page: Option<(u32, u32)>,
+    page: Option<&AppListPage>,
 ) -> Result<Vec<AppChatSummary>, AppStorageError> {
-    let mut statement = db
-        .prepare_cached(
-            r"
-SELECT id,title,kind,project_id,created_at,updated_at FROM chats
-WHERE archived=0 AND NOT EXISTS(
-  SELECT 1 FROM app_session_branches b
-  WHERE b.target_session_id=chats.id AND b.state='prepared')
-ORDER BY updated_at DESC,created_at DESC,id DESC LIMIT ?1 OFFSET ?2
-",
-        )
-        .map_err(AppStorageError::sqlite)?;
+    let mut params = Vec::new();
+    let (source, tail) = list_order(page, false, &mut params);
+    let sql = format!(
+        "SELECT c.id,c.title,c.kind,c.project_id,c.created_at,c.updated_at FROM {source} \
+         WHERE {tail} AND NOT EXISTS(SELECT 1 FROM app_session_branches b \
+         WHERE b.target_session_id=c.id AND b.state='prepared') \
+         ORDER BY {} LIMIT ?",
+        if page.is_some() {
+            "o.updated_at DESC,o.created_at DESC,o.id DESC"
+        } else {
+            "c.updated_at DESC,c.created_at DESC,c.id DESC"
+        }
+    );
+    params.push(page.map_or(-1, |page| i64::from(page.limit)).into());
+    let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     let rows = statement
-        .query_map(
-            page.map_or((-1, 0), |(limit, offset)| {
-                (i64::from(limit), i64::from(offset))
-            }),
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                ))
-            },
-        )
+        .query_map(params_from_iter(params), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+            ))
+        })
         .map_err(AppStorageError::sqlite)?;
     rows.map(|row| {
         let (id, title, kind, project_id, created_at, updated_at) =
@@ -204,25 +204,28 @@ pub(super) fn sessions_page(
     db: &Connection,
     kind: Option<&str>,
     project_id: Option<&str>,
-    page: Option<(u32, u32)>,
+    page: Option<AppListPage>,
 ) -> Result<Vec<AppSessionSummary>, AppStorageError> {
+    let mut params = Vec::new();
+    let (source, tail) = list_order(page.as_ref(), true, &mut params);
+    let select = SESSION_SELECT.replace("FROM chats c", &format!("FROM {source}"));
     let mut sql = format!(
-        "{SESSION_SELECT} WHERE c.archived=0 AND NOT EXISTS(\
+        "{select} WHERE {tail} AND NOT EXISTS(\
       SELECT 1 FROM app_session_branches b WHERE b.target_session_id=c.id AND b.state='prepared')"
     );
-    let mut params = Vec::new();
+    let alias = if page.is_some() { "o" } else { "c" };
     if let Some(kind) = kind.filter(|value| !value.is_empty()) {
-        sql.push_str(" AND c.kind=?");
-        params.push(kind);
+        sql.push_str(&format!(" AND {alias}.kind=?"));
+        params.push(kind.to_owned().into());
     }
     if let Some(project_id) = project_id.filter(|value| !value.is_empty()) {
-        sql.push_str(" AND c.project_id=?");
-        params.push(project_id);
+        sql.push_str(&format!(" AND {alias}.project_id=?"));
+        params.push(project_id.to_owned().into());
     }
-    sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC,c.id DESC");
-    if let Some((limit, offset)) = page {
-        // Integers supplied by the bounded HTTP parser, never request strings.
-        sql.push_str(&format!(" LIMIT {limit} OFFSET {offset}"));
+    sql.push_str(&format!(" ORDER BY {alias}.pinned DESC,{alias}.updated_at DESC,{alias}.created_at DESC,{alias}.id DESC"));
+    if let Some(page) = page {
+        sql.push_str(" LIMIT ?");
+        params.push(i64::from(page.limit).into());
     }
     let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     statement
@@ -346,4 +349,41 @@ fn preview(preview: Option<&str>) -> Option<String> {
                 text.to_owned()
             }
         })
+}
+
+// The history table preserves the sort keys at the cursor's revision while
+// summaries still read the latest content. Every seek value is bound, including
+// the cursor id used to resolve its original tuple through the primary key.
+fn list_order(
+    page: Option<&AppListPage>,
+    pinned: bool,
+    params: &mut Vec<rusqlite::types::Value>,
+) -> (String, String) {
+    let Some(page) = page else {
+        return ("chats c".into(), "c.archived=0".into());
+    };
+    let mut tail =
+        "c.id=o.id AND o.archived=0 AND o.revision<=? AND (o.ended IS NULL OR o.ended>?)"
+            .to_owned();
+    params.extend([page.cursor.revision.into(), page.cursor.revision.into()]);
+    if let Some(after) = &page.cursor.after {
+        let keys = if pinned {
+            "pinned,updated_at,created_at,id"
+        } else {
+            "updated_at,created_at,id"
+        };
+        let outer = keys
+            .split(',')
+            .map(|key| format!("o.{key}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        tail.push_str(&format!(" AND ({outer}) < (SELECT {keys} FROM app_list_order \
+            WHERE id=? AND revision<=? AND (ended IS NULL OR ended>?) ORDER BY revision DESC LIMIT 1)"));
+        params.extend([
+            after.clone().into(),
+            page.cursor.revision.into(),
+            page.cursor.revision.into(),
+        ]);
+    }
+    ("app_list_order o CROSS JOIN chats c".into(), tail)
 }

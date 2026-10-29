@@ -10,6 +10,7 @@ mod core;
 mod documents;
 mod initiated;
 mod library;
+mod list_order;
 mod message_ownership;
 mod migration;
 mod monitoring;
@@ -64,6 +65,7 @@ pub(super) fn migrate(
     // database, the connected provider's routine preset for a new one.
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
+    list_order::create(connection)?;
     initiated::create(connection)?;
     assets::create(connection)?;
     super::super::image_usage::create(connection)?;

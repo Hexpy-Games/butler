@@ -2,11 +2,16 @@
 
 use std::sync::Arc;
 
+use crate::gateway::{
+    AppListCursor, AppListPage,
+    crypto::{constant_time_eq, hmac_sha256_base64},
+};
 use axum::{
     body::Body,
     http::{Request, StatusCode, Uri},
     response::Response,
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::Value;
 
 use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json, query, read_body_with_limit};
@@ -16,16 +21,19 @@ use crate::gateway::{
 };
 
 pub(super) async fn chats(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
-    let page = page_params(uri)?;
+    let page = page_params(&state, uri).await?;
     let chats = state
         .application
-        .list_chats(page.map(|(limit, offset)| (limit + 1, offset)))
+        .list_chats(page.clone().map(|mut page| {
+            page.limit += 1;
+            page
+        }))
         .await?;
     json(
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: page_response(chats, page, None)?,
+            data: page_response(chats, page, None, &state.session_cursor_secret)?,
         },
     )
 }
@@ -37,20 +45,28 @@ pub(super) async fn list(state: Arc<HttpState>, uri: &Uri) -> Result<Response, H
         .filter(|kind| matches!(kind.as_str(), "chat" | "project"))
         .cloned();
     let project_id = params.get("project_id").cloned();
-    let page = page_params(uri)?;
+    let page = page_params(&state, uri).await?;
     let sessions = state
         .application
         .list_sessions(
             kind,
             project_id,
-            page.map(|(limit, offset)| (limit + 1, offset)),
+            page.clone().map(|mut page| {
+                page.limit += 1;
+                page
+            }),
         )
         .await?;
     json(
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: page_response(sessions, page, Some("sessions"))?,
+            data: page_response(
+                sessions,
+                page,
+                Some("sessions"),
+                &state.session_cursor_secret,
+            )?,
         },
     )
 }
@@ -140,9 +156,12 @@ fn parse_request(value: &Value) -> Option<AppCreateSessionRequest> {
     })
 }
 
-fn page_params(uri: &Uri) -> Result<Option<(u32, u32)>, HttpError> {
+async fn page_params(state: &HttpState, uri: &Uri) -> Result<Option<AppListPage>, HttpError> {
     let params = query(uri);
-    if !params.contains_key("limit") && !params.contains_key("offset") {
+    if !params.contains_key("limit")
+        && !params.contains_key("cursor")
+        && !params.contains_key("offset")
+    {
         return Ok(None);
     }
     let invalid = || HttpError::public(400, "invalid_page", "Invalid page.");
@@ -152,32 +171,82 @@ fn page_params(uri: &Uri) -> Result<Option<(u32, u32)>, HttpError> {
         .transpose()
         .map_err(|_| invalid())?
         .unwrap_or(50);
-    let offset = params
-        .get("offset")
-        .map(|s| s.parse::<u32>())
-        .transpose()
-        .map_err(|_| invalid())?
-        .unwrap_or(0);
-    if !(1..=200).contains(&limit) {
+    if !(1..=200).contains(&limit) || params.contains_key("offset") {
         return Err(invalid());
     }
-    Ok(Some((limit, offset)))
+    let scope = format!(
+        "{}:{}:{}",
+        uri.path(),
+        params.get("kind").map_or("", String::as_str),
+        params.get("project_id").map_or("", String::as_str)
+    );
+    let cursor = if let Some(token) = params.get("cursor") {
+        decode_cursor(token, &state.session_cursor_secret, &scope)?
+    } else {
+        let expires = now() + 300;
+        AppListCursor {
+            revision: state.application.list_revision().await?,
+            expires,
+            after: None,
+            scope,
+        }
+    };
+    Ok(Some(AppListPage { limit, cursor }))
 }
 
 fn page_response<T: serde::Serialize>(
-    mut items: Vec<T>,
-    page: Option<(u32, u32)>,
+    items: Vec<T>,
+    page: Option<AppListPage>,
     key: Option<&str>,
+    secret: &str,
 ) -> Result<Value, HttpError> {
-    if let Some((limit, offset)) = page {
-        let next = (items.len() > limit as usize)
-            .then(|| offset.checked_add(limit))
-            .flatten();
-        items.truncate(limit as usize);
-        return Ok(serde_json::json!({"items":items,"next_offset":next}));
+    if let Some(page) = page {
+        let mut items = serde_json::to_value(items).map_err(|_| HttpError::Internal)?;
+        let rows = items.as_array_mut().ok_or(HttpError::Internal)?;
+        let more = rows.len() > page.limit as usize;
+        rows.truncate(page.limit as usize);
+        let next = if more {
+            let mut cursor = page.cursor;
+            cursor.after = Some(
+                rows.last()
+                    .and_then(|r| r["id"].as_str())
+                    .ok_or(HttpError::Internal)?
+                    .into(),
+            );
+            Some(encode_cursor(&cursor, secret)?)
+        } else {
+            None
+        };
+        return Ok(serde_json::json!({"items":items,"next_cursor":next}));
     }
     match key {
         Some(key) => Ok(serde_json::json!({key: items})),
         None => serde_json::to_value(items).map_err(|_| HttpError::Internal),
     }
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+fn encode_cursor(cursor: &AppListCursor, secret: &str) -> Result<String, HttpError> {
+    let payload =
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).map_err(|_| HttpError::Internal)?);
+    let signature = hmac_sha256_base64(secret.as_bytes(), payload.as_bytes());
+    Ok(format!("{payload}.{signature}"))
+}
+fn decode_cursor(token: &str, secret: &str, scope: &str) -> Result<AppListCursor, HttpError> {
+    let resync = || HttpError::public(409, "list_cursor_resync_required", "Reload the list.");
+    let (payload, signature) = token.split_once('.').ok_or_else(resync)?;
+    let expected = hmac_sha256_base64(secret.as_bytes(), payload.as_bytes());
+    if !constant_time_eq(expected.as_bytes(), signature.as_bytes()) {
+        return Err(resync());
+    }
+    let decoded = URL_SAFE_NO_PAD.decode(payload).map_err(|_| resync())?;
+    let cursor: AppListCursor = serde_json::from_slice(&decoded).map_err(|_| resync())?;
+    if cursor.expires <= now() || cursor.scope != scope {
+        return Err(resync());
+    }
+    Ok(cursor)
 }

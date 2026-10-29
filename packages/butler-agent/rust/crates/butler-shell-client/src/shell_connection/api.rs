@@ -15,16 +15,11 @@ impl ShellClient {
         self.list("sessions", page).await
     }
     async fn list(&self, path: &str, page: PageRequest) -> Result<Page, Error> {
-        self.json(
-            Method::GET,
-            &[path],
-            &[
-                ("limit", page.limit.to_string()),
-                ("offset", page.offset.to_string()),
-            ],
-            None,
-        )
-        .await
+        let mut query = vec![("limit", page.limit.to_string())];
+        if let Some(cursor) = page.cursor {
+            query.push(("cursor", cursor));
+        }
+        self.json(Method::GET, &[path], &query, None).await
     }
     /// Read a bounded message window after a row cursor (0: latest window).
     /// The gateway bounds each page; continue with next_cursor until empty.
@@ -46,7 +41,7 @@ impl ShellClient {
         before: Option<&str>,
         limit: u32,
     ) -> Result<Value, Error> {
-        PageRequest::new(limit, 0)?;
+        PageRequest::new(limit, None)?;
         let mut query = vec![("session_id", session.into()), ("limit", limit.to_string())];
         if let Some(before) = before {
             query.push(("before_cursor_token", before.into()));
@@ -148,7 +143,7 @@ impl ShellClient {
     }
     /// Read at most 200 durable events after cursor, including unknown kinds.
     pub async fn replay_events(&self, cursor: u64, limit: u32) -> Result<EventPage, Error> {
-        PageRequest::new(limit, 0)?;
+        PageRequest::new(limit, None)?;
         self.json(
             Method::GET,
             &["events"],

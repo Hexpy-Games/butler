@@ -1365,6 +1365,7 @@ dependencies = [
 name = "butler-shell-client"
 version = "0.0.0"
 dependencies = [
+ "butler-log",
  "butler-platform",
  "futures-core",
  "futures-util",
