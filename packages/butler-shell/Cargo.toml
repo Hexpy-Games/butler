@@ -12,16 +12,6 @@ rust-version = "1.95"
 license = "MIT"
 publish = false
 
-# Test inherits dev. Keep shell source lines in backtraces without emitting
-# variable/type debug info; dependency internals need a local debug override.
-[profile.dev]
-debug = "line-tables-only"
-
-# gpui and its dependency graph dominate cold test codegen and debug linking.
-# Keep assertions and all tests, but omit dependency debug info in this workspace.
-[profile.dev.package."*"]
-debug = 0
-
 [workspace.dependencies]
 gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0ca21f5eed86555f622767db68049164125172f6", package = "gpui-ce" }
 gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0ca21f5eed86555f622767db68049164125172f6", package = "gpui_ce_platform" }
