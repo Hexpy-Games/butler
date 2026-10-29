@@ -142,7 +142,9 @@ pub(super) fn create_epic(
             project_id: project.into(),
             title: title_value,
             description: input.description.clone().unwrap_or_default(),
-            origin: if ctx.actor["origin"] == "chat" {
+            origin: if ctx.actor["origin"] == "mcp" {
+                Origin::Mcp
+            } else if ctx.actor["origin"] == "chat" {
                 Origin::Chat
             } else {
                 Origin::Dialog

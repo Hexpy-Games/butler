@@ -9,10 +9,14 @@ async fn proposal_queries_are_keyed_and_pin_the_partial_indexes() -> Result<(), 
         let db = butler_platform::sqlite::open(path)?;
         use butler_canon::store::proposals::queries::*;
         for (sql, index) in [
+            (
+                butler_canon::store::page::UNSCOPED_EPICS_PAGE,
+                "canon_epics_page",
+            ),
             (GET, "sqlite_autoindex_canon_proposals_1"),
             (OPEN_SESSION, "canon_proposals_open_session"),
-            (OPEN_PAGE, "canon_proposals_open"),
-            (OPEN_BEFORE, "canon_proposals_open"),
+            (OPEN_PAGE, "canon_proposals_chat_open"),
+            (OPEN_BEFORE, "canon_proposals_chat_open"),
             (TURN, "canon_proposals_turn"),
             (COUNT, "canon_proposals_open_session"),
             (PROJECT_SPECS, "canon_spec_nodes_shared_project"),
@@ -31,6 +35,9 @@ async fn proposal_queries_are_keyed_and_pin_the_partial_indexes() -> Result<(), 
                     line.contains("USING INDEX") || line.contains("USING COVERING INDEX"),
                     "{sql}: {plan}"
                 );
+            }
+            if sql == butler_canon::store::page::UNSCOPED_EPICS_PAGE {
+                assert!(!plan.contains("TEMP B-TREE"), "{sql}: {plan}");
             }
             eprintln!("CP-PLAN {plan}");
         }

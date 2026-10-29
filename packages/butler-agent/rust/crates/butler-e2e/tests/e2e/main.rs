@@ -309,3 +309,5 @@ mod one_call_delegation;
 mod chats_initiated;
 mod chats_proposals;
 mod chats_work;
+
+mod canon_mcp;
