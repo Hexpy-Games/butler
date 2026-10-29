@@ -1,13 +1,14 @@
-import { useState, type MouseEvent, type ReactNode, type Ref } from "react";
+import type { MouseEvent, ReactNode, Ref } from "react";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { IconButton } from "../../components/IconButton";
-import { ArrowLeft, ArrowRight, ImageIcon, XIcon } from "../../components/Icons";
+import { ArrowLeft, ArrowRight, XIcon, ZoomIn, ZoomOut } from "../../components/Icons";
 import { TintedGlass } from "../../components/TintedGlass";
 import { Typo } from "../../components/Typo";
 import { dsClass } from "../../lib/internal";
-import { cn } from "../../lib/utils";
 import { SiteIcon } from "../../lib/SiteIcon";
 import styles from "./ImageViewer.module.css";
+import { MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, useZoomPan } from "./zoom";
+import { Picture, zoomKeys } from "./ImageViewerPicture";
 
 /** Where a picture was read: the provenance line under the caption ("shop.example · 오후 5:41 확인"). */
 export interface ImageViewerSource {
@@ -38,6 +39,9 @@ export interface ImageViewerLabels {
   position: (current: number, total: number) => string;
   /** Shown when the picture cannot load. */
   failed: string;
+  /** Zoom buttons for pictures; without them zoom stays on gestures and the +, - and 0 keys. */
+  zoomIn?: string;
+  zoomOut?: string;
 }
 
 export interface ImageViewerSurfaceProps {
@@ -62,25 +66,6 @@ function backdropClick(onClose: () => void) {
   };
 }
 
-function Picture({ image, failedLabel }: { image: ImageViewerImage; failedLabel: string }) {
-  const [failed, setFailed] = useState<string | null>(null);
-  if (failed === image.src) {
-    return (
-      <TintedGlass className={dsClass(styles.failed)} radius="control" padding="md" role="img" aria-label={`${image.alt} · ${failedLabel}`}>
-        <ImageIcon size="xl" />
-        <Typo.Caption tone="secondary">{failedLabel}</Typo.Caption>
-      </TintedGlass>
-    );
-  }
-  if (image.kind === "video") {
-    return (
-      <video key={image.src} className={cn(styles.picture, styles.video)} src={image.src} aria-label={image.alt}
-        controls playsInline preload="metadata" onError={() => setFailed(image.src)} />
-    );
-  }
-  return <img key={image.src} className={styles.picture} src={image.src} alt={image.alt} draggable={false} onError={() => setFailed(image.src)} />;
-}
-
 /**
  * The viewer's layout without the overlay: a bar (position, actions, close), the picture fitted to the
  * stage with previous/next on its sides, and the caption with its source line. `ImageViewer` renders it
@@ -90,8 +75,11 @@ export function ImageViewerSurface({
   image, index, total, labels, actions, onPrevious, onNext, onClose, closeRef, contained = false,
 }: ImageViewerSurfaceProps) {
   const many = total > 1;
+  const zoomable = image.kind !== "video";
+  const zoom = useZoomPan(zoomable, image.src);
   return (
-    <div className={styles.surface} data-contained={contained ? "" : undefined} data-image-viewer-backdrop="" onClick={backdropClick(onClose)}>
+    <div className={styles.surface} data-contained={contained ? "" : undefined} data-image-viewer-backdrop="" onClick={backdropClick(onClose)}
+      onKeyDown={zoomable ? zoomKeys(zoom) : undefined}>
       <div className={styles.bar} data-image-viewer-backdrop="">
         {many ? (
           <TintedGlass className={dsClass(styles.capsule)} radius="control" padding="none">
@@ -100,13 +88,19 @@ export function ImageViewerSurface({
         ) : <span />}
         <TintedGlass className={dsClass(styles.capsule)} radius="control" padding="none">
           <ButtonContainer size="icon-sm">
+            {zoomable && labels.zoomOut ? (
+              <IconButton label={labels.zoomOut} disabled={zoom.view.scale <= MIN_ZOOM} onClick={() => zoom.zoomBy(1 / ZOOM_STEP)}><ZoomOut size="sm" /></IconButton>
+            ) : null}
+            {zoomable && labels.zoomIn ? (
+              <IconButton label={labels.zoomIn} disabled={zoom.view.scale >= MAX_ZOOM} onClick={() => zoom.zoomBy(ZOOM_STEP)}><ZoomIn size="sm" /></IconButton>
+            ) : null}
             {actions}
             <IconButton ref={closeRef} label={labels.close} onClick={onClose}><XIcon size="sm" /></IconButton>
           </ButtonContainer>
         </TintedGlass>
       </div>
       <div className={styles.stage} data-image-viewer-backdrop="">
-        <Picture image={image} failedLabel={labels.failed} />
+        <Picture image={image} failedLabel={labels.failed} zoom={zoom} />
         {many ? (
           <>
             <TintedGlass className={dsClass(styles.nav)} data-side="start" radius="control" padding="none">

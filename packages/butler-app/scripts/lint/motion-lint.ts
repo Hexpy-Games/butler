@@ -288,6 +288,11 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
     constants: {},
   },
   {
+    prefix: "libs/design-system/blocks/MaskCanvas/",
+    justification: "Mask painting: draws a user's brush strokes under the pointer and exports the edit mask; it never animates on its own.",
+    constants: {},
+  },
+  {
     prefix: "libs/design-system/components/ButlerThinkingMark/",
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {
