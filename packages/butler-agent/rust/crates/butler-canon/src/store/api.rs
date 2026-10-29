@@ -13,9 +13,9 @@ use crate::{
     work_types::*,
 };
 use Resource::{
-    Activity, AllowGrant, BacklogOrder, Canon, Comment, CreateEpic, CreatePlan, CreateTag,
-    DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, Grants, List, Plan, PlanOrder,
-    ProposeSpec, RevokeGrant, Spec, Tags,
+    Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
+    CreateTag, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, Grants, List, Plan,
+    PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
 };
 pub use reads::{canon, epic, epic_only, plan};
 
@@ -27,6 +27,7 @@ pub enum Resource {
     Activity,
     Comment,
     ProposeSpec,
+    CheckCriterion,
     Grants,
     AllowGrant,
     DenyGrant,
@@ -49,7 +50,7 @@ pub enum Resource {
 pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<String> {
     let sql = match resource {
         List | Grants | AllowGrant | DenyGrant | RevokeGrant => return Ok(id.into()),
-        Spec | ProposeSpec => {
+        Spec | ProposeSpec | CheckCriterion => {
             "SELECT scope_ref FROM canon_spec_nodes WHERE node_id=?1 AND scope_kind='project' AND visibility='canon'"
         }
         Activity | Comment | Epic | EditEpic => sql::EPIC_SCOPE,
@@ -68,9 +69,8 @@ pub fn read(db: &Connection, resource: Resource, id: &str) -> Result<Value> {
     match resource {
         Spec => mcp_proposals::spec(db, id),
         Activity => activity::page(db, id, None),
-        List | Grants | AllowGrant | DenyGrant | RevokeGrant | Comment | ProposeSpec => {
-            Err(Error::Invalid("request input required"))
-        }
+        List | Grants | AllowGrant | DenyGrant | RevokeGrant | Comment | ProposeSpec
+        | CheckCriterion => Err(Error::Invalid("request input required")),
         Tags => tags::list(db, id),
         Canon => canon(db, id),
         Plan => plan(db, id),
@@ -99,6 +99,7 @@ pub fn write(
         Spec => mcp_proposals::spec(tx, id),
         Activity => activity::page(tx, id, input["before"].as_i64()),
         Comment => activity::comment(tx, ctx, id, input),
+        CheckCriterion => criteria::toggle(tx, ctx, id, input),
         ProposeSpec => mcp_proposals::create(tx, ctx, id, input),
         Grants => grants::list(tx, input["state"].as_str()),
         AllowGrant => grants::decide(tx, ctx, id, "allowed"),

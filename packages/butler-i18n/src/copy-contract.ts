@@ -1081,6 +1081,7 @@ export interface AppCopy {
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
     usage: {
+      imagesTitle: string; imagesGenerated: string; imagesEdited: string; imagesCost: string; imagesTotal: string;
       overviewTitle: string; historyTitle: string;
       lifetimeTokens: string; busiestDay: string; longestTask: string;
       longestStreak: string; currentStreak: string; days: (n: number) => string;

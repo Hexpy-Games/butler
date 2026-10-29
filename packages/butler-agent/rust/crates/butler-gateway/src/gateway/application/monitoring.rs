@@ -254,7 +254,7 @@ pub(crate) async fn worker_activity(
     if let Some(page) = application.worker_activity_page(query.clone()).await? {
         return Ok(page);
     }
-    let sessions = application.list_sessions(None, None).await?;
+    let sessions = application.list_sessions(None, None, None).await?;
     let mut workers = Vec::new();
     for session in sessions.into_iter().filter(|session| {
         query

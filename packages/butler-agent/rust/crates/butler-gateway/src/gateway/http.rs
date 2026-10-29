@@ -329,7 +329,7 @@ async fn route(
             new_chat_briefing::get(state, &uri).await
         }
         (Method::POST, router::Handler::Projects) => projects::create(state, request).await,
-        (Method::GET, router::Handler::Chats) => sessions::chats(state).await,
+        (Method::GET, router::Handler::Chats) => sessions::chats(state, &uri).await,
         (Method::GET, router::Handler::Sessions) => sessions::list(state, &uri).await,
         (Method::GET, router::Handler::ProjectSessions) => {
             sessions::project_list(state, &uri).await

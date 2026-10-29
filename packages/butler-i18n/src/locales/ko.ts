@@ -1199,6 +1199,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     queuedPosition: (position, total) => `대기 중 · ${total}개 중 ${position}번째`,
     contextDetails: "컨텍스트 세부정보 표시",
     usage: {
+      imagesTitle: "이미지 모델", imagesGenerated: "생성", imagesEdited: "편집", imagesCost: "추정 비용", imagesTotal: "합계",
       overviewTitle: "최근 사용량", historyTitle: "사용 기록",
       lifetimeTokens: "누적 토큰", busiestDay: "가장 많이 쓴 날", longestTask: "가장 긴 작업",
       longestStreak: "최장 연속 사용", currentStreak: "연속 사용 중",
