@@ -79,8 +79,6 @@ jobs:
           cache-on-failure: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Formatting
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
-      - name: Check
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo check --locked --workspace --all-targets --profile test
       - name: Clippy
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --locked --workspace --all-targets --profile test -- -D warnings
       - name: Workspace tests
@@ -92,8 +90,7 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- ../../butler-shell
 
   package:
-    # Publish artifacts only after all checks pass, including every platform.
-    needs: shell
+    # Build unsigned experimental artifacts in parallel with platform checks.
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     # Cold check/test each took 4-7 min; optimized gpui compilation needs its
     # own budget. Allow 30 min for cold release + notices/upload/cache saving;
