@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 /** One picture the app can show large. `source` is the page it was read from. */
 export interface ViewerImage {
+  asset?: import("../images/imageApi").ImageAsset;
   src: string;
   alt: string;
   /** `video` plays in the viewer (an attached video file). */

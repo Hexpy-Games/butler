@@ -1,3 +1,4 @@
+import { GeneratedImageActions } from "../images/GeneratedImageActions";
 import { useMemo } from "react";
 import { Copy, DoneIconButton, IconButton, ImageViewer, Library, Popup, type ImageViewerImage } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
@@ -9,7 +10,7 @@ import { closeImageViewer, useImageViewerState, type ViewerImage } from "./image
 function viewerImage(image: ViewerImage, checked: (time: string) => string): ImageViewerImage {
   const site = siteOf(image.source);
   const time = checkedLabel(image.checked);
-  return { src: image.src, alt: image.alt, kind: image.kind, caption: image.caption ?? (image.alt || undefined),
+  return { src: image.src, alt: image.alt, kind: image.kind, caption: image.asset ? undefined : image.caption ?? (image.alt || undefined),
     source: site ? { site, checked: time ? checked(time) : undefined, icon: image.source ? faviconSrc(image.source) : undefined } : undefined };
 }
 
@@ -21,7 +22,7 @@ export function ImageViewerHost() {
   const blocks = appCopy.conversation.answerBlocks;
   const shown = useMemo(() => images.map((image) => viewerImage(image, copy.checked)), [images, copy.checked]);
   const current = index === null ? undefined : images[index];
-  const actions = current ? <>
+  const actions = current?.asset && current.sessionId ? <GeneratedImageActions asset={current.asset} session={current.sessionId} title={current.alt} /> : current ? <>
     {current.source || current.openSource ? <IconButton label={copy.openSource} onClick={() => {
       closeImageViewer();
       runAnswerAction(async () => { await openViewerSource(current); });
@@ -34,5 +35,5 @@ export function ImageViewerHost() {
   </> : undefined;
   return <ImageViewer images={shown} index={index} onIndexChange={(next) => useImageViewerState.setState({ index: next })}
     onClose={closeImageViewer} actions={actions}
-    labels={{ close: copy.close, previous: copy.previous, next: copy.next, position: copy.position, failed: copy.failed }} />;
+    labels={{ zoomIn: copy.zoomIn, zoomOut: copy.zoomOut, close: copy.close, previous: copy.previous, next: copy.next, position: copy.position, failed: copy.failed }} />;
 }

@@ -1,4 +1,5 @@
 import { useDrawerSidebarState } from "@/hooks/useDrawerSidebarState.ts";
+import { useImageEditorState } from "@/components/images/imageEditorState";
 import { startupPaintReady } from "@/app/startupReady";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useEffect } from "react";
@@ -196,11 +197,12 @@ function AppWorkspaceShell() {
   useCommandPaletteHotkey();
   const theme = useWorkspaceTheme();
   const panels = useWorkspacePanels();
+  const editingImage = useImageEditorState(s => Boolean(s.target));
   const { resize, browser, peek, effectiveLeftOpen, isSettingsView } = panels;
   return (
     <AdaptiveShell frame="cards" ref={resize.shellRef} {...theme}
       chromeEnvironment={chromeEnvironment()} data-test-class="mac-window"
-      leftOpen={effectiveLeftOpen} leftPeek={peek.open} splitOpen={browser.paneOpen}
+      leftOpen={effectiveLeftOpen} leftPeek={peek.open} splitOpen={browser.paneOpen || editingImage}
       compactSidebarFullWidth platform={nativePlatform()} resizing={Boolean(resize.resizingPanel)}
       rightOpen={false} settingsActive={isSettingsView} UNSAFE_style={resize.panelStyle}>
       <AppWorkspaceContent leftOpen={effectiveLeftOpen} pane={browser.pane} chatWidth={browser.chatWidth} />

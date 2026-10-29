@@ -2619,6 +2619,17 @@ registerOpenMessageFile({
   isTrustedSender: (event) => event.sender === mainWindow?.webContents,
 });
 
+ipcMain.handle("butler:save-image-asset", async (_event, input = {}) => {
+  const id = typeof input.id === "string" ? input.id : "";
+  if (!/^img_[a-z0-9]{10}(?:[a-z0-9]{2})?$/u.test(id)) throw new Error("Invalid Butler image.");
+  const result = await dialog.showSaveDialog({ defaultPath: safeSaveFileName(input.suggestedName) });
+  if (result.canceled || !result.filePath) return { saved: false };
+  const response = await fetch(new URL(`/message-assets/${id}?download=1`, serverUrl), { headers: await appLocalAuthHeaders() });
+  if (!response.ok) throw new Error("Unable to load Butler image.");
+  await writeFile(result.filePath, Buffer.from(await response.arrayBuffer()));
+  return { saved: true };
+});
+
 ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
   const fileId = typeof input?.fileId === "string" ? input.fileId : "";
   if (!messageFileIdPattern.test(fileId)) {
