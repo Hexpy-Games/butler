@@ -72,7 +72,7 @@ async fn auto_project_writes_sweep_and_retry_asks() -> Result<(), HarnessError> 
             &json!({"command":"sh build.sh", "summary":"Build project", "state_effect":"mutation"}),
         )],
     );
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+    let id = s.gw.say_turn(&chat, prompt).await?;
     super::super::access_tiers::delivered(&s, &chat, &id).await?;
     super::super::access_tiers::assert_counts(&s, &id, 0, 0)?;
     let outputs = super::super::access_tiers::outputs(&s, &chat, &id, &script, prompt).await?;
@@ -109,7 +109,7 @@ async fn auto_project_writes_sweep_and_retry_asks() -> Result<(), HarnessError> 
             &json!({"command":command, "summary":"Create output", "state_effect":"mutation"}),
         )],
     );
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+    let id = s.gw.say_turn(&chat, prompt).await?;
     super::super::access_tiers::delivered(&s, &chat, &id).await?;
     super::super::access_tiers::assert_counts(&s, &id, 0, 0)?;
     let outputs = super::super::access_tiers::outputs(&s, &chat, &id, &script, prompt).await?;

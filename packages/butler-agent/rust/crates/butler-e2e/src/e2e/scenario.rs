@@ -438,8 +438,7 @@ impl Scenario {
         chat: &str,
         text: &str,
     ) -> Result<(String, Value, u32), HarnessError> {
-        let accepted = self.gw.say(chat, text).await?;
-        let turn_id = accepted_turn_id(&accepted)?;
+        let turn_id = self.gw.say_turn(chat, text).await?;
         let deadline = std::time::Instant::now() + Duration::from_secs(turn_timeout());
         let mut restarts = 0;
         loop {
@@ -475,15 +474,6 @@ fn model_settings(choice: &ModelChoice) -> Value {
         body["reasoning_effort"] = Value::String(effort.clone());
     }
     body
-}
-
-pub fn accepted_turn_id(accepted: &Value) -> Result<String, HarnessError> {
-    accepted["turn_id"]
-        .as_str()
-        .or_else(|| accepted["turn"]["turn_id"].as_str())
-        .or_else(|| accepted["turn"]["id"].as_str())
-        .map(str::to_owned)
-        .ok_or_else(|| harness_error(format!("no turn id in accepted message: {accepted}")))
 }
 
 pub fn turn_timeout() -> u64 {

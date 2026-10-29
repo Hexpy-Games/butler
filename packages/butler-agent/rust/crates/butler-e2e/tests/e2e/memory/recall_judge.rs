@@ -263,7 +263,6 @@ async fn mem_judge_provider_failure_and_deadline_preserve_order() -> Result<(), 
 
 #[tokio::test]
 async fn mem_judge_cancellation_drops_request_and_shutdown_drains() -> Result<(), HarnessError> {
-    use butler_e2e::e2e::scenario::accepted_turn_id;
     use std::time::Duration;
     butler_e2e::gate!();
     let s = setup().await?;
@@ -275,7 +274,7 @@ async fn mem_judge_cancellation_drops_request_and_shutdown_drains() -> Result<()
         )
         .await?;
     let chat = chat.data()["session"]["id"].as_str().unwrap().to_owned();
-    let turn_id = accepted_turn_id(&s.gw.say(&chat, ASK).await?)?;
+    let turn_id = s.gw.say_turn(&chat, ASK).await?;
     tokio::time::timeout(Duration::from_secs(20), async {
         while judge_count(&s) == 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -311,7 +310,6 @@ async fn mem_judge_non_gated_recall_makes_no_call() -> Result<(), HarnessError> 
 #[tokio::test]
 async fn mem_judge_shutdown_interrupts_active_and_delivers_queued_followup()
 -> Result<(), HarnessError> {
-    use butler_e2e::e2e::scenario::accepted_turn_id;
     use std::time::Duration;
     butler_e2e::gate!();
     let mut s = setup().await?;
@@ -323,7 +321,7 @@ async fn mem_judge_shutdown_interrupts_active_and_delivers_queued_followup()
         )
         .await?;
     let chat = chat.data()["session"]["id"].as_str().unwrap().to_owned();
-    let active = accepted_turn_id(&s.gw.say(&chat, ASK).await?)?;
+    let active = s.gw.say_turn(&chat, ASK).await?;
     tokio::time::timeout(Duration::from_secs(20), async {
         while judge_count(&s) == 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -364,7 +362,6 @@ async fn mem_judge_shutdown_interrupts_active_and_delivers_queued_followup()
 #[tokio::test]
 async fn mem_judge_wait_releases_reader_pin_and_binds_current_generation()
 -> Result<(), HarnessError> {
-    use butler_e2e::e2e::scenario::accepted_turn_id;
     use std::time::Duration;
     butler_e2e::gate!();
     let s = setup().await?;
@@ -375,7 +372,7 @@ async fn mem_judge_wait_releases_reader_pin_and_binds_current_generation()
             .await?;
     let chat = chat.data()["session"]["id"].as_str().unwrap().to_owned();
     let start = s.provider()?.requests().len();
-    let active = accepted_turn_id(&s.gw.say(&chat, ASK).await?)?;
+    let active = s.gw.say_turn(&chat, ASK).await?;
     let started = tokio::time::timeout(Duration::from_secs(20), async {
         while judge_count(&s) == 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;

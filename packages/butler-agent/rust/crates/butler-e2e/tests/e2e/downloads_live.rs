@@ -9,7 +9,7 @@ use butler_e2e::e2e::{
     HarnessError,
     gateway::{tool_rows, turn_state},
     live,
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use serde_json::{Value, json};
 use std::{
@@ -104,7 +104,7 @@ async fn run(
     assert_eq!(language.status, 200);
     live::spend_turn()?;
     let started = Instant::now();
-    let id = accepted_turn_id(&s.gw.say("general", request).await?)?;
+    let id = s.gw.say_turn("general", request).await?;
     let deadline = started + Duration::from_secs(300);
     let mut timed_out = false;
     let mut mutation_requested = false;

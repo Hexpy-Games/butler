@@ -9,10 +9,7 @@
 )]
 use super::steward_interrupted_queue::{count, db, read_record, records, request_text};
 use super::steward_presentation::{self, stub};
-use butler_e2e::e2e::{
-    HarnessError,
-    scenario::{Scenario, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, scenario::Scenario};
 use serde_json::{Value, json};
 use std::{
     sync::atomic::Ordering,
@@ -136,7 +133,7 @@ async fn failed_direction_continuation_settles_and_the_next_direction_runs()
         other => panic!("continuation did not take its direction: {other:?}"),
     };
     // The whole parent queue sits behind the crash: a held turn and a follow-up.
-    let held = accepted_turn_id(&s.gw.say("general", stub::HOLD_PARENT).await?)?;
+    let held = s.gw.say_turn("general", stub::HOLD_PARENT).await?;
     tokio::time::timeout(Duration::from_secs(20), script.parent_held.notified())
         .await
         .unwrap();

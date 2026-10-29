@@ -11,7 +11,7 @@
 use butler_e2e::e2e::events::LiveEvents;
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
 use butler_e2e::e2e::gateway::turn_state;
-use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures};
 use butler_platform::sqlite;
 use serde_json::json;
@@ -86,7 +86,7 @@ fn writes(s: &Scenario) -> Result<(i64, i64), HarnessError> {
 /// still read and nothing is written; once delivered it is unread.
 async fn background_reply(s: &Scenario, chat: &str) -> Result<(), HarnessError> {
     let before = writes(s)?;
-    let turn = accepted_turn_id(&s.gw.say(chat, "Summarize local models.").await?)?;
+    let turn = s.gw.say_turn(chat, "Summarize local models.").await?;
     tokio::time::timeout(Duration::from_secs(60), async {
         loop {
             let messages = s.gw.messages(chat).await?;

@@ -1,7 +1,7 @@
 //! App cancellation does not make a committed BTCC delivery safe to archive.
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
 use butler_e2e::e2e::gateway::turn_state;
-use butler_e2e::e2e::scenario::{Fixture, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Fixture, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures};
 use serde_json::json;
 use std::time::Duration;
@@ -84,7 +84,7 @@ async fn clear_refuses_committed_delivery_after_app_cancellation() -> Result<(),
         )
         .await?;
     assert_eq!(settings.status, 200, "{}", settings.text);
-    let turn = accepted_turn_id(&s.gw.say("general", "Hello there.").await?)?;
+    let turn = s.gw.say_turn("general", "Hello there.").await?;
     let mut held = barrier.held().await;
     let cancel =
         s.gw.post(&format!("/turns/{turn}/cancel"), json!({}))

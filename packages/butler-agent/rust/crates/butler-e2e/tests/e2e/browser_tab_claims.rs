@@ -11,7 +11,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     events::{LiveEvents, turn_event_kind},
-    scenario::{Setup, accepted_turn_id},
+    scenario::Setup,
     security::AdminClient,
 };
 use serde_json::{Value, json};
@@ -59,7 +59,7 @@ async fn run(mode: Mode) -> Result<(), HarnessError> {
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let host = host::Host::attach(admin, events.clone(), mode).await?;
     let served = tokio::spawn(host.serve());
-    let id = accepted_turn_id(&s.gw.say("general", PROMPT).await?)?;
+    let id = s.gw.say_turn("general", PROMPT).await?;
     let turn = events
         .wait_turn(&s.gw, "general", &id, &["delivered", "failed"], GUARD)
         .await?;

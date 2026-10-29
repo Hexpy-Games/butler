@@ -7,7 +7,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     fake_servers::images::ImageServer,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -80,7 +80,7 @@ impl Fixture {
         self.s.finish().await
     }
     async fn run(&self, prompt: &str) -> Result<String, HarnessError> {
-        let id = accepted_turn_id(&self.s.gw.say("general", prompt).await?)?;
+        let id = self.s.gw.say_turn("general", prompt).await?;
         delivered(&self.s, "general", &id).await?;
         Ok(id)
     }

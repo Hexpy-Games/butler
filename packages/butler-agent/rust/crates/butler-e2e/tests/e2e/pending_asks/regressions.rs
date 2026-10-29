@@ -49,7 +49,7 @@ async fn pa_07_stopping_a_later_turn_preserves_an_answerable_question() -> Resul
     butler_e2e::gate!();
     let (s, _, server) = setup("PA-07").await?;
     let q = ask(&s, "general").await?;
-    let id = accepted_turn_id(&s.gw.say("general", stub::APPROVE).await?)?;
+    let id = s.gw.say_turn("general", stub::APPROVE).await?;
     s.gw.wait_turn(
         "general",
         &id,
@@ -155,7 +155,7 @@ fn history(data: &std::path::Path, reference: &str) -> Result<(), HarnessError> 
 async fn pa_10_later_answer_sets_the_deferred_waiting_time() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, _, server) = setup("PA-10").await?;
-    let id = accepted_turn_id(&s.gw.say("general", stub::BLOCK).await?)?;
+    let id = s.gw.say_turn("general", stub::BLOCK).await?;
     s.gw.wait_turn(
         "general",
         &id,

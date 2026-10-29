@@ -1,9 +1,5 @@
 //! Shared assertions for permission-tier and Linux approval scenarios.
-use butler_e2e::e2e::{
-    HarnessError,
-    gateway::turn_state,
-    scenario::{Scenario, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, gateway::turn_state, scenario::Scenario};
 use serde_json::json;
 use std::time::Duration;
 
@@ -12,7 +8,7 @@ pub(in super::super) async fn paused(
     chat: &str,
     prompt: &str,
 ) -> Result<String, HarnessError> {
-    let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+    let id = s.gw.say_turn(chat, prompt).await?;
     let turn =
         s.gw.wait_turn(
             chat,

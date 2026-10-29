@@ -11,7 +11,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     gateway::turn_state,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -185,7 +185,7 @@ async fn send_to(
         "client_message_id":uuid::Uuid::new_v4().to_string(),
     })).await?;
     assert_eq!(reply.status, 202, "{}", reply.text);
-    accepted_turn_id(reply.data())
+    s.gw.accepted_turn(reply.data()).await
 }
 
 async fn pending(s: &Scenario, chat: &str, id: &str) -> Result<(), HarnessError> {

@@ -25,7 +25,7 @@ use butler_platform::sqlite;
 use std::time::Duration;
 
 use butler_e2e::e2e::gateway::{TERMINAL, tool_rows, turn_state};
-use butler_e2e::e2e::scenario::{Access, Fixture, Scenario, Setup, accepted_turn_id, turn_timeout};
+use butler_e2e::e2e::scenario::{Access, Fixture, Scenario, Setup, turn_timeout};
 use butler_e2e::e2e::{HarnessError, fixtures, live, media, nonce};
 use serde_json::{Value, json};
 
@@ -80,7 +80,7 @@ async fn acc_01_onboarding_saves_without_approval_in_ask_first() -> Result<(), H
             ),
         )
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     delivered_without_asking(&s, "general", &turn_id).await?;
     let saved = data_file(&s, "personalization/onboarding.json")
         + &data_file(&s, "personalization/profile.json");
@@ -115,7 +115,7 @@ async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(
             ),
         )
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     delivered_without_asking(&s, "general", &turn_id).await?;
     let rows = tool_rows(&s.gw.messages("general").await?, &turn_id);
     let write = rows
@@ -177,7 +177,7 @@ async fn acc_03_attached_image_reaches_native_vision_in_ask_first() -> Result<()
             "client_message_id": uuid::Uuid::new_v4().to_string(),
         }))
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     delivered_without_asking(&s, "general", &turn_id).await?;
     let answer = s
         .gw
@@ -221,7 +221,7 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
             "Call the e2e_echo tool of the MCP server named e2e and tell me the token it returns.",
         )
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn = settled(&s, "general", &turn_id).await?;
     assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
     let requests = s.gw.approval_requests("general").await?;
@@ -375,7 +375,7 @@ async fn acc_07_wallpaper_change_asks_in_ask_first() -> Result<(), HarnessError>
             "Change my App wallpaper to the Silk live wallpaper, app-wide.",
         )
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn = settled(&s, "general", &turn_id).await?;
     assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
     let requests = s.gw.approval_requests("general").await?;
@@ -411,7 +411,7 @@ async fn acc_07_allow_applies_the_wallpaper_change() -> Result<(), HarnessError>
             "Change my App wallpaper to the Silk live wallpaper, app-wide.",
         )
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn = settled(&s, "general", &turn_id).await?;
     assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
     let requests = s.gw.approval_requests("general").await?;

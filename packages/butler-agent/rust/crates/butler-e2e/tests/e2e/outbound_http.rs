@@ -8,7 +8,6 @@
 use butler_e2e::e2e::{
     HarnessError,
     fake_servers::{ChatBehavior, FakeServer},
-    scenario::accepted_turn_id,
 };
 use serde_json::json;
 use std::time::Duration;
@@ -31,7 +30,7 @@ async fn log_http_provider_turn_has_context_and_no_external_traceparent() -> Res
         .await?;
     assert_eq!(configured.status, 200);
     let accepted = s.gw.say("general", "Hello").await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(20))
             .await?;
@@ -130,7 +129,7 @@ async fn log_http_full_body_is_retrievable_through_gateway() -> Result<(), Harne
     let accepted =
         s.gw.say("general", &"Complete log payload. ".repeat(700))
             .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(20))
             .await?;

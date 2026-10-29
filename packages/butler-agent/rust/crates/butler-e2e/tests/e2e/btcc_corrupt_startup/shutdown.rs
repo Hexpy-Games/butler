@@ -3,7 +3,6 @@ use super::*;
 use butler_e2e::e2e::{
     cassette::{Cassette, Chunk},
     provider::Pacing,
-    scenario::accepted_turn_id,
 };
 
 #[tokio::test]
@@ -65,7 +64,7 @@ async fn corruption_during_writes_and_active_turn_seals_final_identity() -> Resu
         min_ms: 0,
     });
     let accepted = s.gw.say("general", &prompt).await?;
-    let turn = accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(3);
     while s.provider()?.served() == 0 && Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(20)).await;

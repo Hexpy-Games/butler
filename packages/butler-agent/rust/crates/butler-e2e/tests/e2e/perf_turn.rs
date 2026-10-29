@@ -17,7 +17,7 @@ use std::time::Duration;
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::provider::{Script, round_overheads};
-use butler_e2e::e2e::scenario::{Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::Setup;
 
 const ROUNDS: usize = 6;
 const FILE_BYTES: usize = 2_000;
@@ -75,7 +75,7 @@ async fn perf_02_round_overhead_at_large_context() -> Result<(), HarnessError> {
             "Read every perf file in your workspace, one per step.",
         )
         .await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let waited =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(600))
             .await;

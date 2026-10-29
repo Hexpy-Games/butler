@@ -125,7 +125,7 @@ async fn attach_page_send_stream_rotate_and_resume() -> Result<(), TestError> {
     let accepted = client
         .start_turn("general", "shell-message", "Reply briefly")
         .await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     let turn = turn.as_str();
     let mut ids = Vec::new();
     tokio::time::timeout(Duration::from_secs(60), async {
@@ -173,7 +173,7 @@ async fn attach_page_send_stream_rotate_and_resume() -> Result<(), TestError> {
     let next = client
         .post_message("general", "after-rotation", "Reply briefly again")
         .await?;
-    let next_turn = butler_e2e::e2e::scenario::accepted_turn_id(&next)?;
+    let next_turn = s.gw.accepted_turn(&next).await?;
     let next_turn = next_turn.as_str();
     tokio::time::timeout(Duration::from_secs(60), async {
         while let Some(event) = events.next().await {
@@ -215,7 +215,7 @@ async fn approvals_preserve_exact_action_and_allow_or_deny() -> Result<(), TestE
         let accepted = client
             .start_turn("general", "read-file", "Read approval.txt")
             .await?;
-        let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+        let turn = s.gw.accepted_turn(&accepted).await?;
         let turn = turn.as_str();
         s.gw.wait_turn(
             "general",
@@ -269,7 +269,7 @@ async fn cancel_waiting_turn_through_shell() -> Result<(), TestError> {
     let accepted = client
         .start_turn("general", "cancel-message", "Read approval.txt")
         .await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     s.gw.wait_turn(
         "general",
         &turn,

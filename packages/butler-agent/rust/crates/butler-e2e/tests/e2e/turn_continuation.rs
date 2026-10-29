@@ -5,7 +5,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     gateway::{tool_rows, turn_state},
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use serde_json::json;
 use std::time::Duration;
@@ -125,7 +125,7 @@ async fn reasoning_only_response_and_todo_updates_continue() -> Result<(), Harne
 async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, script, server) = setup(stub::Mode::Approval, Access::AskAlways).await?;
-    let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
+    let id = s.gw.say_turn("general", stub::REQUEST).await?;
     let turn =
         s.gw.wait_turn(
             "general",
@@ -180,7 +180,7 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
 async fn pending_question_pauses_and_answer_resumes_same_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, script, server) = setup(stub::Mode::Question, Access::FullAccess).await?;
-    let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
+    let id = s.gw.say_turn("general", stub::REQUEST).await?;
     let paused =
         s.gw.wait_turn(
             "general",
@@ -245,7 +245,7 @@ async fn empty_and_text_calls_receive_feedback_until_the_model_recovers() -> Res
 async fn approval_resume_preserves_actor_feedback_counts() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = setup(stub::Mode::ApprovalRecovery, Access::AskAlways).await?;
-    let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
+    let id = s.gw.say_turn("general", stub::REQUEST).await?;
     let paused =
         s.gw.wait_turn(
             "general",

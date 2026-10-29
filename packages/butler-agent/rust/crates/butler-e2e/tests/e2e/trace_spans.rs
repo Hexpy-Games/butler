@@ -8,7 +8,6 @@
 use butler_e2e::e2e::{
     HarnessError,
     fake_servers::{ChatBehavior, FakeServer},
-    scenario::accepted_turn_id,
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -38,7 +37,7 @@ async fn turn_trace_complete_and_traceparent_joins_trace() -> Result<(), Harness
             .await?;
     assert_eq!(response.status(), 202);
     let accepted: Value = response.json().await?;
-    let turn_id = accepted_turn_id(&accepted["data"])?;
+    let turn_id = s.gw.accepted_turn(&accepted["data"]).await?;
     let message_id = accepted["data"]["accepted"]["id"].as_str().unwrap();
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(20))
@@ -282,7 +281,7 @@ async fn traceparent_joins_trace_at_standard() -> Result<(), HarnessError> {
             .await?;
     assert_eq!(response.status(), 202);
     let accepted: Value = response.json().await?;
-    let turn_id = accepted_turn_id(&accepted["data"])?;
+    let turn_id = s.gw.accepted_turn(&accepted["data"]).await?;
     s.gw.wait_terminal("general", &turn_id, Duration::from_secs(20))
         .await?;
     let trace = s.gw.get(&format!("/logs/trace?turn_id={turn_id}")).await?;

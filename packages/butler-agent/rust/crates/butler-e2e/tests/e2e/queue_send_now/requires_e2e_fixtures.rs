@@ -53,7 +53,7 @@ async fn restart() -> Result<(), HarnessError> {
     let (mut barrier, address) = Barrier::start().await;
     let mut s = setup.env("BUTLER_TEST_PAUSE_ADDR", address).start().await?;
     stub.attach(&s)?;
-    let running = accepted_turn_id(&s.gw.say("general", ORIGINAL).await?)?;
+    let running = s.gw.say_turn("general", ORIGINAL).await?;
     let held = stub.next().await;
     let correction = queue(&s, CORRECTION).await?;
     queue(&s, SECOND).await?;

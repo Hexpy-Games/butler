@@ -110,7 +110,7 @@ async fn unselected_and_read_only_hide_and_refuse_forced_calls() -> Result<(), H
         }
         f.script("Forced picture", vec![generate("forced")]);
         let reply=f.s.gw.post("/messages",json!({"chat_id":"general","text":"Forced picture","client_message_id":uuid::Uuid::new_v4().to_string(),"access_mode":if selected{"read_only"}else{"auto"}})).await?;
-        let id = accepted_turn_id(reply.data())?;
+        let id = f.s.gw.accepted_turn(reply.data()).await?;
         delivered(&f.s, "general", &id).await?;
         for request in f.script.requests.lock().unwrap().iter() {
             assert!(

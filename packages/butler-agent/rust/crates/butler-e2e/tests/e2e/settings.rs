@@ -246,7 +246,7 @@ async fn set_03_per_message_override_leaves_settings() -> Result<(), HarnessErro
             "reasoning_effort": "max",
         }))
         .await?;
-    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(60))
             .await?;
@@ -311,7 +311,7 @@ async fn set_03_override_does_not_stick_to_next_message() -> Result<(), HarnessE
             "reasoning_effort": "max",
         }))
         .await?;
-    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     s.gw.wait_terminal("general", &turn_id, Duration::from_secs(60))
         .await?;
     let (_, turn) = s
