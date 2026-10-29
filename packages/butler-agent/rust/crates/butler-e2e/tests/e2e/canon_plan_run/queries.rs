@@ -13,6 +13,14 @@ async fn queue_request_and_runtime_reads_use_indexes() -> Result<(), HarnessErro
                 r.get::<_, String>(3)
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        for (sql, expected) in butler_canon::store::queue::sql::INTENT_LOOKUPS {
+            if query == sql {
+                assert!(
+                    plan.iter().any(|line| line == expected),
+                    "{query}: {plan:?}"
+                );
+            }
+        }
         assert!(
             plan.iter()
                 .all(|l| !l.starts_with("SCAN ") || l == "SCAN CONSTANT ROW"),

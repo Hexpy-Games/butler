@@ -34,6 +34,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS canon_queue_active_epic ON canon_session_queue
 CREATE INDEX IF NOT EXISTS canon_queue_op ON canon_session_queue(step_op_id) WHERE step_op_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS canon_intents_session ON canon_intents(json_extract(payload_json,'$.session_id'),kind);
 CREATE INDEX IF NOT EXISTS canon_intents_other_session ON canon_intents(json_extract(payload_json,'$.other_session_id'),kind);
+-- Include state in the key so SQLite prefers the session seek over the replay state index.
+CREATE INDEX IF NOT EXISTS canon_intents_pending_session ON canon_intents(state,json_extract(payload_json,'$.session_id'),kind) WHERE state='pending';
+CREATE INDEX IF NOT EXISTS canon_intents_pending_other_session ON canon_intents(state,json_extract(payload_json,'$.other_session_id'),kind) WHERE state='pending';
 CREATE INDEX IF NOT EXISTS canon_intents_take ON canon_intents(json_extract(payload_json,'$.session_id'),json_extract(payload_json,'$.epic_id')) WHERE kind='canon_take_here';
 CREATE INDEX IF NOT EXISTS canon_queue_intents_pending ON canon_intents(state) WHERE state='pending' AND kind IN ('canon_step','canon_hold','canon_take_here');
 

@@ -52,3 +52,19 @@ pub const READS: &[&str] = &[
     OFFERS,
     LINKED_WORK,
 ];
+
+/// Pin the lookup keys, not just SEARCH: a state-only search visits every pending intent.
+pub const INTENT_LOOKUPS: &[(&str, &str)] = &[
+    (
+        CANCEL_INTENTS,
+        "SEARCH canon_intents USING INDEX canon_intents_pending_session (state=? AND <expr>=? AND kind=?)",
+    ),
+    (
+        CANCEL_OTHER_INTENTS,
+        "SEARCH canon_intents USING INDEX canon_intents_pending_other_session (state=? AND <expr>=? AND kind=?)",
+    ),
+    (
+        OFFERS,
+        "SEARCH canon_intents USING INDEX canon_intents_take (<expr>=? AND <expr>=?)",
+    ),
+];
