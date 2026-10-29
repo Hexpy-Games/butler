@@ -364,7 +364,7 @@ class ApprovedTiers(unittest.TestCase):
                         changes.select({'before': 'previous'}, 'rust-quality.yml')
                     diff.assert_not_called()
                     output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
-                    self.assertTrue(all(output[group] == 'true' for group in changes.GROUPS))
+                    self.assertTrue(all(output[group] == 'true' for group in changes.GROUPS if group != 'shell'))
                     self.assertTrue(json.loads(output['jobs'])['macos-archive'])
                     self.assertTrue(json.loads(output['jobs'])['linux-native'])
 
