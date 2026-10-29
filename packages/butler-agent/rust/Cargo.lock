@@ -963,6 +963,7 @@ dependencies = [
 name = "butler-e2e"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "arrow-array",
  "axum",
  "base64 0.22.1",
@@ -975,6 +976,7 @@ dependencies = [
  "butler-models",
  "butler-platform",
  "butler-runtime",
+ "butler-shell-client",
  "butler-turn",
  "bytes",
  "chrono",
@@ -1359,6 +1361,21 @@ dependencies = [
  "webp",
  "zeroize",
  "zip",
+]
+
+[[package]]
+name = "butler-shell-client"
+version = "0.0.0"
+dependencies = [
+ "butler-log",
+ "butler-platform",
+ "futures-core",
+ "futures-util",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
 ]
 
 [[package]]
