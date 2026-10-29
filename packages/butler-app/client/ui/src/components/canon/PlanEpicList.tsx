@@ -1,3 +1,4 @@
+import { CriteriaProgress } from "./CriteriaProgress.tsx";
 import { appCopy } from "@/app/copy.ts";
 import { ADAPTIVE_MEDIA, Box, EmptyLine, Notebook, SortableCardList, Stack, Tooltip, Typo, useMediaMatch } from "@/butler-ds";
 import type { EpicCard, EpicInput, CanonPlan } from "@/app/canonApi.ts";
@@ -21,6 +22,7 @@ export function PlanEpicList({ projectId, rows, plans, backlog, busy, onWrite, o
       <Stack as="span" shrink={false}><CanonAvatar agent={epic.agent} person={epic.assignee} /></Stack>
     </Stack>,
     description: <Stack as="span" gap="sm"><Typo.Caption truncate>{epic.description.split(/\r?\n/u)[0] || copy.noDescription}</Typo.Caption>
+      <CriteriaProgress criteria={epic.criteria} />
       {compact && <Box as="span" padding="xs"><PlanEpicActions onOpen={() => void openEpicConversation(projectId, epic)} epic={epic} plans={plans} busy={busy} onWrite={onWrite} /></Box>}
     </Stack>,
     actions: compact ? undefined : <PlanEpicActions onOpen={() => void openEpicConversation(projectId, epic)} epic={epic} plans={plans} busy={busy} onWrite={onWrite} />,

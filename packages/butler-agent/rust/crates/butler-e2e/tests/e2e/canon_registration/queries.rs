@@ -13,6 +13,10 @@ async fn proposal_queries_are_keyed_and_pin_the_partial_indexes() -> Result<(), 
                 butler_canon::store::page::UNSCOPED_EPICS_PAGE,
                 "canon_epics_page",
             ),
+            (
+                butler_canon::store::criteria::COUNTS,
+                "sqlite_autoindex_canon_criterion_checks_1",
+            ),
             (GET, "sqlite_autoindex_canon_proposals_1"),
             (OPEN_SESSION, "canon_proposals_open_session"),
             (OPEN_PAGE, "canon_proposals_chat_open"),
@@ -36,7 +40,9 @@ async fn proposal_queries_are_keyed_and_pin_the_partial_indexes() -> Result<(), 
                     "{sql}: {plan}"
                 );
             }
-            if sql == butler_canon::store::page::UNSCOPED_EPICS_PAGE {
+            if sql == butler_canon::store::page::UNSCOPED_EPICS_PAGE
+                || sql == butler_canon::store::criteria::COUNTS
+            {
                 assert!(!plan.contains("TEMP B-TREE"), "{sql}: {plan}");
             }
             eprintln!("CP-PLAN {plan}");

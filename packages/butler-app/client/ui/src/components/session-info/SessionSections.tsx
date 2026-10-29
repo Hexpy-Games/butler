@@ -1,3 +1,4 @@
+import { CriteriaProgress } from "../canon/CriteriaProgress.tsx";
 import { BrowserSection } from "./BrowserSection.tsx";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
@@ -31,6 +32,7 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
       {branch?.branch_name && <KeyValueRow label={c.branch} value={branch.branch_name} valueTextSize="caption" />}
     </SessionSection>}
     {sections.has("task") && epic && <SessionSection id="task" layout={layout} title={appCopy.canon.epic}>
+      <CriteriaProgress criteria={epic.epic.criteria} />
       <EpicInspector embedded projectId={epic.projectId} epicId={epic.epic.id} />
     </SessionSection>}
     {sections.has("context") && summary?.context_details && <SessionSection id="context" layout={layout}>

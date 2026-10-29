@@ -102,6 +102,7 @@ pub fn publish_spec(
             ],
         )?;
     }
+    criteria::reconcile(tx, node_id, publication.revision)?;
     tx.execute(sql::NODE_BUMP, params![node_id, ctx.now, expected_revision])?;
     event(
         tx,

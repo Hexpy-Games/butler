@@ -12,6 +12,7 @@ fn cards(db: &Connection, plan: Option<&str>, project: &str) -> Result<Vec<Value
         *work = public_work(db, work.take())?;
     }
     super::super::agents::enrich(db, &mut works)?;
+    super::super::criteria::enrich(db, &mut works)?;
     Ok(works)
 }
 pub(super) fn backlog_revision(db: &Connection, project: &str) -> Result<i64> {
@@ -43,6 +44,7 @@ pub fn epic(db: &Connection, id: &str) -> Result<Value> {
     work["proposals"] = super::super::mcp_proposals::open(db, id)?;
     let mut works = [public_work(db, work)?];
     super::super::agents::enrich(db, &mut works)?;
+    super::super::criteria::enrich(db, &mut works)?;
     Ok(works[0].take())
 }
 /// Canon-only snapshot: no runtime owners, sessions, proposals or task reads.
@@ -69,10 +71,11 @@ fn spec_tree(db: &Connection, nodes: &[Value], parent: Option<&str>) -> Result<V
         } else {
             Value::Null
         };
-        node["criteria"] = json!(rows(
+        node["latest_revision"] = json!(super::super::criteria::latest(db, id)?);
+        node["criteria"] = json!(super::super::criteria::for_revision(
             db,
-            sql::SPEC_CRITERIA,
-            params![id, node["active_revision"].as_i64()]
+            id,
+            node["latest_revision"].as_i64()
         )?);
         node["children"] = json!(spec_tree(db, nodes, Some(id))?);
         result.push(node);
