@@ -8,6 +8,7 @@ import type { Page } from "playwright";
 import { EMPTY_SETTINGS } from "../../packages/butler-app/client/ui/src/app/constants.ts";
 import { HARNESS_NAVIGATION, HARNESS_SS03_OBSERVER_VIEW } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 import type { MessageRecord, SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
+import { appShellRead, refuseUnrouted } from "../support/offline-app-shell.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 
 if (await runSmokeCases(["light", "dark"], "BUTLER_CHATS_BUBBLE_THEME", import.meta.path, { isolate: true })) process.exit(0);
@@ -16,6 +17,8 @@ const shots = process.env.BUTLER_SMOKE_SCREENSHOTS ?? mkdtempSync(join(tmpdir(),
 mkdirSync(shots, { recursive: true });
 const dist = resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
 const browser = await launchSmokeBrowser();
+/** Requests no fixture route answers; each one names a read the harness must learn. */
+const unrouted: string[] = [];
 try {
   const general = transcript("general");
   const work = transcript("butler-client");
@@ -35,6 +38,7 @@ try {
       const isGeneral = view.session_id === "general";
       const screenshot = join(shots, `${isGeneral ? "chats" : "session"}-${theme}-${width}.png`);
       await page.screenshot({ path: screenshot, animations: "disabled" });
+      assert.deepEqual(unrouted, [], "every request has a fixture route");
       assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0, "fixture requests succeed");
       const measured = await measure(page);
       console.log(JSON.stringify({ theme, width, session: isGeneral ? "chats" : "work", screenshot, ...measured }));
@@ -149,6 +153,7 @@ try {
       } finally { await page.close(); }
     }
   }
+  assert.deepEqual(unrouted, [], "every request has a fixture route");
   console.log(JSON.stringify({ result: "SS10_PASS", theme, cells: 10, screenshots: shots, modelCalls: 0 }));
 } finally {
   await browser.close();
@@ -207,11 +212,10 @@ async function installFixture(page: Page, view: SessionView) {
       session_id: view.session_id, revision: 0, catalog_generation: "harness-model-catalog-v1",
       controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false },
     } } });
-    if (/^\/projects\/[^/]+\/canon\/sidebar$/u.test(url.pathname))
-      return route.fulfill({ json: { ok: true, data: { project_id: "butler", groups: [] } } });
-    if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (url.pathname === "/session-view") return route.fulfill({ json: { protocol_version: "butler.app.v1", data: view } });
-    return route.fulfill({ json: { ok: true, data: {} } });
+    const shell = appShellRead(url, route.request().method());
+    if (shell !== undefined) return route.fulfill({ json: { ok: true, data: shell } });
+    return refuseUnrouted(route, unrouted);
   });
 }
 
