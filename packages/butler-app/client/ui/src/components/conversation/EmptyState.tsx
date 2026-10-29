@@ -62,7 +62,19 @@ export function EmptyState({
       .then((nextBriefing) => {
         if (!cancelled) setBriefing(nextBriefing);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        // The fallback cards keep the view usable; the failed request still reaches the App log.
+        const { code, status } = (error ?? {}) as { code?: unknown; status?: unknown };
+        window.butlerApp?.log?.({
+          level: "ERROR",
+          category: "app.ui",
+          event: "ui.error",
+          attrs: {
+            request: "new-chat-briefing",
+            ...(typeof code === "string" ? { code } : {}),
+            ...(typeof status === "number" ? { status } : {}),
+          },
+        });
         if (!cancelled) setBriefing(null);
       });
     return () => {
