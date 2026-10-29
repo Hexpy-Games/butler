@@ -128,7 +128,7 @@ async fn run(binary: &Path, dir: &Path, dark: bool) -> anyhow::Result<()> {
                 .provider
                 .as_ref()
                 .into_iter()
-                .flat_map(|p| p.requests())
+                .flat_map(butler_e2e::e2e::provider::Provider::requests)
                 .flat_map(|request| request["input"].as_array().cloned().unwrap_or_default())
                 .filter(|item| item["type"] == "function_call_output")
                 .map(|item| item["output"].clone())
@@ -203,5 +203,63 @@ async fn scenario(
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     h.command("connected").await?;
     h.command("shot reattached").await?;
-    h.finish().await
+    h.finish().await?;
+    verify_outcome(s, dir, decision).await
+}
+
+/// Independent gateway evidence after restart, alongside the rendered UI evidence.
+async fn verify_outcome(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    dir: &Path,
+    decision: &str,
+) -> anyhow::Result<()> {
+    let page =
+        s.gw.get("/sessions?limit=20")
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut turns = Vec::new();
+    for row in page.data()["items"].as_array().into_iter().flatten() {
+        let id = row["id"].as_str().context("session id")?;
+        let view =
+            s.gw.get(&format!("/session-view?session_id={id}"))
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        if !view.data()["latest_turn"].is_null() {
+            turns.push(view.data()["latest_turn"].clone());
+        }
+    }
+    let expected = if decision == "cancel" {
+        "cancelled"
+    } else {
+        "delivered"
+    };
+    if turns.len() != 1 || turns[0]["state"] != expected {
+        bail!("unexpected persisted turn outcome");
+    }
+    let feedback: Vec<serde_json::Value> = s
+        .provider
+        .as_ref()
+        .into_iter()
+        .flat_map(butler_e2e::e2e::provider::Provider::requests)
+        .flat_map(|request| request["input"].as_array().cloned().unwrap_or_default())
+        .filter(|item| item["type"] == "function_call_output")
+        .map(|item| serde_json::from_str(item["output"].as_str().unwrap_or_default()))
+        .collect::<Result<_, _>>()?;
+    let executed = feedback
+        .iter()
+        .any(|value| value["output"]["command_outcome_observed"] == true);
+    let refused = feedback.iter().any(|value| value["ok"] == false);
+    if decision == "allow" && !executed {
+        bail!("allowed command was not executed");
+    }
+    if decision == "deny" && (executed || !refused) {
+        bail!("denied command was not refused");
+    }
+    let evidence = serde_json::json!({"turns":turns,"command_executed":executed,"tool_refused":refused,"feedback":feedback});
+    tokio::fs::write(
+        dir.join("verified.json"),
+        serde_json::to_vec_pretty(&evidence)?,
+    )
+    .await?;
+    Ok(())
 }
