@@ -922,6 +922,7 @@ dependencies = [
 name = "butler-canon"
 version = "0.0.0"
 dependencies = [
+ "base64 0.22.1",
  "caseless",
  "pulldown-cmark",
  "rusqlite",

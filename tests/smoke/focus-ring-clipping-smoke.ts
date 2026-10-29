@@ -84,6 +84,7 @@ function record(cell: Cell, screen: string, result: { stops: number; clipped: Fo
   checked += result.stops;
   if (process.env.BUTLER_FOCUS_RING_VERBOSE) {
     console.error(`${screen} @ ${cell.width}px ${cell.theme} ${cell.background}: ${result.stops} stops: ${(result.visited ?? []).join(" | ")}`);
+    if (result.clipped.length) console.error(JSON.stringify({ screen, cell, clips: result.clipped }));
     if (result.unmarked?.length) console.error(`  no indicator: ${result.unmarked.join(" | ")}`);
   }
   assert(result.stops > 0, `${screen}: the keyboard reached no control`);

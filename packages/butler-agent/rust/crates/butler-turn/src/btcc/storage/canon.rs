@@ -46,6 +46,8 @@ pub(super) fn work_error(error: store::Error) -> StorageError {
         return StorageError::sqlite(error);
     }
     let code = match &error {
+        store::Error::Permission => "permission",
+        store::Error::Running => "running",
         store::Error::Conflict { .. } => "conflict",
         store::Error::TagExists { .. } => "tag_exists",
         store::Error::NotFound => "work_model_not_found",

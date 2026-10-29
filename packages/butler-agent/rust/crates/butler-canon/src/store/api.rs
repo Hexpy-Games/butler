@@ -12,11 +12,25 @@ use crate::{
     work_queries::Query,
     work_types::*,
 };
-pub use reads::{canon, epic, plan};
+use Resource::{
+    Activity, AllowGrant, BacklogOrder, Canon, Comment, CreateEpic, CreatePlan, CreateTag,
+    DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, Grants, List, Plan, PlanOrder,
+    ProposeSpec, RevokeGrant, Spec, Tags,
+};
+pub use reads::{canon, epic, epic_only, plan};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Resource {
     Canon,
+    List,
+    Spec,
+    Activity,
+    Comment,
+    ProposeSpec,
+    Grants,
+    AllowGrant,
+    DenyGrant,
+    RevokeGrant,
     Plan,
     Epic,
     CreatePlan,
@@ -30,16 +44,16 @@ pub enum Resource {
     EditTag,
     DeleteTag,
 }
-use Resource::{
-    BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan, EditTag,
-    Epic, Plan, PlanOrder, Tags,
-};
 
 /// Identity-only PK lookups, shared by reads and edits before App project checks.
 pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<String> {
     let sql = match resource {
+        List | Grants | AllowGrant | DenyGrant | RevokeGrant => return Ok(id.into()),
+        Spec | ProposeSpec => {
+            "SELECT scope_ref FROM canon_spec_nodes WHERE node_id=?1 AND scope_kind='project' AND visibility='canon'"
+        }
+        Activity | Comment | Epic | EditEpic => sql::EPIC_SCOPE,
         Plan | EditPlan | PlanOrder => sql::PLAN_SCOPE,
-        Epic | EditEpic => sql::EPIC_SCOPE,
         EditTag | DeleteTag => sql::TAG_SCOPE,
         Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => {
             return Ok(id.to_owned());
@@ -52,12 +66,25 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
 
 pub fn read(db: &Connection, resource: Resource, id: &str) -> Result<Value> {
     match resource {
+        Spec => mcp_proposals::spec(db, id),
+        Activity => activity::page(db, id, None),
+        List | Grants | AllowGrant | DenyGrant | RevokeGrant | Comment | ProposeSpec => {
+            Err(Error::Invalid("request input required"))
+        }
         Tags => tags::list(db, id),
         Canon => canon(db, id),
         Plan => plan(db, id),
         Epic => epic(db, id),
         CreatePlan | EditPlan | CreateEpic | EditEpic | PlanOrder | BacklogOrder | CreateTag
         | EditTag | DeleteTag => Err(Error::Invalid("read requires a readable resource")),
+    }
+}
+pub fn read_query(db: &Connection, resource: Resource, id: &str, input: &Value) -> Result<Value> {
+    match resource {
+        Resource::List => page::list(db, id, input),
+        Resource::Activity => activity::page(db, id, input["before"].as_i64()),
+        Resource::Grants => grants::list(db, input["state"].as_str()),
+        _ => read(db, resource, id),
     }
 }
 pub fn write(
@@ -68,6 +95,15 @@ pub fn write(
     input: Value,
 ) -> Result<Value> {
     match resource {
+        List => page::list(tx, id, &input),
+        Spec => mcp_proposals::spec(tx, id),
+        Activity => activity::page(tx, id, input["before"].as_i64()),
+        Comment => activity::comment(tx, ctx, id, input),
+        ProposeSpec => mcp_proposals::create(tx, ctx, id, input),
+        Grants => grants::list(tx, input["state"].as_str()),
+        AllowGrant => grants::decide(tx, ctx, id, "allowed"),
+        DenyGrant => grants::decide(tx, ctx, id, "denied"),
+        RevokeGrant => grants::decide(tx, ctx, id, "revoked"),
         CreateTag => tags::create(tx, ctx, id, input),
         EditTag => tags::edit(tx, ctx, id, input),
         DeleteTag => tags::delete(tx, ctx, id),

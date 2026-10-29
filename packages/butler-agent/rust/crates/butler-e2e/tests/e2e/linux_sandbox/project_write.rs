@@ -7,7 +7,7 @@ async fn auto_mutation_waits_for_approval_without_running() -> Result<(), Harnes
     butler_e2e::gate!();
     butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux sandbox scenario");
     let (url, script, server) = stub::start().await?;
-    let setup = test_support_agent(Setup::new("LINUX-AUTO-MUTATION-FALLBACK")?)?
+    let setup = test_support_agent(Setup::mutates_installation("LINUX-AUTO-MUTATION-FALLBACK")?)?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))

@@ -144,7 +144,7 @@ async fn approval_fallback_with_helper(
     opt_in: Option<&str>,
 ) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start().await?;
-    let mut setup = Setup::new("WINDOWS-AUTO-MUTATION-FALLBACK")?
+    let mut setup = Setup::mutates_installation("WINDOWS-AUTO-MUTATION-FALLBACK")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));

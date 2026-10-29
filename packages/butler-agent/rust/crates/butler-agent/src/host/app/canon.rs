@@ -2,6 +2,7 @@
 mod canon_sidebar;
 mod progress;
 mod proposals;
+mod requests;
 use butler_canon::{store, work_queries::Query};
 use butler_gateway::gateway::{
     AppCanonConflict, AppCanonEvent, AppCanonPort, AppCanonRequest, AppCanonResource,
@@ -57,41 +58,15 @@ impl AppCanonPort for AppCanon {
                 .map_err(error)
         })
     }
+    fn admit(
+        &self,
+        delegate: butler_gateway::gateway::AppCanonDelegate,
+        capability: String,
+    ) -> ApplicationFuture<Value> {
+        requests::admit(self.storage.clone(), delegate, capability)
+    }
     fn execute(&self, request: AppCanonRequest) -> ApplicationFuture<Value> {
-        let storage = self.storage.clone();
-        let ledger = self.ledger.clone();
-        Box::pin(async move {
-            let AppCanonRequest {
-                resource,
-                id,
-                input,
-            } = request;
-            let result = if let Some(input) = input {
-                // Same trusted local viewer as gateway/application/snapshot_input.rs.
-                // Display-profile names are mutable presentation, not identities.
-                let ctx = store::Context {
-                    now: chrono::Utc::now().timestamp_millis(),
-                    actor: json!({"person":butler_gateway::gateway::APP_PERSON_ID,"via":"app"}),
-                };
-                storage
-                    .canon_write(move |tx| {
-                        store::write_api(tx, &ctx, store_resource(resource), &id, input)
-                    })
-                    .await
-                    .map_err(error)
-            } else {
-                storage
-                    .canon_read(move |db| {
-                        if resource == AppCanonResource::EpicProgress {
-                            return Ok(json!({"epic_id":id}));
-                        }
-                        store::read_api(db, store_resource(resource), &id)
-                    })
-                    .await
-                    .map_err(error)
-            }?;
-            progress::enrich(&storage, &ledger, result).await
-        })
+        requests::execute(self.storage.clone(), self.ledger.clone(), request)
     }
     fn project_scope(&self, resource: AppCanonResource, id: String) -> ApplicationFuture<String> {
         let storage = self.storage.clone();
@@ -161,7 +136,8 @@ fn error(error: StorageError) -> GatewayApplicationError {
         return GatewayApplicationError::internal_from(error);
     };
     let status = match *code {
-        "conflict" | "tag_exists" => 409,
+        "permission" => 403,
+        "conflict" | "tag_exists" | "running" => 409,
         "work_model_not_found" => 404,
         "invalid_rank" | "work_model_invalid" => 400,
         _ => return GatewayApplicationError::internal_from(error),
@@ -201,10 +177,20 @@ fn error(error: StorageError) -> GatewayApplicationError {
 
 fn store_resource(resource: AppCanonResource) -> store::api::Resource {
     use AppCanonResource::{
-        BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan,
-        EditTag, Epic, EpicProgress, Plan, PlanOrder, Tags,
+        Activity, AllowGrant, BacklogOrder, Canon, Comment, CreateEpic, CreatePlan, CreateTag,
+        DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants, List, Plan,
+        PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
     };
     match resource {
+        List => store::api::Resource::List,
+        Spec => store::api::Resource::Spec,
+        Activity => store::api::Resource::Activity,
+        Comment => store::api::Resource::Comment,
+        ProposeSpec => store::api::Resource::ProposeSpec,
+        Grants => store::api::Resource::Grants,
+        AllowGrant => store::api::Resource::AllowGrant,
+        DenyGrant => store::api::Resource::DenyGrant,
+        RevokeGrant => store::api::Resource::RevokeGrant,
         Tags => store::api::Resource::Tags,
         CreateTag => store::api::Resource::CreateTag,
         EditTag => store::api::Resource::EditTag,

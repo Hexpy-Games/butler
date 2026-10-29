@@ -60,7 +60,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
     let (url, script, server) = stub::start().await?;
     script.browser.store(true, Ordering::SeqCst);
     script.answer_blocks.store(true, Ordering::SeqCst);
-    let setup = Setup::new("ANSWER-BLOCKS-COLLECTED")?
+    let setup = Setup::mutates_installation("ANSWER-BLOCKS-COLLECTED")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let (static_path, static_bytes) = install_ui_asset(&setup)?;
