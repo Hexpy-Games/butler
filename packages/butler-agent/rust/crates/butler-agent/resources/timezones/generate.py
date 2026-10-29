@@ -61,12 +61,86 @@ def load(pkg, name):
     finally:
         close(p)
 import argparse, struct, hashlib, datetime, re
+
+def posix_offset(seconds):
+    # POSIX TZ strings count hours west of UTC.
+    sign = '-' if seconds > 0 else ''
+    hours, rest = divmod(abs(seconds), 3600)
+    minutes, seconds = divmod(rest, 60)
+    return sign + str(hours) + (f':{minutes:02}' if minutes or seconds else '') + (f':{seconds:02}' if seconds else '')
+
+def fixed_footer(offset, isdst, abbreviation):
+    """The TZif footer that keeps one local time type after the last transition.
+
+    ICU keeps the final type of a zone without an annual rule forever, but a
+    TZif without a footer leaves every later time undefined (RFC 8536 3.3), so
+    readers such as tz-rs find no local time type for it.
+    """
+    name = abbreviation if re.fullmatch(r'[A-Za-z]{3,}', abbreviation) else f'<{abbreviation}>'
+    if not isdst:
+        return f'{name}{posix_offset(offset)}'.encode()
+    # Permanent DST (RFC 8536 3.3.1): DST starts January 1 at 00:00 and ends
+    # December 31 at 24:00 plus the one-hour difference to standard time.
+    return f'{name}{posix_offset(offset - 3600)}{name},0/0,J365/25'.encode()
+
+def write_pack(out, rows):
+    rows.sort(key=lambda r: r[0].lower())
+    blob = bytearray(b'BTZ2') + struct.pack('<I', len(rows))
+    manifest = []
+    for name, can, data in rows:
+        n = name.encode()
+        a = can.encode()
+        blob += struct.pack('<HHI', len(n), len(a), len(data)) + n + a + data
+        manifest.append({'name': name, 'canonical': can, 'sha256': hashlib.sha256(data).hexdigest()})
+    (out / 'source-2026c.btz').write_bytes(blob)
+    (out / 'provenance.json').write_text(json.dumps({'source': 'macOS ICU resource zoneinfo64 and /usr/share/zoneinfo POSIX future rules', 'version': '2026c', 'actual_icu': '78.1', 'reported_bun_icu': '74.2', 'sha256': hashlib.sha256(blob).hexdigest(), 'records': manifest}, indent=2) + '\n')
+    return blob
+
+def final_type(tzif):
+    """The (offset, isdst, abbreviation) after the last transition of a pack record, and where its footer starts."""
+    def counts(at):
+        return struct.unpack_from('>6I', tzif, at + 20)
+    isut, isstd, leap, times, types, chars = counts(0)
+    at = 44 + times * 5 + types * 6 + chars + leap * 8 + isstd + isut
+    isut, isstd, leap, times, types, chars = counts(at)
+    at += 44 + times * 8
+    index = tzif[at + times - 1] if times else 0
+    at += times
+    offset, isdst, start = struct.unpack_from('>iBB', tzif, at + index * 6)
+    names = tzif[at + types * 6:at + types * 6 + chars]
+    end = at + types * 6 + chars + leap * 12 + isstd + isut
+    return (offset, isdst, names[start:names.index(b'\0', start)].decode()), end
+
+def refooter(pack, out):
+    """Adds the fixed footer to the records of a frozen pack that have none."""
+    data = pack.read_bytes()
+    assert data[:4] == b'BTZ2'
+    at, rows = 8, []
+    for _ in range(struct.unpack_from('<I', data, 4)[0]):
+        n, a, size = struct.unpack_from('<HHI', data, at)
+        at += 8
+        name, can, tzif = data[at:at + n].decode(), data[at + n:at + n + a].decode(), data[at + n + a:at + n + a + size]
+        at += n + a + size
+        final, end = final_type(tzif)
+        if tzif[end:] == b'\n\n':
+            tzif = tzif[:end] + b'\n' + fixed_footer(*final) + b'\n'
+        assert tzif[end:].count(b'\n') == 2 and len(tzif[end:]) > 2, name
+        rows.append((name, can, tzif))
+    assert at == len(data)
+    return write_pack(out, rows)
+
 parser = argparse.ArgumentParser(description='Regenerate frozen ICU 78.1 / TZ2026c prompt data; developer-only macOS utility')
-parser.add_argument('--zoneinfo', type=pathlib.Path, required=True)
+parser.add_argument('--zoneinfo', type=pathlib.Path)
+parser.add_argument('--refooter', type=pathlib.Path, help='add the fixed footer to a frozen pack without ICU')
 parser.add_argument('--output', type=pathlib.Path, required=True)
 args = parser.parse_args()
 out = args.output
 out.mkdir(parents=True, exist_ok=True)
+if args.refooter:
+    blob = refooter(args.refooter, out)
+    print(len(blob), hashlib.sha256(blob).hexdigest())
+    raise SystemExit
+assert args.zoneinfo, '--zoneinfo is required'
 version = (c.c_uint8 * 4)()
 L.u_getVersion(version)
 assert list(version) == [78, 1, 0, 0], 'Review a new ICU baseline before updating generated data'
@@ -168,6 +242,8 @@ for name in z['Names']:
             assert not times or times[-1] < anchor
             times.append(anchor)
             mapping.append(types.index(t))
+    else:
+        footer = fixed_footer(*types[mapping[-1] if mapping else 0])
     first = header(0, 1) + struct.pack('>iBB', types[0][0], types[0][1], 0) + b'LMT\x00'
     abbreviations = bytearray()
     type_bytes = bytearray()
@@ -179,16 +255,7 @@ for name in z['Names']:
     second = header(len(times), len(types), len(abbreviations)) + b''.join(struct.pack('>q', v) for v in times) + bytes(mapping) + type_bytes + abbreviations + b'\n' + footer + b'\n'
     rows.append((name, can, first + second))
 assert not footer_missing, footer_missing
-rows.sort(key=lambda r: r[0].lower())
-blob = bytearray(b'BTZ2') + struct.pack('<I', len(rows))
-manifest = []
-for name, can, data in rows:
-    n = name.encode()
-    a = can.encode()
-    blob += struct.pack('<HHI', len(n), len(a), len(data)) + n + a + data
-    manifest.append({'name': name, 'canonical': can, 'sha256': hashlib.sha256(data).hexdigest()})
-(out / 'source-2026c.btz').write_bytes(blob)
-(out / 'provenance.json').write_text(json.dumps({'source': 'macOS ICU resource zoneinfo64 and /usr/share/zoneinfo POSIX future rules', 'version': '2026c', 'actual_icu': '78.1', 'reported_bun_icu': '74.2', 'sha256': hashlib.sha256(blob).hexdigest(), 'records': manifest}, indent=2) + '\n')
+blob = write_pack(out, rows)
 meta = load(None, b'metaZones')['metazoneInfo']
 names = load(b'icudt78l-zone', b'root')['zoneStrings']
 for key, value in load(b'icudt78l-zone', b'en')['zoneStrings'].items():

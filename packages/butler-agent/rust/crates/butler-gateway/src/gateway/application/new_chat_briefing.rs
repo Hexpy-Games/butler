@@ -44,6 +44,11 @@ impl AppApplication {
         let data_root = self.butler_data.clone();
         let now = self.dependencies.identity_clock.now_iso();
         tokio::task::spawn_blocking(move || {
+            // The onboarding card shows no time of day, so it does not wait
+            // on the local time.
+            if project.is_none() && !profile::first_chat_onboarding_complete(&data_root, &now) {
+                return Ok(fallback("onboarding", &locale, &now, "", None, None, None));
+            }
             let epoch_ms = DateTime::parse_from_rfc3339(&now)
                 .map_err(GatewayApplicationError::internal_from)?
                 .timestamp_millis();
@@ -62,17 +67,6 @@ impl AppApplication {
             } else {
                 BriefingScope::General
             };
-            if project.is_none() && !profile::first_chat_onboarding_complete(&data_root, &now) {
-                return Ok(fallback(
-                    "onboarding",
-                    &locale,
-                    &now,
-                    &moment,
-                    None,
-                    None,
-                    None,
-                ));
-            }
             let project_id = project.as_ref().map(|project| project.id.as_str());
             if let Some(artifact) = cognition::read_new_chat_briefing(
                 &data_root,

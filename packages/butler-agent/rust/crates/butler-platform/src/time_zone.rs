@@ -6,6 +6,7 @@
 
 use std::io;
 
+mod baseline;
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
@@ -26,6 +27,23 @@ pub const BASELINE_ARCHIVE: &[u8] = include_bytes!("../data/source-2026c.btz");
 /// [`io::ErrorKind::NotFound`] error.
 pub fn zone_rules(name: &str) -> io::Result<Vec<u8>> {
     sys::zone_rules(name)
+}
+
+/// The compiled (TZif) rules of the IANA zone `name` in
+/// [`BASELINE_ARCHIVE`], on every host: what [`zone_rules`] reads on
+/// Windows. A zone the archive does not hold is a
+/// [`io::ErrorKind::NotFound`] error.
+pub fn baseline_zone_rules(name: &str) -> io::Result<Vec<u8>> {
+    baseline::lookup(BASELINE_ARCHIVE, name).ok_or_else(|| io::ErrorKind::NotFound.into())
+}
+
+/// Every zone name in [`BASELINE_ARCHIVE`], aliases included.
+pub fn baseline_zone_names() -> io::Result<Vec<String>> {
+    let entries = baseline::entries(BASELINE_ARCHIVE).ok_or(io::ErrorKind::InvalidData)?;
+    Ok(entries
+        .into_iter()
+        .map(|(name, _)| String::from_utf8_lossy(name).into_owned())
+        .collect())
 }
 
 /// Cheap identity of the process-local rules; inspect on a blocking thread.

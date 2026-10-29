@@ -54,6 +54,7 @@ zstd = "0.13.3"
 
 [dev-dependencies]
 butler-memory = { path = "../butler-memory" }
+tz-rs.workspace = true
 
 [lints]
 workspace = true
