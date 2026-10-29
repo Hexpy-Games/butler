@@ -15,6 +15,7 @@ pub mod fixtures;
 pub mod gateway;
 pub mod hedge;
 pub mod install_fixture;
+pub mod installation;
 pub mod live;
 pub mod matching;
 pub mod mcp;
