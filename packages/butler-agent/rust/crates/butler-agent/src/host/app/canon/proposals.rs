@@ -77,6 +77,16 @@ fn write(
     input: &Value,
 ) -> store::Result<Value> {
     let id = input["id"].as_str().unwrap_or_default();
+    let row = if matches!(action, "apply" | "cancel") {
+        Some(store::get_canon_proposal(tx, id)?)
+    } else {
+        None
+    };
+    let by = if row.as_ref().is_some_and(|r| r["source"] == "mcp") {
+        Some("inspector")
+    } else {
+        input["by"].as_str()
+    };
     match action {
         "select" => store::select_canon_proposal_target(
             tx,
@@ -90,11 +100,9 @@ fn write(
             ctx,
             id,
             input["project_id"].as_str().unwrap_or_default(),
-            input["by"].as_str(),
+            by,
         ),
-        "cancel" => {
-            store::transition_canon_proposal(tx, ctx, id, "cancelled", input["by"].as_str())
-        }
+        "cancel" => store::transition_canon_proposal(tx, ctx, id, "cancelled", by),
         "bind" => {
             store::bind_canon_proposal_epic(
                 tx,

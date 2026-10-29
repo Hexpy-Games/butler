@@ -1,3 +1,4 @@
+import { CanonConnectedTools } from "./CanonConnectedTools.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
@@ -60,6 +61,7 @@ export function McpSettings() {
   }
   return (
     <SettingsPage>
+      <CanonConnectedTools />
       <SettingsSection
         id="mcp-servers"
         kind="list"

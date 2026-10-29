@@ -1,16 +1,18 @@
 //! App identity/scope resolution, over the host-owned canon port.
+mod delegated;
 mod events;
 pub(super) mod files;
 use super::*;
-use AppCanonResource::{
-    BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan, EditTag,
-    Epic, EpicProgress, Plan, PlanOrder, Tags,
-};
+use AppCanonResource::{CreateEpic, EditEpic, Epic};
 pub(super) use events::start;
 
-pub(super) fn execute(app: &AppApplication, request: AppCanonRequest) -> ApplicationFuture<Value> {
+pub(super) fn execute(
+    app: &AppApplication,
+    mut request: AppCanonRequest,
+) -> ApplicationFuture<Value> {
     let app = app.clone_handle();
     Box::pin(async move {
+        delegated::prepare(&app, &mut request).await?;
         validate_scope(&app, &request).await?;
         // A relay batch cannot consume this write's lifetime pin before canon commits.
         let writing = matches!(request.resource, CreateEpic | EditEpic);
@@ -24,8 +26,12 @@ pub(super) fn execute(app: &AppApplication, request: AppCanonRequest) -> Applica
         if writing {
             hold(&app, "canon_write").await?;
         }
+        let delegated = request.delegate.is_some();
         let detail = matches!(request.resource, Epic | CreateEpic | EditEpic);
         let mut result = app.dependencies.canon.execute(request).await?;
+        if delegated {
+            return Ok(result);
+        }
         app.storage
             .read(move |db| {
                 public_sessions(db, &mut result)?;
@@ -52,14 +58,24 @@ async fn validate_scope(
     app: &AppApplication,
     request: &AppCanonRequest,
 ) -> Result<(), GatewayApplicationError> {
+    use AppCanonResource::{
+        Activity, AllowGrant, BacklogOrder, Canon, Comment, CreateEpic, CreatePlan, CreateTag,
+        DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants, List, Plan,
+        PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+    };
     let project = match request.resource {
-        Plan | EditPlan | PlanOrder | Epic | EpicProgress | EditEpic | EditTag | DeleteTag => {
+        Grants | AllowGrant | DenyGrant | RevokeGrant => return Ok(()),
+        List if request.id.is_empty() => return Ok(()),
+        Spec | ProposeSpec | Activity | Comment | Plan | EditPlan | PlanOrder | Epic
+        | EpicProgress | EditEpic | EditTag | DeleteTag => {
             app.dependencies
                 .canon
                 .project_scope(request.resource, request.id.clone())
                 .await?
         }
-        Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => request.id.clone(),
+        List | Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => {
+            request.id.clone()
+        }
     };
     let exists = app
         .storage

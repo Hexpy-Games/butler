@@ -11,8 +11,6 @@ use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, fixtures};
 use serde_json::{Value, json};
 use std::path::Path;
-use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 // A watchdog around persisted completion barriers, not a latency assertion.
 // Yield without sleeping; elapsed time is never evidence of completion.
@@ -35,56 +33,14 @@ pub(super) async fn bootstrap(data: &Path) {
 }
 
 async fn mcp_graph(s: &Scenario) -> Result<Value, HarnessError> {
-    let mut command = tokio::process::Command::from(s.agent.launch.command());
-    command
-        .args(["mcp", "serve"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(std::fs::File::create(
-            s.sandbox.logs.join("memory-graph-mcp.log"),
-        )?)
-        .kill_on_drop(true);
-    let mut child = command.spawn()?;
-    let mut stdin = child.stdin.take().unwrap();
-    let mut replies = BufReader::new(child.stdout.take().unwrap()).lines();
-    let messages = [
-        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
-            "protocolVersion":"2025-06-18","capabilities":{},
-            "clientInfo":{"name":"memory-wiring-audit","version":"0"}}}),
-        json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
-        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
-            "name":"memory_graph","arguments":{"query":"garden","hops":1}}}),
-    ];
-    let mut result = Value::Null;
-    for message in messages {
-        stdin.write_all(format!("{message}\n").as_bytes()).await?;
-        stdin.flush().await?;
-        let Some(id) = message["id"].as_u64() else {
-            continue;
-        };
-        result = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-            while let Some(line) = replies.next_line().await? {
-                let reply: Value = serde_json::from_str(&line)?;
-                if reply["id"] == id {
-                    return Ok::<_, HarnessError>(reply);
-                }
-            }
-            Err(butler_e2e::e2e::harness_error(
-                "MCP closed before its reply",
-            ))
-        })
-        .await
-        .expect("MCP did not answer")?;
-    }
-    drop(stdin);
-    if tokio::time::timeout(std::time::Duration::from_secs(10), child.wait())
-        .await
-        .is_err()
-    {
-        child.kill().await?;
-        child.wait().await?;
-    }
-    Ok(result)
+    butler_e2e::e2e::mcp::tool(
+        &s.agent.launch,
+        &s.sandbox.logs.join("memory-graph-mcp.log"),
+        json!({"name":"memory-wiring-audit","version":"0"}),
+        "memory_graph",
+        json!({"query":"garden","hops":1}),
+    )
+    .await
 }
 
 /// The retained MCP graph query must work on a production fresh generation.

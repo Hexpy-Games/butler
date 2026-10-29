@@ -6,6 +6,14 @@ use super::*;
 pub use feed::{catch_up, prepare};
 pub(crate) use progress::queue_outcome;
 pub use progress::{enrich, progress, project_works};
+pub fn epic_running(db: &Connection, epic: &str) -> Result<bool> {
+    for work in rows(db, Query::Works.sql(), [epic])? {
+        if progress::running(db, &work)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
 pub type ProjectViews = std::collections::HashMap<String, Value>;
 use queries::Query;
 use rusqlite::params;
@@ -121,7 +129,11 @@ fn advance_label(tx: &Transaction<'_>, ctx: &Context, id: &str, target: &str) ->
     if rank(text(&row, "canon_status")?) >= rank(target) {
         return Ok(());
     }
+    if target == "done" && epic_running(tx, id)? {
+        return Err(Error::Running);
+    }
     tx.execute(Query::AdvanceLabel.sql(), params![id, target, ctx.now])?;
+    activity::status(tx, ctx, id, text(&row, "canon_status")?, target)?;
     event(
         tx,
         ctx,

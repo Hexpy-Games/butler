@@ -1,3 +1,4 @@
+import { publishCanonTrustEvent } from "@/app/canonTrust.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import { publishDocumentEvent } from "@/app/documentEvents";
 import { publishCanonProposalEvent } from "@/app/canonProposals.ts";
@@ -98,6 +99,7 @@ export function useLiveSessionEvents(): void {
       publishLibraryEvent(event);
       publishDocumentEvent(event);
       publishCanonEvent(event);
+      publishCanonTrustEvent(event);
       publishPendingAsksEvent(event);
       publishCanonProposalEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
@@ -212,6 +214,7 @@ export function useLiveSessionEvents(): void {
       },
       onRecovered: () => {
         refreshVisibleTaskGraphs();
+        publishCanonTrustEvent({ type: "stream.reconcile_required" } as TimelineEvent);
         // Module changes may have been missed while disconnected.
         void userWallpaperModules.refresh();
         const view = useButlerStore.getState().view;

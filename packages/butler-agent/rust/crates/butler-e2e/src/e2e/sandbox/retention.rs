@@ -68,5 +68,5 @@ fn retain(path: &Path) -> std::io::Result<()> {
 
 fn remove_sandbox(path: &std::path::Path) -> std::io::Result<()> {
     butler_platform::plugin_files::remove(&path.join("data/plugins/store"))?;
-    fs::remove_dir_all(path)
+    butler_platform::command_sandbox::FixtureInstallation::remove_sandbox(path)
 }

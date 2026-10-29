@@ -185,7 +185,11 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
 async fn admission(abi_cap: Option<u32>) -> Result<(), HarnessError> {
     let capped = abi_cap.is_some();
     let (url, script, server) = stub::start().await?;
-    let mut setup = Setup::new("LINUX-ADMISSION")?;
+    let mut setup = if capped && std::env::var_os("BUTLER_E2E_FAULT_BIN").is_some() {
+        Setup::mutates_installation("LINUX-ADMISSION")?
+    } else {
+        Setup::new("LINUX-ADMISSION")?
+    };
     if capped {
         setup = test_support_agent(setup)?;
     }

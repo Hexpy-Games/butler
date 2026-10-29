@@ -263,7 +263,11 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
 
 /// Fault scenarios need debug hooks even when perf CI supplies a release Agent.
 fn fault_setup(id: &str) -> Result<Setup, HarnessError> {
-    let setup = Setup::new(id)?;
+    let setup = if std::env::var_os("BUTLER_E2E_FAULT_BIN").is_some() {
+        Setup::mutates_installation(id)?
+    } else {
+        Setup::new(id)?
+    };
     if let Some(binary) = std::env::var_os("BUTLER_E2E_FAULT_BIN") {
         butler_e2e::e2e::executable::copy(std::path::Path::new(&binary), &setup.sandbox.binary)?;
     }
