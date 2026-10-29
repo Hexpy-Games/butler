@@ -196,8 +196,10 @@ async fn scenario(
             h.command("shot streaming").await?;
             let began = std::time::Instant::now();
             proxy.burst()?;
+            h.command("stable").await?;
             h.command("answer shell answer").await?;
             if proxy.refused() < 3 { bail!("503 burst did not exceed the request retry budget"); }
+            h.command("attached").await?;
             h.command("shot resumed-after-503").await?;
             tokio::fs::write(dir.join("503.json"), serde_json::to_vec_pretty(&serde_json::json!({
                 "refused":proxy.refused(), "elapsed_ms":began.elapsed().as_millis(), "later_answer":"shell answer"

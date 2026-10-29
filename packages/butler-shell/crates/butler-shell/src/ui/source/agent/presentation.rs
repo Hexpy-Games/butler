@@ -52,9 +52,7 @@ pub(super) async fn read(client: &ShellClient, session: &str) -> Result<Composer
     let raw = match client.session_controls(session).await {
         Ok(raw) => raw,
         Err(error) => match error.kind() {
-            butler_shell_client::FailureKind::Disconnected
-            | butler_shell_client::FailureKind::Incompatible
-            | butler_shell_client::FailureKind::Missing => return Err(error),
+            butler_shell_client::FailureKind::Disconnected => return Err(error),
             _ => return Ok(ComposerContext::unavailable()),
         },
     };

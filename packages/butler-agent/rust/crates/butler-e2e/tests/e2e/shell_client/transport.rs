@@ -16,6 +16,16 @@ impl Drop for Peer {
 }
 impl Peer {
     pub(super) async fn new(router: Router) -> Result<Self, TestError> {
+        Self::serve(move |listener| async move {
+            axum::serve(listener, router).await.unwrap();
+        })
+        .await
+    }
+    pub(super) async fn serve<F, Fut>(serve: F) -> Result<Self, TestError>
+    where
+        F: FnOnce(tokio::net::TcpListener) -> Fut,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
         let setup = Setup::new("SHELL-HTTP")?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let pid = std::process::id();
@@ -34,9 +44,7 @@ impl Peer {
             }))?,
         )?;
         write_token(&setup.sandbox.data, "old")?;
-        let task = tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
+        let task = tokio::spawn(serve(listener));
         Ok(Self { setup, task })
     }
     pub(super) async fn client(&self) -> Result<ShellClient, TestError> {

@@ -60,10 +60,8 @@ pub(super) async fn monitor(
             backoff = (backoff * 2).min(Duration::from_secs(5));
         }
         let client = match ShellClient::attach(Some(data.clone())).await {
-            Ok(AttachState::Connected(client)) => {
-                backoff = Duration::from_millis(100);
-                Some(client)
-            }
+            // Metadata discovery does not prove the HTTP endpoint is serving.
+            Ok(AttachState::Connected(client)) => Some(client),
             _ => None,
         };
         let next = client.as_ref().map(|c| c.instance_identity().clone());

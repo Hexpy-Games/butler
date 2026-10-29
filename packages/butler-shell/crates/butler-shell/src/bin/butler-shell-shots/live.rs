@@ -33,6 +33,8 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             s.disconnected().is_none() && s.store.cursor.is_some() && !s.store.chats.is_empty()
         }),
         "left" => left(h, arg),
+        "stable" => stable(h),
+        "attached" => attached(h),
         "controls" => wait(h, |s, app| {
             s.composer
                 .read(app)
@@ -172,6 +174,43 @@ fn exact(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     })?;
     if !found {
         bail!("exact action missing");
+    }
+    Ok(())
+}
+
+/// A request failure must preserve the open chat and stream epoch throughout recovery.
+fn stable(h: &mut Harness) -> anyhow::Result<()> {
+    let (epoch, selected) = h.cx.update(|app| {
+        h.window
+            .read(app)
+            .map(|s| (s.store.epoch(), s.store.selected().cloned()))
+    })?;
+    let deadline = Instant::now() + Duration::from_secs(4);
+    while Instant::now() < deadline {
+        super::settle(&mut h.cx, h.handle);
+        let unchanged = h.cx.update(|app| {
+            h.window.read(app).map(|s| {
+                s.disconnected().is_none()
+                    && s.store.epoch() == epoch
+                    && s.store.selected() == selected.as_ref()
+            })
+        })?;
+        if !unchanged {
+            bail!("request failure changed selection or connection epoch");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok(())
+}
+
+fn attached(h: &mut Harness) -> anyhow::Result<()> {
+    let attached = h.cx.update(|app| {
+        h.window
+            .read(app)
+            .map(|s| s.disconnected().is_none() && s.store.cursor.is_some())
+    })?;
+    if !attached {
+        bail!("request failure disconnected the shell");
     }
     Ok(())
 }

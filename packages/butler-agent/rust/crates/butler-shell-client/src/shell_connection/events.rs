@@ -89,7 +89,7 @@ impl State {
                         .map(|raw| (raw, false)),
                 ),
                 Ok(None) => self.disconnect(),
-                Err(error) if error.is_timeout() && self.client.instance_alive().await => {
+                Err(_) if self.client.instance_alive().await => {
                     self.disconnect();
                 }
                 Err(_) => {

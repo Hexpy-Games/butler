@@ -15,7 +15,8 @@ pub(super) async fn run(binary: &Path, dir: &Path) -> anyhow::Result<()> {
     let setup = butler_e2e::e2e::scenario::Setup::new("GPUI-REPLAY")?;
     let reads = Arc::new(AtomicUsize::new(0));
     let authority = Arc::new(AtomicUsize::new(0));
-    let controls_status = Arc::new(AtomicUsize::new(0));
+    // The first listed chat disappears before its controls are read.
+    let controls_status = Arc::new(AtomicUsize::new(404));
     let row = json!({"id":"replay","title":"Replay","created_at":"2026-10-29T00:00:00Z","updated_at":"2026-10-29T00:00:01Z","pinned":false,"archived":false});
     let app = Router::new()
         .route("/sessions", get({
@@ -26,9 +27,12 @@ pub(super) async fn run(binary: &Path, dir: &Path) -> anyhow::Result<()> {
         }))
         .route("/sessions/replay/controls", get({
             let status = controls_status.clone();
-            move || { let failed = status.load(Ordering::SeqCst) != 0; async move {
-                if failed { return Err(axum::http::StatusCode::FORBIDDEN); }
-                Ok(axum::Json(json!({"data":{"controls":{"access_mode":"future_permission","model":"stub","reasoning_effort":"none"}}})))
+            move || { let status = status.load(Ordering::SeqCst); async move {
+                if status != 0 {
+                    return Response::builder().status(u16::try_from(status).unwrap_or(500))
+                        .body(Body::from(json!({"error":{"code":"session_not_found"}}).to_string())).unwrap_or_default();
+                }
+                Response::new(Body::from(json!({"data":{"controls":{"access_mode":"future_permission","model":"stub","reasoning_effort":"none"}}}).to_string()))
             }}
         }))
         .route("/session-view", get(|| async {
@@ -110,14 +114,20 @@ async fn drive(
             )?,
         )
         .await?;
+        h.command("controls unavailable").await?;
+        h.command("attached").await?;
+        controls_status.store(0, Ordering::SeqCst);
+        h.command("open replay").await?;
         h.command("controls loaded").await?;
         h.command("new").await?;
         h.command("shot unknown-permission").await?;
-        controls_status.store(1, Ordering::SeqCst);
+        controls_status.store(403, Ordering::SeqCst);
         h.command("open replay").await?;
         h.command("controls unavailable").await?;
+        h.command("attached").await?;
         h.command("new").await?;
         h.command("shot controls-unavailable").await?;
+        h.command("stable").await?;
         Ok(())
     }
     .await;

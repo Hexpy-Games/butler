@@ -19,6 +19,7 @@ type TestError = Box<dyn std::error::Error + Send + Sync>;
 mod create;
 mod failures;
 mod paging;
+mod reset;
 mod retention;
 mod transport;
 
