@@ -1,9 +1,9 @@
 //! One physical request owns its operation, cancellation and inline deadlines.
 //! No task, listener registry or per-Turn map survives this future.
 //!
-//! Until an attempt's first response event arrives only the total limit
-//! applies: a slow prefill sends nothing and is not a stall. After it, the
-//! idle limit detects a stream that stops.
+//! Until an attempt's first output event (text, reasoning or a tool call)
+//! arrives only the total limit applies: a slow prefill sends no output and
+//! is not a stall. After it, the idle limit detects a stream that stops.
 
 use parking_lot::Mutex;
 use std::future::Future;
@@ -22,7 +22,7 @@ pub(super) struct RequestPolicy {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TimeoutKind {
-    /// The total limit passed before the attempt's first response event.
+    /// The total limit passed before the attempt's first output event.
     FirstResponse,
     Total,
     Idle,
@@ -81,7 +81,7 @@ impl RequestProgress {
         self.shared.changed.notify_one();
     }
 
-    /// A new physical attempt waits for its own first response event.
+    /// A new physical attempt waits for its own first output event.
     pub(super) fn await_first_response(&self) {
         let mut state = self.shared.deadlines.lock();
         if state.disposed {
@@ -92,9 +92,14 @@ impl RequestProgress {
         self.shared.changed.notify_one();
     }
 
-    pub(super) fn record_progress(&self) {
+    /// One response event: `output` (model output) arms stall detection for
+    /// this attempt; after that, every event resets the idle limit.
+    pub(super) fn record_event(&self, output: bool) {
         let mut state = self.shared.deadlines.lock();
-        if state.disposed || self.shared.cancellation.is_cancelled() {
+        if state.disposed
+            || self.shared.cancellation.is_cancelled()
+            || (!output && state.progress.is_none())
+        {
             return;
         }
         let now = Instant::now();

@@ -1,6 +1,6 @@
 //! When a streamed chat answer's bytes arrive (synthetic timings): a slow
-//! prefill that sends nothing, a stream that stops after its first chunk,
-//! and a stream that never ends.
+//! prefill that sends nothing (or only headers, or only a role chunk), a
+//! stream that stops after its first chunk, and a stream that never ends.
 use std::convert::Infallible;
 use std::time::Duration;
 
@@ -21,6 +21,11 @@ pub enum Pace {
     StallFirstAfterOneChunk,
     /// A chunk every `Duration`, forever.
     Endless(Duration),
+    /// Headers at once, then no body for this long; then the answer.
+    HeadersThenSilence(Duration),
+    /// A role-only chunk at once (no content), then nothing for this long;
+    /// then the answer.
+    RoleChunkThenSilence(Duration),
 }
 
 /// The paced answer for a streamed request, or None for the usual one
@@ -58,13 +63,43 @@ pub(super) async fn response(
             });
             Some(event_stream(Body::from_stream(words)))
         }
+        Pace::HeadersThenSilence(silence) => Some(late_answer(&model, &chat.answer, None, silence)),
+        Pace::RoleChunkThenSilence(silence) => {
+            let role = frame(&model, &json!({"role": "assistant"}), &Value::Null);
+            Some(late_answer(&model, &chat.answer, Some(role), silence))
+        }
     }
 }
 
+/// `opening` at once, then `silence`, then the whole answer and its end.
+fn late_answer(
+    model: &str,
+    answer: &str,
+    opening: Option<String>,
+    silence: Duration,
+) -> Response<Body> {
+    let mut rest: Vec<String> = answer
+        .split_inclusive(' ')
+        .map(|word| chunk(model, word))
+        .collect();
+    rest.push(frame(model, &json!({}), &json!("stop")));
+    rest.push("data: [DONE]\n\n".to_owned());
+    let head = stream::iter(opening.map(|text| Ok::<_, Infallible>(Bytes::from(text))));
+    let tail = stream::once(async move {
+        tokio::time::sleep(silence).await;
+        Ok(Bytes::from(rest.concat()))
+    });
+    event_stream(Body::from_stream(head.chain(tail)))
+}
+
 fn chunk(model: &str, content: &str) -> String {
+    frame(model, &json!({"content": content}), &Value::Null)
+}
+
+fn frame(model: &str, delta: &Value, finish: &Value) -> String {
     let event = json!({
         "id": "chatcmpl-e2e-paced", "object": "chat.completion.chunk", "created": 1_759_000_000,
-        "model": model, "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": null}]
+        "model": model, "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]
     });
     format!("data: {event}\n\n")
 }

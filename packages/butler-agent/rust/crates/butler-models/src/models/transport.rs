@@ -215,7 +215,7 @@ async fn send_attempt(
         .await
         .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
     // Headers alone are not the first response: servers may send them
-    // before a long prefill. The first body event starts stall detection.
+    // before a long prefill. The first output event starts stall detection.
     timing.mark("headers_received");
     plan_limit::read(
         response,

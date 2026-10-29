@@ -26,7 +26,11 @@ pub(in crate::models::transport) async fn read(
     let completed = super::consume(response, provider, api, None, |frame| {
         let event: Value = serde_json::from_str(frame)
             .map_err(|_| protocol(provider, api, "provider_stream_malformed_event"))?;
-        progress.record_progress();
+        progress.record_event(match &state {
+            State::Anthropic(_) => super::output_event::anthropic(&event),
+            State::Gemini(_) => super::output_event::gemini(&event),
+            State::Responses(_) => super::output_event::responses(&event),
+        });
         stream_error(&event, provider, api)?;
         match &mut state {
             State::Anthropic(state) => state.event(&event, observer),

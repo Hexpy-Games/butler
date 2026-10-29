@@ -145,7 +145,7 @@ impl ModelConfiguration {
             local_base,
             auth.mode(),
         )?;
-        let policy = self.round_policy(&read, &metadata);
+        let policy = self.round_policy(&metadata);
         let prompt_cache = if metadata.provider_id == "openai" {
             self.prompt_cache(&read, &root)
         } else {
@@ -178,16 +178,9 @@ impl ModelConfiguration {
     }
 
     /// A Custom model's own response time limit replaces the global total.
-    fn round_policy(
-        &self,
-        read: &ModelConfigurationRead,
-        metadata: &crate::models::ModelProviderMetadata,
-    ) -> ProviderRoundPolicy {
-        let total = read
-            .local
-            .iter()
-            .find(|model| model.model_ref == metadata.model_ref)
-            .and_then(|model| model.response_timeout_ms)
+    fn round_policy(&self, metadata: &crate::models::ModelProviderMetadata) -> ProviderRoundPolicy {
+        let total = metadata
+            .response_timeout_ms
             .map(std::time::Duration::from_millis)
             .unwrap_or_else(|| {
                 policy::total(self.environment.provider_round_timeout_ms.as_deref())
