@@ -111,7 +111,7 @@ async fn fresh_and_existing_core_catalog_preserves_custom_skills_and_installatio
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     for old in [false, true] {
-        let setup = Setup::new("SKILLS-CLEANUP")?
+        let setup = Setup::mutates_installation("SKILLS-CLEANUP")?
             .stub_cassette(cassette()?)
             .replay_only();
         if old {
