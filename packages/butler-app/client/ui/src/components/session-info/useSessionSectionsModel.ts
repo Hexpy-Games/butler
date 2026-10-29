@@ -1,5 +1,6 @@
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { useButlerStore } from "@/app/store.ts";
+import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
 import { usePendingAsks } from "./usePendingAsks.ts";
 import { canOpenHandoffTab } from "../browser/browserHandoff.ts";
@@ -23,15 +24,19 @@ export function useSessionSectionsModel() {
   const running = (ACTIVE_TURN_STATES.has(summary?.turn_state ?? "") ? summary?.latest_progress?.safe_progress_rows : [])?.filter(row => ["running", "active", "thinking", "streaming", "reviewing", "waiting_for_tool"].includes(row.state ?? "")) ?? [];
   const hasArtifacts = artifacts.length > 0 || messages.some(message => message.artifacts?.length);
   const ids: string[] = [];
-  if (asks && asks.open_count > 0) ids.push("asks");
-  if (browserTabs.length > 0 && canOpenHandoffTab()) ids.push("browser");
-  if (folder || branch?.branch_name) ids.push("environment");
-  if (epic) ids.push("task");
-  if (summary?.context_details) ids.push("context");
-  if (hasArtifacts) ids.push("artifacts");
-  if (attachments.length > 0) ids.push("attachments");
-  if (schedules.length > 0) ids.push("schedules");
-  if (running.length > 0 || waiting.length > 0) ids.push("queue");
+  // The summary's sections sit above the task: showing any section before it lands would push them down afterwards.
+  const summaryPending = isServerBackedSessionId(sessionId) && !summary;
+  if (!summaryPending) {
+    if (asks && asks.open_count > 0) ids.push("asks");
+    if (browserTabs.length > 0 && canOpenHandoffTab()) ids.push("browser");
+    if (folder || branch?.branch_name) ids.push("environment");
+    if (epic) ids.push("task");
+    if (summary?.context_details) ids.push("context");
+    if (hasArtifacts) ids.push("artifacts");
+    if (attachments.length > 0) ids.push("attachments");
+    if (schedules.length > 0) ids.push("schedules");
+    if (running.length > 0 || waiting.length > 0) ids.push("queue");
+  }
   return { ids, sessionId, summary, epic, asks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting };
 }
 
