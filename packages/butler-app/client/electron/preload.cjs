@@ -1484,6 +1484,10 @@ const butlerApp = Object.freeze({
     if (url.pathname !== "/usage-history") throw new Error("Unsupported usage history route.");
     return requestJson(url.pathname + url.search, { method: "GET" });
   },
+  getImageUsage: ({ days = 7 } = {}) => {
+    const params = new URLSearchParams({ days: String(days) });
+    return requestJson(`/usage/images?${params.toString()}`);
+  },
   getUsageMonitor: ({ sessionId, sinceHours } = {}) => {
     const params = new URLSearchParams();
     if (sessionId) params.set("session_id", sessionId);
