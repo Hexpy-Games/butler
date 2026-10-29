@@ -100,6 +100,9 @@ fn require(
     if ctx.actor["origin"] != "mcp" {
         return Ok(());
     }
+    if resource == AppCanonResource::CheckCriterion {
+        return Err(store::Error::Permission);
+    }
     let capability = match resource {
         AppCanonResource::EditEpic => "canon.epic.status",
         AppCanonResource::Comment => "canon.epic.comment",
@@ -143,11 +146,17 @@ fn read(
             &json!({"plan_id":id}),
         );
     }
-    let value = store::api::read_query(
+    let mut value = store::api::read_query(
         db,
         store_resource(resource),
         id,
         &input.unwrap_or(json!({})),
     )?;
+    if !delegated
+        && resource == AppCanonResource::List
+        && let Some(epics) = value["epics"].as_array_mut()
+    {
+        store::criteria::enrich(db, epics)?;
+    }
     project(db, resource, value, delegated)
 }

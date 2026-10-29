@@ -310,4 +310,5 @@ mod chats_initiated;
 mod chats_proposals;
 mod chats_work;
 
+mod canon_criteria;
 mod canon_mcp;

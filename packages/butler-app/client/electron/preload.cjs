@@ -1508,6 +1508,7 @@ const butlerApp = Object.freeze({
     if (!["allow", "deny", "revoke"].includes(action)) throw new Error("Invalid grant action");
     return requestCanonWrite(`/canon/mcp-grants/${encodeURIComponent(id)}/${action}`, "POST", {});
   },
+  checkCanonCriterion: ({ id, criterionId, body }) => requestCanonWrite(`/canon/specs/${encodeURIComponent(id)}/criteria/${encodeURIComponent(criterionId)}`, "POST", body),
   getCanonActivity: ({ id, before }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}/activity${before == null ? "" : `?before=${encodeURIComponent(before)}`}`),
   getCanonProposal: ({ id }) => requestBridgeResult(`/canon/proposals/${encodeURIComponent(id)}`),
   resolveCanonProposal: ({ id, body }) => requestCanonWrite(`/canon/proposals/${encodeURIComponent(id)}`, "POST", body),

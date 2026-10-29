@@ -1,5 +1,6 @@
 //! CB-12: upgrade an unreleased dev data folder through real agent startup.
 #![allow(clippy::unwrap_used, reason = "test assertions")]
+mod criteria;
 mod expected;
 use butler_e2e::e2e::{HarnessError, events::LiveEvents, scenario::Setup};
 use rusqlite::{Connection, types::Value};
@@ -78,6 +79,7 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
             "canon_activity",
             "canon_audit",
             "canon_counters",
+            "canon_criterion_checks",
             "canon_cursors",
             "canon_epic_tags",
             "canon_epic_work_links",

@@ -58,6 +58,7 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
                 ["canon", "list" | "mcp-grants"]
                     | ["canon", "mcp-grants", _, "allow" | "deny" | "revoke"]
                     | ["canon", "specs", _, "proposals"]
+                    | ["canon", "specs", _, "criteria", _]
                     | ["canon", "epics", _, "comments" | "activity" | "progress"]
                     | ["sessions", _, "canon", _]
                     | ["projects", _, "canon"]
