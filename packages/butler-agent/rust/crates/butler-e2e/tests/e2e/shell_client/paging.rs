@@ -91,7 +91,7 @@ async fn check_pages(
     let archived = rows[4]["id"].as_str().unwrap();
     crate::chats_initiated::support::clock(clock, now).await?;
     let accepted = client.post_message(changed, now, "Reply briefly").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     s.gw.wait_terminal(changed, turn.as_str(), Duration::from_secs(30))
         .await?;
     assert_eq!(

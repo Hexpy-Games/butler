@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use butler_e2e::e2e::events::{LiveEvents, event_turn_id};
 use butler_e2e::e2e::faults::{Fault, Transform};
 use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, nonce};
 use serde_json::{Value, json};
 
@@ -96,7 +96,7 @@ async fn rec_02_crash_during_streaming_recovers_without_duplicates() -> Result<(
     s.provider()?
         .inject(Fault::once(exchange, Transform::StallAfter(6)))?;
     let accepted = s.gw.say("general", LONG).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     wait_served(&s, 1).await;
     wait_stream_delta(&live, &turn_id).await?;
     let before_crash = event_ids(&s.gw.events_since(0).await?);
@@ -164,7 +164,7 @@ async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), Har
     s.provider()?
         .inject(Fault::once(exchange, Transform::StallAfter(6)))?;
     let accepted = s.gw.say("general", LONG).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     wait_served(&s, 1).await;
     wait_stream_delta(&live, &turn_id).await?;
     s.crash_and_restart().await?;
@@ -236,7 +236,7 @@ async fn crash_after_effect(
     s.provider()?
         .inject(Fault::on_request("log.txt", 11, Transform::StallAfter(0)))?;
     let accepted = s.gw.say("general", &prompt).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(60);
     while !fs::read_to_string(&log)
         .unwrap_or_default()
@@ -344,7 +344,7 @@ async fn rec_01_graceful_stop_during_turn() -> Result<(), HarnessError> {
         });
     }
     let accepted = s.gw.say("general", LONG).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     wait_served(&s, 1).await;
     s.agent.terminate().await?;
     s.gw = s.agent.start_again().await?;

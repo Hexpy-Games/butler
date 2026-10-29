@@ -76,7 +76,7 @@ async fn pg2_allow_hook_cannot_bypass_approval() -> Result<(), HarnessError> {
     install(&s, &folder).await?;
     s.provider()?.set_chat_responder(stub::run);
     let accepted = s.gw.say("general", "Use the package tool.").await?;
-    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let states = butler_e2e::e2e::gateway::TERMINAL
         .iter()
         .copied()
@@ -276,7 +276,7 @@ async fn plugin_skill_allowed_tools_cannot_grant_command_approval() -> Result<()
     let accepted =
         s.gw.say("general", "Load the plugin skill and run its command.")
             .await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     let states = butler_e2e::e2e::gateway::TERMINAL
         .iter()
         .copied()

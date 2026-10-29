@@ -1,9 +1,6 @@
 use super::super::access_tiers::{self, stub};
 use super::*;
-use butler_e2e::e2e::{
-    cassette::Cassette,
-    scenario::{Access, accepted_turn_id},
-};
+use butler_e2e::e2e::{cassette::Cassette, scenario::Access};
 use serde_json::json;
 use std::time::{Duration, Instant};
 
@@ -33,7 +30,7 @@ async fn row11_new_secrets_are_swept() -> Result<(), HarnessError> {
         server.abort();
         return Ok(());
     }
-    let id = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+    let id = s.gw.say_turn(&chat, prompt).await?;
     access_tiers::delivered(&s, &chat, &id).await?;
     access_tiers::assert_counts(&s, &id, 0, 0)?;
     let text = access_tiers::outputs(&s, &chat, &id, &script, prompt)
@@ -107,7 +104,7 @@ async fn interrupted(kill: bool) -> Result<(), HarnessError> {
         server.abort();
         return Ok(());
     }
-    let id = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+    let id = s.gw.say_turn(&chat, prompt).await?;
     let deadline = Instant::now() + Duration::from_secs(20);
     let pid = loop {
         if let Ok(text) = std::fs::read_to_string(project.join("child.pid"))

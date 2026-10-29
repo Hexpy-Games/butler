@@ -11,7 +11,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::gateway::{TERMINAL, tool_rows, turn_state};
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, nonce};
 use serde_json::{Value, json};
 
@@ -22,7 +22,7 @@ async fn send(s: &Scenario, text: &str, access_mode: &str) -> Result<String, Har
             "client_message_id": uuid::Uuid::new_v4().to_string()}),
         )
         .await?;
-    accepted_turn_id(&accepted)
+    s.gw.accepted_turn(&accepted).await
 }
 
 /// TOOL-02 — write then edit change the file exactly; read-only refuses.

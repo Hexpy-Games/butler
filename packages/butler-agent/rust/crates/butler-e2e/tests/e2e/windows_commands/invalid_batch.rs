@@ -30,7 +30,7 @@ async fn invalid_path_batch_preserves_good_file_and_turn() -> Result<(), Harness
             .start()
             .await?;
         let accepted = s.gw.say("general", provider::PROMPT).await?;
-        let id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+        let id = s.gw.accepted_turn(&accepted).await?;
         if access == Access::AskAlways {
             approve_batch(&s, &id, &case).await?;
         }

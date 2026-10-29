@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::provider::Pacing;
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id, turn_timeout};
+use butler_e2e::e2e::scenario::{Scenario, Setup, turn_timeout};
 use butler_platform::sqlite;
 use serde_json::{Value, json};
 
@@ -76,7 +76,7 @@ async fn stop_unadmitted_turn(s: &mut Scenario) -> Result<String, HarnessError> 
         cap_ms: 300,
         min_ms: 200,
     });
-    let first = accepted_turn_id(&s.gw.say("general", NUMBERS).await?)?;
+    let first = s.gw.say_turn("general", NUMBERS).await?;
     let queued =
         s.gw.post(
             "/session-queue",

@@ -1,5 +1,5 @@
 use super::*;
-use butler_e2e::e2e::{gateway::turn_state, scenario::accepted_turn_id};
+use butler_e2e::e2e::gateway::turn_state;
 
 #[tokio::test]
 async fn cb_13_quick_answer_in_epic_conversation_creates_no_work_or_link()
@@ -19,7 +19,7 @@ async fn cb_13_quick_answer_in_epic_conversation_creates_no_work_or_link()
     let chat = conversation["session_id"].as_str().unwrap();
     let reply = s.gw.post("/messages",json!({"chat_id":chat,"text":"Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.","client_message_id":uuid::Uuid::new_v4().to_string()})).await?;
     assert_eq!(reply.status, 202, "{}", reply.text);
-    let turn = accepted_turn_id(reply.data())?;
+    let turn = s.gw.accepted_turn(reply.data()).await?;
     let answer =
         s.gw.wait_terminal(chat, &turn, Duration::from_secs(60))
             .await?;

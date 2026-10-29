@@ -44,7 +44,7 @@ async fn staging_recovers_after_normal_stop_and_kill() -> Result<(), HarnessErro
             .release();
         let held = s.provider()?.hold_after_tool("Interrupted delivery");
         let accepted = s.gw.say("general", "Interrupted delivery").await?;
-        let turn = accepted_turn_id(&accepted)?;
+        let turn = s.gw.accepted_turn(&accepted).await?;
         let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while stage_bytes(&data)? != BYTES {
             assert!(

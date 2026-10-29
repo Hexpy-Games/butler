@@ -24,7 +24,7 @@ async fn retry_decided_enqueues_other_resumes_and_retains_the_failed_decision()
         script.select(Case { tool: "write_file",
             args: json!({"path":"denied-recovery.txt","content":"must not execute","overwrite":false}),
             refused: false });
-        let turn = accepted_turn_id(&s.gw.say(&chat, provider::PROMPT).await?)?;
+        let turn = s.gw.say_turn(&chat, provider::PROMPT).await?;
         s.gw.wait_turn(&chat, &turn, &["waiting_for_form"], Duration::from_secs(15))
             .await?;
         let cards = s.gw.approval_requests(&chat).await?;

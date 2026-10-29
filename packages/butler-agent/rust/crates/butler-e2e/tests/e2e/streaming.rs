@@ -20,7 +20,7 @@ use butler_e2e::e2e::events::LiveEvents;
 use butler_e2e::e2e::faults::{ArgsMutation, Fault, Transform};
 use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::provider::Pacing;
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use serde_json::json;
 
 const INSIDE: &str =
@@ -150,7 +150,7 @@ async fn turn_03_stop_after_a_rejected_candidate_keeps_no_partial() -> Result<()
         min_ms: 150,
     });
     let accepted = s.gw.say("general", INSIDE).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     // The ninth request follows the sent-back candidate (the eighth answer).
     let deadline = Instant::now() + Duration::from_secs(90);
     while s.provider()?.served() < 9 {

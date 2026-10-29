@@ -27,7 +27,7 @@ async fn pg9_silent_update_keeps_inflight_digest_and_pg11_rollback() -> Result<(
     repo.publish();
     s.provider()?.set_chat_responder(respond);
     let accepted = s.gw.say("general", "Call the old package tool.").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     let marker = s.sandbox.data.join("plugins/data/helper/call-started");
     tokio::time::timeout(Duration::from_secs(20), async {
         while !marker.exists() {

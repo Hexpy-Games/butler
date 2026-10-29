@@ -2,7 +2,7 @@
 use super::{forget, support};
 use butler_e2e::e2e::{
     HarnessError,
-    scenario::{Fixture, Scenario, Setup, accepted_turn_id},
+    scenario::{Fixture, Scenario, Setup},
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -41,7 +41,7 @@ async fn rules_inline_busy_drain_wakes_parked_consumer() -> Result<(), HarnessEr
     std::fs::write(state.join("rule-capture-drain-arm"), b"")?;
     // Keep conversation completion from supplying an unrelated memory wakeup.
     let reply = s.provider()?.hold_after_tool(SAVE);
-    let turn = accepted_turn_id(&s.gw.say("general", SAVE).await?)?;
+    let turn = s.gw.say_turn("general", SAVE).await?;
     support::until(|| state.join("rule-capture-drain-reached").exists()).await;
     let parked_before = parked_count(&s).await;
     wait_for_new_park(&s, parked_before).await;

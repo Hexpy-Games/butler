@@ -15,7 +15,7 @@ use butler_e2e::e2e::{
     cassette::{Cassette, Chunk},
     gateway::{TERMINAL, turn_state},
     provider::Pacing,
-    scenario::{Fixture, Scenario, Setup, accepted_turn_id},
+    scenario::{Fixture, Scenario, Setup},
 };
 use rusqlite::{Connection, OpenFlags};
 use serde_json::json;
@@ -208,7 +208,7 @@ async fn queue_followup(s: &Scenario, prompt: &str) -> Result<String, HarnessErr
         cap_ms: 30_000,
         min_ms: 0,
     });
-    let running = accepted_turn_id(&s.gw.say("general", prompt).await?)?;
+    let running = s.gw.say_turn("general", prompt).await?;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         if s.gw.messages("general").await?.iter().any(|message| {
