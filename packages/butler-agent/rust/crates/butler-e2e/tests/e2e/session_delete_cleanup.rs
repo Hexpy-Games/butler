@@ -1,6 +1,7 @@
 //! A committed deletion attempts all cleanup and recovers without idle work.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod archive;
+mod project_owner;
 
 use butler_e2e::e2e::{
     HarnessError,
@@ -46,6 +47,10 @@ async fn chat(s: &Scenario) -> Result<String, HarnessError> {
 
 async fn inject(s: &mut Scenario) -> Result<Deleted, HarnessError> {
     let chat = chat(s).await?;
+    inject_chat(s, chat).await
+}
+
+async fn inject_chat(s: &mut Scenario, chat: String) -> Result<Deleted, HarnessError> {
     let (_, turn) = s.turn(&chat, "Publish").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let uploaded =
@@ -75,7 +80,7 @@ async fn inject(s: &mut Scenario) -> Result<Deleted, HarnessError> {
         .join(format!("{}.md", &hash[..32]));
     std::fs::create_dir_all(summary.parent().unwrap())?;
     std::fs::write(&summary, "Earlier conversation summary")?;
-    let hash = format!("{:x}", Sha256::digest(b"cleanup asset"));
+    let hash = format!("{:x}", Sha256::digest(chat.as_bytes()));
     let asset = s
         .sandbox
         .data
@@ -85,13 +90,10 @@ async fn inject(s: &mut Scenario) -> Result<Deleted, HarnessError> {
     std::fs::create_dir_all(asset.parent().unwrap())?;
     std::fs::write(&asset, b"cleanup asset")?;
     db.execute(
-        "INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at) VALUES('cleanup-asset',?1,'image/png',1,1,13,'','','2026-01-01')",
-        [&hash],
+        "INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at) VALUES(?2,?1,'image/png',1,1,13,'','','2026-01-01')",
+        params![hash, chat],
     )?;
-    db.execute(
-        "INSERT INTO app_asset_refs VALUES('cleanup-asset','chat',?1)",
-        [&chat],
-    )?;
+    db.execute("INSERT INTO app_asset_refs VALUES(?1,'chat',?1)", [&chat])?;
     let outputs = outputs(s)?;
     let output: String =
         outputs.query_row("SELECT id FROM outputs WHERE session=?1", [&chat], |r| {
@@ -104,7 +106,7 @@ async fn inject(s: &mut Scenario) -> Result<Deleted, HarnessError> {
             .join(format!("{output}.json"))
             .exists()
     );
-    outputs.execute_batch("CREATE TRIGGER fail_delete BEFORE DELETE ON outputs BEGIN SELECT RAISE(ABORT,'injected'); END;")?;
+    outputs.execute_batch("CREATE TRIGGER IF NOT EXISTS fail_delete BEFORE DELETE ON outputs BEGIN SELECT RAISE(ABORT,'injected'); END;")?;
     s.gw = s.agent.start_again().await?;
     Ok(Deleted {
         chat,
