@@ -8,8 +8,8 @@ import type { NativeAppServerHandle } from "./native-app-server.ts";
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 export const criteriaText = "변경 내용을 기준별로 확인할 수 있다";
 export const criteria = (text = criteriaText) => [
-  { id: "VB-03", part_id: "확인", text },
-  { id: "VB-04", part_id: "확인", text: "확인한 사람과 시점을 기록한다" },
+  { id: "VB-03", part_id: "기록", text },
+  { id: "VB-04", part_id: "기록", text: "확인한 사람과 시점을 기록한다" },
 ];
 export async function seedCriteria(server: NativeAppServerHandle) {
   await server.api("/personalization", { method: "PATCH", body: JSON.stringify({ profile: { principal_name: "하늘" } }) });
@@ -19,7 +19,7 @@ export async function seedCriteria(server: NativeAppServerHandle) {
   const empty = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, post({ title: "다음 검토 준비", description: "검토할 내용을 모읍니다.", plan_id: plan.id }));
   const { session_id } = await server.api<{ session_id: string }>(`/canon/epics/${epic.id}/conversation`, post({}));
   const node = "review-spec";
-  const body = `# 확인\n${criteria().map(c => `- ${c.id} ${c.text}`).join("\n")}`;
+  const body = `# 기록\n${criteria().map(c => `- ${c.id} ${c.text}`).join("\n")}`;
   const hash = createHash("sha256").update(body).digest("hex");
   const db = new Database(join(server.butlerData, "agent-runtime/btcc.sqlite"));
   try {
