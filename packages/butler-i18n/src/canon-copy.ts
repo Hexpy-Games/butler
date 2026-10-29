@@ -5,6 +5,9 @@ export interface CanonCopy {
     takeHere: (epic: string, conversation: string) => string;
     remove: string; proceed: string; openOther: string; take: string;
   };
+  criteriaCount: (confirmed: number, total: number) => string;
+  criterionState: (id: string, confirmed: boolean) => string;
+  criterionActivity: (id: string, confirmed: boolean) => string;
   mcp: {
     trustTitle: (client: string) => string; trustDescription: string; client: string; person: string; requestedPermissions: string;
     trustNotice: (person: string) => string; capabilities: Record<string, string>;

@@ -1,5 +1,6 @@
 //! CB-12: upgrade an unreleased dev data folder through real agent startup.
 #![allow(clippy::unwrap_used, reason = "test assertions")]
+mod criteria;
 mod expected;
 use butler_e2e::e2e::{HarnessError, events::LiveEvents, scenario::Setup};
 use rusqlite::{Connection, types::Value};
@@ -87,6 +88,7 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
             "canon_activity",
             "canon_audit",
             "canon_counters",
+            "canon_criterion_checks",
             "canon_cursors",
             "canon_epic_tags",
             "canon_epic_work_links",
@@ -98,11 +100,13 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
             "canon_proposals",
             "canon_session_epics",
             "canon_session_queue",
+            "canon_session_queue_chains",
             "canon_session_queue_heads",
             "canon_spec_bodies",
             "canon_spec_criteria",
             "canon_spec_nodes",
             "canon_spec_revisions",
+            "canon_step_cancellations",
             "canon_tags",
         ]
     );
@@ -249,6 +253,10 @@ async fn cb_12_reupgrade_discards_colliding_history_and_outpaces_stale_receipts(
     db.execute_batch(include_str!(
         "../../fixtures/work-model-p14/separation-values.sql"
     ))?;
+    backing_chats(
+        &Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?,
+        &db,
+    )?;
     drop(db);
     s.restart().await?;
     s.agent.terminate().await?;

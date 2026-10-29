@@ -22,7 +22,9 @@ export interface CanonActor { person?: string | null; via?: string | null; origi
 export interface CanonActivity { seq: number; entity_id: string; kind: string; from?: CanonStatus; to?: CanonStatus; summary: string; body: string | null; actor: CanonActor; at: number }
 export interface CanonActivityPage { activity: CanonActivity[]; activity_before: number | null }
 export interface CanonMcpProposal { id: string; spec_id: string; summary: string; current_body: string | null; proposed_body: string; actor: CanonActor; base_revision: number; created_at: string }
+export interface CriteriaCount { confirmed: number; total: number }
 export interface CanonWork {
+  criteria?: CriteriaCount | null;
   agent?: CanonAgent | null;
   tags: EpicTag[];
   id: string;
@@ -61,6 +63,7 @@ export interface CanonOverview {
 }
 export interface PlanDetail extends PlanCards { progress: { total: number; done: number } }
 export interface SpecCriterion {
+  confirmed: boolean;
   node_id: string;
   revision: number;
   criterion_id: string;
@@ -68,6 +71,8 @@ export interface SpecCriterion {
   text: string;
 }
 export interface SpecNode {
+  revision: number;
+  latest_revision?: number | null;
   node_id: string;
   parent_node_id: string | null;
   concern_id: string;

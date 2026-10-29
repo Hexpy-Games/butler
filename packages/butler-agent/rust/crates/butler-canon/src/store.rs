@@ -4,6 +4,7 @@ pub mod activity;
 mod agents;
 pub mod api;
 mod attachments;
+pub mod criteria;
 pub mod grants;
 pub use grants::sanitize as sanitize_mcp_client;
 pub use public::{

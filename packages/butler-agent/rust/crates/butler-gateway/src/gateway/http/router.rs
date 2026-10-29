@@ -263,6 +263,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/canon/mcp-grants/{id}/allow", Handler::Canon),
     ("/canon/mcp-grants/{id}/deny", Handler::Canon),
     ("/canon/mcp-grants/{id}/revoke", Handler::Canon),
+    ("/canon/specs/{id}/criteria/{criterion_id}", Handler::Canon),
     ("/canon/proposals/{id}", Handler::Canon),
     ("/sessions/{id}/canon/{action}", Handler::Canon),
     ("/sessions/{id}/canon/queue/edits", Handler::Canon),

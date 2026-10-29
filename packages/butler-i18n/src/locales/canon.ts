@@ -7,6 +7,9 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
       takeHere: (epic, conversation) => `‘${epic}’는 ‘${conversation}’ 대화에서 진행 중입니다(예정입니다). 여기서 할까요?`,
       remove: "삭제", proceed: "그래도 진행", openOther: "그 대화 열기", take: "여기서 하기",
     },
+    criteriaCount: (confirmed, total) => `${confirmed}/${total} 확인`,
+    criterionState: (id, confirmed) => `${id} ${confirmed ? "확인됨" : "미확인"}`,
+    criterionActivity: (id, confirmed) => `${id} ${confirmed ? "확인" : "확인 취소"}`,
     mcp: {
       createdActivity: "과제를 만들었습니다", appliedActivity: "명세 변경 반영", declinedActivity: "명세 변경 거절",
       trustTitle: client => `${client}에 캐논 권한을 줄까요?`, trustDescription: "요청한 권한을 확인하세요", client: "연결 대상", person: "대리하는 사람", requestedPermissions: "요청한 권한",
@@ -69,6 +72,9 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
       takeHere: (epic, conversation) => `‘${epic}’ is running or queued in ‘${conversation}’. Do it here?`,
       remove: "Delete", proceed: "Continue anyway", openOther: "Open that conversation", take: "Do it here",
     },
+    criteriaCount: (confirmed, total) => `${confirmed}/${total} confirmed`,
+    criterionState: (id, confirmed) => `${id} ${confirmed ? "confirmed" : "not confirmed"}`,
+    criterionActivity: (id, confirmed) => `${id} ${confirmed ? "confirmed" : "unconfirmed"}`,
     mcp: {
       createdActivity: "Epic created", appliedActivity: "Spec change applied", declinedActivity: "Spec change declined",
       trustTitle: client => `Give ${client} canon access?`, trustDescription: "Review requested access", client: "Connected tool", person: "Acting for", requestedPermissions: "Requested permissions",

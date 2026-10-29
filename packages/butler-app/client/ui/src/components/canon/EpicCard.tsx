@@ -1,3 +1,4 @@
+import { CriteriaProgress } from "./CriteriaProgress.tsx";
 import { canonTaskCounts } from "./canonProgressSource.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicCard as CardData } from "@/app/canonApi.ts";
@@ -19,6 +20,7 @@ export function EpicCard({ epic, ordinal, selected, onSelect }: {
         <Typo.Body data-test-class="canon-epic-title" truncate shrink minWidth="0">{epic.title}</Typo.Body>
         <Stack shrink={false}><CanonAvatar agent={epic.agent} person={epic.assignee} /></Stack>
       </Stack>
+      <CriteriaProgress criteria={epic.criteria} />
       <CanonTagList tags={epic.tags} limit={3} />
       {caption && <Typo.Caption numeric="tabular" tone="secondary">{caption}</Typo.Caption>}
       {epic.canon_status === "cancelled" && <Tag>{copy.statuses.cancelled}</Tag>}
