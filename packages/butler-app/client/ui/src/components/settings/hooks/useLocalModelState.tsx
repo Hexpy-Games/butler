@@ -4,6 +4,7 @@ import type {
   LocalModelDiscoveryRequest,
   LocalModelDiscoveryResult,
 } from "@/app/types.ts";
+import { useButlerStore } from "@/app/store.ts";
 import { imageInputChange, responseTimeoutMs, responseTimeoutSeconds } from "../localModelApi";
 
 const DEFAULT_PLATFORM = "custom" as const;
@@ -34,7 +35,10 @@ export function useLocalModelState() {
   const selectedModel =
     discovery?.models.find((model) => model.model_ref === selectedModelRef) ?? null;
   const isEditing = editingModelRef.length > 0;
-  const responseTimeoutInvalid = Number.isNaN(responseTimeoutMs(responseTimeout));
+  const responseTimeoutLimits = useButlerStore((state) => state.modelCatalog.response_timeout);
+  const responseTimeoutInvalid = Number.isNaN(
+    responseTimeoutMs(responseTimeout, responseTimeoutLimits),
+  );
   const canDiscover = serverUrl.trim().length > 0 && !busy;
   const canRegister =
     !busy &&
@@ -98,9 +102,12 @@ export function useLocalModelState() {
     setManualDisplayName,
     manualContext,
     setManualContext,
-    responseTimeout,
-    setResponseTimeout,
-    responseTimeoutInvalid,
+    responseTimeout: {
+      value: responseTimeout,
+      setValue: setResponseTimeout,
+      invalid: responseTimeoutInvalid,
+      limits: responseTimeoutLimits,
+    },
     editingModelRef,
     setEditingModelRef,
     busy,

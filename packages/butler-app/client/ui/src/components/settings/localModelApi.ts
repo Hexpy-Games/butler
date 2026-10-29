@@ -8,6 +8,7 @@ import type {
   LocalModelDiscoveryRequest,
   LocalModelRegistrationRequest,
   LocalModelRegistrationResult,
+  ResponseTimeoutLimits,
 } from "@/app/types.ts";
 
 const API_TYPE = "openai_compatible" as const;
@@ -42,16 +43,17 @@ export function localModelPayload(
   };
 }
 
-const RESPONSE_TIMEOUT_MAX_SECONDS = 86_400;
-
-/** Milliseconds for a seconds entry: null when empty, NaN when out of range. */
-export function responseTimeoutMs(seconds: string): number | null {
+/**
+ * Milliseconds for a seconds entry: null when empty, NaN when outside the
+ * agent's `limits` (or not positive while the catalog has not said).
+ */
+export function responseTimeoutMs(seconds: string, limits?: ResponseTimeoutLimits): number | null {
   const text = seconds.trim();
   if (!text) return null;
   const value = Number(text);
-  return Number.isFinite(value) && value >= 1 && value <= RESPONSE_TIMEOUT_MAX_SECONDS
-    ? Math.round(value * 1000)
-    : Number.NaN;
+  const ms = Math.round(value * 1000);
+  const inRange = limits ? ms >= limits.min_ms && ms <= limits.max_ms : ms > 0;
+  return Number.isFinite(value) && inRange ? ms : Number.NaN;
 }
 
 /** A stored limit as the seconds the field shows; empty when unset. */

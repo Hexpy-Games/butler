@@ -6,15 +6,15 @@ use super::{ModelProviderMetadata, ReasoningEffort, TokenEstimatorKind};
 
 const LOCAL_SOURCE: &str =
     "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md";
-/// Longest response time limit a Custom model may set: one day.
-pub const LOCAL_RESPONSE_TIMEOUT_MAX_MS: u64 = 86_400_000;
+/// The response time limits a Custom model may set: one second to one day.
+pub const LOCAL_RESPONSE_TIMEOUT_MS: std::ops::RangeInclusive<u64> = 1_000..=86_400_000;
 
 /// A Custom model's response time limit when `value` is a whole number of
-/// milliseconds from one second to [`LOCAL_RESPONSE_TIMEOUT_MAX_MS`].
+/// milliseconds within [`LOCAL_RESPONSE_TIMEOUT_MS`].
 pub fn local_response_timeout_ms(value: &Value) -> Option<u64> {
     value
         .as_u64()
-        .filter(|ms| (1_000..=LOCAL_RESPONSE_TIMEOUT_MAX_MS).contains(ms))
+        .filter(|ms| LOCAL_RESPONSE_TIMEOUT_MS.contains(ms))
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

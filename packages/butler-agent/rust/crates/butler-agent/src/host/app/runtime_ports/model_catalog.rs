@@ -266,6 +266,15 @@ impl AppModelCatalog {
         catalog: &T,
     ) -> Result<Value, GatewayApplicationError> {
         let mut value = catalog_value(catalog)?;
+        // A Custom model's response limit: its range, and the runtime value
+        // an empty one falls back to.
+        let default = self.configuration.default_round_timeout().as_millis();
+        let range = butler_models::models::LOCAL_RESPONSE_TIMEOUT_MS;
+        value["response_timeout"] = json!({
+            "default_ms": u64::try_from(default).unwrap_or(u64::MAX),
+            "min_ms": range.start(),
+            "max_ms": range.end(),
+        });
         if self
             .configuration
             .chatgpt_catalog(&mut value)

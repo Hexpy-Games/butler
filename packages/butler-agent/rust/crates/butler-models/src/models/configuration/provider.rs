@@ -177,14 +177,17 @@ impl ModelConfiguration {
             .unwrap_or_else(|| self.data_root.clone())
     }
 
+    /// The round time limit a model uses when it sets none of its own.
+    pub fn default_round_timeout(&self) -> std::time::Duration {
+        policy::total(self.environment.provider_round_timeout_ms.as_deref())
+    }
+
     /// A Custom model's own response time limit replaces the global total.
     fn round_policy(&self, metadata: &crate::models::ModelProviderMetadata) -> ProviderRoundPolicy {
         let total = metadata
             .response_timeout_ms
             .map(std::time::Duration::from_millis)
-            .unwrap_or_else(|| {
-                policy::total(self.environment.provider_round_timeout_ms.as_deref())
-            });
+            .unwrap_or_else(|| self.default_round_timeout());
         let idle = (metadata.provider_id != "openai")
             .then(|| policy::idle(self.environment.provider_round_idle_timeout_ms.as_deref()));
         ProviderRoundPolicy {

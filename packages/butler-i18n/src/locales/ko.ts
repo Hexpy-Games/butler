@@ -2315,8 +2315,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       displayName: "표시 이름",
       maxContext: "최대 컨텍스트",
       responseTimeout: "응답 대기 시간",
-      responseTimeoutDescription: "초 단위. 비우면 기본값을 씁니다.",
-      responseTimeoutError: "1~86400초로 입력하세요.",
+      responseTimeoutDescription: (defaultSeconds) =>
+        defaultSeconds === undefined
+          ? "초 단위. 비우면 기본값을 씁니다."
+          : `초 단위. 비우면 기본값(${defaultSeconds}초)을 씁니다.`,
+      responseTimeoutError: (range) =>
+        range ? `${range.min}~${range.max}초로 입력하세요.` : "0보다 큰 초를 입력하세요.",
       imageInput: "이미지 입력",
       registeredLocalModels: "등록된 사용자 지정 모델",
       customOpenAiCompatible: "사용자 지정 OpenAI 호환",

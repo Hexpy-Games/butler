@@ -72,7 +72,7 @@ pub use catalog::{
     ApiKeyBilling, BrowsingResolution, BrowsingRule, CredentialStorage, CredentialView,
     DEFAULT_PROVIDER, HostedApiShape, ImageLimitField, ImageLimitSources, ImageMask,
     ImageOutputCapability, ImageOutputEndpoint, ImageOutputPricing, ImageProbeEvidence,
-    ImageSizeKind, LEGACY_DEFAULT_MODEL, LOCAL_RESPONSE_TIMEOUT_MAX_MS, LocalImageDiscovery,
+    ImageSizeKind, LEGACY_DEFAULT_MODEL, LOCAL_RESPONSE_TIMEOUT_MS, LocalImageDiscovery,
     LocalModelConfig, LocalModelPlatform, LocalModelSource, ModelCatalogSnapshot,
     ModelCatalogSnapshotInput, ModelPreset, ModelPricing, ModelProviderMetadata, ModelTier,
     NextPrices, ParsedModelRef, ParsedModelRefSource, PromptPriceTier, ProviderAuthMethod,

@@ -28,7 +28,7 @@ pub use defaults::{
 };
 pub use facts::{ImageLimitField, ImageLimitSources, ModelTier};
 pub use local::{
-    LOCAL_RESPONSE_TIMEOUT_MAX_MS, LocalImageDiscovery, LocalModelConfig, LocalModelPlatform,
+    LOCAL_RESPONSE_TIMEOUT_MS, LocalImageDiscovery, LocalModelConfig, LocalModelPlatform,
     LocalModelSource, local_response_timeout_ms, normalize_local_model_config,
 };
 #[cfg(any(test, feature = "test-support"))]

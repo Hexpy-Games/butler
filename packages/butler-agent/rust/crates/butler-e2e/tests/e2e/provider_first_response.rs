@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL, Pace};
 use butler_e2e::e2e::gateway::turn_state;
-use butler_e2e::e2e::scenario::{Scenario, accepted_turn_id};
+use butler_e2e::e2e::scenario::Scenario;
 use serde_json::{Value, json};
 
 use super::setup_local_models::{use_local_model, with_local_server, with_local_server_env};
@@ -81,8 +81,7 @@ struct Ended {
 
 async fn timed_turn(s: &Scenario, text: &str) -> Result<Ended, HarnessError> {
     let started = Instant::now();
-    let accepted = s.gw.say("general", text).await?;
-    let id = accepted_turn_id(&accepted)?;
+    let id = s.gw.say_turn("general", text).await?;
     let turn = s.gw.wait_terminal("general", &id, WAIT).await?;
     let elapsed = started.elapsed();
     let text = answer(s, &id).await?;
@@ -172,7 +171,7 @@ async fn no_first_response_by_total_fails_once() -> Result<(), HarnessError> {
     let path = format!("/turns/{}/retry-current", ended.id);
     let retry = s.gw.post(&path, json!({})).await?;
     assert_eq!(retry.status, 202, "{}", retry.text);
-    let retried_id = accepted_turn_id(retry.data())?;
+    let retried_id = s.gw.accepted_turn(retry.data()).await?;
     let retried = s.gw.wait_terminal("general", &retried_id, WAIT).await?;
     eprintln!(
         "FIRST-RESPONSE-02 retry: {} after {:?}",

@@ -2311,8 +2311,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       displayName: "Display name",
       maxContext: "Max context",
       responseTimeout: "Response timeout",
-      responseTimeoutDescription: "In seconds. Empty uses the default.",
-      responseTimeoutError: "Enter 1 to 86400 seconds.",
+      responseTimeoutDescription: (defaultSeconds) =>
+        defaultSeconds === undefined
+          ? "In seconds. Leave empty to use the default."
+          : `In seconds. Leave empty to use the default (${defaultSeconds}s).`,
+      responseTimeoutError: (range) =>
+        range ? `Enter ${range.min} to ${range.max} seconds.` : "Enter seconds above 0.",
       imageInput: "Image input",
       registeredLocalModels: "Registered Custom models",
       customOpenAiCompatible: "Custom OpenAI-compatible",

@@ -210,6 +210,14 @@ export interface ModelCatalogView {
   registered_models?: AppModelSummary[];
   provider_credentials?: ProviderCredentialView[];
   worker_model_presets: WorkerModelPreset[];
+  /** A Custom model's response time limit: allowed range and the default an empty one uses. */
+  response_timeout?: ResponseTimeoutLimits;
+}
+
+export interface ResponseTimeoutLimits {
+  default_ms: number;
+  min_ms: number;
+  max_ms: number;
 }
 
 export interface LocalModelDiscoveryRequest {

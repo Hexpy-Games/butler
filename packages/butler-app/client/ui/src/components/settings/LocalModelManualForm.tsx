@@ -1,6 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { Input, SettingsField } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
+import type { ResponseTimeoutLimits } from "@/app/types.ts";
 import { SettingsSwitch } from "./SettingsFormComponents";
 
 export interface LocalModelImageInput {
@@ -8,11 +9,16 @@ export interface LocalModelImageInput {
   setChecked: (value: boolean) => void;
 }
 
-/** The response time limit field: seconds as typed. */
+/** The response time limit field: seconds as typed, and the agent's limits. */
 export interface LocalModelResponseTimeout {
   value: string;
   setValue: (value: string) => void;
   invalid: boolean;
+  limits?: ResponseTimeoutLimits;
+}
+
+function seconds(milliseconds: number | undefined): number | undefined {
+  return milliseconds === undefined ? undefined : milliseconds / 1000;
 }
 
 interface LocalModelManualFormProps {
@@ -38,6 +44,7 @@ export function LocalModelManualForm({
 }: LocalModelManualFormProps) {
   useAppLocale();
   const copy = appCopy.settings.localModels;
+  const limits = responseTimeout.limits;
 
   return (
     <>
@@ -82,8 +89,14 @@ export function LocalModelManualForm({
         id="local-model-response-timeout"
         data-test-class="settings-field"
         label={copy.responseTimeout}
-        description={copy.responseTimeoutDescription}
-        error={responseTimeout.invalid ? copy.responseTimeoutError : undefined}
+        description={copy.responseTimeoutDescription(seconds(limits?.default_ms))}
+        error={
+          responseTimeout.invalid
+            ? copy.responseTimeoutError(
+                limits && { min: limits.min_ms / 1000, max: limits.max_ms / 1000 },
+              )
+            : undefined
+        }
         control={
           <Input
             id="local-model-response-timeout"

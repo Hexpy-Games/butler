@@ -35,6 +35,9 @@ async fn custom_model_timeout_replaces_global_total() -> Result<(), HarnessError
     butler_e2e::gate!();
     let pace = Pace::FirstByteAfter(Duration::from_millis(3_000));
     let (server, s) = paced("FIRST-RESPONSE-05", pace, 1_500).await?;
+    // The default the form shows follows the global override.
+    let catalog = s.gw.get("/model-catalog").await?;
+    assert_eq!(catalog.data()["response_timeout"]["default_ms"], 1_500);
     let ended = timed_turn(&s, "First question.").await?;
     eprintln!(
         "FIRST-RESPONSE-05 global: {} after {:?}",
@@ -72,6 +75,11 @@ async fn response_timeout_round_trips_through_settings() -> Result<(), HarnessEr
     assert_eq!(created.status, 201, "{}", created.text);
     assert_eq!(created.data()["model"]["response_timeout_ms"], 900_000);
     let catalog = s.gw.get("/model-catalog").await?;
+    // The form's hint and range come from the runtime's own policy.
+    assert_eq!(
+        catalog.data()["response_timeout"],
+        json!({"default_ms": 600_000, "min_ms": 1_000, "max_ms": 86_400_000})
+    );
     let listed = catalog.data()["models"]
         .as_array()
         .unwrap()
