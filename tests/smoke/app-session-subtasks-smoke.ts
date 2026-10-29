@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import type { Locator, Page } from "playwright";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
-import { COPY, hoverInset, installSubtaskPage, replaySubtasks, subtaskFixtures, titleDeltas, type SubtaskReplay } from "../support/session-subtasks-fixtures.ts";
+import { COPY, hoverInset, installSubtaskPage, replaySubtasks, subtaskFixtures, markDeltas, titleDeltas, type SubtaskReplay } from "../support/session-subtasks-fixtures.ts";
 import { SESSION_INFO_COPY } from "../../packages/butler-i18n/src/locales/session-info.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
@@ -21,8 +21,8 @@ const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(tmpdir(), "bu
 mkdirSync(shots, { recursive: true });
 const copy = SESSION_INFO_COPY[lang === "ko" ? "ko-KR" : "en-US"];
 const text = lang === "ko"
-  ? { working: "작업 중", resume: "이어서 진행", attention: "확인 필요", ask: COPY.ko.ask }
-  : { working: "Working", resume: "Resume", attention: "Needs attention", ask: COPY.en.ask };
+  ? { working: "작업 중", resume: "이어서 진행", attention: "확인 필요", ask: COPY.ko.ask, showSidebar: "사이드바 보기" }
+  : { working: "Working", resume: "Resume", attention: "Needs attention", ask: COPY.en.ask, showSidebar: "Show sidebar" };
 const name = (shot: string) => join(shots, `${baseline ? "main-" : ""}${shot}-${theme}-${lang}.png`);
 const aside = (page: Page) => page.getByRole("complementary", { name: copy.title, exact: true });
 const sidebar = (page: Page) => page.locator('[data-test-class="app-sidebar"]');
@@ -119,7 +119,21 @@ async function subtaskScreens(parentId: string) {
   await page.mouse.move(0, 0);
   await shot(page, "info-phone");
   results.phoneHoverInset = await hoverInset(aside(page).locator('[data-test-class="subtask-row"]').first());
+  await page.locator('[data-test-class="session-info-toggle"]').click();
+  await page.getByRole("button", { name: text.showSidebar, exact: true }).first().click();
+  await sidebar(page).locator('[data-test-class="subtask-line"]').first().waitFor();
+  await verifyMarkColumn(page, "390");
   await page.close();
+}
+
+/** Every child mark (working, alert, resume) centres on the parent spinner's column, ±0.5px. */
+async function verifyMarkColumn(page: Page, width: string) {
+  const deltas = await markDeltas(sidebar(page));
+  results[`markDeltas${width}`] = deltas;
+  assert.deepEqual(Object.keys(deltas).sort(), ["attention", "progress", "resume"], "every state has a mark");
+  for (const [mark, delta] of Object.entries(deltas)) {
+    assert(Math.abs(delta) <= 0.5, `${mark} centres on the parent spinner at ${width}: ${delta}px`);
+  }
 }
 
 async function verifyPanel(page: Page) {
@@ -161,6 +175,7 @@ async function verifySidebar(page: Page) {
   const deltas = await titleDeltas(tree);
   results.titleDeltas = deltas;
   assert.deepEqual(deltas, [0, 0, 0], "subtask titles start where the parent title starts");
+  await verifyMarkColumn(page, "1440");
   const parentRow = tree.locator('[data-test-class="subtask-lines"]').locator("xpath=preceding-sibling::*[1]");
   await parentRow.locator('[data-slot="spinner"]').waitFor();
   assert.equal(await parentRow.getByLabel(text.attention, { exact: true }).count(), 0, "the alert rests on the subtask line, not twice");

@@ -124,6 +124,23 @@ export async function hoverInset(row: Locator): Promise<{ left: number; right: n
   });
 }
 
+/**
+ * Each nested subtask mark's x-centre minus the parent row's spinner x-centre, keyed by mark
+ * (progress = working, attention = needs approval, resume = paused).
+ */
+export async function markDeltas(sidebar: Locator): Promise<Record<string, number>> {
+  return sidebar.evaluate(root => {
+    const lines = root.querySelector('[data-test-class="subtask-lines"]')!;
+    const centre = (node: Element) => { const box = node.getBoundingClientRect(); return box.left + box.width / 2; };
+    const spinner = centre(lines.previousElementSibling!.querySelector('[data-slot="spinner"]')!);
+    const deltas: Record<string, number> = {};
+    for (const mark of lines.querySelectorAll('[data-test-class="subtask-progress"], [data-test-class="subtask-attention"], [data-test-class="subtask-resume"]')) {
+      deltas[mark.getAttribute("data-test-class")!.replace("subtask-", "")] = Math.round((centre(mark) - spinner) * 100) / 100;
+    }
+    return deltas;
+  });
+}
+
 /** The x delta between a parent row's title and each nested subtask title. */
 export async function titleDeltas(sidebar: Locator): Promise<number[]> {
   return sidebar.evaluate(root => {
