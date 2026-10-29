@@ -27,6 +27,12 @@ pub(super) fn row(
     let user = msg.role == Role::User;
     let body = if user {
         user_bubble(msg, cx)
+    } else if matches!(msg.role, Role::Other(_)) {
+        div()
+            .text_size(px(typo::BODY.0))
+            .line_height(px(typo::BODY.1))
+            .text_color(cx.theme.text3)
+            .child(msg.text.clone())
     } else {
         assistant(msg, cx, activity_toggle)
     };

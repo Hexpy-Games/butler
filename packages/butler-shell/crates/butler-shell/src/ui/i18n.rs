@@ -167,19 +167,20 @@ static EN: Strings = Strings {
 
 impl Strings {
     /// shell.controlLabel: effective controls from the agent, in the current locale.
-    pub(crate) fn control_label(&self, value: gpui::SharedString) -> gpui::SharedString {
-        let pair = match value.as_ref() {
-            "ask_first" => ("항상 확인", "Ask first"),
-            "ask_except_reads" => ("변경 시 확인", "Ask for changes"),
-            "full_access" => ("전체 허용", "Full access"),
-            "auto" => ("위험 시 확인", "Ask for risks"),
+    pub(crate) fn control_label(&self, value: &str) -> gpui::SharedString {
+        let pair = match value {
+            "ask_first" => ("모두 확인", "Ask every time"), // permissions.askAlways
+            "ask_except_reads" => ("먼저 확인", "Ask first"), // permissions.askFirst
+            "full_access" => ("전체 권한", "Full access"),  // permissions.fullAccess
+            "auto" => ("알아서 진행", "Auto"),              // permissions.auto
+            "read_only" => ("읽기 전용", "Read only"),      // permissions.readOnly
             "none" => ("없음", "None"),
             "low" => ("낮음", "Low"),
             "medium" => ("보통", "Medium"),
             "high" => ("높음", "High"),
             "xhigh" => ("매우 높음", "Extra high"),
             "max" => ("최대", "Max"),
-            _ => return value,
+            _ => ("—", "—"),
         };
         match self.locale {
             Locale::Ko => pair.0,

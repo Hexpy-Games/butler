@@ -67,9 +67,6 @@ fn lines(card: &AuthorityCard) -> (SharedString, Vec<SharedString>) {
             }
         }
     }
-    if action.is_some() && !card.reason.is_empty() {
-        details.push(card.reason.clone());
-    }
     (action.unwrap_or_else(|| card.reason.clone()), details)
 }
 
@@ -227,7 +224,21 @@ pub(super) fn panel(
         .flex()
         .flex_col();
     for line in details {
-        more = more.child(text(line, typo::CAPTION, FontWeight::NORMAL, t.text2));
+        more = more.child(crate::ui::exact_action::exact_action(line, &t, 1.));
+    }
+    if card
+        .approval
+        .as_ref()
+        .and_then(crate::ui::source::Approval::action)
+        .is_some()
+        && !card.reason.is_empty()
+    {
+        more = more.child(text(
+            card.reason.clone(),
+            typo::CAPTION,
+            FontWeight::NORMAL,
+            t.text2,
+        ));
     }
     div()
         .flex()

@@ -68,7 +68,7 @@ impl Harness {
     fn open(source: Option<Rc<dyn Source>>, dark: bool) -> anyhow::Result<Self> {
         let mut cx = context()?;
         let code_font = cx.update(|cx| ui::theme::code_font(&cx.text_system().all_font_names()));
-        let window = cx.open_window(size(px(1100.), px(720.)), |window, cx| {
+        let window = cx.open_window(size(px(800.), px(720.)), |window, cx| {
             let options = ShellOptions {
                 source,
                 acrylic: false,

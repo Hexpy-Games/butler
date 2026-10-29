@@ -29,6 +29,7 @@ pub(crate) enum Applied {
     Message(SessionId, Message),
     /// Events were lost: take a new snapshot.
     Resync,
+    MessageDeleted(SessionId, gpui::SharedString),
 }
 
 #[derive(Default)]
@@ -84,10 +85,11 @@ impl Store {
         self.loading = None;
         self.chats_next = page.next;
         if load.cursor.is_some() {
-            self.chats.extend(page.chats);
+            self.chats
+                .extend(page.chats.into_iter().filter(|c| !c.archived));
             return None;
         }
-        self.chats = page.chats;
+        self.chats = page.chats.into_iter().filter(|c| !c.archived).collect();
         self.running = (self.chats.iter())
             .filter(|c| c.running)
             .filter_map(|c| {
@@ -201,12 +203,19 @@ impl Store {
                 }
                 return Applied::Message(session, message);
             }
+            LiveUpdate::MessageDeleted { session, id } => {
+                return Applied::MessageDeleted(session, id);
+            }
             LiveUpdate::Turn { chat, running } => self.set_running(&chat, running),
             LiveUpdate::Authority { session, cards } => self.authority_loaded(session, cards),
             LiveUpdate::Chat(summary) => {
-                match self.chats.iter_mut().find(|c| c.chat == summary.chat) {
-                    Some(row) => *row = summary,
-                    None => self.chats.insert(0, summary),
+                self.chats.retain(|c| c.chat != summary.chat);
+                if !summary.archived {
+                    let key = |c: &ChatSummary| {
+                        (c.pinned, c.updated_at, c.created_at, c.chat.chat.0.clone())
+                    };
+                    let at = self.chats.partition_point(|c| key(c) > key(&summary));
+                    self.chats.insert(at, summary);
                 }
             }
             LiveUpdate::Resync => return Applied::Resync,

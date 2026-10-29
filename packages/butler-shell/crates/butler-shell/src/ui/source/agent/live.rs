@@ -31,7 +31,9 @@ pub(super) fn subscribe(
                                         if send.send(LiveEvent { cursor: (i + 1 == count).then_some(cursor).flatten(), update }).await.is_err() { return; }
                                     }
                                 }
-                                Err(_) => break,
+                                Err(_) => {
+                                    let _ = send.send(LiveEvent { cursor: None, update: LiveUpdate::Resync }).await;
+                                },
                             }
                         }
                         Some(Err(Error::EventGap(_))) => { let _ = send.send(LiveEvent { cursor: None, update: LiveUpdate::Resync }).await; break; }
@@ -64,6 +66,15 @@ async fn updates(client: &ShellClient, raw: &Value) -> Result<Vec<LiveUpdate>, E
                 message: convert::message(message)?,
             }])
         }
+        "message.deleted" => Ok(vec![LiveUpdate::MessageDeleted {
+            session: SessionId(
+                convert::string(payload, "chat_id")
+                    .or_else(|_| convert::string(payload, "session_id"))?
+                    .to_owned()
+                    .into(),
+            ),
+            id: convert::string(payload, "message_id")?.to_owned().into(),
+        }]),
         "turn.state_changed" => {
             let turn = payload.get("turn").unwrap_or(payload);
             let session = turn["chat_id"]

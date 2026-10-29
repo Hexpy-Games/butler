@@ -108,6 +108,17 @@ impl Chat {
         self.list.splice(1..1, n);
     }
 
+    pub(crate) fn remove(&mut self, session: &SessionId, id: &gpui::SharedString) {
+        if self.open.as_ref().map(|c| &c.session) != Some(session) {
+            return;
+        }
+        if let Some(ix) = self.messages.iter().position(|m| &m.id == id) {
+            self.messages.remove(ix);
+            self.born.remove(id);
+            self.list.splice(ix + 1..ix + 2, 0);
+        }
+    }
+
     /// A message added or grown by the running turn.
     pub(crate) fn upsert(&mut self, session: &SessionId, message: Message) {
         if self.open.as_ref().map(|c| &c.session) != Some(session) {

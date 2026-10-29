@@ -54,6 +54,8 @@ fn chat(
         title: title.to_owned().into(),
         space,
         pinned,
+        archived: false,
+        created_at: Timestamp(0),
         running,
         updated_at: ago(minutes),
     }

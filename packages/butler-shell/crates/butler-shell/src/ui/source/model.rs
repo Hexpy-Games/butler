@@ -62,6 +62,8 @@ pub(crate) struct ChatSummary {
     pub(crate) title: SharedString,
     pub(crate) space: Option<Space>,
     pub(crate) pinned: bool,
+    pub(crate) archived: bool,
+    pub(crate) created_at: Timestamp,
     pub(crate) running: bool,
     /// Last activity (the row shows its age, formatted when drawn).
     pub(crate) updated_at: Timestamp,
@@ -75,10 +77,11 @@ pub(crate) struct ChatPage {
     pub(crate) events: EventCursor,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Role {
     User,
     Assistant,
+    Other(String),
 }
 
 /// A tool call shown under an activity step.
@@ -267,6 +270,10 @@ pub(crate) enum LiveUpdate {
     Message {
         session: SessionId,
         message: Message,
+    },
+    MessageDeleted {
+        session: SessionId,
+        id: SharedString,
     },
     /// A chat's turn started (`Some`) or ended (`None`).
     Turn {

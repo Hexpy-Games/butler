@@ -23,22 +23,34 @@ struct Auth {
 }
 
 impl ShellClient {
+    /// Stable attachment identity, excluding credentials.
+    pub fn instance_identity(&self) -> &(u32, String, String) {
+        &self.inner.identity
+    }
+
+    pub(super) async fn instance_alive(&self) -> bool {
+        matches!(Self::attach(Some(self.inner.data.clone())).await,
+            Ok(AttachState::Connected(client)) if client.instance_identity() == self.instance_identity())
+    }
+
     /// Attach using explicit DATA, then BUTLER_DATA, then the platform home's
     /// `.butler` directory. Reads only metadata and never starts an agent.
     pub async fn attach(data: Option<PathBuf>) -> Result<AttachState, Error> {
         // Client construction may also read the platform certificate store.
         tokio::task::spawn_blocking(move || {
-            let Some((data, endpoint, token)) = discover(data)? else {
+            let Some((data, endpoint, token, identity)) = discover(data)? else {
                 return Ok(AttachState::NotRunning);
             };
-            Ok(AttachState::Connected(Self::new(data, endpoint, token)?))
+            Ok(AttachState::Connected(Self::new(
+                data, endpoint, token, identity,
+            )?))
         })
         .await
         .map_err(|_| Error::LocalMetadata)?
     }
 }
 
-type Discovery = Option<(PathBuf, reqwest::Url, String)>;
+type Discovery = Option<(PathBuf, reqwest::Url, String, (u32, String, String))>;
 fn discover(data: Option<PathBuf>) -> Result<Discovery, Error> {
     let data = data
         .or_else(|| {
@@ -69,7 +81,8 @@ fn discover(data: Option<PathBuf>) -> Result<Discovery, Error> {
         return Ok(None);
     };
     let token = read_token(&data)?;
-    Ok(Some((data, endpoint, token)))
+    let identity = (record.pid, record.nonce, endpoint.to_string());
+    Ok(Some((data, endpoint, token, identity)))
 }
 
 fn identity_matches(record: &Instance) -> bool {

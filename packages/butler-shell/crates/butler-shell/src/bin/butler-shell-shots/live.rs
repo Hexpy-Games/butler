@@ -44,6 +44,15 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
                     && m.streaming == (command == "streaming")
             })
         }),
+        "roles" => wait(h, |s, app| {
+            ["automation", "system"].iter().all(|role| {
+                s.chat
+                    .read(app)
+                    .messages
+                    .iter()
+                    .any(|m| m.role == ui::source::Role::Other((*role).into()))
+            })
+        }),
         "approval" => wait(h, |s, _| s.store.approval().is_some()),
         "exact" => {
             let found = h.cx.update(|app| {

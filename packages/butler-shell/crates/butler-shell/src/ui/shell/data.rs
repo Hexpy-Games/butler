@@ -46,10 +46,12 @@ impl Shell {
         mut attachment: crate::ui::source::agent::Attachment,
         cx: &mut Context<Self>,
     ) {
+        self.rediscover = Some(attachment.retry.clone());
         self.connection_task = Some(cx.spawn(async move |this, cx| {
             while let Some(source) = attachment.next().await {
                 if this
                     .update(cx, |this, cx| {
+                        this.source = None;
                         this.lost(cx);
                         this.source = source;
                         this.sync_composer(cx);
@@ -127,6 +129,10 @@ impl Shell {
             Applied::Store => {}
             Applied::Message(session, message) => self.chat.update(cx, |c, cx| {
                 c.upsert(&session, message);
+                cx.notify();
+            }),
+            Applied::MessageDeleted(session, id) => self.chat.update(cx, |c, cx| {
+                c.remove(&session, &id);
                 cx.notify();
             }),
             Applied::Resync => self.connect(cx),
@@ -234,7 +240,11 @@ impl Shell {
     /// The agent went away: back to the disconnected state.
     fn lost(&mut self, cx: &mut Context<Self>) {
         self.live_task = None;
-        self.source = None;
+        if self.source.take().is_some()
+            && let Some(retry) = &self.rediscover
+        {
+            let _ = retry.send(());
+        }
         self.store.lost();
         self.sync_composer(cx);
         cx.notify();

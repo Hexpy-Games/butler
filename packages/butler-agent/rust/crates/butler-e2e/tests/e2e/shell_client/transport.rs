@@ -196,3 +196,42 @@ async fn live_jump_replays_hole_once_and_advances() -> Result<(), TestError> {
     assert_eq!(ids, [Some(1), Some(3)]);
     Ok(())
 }
+
+async fn transient(State(count): State<Arc<std::sync::atomic::AtomicUsize>>) -> Response {
+    if count.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+        return Response::builder().status(503).body(Body::empty()).unwrap();
+    }
+    Response::builder()
+        .header("content-type", "text/event-stream")
+        .body(Body::from("data: {\"id\":1,\"type\":\"future.event\"}\n\n"))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn transient_failure_recovers_without_an_instance_rewrite() -> Result<(), TestError> {
+    butler_e2e::gate!();
+    let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let peer = Peer::new(
+        Router::new()
+            .route("/events/live", get(transient))
+            .with_state(count.clone()),
+    )
+    .await?;
+    let record = peer
+        .setup
+        .sandbox
+        .data
+        .join("state/butler-agent-native-service.json");
+    let before = std::fs::read(&record)?;
+    let mut stream = peer.client().await?.live_events(0);
+    let began = std::time::Instant::now();
+    let event = tokio::time::timeout(Duration::from_secs(5), stream.next())
+        .await?
+        .unwrap()?;
+    assert_eq!(event.cursor, Some(1));
+    assert_eq!(event.raw["type"], "future.event");
+    assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(std::fs::read(record)?, before);
+    eprintln!("SHELL transient 503 recovery {:?}", began.elapsed());
+    Ok(())
+}

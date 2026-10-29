@@ -22,7 +22,11 @@ use crate::gateway::{
 
 pub(super) async fn chats(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
     let page = page_params(&state, uri)?;
-    let cursor = state.application.latest_event_cursor().await?;
+    let cursor = if page.is_some() {
+        state.application.latest_event_cursor().await?
+    } else {
+        0
+    };
     let chats = state
         .application
         .list_chats(page.clone().map(|mut page| {
@@ -50,7 +54,11 @@ pub(super) async fn list(state: Arc<HttpState>, uri: &Uri) -> Result<Response, H
         .cloned();
     let project_id = params.get("project_id").cloned();
     let page = page_params(&state, uri)?;
-    let cursor = state.application.latest_event_cursor().await?;
+    let cursor = if page.is_some() {
+        state.application.latest_event_cursor().await?
+    } else {
+        0
+    };
     let sessions = state
         .application
         .list_sessions(

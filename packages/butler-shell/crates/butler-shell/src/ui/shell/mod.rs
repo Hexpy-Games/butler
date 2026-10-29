@@ -62,6 +62,7 @@ pub(crate) struct Shell {
     subscriptions: Vec<Subscription>,
     live_task: Option<gpui::Task<()>>,
     connection_task: Option<gpui::Task<()>>,
+    rediscover: Option<tokio::sync::mpsc::UnboundedSender<()>>,
 }
 
 impl HasHover for Shell {
@@ -130,6 +131,7 @@ impl Shell {
             subscriptions,
             live_task: None,
             connection_task: None,
+            rediscover: None,
         };
         shell.sync_composer(cx);
         shell.connect(cx);

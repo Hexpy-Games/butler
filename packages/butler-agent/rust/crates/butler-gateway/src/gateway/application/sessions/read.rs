@@ -151,11 +151,16 @@ pub(super) fn chats(
 ) -> Result<Vec<AppChatSummary>, AppStorageError> {
     let mut params = Vec::new();
     let tail = list_after(page, false, &mut params);
+    let tie = if page.is_some() {
+        ",c.id DESC"
+    } else {
+        ",c.rowid ASC"
+    };
     let sql = format!(
         "SELECT c.id,c.title,c.kind,c.project_id,c.created_at,c.updated_at FROM chats c \
          WHERE {tail} AND NOT EXISTS(SELECT 1 FROM app_session_branches b \
          WHERE b.target_session_id=c.id AND b.state='prepared') \
-         ORDER BY c.updated_at DESC,c.created_at DESC,c.id DESC LIMIT ?"
+         ORDER BY c.updated_at DESC,c.created_at DESC{tie} LIMIT ?"
     );
     params.push(page.map_or(-1, |page| i64::from(page.limit)).into());
     let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
@@ -215,7 +220,12 @@ pub(super) fn sessions_page(
         sql.push_str(" AND c.project_id=?");
         params.push(project_id.to_owned().into());
     }
-    sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC,c.id DESC");
+    sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC");
+    sql.push_str(if page.is_some() {
+        ",c.id DESC"
+    } else {
+        ",c.rowid ASC"
+    });
     if let Some(page) = page {
         sql.push_str(" LIMIT ?");
         params.push(i64::from(page.limit).into());

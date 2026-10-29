@@ -77,8 +77,18 @@ impl Shots {
         self.ack("LIVE OK").await
     }
     async fn finish(mut self) -> anyhow::Result<()> {
-        self.input.write_all(b"quit\n").await?;
-        if !self.child.wait().await?.success() {
+        let sent = self.input.write_all(b"quit\n").await;
+        let waited =
+            tokio::time::timeout(std::time::Duration::from_secs(5), self.child.wait()).await;
+        let status = match waited {
+            Ok(status) => status?,
+            Err(_) => {
+                self.child.kill().await?;
+                self.child.wait().await?
+            }
+        };
+        sent?;
+        if !status.success() {
             bail!("shots failed");
         }
         Ok(())
@@ -123,40 +133,20 @@ async fn run(binary: &Path, dir: &Path, dark: bool) -> anyhow::Result<()> {
             .launch
             .set_env("BUTLER_APP_SERVER_PORT", s.agent.launch.port.to_string());
         let result = scenario(binary, &out, dark, decision, &mut s).await;
-        if result.is_err() {
-            let feedback: Vec<_> = s
-                .provider
-                .as_ref()
-                .into_iter()
-                .flat_map(butler_e2e::e2e::provider::Provider::requests)
-                .flat_map(|request| request["input"].as_array().cloned().unwrap_or_default())
-                .filter(|item| item["type"] == "function_call_output")
-                .map(|item| item["output"].clone())
-                .collect();
-            tokio::fs::write(
-                out.join("feedback.json"),
-                serde_json::to_vec_pretty(&feedback)?,
-            )
-            .await?;
-            let sessions =
-                s.gw.get("/sessions?limit=20")
-                    .await
-                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-            let mut views = Vec::new();
-            for row in sessions.data()["items"].as_array().into_iter().flatten() {
-                if let Some(id) = row["id"].as_str() {
-                    let view =
-                        s.gw.get(&format!("/session-view?session_id={id}"))
-                            .await
-                            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-                    let data = view.data();
-                    views.push(serde_json::json!({"session":id,"messages":data["messages"],"latest_turn":data["latest_turn"],"authority_requests":data["authority_requests"]}));
-                }
-            }
-            tokio::fs::write(out.join("failure.json"), serde_json::to_vec_pretty(&views)?).await?;
-        }
+        let diagnostics = if result.is_err() {
+            diagnostics(&s, &out).await
+        } else {
+            Ok(())
+        };
+        let stopped = s
+            .agent
+            .terminate()
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()));
         let cleanup = s.finish().await.map_err(|e| anyhow::anyhow!(e.to_string()));
         result?;
+        diagnostics?;
+        stopped?;
         cleanup?;
     }
     Ok(())
@@ -168,43 +158,50 @@ async fn scenario(
     decision: &str,
     s: &mut butler_e2e::e2e::scenario::Scenario,
 ) -> anyhow::Result<()> {
+    seed_roles(s).await?;
     let mut h = Shots::start(binary, &s.sandbox.data, dir, dark).await?;
-    for command in [
-        "connected",
-        "shot listed",
-        "open general",
-        "shot open",
-        "new",
-    ] {
-        h.command(command).await?;
+    let result = async {
+        for command in [
+            "connected",
+            "shot listed",
+            "open general",
+            "roles",
+            "shot open",
+            "new",
+        ] {
+            h.command(command).await?;
+        }
+        h.command(&format!("send {}", stub::PROMPT)).await?;
+        h.command("approval").await?;
+        h.command(&format!("exact {}", stub::ACTION)).await?;
+        h.command("shot approval").await?;
+        h.command("modify").await?;
+        h.command("shot modify").await?;
+        h.command("close").await?;
+        h.command(decision).await?;
+        if decision == "allow" {
+            h.command("streaming shell answer").await?;
+            h.command("shot streaming").await?;
+            h.command("answer shell answer").await?;
+        }
+        h.command(&format!("shot {decision}")).await?;
+        s.agent
+            .terminate()
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        h.command("disconnected").await?;
+        h.command("shot disconnected").await?;
+        s.restart()
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        h.command("connected").await?;
+        h.command("shot reattached").await?;
+        verify_outcome(s, dir, decision).await
     }
-    h.command(&format!("send {}", stub::PROMPT)).await?;
-    h.command("approval").await?;
-    h.command(&format!("exact {}", stub::ACTION)).await?;
-    h.command("shot approval").await?;
-    h.command("modify").await?;
-    h.command("shot modify").await?;
-    h.command("close").await?;
-    h.command(decision).await?;
-    if decision == "allow" {
-        h.command("streaming shell answer").await?;
-        h.command("shot streaming").await?;
-        h.command("answer shell answer").await?;
-    }
-    h.command(&format!("shot {decision}")).await?;
-    s.agent
-        .terminate()
-        .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    h.command("disconnected").await?;
-    h.command("shot disconnected").await?;
-    s.restart()
-        .await
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    h.command("connected").await?;
-    h.command("shot reattached").await?;
-    h.finish().await?;
-    verify_outcome(s, dir, decision).await
+    .await;
+    let cleanup = h.finish().await;
+    result?;
+    cleanup
 }
 
 /// Independent gateway evidence after restart, alongside the rendered UI evidence.
@@ -261,5 +258,59 @@ async fn verify_outcome(
         serde_json::to_vec_pretty(&evidence)?,
     )
     .await?;
+    Ok(())
+}
+
+async fn diagnostics(s: &butler_e2e::e2e::scenario::Scenario, out: &Path) -> anyhow::Result<()> {
+    let feedback: Vec<_> = s
+        .provider
+        .as_ref()
+        .into_iter()
+        .flat_map(butler_e2e::e2e::provider::Provider::requests)
+        .flat_map(|request| request["input"].as_array().cloned().unwrap_or_default())
+        .filter(|item| item["type"] == "function_call_output")
+        .map(|item| item["output"].clone())
+        .collect();
+    tokio::fs::write(
+        out.join("feedback.json"),
+        serde_json::to_vec_pretty(&feedback)?,
+    )
+    .await?;
+    let sessions =
+        s.gw.get("/sessions?limit=20")
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut views = Vec::new();
+    for row in sessions.data()["items"].as_array().into_iter().flatten() {
+        if let Some(id) = row["id"].as_str() {
+            let view =
+                s.gw.get(&format!("/session-view?session_id={id}"))
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let data = view.data();
+            views.push(serde_json::json!({"session":id,"messages":data["messages"],"latest_turn":data["latest_turn"],"authority_requests":data["authority_requests"]}));
+        }
+    }
+    tokio::fs::write(out.join("failure.json"), serde_json::to_vec_pretty(&views)?).await?;
+    Ok(())
+}
+
+async fn seed_roles(s: &mut butler_e2e::e2e::scenario::Scenario) -> anyhow::Result<()> {
+    s.agent
+        .terminate()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let path = s.sandbox.data.join(butler_platform::data_paths::APP_DB);
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let db = butler_platform::sqlite::open(path)?;
+        for role in ["automation", "system"] {
+            db.execute("INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at) VALUES(?1,'general',?1,?2,'delivered','2026-10-29T00:00:00Z','2026-10-29T00:00:00Z')",
+                [role, &format!("{role}: Scheduled result")])?;
+        }
+        Ok(())
+    }).await??;
+    s.restart()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     Ok(())
 }

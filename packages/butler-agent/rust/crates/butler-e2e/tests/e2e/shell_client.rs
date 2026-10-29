@@ -285,7 +285,7 @@ async fn cancel_waiting_turn_through_shell() -> Result<(), TestError> {
 }
 
 #[tokio::test]
-async fn transport_outage_resumes_the_same_stream_without_gaps() -> Result<(), TestError> {
+async fn stopped_agent_reattaches_and_resumes_without_gaps() -> Result<(), TestError> {
     butler_e2e::gate!();
     let mut s = start("SHELL-RECONNECT", 0, Access::FullAccess).await?;
     let client = attach(&s).await?;
@@ -307,17 +307,29 @@ async fn transport_outage_resumes_the_same_stream_without_gaps() -> Result<(), T
     })
     .await?;
     s.agent.terminate().await?;
-    let resume = async {
-        // Force at least one refused reconnect before the service returns.
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        s.restart().await?;
-        s.turn("general", "Second answer").await?;
-        Ok::<_, TestError>(())
-    };
-    let receive = async {
-        let mut ids = Vec::new();
+    let mut ids = Vec::new();
+    let failure = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            let event = stream.next().await.unwrap()?;
+            match stream.next().await.unwrap() {
+                Ok(event) => {
+                    if let Some(id) = event.cursor {
+                        ids.push(id);
+                    }
+                }
+                Err(error) => break error,
+            }
+        }
+    })
+    .await?;
+    assert!(matches!(failure, butler_shell_client::Error::Connection));
+    assert!(stream.next().await.is_none());
+    s.restart().await?;
+    let client = attach(&s).await?;
+    let mut stream = client.live_events(ids.last().copied().unwrap_or(before));
+    s.turn("general", "Second answer").await?;
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let event = stream.next().await.unwrap().unwrap();
             if let Some(id) = event.cursor {
                 ids.push(id);
             }
@@ -327,16 +339,11 @@ async fn transport_outage_resumes_the_same_stream_without_gaps() -> Result<(), T
                 && message["turn_id"] != first_turn
             {
                 assert_eq!(message["text"], "shell answer");
-                return Ok::<_, TestError>(ids);
+                break;
             }
         }
-    };
-    let (resumed, received) = tokio::time::timeout(Duration::from_secs(60), async {
-        tokio::join!(resume, receive)
     })
     .await?;
-    resumed?;
-    let ids = received?;
     let replay = client.replay_events(before, 200).await?;
     let expected: Vec<_> = replay
         .events
@@ -346,6 +353,37 @@ async fn transport_outage_resumes_the_same_stream_without_gaps() -> Result<(), T
         .collect();
     assert_eq!(ids, expected);
     drop(stream);
+    s.finish().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn crashed_instance_ends_the_stream_without_a_record_rewrite() -> Result<(), TestError> {
+    butler_e2e::gate!();
+    let mut s = start("SHELL-CRASH", 0, Access::FullAccess).await?;
+    let client = attach(&s).await?;
+    let record = s
+        .sandbox
+        .data
+        .join("state/butler-agent-native-service.json");
+    let before = std::fs::read(&record)?;
+    let mut events = client.live_events(0);
+    s.agent.kill9()?;
+    let error = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(Err(error)) = events.next().await {
+                break error;
+            }
+        }
+    })
+    .await?;
+    assert!(matches!(error, butler_shell_client::Error::Connection));
+    assert!(events.next().await.is_none());
+    assert_eq!(std::fs::read(record)?, before);
+    s.restart().await?;
+    let reattached = attach(&s).await?;
+    assert_ne!(client.instance_identity(), reattached.instance_identity());
+    s.agent.terminate().await?;
     s.finish().await?;
     Ok(())
 }

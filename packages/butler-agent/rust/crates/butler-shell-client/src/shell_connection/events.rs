@@ -69,6 +69,10 @@ impl State {
             if self.response.is_none()
                 && let Err(error) = self.connect().await
             {
+                if matches!(error, Error::Connection) && !self.client.instance_alive().await {
+                    self.stopped = true;
+                    return Err(Error::Connection);
+                }
                 if retryable(&error) {
                     continue;
                 }
@@ -151,6 +155,10 @@ impl State {
         let page = match self.client.replay_events(self.cursor, 200).await {
             Ok(page) => page,
             Err(error) => {
+                if matches!(error, Error::Connection) && !self.client.instance_alive().await {
+                    self.stopped = true;
+                    return Err(Error::LocalMetadata);
+                }
                 tokio::time::sleep(self.backoff).await;
                 self.backoff =
                     (self.backoff * 2).clamp(Duration::from_millis(100), Duration::from_secs(5));

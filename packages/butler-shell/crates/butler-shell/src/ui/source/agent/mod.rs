@@ -40,12 +40,14 @@ pub(crate) struct Agent {
 pub(crate) struct Attachment {
     worker: Arc<Worker>,
     changes: mpsc::UnboundedReceiver<Option<ShellClient>>,
+    pub(crate) retry: tokio::sync::mpsc::UnboundedSender<()>,
 }
 impl Attachment {
     pub(crate) fn start(data: Option<PathBuf>) -> Self {
         let (jobs, mut incoming) = tokio::sync::mpsc::unbounded_channel::<Job>();
         let (stop, stopped) = tokio::sync::oneshot::channel();
         let (changes, events) = mpsc::unbounded();
+        let (retry, retries) = tokio::sync::mpsc::unbounded_channel();
         std::thread::spawn(move || {
             let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -54,7 +56,7 @@ impl Attachment {
                 return;
             };
             runtime.block_on(async move {
-                tokio::spawn(watch::monitor(data, changes));
+                tokio::spawn(watch::monitor(data, changes, retries));
                 tokio::pin!(stopped);
                 loop {
                     tokio::select! {
@@ -74,6 +76,7 @@ impl Attachment {
                 stop: Some(stop),
             }),
             changes: events,
+            retry,
         }
     }
     pub(crate) async fn next(&mut self) -> Option<Option<Rc<dyn Source>>> {
@@ -110,18 +113,18 @@ impl Agent {
 impl Source for Agent {
     fn chats(&self, cursor: Option<PageCursor>) -> Fetch<ChatPage> {
         let client = self.client.clone();
+        let fallback = self.presentation.get();
+        let first = cursor.is_none();
         self.presentation.initial(self.fetch(async move {
             let page = client
                 .list_sessions(PageRequest::new(100, cursor.map(|c| c.0))?)
                 .await?;
-            let context = if let Some(row) = page.items.first() {
-                presentation::read(&client, convert::string(row, "id")?).await?
+            let context = if first && let Some(row) = page.items.first() {
+                presentation::read(&client, convert::string(row, "id")?)
+                    .await
+                    .unwrap_or(fallback)
             } else {
-                ComposerContext {
-                    permission: "".into(),
-                    model: "".into(),
-                    effort: "".into(),
-                }
+                fallback
             };
             Ok((
                 ChatPage {
@@ -139,12 +142,13 @@ impl Source for Agent {
     }
     fn messages(&self, session: &SessionId, before: Option<MessageCursor>) -> Fetch<MessagePage> {
         let (client, session) = (self.client.clone(), session.0.to_string());
+        let fallback = self.presentation.get();
         self.presentation.remember(self.fetch(async move {
-            let (raw, context) = tokio::try_join!(
+            let (raw, context) = tokio::join!(
                 client.message_window(&session, before.as_ref().map(|c| c.0.as_str()), 200),
                 presentation::read(&client, &session)
-            )?;
-            Ok((convert::window(&raw)?, context))
+            );
+            Ok((convert::window(&raw?)?, context.unwrap_or(fallback)))
         }))
     }
 

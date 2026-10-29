@@ -69,12 +69,7 @@ pub(super) fn migrate(
     super::super::image_usage::create(connection)?;
     documents::create(connection)?;
     connection.execute_batch(
-        "DROP TRIGGER IF EXISTS list_order_insert;
-         DROP TRIGGER IF EXISTS list_order_update;
-         DROP TRIGGER IF EXISTS list_order_delete;
-         DROP TABLE IF EXISTS app_list_order;
-         DROP TABLE IF EXISTS app_list_revision;
-         CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
+        "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
          CREATE INDEX IF NOT EXISTS chats_order_idx ON chats(archived,updated_at DESC,created_at DESC,id DESC);
          CREATE INDEX IF NOT EXISTS sessions_order_idx ON chats(archived,pinned DESC,updated_at DESC,created_at DESC,id DESC);
          CREATE INDEX IF NOT EXISTS projects_canon_name ON projects(display_name,id) WHERE archived=0;

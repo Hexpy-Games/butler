@@ -6,7 +6,8 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 pub(super) const STREAM_CHUNK_DELAY: u64 = 1500;
 pub(super) const PROMPT: &str = "Review the command";
-pub(super) const ACTION: &str = "printf '%s\\n' --message-format";
+pub(super) const ACTION: &str =
+    "printf '%s\\n' --message-format-with-a-long-hyphenated-option-to-review-exactly";
 pub(super) fn cassette() -> Result<Cassette, HarnessError> {
     let mut cassette = Cassette::load("TOOL-01")?;
     let template = cassette.exchanges[0].clone();

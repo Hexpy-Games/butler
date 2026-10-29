@@ -13,6 +13,7 @@ pub struct ShellClient {
 pub(crate) struct Inner {
     pub(crate) data: PathBuf,
     pub(crate) endpoint: Url,
+    pub(crate) identity: (u32, String, String),
     pub(crate) http: butler_log::http::Client,
     token: Mutex<String>,
 }
@@ -24,7 +25,12 @@ impl fmt::Debug for ShellClient {
     }
 }
 impl ShellClient {
-    pub(crate) fn new(data: PathBuf, endpoint: Url, token: String) -> Result<Self, Error> {
+    pub(crate) fn new(
+        data: PathBuf,
+        endpoint: Url,
+        token: String,
+        identity: (u32, String, String),
+    ) -> Result<Self, Error> {
         let http = butler_log::http::loopback()
             .no_proxy()
             .redirect(butler_log::http::RedirectPolicy::none())
@@ -36,6 +42,7 @@ impl ShellClient {
             inner: Arc::new(Inner {
                 data,
                 endpoint,
+                identity,
                 http,
                 token: Mutex::new(token),
             }),

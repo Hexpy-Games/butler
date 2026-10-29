@@ -23,6 +23,8 @@ fn chat(n: u32) -> ChatSummary {
         title: SharedString::from(format!("chat {n}")),
         space: None,
         pinned: false,
+        archived: false,
+        created_at: Timestamp(0),
         running: false,
         updated_at: Timestamp(0),
     }
@@ -128,7 +130,7 @@ fn titles(store: &Store) -> Vec<String> {
 
 // test-category: pure-logic
 #[test]
-fn paging_appends_pages_until_the_end() {
+fn paging_and_live_chat_updates_preserve_visible_order() {
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
     assert!(
@@ -143,6 +145,29 @@ fn paging_appends_pages_until_the_end() {
         store.begin_more().is_none(),
         "the last page has no next cursor"
     );
+    let mut store = Store::default();
+    let mut pinned = chat(1);
+    pinned.pinned = true;
+    store.chats = vec![pinned, chat(2)];
+    let mut updated = chat(3);
+    updated.updated_at = Timestamp(10);
+    let apply = |store: &mut Store, row| {
+        store.apply(
+            store.epoch(),
+            LiveEvent {
+                cursor: None,
+                update: LiveUpdate::Chat(row),
+            },
+        );
+    };
+    apply(&mut store, updated.clone());
+    assert_eq!(titles(&store), ["chat 1", "chat 3", "chat 2"]);
+    updated.pinned = true;
+    apply(&mut store, updated.clone());
+    assert_eq!(titles(&store), ["chat 3", "chat 1", "chat 2"]);
+    updated.archived = true;
+    apply(&mut store, updated);
+    assert_eq!(titles(&store), ["chat 1", "chat 2"]);
 }
 
 // test-category: pure-logic
@@ -240,7 +265,7 @@ fn live_resumes_after_the_snapshot_cursor() {
 
 // test-category: pure-logic
 #[test]
-fn a_message_window_brings_its_running_turn() {
+fn message_windows_and_live_rows_keep_roles_deletions_and_running_turns() {
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
     store.chats_loaded(&first, block_on(fake.chats(None)).unwrap());
@@ -250,4 +275,47 @@ fn a_message_window_brings_its_running_turn() {
     assert!(store.messages_loaded(&chat, &page));
     assert_eq!(store.running(), Some(&TurnId("t1".into())));
     assert!(store.chats.iter().any(|c| c.chat == chat && c.running));
+    use crate::ui::source::{Message, Role};
+    let mut store = Store::default();
+    let message = Message {
+        id: "future".into(),
+        role: Role::Other("automation".into()),
+        text: "Scheduled result".into(),
+        activity: Vec::new(),
+        streaming: false,
+    };
+    let applied = store.apply(
+        store.epoch(),
+        LiveEvent {
+            cursor: Some(EventCursor(1)),
+            update: LiveUpdate::Message {
+                session: chat.session.clone(),
+                message,
+            },
+        },
+    );
+    let Applied::Message(_, message) = applied else {
+        panic!("message discarded")
+    };
+    assert_eq!(message.role, Role::Other("automation".into()));
+    assert_eq!(message.text, "Scheduled result");
+    assert_eq!(store.cursor, Some(EventCursor(1)));
+    let mut store = Store::default();
+    let event = || LiveEvent {
+        cursor: Some(EventCursor(1)),
+        update: LiveUpdate::MessageDeleted {
+            session: chat.session.clone(),
+            id: "gone".into(),
+        },
+    };
+    assert!(matches!(
+        store.apply(store.epoch() + 1, event()),
+        Applied::Store
+    ));
+    assert!(matches!(store.apply(store.epoch(), event()),
+        Applied::MessageDeleted(_, id) if id.as_ref() == "gone"));
+    assert!(matches!(
+        store.apply(store.epoch(), event()),
+        Applied::Store
+    ));
 }

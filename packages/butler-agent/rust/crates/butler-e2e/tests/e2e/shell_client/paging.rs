@@ -131,3 +131,43 @@ async fn check_pages(
     assert_eq!(actual, unmoved, "all unmoved rows appear once in order");
     Ok(())
 }
+
+#[tokio::test]
+async fn unpaged_ties_keep_main_order_and_bytes() -> Result<(), TestError> {
+    butler_e2e::gate!();
+    let mut s = start("SHELL-TIES", 0, Access::FullAccess).await?;
+    for title in ["one", "two", "three"] {
+        s.gw.post("/sessions", json!({"kind":"chat","title":title}))
+            .await?;
+    }
+    s.agent.terminate().await?;
+    let db =
+        butler_platform::sqlite::open(s.sandbox.data.join(butler_platform::data_paths::APP_DB))?;
+    db.execute(
+        "UPDATE chats SET created_at='2026-10-29T00:00:00Z',updated_at='2026-10-29T00:00:00Z'",
+        [],
+    )?;
+    // Main's archived index yields rowid order for equal timestamp keys.
+    let expected = db.prepare("SELECT id FROM chats INDEXED BY chats_archived_idx WHERE archived=0 ORDER BY pinned DESC,updated_at DESC,created_at DESC")?
+        .query_map([], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>()?;
+    drop(db);
+    s.restart().await?;
+    let client = attach(&s).await?;
+    for (sessions, route) in [(false, "/chats"), (true, "/sessions")] {
+        let baseline = s.gw.get(route).await?;
+        let data = baseline.data();
+        let rows = if sessions { &data["sessions"] } else { data };
+        let ids: Vec<_> = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, expected);
+        let _ = page(&client, sessions, None).await?;
+        assert_eq!(s.gw.get(route).await?.text, baseline.text);
+    }
+    s.agent.terminate().await?;
+    s.finish().await?;
+    Ok(())
+}

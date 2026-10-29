@@ -10,9 +10,10 @@ use serde_json::Value;
 
 pub(super) fn error(error: Error) -> SourceError {
     match error {
-        Error::Connection | Error::LocalMetadata | Error::Authentication => {
-            SourceError::Disconnected
-        }
+        Error::Connection
+        | Error::LocalMetadata
+        | Error::Authentication
+        | Error::Http(404 | 408 | 429 | 500..=599) => SourceError::Disconnected,
         other => SourceError::Refused(other.to_string()),
     }
 }
@@ -51,6 +52,12 @@ pub(super) fn chat(raw: &Value) -> Result<ChatSummary, Error> {
             project: true,
         }),
         pinned: raw["pinned"].as_bool().unwrap_or(false),
+        archived: raw["archived"].as_bool().unwrap_or(false),
+        created_at: Timestamp(
+            chrono::DateTime::parse_from_rfc3339(string(raw, "created_at")?)
+                .map_err(|_| Error::Protocol)?
+                .timestamp_millis(),
+        ),
         running: raw["active_turn_state"].as_str().is_some_and(active),
         updated_at: Timestamp(updated.timestamp_millis()),
     })
@@ -65,7 +72,7 @@ pub(super) fn message(raw: &Value) -> Result<Message, Error> {
     let role = match string(raw, "role")? {
         "user" => Role::User,
         "assistant" => Role::Assistant,
-        _ => return Err(Error::Protocol),
+        other => Role::Other(other.to_owned()),
     };
     Ok(Message {
         id: string(raw, "id")?.to_owned().into(),
