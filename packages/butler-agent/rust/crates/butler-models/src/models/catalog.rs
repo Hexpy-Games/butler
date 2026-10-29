@@ -139,7 +139,7 @@ pub struct ModelProviderMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_reasoning_budget_ratio: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub response_timeout_ms: Option<f64>,
+    pub response_timeout_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registered: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]

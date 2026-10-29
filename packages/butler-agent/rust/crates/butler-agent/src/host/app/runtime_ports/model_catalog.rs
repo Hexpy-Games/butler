@@ -363,7 +363,7 @@ struct LocalInput {
     #[serde(default, deserialize_with = "declaration")]
     image_input: Option<Option<bool>>,
     #[serde(default, deserialize_with = "declaration")]
-    response_timeout_ms: Option<Option<f64>>,
+    response_timeout_ms: Option<Option<u64>>,
     source: Option<butler_models::models::LocalModelSource>,
 }
 

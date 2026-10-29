@@ -27,7 +27,7 @@ pub struct LocalModelMutation {
     /// Outer None preserves the declaration; Some(None) clears it.
     pub image_input: Option<Option<bool>>,
     /// Outer None keeps the saved limit; Some(None) clears it.
-    pub response_timeout_ms: Option<Option<f64>>,
+    pub response_timeout_ms: Option<Option<u64>>,
     pub source: LocalModelSource,
 }
 

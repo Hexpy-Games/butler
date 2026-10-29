@@ -188,7 +188,7 @@ impl ModelConfiguration {
             .iter()
             .find(|model| model.model_ref == metadata.model_ref)
             .and_then(|model| model.response_timeout_ms)
-            .map(|ms| std::time::Duration::from_millis(butler_core::json::saturating_u64(ms)))
+            .map(std::time::Duration::from_millis)
             .unwrap_or_else(|| {
                 policy::total(self.environment.provider_round_timeout_ms.as_deref())
             });

@@ -7,14 +7,14 @@ use super::{ModelProviderMetadata, ReasoningEffort, TokenEstimatorKind};
 const LOCAL_SOURCE: &str =
     "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md";
 /// Longest response time limit a Custom model may set: one day.
-pub const LOCAL_RESPONSE_TIMEOUT_MAX_MS: f64 = 86_400_000.0;
+pub const LOCAL_RESPONSE_TIMEOUT_MAX_MS: u64 = 86_400_000;
 
 /// A Custom model's response time limit when `value` is a whole number of
 /// milliseconds from one second to [`LOCAL_RESPONSE_TIMEOUT_MAX_MS`].
-pub fn local_response_timeout_ms(value: &Value) -> Option<f64> {
+pub fn local_response_timeout_ms(value: &Value) -> Option<u64> {
     value
-        .as_f64()
-        .filter(|ms| ms.fract() == 0.0 && (1_000.0..=LOCAL_RESPONSE_TIMEOUT_MAX_MS).contains(ms))
+        .as_u64()
+        .filter(|ms| (1_000..=LOCAL_RESPONSE_TIMEOUT_MAX_MS).contains(ms))
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -55,7 +55,7 @@ pub struct LocalModelConfig {
     pub image_discovery: Option<LocalImageDiscovery>,
     /// Replaces the global round time limit for this model's rounds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub response_timeout_ms: Option<f64>,
+    pub response_timeout_ms: Option<u64>,
     pub token_estimator: TokenEstimatorKind,
     pub source: LocalModelSource,
     pub source_url: String,
