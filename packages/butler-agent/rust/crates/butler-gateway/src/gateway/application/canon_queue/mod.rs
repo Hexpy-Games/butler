@@ -16,6 +16,7 @@ pub(super) async fn execute(
     action: &str,
     input: Value,
 ) -> Result<Value, GatewayApplicationError> {
+    delete::replay_deletes(app).await?;
     let chat = field(&input, "session_id")?;
     let session = app.runtime_hint(&chat).await?;
     let action = match action {

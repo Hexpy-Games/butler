@@ -218,6 +218,111 @@ async fn take_deleted_source_resolves_and_runs_target_once() -> Result<(), Harne
     Ok(())
 }
 
+#[tokio::test]
+async fn take_deleted_source_crash_recovers_and_runs_target_once() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (mut s, script, server, epic, source) =
+        crate::canon_link::setup("CB-TAKE-DELETED", false, false).await?;
+    let app = Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    let canon = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    // Keep the source before admission, then refuse its terminal canon receipt.
+    app.execute_batch("CREATE TRIGGER hold_step AFTER INSERT ON app_initiated_messages WHEN NEW.kind='canon_step' BEGIN UPDATE app_initiated_messages SET posting=1 WHERE id=NEW.id; END;")?;
+    canon.execute_batch("CREATE TRIGGER refuse_receipt BEFORE DELETE ON canon_step_cancellations BEGIN SELECT RAISE(ABORT,'receipt unavailable'); END;")?;
+    data(
+        s.gw.post(
+            &format!("/sessions/{source}/canon/queue"),
+            json!({"op":"start_now","epic_id":epic}),
+        )
+        .await?,
+        200,
+    );
+    let target = data(
+        s.gw.post("/sessions", json!({"title":"Target","kind":"chat"}))
+            .await?,
+        201,
+    );
+    let target = target["session"]["id"].as_str().unwrap();
+    data(
+        s.gw.post(
+            &format!("/sessions/{target}/canon/queue"),
+            json!({"op":"start_now","epic_id":epic}),
+        )
+        .await?,
+        200,
+    );
+    data(
+        s.gw.post(
+            &format!("/sessions/{target}/canon/queue/take/{epic}"),
+            json!({}),
+        )
+        .await?,
+        200,
+    );
+    assert_eq!(s.gw.turns(&source).await?.len(), 0);
+    assert_eq!(s.gw.turns(target).await?.len(), 0);
+    data(
+        s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+            .await?,
+        200,
+    );
+    s.agent.kill9()?;
+    assert_eq!(
+        canon.query_row::<i64, _, _>("SELECT count(*) FROM canon_step_cancellations", [], |r| r
+            .get(0))?,
+        1
+    );
+    // Crash snapshot: move committed, Stop receipt/projection not committed,
+    // and D5's App delete committed before its canon notification.
+    canon.execute_batch("DROP TRIGGER refuse_receipt; UPDATE canon_intents SET state='pending' WHERE kind='canon_take_here';")?;
+    app.execute_batch("DROP TRIGGER hold_step; PRAGMA foreign_keys=ON;")?;
+    app.execute("DELETE FROM chats WHERE id=?1", [&source])?;
+    script.release();
+    s.gw = s.agent.start_again().await?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let pending: i64 = canon.query_row(
+            "SELECT count(*) FROM canon_intents WHERE kind='canon_take_here' AND state='pending'",
+            [],
+            |r| r.get(0),
+        )?;
+        if pending == 0 {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "deleted-source intents remain pending"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    wait_done(&s, target, 1).await?;
+    let turn = first_turn(&s, target).await?;
+    s.gw.wait_terminal(target, &turn, Duration::from_secs(30))
+        .await?;
+    assert_eq!(failures(&s).await?, 0);
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    let before = (version(&canon)?, version(&app)?);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!((version(&canon)?, version(&app)?), before);
+    assert_eq!(failures(&s).await?, 0);
+    assert_eq!(s.gw.turns(target).await?.len(), 1);
+    assert_eq!(
+        s.gw.messages(target)
+            .await?
+            .iter()
+            .filter(|m| m["initiated"]["kind"] == "canon_step")
+            .count(),
+        1
+    );
+    assert_eq!(
+        canon.query_row::<i64, _, _>("SELECT count(*) FROM canon_step_cancellations", [], |r| r
+            .get(0))?,
+        0
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 async fn failures(s: &Scenario) -> Result<usize, HarnessError> {
     Ok(
         log_count(s, "Canon%20conversation%20replay%20failed").await?
