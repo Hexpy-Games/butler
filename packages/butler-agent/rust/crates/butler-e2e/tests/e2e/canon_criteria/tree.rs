@@ -34,7 +34,7 @@ async fn child_criteria_count_and_same_ids_are_scoped_to_their_node() -> Result<
             &ctx,
             node,
             1,
-            &[("VB-03", "변경 내용을 확인할 수 있다")],
+            &[("VB-03", "표시", "변경 내용을 확인할 수 있다")],
         )?;
     }
     tx.commit()?;

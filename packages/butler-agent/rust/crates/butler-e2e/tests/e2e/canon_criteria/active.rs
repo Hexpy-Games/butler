@@ -49,6 +49,18 @@ async fn tree_toggle_count_and_mcp_follow_active_revision_until_activation()
     let spec =
         super::super::canon_mcp::call(&s, "canon_get_spec", json!({"spec_id":"criteria-spec"}))
             .await?;
+    let criterion_ids = |criteria: &Value| {
+        criteria
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|criterion| criterion["criterion_id"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let epic_ids = criterion_ids(&external["specs"][0]["criteria"]);
+    let spec_ids = criterion_ids(&spec["criteria"]);
+    assert_eq!(epic_ids, spec_ids);
+    assert_eq!(epic_ids, ["VB-03", "VB-04"]);
     assert_eq!(spec["criteria"], external["specs"][0]["criteria"]);
     let reply =
         s.gw.post(

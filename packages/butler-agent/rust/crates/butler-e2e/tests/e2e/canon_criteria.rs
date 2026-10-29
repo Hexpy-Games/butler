@@ -64,14 +64,18 @@ async fn fixture(label: &str) -> Result<(Scenario, String, String), HarnessError
         &s,
         1,
         &[
-            ("VB-03", "변경 내용을 확인할 수 있다"),
-            ("VB-04", "확인한 사람을 기록한다"),
+            ("VB-03", "표시", "변경 내용을 확인할 수 있다"),
+            ("VB-04", "기록", "확인한 사람을 기록한다"),
         ],
     )?;
     s.restart().await?;
     Ok((s, project, epic))
 }
-fn publish(s: &Scenario, revision: i64, criteria: &[(&str, &str)]) -> Result<(), HarnessError> {
+fn publish(
+    s: &Scenario,
+    revision: i64,
+    criteria: &[(&str, &str, &str)],
+) -> Result<(), HarnessError> {
     let mut db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let tx = store::Transaction::new(db.transaction()?).map_err(|e| err(&e))?;
     let ctx = store::Context {
@@ -87,7 +91,7 @@ fn publish_node(
     ctx: &store::Context,
     node: &str,
     revision: i64,
-    criteria: &[(&str, &str)],
+    criteria: &[(&str, &str, &str)],
 ) -> Result<(), HarnessError> {
     let expected: i64 = tx.query_row(
         "SELECT revision FROM canon_spec_nodes WHERE node_id=?1",
@@ -101,7 +105,7 @@ fn publish_node(
     )?;
     let body = criteria
         .iter()
-        .map(|(id, text)| format!("- {id} {text}"))
+        .map(|(id, _, text)| format!("- {id} {text}"))
         .collect::<Vec<_>>()
         .join("\n");
     let hash = store::put_body(tx, &body).map_err(|e| err(&e))?;
@@ -116,9 +120,9 @@ fn publish_node(
             parser_version: "markdown".into(),
             criteria: criteria
                 .iter()
-                .map(|(id, text)| store::Criterion {
+                .map(|(id, part, text)| store::Criterion {
                     id: (*id).into(),
-                    part_id: "표시".into(),
+                    part_id: (*part).into(),
                     text: (*text).into(),
                 })
                 .collect(),

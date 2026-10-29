@@ -60,7 +60,7 @@ pub fn for_revision(db: &Connection, node: &str, revision: Option<i64>) -> Resul
         "SELECT c.*,ch.node_id IS NOT NULL AS confirmed
         FROM canon_spec_criteria c LEFT JOIN canon_criterion_checks ch
         ON ch.node_id=c.node_id AND ch.criterion_id=c.criterion_id AND ch.text=c.text
-        WHERE c.node_id=?1 AND c.revision=?2 ORDER BY c.part_id,c.criterion_id",
+        WHERE c.node_id=?1 AND c.revision=?2 ORDER BY c.criterion_id",
         params![node, revision],
     )?;
     for criterion in &mut criteria {

@@ -10,8 +10,8 @@ async fn decisions_carry_only_while_id_and_text_survive_every_revision() -> Resu
         &s,
         2,
         &[
-            ("VB-04", "확인한 사람을 기록한다"),
-            ("VB-03", "변경 내용을 확인할 수 있다"),
+            ("VB-04", "표시", "확인한 사람을 기록한다"),
+            ("VB-03", "표시", "변경 내용을 확인할 수 있다"),
         ],
     )?;
     s.restart().await?;
@@ -22,8 +22,8 @@ async fn decisions_carry_only_while_id_and_text_survive_every_revision() -> Resu
         &s,
         3,
         &[
-            ("VB-03", "기준마다 변경 내용을 확인할 수 있다"),
-            ("VB-04", "확인한 사람을 기록한다"),
+            ("VB-03", "표시", "기준마다 변경 내용을 확인할 수 있다"),
+            ("VB-04", "표시", "확인한 사람을 기록한다"),
         ],
     )?;
     s.restart().await?;
@@ -36,15 +36,15 @@ async fn decisions_carry_only_while_id_and_text_survive_every_revision() -> Resu
         &s,
         4,
         &[
-            ("VB-03", "변경 내용을 확인할 수 있다"),
-            ("VB-04", "확인한 사람을 기록한다"),
+            ("VB-03", "표시", "변경 내용을 확인할 수 있다"),
+            ("VB-04", "표시", "확인한 사람을 기록한다"),
         ],
     )?;
     s.restart().await?;
     count(&s, &epic, 0, 2).await?; // Restoring old text does not restore the decision.
     toggle(&s, true, 4).await?;
     s.agent.terminate().await?;
-    publish(&s, 5, &[("VB-04", "확인한 사람을 기록한다")])?;
+    publish(&s, 5, &[("VB-04", "표시", "확인한 사람을 기록한다")])?;
     s.restart().await?;
     count(&s, &epic, 0, 1).await?;
     s.agent.terminate().await?;
