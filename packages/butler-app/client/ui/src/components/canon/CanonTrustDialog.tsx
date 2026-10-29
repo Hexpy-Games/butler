@@ -28,6 +28,7 @@ export function CanonTrustDialog() {
         description={<Stack as="span" gap="none" cross="start"><Typo.Body as="span" tone="primary">{grant.client_title}</Typo.Body></Stack>} />
       <KeyValueRow label={copy.person} value={null} detailLayout="stack" detailAlign="start"
         description={<Stack as="span" gap="none" cross="start"><Typo.Body as="span" tone="primary">{person}</Typo.Body></Stack>} />
+      <KeyValueRow label={copy.requestedPermissions} value={null} detailLayout="stack" detailAlign="start" />
       {grant.requested.map(capability => <Typo.Body key={capability}>{copy.capabilities[capability] ?? capability}</Typo.Body>)}
       <Notice tone="info" message={copy.trustNotice(person)} />
     </Stack></ScrollArea>

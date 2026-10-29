@@ -89,7 +89,7 @@ try {
       await dialog.waitFor();
       await dialog.getByText("하늘", { exact: true }).waitFor();
       for (const label of Object.values(c.canon.mcp.capabilities)) await dialog.getByText(label, { exact: true }).waitFor();
-      await assertTrustLayout(dialog, Object.values(c.canon.mcp.capabilities));
+      await assertTrustLayout(dialog, Object.values(c.canon.mcp.capabilities), c.canon.mcp.requestedPermissions);
       await focus.audit(dialog);
     }
     if (!before) {
@@ -240,7 +240,7 @@ try {
       assert.equal(request.status, 403);
       const englishDialog = page.getByRole("dialog", { name: en.canon.mcp.trustTitle("Claude Code"), exact: true });
       await englishDialog.waitFor();
-      await assertTrustLayout(englishDialog, Object.values(en.canon.mcp.capabilities));
+      await assertTrustLayout(englishDialog, Object.values(en.canon.mcp.capabilities), en.canon.mcp.requestedPermissions);
       await focus.audit(englishDialog);
       await capture("trust-en", [englishDialog]);
       await englishDialog.getByRole("button", { name: en.canon.mcp.allow, exact: true }).click();
