@@ -64,23 +64,15 @@ WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions
 # Lint-only inputs have no product consumer. Matching consumer rules below also
 # apply: integration reuse hashes must observe release-only workflow changes.
 CI_LINT_ONLY = (
-    '.github/workflows/ci-windows-main-failure.yml',
-    '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
+    '.github/workflows/ci-windows-main-failure.yml', '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
     '.github/workflows/post-release-verify.yml', '.github/workflows/macos-release-recovery.yml',
-    '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml',
-    '.github/workflows/ds-approval.yml', '.github/workflows/ci-store-maintenance.yml',
-    '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
-    '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
-    '.github/scripts/ci-changes.py', '.github/scripts/ci_parts.py',
-    '.github/scripts/ci_consumer_test_support.py',
-    '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
-    '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
-    '.github/scripts/ci_runtime_crates.py', '.github/scripts/runtime-crates.json',
-    '.github/scripts/ci_runtime_tests.py',
-    '.github/scripts/ci_ds_approval_tests.py',
-    '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
-    '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py',
-    '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
+    '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml', '.github/workflows/ds-approval.yml', '.github/workflows/ci-store-maintenance.yml',
+    '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py', '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
+    '.github/scripts/ci-changes.py', '.github/scripts/ci_parts.py', '.github/scripts/ci_consumer_test_support.py',
+    '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
+    '.github/scripts/ci_runtime_crates.py', '.github/scripts/runtime-crates.json', '.github/scripts/ci_runtime_tests.py',
+    '.github/scripts/ci_ds_approval_tests.py', '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
+    '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py', '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
     '.github/workflows/issue-links.yml', '.github/scripts/issue_links.py',
 )
 # Integration packaging keys include Rust/UI and transitive producer inputs.
@@ -89,10 +81,8 @@ CI_CONSUMERS = (
     # Lint publishes both workflow and license receipts. Its tested scripts and
     # their transitive imports must invalidate the license receipt as well.
     (('licenses',), (
-        '.github/scripts/test-*.py', '.github/scripts/ds-approval.py',
-        '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
-        '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
-        '.github/scripts/check-gate.py', '.github/scripts/ci_tool_path.py',
+        '.github/scripts/test-*.py', '.github/scripts/ds-approval.py', '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
+        '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py', '.github/scripts/check-gate.py', '.github/scripts/ci_tool_path.py',
         '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
@@ -143,8 +133,10 @@ CI_CONSUMERS = (
 LICENSE_INPUTS = set(json.loads((Path(__file__).resolve().parents[2] /
                                 'deploy/licenses/catalog.json').read_text(encoding='utf-8'))['inputs'])
 
+
 def matches(path, patterns):
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
+
 
 def github_categories(path):
     if path == '.github/workflows/shell.yml':
@@ -159,6 +151,7 @@ def github_categories(path):
     if matches(path, CI_LINT_ONLY):
         groups.add('workflows')
     return groups or (set(GROUPS) - {'shell'})  # Unknown legacy CI inputs fail closed.
+
 
 def categories(path, event=None):
     if path.startswith('packages/butler-shell/'):
@@ -205,15 +198,19 @@ def categories(path, event=None):
         result.add('shell')
     return result
 
+
 def windows_native(path):
     return matches(path, WINDOWS)
+
 
 def windows_runtime(path, event=None):
     # Crates the Windows agent links, from the checked-in Cargo graph closure.
     return 'rust' in categories(path, event) and ci_runtime_crates.selects(path, ci_rust_inputs.consumes)
 
+
 def command(*args):
     return subprocess.check_output(args, text=True).strip()
+
 
 def changed(base, head='HEAD'):
     # Diff from the merge base so commits that reached the base branch after
@@ -226,6 +223,7 @@ def changed(base, head='HEAD'):
     raw = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', base, head])
     return raw.decode().split('\0')[:-1]
 
+
 def hashes(base):
     digests = {group: hashlib.sha256(b'ci-inputs-v1') for group in GROUPS}
     raw = subprocess.check_output(['git', 'ls-tree', '-rz', 'HEAD'])
@@ -237,7 +235,9 @@ def hashes(base):
             digests[group].update(entry + b'\0')
     return {group: digest.hexdigest() for group, digest in digests.items()}
 
+
 trusted_run = ci_receipts.trusted_run
+
 
 def api_items(path, key):
     pages = json.loads(command('gh', 'api', path, '--paginate', '--slurp'))

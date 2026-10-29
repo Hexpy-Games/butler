@@ -15,13 +15,14 @@ concurrency:
 
 jobs:
   changes:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     uses: ./.github/workflows/ci-changes.yml
     with:
       workflow: shell.yml
 
   shell:
     needs: changes
-    if: needs.changes.outputs.shell == 'true'
+    if: (github.event_name != 'push' || github.ref == 'refs/heads/main') && needs.changes.outputs.shell == 'true'
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -70,7 +71,7 @@ jobs:
           toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
           echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
         with:
           workspaces: |
             packages/butler-shell -> ../../target/shell
@@ -78,16 +79,19 @@ jobs:
           key: shell-${{ matrix.platform }}-${{ hashFiles('packages/butler-shell/Cargo.lock', 'packages/butler-shell/rust-toolchain.toml') }}
       - name: Formatting
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
+      - name: Check
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo check --locked --workspace --all-targets --profile test
       - name: Clippy
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --locked --workspace --all-targets -- -D warnings
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --locked --workspace --all-targets --profile test -- -D warnings
       - name: Workspace tests
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --workspace
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --workspace --profile test
       - name: Source rules
         working-directory: packages/butler-agent/rust
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target/source-check
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- ../../butler-shell
       - name: Release binary
+        if: env.PACKAGE_SHELL == 'true'
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --bin butler-shell
       - name: Package experimental binary and licenses
         id: package

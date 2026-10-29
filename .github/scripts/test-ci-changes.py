@@ -17,6 +17,7 @@ SPEC = importlib.util.spec_from_file_location('changes', ROOT / 'ci-changes.py')
 changes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(changes)
 
+
 class Paths(unittest.TestCase):
     # test-category: pure-logic
     def test_responsible_jobs_and_workflow_fail_closed(self):
@@ -64,16 +65,14 @@ class Paths(unittest.TestCase):
         from ci_consumer_test_support import consumer_groups
         for path, groups in consumer_groups(set(changes.GROUPS) - {'shell'}).items():
             with self.subTest(path=path):
-                # The experimental workspace has its own explicit input contract.
-                if path != '.github/workflows/shell.yml':
+                if path != '.github/workflows/shell.yml':  # Explicit shell inputs.
                     self.assertGreaterEqual(changes.categories(path), groups)
         for path in ['.github/workflows/new-check.yml',
                      '.github/actions/new-setup/action.yml',
                      '.github/scripts/new-helper.py', '.github/actionlint.yaml']:
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), set(changes.GROUPS) - {'shell'})
-        for path in ['.github/releases/v1.2.3.md',
-                     '.github/actions/windows-runner-setup/README.md']:
+        for path in ['.github/releases/v1.2.3.md', '.github/actions/windows-runner-setup/README.md']:
             self.assertEqual(changes.categories(path), set())
 
     # test-category: pure-logic
@@ -205,6 +204,7 @@ jobs:
                 self.assertNotEqual(updated['ui'], changes.hashes(base)['ui'])
             finally:
                 os.chdir(original)
+
 
     def test_changed_ignores_base_branch_commits_after_the_fork(self):
         original = Path.cwd()
