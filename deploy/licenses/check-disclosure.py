@@ -11,11 +11,13 @@ assert copyrights(["Copyright Holder may include your modifications in the Stand
 print("Dated, undated and wrapped attribution fixtures passed")
 
 # test-category: race
+import concurrent.futures
 import importlib.util
 import io
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -28,34 +30,109 @@ spec.loader.exec_module(notices)
 
 
 class LicensePackaging(unittest.TestCase):
-    def test_concurrent_canonical_license_cache_is_never_partial(self):
+    def setUp(self):
+        # Each fixture models a fresh collector process.
+        self.futures = patch.object(refresh, 'FETCHES', {})
+        self.futures.start()
+        self.addCleanup(self.futures.stop)
+
+    # test-category: race
+    def test_concurrent_fetch_shares_one_network_result(self):
+        for missing in (False, True):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
+                url = f'https://example.org/license/{missing}'
+                start = threading.Barrier(32)
+                entered = threading.Event()
+                release = threading.Event()
+
+                def network(*args, **kwargs):
+                    entered.set()
+                    if not release.wait(10):
+                        raise TimeoutError('network stub was not released')
+                    if missing:
+                        error = refresh.urllib.error.HTTPError(url, 404, 'missing', {}, io.BytesIO())
+                        self.addCleanup(error.close)
+                        raise error
+                    return io.BytesIO(b'Complete license\n')
+
+                def fetch():
+                    start.wait(timeout=10)
+                    return refresh.fetch(url)
+
+                with patch.object(refresh.tempfile, 'gettempdir', return_value=temporary), \
+                     patch.object(refresh.urllib.request, 'urlopen', side_effect=network) as request, \
+                     concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
+                    results = [pool.submit(fetch) for _ in range(32)]
+                    try:
+                        self.assertTrue(entered.wait(10))
+                    finally:
+                        release.set()
+                    expected = None if missing else 'Complete license\n'
+                    self.assertEqual([result.result(timeout=10) for result in results], [expected] * 32)
+                    self.assertEqual(refresh.fetch(url), expected)
+                    self.assertEqual(request.call_count, 1)
+
+    # test-category: race
+    def test_failed_fetch_is_shared_without_retry(self):
         with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            (directory / 'Cargo.toml').write_text('[package]\n', encoding='utf-8', newline='\n')
-            package = dict(name='example', version='1.0', license='Apache-2.0',
-                           manifest_path=str(directory / 'Cargo.toml'), evidence=[],
-                           source='registry+example')
-            original = Path.write_text
-            observed = []
-            writing = False
+            url = 'https://example.org/unavailable'
+            error = refresh.urllib.error.HTTPError(url, 503, 'unavailable', {}, io.BytesIO())
+            self.addCleanup(error.close)
+            with patch.object(refresh.tempfile, 'gettempdir', return_value=temporary), \
+                 patch.object(refresh.urllib.request, 'urlopen', side_effect=error) as request, \
+                 concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
+                results = [pool.submit(refresh.fetch, url) for _ in range(32)]
+                exceptions = [result.exception(timeout=10) for result in results]
+                self.assertIsInstance(exceptions[0], RuntimeError)
+                self.assertIn('HTTP 503', str(exceptions[0]))
+                self.assertTrue(all(error is exceptions[0] for error in exceptions))
+                self.assertEqual(request.call_count, 1)
+            self.assertEqual(list((Path(temporary) / 'butler-license-evidence').iterdir()), [])
+
+    # test-category: race
+    def test_atomic_cache_preserves_complete_entry_during_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / 'license'
+            destination.write_text('old complete license', encoding='utf-8')
 
             def overlapping_write(path, text, *args, **kwargs):
-                nonlocal writing
-                if writing:
-                    return original(path, text, *args, **kwargs)
-                writing = True
-                # Pause a writer after truncation, before its first byte. A
-                # second collector must see a complete entry or fetch its own.
-                with path.open('w', encoding='utf-8', newline='\n') as output:
-                    observed.append(notices.evidence(package, {})[3][-1][1])
+                with path.open('w', encoding='utf-8') as output:
+                    self.assertEqual(destination.read_text(encoding='utf-8'), 'old complete license')
                     return output.write(text)
 
-            with patch.object(refresh.tempfile, 'gettempdir', return_value=temporary), \
-                 patch.object(refresh.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(b'Apache License\n')), \
-                 patch.object(Path, 'write_text', overlapping_write):
-                result = notices.evidence(package, {})
-            self.assertEqual(observed, ['Apache License\n'])
-            self.assertEqual(result[3][-1][1], 'Apache License\n')
+            with patch.object(Path, 'write_text', overlapping_write):
+                refresh.cache_text(destination, 'new complete license')
+            self.assertEqual(destination.read_text(encoding='utf-8'), 'new complete license')
+            self.assertEqual(list(Path(temporary).iterdir()), [destination])
+
+    # test-category: race
+    def test_replace_denied_uses_other_process_entry(self):
+        for existing in ('other complete license\n', ''):
+            with self.subTest(existing=existing), tempfile.TemporaryDirectory() as temporary:
+                destination = Path(temporary) / 'license'
+
+                def replace(source, target):
+                    target.write_text(existing, encoding='utf-8')
+                    raise PermissionError('destination open for reading')
+
+                with patch.object(Path, 'replace', replace):
+                    self.assertEqual(refresh.cache_text(destination, 'downloaded'), existing)
+                self.assertEqual(destination.read_text(encoding='utf-8'), existing)
+                self.assertEqual(list(Path(temporary).iterdir()), [destination])
+
+    # test-category: pure-logic
+    def test_replace_errors_without_complete_entry_propagate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / 'license'
+            for error in (PermissionError('no entry'), OSError('disk failure')):
+                with self.subTest(error=error), patch.object(Path, 'replace', side_effect=error):
+                    with self.assertRaises(type(error)):
+                        refresh.cache_text(destination, 'downloaded')
+                    self.assertEqual(list(Path(temporary).iterdir()), [])
+            destination.write_text('complete', encoding='utf-8')
+            with patch.object(Path, 'replace', side_effect=OSError('disk failure')):
+                with self.assertRaises(OSError):
+                    refresh.cache_text(destination, 'downloaded')
 
     # test-category: pure-logic
     def test_utf8_files_and_cargo_output_under_cp1252_default(self):
