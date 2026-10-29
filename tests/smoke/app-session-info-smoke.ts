@@ -6,6 +6,7 @@ import { verifySessionPaneMotion, verifyTitleActionsAfterSubtitle } from "../sup
 import { verifyPaneToggleFill } from "../support/pane-toggle-fill.ts";
 import { verifySessionInfoBrowser } from "../support/session-info-browser.ts";
 import { verifyRailBesidePane } from "../support/session-pane-rail.ts";
+import { verifySessionViewFailure } from "../support/session-view-failure.ts";
 // Stub/replay UI smoke through the real native App, isolated from the owner's data.
 import { sessionInfoStub, verifyNativePendingAsks, labelSessionInfoModel } from "../support/session-info-pending-asks.ts";
 import { strict as assert } from "node:assert";
@@ -43,6 +44,7 @@ try {
   if (!before) await verifyNativePendingAsks(browser, server, theme);
   if (!before) await verifySessionPaneMotion(browser, server, view);
   if (!before) await verifyRailBesidePane(browser, server, view);
+  if (!before) await verifySessionViewFailure(browser, server, view);
   if (!before) await verifySessionInfoBrowser(browser, server, view, shots, theme);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
   const errors: string[] = [];

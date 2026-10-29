@@ -128,7 +128,6 @@ async function openSidebar(page: Page) {
   await page.waitForTimeout(150);
 }
 
-/** Starts keyboard order just before `selector` so Tab enters it first. */
 const tabbable = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
 /**
