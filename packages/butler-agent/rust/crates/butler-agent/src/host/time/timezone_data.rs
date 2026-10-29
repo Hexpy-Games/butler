@@ -3,61 +3,22 @@
 
 use std::cmp::Ordering;
 
+use butler_platform::time_zone::BaselineZone;
 use butler_runtime::context::{ContextCode, ContextError, ContextResult};
 
 fn failure(message: impl Into<String>) -> ContextError {
     ContextError::new(ContextCode::PromptTimeFormatError, message)
 }
 
-const DATA: &[u8] = butler_platform::time_zone::BASELINE_ARCHIVE;
-
-struct Entry {
-    name: &'static str,
-    canonical: &'static str,
-    bytes: &'static [u8],
-}
-
 pub(in crate::host) struct TimeZoneData {
-    entries: Vec<Entry>,
+    entries: Vec<BaselineZone>,
 }
 
 impl TimeZoneData {
     pub(in crate::host) fn new() -> ContextResult<Self> {
-        let mut input = DATA;
-        if take(&mut input, 4)? != b"BTZ2" {
-            return Err(failure("Invalid embedded time zone header"));
-        }
-        let count = take_u32(&mut input)? as usize;
-        if count > input.len() / 6 {
-            return Err(failure("Invalid embedded time zone count"));
-        }
-        let mut entries: Vec<Entry> = Vec::with_capacity(count);
-        for _ in 0..count {
-            let name_len = usize::from(take_u16(&mut input)?);
-            let canonical_len = usize::from(take_u16(&mut input)?);
-            let data_len = take_u32(&mut input)? as usize;
-            let name = std::str::from_utf8(take(&mut input, name_len)?)
-                .map_err(|error| failure(error.to_string()).with_source(error))?;
-            let canonical = std::str::from_utf8(take(&mut input, canonical_len)?)
-                .map_err(|error| failure(error.to_string()).with_source(error))?;
-            let bytes = take(&mut input, data_len)?;
-            if !name.is_ascii()
-                || !bytes.starts_with(b"TZif")
-                || entries
-                    .last()
-                    .is_some_and(|prior| compare(prior.name, name) != Ordering::Less)
-            {
-                return Err(failure("Invalid embedded time zone record"));
-            }
-            entries.push(Entry {
-                name,
-                canonical,
-                bytes,
-            });
-        }
-        if !input.is_empty() {
-            return Err(failure("Unexpected embedded time zone suffix"));
-        }
+        let entries = butler_platform::time_zone::baseline_zones().map_err(|error| {
+            failure(format!("Invalid embedded time zone data: {error}")).with_source(error)
+        })?;
         Ok(Self { entries })
     }
 
@@ -66,7 +27,7 @@ impl TimeZoneData {
             .entries
             .binary_search_by(|entry| compare(entry.name, name))
             .map_err(|_| failure("Unknown time zone"))?;
-        tz::TimeZone::from_tz_data(self.entries[index].bytes)
+        tz::TimeZone::from_tz_data(self.entries[index].rules)
             .map_err(|error| failure(error.to_string()).with_source(error))
     }
 
@@ -116,20 +77,9 @@ impl TimeZoneData {
             .map_err(|_| failure("Unknown time zone"))?;
         let zone = self.find(name)?;
         let view = zone.as_ref();
-        // ICU zones without a final annual rule retain the final time type,
-        // including permanent daylight offsets. TZif has no fixed-DST footer.
-        let final_transition = view
-            .transitions()
-            .last()
-            .filter(|last| view.extra_rule().is_none() && epoch >= last.unix_leap_time());
-        let local = if let Some(last) = final_transition {
-            view.local_time_types()
-                .get(last.local_time_type_index())
-                .ok_or_else(|| failure("Invalid time zone data"))?
-        } else {
-            zone.find_local_time_type(epoch)
-                .map_err(|error| failure(error.to_string()).with_source(error))?
-        };
+        let local = zone
+            .find_local_time_type(epoch)
+            .map_err(|error| failure(error.to_string()).with_source(error))?;
         let daylight = match view.extra_rule() {
             Some(tz::timezone::TransitionRule::Alternate(rule))
                 if view
@@ -151,26 +101,4 @@ fn compare(left: &str, right: &str) -> Ordering {
     left.bytes()
         .map(|byte| byte.to_ascii_lowercase())
         .cmp(right.bytes().map(|byte| byte.to_ascii_lowercase()))
-}
-
-fn take_u16(input: &mut &'static [u8]) -> ContextResult<u16> {
-    let bytes = take(input, 2)?;
-    <[u8; 2]>::try_from(bytes)
-        .map(u16::from_le_bytes)
-        .map_err(|source| failure("Truncated embedded time zone data").with_source(source))
-}
-
-fn take_u32(input: &mut &'static [u8]) -> ContextResult<u32> {
-    let bytes = take(input, 4)?;
-    <[u8; 4]>::try_from(bytes)
-        .map(u32::from_le_bytes)
-        .map_err(|source| failure("Truncated embedded time zone data").with_source(source))
-}
-
-fn take(input: &mut &'static [u8], length: usize) -> ContextResult<&'static [u8]> {
-    let (head, tail) = input
-        .split_at_checked(length)
-        .ok_or_else(|| failure("Truncated embedded time zone data"))?;
-    *input = tail;
-    Ok(head)
 }

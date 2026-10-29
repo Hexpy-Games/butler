@@ -347,7 +347,7 @@ def vendored_components():
         ("IBM Plex Mono", "2.5.0", "OFL-1.1", "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt"),
         ("LobeHub provider logos", "1.95.1", "MIT", "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE"),
         ("JavaScriptCore V8 Date.parse adaptation", "2026-09-19", "BSD-2-Clause", "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt"),
-        ("Unicode CLDR timezone names", "ICU 78.1 / TZ 2026c", "Unicode-3.0", "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt"),
+        ("Unicode CLDR timezone names", "ICU 78.1 / TZ 2026e", "Unicode-3.0", "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt"),
     ]
     return [record("vendored", name, version, license_id, path,
                    [TARGETS["x86_64-pc-windows-msvc"]] if name == "notify Windows ledger backend" else list(TARGETS.values()),

@@ -119,6 +119,7 @@ mod lifecycle_intent;
 mod linux_sandbox;
 mod live;
 mod live_config;
+mod local_zone;
 mod long_paths;
 mod mail;
 mod mcp;

@@ -7680,7 +7680,7 @@ License: https://github.com/google/fonts/blob/main/ofl/notosanskr/OFL.txt
 Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'
 
 =====
-Unicode CLDR timezone names ICU 78.1 / TZ 2026c
+Unicode CLDR timezone names ICU 78.1 / TZ 2026e
 Unicode-3.0
 License: https://github.com/unicode-org/icu/blob/release-78.1/LICENSE
 Copyright © 1991-2026 Unicode, Inc.

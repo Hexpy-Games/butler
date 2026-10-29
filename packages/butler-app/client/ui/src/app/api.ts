@@ -63,7 +63,10 @@ interface ButlerAppBridge extends PendingAsksBridge {
   onTextSizeShortcut?: (handler: (command: "increase" | "decrease" | "reset") => void) => () => void;
   initialTextSize?: SettingsView["text_size"];
   setTextSize?: (value: SettingsView["text_size"]) => Promise<void>;
-  log?: (row: { level: "DEBUG"; category: "http.client"; event: "image.fetch"; attrs: { url: string } }) => void;
+  /** One renderer row for the main-process App log (`butler:app-log`); fire and forget. */
+  log?: (row:
+    | { level: "DEBUG"; category: "http.client"; event: "image.fetch"; attrs: { url: string } }
+    | { level: "ERROR"; category: "app.ui"; event: "ui.error"; attrs: Record<string, string | number | boolean> }) => void;
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
   history?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
   organizeLibrary?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
