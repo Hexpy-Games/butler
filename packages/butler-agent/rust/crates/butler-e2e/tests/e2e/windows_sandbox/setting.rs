@@ -3,7 +3,7 @@ use super::super::access_tiers::{self, stub};
 use super::*;
 use butler_e2e::e2e::{
     cassette::Cassette,
-    scenario::{Access, Scenario, accepted_turn_id},
+    scenario::{Access, Scenario},
 };
 use serde_json::json;
 
@@ -62,7 +62,7 @@ async fn setting_roundtrip(kill_switch: bool) -> Result<(), HarnessError> {
         asks_without_preparation(&s, &chat, &project, "Run with sandbox on.").await?;
     } else {
         let prompt = "Run with sandbox on.";
-        let id = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+        let id = s.gw.say_turn(&chat, prompt).await?;
         access_tiers::delivered(&s, &chat, &id).await?;
         access_tiers::assert_counts(&s, &id, 0, 0)?;
         let output = access_tiers::outputs(&s, &chat, &id, &script, prompt)

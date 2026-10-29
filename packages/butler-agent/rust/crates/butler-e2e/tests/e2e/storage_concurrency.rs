@@ -9,7 +9,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::{Cassette, Chunk},
     gateway::{Gateway, turn_state},
-    scenario::{Setup, accepted_turn_id},
+    scenario::Setup,
 };
 use futures_util::future::try_join_all;
 use serde_json::{Value, json};
@@ -270,7 +270,7 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
     let turns = try_join_all(
         sessions
             .iter()
-            .map(|session| async { accepted_turn_id(&s.gw.say(session, REQUEST).await?) }),
+            .map(|session| async { s.gw.say_turn(session, REQUEST).await }),
     )
     .await?;
     let view_samples: Vec<u64> =
@@ -374,7 +374,7 @@ async fn final_stream_boundary_survives_an_immediate_crash() -> Result<(), Harne
         .start()
         .await?;
     let accepted = s.gw.say("general", REQUEST).await?;
-    let turn = accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     let delivered =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
             .await?;
@@ -414,7 +414,7 @@ async fn idle_delta_window_flushes_without_a_later_boundary() -> Result<(), Harn
     // Four stream headers plus five deltas, then no completion or tool boundary.
     s.provider()?
         .inject(Fault::first_call(REQUEST, Transform::StallAfter(9)))?;
-    let turn = accepted_turn_id(&s.gw.say("general", REQUEST).await?)?;
+    let turn = s.gw.say_turn("general", REQUEST).await?;
     let expected = "delta-000 delta-001 delta-002 delta-003 delta-004 ";
     let path = s.sandbox.data.join("app-server/butler-client.sqlite");
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -467,7 +467,7 @@ async fn skill_read_index_keeps_latest_appends_and_replaced_content() -> Result<
         .cassette("TURN-01")
         .start()
         .await?;
-    let turn = accepted_turn_id(&s.gw.say("general", REQUEST).await?)?;
+    let turn = s.gw.say_turn("general", REQUEST).await?;
     s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
         .await?;
     let path = s.sandbox.data.join("transcripts/butler_app-general.jsonl");

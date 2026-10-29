@@ -10,7 +10,7 @@ mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Fixture, Setup, accepted_turn_id},
+    scenario::{Access, Fixture, Setup},
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -36,7 +36,7 @@ async fn onboarding_form_replays_questions_and_persists_profile() -> Result<(), 
             .status,
         200
     );
-    let turn = accepted_turn_id(&s.gw.say("general", stub::PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", stub::PROMPT).await?;
     for (id, answer) in [("principal_name", "민수"), ("preferred_address", "민수님")] {
         let parked =
             s.gw.wait_turn(

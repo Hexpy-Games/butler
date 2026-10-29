@@ -17,7 +17,7 @@ async fn project_result_posts_during_quiet_hours_with_stable_live_and_read_flag(
         "safe_title":"Evidence","child_session_id":"child-project","parent_chat_id":chat,"text":"Evidence is ready.",
         "model_ref":s.model.model,"reasoning_effort":s.model.effort.clone().unwrap_or_else(|| "low".into()),"access_mode":"full_access"})).await?;
     assert_eq!(response.status, 202, "{response:?}");
-    let turn = accepted_turn_id(response.data())?;
+    let turn = s.gw.accepted_turn(response.data()).await?;
     s.gw.wait_terminal(&chat, &turn, Duration::from_secs(30))
         .await?;
     let messages = s.gw.messages(&chat).await?;
@@ -71,7 +71,9 @@ async fn schedule_work_steered_by_user_posts_immediately_and_quietly() -> Result
     )?;
     *script.relation.lock().unwrap() = relation;
     clock(&address, "2026-10-28T06:59:59.000Z").await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Check the evidence again.").await?)?;
+    let turn =
+        s.gw.say_turn("general", "Check the evidence again.")
+            .await?;
     s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
         .await?;
     let started = Instant::now();

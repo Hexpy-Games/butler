@@ -8,7 +8,7 @@ async fn three_tool_only_questions_keep_durable_assistant_answer_segments()
         .stub_cassette(stub::consecutive_cassette()?)
         .start()
         .await?;
-    let turn = accepted_turn_id(&s.gw.say("general", stub::PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", stub::PROMPT).await?;
     let mut refs = Vec::new();
     for question_index in 0..3 {
         let deadline = std::time::Instant::now() + Duration::from_secs(20);

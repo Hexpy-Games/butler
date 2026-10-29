@@ -5,7 +5,7 @@ use butler_e2e::e2e::{
     fixtures,
     gateway::turn_state,
     provider::title_response,
-    scenario::{Fixture, Scenario, Setup, accepted_turn_id, turn_timeout},
+    scenario::{Fixture, Scenario, Setup, turn_timeout},
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -158,7 +158,9 @@ async fn request_and_approve(
     kind: &str,
     time: Option<&str>,
 ) -> Result<(String, Value), HarnessError> {
-    let id = accepted_turn_id(&s.gw.say("general", "Set up my briefing schedule.").await?)?;
+    let id =
+        s.gw.say_turn("general", "Set up my briefing schedule.")
+            .await?;
     let turn =
         s.gw.wait_turn(
             "general",

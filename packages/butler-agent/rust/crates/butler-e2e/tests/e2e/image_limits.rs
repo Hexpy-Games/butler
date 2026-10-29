@@ -8,7 +8,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use butler_e2e::e2e::config::ModelChoice;
 use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::provider::Script;
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, media};
 use serde_json::{Value, json};
 
@@ -46,7 +46,7 @@ async fn image_limits_absent_catalog_dimensions_deliver_and_decode_limits_refuse
     let terminal =
         s.gw.wait_terminal(
             "general",
-            &accepted_turn_id(sent.data())?,
+            &s.gw.accepted_turn(sent.data()).await?,
             Duration::from_secs(15),
         )
         .await?;

@@ -15,7 +15,7 @@ mod upload;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use host::{Host, call};
 use serde_json::{Value, json};
@@ -223,7 +223,7 @@ fn pay() -> Turn {
 /// Sends `text`; returns the turn and the approval card it raised, or None
 /// when the turn delivered without asking.
 async fn ask(s: &Scenario, text: &str) -> Result<(String, Option<Value>), HarnessError> {
-    let id = accepted_turn_id(&s.gw.say("general", text).await?)?;
+    let id = s.gw.say_turn("general", text).await?;
     let states = ["waiting_for_form", "delivered", "failed"];
     for _ in 0..100 {
         let turn =

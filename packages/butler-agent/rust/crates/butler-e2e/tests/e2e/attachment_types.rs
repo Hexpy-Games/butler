@@ -4,7 +4,7 @@ use super::access_tiers::{delivered, stub};
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::{
@@ -38,7 +38,7 @@ pub(super) async fn send(
         )
         .await?;
     assert_eq!(reply.status, 202, "{}", reply.text);
-    accepted_turn_id(reply.data())
+    s.gw.accepted_turn(reply.data()).await
 }
 pub(super) fn input_text(request: &Value) -> String {
     request["input"]

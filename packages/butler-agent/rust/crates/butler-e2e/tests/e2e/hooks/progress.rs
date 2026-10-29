@@ -32,7 +32,7 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
     let accepted =
         s.gw.say("general", "Read progress-input.txt, then finish.")
             .await?;
-    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(20);
     while !held.exists() {
         assert!(Instant::now() < deadline, "{}", s.agent.logs());

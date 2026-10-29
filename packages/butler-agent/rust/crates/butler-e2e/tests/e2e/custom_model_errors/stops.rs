@@ -13,7 +13,7 @@ async fn unknown_chat_finish_reason_fails_and_keeps_partial() -> Result<(), Harn
     let s = with_local_server("CHAT-UNKNOWN-STOP", &server).await?;
     use_local_model(&s, &server.base_url).await?;
     let accepted = s.gw.say("general", "Explain the design.").await?;
-    let id = accepted_turn_id(&accepted)?;
+    let id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_terminal("general", &id, Duration::from_secs(60))
             .await?;

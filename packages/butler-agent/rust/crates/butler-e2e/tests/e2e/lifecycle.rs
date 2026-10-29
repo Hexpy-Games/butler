@@ -104,7 +104,7 @@ async fn rec_04_restart_mid_turn_settles_the_turn() -> Result<(), HarnessError> 
         .gw
         .say("general", "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.")
         .await?;
-    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(20);
     while s.provider()?.served() == 0 {
         assert!(Instant::now() < deadline);

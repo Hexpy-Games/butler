@@ -58,7 +58,7 @@ mod requires_e2e_fixtures {
         args: json!({"path":"decision-survived.txt","content":"approved message","overwrite":false}),
         refused: false,
     });
-        let id = accepted_turn_id(&s.gw.say(&chat, provider::PROMPT).await?)?;
+        let id = s.gw.say_turn(&chat, provider::PROMPT).await?;
         let turn =
             s.gw.wait_turn(&chat, &id, &["waiting_for_form"], Duration::from_secs(15))
                 .await?;

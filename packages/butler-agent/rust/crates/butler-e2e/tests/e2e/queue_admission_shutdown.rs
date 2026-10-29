@@ -6,12 +6,7 @@
     reason = "test assertions"
 )]
 
-use butler_e2e::e2e::{
-    HarnessError,
-    gateway::turn_state,
-    provider::Pacing,
-    scenario::{Setup, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, gateway::turn_state, provider::Pacing, scenario::Setup};
 use butler_platform::sqlite;
 use serde_json::json;
 use std::time::{Duration, Instant};
@@ -35,7 +30,7 @@ async fn q_02_shutdown_finishes_an_in_flight_queue_admission() -> Result<(), Har
         cap_ms: 300,
         min_ms: 200,
     });
-    let first = accepted_turn_id(&s.gw.say("general", LONG).await?)?;
+    let first = s.gw.say_turn("general", LONG).await?;
     let queued =
         s.gw.post(
             "/session-queue",

@@ -17,7 +17,7 @@ async fn ask_user_free_text_and_card_control_options() -> Result<(), HarnessErro
         .stub_cassette(stub::free_text_cassette(&invalid, &raw)?)
         .start()
         .await?;
-    let turn = accepted_turn_id(&s.gw.say("general", stub::PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", stub::PROMPT).await?;
     let parked =
         s.gw.wait_turn(
             "general",

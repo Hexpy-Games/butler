@@ -8,7 +8,7 @@
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Scenario, Setup, accepted_turn_id},
+    scenario::{Scenario, Setup},
 };
 use butler_platform::sqlite;
 use serde_json::{Value, json};
@@ -31,7 +31,7 @@ async fn normalized_outbox_delivers_once_across_both_restart_windows() -> Result
             .start()
             .await?;
         let started = Instant::now();
-        let id = accepted_turn_id(&s.gw.say("general", &prompt).await?)?;
+        let id = s.gw.say_turn("general", &prompt).await?;
         wait_held(&s, &id).await?;
         s.agent.kill9()?;
         change_stored_text(&s, &id, phase);

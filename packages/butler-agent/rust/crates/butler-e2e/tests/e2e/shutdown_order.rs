@@ -11,7 +11,7 @@ use butler_e2e::e2e::{
     cassette::{Cassette, Chunk},
     gateway::turn_state,
     provider::Pacing,
-    scenario::{Scenario, Setup, accepted_turn_id},
+    scenario::{Scenario, Setup},
     stop_intent::{control_command, instance_record, intent_path},
 };
 use butler_platform::sqlite;
@@ -323,7 +323,7 @@ pub(crate) async fn streaming_with_setup(setup: Setup) -> Result<(Scenario, Stri
         min_ms: 0,
     });
     let accepted = s.gw.say("general", &prompt).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let turn = s.gw.turn("general", &turn_id).await?.unwrap();
