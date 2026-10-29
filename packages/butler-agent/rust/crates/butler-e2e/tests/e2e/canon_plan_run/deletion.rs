@@ -113,6 +113,10 @@ mod requires_e2e_fixtures {
             200,
         );
         s.agent.terminate().await?;
+        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        // The HTTP hold does not park background outbox replay. Keep every
+        // Canon delete before its commit until we have injected the crash.
+        db.execute_batch("CREATE TRIGGER refuse_delete BEFORE DELETE ON canon_session_epics BEGIN SELECT RAISE(ABORT,'crash boundary'); END;")?;
         let release = s.sandbox.data.join("delete-release");
         s.agent
             .launch
@@ -135,14 +139,32 @@ mod requires_e2e_fixtures {
             );
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
-        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
         assert!(
             db.query_row::<i64, _, _>("SELECT count(*) FROM canon_session_epics", [], |r| r
                 .get(0))?
                 > 0
         );
+        let app =
+            rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+        assert_eq!(
+            app.query_row::<i64, _, _>("SELECT count(*) FROM chats WHERE id=?1", [&chat], |r| r
+                .get(0))?,
+            0,
+            "App deletion must be committed before the crash"
+        );
+        assert_eq!(
+            app.query_row::<i64, _, _>(
+                "SELECT count(*) FROM app_canon_session_deletes WHERE op_id=?1",
+                [format!("session-delete:{chat}")],
+                |r| r.get(0)
+            )?,
+            1,
+            "Canon deletion must remain pending before the crash"
+        );
+        drop(app);
         s.agent.kill9()?;
         let _ = deleting.await;
+        db.execute_batch("DROP TRIGGER refuse_delete")?;
         std::fs::write(&release, b"continue")?;
         s.gw = s.agent.start_again().await?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
