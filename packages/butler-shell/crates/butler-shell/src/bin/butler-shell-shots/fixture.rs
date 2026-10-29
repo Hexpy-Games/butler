@@ -257,6 +257,7 @@ impl Source for Fixture {
 
     fn composer(&self) -> ComposerContext {
         ComposerContext {
+            state: crate::ui::source::model::Controls::Loaded,
             permission: "먼저 확인".into(),
             model: "Luna".into(),
             effort: "중간".into(),

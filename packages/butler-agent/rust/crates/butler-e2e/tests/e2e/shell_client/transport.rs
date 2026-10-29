@@ -5,7 +5,7 @@ use axum::{
 };
 use std::sync::{Arc, Mutex};
 
-struct Peer {
+pub(super) struct Peer {
     setup: Setup,
     task: tokio::task::JoinHandle<()>,
 }
@@ -15,7 +15,7 @@ impl Drop for Peer {
     }
 }
 impl Peer {
-    async fn new(router: Router) -> Result<Self, TestError> {
+    pub(super) async fn new(router: Router) -> Result<Self, TestError> {
         let setup = Setup::new("SHELL-HTTP")?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let pid = std::process::id();
@@ -39,7 +39,7 @@ impl Peer {
         });
         Ok(Self { setup, task })
     }
-    async fn client(&self) -> Result<ShellClient, TestError> {
+    pub(super) async fn client(&self) -> Result<ShellClient, TestError> {
         match ShellClient::attach(Some(self.setup.sandbox.data.clone())).await? {
             AttachState::Connected(client) => Ok(client),
             AttachState::NotRunning => panic!("peer instance not found"),
@@ -242,6 +242,8 @@ async fn request_failures_are_bounded_and_leave_the_client_usable() -> Result<()
     use butler_shell_client::{Error, FailureKind};
     use std::sync::atomic::{AtomicUsize, Ordering};
     for (status, attempts, kind) in [
+        (403, 1, FailureKind::Refused),
+        (408, 1, FailureKind::Refused),
         (404, 1, FailureKind::Missing),
         (429, 3, FailureKind::Retryable),
         (503, 3, FailureKind::Retryable),
@@ -257,7 +259,9 @@ async fn request_failures_are_bounded_and_leave_the_client_usable() -> Result<()
                         if attempt < attempts {
                             Response::builder()
                                 .status(status)
-                                .body(Body::empty())
+                                .body(Body::from(
+                                    json!({"error":{"code":"session_not_found"}}).to_string(),
+                                ))
                                 .unwrap()
                         } else {
                             Response::new(Body::from(

@@ -6,6 +6,10 @@ use tokio::{
     io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader},
     process::{Child, ChildStdin, Command},
 };
+#[path = "gpui_shell/proxy.rs"]
+mod proxy;
+#[path = "gpui_shell/replay.rs"]
+mod replay;
 #[path = "gpui_shell/stub.rs"]
 mod stub;
 
@@ -16,12 +20,14 @@ struct Shots {
 }
 impl Shots {
     async fn start(binary: &Path, data: &Path, dir: &Path, dark: bool) -> anyhow::Result<Self> {
-        let stdout_path = dir.join("shots.stdout");
+        let logs = std::env::temp_dir().join(format!("gpui-shots-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(&logs).await?;
+        let stdout_path = logs.join("shots.stdout");
         let stdout = tokio::fs::File::create(&stdout_path)
             .await?
             .into_std()
             .await;
-        let stderr = tokio::fs::File::create(dir.join("shots.stderr"))
+        let stderr = tokio::fs::File::create(logs.join("shots.stderr"))
             .await?
             .into_std()
             .await;
@@ -101,11 +107,15 @@ async fn main() -> anyhow::Result<()> {
         .get(1)
         .context("usage: gpui_shell <shots binary> <output>")?;
     let output = std::path::PathBuf::from(args.get(2).context("output")?);
+    if args.get(3).is_some_and(|arg| arg == "--replay-only") {
+        return replay::run(Path::new(binary), &output.join("replay")).await;
+    }
     for (dark, theme) in [(false, "light"), (true, "dark")] {
         let dir = output.join(theme);
         tokio::fs::create_dir_all(&dir).await?;
         run(Path::new(binary), &dir, dark).await?;
     }
+    replay::run(Path::new(binary), &output.join("replay")).await?;
     Ok(())
 }
 async fn run(binary: &Path, dir: &Path, dark: bool) -> anyhow::Result<()> {
@@ -159,6 +169,8 @@ async fn scenario(
     s: &mut butler_e2e::e2e::scenario::Scenario,
 ) -> anyhow::Result<()> {
     seed_roles(s).await?;
+    let proxy = proxy::Proxy::start(s.gw.base.clone()).await?;
+    proxy.attach(&s.sandbox.data).await?;
     let mut h = Shots::start(binary, &s.sandbox.data, dir, dark).await?;
     let result = async {
         for command in [
@@ -182,7 +194,14 @@ async fn scenario(
         if decision == "allow" {
             h.command("streaming shell answer").await?;
             h.command("shot streaming").await?;
+            let began = std::time::Instant::now();
+            proxy.burst()?;
             h.command("answer shell answer").await?;
+            if proxy.refused() < 3 { bail!("503 burst did not exceed the request retry budget"); }
+            h.command("shot resumed-after-503").await?;
+            tokio::fs::write(dir.join("503.json"), serde_json::to_vec_pretty(&serde_json::json!({
+                "refused":proxy.refused(), "elapsed_ms":began.elapsed().as_millis(), "later_answer":"shell answer"
+            }))?).await?;
         }
         h.command(&format!("shot {decision}")).await?;
         s.agent
@@ -194,6 +213,7 @@ async fn scenario(
         s.restart()
             .await
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        proxy.attach(&s.sandbox.data).await?;
         h.command("connected").await?;
         h.command("shot reattached").await?;
         verify_outcome(s, dir, decision).await?;

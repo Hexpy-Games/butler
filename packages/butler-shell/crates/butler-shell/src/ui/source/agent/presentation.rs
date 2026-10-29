@@ -45,17 +45,25 @@ impl Presentation {
         self.value
             .borrow()
             .clone()
-            .unwrap_or_else(|| ComposerContext {
-                permission: "".into(),
-                model: "".into(),
-                effort: "".into(),
-            })
+            .unwrap_or_else(ComposerContext::unavailable)
     }
 }
 pub(super) async fn read(client: &ShellClient, session: &str) -> Result<ComposerContext, Error> {
-    let raw = client.session_controls(session).await?;
+    let raw = match client.session_controls(session).await {
+        Ok(raw) => raw,
+        Err(error) => match error.kind() {
+            butler_shell_client::FailureKind::Disconnected
+            | butler_shell_client::FailureKind::Incompatible
+            | butler_shell_client::FailureKind::Missing => return Err(error),
+            _ => return Ok(ComposerContext::unavailable()),
+        },
+    };
+    Ok(controls(&raw).unwrap_or_else(|_| ComposerContext::unavailable()))
+}
+fn controls(raw: &serde_json::Value) -> Result<ComposerContext, Error> {
     let controls = &raw["controls"];
     Ok(ComposerContext {
+        state: crate::ui::source::model::Controls::Loaded,
         permission: super::convert::string(controls, "access_mode")?
             .to_owned()
             .into(),

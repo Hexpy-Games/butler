@@ -49,6 +49,7 @@ pub(crate) struct Shell {
     sidebar_open: bool,
     /// The agent, while one is attached; `None` shows the disconnected state.
     source: Option<Rc<dyn Source>>,
+    incompatible: bool,
     pub(crate) store: Store,
     /// A brief notice (a failed request), and when it appeared.
     toast: Option<(SharedString, Instant)>,
@@ -121,6 +122,7 @@ impl Shell {
             sidebar: SidebarState::new(),
             sidebar_open: true,
             source: options.source,
+            incompatible: false,
             store: Store::default(),
             toast: None,
             acrylic: options.acrylic,
@@ -145,6 +147,9 @@ impl Shell {
 
     /// Why the agent's controls are unavailable, when they are.
     pub(crate) fn disconnected(&self) -> Option<SharedString> {
+        if self.incompatible {
+            return Some(self.theme.strings.update_required.into());
+        }
         self.source
             .is_none()
             .then(|| self.theme.strings.not_running.into())

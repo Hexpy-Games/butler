@@ -2,6 +2,7 @@
 mod convert;
 mod live;
 mod presentation;
+mod refresh;
 mod watch;
 
 use super::{
@@ -120,9 +121,7 @@ impl Source for Agent {
                 .list_sessions(PageRequest::new(100, cursor.map(|c| c.0))?)
                 .await?;
             let context = if first && let Some(row) = page.items.first() {
-                presentation::read(&client, convert::string(row, "id")?)
-                    .await
-                    .unwrap_or(fallback)
+                presentation::read(&client, convert::string(row, "id")?).await?
             } else {
                 fallback
             };
@@ -147,14 +146,7 @@ impl Source for Agent {
                 client.message_window(&session, before.as_ref().map(|c| c.0.as_str()), 200),
                 presentation::read(&client, &session)
             );
-            Ok((
-                convert::window(&raw?)?,
-                context.unwrap_or_else(|_| ComposerContext {
-                    permission: "".into(),
-                    model: "".into(),
-                    effort: "".into(),
-                }),
-            ))
+            Ok((convert::window(&raw?)?, context?))
         }))
     }
 
@@ -170,8 +162,7 @@ impl Source for Agent {
         self.presentation.remember(self.fetch(async move {
             let raw = client.create_session(None).await?;
             let chat = convert::identity(&raw["session"])?;
-            let context = presentation::read(&client, &chat.session.0).await?;
-            Ok((chat, context))
+            Ok((chat, ComposerContext::unavailable()))
         }))
     }
 

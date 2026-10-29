@@ -28,6 +28,9 @@ pub enum Error {
     /// HTTP failure after the single permitted credential refresh.
     #[error("agent returned HTTP {0}")]
     Http(u16),
+    /// The agent lacks a required route.
+    #[error("agent update required")]
+    Incompatible,
     /// A response does not match the wire contract.
     #[error("invalid agent response")]
     Protocol,
@@ -41,23 +44,33 @@ pub enum Error {
 pub enum FailureKind {
     /// Transport, instance metadata or credentials are unavailable.
     Disconnected,
-    /// The requested resource or route does not exist.
+    /// The requested resource does not exist.
     Missing,
+    /// A required route is absent; preserve resources and ask for an update.
+    Incompatible,
     /// The server temporarily refused this request.
     Retryable,
     /// Only this action failed.
     Refused,
 }
 impl Error {
-    /// Classify failures consistently for retry and presentation.
+    /// Disconnected: transport, missing/stale metadata, or auth after one token re-read;
+    /// show disconnected and rediscover through the watcher. Gone (resource 404): drop
+    /// only that resource and clear its selection; a missing route is Incompatible.
+    /// Refused (403 and other 4xx): fail only this action, without retry or disconnect.
+    /// Transient (429, 5xx): bounded backoff only for GETs or server-deduped client-id
+    /// POSTs. Never retry create_session or unverified authority decisions; re-read
+    /// authority after a failed decision before showing failure. A live subscription
+    /// resubscribes from its last cursor with capped backoff until disconnected.
     pub fn kind(&self) -> FailureKind {
         match self {
             Self::Connection | Self::LocalMetadata | Self::Authentication => {
                 FailureKind::Disconnected
             }
-            Self::Http(401 | 403) => FailureKind::Disconnected,
+            Self::Http(401) => FailureKind::Disconnected,
+            Self::Incompatible => FailureKind::Incompatible,
             Self::Http(404) => FailureKind::Missing,
-            Self::Http(408 | 429 | 500..=599) => FailureKind::Retryable,
+            Self::Http(429 | 500..=599) => FailureKind::Retryable,
             _ => FailureKind::Refused,
         }
     }

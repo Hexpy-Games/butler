@@ -235,6 +235,12 @@ impl Store {
             LiveUpdate::Turn { chat, running } => self.set_running(&chat, running),
             LiveUpdate::Authority { session, cards } => self.authority_loaded(session, cards),
             LiveUpdate::Chat(summary) => {
+                if self
+                    .summary(&summary.chat)
+                    .is_some_and(|row| row.updated_at > summary.updated_at)
+                {
+                    return Applied::Store;
+                }
                 self.chats.retain(|c| c.chat != summary.chat);
                 if !summary.archived {
                     let key = |c: &ChatSummary| {

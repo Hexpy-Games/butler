@@ -117,6 +117,7 @@ impl Source for Fake {
     }
     fn composer(&self) -> ComposerContext {
         ComposerContext {
+            state: crate::ui::source::model::Controls::Loaded,
             permission: "".into(),
             model: "".into(),
             effort: "".into(),
@@ -131,7 +132,6 @@ fn titles(store: &Store) -> Vec<String> {
 // test-category: pure-logic
 #[test]
 fn paging_and_live_chat_updates_preserve_visible_order() {
-    activity_refresh_reorders_an_existing_chat();
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
     assert!(
@@ -202,7 +202,6 @@ fn resync_supersedes_a_load_in_flight_and_keeps_the_list() {
 // test-category: pure-logic
 #[test]
 fn a_failed_answer_keeps_the_card() {
-    chat_request_failures_preserve_connection_and_drop_only_missing_resources();
     let (fake, mut store) = (Fake::new(), Store::default());
     let chat = chat(1).chat;
     store.open(Some(chat.clone()));
@@ -323,6 +322,8 @@ fn message_windows_and_live_rows_keep_roles_deletions_and_running_turns() {
 }
 
 /// Store regression: refreshed activity uses the server sort key, keeping pins first.
+// test-category: pure-logic
+#[test]
 fn activity_refresh_reorders_an_existing_chat() {
     let mut store = Store::default();
     let mut pinned = chat(1);
@@ -344,13 +345,27 @@ fn activity_refresh_reorders_an_existing_chat() {
         store.epoch(),
         LiveEvent {
             cursor: Some(EventCursor(2)),
-            update: LiveUpdate::Chat(active),
+            update: LiveUpdate::Chat(active.clone()),
         },
     );
     assert_eq!(titles(&store), ["chat 1", "chat 2", "chat 3"]);
+    let mut stale = active;
+    stale.title = "stale".into();
+    stale.updated_at = Timestamp(10);
+    store.apply(
+        store.epoch(),
+        LiveEvent {
+            cursor: Some(EventCursor(3)),
+            update: LiveUpdate::Chat(stale),
+        },
+    );
+    assert_eq!(titles(&store), ["chat 1", "chat 2", "chat 3"]);
+    assert_eq!(store.cursor, Some(EventCursor(3)));
 }
 
 /// Store regressions: a failed action preserves the chat; a deleted open chat leaves it.
+// test-category: pure-logic
+#[test]
 fn chat_request_failures_preserve_connection_and_drop_only_missing_resources() {
     let mut store = Store::default();
     let open = chat(1).chat;

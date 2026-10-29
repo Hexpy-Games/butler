@@ -33,6 +33,20 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             s.disconnected().is_none() && s.store.cursor.is_some() && !s.store.chats.is_empty()
         }),
         "left" => left(h, arg),
+        "controls" => wait(h, |s, app| {
+            s.composer
+                .read(app)
+                .context
+                .as_ref()
+                .is_some_and(|context| {
+                    let loaded = context.state == ui::source::model::Controls::Loaded;
+                    loaded == (arg == "loaded")
+                })
+        }),
+        "cursor" => {
+            let cursor: u64 = arg.parse()?;
+            wait(h, |s, _| s.store.cursor.is_some_and(|c| c.0 == cursor))
+        }
         "disconnected" => wait(h, |s, _| s.disconnected().is_some()),
         "open" => h.update(|s, w, cx| super::open_chat(s, arg, w, cx)),
         "close" => h.update(|s, w, cx| s.open_chat(s.store.selected().cloned(), w, cx)),
@@ -55,21 +69,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             })
         }),
         "approval" => wait(h, |s, _| s.store.approval().is_some()),
-        "exact" => {
-            let found = h.cx.update(|app| {
-                h.window.read(app).map(|s| {
-                    s.store
-                        .approval()
-                        .and_then(|c| c.approval.as_ref())
-                        .and_then(ui::source::Approval::action)
-                        .is_some_and(|text| text.as_ref() == arg)
-                })
-            })?;
-            if !found {
-                bail!("exact action missing");
-            }
-            Ok(())
-        }
+        "exact" => exact(h, arg),
         "allow" | "deny" => {
             h.update(|s, _, cx| {
                 if let Some(card) = s.store.approval().cloned() {
@@ -156,6 +156,22 @@ fn left(h: &mut Harness, deleted: &str) -> anyhow::Result<()> {
             bail!("deleted chat remained open or connection was lost");
         }
         std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok(())
+}
+
+fn exact(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let found = h.cx.update(|app| {
+        h.window.read(app).map(|s| {
+            s.store
+                .approval()
+                .and_then(|c| c.approval.as_ref())
+                .and_then(ui::source::Approval::action)
+                .is_some_and(|text| text.as_ref() == arg)
+        })
+    })?;
+    if !found {
+        bail!("exact action missing");
     }
     Ok(())
 }

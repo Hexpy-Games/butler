@@ -65,12 +65,19 @@ impl ShellClient {
         body: Option<&Value>,
         live: bool,
     ) -> Result<Response, Error> {
+        // Only the message ingress dedupes client ids. Session creation and
+        // authority side effects have no end-to-end retry guarantee.
+        let idempotent = method == Method::GET
+            || (method == Method::POST
+                && url.path() == "/messages"
+                && body.and_then(|b| b["client_message_id"].as_str()).is_some());
         let mut delay = Duration::from_millis(200);
         for attempt in 0..3 {
             let result = self
                 .authenticated_request(method.clone(), url.clone(), body, live)
                 .await;
-            if attempt == 2
+            if !idempotent
+                || attempt == 2
                 || !matches!(&result, Err(e) if e.kind() == crate::FailureKind::Retryable)
             {
                 return result;
@@ -92,7 +99,7 @@ impl ShellClient {
             .send(method.clone(), url.clone(), body, live, &token)
             .await?;
         if first.status().as_u16() != 401 {
-            return checked(first);
+            return checked(first).await;
         }
         drop(first);
         // Serialize refreshes, and reuse a credential a concurrent 401 refreshed.
@@ -110,7 +117,7 @@ impl ShellClient {
         if next == token {
             return Err(Error::Authentication);
         }
-        checked(self.send(method, url, body, live, &next).await?)
+        checked(self.send(method, url, body, live, &next).await?).await
     }
     async fn send(
         &self,
@@ -148,19 +155,29 @@ impl ShellClient {
         struct Envelope<T> {
             data: T,
         }
-        response
-            .json::<Envelope<T>>()
-            .await
+        let bytes = response.bytes().await.map_err(|_| Error::Connection)?;
+        serde_json::from_slice::<Envelope<T>>(&bytes)
             .map(|e| e.data)
             .map_err(|_| Error::Protocol)
     }
 }
-fn checked(response: Response) -> Result<Response, Error> {
+async fn checked(response: Response) -> Result<Response, Error> {
     if response.status().is_success() {
         Ok(response)
     } else if response.status().as_u16() == 401 {
         Err(Error::Authentication)
     } else {
-        Err(Error::Http(response.status().as_u16()))
+        let status = response.status().as_u16();
+        if status == 404 {
+            // The gateway distinguishes route errors from resource-specific codes.
+            let bytes = response.bytes().await.map_err(|_| Error::Connection)?;
+            let raw: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Protocol)?;
+            return match raw["error"]["code"].as_str() {
+                Some("not_found") => Err(Error::Incompatible),
+                Some(code) if code.ends_with("_not_found") => Err(Error::Http(404)),
+                _ => Err(Error::Protocol),
+            };
+        }
+        Err(Error::Http(status))
     }
 }

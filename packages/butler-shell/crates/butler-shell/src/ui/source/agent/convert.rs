@@ -11,6 +11,7 @@ use serde_json::Value;
 pub(super) fn error(error: &Error) -> SourceError {
     match error.kind() {
         butler_shell_client::FailureKind::Disconnected => SourceError::Disconnected,
+        butler_shell_client::FailureKind::Incompatible => SourceError::Incompatible,
         butler_shell_client::FailureKind::Missing => SourceError::Missing,
         _ => SourceError::Refused(error.to_string()),
     }

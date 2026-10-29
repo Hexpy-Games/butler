@@ -59,9 +59,11 @@ impl State {
                 continue;
             }
             if let Some((target, _)) = &self.recovery {
-                if let Err(error) = self.recover(*target).await
-                    && !retryable(&error)
-                {
+                if let Err(error) = self.recover(*target).await {
+                    if retryable(&error) {
+                        continue;
+                    }
+                    self.stopped = true;
                     return Err(error);
                 }
                 continue;
@@ -69,10 +71,6 @@ impl State {
             if self.response.is_none()
                 && let Err(error) = self.connect().await
             {
-                if matches!(error, Error::Connection) && !self.client.instance_alive().await {
-                    self.stopped = true;
-                    return Err(Error::Connection);
-                }
                 if retryable(&error) {
                     continue;
                 }
@@ -90,7 +88,15 @@ impl State {
                         .into_iter()
                         .map(|raw| (raw, false)),
                 ),
-                Ok(None) | Err(_) => self.disconnect(),
+                Ok(None) => self.disconnect(),
+                Err(error) if error.is_timeout() && self.client.instance_alive().await => {
+                    self.disconnect();
+                }
+                Err(_) => {
+                    self.disconnect();
+                    self.stopped = true;
+                    return Err(Error::Connection);
+                }
             }
         }
     }
@@ -155,10 +161,6 @@ impl State {
         let page = match self.client.replay_events(self.cursor, 200).await {
             Ok(page) => page,
             Err(error) => {
-                if matches!(error, Error::Connection) && !self.client.instance_alive().await {
-                    self.stopped = true;
-                    return Err(Error::LocalMetadata);
-                }
                 tokio::time::sleep(self.backoff).await;
                 self.backoff =
                     (self.backoff * 2).clamp(Duration::from_millis(100), Duration::from_secs(5));
@@ -223,5 +225,5 @@ impl Decoder {
 }
 
 fn retryable(error: &Error) -> bool {
-    matches!(error, Error::Connection)
+    error.kind() == crate::FailureKind::Retryable
 }

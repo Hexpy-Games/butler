@@ -251,12 +251,31 @@ pub(crate) enum Decision {
     Answer(Vec<QuestionAnswer>),
 }
 
+/// Whether controls were loaded, independently of their display labels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Controls {
+    Loaded,
+    Unavailable,
+}
+
 /// The composer's labels for the open chat.
 #[derive(Clone, Debug)]
 pub(crate) struct ComposerContext {
+    pub(crate) state: Controls,
     pub(crate) permission: SharedString,
     pub(crate) model: SharedString,
     pub(crate) effort: SharedString,
+}
+
+impl ComposerContext {
+    pub(crate) fn unavailable() -> Self {
+        Self {
+            state: Controls::Unavailable,
+            permission: "".into(),
+            model: "".into(),
+            effort: "".into(),
+        }
+    }
 }
 
 /// A message was sent and its turn started.

@@ -10,6 +10,7 @@ use crate::ui::widgets::{IconButtonSpec, hover_listener, icon, icon_button, text
 /// A label pill: text, an optional secondary detail and an optional leading glyph.
 struct Pill {
     id: &'static str,
+    unavailable: bool,
     glyph: Option<(&'static str, Hsla)>,
     label: SharedString,
     detail: Option<SharedString>,
@@ -19,7 +20,7 @@ impl Composer {
     /// The permission and model labels. Changing them comes later: they say so on hover.
     fn pill(&self, pill: Pill) -> impl IntoElement {
         let t = &self.theme;
-        let unavailable = pill.label.as_ref() == "—";
+        let unavailable = pill.unavailable;
         let mut row = div().flex().items_center().gap(px(4.)).child(text(
             pill.label,
             typo::CAPTION,
@@ -96,17 +97,24 @@ impl Composer {
         let Some(context) = self.context.clone() else {
             return Vec::new();
         };
+        let unavailable = context.state == crate::ui::source::model::Controls::Unavailable;
         let access = Pill {
+            unavailable,
             id: "access",
             glyph: Some(("shield-question", self.theme.accent_text)),
             label: self.theme.strings.control_label(&context.permission),
             detail: None,
         };
         let model = Pill {
+            unavailable,
             id: "model",
             glyph: None,
-            label: context.model,
-            detail: Some(self.theme.strings.control_label(&context.effort)),
+            label: if unavailable {
+                "—".into()
+            } else {
+                context.model
+            },
+            detail: (!unavailable).then(|| self.theme.strings.control_label(&context.effort)),
         };
         vec![
             self.pill(access).into_any_element(),

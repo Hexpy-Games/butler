@@ -53,6 +53,7 @@ impl Shell {
                     .update(cx, |this, cx| {
                         this.source = None;
                         this.lost(cx);
+                        this.incompatible = false;
                         this.source = source;
                         this.sync_composer(cx);
                         this.connect(cx);
@@ -203,14 +204,16 @@ impl Shell {
             return;
         };
         let session = chat.session.clone();
+        let chat = chat.clone();
         Self::run(
             source.authority(&chat.session),
             cx,
-            move |this, result, cx| {
-                if let Ok(cards) = result {
+            move |this, result, cx| match result {
+                Ok(cards) => {
                     this.store.authority_loaded(session, cards);
                     this.sync_composer(cx);
                 }
+                Err(error) => this.chat_failed(&chat, &error, this.theme.strings.load_failed, cx),
             },
         );
     }
@@ -284,6 +287,7 @@ impl Shell {
                     this.store.open(Some(chat.clone()));
                     this.chat
                         .update(cx, |c, _| c.show(Some(chat.clone()), None));
+                    this.reload_open_chat(cx);
                     this.send_to(chat, id, text, cx);
                 }
                 Err(e) => this.failed(&e, this.theme.strings.send_failed, cx),
@@ -348,9 +352,16 @@ impl Shell {
             match result {
                 Ok(()) => this.store.answer_done(&chat.session, &request),
                 Err(e) => {
-                    this.store.answer_failed(&request);
-                    this.reload_authority(&chat, cx);
-                    this.failed(&e, this.theme.strings.decision_failed, cx);
+                    let session = chat.session.clone();
+                    Self::run(source.authority(&session), cx, move |this, state, cx| {
+                        this.store.answer_failed(&request);
+                        match state {
+                            Ok(cards) => this.store.authority_loaded(session, cards),
+                            Err(error) => this.failed(&error, this.theme.strings.load_failed, cx),
+                        }
+                        this.failed(&e, this.theme.strings.decision_failed, cx);
+                        this.sync_composer(cx);
+                    });
                 }
             }
             this.sync_composer(cx);
@@ -380,6 +391,13 @@ impl Shell {
     fn failed(&mut self, error: &SourceError, toast: &'static str, cx: &mut Context<Self>) {
         match error {
             SourceError::Disconnected => self.lost(cx),
+            SourceError::Incompatible => {
+                self.live_task = None;
+                self.source = None;
+                self.incompatible = true;
+                self.store.lost();
+                self.sync_composer(cx);
+            }
             SourceError::Missing | SourceError::Refused(_) => {
                 self.toast = Some((SharedString::from(toast), Instant::now()));
             }

@@ -3,7 +3,7 @@ use super::{
     super::{ChatId, EventCursor, LiveEvent, LiveUpdate, SessionId, TurnId},
     Agent, convert,
 };
-use butler_shell_client::{Error, PageRequest, ShellClient};
+use butler_shell_client::Error;
 use futures::{SinkExt as _, StreamExt as _, channel::mpsc};
 use serde_json::Value;
 
@@ -15,36 +15,12 @@ pub(super) fn subscribe(
     let (mut send, receive) = mpsc::channel(32);
     let (cancel, mut cancelled) = tokio::sync::oneshot::channel::<()>();
     let _ = agent.worker.jobs.send(Box::pin(async move {
-        let mut events = client.live_events(after.0);
-        loop {
-            tokio::select! {
-                _ = &mut cancelled => break,
-                event = events.next() => {
-                    match event {
-                        Some(Ok(event)) => {
-                            let cursor = event.cursor.map(EventCursor);
-                            match updates(&client, &event.raw).await {
-                                Ok(updates) => {
-                                    // Only the last projection claims the envelope cursor.
-                                    let count = updates.len();
-                                    for (i, update) in updates.into_iter().enumerate() {
-                                        if send.send(LiveEvent { cursor: (i + 1 == count).then_some(cursor).flatten(), update }).await.is_err() { return; }
-                                    }
-                                }
-                                Err(error) => {
-                                    let _ = send.send(LiveEvent { cursor, update: LiveUpdate::Failed(convert::error(&error)) }).await;
-                                },
-                            }
-                        }
-                        Some(Err(Error::EventGap(_))) => { let _ = send.send(LiveEvent { cursor: None, update: LiveUpdate::Resync }).await; break; }
-                        Some(Err(error)) => {
-                            let _ = send.send(LiveEvent { cursor: None, update: LiveUpdate::Failed(convert::error(&error)) }).await;
-                            break;
-                        }
-                        None => break,
-                    }
-                }
-            }
+        let dirty = super::refresh::Dirty::default();
+        let mut refresh_send = send.clone();
+        tokio::select! {
+            _ = &mut cancelled => {},
+            () = super::refresh::run(&client, &dirty, &mut refresh_send) => {},
+            () = pump(&client, after.0, &dirty, &mut send) => {},
         }
     }));
     Box::pin(futures::stream::unfold(
@@ -54,7 +30,85 @@ pub(super) fn subscribe(
         },
     ))
 }
-async fn updates(client: &ShellClient, raw: &Value) -> Result<Vec<LiveUpdate>, Error> {
+async fn pump(
+    client: &butler_shell_client::ShellClient,
+    mut cursor: u64,
+    dirty: &super::refresh::Dirty,
+    send: &mut mpsc::Sender<LiveEvent>,
+) {
+    let mut backoff = std::time::Duration::from_millis(100);
+    loop {
+        let mut events = client.live_events(cursor);
+        while let Some(event) = futures::future::poll_fn(|cx| {
+            let next = events.as_mut().poll_next(cx);
+            if next.is_pending() {
+                dirty.flush();
+            }
+            next
+        })
+        .await
+        {
+            match event {
+                Ok(event) => {
+                    let updates = match updates(dirty, &event.raw) {
+                        Ok(updates) => updates,
+                        Err(error) => vec![LiveUpdate::Failed(convert::error(&error))],
+                    };
+                    if deliver(send, event.cursor.map(EventCursor), updates)
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                    if let Some(next) = event.cursor {
+                        cursor = next;
+                    }
+                    backoff = std::time::Duration::from_millis(100);
+                }
+                Err(Error::EventGap(_)) => {
+                    let _ = deliver(send, None, vec![LiveUpdate::Resync]).await;
+                    return;
+                }
+                Err(error) => {
+                    if deliver(send, None, vec![LiveUpdate::Failed(convert::error(&error))])
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                    if matches!(
+                        error.kind(),
+                        butler_shell_client::FailureKind::Disconnected
+                            | butler_shell_client::FailureKind::Incompatible
+                    ) {
+                        return;
+                    }
+                    break;
+                }
+            }
+        }
+        dirty.flush();
+        tokio::time::sleep(backoff).await;
+        backoff = (backoff * 2).min(std::time::Duration::from_secs(5));
+    }
+}
+async fn deliver(
+    send: &mut mpsc::Sender<LiveEvent>,
+    cursor: Option<EventCursor>,
+    updates: Vec<LiveUpdate>,
+) -> Result<(), ()> {
+    let count = updates.len();
+    for (index, update) in updates.into_iter().enumerate() {
+        send.send(LiveEvent {
+            cursor: (index + 1 == count).then_some(cursor).flatten(),
+            update,
+        })
+        .await
+        .map_err(|_| ())?;
+    }
+    Ok(())
+}
+fn updates(dirty: &super::refresh::Dirty, raw: &Value) -> Result<Vec<LiveUpdate>, Error> {
     let payload = &raw["payload"];
     let name = convert::string(raw, "type")?;
     match name {
@@ -68,7 +122,7 @@ async fn updates(client: &ShellClient, raw: &Value) -> Result<Vec<LiveUpdate>, E
             let delivered = message["role"] == "assistant" && message["status"] == "delivered";
             let mut updates = Vec::new();
             if delivered {
-                refresh_rows(client, &mut updates).await;
+                dirty.mark(session);
             }
             // Keep the message last so it retains the envelope cursor for snapshot filtering.
             updates.push(LiveUpdate::Message {
@@ -86,42 +140,7 @@ async fn updates(client: &ShellClient, raw: &Value) -> Result<Vec<LiveUpdate>, E
             ),
             id: convert::string(payload, "message_id")?.to_owned().into(),
         }]),
-        "turn.state_changed" => {
-            let turn = payload.get("turn").unwrap_or(payload);
-            let session = turn["chat_id"]
-                .as_str()
-                .or_else(|| payload["chat_id"].as_str())
-                .or_else(|| payload["session_id"].as_str())
-                .ok_or(Error::Protocol)?;
-            let state = convert::string(turn, "state")?;
-            let running = if convert::active(state) {
-                Some(TurnId(
-                    convert::string(turn, "id")
-                        .or_else(|_| convert::string(payload, "turn_id"))?
-                        .to_owned()
-                        .into(),
-                ))
-            } else {
-                None
-            };
-            let mut updates = vec![LiveUpdate::Turn {
-                chat: ChatId(session.to_owned().into()),
-                running,
-            }];
-            match client
-                .authority_requests(session)
-                .await
-                .and_then(convert::authority)
-            {
-                Ok(cards) => updates.push(LiveUpdate::Authority {
-                    session: SessionId(session.to_owned().into()),
-                    cards,
-                }),
-                Err(error) => updates.push(LiveUpdate::Failed(convert::error(&error))),
-            }
-            refresh_rows(client, &mut updates).await;
-            Ok(updates)
-        }
+        "turn.state_changed" => turn(dirty, payload),
         "session.created" | "session.updated" => {
             Ok(vec![LiveUpdate::Chat(convert::chat(&payload["session"])?)])
         }
@@ -130,19 +149,28 @@ async fn updates(client: &ShellClient, raw: &Value) -> Result<Vec<LiveUpdate>, E
     }
 }
 
-/// Refresh the same bounded first page Electron reloads on activity.
-async fn refresh_rows(client: &ShellClient, updates: &mut Vec<LiveUpdate>) {
-    let rows = match PageRequest::new(100, None) {
-        Ok(page) => client.list_sessions(page).await,
-        Err(error) => Err(error),
+fn turn(dirty: &super::refresh::Dirty, payload: &Value) -> Result<Vec<LiveUpdate>, Error> {
+    let turn = payload.get("turn").unwrap_or(payload);
+    let session = turn["chat_id"]
+        .as_str()
+        .or_else(|| payload["chat_id"].as_str())
+        .or_else(|| payload["session_id"].as_str())
+        .ok_or(Error::Protocol)?;
+    let state = convert::string(turn, "state")?;
+    let running = if convert::active(state) {
+        Some(TurnId(
+            convert::string(turn, "id")
+                .or_else(|_| convert::string(payload, "turn_id"))?
+                .to_owned()
+                .into(),
+        ))
+    } else {
+        None
     };
-    match rows.and_then(|page| {
-        page.items
-            .iter()
-            .map(convert::chat)
-            .collect::<Result<Vec<_>, _>>()
-    }) {
-        Ok(rows) => updates.extend(rows.into_iter().map(LiveUpdate::Chat)),
-        Err(error) => updates.push(LiveUpdate::Failed(convert::error(&error))),
-    }
+    let updates = vec![LiveUpdate::Turn {
+        chat: ChatId(session.to_owned().into()),
+        running,
+    }];
+    dirty.mark(session);
+    Ok(updates)
 }
