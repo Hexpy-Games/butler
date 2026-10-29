@@ -18,6 +18,7 @@ impl Presentation {
     ) -> Fetch<T> {
         let generation = self.generation.get() + 1;
         self.generation.set(generation);
+        *self.value.borrow_mut() = None;
         let this = self.clone();
         Box::pin(async move {
             let (result, context) = fetch.await?;

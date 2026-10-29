@@ -116,17 +116,13 @@ impl Shell {
                     return;
                 }
             }
-            let _ = this.update(cx, |this, cx| {
-                if this.store.epoch() == epoch {
-                    this.lost(cx);
-                }
-            });
         }));
     }
 
     fn apply(&mut self, epoch: u64, event: crate::ui::source::LiveEvent, cx: &mut Context<Self>) {
         match self.store.apply(epoch, event) {
             Applied::Store => {}
+            Applied::Failed(error) => self.failed(&error, self.theme.strings.load_failed, cx),
             Applied::Message(session, message) => self.chat.update(cx, |c, cx| {
                 c.upsert(&session, message);
                 cx.notify();
@@ -196,7 +192,7 @@ impl Shell {
                     }
                     this.sync_composer(cx);
                 }
-                Err(e) => this.failed(&e, this.theme.strings.load_failed, cx),
+                Err(e) => this.chat_failed(&shown, &e, this.theme.strings.load_failed, cx),
             },
         );
         self.reload_authority(&chat, cx);
@@ -232,7 +228,7 @@ impl Shell {
                     c.prepend(&chat, page);
                     cx.notify();
                 }),
-                Err(e) => this.failed(&e, this.theme.strings.load_failed, cx),
+                Err(e) => this.chat_failed(&chat, &e, this.theme.strings.load_failed, cx),
             },
         );
     }
@@ -313,7 +309,7 @@ impl Shell {
                     this.store.turn_started(&chat.chat, sent.turn);
                     this.sync_composer(cx);
                 }
-                Err(e) => this.failed(&e, this.theme.strings.send_failed, cx),
+                Err(e) => this.chat_failed(&chat, &e, this.theme.strings.send_failed, cx),
             },
         );
     }
@@ -361,11 +357,30 @@ impl Shell {
         });
     }
 
+    fn chat_failed(
+        &mut self,
+        chat: &ChatRef,
+        error: &SourceError,
+        toast: &'static str,
+        cx: &mut Context<Self>,
+    ) {
+        if self.store.chat_failed(chat, error) {
+            self.close_dialog(cx);
+            self.chat.update(cx, |c, cx| {
+                c.show(None, None);
+                cx.notify();
+            });
+            self.composer.update(cx, |c, cx| c.set_new_chat(true, cx));
+            self.sync_composer(cx);
+        }
+        self.failed(error, toast, cx);
+    }
+
     /// A failed request: a brief toast, or the disconnected state when the agent is gone.
     fn failed(&mut self, error: &SourceError, toast: &'static str, cx: &mut Context<Self>) {
         match error {
             SourceError::Disconnected => self.lost(cx),
-            SourceError::Refused(_) => {
+            SourceError::Missing | SourceError::Refused(_) => {
                 self.toast = Some((SharedString::from(toast), Instant::now()));
             }
         }

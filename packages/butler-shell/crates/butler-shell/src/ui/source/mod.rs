@@ -21,6 +21,8 @@ pub(crate) use model::{
 pub(crate) enum SourceError {
     /// The agent is not running or the connection dropped.
     Disconnected,
+    /// The resource or route is gone; the connection stays attached.
+    Missing,
     /// The agent refused the request.
     Refused(String),
 }

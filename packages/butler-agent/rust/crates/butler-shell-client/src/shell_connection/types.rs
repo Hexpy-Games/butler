@@ -36,6 +36,33 @@ pub enum Error {
     EventGap(u64),
 }
 
+/// How callers should handle a failed request, independently of the UI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureKind {
+    /// Transport, instance metadata or credentials are unavailable.
+    Disconnected,
+    /// The requested resource or route does not exist.
+    Missing,
+    /// The server temporarily refused this request.
+    Retryable,
+    /// Only this action failed.
+    Refused,
+}
+impl Error {
+    /// Classify failures consistently for retry and presentation.
+    pub fn kind(&self) -> FailureKind {
+        match self {
+            Self::Connection | Self::LocalMetadata | Self::Authentication => {
+                FailureKind::Disconnected
+            }
+            Self::Http(401 | 403) => FailureKind::Disconnected,
+            Self::Http(404) => FailureKind::Missing,
+            Self::Http(408 | 429 | 500..=599) => FailureKind::Retryable,
+            _ => FailureKind::Refused,
+        }
+    }
+}
+
 /// Bounded list request, ordered as the gateway orders chats or sessions.
 #[derive(Clone, Debug)]
 pub struct PageRequest {

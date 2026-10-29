@@ -105,7 +105,7 @@ impl Agent {
             receive
                 .await
                 .map_err(|_| SourceError::Disconnected)?
-                .map_err(convert::error)
+                .map_err(|error| convert::error(&error))
         })
     }
 }
@@ -142,13 +142,19 @@ impl Source for Agent {
     }
     fn messages(&self, session: &SessionId, before: Option<MessageCursor>) -> Fetch<MessagePage> {
         let (client, session) = (self.client.clone(), session.0.to_string());
-        let fallback = self.presentation.get();
         self.presentation.remember(self.fetch(async move {
             let (raw, context) = tokio::join!(
                 client.message_window(&session, before.as_ref().map(|c| c.0.as_str()), 200),
                 presentation::read(&client, &session)
             );
-            Ok((convert::window(&raw?)?, context.unwrap_or(fallback)))
+            Ok((
+                convert::window(&raw?)?,
+                context.unwrap_or_else(|_| ComposerContext {
+                    permission: "".into(),
+                    model: "".into(),
+                    effort: "".into(),
+                }),
+            ))
         }))
     }
 

@@ -32,6 +32,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "connected" => wait(h, |s, _| {
             s.disconnected().is_none() && s.store.cursor.is_some() && !s.store.chats.is_empty()
         }),
+        "left" => left(h, arg),
         "disconnected" => wait(h, |s, _| s.disconnected().is_some()),
         "open" => h.update(|s, w, cx| super::open_chat(s, arg, w, cx)),
         "close" => h.update(|s, w, cx| s.open_chat(s.store.selected().cloned(), w, cx)),
@@ -127,6 +128,34 @@ pub(super) fn run(dir: &Path, data: std::path::PathBuf, dark: bool) -> anyhow::R
         }
         println!("LIVE OK");
         io::stdout().flush()?;
+    }
+    Ok(())
+}
+
+/// Observe beyond the former five-second reconnect cycle after another client deletes.
+fn left(h: &mut Harness, deleted: &str) -> anyhow::Result<()> {
+    wait(h, |s, _| {
+        s.store.selected().is_none()
+            && !s
+                .store
+                .chats
+                .iter()
+                .any(|row| row.chat.chat.0.as_ref() == deleted)
+    })?;
+    let deadline = Instant::now() + Duration::from_secs(6);
+    while Instant::now() < deadline {
+        super::settle(&mut h.cx, h.handle);
+        let attached = h.cx.update(|app| {
+            h.window.read(app).map(|s| {
+                s.disconnected().is_none()
+                    && s.store.selected().is_none()
+                    && s.chat.read(app).messages.is_empty()
+            })
+        })?;
+        if !attached {
+            bail!("deleted chat remained open or connection was lost");
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
     Ok(())
 }

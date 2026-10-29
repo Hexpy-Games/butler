@@ -9,5 +9,5 @@ pub use events::LiveEvents;
 pub use transport::ShellClient;
 pub use types::{
     AttachState, AuthorityDecision, AuthorityPage, AuthorityRequest, Error, EventKind, EventPage,
-    LiveEvent, MessagePage, Page, PageRequest,
+    FailureKind, LiveEvent, MessagePage, Page, PageRequest,
 };

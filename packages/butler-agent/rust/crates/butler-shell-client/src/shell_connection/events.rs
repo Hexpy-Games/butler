@@ -223,8 +223,5 @@ impl Decoder {
 }
 
 fn retryable(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::Connection | Error::Http(408 | 429 | 500..=599)
-    )
+    matches!(error, Error::Connection)
 }

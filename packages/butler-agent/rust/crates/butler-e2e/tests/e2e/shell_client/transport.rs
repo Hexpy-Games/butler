@@ -235,3 +235,53 @@ async fn transient_failure_recovers_without_an_instance_rewrite() -> Result<(), 
     eprintln!("SHELL transient 503 recovery {:?}", began.elapsed());
     Ok(())
 }
+
+#[tokio::test]
+async fn request_failures_are_bounded_and_leave_the_client_usable() -> Result<(), TestError> {
+    butler_e2e::gate!();
+    use butler_shell_client::{Error, FailureKind};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    for (status, attempts, kind) in [
+        (404, 1, FailureKind::Missing),
+        (429, 3, FailureKind::Retryable),
+        (503, 3, FailureKind::Retryable),
+    ] {
+        let count = Arc::new(AtomicUsize::new(0));
+        let peer = Peer::new(Router::new().route(
+            "/chats",
+            get({
+                let count = count.clone();
+                move || {
+                    let attempt = count.fetch_add(1, Ordering::SeqCst);
+                    async move {
+                        if attempt < attempts {
+                            Response::builder()
+                                .status(status)
+                                .body(Body::empty())
+                                .unwrap()
+                        } else {
+                            Response::new(Body::from(
+                                json!({"data":{"items":[],"next_cursor":null,"event_cursor":17}})
+                                    .to_string(),
+                            ))
+                        }
+                    }
+                }
+            }),
+        ))
+        .await?;
+        let client = peer.client().await?;
+        let error = client
+            .list_chats(PageRequest::new(2, None)?)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Http(code) if code == status));
+        assert_eq!(error.kind(), kind);
+        assert_eq!(count.load(Ordering::SeqCst), attempts);
+        let page = client.list_chats(PageRequest::new(2, None)?).await?;
+        assert_eq!(page.items, [] as [serde_json::Value; 0]);
+        assert_eq!(page.event_cursor, 17);
+        assert_eq!(count.load(Ordering::SeqCst), attempts + 1);
+    }
+    Ok(())
+}

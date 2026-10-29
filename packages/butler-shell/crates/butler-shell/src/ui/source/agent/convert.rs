@@ -8,13 +8,11 @@ use super::super::{
 use butler_shell_client::{AuthorityPage, Error};
 use serde_json::Value;
 
-pub(super) fn error(error: Error) -> SourceError {
-    match error {
-        Error::Connection
-        | Error::LocalMetadata
-        | Error::Authentication
-        | Error::Http(404 | 408 | 429 | 500..=599) => SourceError::Disconnected,
-        other => SourceError::Refused(other.to_string()),
+pub(super) fn error(error: &Error) -> SourceError {
+    match error.kind() {
+        butler_shell_client::FailureKind::Disconnected => SourceError::Disconnected,
+        butler_shell_client::FailureKind::Missing => SourceError::Missing,
+        _ => SourceError::Refused(error.to_string()),
     }
 }
 pub(super) fn string<'a>(raw: &'a Value, key: &str) -> Result<&'a str, Error> {

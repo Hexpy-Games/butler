@@ -19,6 +19,7 @@ impl Composer {
     /// The permission and model labels. Changing them comes later: they say so on hover.
     fn pill(&self, pill: Pill) -> impl IntoElement {
         let t = &self.theme;
+        let unavailable = pill.label.as_ref() == "—";
         let mut row = div().flex().items_center().gap(px(4.)).child(text(
             pill.label,
             typo::CAPTION,
@@ -39,7 +40,14 @@ impl Composer {
             .pl(px(10.))
             .pr(px(pad_right))
             .rounded_full()
-            .tooltip(tooltip(t.strings.not_yet, t))
+            .tooltip(tooltip(
+                if unavailable {
+                    t.strings.load_failed
+                } else {
+                    t.strings.not_yet
+                },
+                t,
+            ))
             .children(pill.glyph.map(|(name, color)| icon(name, 16., color)))
             .child(row)
     }

@@ -131,6 +131,7 @@ fn titles(store: &Store) -> Vec<String> {
 // test-category: pure-logic
 #[test]
 fn paging_and_live_chat_updates_preserve_visible_order() {
+    activity_refresh_reorders_an_existing_chat();
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
     assert!(
@@ -201,6 +202,7 @@ fn resync_supersedes_a_load_in_flight_and_keeps_the_list() {
 // test-category: pure-logic
 #[test]
 fn a_failed_answer_keeps_the_card() {
+    chat_request_failures_preserve_connection_and_drop_only_missing_resources();
     let (fake, mut store) = (Fake::new(), Store::default());
     let chat = chat(1).chat;
     store.open(Some(chat.clone()));
@@ -318,4 +320,59 @@ fn message_windows_and_live_rows_keep_roles_deletions_and_running_turns() {
         store.apply(store.epoch(), event()),
         Applied::Store
     ));
+}
+
+/// Store regression: refreshed activity uses the server sort key, keeping pins first.
+fn activity_refresh_reorders_an_existing_chat() {
+    let mut store = Store::default();
+    let mut pinned = chat(1);
+    pinned.pinned = true;
+    store.chats = vec![pinned, chat(3), chat(2)];
+    let mut active = chat(2);
+    active.updated_at = Timestamp(20);
+    store.apply(
+        store.epoch(),
+        LiveEvent {
+            cursor: Some(EventCursor(1)),
+            update: LiveUpdate::Turn {
+                chat: active.chat.chat.clone(),
+                running: None,
+            },
+        },
+    );
+    store.apply(
+        store.epoch(),
+        LiveEvent {
+            cursor: Some(EventCursor(2)),
+            update: LiveUpdate::Chat(active),
+        },
+    );
+    assert_eq!(titles(&store), ["chat 1", "chat 2", "chat 3"]);
+}
+
+/// Store regressions: a failed action preserves the chat; a deleted open chat leaves it.
+fn chat_request_failures_preserve_connection_and_drop_only_missing_resources() {
+    let mut store = Store::default();
+    let open = chat(1).chat;
+    store.chats = vec![chat(1), chat(2)];
+    store.open(Some(open.clone()));
+    store.turn_started(&open.chat, TurnId("running".into()));
+    let epoch = store.epoch();
+    let cursor = EventCursor(42);
+    store.cursor = Some(cursor);
+    assert!(!store.chat_failed(&open, &SourceError::Refused("HTTP 503".into())));
+    assert_eq!(store.selected(), Some(&open));
+    assert!(store.running().is_some());
+    assert_eq!(titles(&store), ["chat 1", "chat 2"]);
+    assert_eq!(store.epoch(), epoch);
+    assert_eq!(store.cursor, Some(cursor));
+    assert!(store.chat_failed(&open, &SourceError::Missing));
+    assert_eq!(store.selected(), None);
+    assert_eq!(store.running(), None);
+    assert_eq!(titles(&store), ["chat 2"]);
+    assert_eq!(store.epoch(), epoch);
+    assert_eq!(store.cursor, Some(cursor));
+    store.open(Some(chat(2).chat));
+    assert!(!store.chat_failed(&open, &SourceError::Missing));
+    assert_eq!(store.selected(), Some(&chat(2).chat));
 }

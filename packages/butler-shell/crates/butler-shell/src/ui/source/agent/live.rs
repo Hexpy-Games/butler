@@ -3,7 +3,7 @@ use super::{
     super::{ChatId, EventCursor, LiveEvent, LiveUpdate, SessionId, TurnId},
     Agent, convert,
 };
-use butler_shell_client::{Error, ShellClient};
+use butler_shell_client::{Error, PageRequest, ShellClient};
 use futures::{SinkExt as _, StreamExt as _, channel::mpsc};
 use serde_json::Value;
 
@@ -31,13 +31,17 @@ pub(super) fn subscribe(
                                         if send.send(LiveEvent { cursor: (i + 1 == count).then_some(cursor).flatten(), update }).await.is_err() { return; }
                                     }
                                 }
-                                Err(_) => {
-                                    let _ = send.send(LiveEvent { cursor: None, update: LiveUpdate::Resync }).await;
+                                Err(error) => {
+                                    let _ = send.send(LiveEvent { cursor, update: LiveUpdate::Failed(convert::error(&error)) }).await;
                                 },
                             }
                         }
                         Some(Err(Error::EventGap(_))) => { let _ = send.send(LiveEvent { cursor: None, update: LiveUpdate::Resync }).await; break; }
-                        _ => break,
+                        Some(Err(error)) => {
+                            let _ = send.send(LiveEvent { cursor: None, update: LiveUpdate::Failed(convert::error(&error)) }).await;
+                            break;
+                        }
+                        None => break,
                     }
                 }
             }
@@ -61,10 +65,17 @@ async fn updates(client: &ShellClient, raw: &Value) -> Result<Vec<LiveUpdate>, E
                 .or_else(|| payload["chat_id"].as_str())
                 .or_else(|| payload["session_id"].as_str())
                 .ok_or(Error::Protocol)?;
-            Ok(vec![LiveUpdate::Message {
+            let delivered = message["role"] == "assistant" && message["status"] == "delivered";
+            let mut updates = Vec::new();
+            if delivered {
+                refresh_rows(client, &mut updates).await;
+            }
+            // Keep the message last so it retains the envelope cursor for snapshot filtering.
+            updates.push(LiveUpdate::Message {
                 session: SessionId(session.to_owned().into()),
                 message: convert::message(message)?,
-            }])
+            });
+            Ok(updates)
         }
         "message.deleted" => Ok(vec![LiveUpdate::MessageDeleted {
             session: SessionId(
@@ -93,22 +104,45 @@ async fn updates(client: &ShellClient, raw: &Value) -> Result<Vec<LiveUpdate>, E
             } else {
                 None
             };
-            let cards = convert::authority(client.authority_requests(session).await?)?;
-            Ok(vec![
-                LiveUpdate::Turn {
-                    chat: ChatId(session.to_owned().into()),
-                    running,
-                },
-                LiveUpdate::Authority {
+            let mut updates = vec![LiveUpdate::Turn {
+                chat: ChatId(session.to_owned().into()),
+                running,
+            }];
+            match client
+                .authority_requests(session)
+                .await
+                .and_then(convert::authority)
+            {
+                Ok(cards) => updates.push(LiveUpdate::Authority {
                     session: SessionId(session.to_owned().into()),
                     cards,
-                },
-            ])
+                }),
+                Err(error) => updates.push(LiveUpdate::Failed(convert::error(&error))),
+            }
+            refresh_rows(client, &mut updates).await;
+            Ok(updates)
         }
         "session.created" | "session.updated" => {
             Ok(vec![LiveUpdate::Chat(convert::chat(&payload["session"])?)])
         }
         "session.cleared" | "session.permanently_deleted" => Ok(vec![LiveUpdate::Resync]),
         _ => Ok(Vec::new()),
+    }
+}
+
+/// Refresh the same bounded first page Electron reloads on activity.
+async fn refresh_rows(client: &ShellClient, updates: &mut Vec<LiveUpdate>) {
+    let rows = match PageRequest::new(100, None) {
+        Ok(page) => client.list_sessions(page).await,
+        Err(error) => Err(error),
+    };
+    match rows.and_then(|page| {
+        page.items
+            .iter()
+            .map(convert::chat)
+            .collect::<Result<Vec<_>, _>>()
+    }) {
+        Ok(rows) => updates.extend(rows.into_iter().map(LiveUpdate::Chat)),
+        Err(error) => updates.push(LiveUpdate::Failed(convert::error(&error))),
     }
 }

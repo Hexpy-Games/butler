@@ -65,6 +65,28 @@ impl ShellClient {
         body: Option<&Value>,
         live: bool,
     ) -> Result<Response, Error> {
+        let mut delay = Duration::from_millis(200);
+        for attempt in 0..3 {
+            let result = self
+                .authenticated_request(method.clone(), url.clone(), body, live)
+                .await;
+            if attempt == 2
+                || !matches!(&result, Err(e) if e.kind() == crate::FailureKind::Retryable)
+            {
+                return result;
+            }
+            tokio::time::sleep(delay).await;
+            delay *= 4;
+        }
+        Err(Error::Protocol)
+    }
+    async fn authenticated_request(
+        &self,
+        method: Method,
+        url: Url,
+        body: Option<&Value>,
+        live: bool,
+    ) -> Result<Response, Error> {
         let token = self.inner.token.lock().await.clone();
         let first = self
             .send(method.clone(), url.clone(), body, live, &token)

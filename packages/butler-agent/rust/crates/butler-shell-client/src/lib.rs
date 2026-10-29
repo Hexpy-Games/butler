@@ -7,5 +7,5 @@ mod shell_connection;
 
 pub use shell_connection::{
     AttachState, AuthorityDecision, AuthorityPage, AuthorityRequest, Error, EventKind, EventPage,
-    LiveEvent, LiveEvents, MessagePage, Page, PageRequest, ShellClient,
+    FailureKind, LiveEvent, LiveEvents, MessagePage, Page, PageRequest, ShellClient,
 };

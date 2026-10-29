@@ -266,6 +266,8 @@ pub(crate) struct SentTurn {
 
 /// One live change.
 pub(crate) enum LiveUpdate {
+    /// An individual live projection failed.
+    Failed(super::SourceError),
     /// A message was added or changed (streamed text grows in place).
     Message {
         session: SessionId,

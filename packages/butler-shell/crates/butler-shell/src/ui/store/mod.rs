@@ -25,6 +25,7 @@ pub(crate) struct ChatsLoad {
 pub(crate) enum Applied {
     /// Nothing visible beyond the store (or the event was stale or a duplicate).
     Store,
+    Failed(crate::ui::source::SourceError),
     /// A message of `session` to show if that chat is open.
     Message(SessionId, Message),
     /// Events were lost: take a new snapshot.
@@ -116,6 +117,30 @@ impl Store {
         self.selected = chat;
     }
 
+    /// A missing chat loses all its state; another request failure leaves it intact.
+    pub(crate) fn chat_failed(
+        &mut self,
+        chat: &ChatRef,
+        error: &crate::ui::source::SourceError,
+    ) -> bool {
+        if !matches!(error, crate::ui::source::SourceError::Missing) {
+            return false;
+        }
+        self.chats.retain(|row| row.chat != *chat);
+        self.running.remove(&chat.chat);
+        if let Some(cards) = self.authority.remove(&chat.session) {
+            for card in cards {
+                self.pending.remove(&card.request);
+            }
+        }
+        self.message_snapshots.remove(&chat.session);
+        if self.selected.as_ref() != Some(chat) {
+            return false;
+        }
+        self.selected = None;
+        true
+    }
+
     pub(crate) fn summary(&self, chat: &ChatRef) -> Option<&ChatSummary> {
         self.chats.iter().find(|c| &c.chat == chat)
     }
@@ -193,6 +218,7 @@ impl Store {
             self.cursor = Some(cursor);
         }
         match event.update {
+            LiveUpdate::Failed(error) => return Applied::Failed(error),
             LiveUpdate::Message { session, message } => {
                 if event.cursor.is_some_and(|c| {
                     self.message_snapshots

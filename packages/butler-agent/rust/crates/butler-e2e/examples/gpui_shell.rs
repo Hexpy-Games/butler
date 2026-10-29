@@ -196,7 +196,29 @@ async fn scenario(
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         h.command("connected").await?;
         h.command("shot reattached").await?;
-        verify_outcome(s, dir, decision).await
+        verify_outcome(s, dir, decision).await?;
+        let page =
+            s.gw.get("/sessions?limit=20")
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let chat = page.data()["items"]
+            .as_array()
+            .context("sessions")?
+            .iter()
+            .filter_map(|row| row["id"].as_str())
+            .find(|id| *id != "general")
+            .context("created chat")?;
+        h.command(&format!("open {chat}")).await?;
+        h.command("shot before-delete").await?;
+        let deleted =
+            s.gw.delete(&format!("/sessions/{chat}?permanent=true"))
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        if deleted.status != 200 {
+            bail!("gateway delete failed: {}", deleted.status);
+        }
+        h.command(&format!("left {chat}")).await?;
+        h.command("shot deleted-open-chat").await
     }
     .await;
     let cleanup = h.finish().await;
