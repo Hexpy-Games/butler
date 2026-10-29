@@ -90,8 +90,9 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- ../../butler-shell
 
   package:
+    needs: changes
     # Build unsigned experimental artifacts in parallel with platform checks.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.shell == 'true')
     # Cold check/test each took 4-7 min; optimized gpui compilation needs its
     # own budget. Allow 30 min for cold release + notices/upload/cache saving;
     # this is an initial allowance, not a measured release completion time.

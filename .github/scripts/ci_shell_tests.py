@@ -16,10 +16,11 @@ class ShellSelection(unittest.TestCase):
         workflow = (Path(__file__).resolve().parents[1] / 'workflows/shell.yml').read_text()
         shell = workflow.split('  shell:\n', 1)[1].split('  package:\n', 1)[0]
         package = workflow.split('  package:\n', 1)[1]
-        self.assertNotRegex(package, r'(?m)^    needs:')
+        self.assertIn('    needs: changes\n', package)
         self.assertIn(
             "    if: github.event_name == 'workflow_dispatch' || "
-            "(github.event_name == 'push' && github.ref == 'refs/heads/main')\n",
+            "(github.event_name == 'push' && github.ref == 'refs/heads/main' && "
+            "needs.changes.outputs.shell == 'true')\n",
             package,
         )
         self.assertNotRegex(shell, r'\bcargo check\b')
