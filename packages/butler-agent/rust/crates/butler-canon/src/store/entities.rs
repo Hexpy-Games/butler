@@ -129,6 +129,7 @@ pub(super) fn insert_work_assigned(
         json!({"tags": rows(tx, api::sql::EPIC_TAGS, [&input.id])?})
     };
     event_with_details(tx, ctx, ("work", &input.id, 0, "create"), &details)?;
+    activity::append(tx, ctx, &input.id, "created", &input.title, None)?;
     read_work(tx, &input.id)
 }
 pub fn edit_work(
@@ -197,12 +198,19 @@ pub fn set_label(
     label: CanonStatus,
     _person: &UserAct,
 ) -> Result<Value> {
-    cas(&read_work(tx, id)?, "revision", expected_revision)?;
+    let old = read_work(tx, id)?;
+    cas(&old, "revision", expected_revision)?;
+    if label == CanonStatus::Done && runtime::epic_running(tx, id)? {
+        return Err(Error::Running);
+    }
     tx.execute(
         sql::LABEL,
         params![id, label.as_str(), ctx.now, expected_revision],
     )?;
     event(tx, ctx, "work", id, expected_revision + 1, "label")?;
+    if old["canon_status"] != label.as_str() {
+        activity::status(tx, ctx, id, text(&old, "canon_status")?, label.as_str())?;
+    }
     read_work(tx, id)
 }
 /// Bounds are ranks in the destination Plan/backlog. Canon ordering is separate

@@ -6,6 +6,8 @@
     reason = "test assertions"
 )]
 mod delegation;
+#[path = "canon_mcp/running.rs"]
+mod mcp_running;
 mod plans;
 mod recovery;
 mod stub;
@@ -42,6 +44,7 @@ async fn setup(
 > {
     let (url, script, server) = stub::start(rejects, revise).await?;
     let s = Setup::new(name)?
+        .data_folder_token()
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", &url)
         .start()

@@ -12,7 +12,7 @@ mod operations;
 mod queries;
 mod recovery;
 mod review;
-mod stub;
+pub(super) mod stub;
 mod variants;
 use butler_e2e::e2e::{
     HarnessError,

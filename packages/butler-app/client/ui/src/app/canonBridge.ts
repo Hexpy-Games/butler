@@ -1,5 +1,10 @@
 /** Exact canon route allowlist; the preload retains ownership of authenticated requests. */
 export function canonBridgeInput(url: URL, verb: string, body: () => Record<string, unknown>): { method: string; input: Record<string, unknown> } | null {
+  if (url.pathname === "/canon/mcp-grants" && verb === "GET") return { method: "getCanonGrants", input: { state: url.searchParams.get("state") } };
+  const grant = url.pathname.match(/^\/canon\/mcp-grants\/([^/]+)\/(allow|deny|revoke)$/u);
+  if (grant && verb === "POST") return { method: "decideCanonGrant", input: { id: decodeURIComponent(grant[1]!), action: grant[2] } };
+  const activity = url.pathname.match(/^\/canon\/epics\/([^/]+)\/activity$/u);
+  if (activity && verb === "GET") return { method: "getCanonActivity", input: { id: decodeURIComponent(activity[1]!), before: url.searchParams.get("before") } };
   const proposal = url.pathname.match(/^\/canon\/proposals\/([^/]+)$/u);
   if (proposal && (verb === "GET" || verb === "POST")) return {
     method: verb === "GET" ? "getCanonProposal" : "resolveCanonProposal", input: { id: decodeURIComponent(proposal[1]!), body: body() },

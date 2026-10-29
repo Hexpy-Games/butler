@@ -3,11 +3,11 @@ use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
 use butler_e2e::e2e::{matching, sanitize::Placeholders};
 use std::sync::{Arc, Mutex};
 #[derive(Default)]
-pub(super) struct Script {
+pub(crate) struct Script {
     pub replies: Mutex<std::collections::HashMap<String, Vec<Value>>>,
     pub requests: Mutex<Vec<Value>>,
 }
-pub(super) async fn start()
+pub(crate) async fn start()
 -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/v1", listener.local_addr()?);
@@ -77,14 +77,14 @@ fn final_reply(body: &Value) -> Value {
     };
     json!({"type":"message","id":"msg_done","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
 }
-pub(super) fn arm(script: &Script, message: &str, calls: Vec<(&str, Value)>) {
+pub(crate) fn arm(script: &Script, message: &str, calls: Vec<(&str, Value)>) {
     let items=calls.into_iter().enumerate().map(|(n,(name,args))|json!({"type":"function_call","id":format!("fc_cp_{n}"),"call_id":format!("call_cp_{n}"),"name":name,"arguments":args.to_string(),"status":"completed"})).collect();
     script.replies.lock().unwrap().insert(
         message.split_whitespace().collect::<Vec<_>>().join(" "),
         items,
     );
 }
-pub(super) fn results(script: &Script) -> Vec<Value> {
+pub(crate) fn results(script: &Script) -> Vec<Value> {
     script
         .requests
         .lock()

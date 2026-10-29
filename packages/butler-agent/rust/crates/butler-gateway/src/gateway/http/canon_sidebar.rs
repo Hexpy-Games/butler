@@ -11,6 +11,13 @@ pub(super) async fn route(
     request: Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
+    if super::canon::delegate(request.headers())?.is_some() {
+        return Err(HttpError::public(
+            403,
+            "permission",
+            "허용되지 않은 작업입니다.",
+        ));
+    }
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
     let app = &state.application;
     let data = match (request.method(), parts.as_slice()) {

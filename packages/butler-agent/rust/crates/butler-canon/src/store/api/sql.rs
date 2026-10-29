@@ -6,6 +6,7 @@ macro_rules! statements {
     }
 }
 statements! {
+OPEN_MCP_SPEC = "SELECT * FROM canon_proposals INDEXED BY canon_proposals_mcp_spec WHERE json_extract(changes_json,'$[0].id')=?1 AND source='mcp' AND state='open' ORDER BY created_at DESC,id DESC";
 PLAN_SCOPE = "SELECT project_id FROM canon_plans WHERE id=?1";
 EPIC_SCOPE = "SELECT project_id FROM canon_epics WHERE id=?1";
 PLANS = "SELECT * FROM canon_plans WHERE project_id=?1 ORDER BY status DESC,due_on IS NULL,due_on,created_at,id";

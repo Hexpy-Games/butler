@@ -1,5 +1,6 @@
 //! Standalone MCP stdio entrypoint; it does not acquire service/runtime ownership.
 
+mod canon;
 mod cleanup;
 mod graph;
 mod model;
