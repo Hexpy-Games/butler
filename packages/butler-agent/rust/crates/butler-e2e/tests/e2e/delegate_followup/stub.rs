@@ -180,10 +180,8 @@ async fn reply(
             "call_id":format!("file-{i}"),"name":"list_files","status":"completed",
             "arguments":json!({"root":format!("{}/lookup-{i}", script.file_root.lock().unwrap())}).to_string()
         })).collect::<Vec<_>>())
-    } else if script.duplicate.load(Ordering::SeqCst) && kind == "parent" && step == 3 {
-        let mut duplicate = item.clone();
-        duplicate["id"] = "duplicate-delegate".into();
-        duplicate["call_id"] = "duplicate-delegate".into();
+    } else if script.duplicate.load(Ordering::SeqCst) && kind == "parent" && step == 0 {
+        let duplicate = item.clone();
         json!([item, duplicate])
     } else {
         item

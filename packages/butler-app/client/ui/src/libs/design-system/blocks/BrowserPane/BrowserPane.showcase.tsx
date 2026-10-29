@@ -20,6 +20,22 @@ function Pane({ locale, placement }: { locale: "en-US" | "ko-KR"; placement: "co
 
 export const stories: ShowcaseStory[] = [
   {
+    // Butler controls the tab: the pane edge takes the riso inks on all four edges.
+    name: "Controlled: Butler holds the tab (cards frame)",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={900} frame="cards" holder="butler" band="agent" />,
+  },
+  {
+    name: "Controlled: standalone browser (cards frame)",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <StandaloneFrameDemo locale={locale} width={1440} height={900} frame="cards" holder="butler" band="agent" />,
+  },
+  {
+    name: "Conversation frame at 1440 (cards frame)",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={900} frame="cards" />,
+  },
+  {
     // The approved layout: chat left (400px), the pane right, Butler holding the tab.
     name: "Conversation frame at 1440",
     widths: ["app", "wide"],

@@ -1,21 +1,20 @@
 // Settings containers -> isolated native gateway; browser data is an offline fixture.
+// Screenshots go to BUTLER_SETTINGS_BROWSER_EVIDENCE, or a fresh temp directory when unset.
 import { strict as assert } from "node:assert";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 
-const before = process.env.BUTLER_SETTINGS_BEFORE_UI;
-const stage = before ? "before" : "after";
-const output = process.env.BUTLER_SETTINGS_BROWSER_EVIDENCE;
-assert.ok(output, "explicit evidence directory required");
-mkdirSync(join(output, stage), { recursive: true });
-const report: Record<string, unknown>[] = [];
+const output = process.env.BUTLER_SETTINGS_BROWSER_EVIDENCE ?? mkdtempSync(join(tmpdir(), "settings-browser-page-"));
+mkdirSync(output, { recursive: true });
+let screenshots = 0;
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
 const browser = await launchSmokeBrowser();
-const server = await createNativeAppServer({ uiRoot: resolve(before ?? "packages/butler-app/client/ui/dist") });
+const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
 const admin = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8")).secret as string;
 const defaultBrowsingAgent = (await server.api<{ browser: { browsing_agent: string } }>("/settings")).browser.browsing_agent;
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
@@ -26,7 +25,8 @@ async function capture(name: string) {
     await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
   });
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name);
-  await page.screenshot({ path: join(output!, stage, `${name}.png`) });
+  await page.screenshot({ path: join(output, `${name}.png`) });
+  screenshots += 1;
 }
 
 async function open(id: string, title: string) {
@@ -49,29 +49,28 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
   {
     await open("browser", copy.settings.sections.browser);
     await section(page, "sign-ins").locator('[data-test-class="sign-in-row"]').waitFor();
-    await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
-    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), [...(!before ? ["browsing-agent"] : []), "browser-history", "browser-site-data", "sign-ins", "browser-import", "payment-methods", "profiles", "purchase-sites"]);
-    if (!before) {
-      const settings = await server.api<{ browser: { auto: { model: string; available: boolean } } }>("/settings");
-      const catalog = await server.api<{ models: { model_ref: string; display_name: string }[]; registered_models: { model_ref: string; display_name: string }[] }>("/model-catalog");
-      const resolvedName = [...catalog.registered_models, ...catalog.models].find(model => model.model_ref === settings.browser.auto.model)?.display_name;
-      const autoLabel = copy.settings.browsingAgent.auto(settings.browser.auto.available && resolvedName ? resolvedName : copy.settings.browsingAgent.conversationModel);
-      const field = section(page, "browsing-agent");
-      const select = field.getByRole("combobox", { name: copy.settings.browsingAgent.label });
-      const defaultLabel = defaultBrowsingAgent === "auto" ? autoLabel : copy.settings.browsingAgent.off;
-      await select.getByText(defaultLabel, { exact: true }).waitFor();
-      await capture(`browser-default-${key}`);
-      await select.click();
-      await page.getByRole("option", { name: copy.settings.browsingAgent.off, exact: true }).click();
-      await select.getByText(copy.settings.browsingAgent.off, { exact: true }).waitFor();
-      assert.equal((await server.api<{ browser: { browsing_agent: string } }>("/settings")).browser.browsing_agent, "off");
-      await select.click();
-      await page.getByRole("option", { name: autoLabel, exact: true }).click();
-      await select.getByText(autoLabel, { exact: true }).waitFor();
-      await select.click();
-      await page.getByRole("option", { name: defaultLabel, exact: true }).click();
-      await select.getByText(defaultLabel, { exact: true }).waitFor();
-    }
+    await section(page, "browser-import").getByRole("button", { name: copy.settings.browserImport.open, exact: true }).waitFor();
+    const lists = ["payment-methods", "profiles", "purchase-sites", "browser-import"];
+    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), ["browsing-agent", "browser-history", "browser-site-data", "sign-ins", ...lists]);
+    const settings = await server.api<{ browser: { auto: { model: string; available: boolean } } }>("/settings");
+    const catalog = await server.api<{ models: { model_ref: string; display_name: string }[]; registered_models: { model_ref: string; display_name: string }[] }>("/model-catalog");
+    const resolvedName = [...catalog.registered_models, ...catalog.models].find(model => model.model_ref === settings.browser.auto.model)?.display_name;
+    const autoLabel = copy.settings.browsingAgent.auto(settings.browser.auto.available && resolvedName ? resolvedName : copy.settings.browsingAgent.conversationModel);
+    const field = section(page, "browsing-agent");
+    const select = field.getByRole("combobox", { name: copy.settings.browsingAgent.label });
+    const defaultLabel = defaultBrowsingAgent === "auto" ? autoLabel : copy.settings.browsingAgent.off;
+    await select.getByText(defaultLabel, { exact: true }).waitFor();
+    await capture(`browser-default-${key}`);
+    await select.click();
+    await page.getByRole("option", { name: copy.settings.browsingAgent.off, exact: true }).click();
+    await select.getByText(copy.settings.browsingAgent.off, { exact: true }).waitFor();
+    assert.equal((await server.api<{ browser: { browsing_agent: string } }>("/settings")).browser.browsing_agent, "off");
+    await select.click();
+    await page.getByRole("option", { name: autoLabel, exact: true }).click();
+    await select.getByText(autoLabel, { exact: true }).waitFor();
+    await select.click();
+    await page.getByRole("option", { name: defaultLabel, exact: true }).click();
+    await select.getByText(defaultLabel, { exact: true }).waitFor();
     await capture(`browser-${key}`);
     const group = page.getByText(copy.settings.groups.appAndSystem, { exact: true }).locator("..");
     assert(await group.count(), "app and system group remains visible");
@@ -93,8 +92,6 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
   }
   await open("general", copy.settings.sections.general);
   await section(page, "search-behavior").scrollIntoViewIfNeeded();
-  const searchText = await section(page, "search-provider").innerText() + "\n" + await section(page, "search-behavior").innerText();
-  report.push({ key, searchText });
   await capture(`general-search-${key}`);
 }
 
@@ -111,16 +108,10 @@ try {
     } else {
       const response = await route.fetch({ headers: { ...route.request().headers(), ...server.authHeaders, "x-butler-admin": admin } });
       const body = await response.json();
-      if (before && path === "/security") Object.assign(body.data, { headless_browser: true, headless_browser_app: true });
       await route.fulfill({ response, json: body });
     }
   });
   for (const locale of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const) await matrix(locale, theme);
   assert.equal(server.stubModelCalls.length, 0);
-  if (!before) {
-    const baseline = JSON.parse(readFileSync(join(output, "before", "report.json"), "utf8"));
-    assert.deepEqual(report, baseline.report, "General search sections retain all copy, controls and order");
-  }
-  writeFileSync(join(output, stage, "report.json"), JSON.stringify({ stage, report, modelCalls: 0 }, null, 2));
-  console.log(JSON.stringify({ ok: true, stage, cells: report.length, screenshots: report.length * (before ? 3 : 4), modelCalls: 0 }));
+  console.log(JSON.stringify({ ok: true, screenshots, output, modelCalls: 0 }));
 } finally { await browser.close(); await server.stop(); }

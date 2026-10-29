@@ -97,7 +97,7 @@ ComposerCard reads.
 `aside` puts content in the conversation's right margin (session details:
 open requests, the task, results, attachments, environment). The shell owns
 where it sits and scrolls it in a scroller of its own (the shared edge fade,
-the scrollbar gutter reserved on both edges):
+a scrollbar lane only while a classic scrollbar is drawn):
 
 - Docked (a 960px shell or wider; a floating aside docks again from 992px, so a
   width on the line never flaps): flat on the shell's background, 272px
@@ -117,11 +117,27 @@ cards on glass: margin variant B is one flat `Card` per section, 12px apart
 (`Stack gap="md"`), docked; the same sections bare on the glass. The aside
 element carries `data-layout` and the shell `data-aside`. Each layout enters
 and leaves with the DS Presence fade, so opening, closing and a docked/floating
-flip cross-fade (none under reduced motion). Both layouts keep one inset on
+flip cross-fade. A closed aside forgets its layout, so reopening after a resize
+mounts it straight in the right place.
+
+Motion: when a docked aside opens or closes (or the rail's room comes or goes)
+the shell's CSS moves the column at once, and `ConversationColumnGlide` slides
+it from where it was on screen (FLIP) on a transform, `--motion-slow` with
+`--motion-ease-emphasized`. The message list, the floating composer and the
+jump button carry `data-column-glide` and travel together; the docked aside
+rides along, entering from the right as the column makes room and leaving to
+the right as it comes back, so the pane pushes the column and never covers it.
+Nothing reflows while it moves: a width change applies before the glide (text
+wraps once) and the transcript keeps its scroll position. A floating aside
+fades in and out over the conversation; the column does not move. Under
+reduced motion everything moves at once, with no fade. Both layouts keep one inset on
 the start and the end, whatever the scrollbar (overlay, classic or hidden). Name
 the landmark with `asideLabel`. Without `aside` the shell renders exactly as
 before. A docked aside and a `TabRail` share the right margin: show one at a
-time.
+time. The shell enforces the order: while the aside shows or is still leaving,
+a rail is held (hidden and inert), and once the aside's exit has ended the
+rail fades in, so its cards never show under the leaving pane. The column
+makes room for the rail as the aside leaves, in one move.
 
 ```tsx
 <ConversationShell composerReserve={reserve} asideLabel={copy.sessionDetails} asideFloatOpen={detailsOpen}

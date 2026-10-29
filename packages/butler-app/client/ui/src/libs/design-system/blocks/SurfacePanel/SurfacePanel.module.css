@@ -9,6 +9,10 @@
   color: var(--text-primary);
 }
 
+.radiusLg {
+  border-radius: var(--radius-popover);
+}
+
 .elevation-none {
   box-shadow: none;
   background: transparent;

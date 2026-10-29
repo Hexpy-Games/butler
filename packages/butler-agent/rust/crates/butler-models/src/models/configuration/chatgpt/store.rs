@@ -147,6 +147,14 @@ pub fn account_view(registration: &Value, host: &Value, legacy: bool) -> ChatGpt
     }
 }
 
+pub async fn remove_legacy(paths: &Paths) -> Result<(), Error> {
+    match tokio::fs::remove_file(&paths.legacy).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err("legacy_auth_delete_failed"),
+    }
+}
+
 pub async fn delete_legacy(paths: &Paths) {
     match tokio::fs::remove_file(&paths.legacy).await {
         Ok(()) => {}

@@ -21,7 +21,7 @@
   width: fit-content;
   max-width: min(440px, 68%);
   min-width: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-popover);
   outline: var(--border-hairline) dashed var(--line-strong);
   outline-offset: calc(var(--border-hairline) * -1);
   background-color: color-mix(in srgb, var(--user-message-bg) 40%, transparent);

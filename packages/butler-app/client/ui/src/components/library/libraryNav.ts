@@ -22,6 +22,7 @@ export function libraryTitle(view: LibraryView): string {
 
 /** One level up: item → its group (or kind) → kind → main. The main screen has none. */
 export function libraryParent(view: LibraryView): LibraryView | null {
+  if (view.doc) return { kind: "library", section: "document" };
   if (view.item) return { kind: "library", section: view.section, group: view.group };
   if (view.group) return { kind: "library", section: view.section };
   if (view.section) return { kind: "library" };
@@ -35,5 +36,5 @@ export function openLibrary(view: Omit<LibraryView, "kind"> = {}) {
 /** Opens a scrap's detail panel (the item travels with the route; the panel reads it from here). */
 export function openDetail(item: LibraryItem, from: LibraryView) {
   useLibraryNames.setState({ item });
-  openLibrary({ section: item.kind, group: from.group, item: item.id });
+  openLibrary({ section: item.kind === "doc" ? "document" : item.kind, group: from.group, item: item.id });
 }

@@ -47,6 +47,7 @@ pub(crate) use router::templates as route_templates;
 mod security;
 pub(super) use security::RequestPolicy;
 mod canon;
+mod canon_proposals;
 mod canon_sidebar;
 mod security_settings;
 mod session_branches;
@@ -269,9 +270,10 @@ async fn authorized_route(
     request.extensions_mut().insert(client.clone());
     let signs = client.access.receives_signed_urls();
     let keys = client.keys.clone();
+    let application = state.application.clone();
     let response = route_for_client(state, request, client).await?;
     Ok(if signs {
-        keys.sign_urls(response).await
+        keys.sign_urls(response, application.as_ref()).await
     } else {
         response
     })
@@ -296,7 +298,7 @@ async fn route(
     let uri = request.uri().clone();
     let accepts_html = static_ui::accepts_html(request.headers());
     match (method.clone(), handler) {
-        (Method::GET, router::Handler::Health) => health(),
+        (Method::GET, router::Handler::Health) => health(&state),
         (Method::GET, router::Handler::ProviderQuota) => {
             monitors::provider_quota(state, &uri).await
         }
@@ -322,6 +324,7 @@ async fn route(
             session_branches::post(state, request).await
         }
         (Method::GET, router::Handler::Projects) => projects::list(state, &uri).await,
+        (Method::GET, router::Handler::ProjectFolders) => projects::folders(state, &uri).await,
         (Method::GET, router::Handler::NewChatBriefing) => {
             new_chat_briefing::get(state, &uri).await
         }
@@ -400,3 +403,6 @@ async fn post_message(
         },
     )
 }
+
+mod connectors;
+mod plugins;

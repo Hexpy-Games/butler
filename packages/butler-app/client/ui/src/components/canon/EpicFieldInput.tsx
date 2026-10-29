@@ -23,14 +23,14 @@ export function EpicFieldInput({ epic, field, value, busy, valid, current, base,
     onKeyDown: (event: React.KeyboardEvent) => {
       if (event.nativeEvent.isComposing) return;
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!saving) onCancel(); }
-      if (event.key === "Enter" && !multiline) { event.preventDefault(); void save(); }
+      if (event.key === "Enter" && (!multiline || event.metaKey || event.ctrlKey)) { event.preventDefault(); void save(); }
     } };
   const actions = <ButtonContainer size="icon-sm" justify="end">
     <Tooltip label={copy.cancel}><Button size="icon-sm" variant="outline" aria-label={copy.cancel} disabled={saving} onClick={onCancel}><X size="sm" /></Button></Tooltip>
     <Tooltip label={copy.save}><Button size="icon-sm" aria-label={copy.save} disabled={saving || !valid} onClick={() => void save()}><CheckIcon size="sm" /></Button></Tooltip>
   </ButtonContainer>;
   return <Presence present motion="fade"><Stack gap="sm" data-canon-inline-editor>
-    {multiline ? <><Textarea {...props} onSelect={attachments.onSelect} rows={5} />
+    {multiline ? <><Textarea autoGrow {...props} onSelect={attachments.onSelect} />
       <Stack align="row" justify="between" cross="center" gap="xs">{attachments.control}{actions}</Stack>
       {(items.length > 0 || attachments.pendingFile) && <AttachmentList items={[...items,
         ...(attachments.pendingFile ? [{ id: "upload", name: attachments.pendingFile.name, upload: "uploading" as const }] : [])]} />}</>

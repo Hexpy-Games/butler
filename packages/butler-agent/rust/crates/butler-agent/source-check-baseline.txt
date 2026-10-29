@@ -13,7 +13,7 @@ src/host/guided/command.rs	GuidedCommand::execute_observation	151
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	171
 src/host/guided/command/output/assemble.rs	assemble	139
-src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	183
+src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	180
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
@@ -25,7 +25,6 @@ src/host/guided/project_tools/lifecycle/closeout.rs	closeout	97
 src/host/guided/project_tools/options.rs	command	144
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
-src/host/guided/tools/dispatch.rs	execute	174
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
 src/host/guided/tools/execute.rs	execute	118
@@ -40,7 +39,7 @@ src/host/memory_jobs/briefing.rs	<BriefingSource as BriefingInputSource>::snapsh
 src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	107
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	153
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	89
-src/host/runtime.rs	AgentRuntime::open	365
+src/host/runtime.rs	AgentRuntime::open	359
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
 src/host/service/ingress/bind/policy.rs	upsert_app_binding	210

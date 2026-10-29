@@ -19,6 +19,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "json" => &["public_text"],
         // Typed hook envelopes preserve complete tool JSON.
         "hooks" => &["json"],
+        // Plugin admin port carries inert values and secret-free failures.
+        "plugins" => &[],
         // butler-canon: inert SQL definitions and pure chain invariants.
         "work_schema" | "work_queries" | "work_rank" | "work_types" => &[],
         "work_chain" => &["work_types"],
@@ -69,7 +71,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Outbound transport produces records through the structured logging facade.
         "http" => &["structured_logging"],
         // butler-e2e: dev-only harness around the built binary; one domain.
-        "e2e" => &[],
+        "e2e" | "mail_connector" => &[],
         _ => return None,
     })
 }
@@ -83,7 +85,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
         "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
-        | "account_dirs" | "process_priority" | "download_mark" => &[],
+        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files"
+        | "shared_locks" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
@@ -91,7 +94,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "command_sandbox" => &["secure_fs", "account_dirs", "data_paths"],
         "process_control" => &["process_table"],
         // The headless browser's DevTools pipe runs in a contained process tree.
-        "browser_process" => &["process_control"],
+        "browser_process" | "system_wake" => &["process_control"],
         // The installed App is found under the user's home; its windowless
         // browser host runs in a contained process tree.
         "app_browser" => &["process_control", "user_dirs"],

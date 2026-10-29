@@ -28,7 +28,9 @@ pub(in crate::store) fn append(
         _ => None,
     };
     if let Some(project) = project {
-        let origin = if ctx.actor.get("person").is_some() && ctx.actor["via"] != "butler" {
+        let origin = if ctx.actor["origin"] == "mcp" {
+            "mcp"
+        } else if ctx.actor.get("person").is_some() && ctx.actor["via"] != "butler" {
             "local"
         } else {
             "butler"

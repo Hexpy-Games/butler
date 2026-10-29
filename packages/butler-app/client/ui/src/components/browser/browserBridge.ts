@@ -85,7 +85,6 @@ export function connectBrowser() {
       if (requested && session && current.view.kind === "session" && current.activeChatId === session) {
         useBrowserShellState.getState().setOpen(session, true);
         useBrowserShellState.getState().rememberTab(session, requested.id);
-        current.setRightOpen(false);
         void browserCall("activate", { id: requested.id });
       }
     }
@@ -112,7 +111,6 @@ export async function openConversationBrowser(session: string, requestedTab?: st
   if (!window.butlerBrowser || !publicBrowserOwner(`conversation:${session}`, useButlerStore.getState().navigation)) return;
   connectBrowser();
   const store = useButlerStore.getState();
-  store.setRightOpen(false);
   // A link from the open conversation keeps its view; only another conversation is opened.
   if (store.activeChatId !== session || store.view.kind !== "session") store.openSession(session);
   const shell = useBrowserShellState.getState();

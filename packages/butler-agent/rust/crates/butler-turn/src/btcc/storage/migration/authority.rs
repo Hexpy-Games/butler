@@ -13,9 +13,13 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
 
     let table = "btcc_authority_requests_af02d_legacy";
     db.execute_batch(&format!(
-        "ALTER TABLE btcc_authority_requests RENAME TO {table}; \
+        "DROP TRIGGER IF EXISTS pending_ask_suspended; \
+         ALTER TABLE btcc_authority_requests RENAME TO {table}; \
          DROP INDEX IF EXISTS idx_btcc_authority_requests_owner_pending; \
-         DROP INDEX IF EXISTS idx_btcc_authority_requests_slot_action;"
+         DROP INDEX IF EXISTS idx_btcc_authority_requests_slot_action; \
+         DROP INDEX IF EXISTS idx_btcc_questions_owner_turn; \
+         DROP INDEX IF EXISTS idx_btcc_questions_deferred; \
+         DROP INDEX IF EXISTS idx_btcc_permission_sources;"
     ))?;
     db.execute_batch(AUTHORITY_SCHEMA)?;
 
@@ -54,7 +58,8 @@ fn requires_rewrite(db: &Connection, definition: &str) -> rusqlite::Result<bool>
             || !column_exists(db, "btcc_authority_requests", "closed_at")?
             || !definition.contains("'reviewed_effect'")
             || !definition.contains("'session_cancelled'")
-            || !definition.contains("'work_abandoned'"),
+            || !definition.contains("'work_abandoned'")
+            || !definition.contains("'site'"),
     )
 }
 

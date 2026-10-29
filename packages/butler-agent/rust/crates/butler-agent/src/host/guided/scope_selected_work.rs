@@ -140,6 +140,18 @@ impl ScopeSelectedWorkRepository {
 }
 
 impl DurableWorkRepository for ScopeSelectedWorkRepository {
+    fn work_for_turn(&self, turn: String, work: String) -> PortFuture<'_, Option<WorkView>> {
+        Box::pin(async move {
+            self.store_for_turn(&turn)
+                .await?
+                .work_for_turn(turn, work)
+                .await
+        })
+    }
+    fn steward_owns_work(&self, session: String, work: String) -> PortFuture<'_, bool> {
+        self.session.steward_owns_work(session, work)
+    }
+
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>> {
         Box::pin(async move {
             self.store_for_scope(&scope)
@@ -176,6 +188,14 @@ impl DurableWorkRepository for ScopeSelectedWorkRepository {
             self.store_for_scope(&command.input.scope)
                 .await?
                 .start_work(command)
+                .await
+        })
+    }
+    fn start_handoff_work(&self, command: StartWorkCommand) -> PortFuture<'_, WorkView> {
+        Box::pin(async move {
+            self.store_for_scope(&command.input.scope)
+                .await?
+                .start_handoff_work(command)
                 .await
         })
     }

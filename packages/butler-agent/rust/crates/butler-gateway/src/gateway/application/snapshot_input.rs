@@ -17,35 +17,23 @@ impl AppApplication {
     ) -> Result<AppTurn, GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
-        let (snapshot, conversation_access, default_project_folder, document_edits) = self
-            .storage
-            .execute(move |db| claimed_input(db, &queued_id, &claim_id))
-            .await
-            .map_err(app_error)?;
-        let controls: ExecutionControls =
-            serde_json::from_value(snapshot.execution_controls.clone()).map_err(|source| {
-                public(
-                    500,
-                    "turn_execution_controls_invalid",
-                    "Turn controls are unavailable.",
-                )
-                .with_source(source)
-            })?;
-        let verified = controls.verify().map_err(|source| {
-            public(
-                500,
-                "turn_execution_controls_invalid",
-                "Turn controls are unavailable.",
-            )
-            .with_source(source)
-        })?;
-        if verified.turn_id != snapshot.turn_id || verified.session_id != snapshot.chat_id {
-            return Err(public(
-                500,
-                "turn_execution_controls_identity_mismatch",
-                "Turn controls are unavailable.",
-            ));
-        }
+        let facts = self.dependencies.settings_facts.snapshot()?;
+        let (snapshot, conversation_access, default_project_folder, document_edits, language) =
+            self.storage
+                .execute(move |db| {
+                    let (snapshot, access, folder, edits) =
+                        claimed_input(db, &queued_id, &claim_id)?;
+                    Ok((
+                        snapshot,
+                        access,
+                        folder,
+                        edits,
+                        settings::ui_language(db, &facts)?.as_str().to_owned(),
+                    ))
+                })
+                .await
+                .map_err(app_error)?;
+        verify_claimed_controls(&snapshot)?;
         let needs_project_sources = snapshot
             .content_parts
             .as_ref()
@@ -69,14 +57,7 @@ impl AppApplication {
                 "Project source context is unavailable.",
             ));
         }
-        let readiness = self.dependencies.executor_readiness.readiness()?;
-        if !readiness.authenticated_gateway_ready || !readiness.btcc_executor_ready {
-            return Err(public(
-                503,
-                "app_transport_executor_unavailable",
-                "The Butler runtime is unavailable.",
-            ));
-        }
+        self.ensure_native_dispatch_ready()?;
         let assets = self
             .dependencies
             .native_assets
@@ -88,9 +69,53 @@ impl AppApplication {
             &conversation_access,
             default_project_folder,
         );
+        turn.app_turn_context["language"] = language.into();
         turn.app_turn_context["documentEdits"] = json!(document_edits);
         self.with_canon_epics(turn).await
     }
+
+    fn ensure_native_dispatch_ready(&self) -> Result<(), GatewayApplicationError> {
+        let readiness = self.dependencies.executor_readiness.readiness()?;
+        if !readiness.authenticated_gateway_ready || !readiness.btcc_executor_ready {
+            return Err(public(
+                503,
+                "app_transport_executor_unavailable",
+                "The Butler runtime is unavailable.",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Dispatch verifies the immutable controls against the claimed turn identity.
+fn verify_claimed_controls(
+    snapshot: &ClaimedNativeSnapshot,
+) -> Result<(), GatewayApplicationError> {
+    let controls: ExecutionControls = serde_json::from_value(snapshot.execution_controls.clone())
+        .map_err(|source| {
+        public(
+            500,
+            "turn_execution_controls_invalid",
+            "Turn controls are unavailable.",
+        )
+        .with_source(source)
+    })?;
+    let verified = controls.verify().map_err(|source| {
+        public(
+            500,
+            "turn_execution_controls_invalid",
+            "Turn controls are unavailable.",
+        )
+        .with_source(source)
+    })?;
+    if verified.turn_id != snapshot.turn_id || verified.session_id != snapshot.chat_id {
+        return Err(public(
+            500,
+            "turn_execution_controls_identity_mismatch",
+            "Turn controls are unavailable.",
+        ));
+    }
+    Ok(())
 }
 
 /// The claimed snapshot and its conversation's own access mode now.
@@ -134,6 +159,7 @@ fn claimed_snapshot(
                 let ledger_project_id: Option<String> = row.get(13)?;
                 let resolution = parse_value(resolution_json.as_deref().unwrap_or("{}"), 9)?;
                 Ok(ClaimedNativeSnapshot {
+                    message_origin: string_field(&resolution, "message_origin"),
                     session_id: row
                         .get::<_, Option<String>>(16)?
                         .unwrap_or_else(|| session_hint(&chat_id)),
@@ -191,6 +217,9 @@ fn rebuilt_turn(
 ) -> AppTurn {
     let mut context = Map::new();
     context.insert("version".into(), Value::from(1));
+    if let Some(origin) = &snapshot.message_origin {
+        context.insert("messageOrigin".into(), origin.clone().into());
+    }
     context.insert("defaultProjectFolder".into(), default_project_folder.into());
     if let Some(seed) = snapshot.branch_seed.clone() {
         context.insert("branchSeed".into(), seed);

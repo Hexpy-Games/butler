@@ -28,6 +28,7 @@ const COMPONENT_STORIES: Array<[string, string, string]> = [
   ["components/Dialog", "Rename conversation", "Overlays: dialog and backdrop"],
   ["components/Tooltip", "Icon button label", "Overlays: tooltip presence"],
   ["blocks/QueuedMessage", "Send flight", "Send flight: the bubble flies from the composer"],
+  ["blocks/BlockActionFrame", "Save flight", "Save flight: a saved block flies into the 서랍"],
   ["components/Spinner", "Sizes and busy button", "Spinner: arc loop"],
   ["components/LoadingIndicator", "Spinner to check", "LoadingIndicator: spinner resolves into a drawn check"],
   ["components/ButlerThinkingMark", "Idle to working", "ButlerThinkingMark: halftone morph and settle to the logo"],

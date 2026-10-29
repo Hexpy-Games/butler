@@ -104,11 +104,14 @@ impl<'a> Trail<'a> {
             identity: self.identity,
             at: self.at,
             revision: self.revision,
-            stage: self
-                .current
-                .view
-                .current_stage
-                .unwrap_or(WorkStage::Planning),
+            stage: if command.delegated_result_id.is_some() {
+                WorkStage::Reporting
+            } else {
+                self.current
+                    .view
+                    .current_stage
+                    .unwrap_or(WorkStage::Planning)
+            },
             plan_id,
             progress,
             summary: &command.normalized_summary,

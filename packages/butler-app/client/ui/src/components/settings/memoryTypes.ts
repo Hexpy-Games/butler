@@ -22,3 +22,12 @@ export interface MemoryProject { ledger_project_id?: string; id: string; display
 export function cardState(state: SettingsSectionState, card?: MemoryCard): SettingsSectionState {
   return state !== "ready" ? state : card && card.health.state !== "unavailable" ? "ready" : "empty";
 }
+export interface ConsolidationReceipt {
+  kind: "consolidation"; operation_id: string; sequence: number;
+  phase: "running" | "complete" | "failed"; trigger: "manual" | "scheduled";
+}
+export interface ConsolidationStatus {
+  active?: ConsolidationReceipt | null;
+  last_run: { at: string; status: string; message?: string; trigger?: "manual" | "scheduled" } | null;
+  time_of_day: string;
+}

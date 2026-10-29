@@ -1,9 +1,29 @@
 //! Transaction operations. The caller owns an IMMEDIATE transaction and must
 //! roll it back on any error. No operation commits, opens a DB, or starts work.
+pub mod activity;
+mod agents;
 pub mod api;
 mod attachments;
+pub mod grants;
+pub use grants::sanitize as sanitize_mcp_client;
+pub use public::{
+    Activity as CanonActivity, Epic as CanonEpic, Page as CanonPage, SpecBody as CanonSpecBody,
+};
+pub mod mcp_proposals;
+pub mod page;
+pub mod proposals;
+pub mod public;
 pub use attachments::{
     references as attachment_references, references_lenient as attachment_references_lenient,
+};
+pub use proposals::queries::COUNT as COUNT_CANON_OPEN_PROPOSALS;
+pub use proposals::specs::{project_nodes as canon_project_spec_nodes, read as read_canon_spec};
+pub use proposals::view::{detail as canon_proposal_detail, open as open_canon_proposals};
+pub use proposals::{
+    APPLIED_MESSAGE as CANON_APPLIED_MESSAGE, apply as apply_canon_proposal,
+    bind as bind_canon_proposal_epic, create as create_canon_proposal, get as get_canon_proposal,
+    select_target as select_canon_proposal_target, transition as transition_canon_proposal,
+    turn_cards as canon_proposal_turn_cards,
 };
 pub mod runtime;
 pub use api::{mark_outbox_published, read as read_api, write as write_api};
@@ -31,6 +51,10 @@ pub enum Error {
     Conflict { current: Value },
     #[error("tag already exists")]
     TagExists { existing: Value },
+    #[error("epic is running")]
+    Running,
+    #[error("permission denied")]
+    Permission,
     #[error("not found")]
     NotFound,
     #[error("invalid fractional rank")]

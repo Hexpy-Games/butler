@@ -24,7 +24,11 @@ pub(super) async fn granted_sites(
     state: &Arc<HttpState>,
     session: &str,
     turn: Option<&str>,
+    browser: &Value,
 ) -> Result<Vec<String>, HttpError> {
+    if browser["signin"] == false {
+        return Ok(Vec::new());
+    }
     let value = state
         .application
         .signins(AppSignInCommand::Grants {
@@ -56,9 +60,13 @@ pub(super) async fn admit(
         if frame["args"]["signed_in"] != true {
             return Ok(None);
         }
+        if let Some(refusal) = schedule_refusal(frame) {
+            return Ok(Some(refusal));
+        }
         let url = frame["args"]["url"].as_str().unwrap_or("").to_owned();
         let site = site_of(&url).ok_or_else(|| error(400, "navigation_denied"))?;
-        let sites = granted_sites(state, session, turn.as_deref()).await?;
+        let sites =
+            granted_sites(state, session, turn.as_deref(), &frame["schedule_browser"]).await?;
         if signed_in_place(&url, &sites) != SignedInPlace::Granted {
             return Ok(Some(grant_required(&site)));
         }
@@ -76,8 +84,11 @@ pub(super) async fn admit(
     if UNGATED.contains(&op) || tab["owner"] != format!("conversation:{session}") {
         return Ok(None);
     }
+    if let Some(refusal) = schedule_refusal(frame) {
+        return Ok(Some(refusal));
+    }
     let url = tab["url"].as_str().unwrap_or("");
-    let sites = granted_sites(state, session, turn.as_deref()).await?;
+    let sites = granted_sites(state, session, turn.as_deref(), &frame["schedule_browser"]).await?;
     let place = signed_in_place(url, &sites);
     let refused = match place {
         SignedInPlace::Granted | SignedInPlace::Payment => false,
@@ -132,10 +143,17 @@ pub(super) async fn grant(
     }
     state
         .application
-        .signins(AppSignInCommand::Grant {
-            session: session.into(),
-            site: site.into(),
-            source: "approval".into(),
+        .signins(if args["always"] == true {
+            AppSignInCommand::SetAllConversations {
+                site: site.into(),
+                value: true,
+            }
+        } else {
+            AppSignInCommand::Grant {
+                session: session.into(),
+                site: site.into(),
+                source: "approval".into(),
+            }
         })
         .await?;
     Ok(json!({"status":"ok","site":site}))
@@ -171,4 +189,12 @@ pub(in crate::gateway::http) fn fence_site(state: &HttpState, site: &str) {
     {
         let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"use.signin_revoked","args":{"site":site}}));
     }
+}
+
+fn schedule_refusal(frame: &Value) -> Option<Value> {
+    (frame["schedule_browser"]["signin"] == false).then(|| {
+        json!({
+            "status":"not_dispatched", "reason":"schedule_signin_off"
+        })
+    })
 }

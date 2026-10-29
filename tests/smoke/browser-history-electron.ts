@@ -6,6 +6,45 @@ import { join, resolve } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { shellReady } from "../support/browser-shell-acceptance";
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
+type SuggestionFrame = { open: boolean; state: string | null; expanded: string | null; rect: { left: number; top: number; width: number } | null; moving: boolean };
+async function auditSuggestionTyping(a: Awaited<ReturnType<typeof browserAgentApp>>) {
+  await a.main(`${a.win}.webContents.setBackgroundThrottling(false)`);
+  await a.main("globalThis.browserAgentSubject.shortcut({type:'keyDown',meta:true,key:'l'},true)");
+  await waitBrowser(() => a.page.expression("document.activeElement?.matches('input[aria-label=Address]')"), "typing input focused");
+  await a.page.expression("document.querySelector('input[aria-label=Address]').select()");
+  await a.page.expression(`(()=>{
+    window.suggestionAudit={running:true,frames:[]};
+    const sample=()=>{
+      const p=document.querySelector('#address-suggestions')?.closest('[data-slot=popover-content]');
+      const r=p?.getBoundingClientRect();
+      window.suggestionAudit.frames.push({open:!!p,state:p?.getAttribute('data-state')??null,
+        expanded:document.querySelector('input[aria-label=Address]')?.getAttribute('aria-expanded')??null,
+        rect:r?{left:r.left,top:r.top,width:r.width}:null,moving:!!p?.getAnimations().some(a=>a.playState==='running')});
+      if(window.suggestionAudit.running)requestAnimationFrame(sample);
+    };requestAnimationFrame(sample);
+  })()`);
+  for (const char of "Histor") {
+    await a.page.insertText(char);
+    await Bun.sleep(120);
+    writeFileSync(join(evidence, `typing-${char}-${Date.now()}-renderer.png`), await a.page.screenshot());
+  }
+  const expected = await a.gateway.api<{ items: Array<{ title: string; url: string }> }>("/browser-history/suggestions?q=Histor");
+  assert.ok(expected.items.length > 0);
+  const titles = expected.items.map(item => item.title);
+  await waitBrowser(() => a.page.expression(`JSON.stringify([...document.querySelectorAll('#address-suggestions [role=option]')].map(n=>n.children[1].children[0].textContent))===${JSON.stringify(JSON.stringify(titles))}`), "final query suggestions settled");
+  await a.page.expression("window.suggestionAudit.running=false");
+  const frames = await a.page.expression<SuggestionFrame[]>("window.suggestionAudit.frames");
+  writeFileSync(join(evidence, "suggestion-typing-frames.json"), JSON.stringify({ frames, expected }, null, 2));
+  const first = frames.findIndex(frame => frame.open && frame.state === "open" && frame.expanded === "true");
+  assert.ok(first >= 0, "suggestions opened");
+  const visible = frames.slice(first);
+  assert.equal(visible.filter(frame => !frame.open || frame.state !== "open" || frame.expanded !== "true").length, 0, "no closed suggestion frames between keys");
+  // The designed initial enter motion may move the rect; subsequent queries must not restart it.
+  const settled = visible.findIndex(frame => !frame.moving);
+  assert.ok(settled >= 0, "first enter animation settled");
+  for (const frame of visible.slice(settled)) assert.deepEqual(frame.rect, visible[settled]!.rect, "suggestion anchor remains fixed after first enter");
+  await a.page.press("Escape");
+}
 const fixture = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
   const url = new URL(request.url);
   if (url.pathname === "/favicon.svg") return new Response('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="blue"/></svg>', { headers: { "content-type": "image/svg+xml" } });
@@ -59,9 +98,9 @@ try {
   // The existing browser menu is the public history entry.
   await a.click("More"); await a.page.clickText("History", "[role=menuitem]");
   await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===5"), "history page loaded");
-  await a.page.clickSelector('[role=switch][aria-label="Visited by Butler"]');
+  await a.page.clickRole("switch", "Visited by Butler");
   await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===1"), "Butler filter applied");
-  await a.page.clickSelector('[role=switch][aria-label="Visited by Butler"]');
+  await a.page.clickRole("switch", "Visited by Butler");
   await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===5"), "all visits restored");
   assert.equal(await a.page.expression("document.querySelectorAll('[data-row-id] [role=checkbox]').length"), 0, "check boxes only in selection mode");
   await a.page.clickText("Select", "button");
@@ -74,6 +113,10 @@ try {
   await a.call("navigate", { id: tab, value: fixture.url.href }); await ready("History Alpha");
   await waitBrowser(async () => (await rows()).items.length === 4, "a new visit to a deleted URL is recorded");
   await a.gateway.api("/library", { method: "POST", body: JSON.stringify({ id: "bookmark", kind: "bookmark", title: "History bookmarked", url: "https://example.com/bookmark", capturedAt: new Date().toISOString() }) });
+  await a.page.clickSelector('[data-test-class="titlebar-back"]');
+  await waitBrowser(() => a.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), "browser ready for typing audit");
+  await a.call("activate", { id: tab });
+  await auditSuggestionTyping(a);
   for (const language of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     const ko = language === "ko";
     await a.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme }) });

@@ -36,6 +36,7 @@ async fn setup(app: bool) -> Result<Scenario, HarnessError> {
     for job in ["session-sync", "consolidation-cycle"] {
         std::fs::remove_file(s.sandbox.data.join(format!("state/scheduler/{job}.json")))?;
     }
+    super::memory_fixture::arm_consolidation(&s.sandbox.data, "2026-10-02T03:59:00.000Z")?;
     Ok(s)
 }
 

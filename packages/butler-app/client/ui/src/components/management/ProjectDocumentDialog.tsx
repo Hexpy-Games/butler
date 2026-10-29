@@ -60,7 +60,7 @@ export function ProjectDocumentDialog({
             )}</Stack>
           </DisclosureRow>}
         >
-          {document.artifact ? <ArtifactViewer artifact={document.artifact} onBack={close} embedded
+          {document.artifact ? <ArtifactViewer artifact={document.artifact}
             refreshFileUrls={refreshFileUrls} />
             : <ProjectDocumentMarkdownContent markdown={view.body} />}
           {document.truncated && <Button variant="outline" onClick={onLoadMore} disabled={!onLoadMore}>

@@ -1,0 +1,123 @@
+/* ExpandableText. Tokens only. */
+/* The root is the toggle; the layout grid sits inside it. */
+.root {
+  min-width: 0;
+  border-radius: calc(var(--space-xs) / var(--ui-scale));
+  color: var(--text-primary);
+  outline: none;
+}
+
+/* Caption above, then the text with the chevron slot after its first line:
+   the same column widths in every row and at every width. */
+.layout {
+  display: grid;
+  grid-template-areas:
+    "meta meta"
+    "text chevron";
+  grid-template-columns: minmax(0, 1fr) var(--typo-body-line-height);
+  gap: var(--space-xs);
+  align-items: start;
+  min-width: 0;
+}
+
+/* No caption: no empty first row and no gap above the text. */
+.layout:not([data-meta]) {
+  grid-template-areas: "text chevron";
+}
+
+.root[data-interactive] {
+  cursor: pointer;
+}
+
+/* The whole text area is the toggle. Its ring is the DS default focus ring
+   (tokens.css :focus-visible): it fits in --focus-ring-room, so a scroll
+   frame that leaves that room (ScrollArea) never cuts it. */
+.root[data-interactive]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(var(--focus-ring-room) - var(--focus-ring-width));
+}
+
+/* The box animates its own height (set in px from the measured text, so
+   interpolate-size only matters if a keyword height is ever transitioned);
+   overflow is clipped by that height. */
+.box {
+  grid-area: text;
+  min-width: 0;
+  overflow: clip;
+  interpolate-size: allow-keywords;
+}
+
+.box[data-animating] {
+  transition: height var(--motion-base) var(--motion-ease-standard);
+}
+
+.root:not([data-expanded]) .box[data-animating] {
+  transition-duration: var(--motion-exit-base);
+  transition-timing-function: var(--motion-ease-accelerate);
+}
+
+/* One text node. Clamped: -webkit-line-clamp with normal wrapping, so the
+   line breaks are the same as when it is open. */
+.text {
+  display: -webkit-box;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: var(--typo-body-size);
+  line-height: var(--typo-body-line-height);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: none;
+}
+
+.text[data-clamped] {
+  overflow: hidden;
+}
+
+.text[data-clamped="1"] {
+  -webkit-line-clamp: 1;
+}
+
+.text[data-clamped="2"] {
+  -webkit-line-clamp: 2;
+}
+
+.text[data-clamped="3"] {
+  -webkit-line-clamp: 3;
+}
+
+.meta {
+  grid-area: meta;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The DS trailing disclosure chevron (DisclosureRow .turn): a line-high slot,
+   --text-tertiary, ChevronRight turning 90° down when open. Kept in every row. */
+.chevron {
+  display: inline-grid;
+  grid-area: chevron;
+  width: var(--typo-body-line-height);
+  height: var(--typo-body-line-height);
+  place-items: center;
+  color: var(--text-tertiary);
+  transition: transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.chevron svg {
+  display: block;
+}
+
+.chevron[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .box[data-animating],
+  .chevron {
+    transition: none;
+  }
+}

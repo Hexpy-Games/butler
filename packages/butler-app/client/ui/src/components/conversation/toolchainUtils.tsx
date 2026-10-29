@@ -10,22 +10,10 @@ import { commandProgram, uniqueFileTargets } from "../../../../../../butler-i18n
 import { publicOperationTitle } from
   "../../../../../../butler-progress-projection/src/index.ts";
 import { activityIcon } from "./toolchainIcons";
+import { isWorkActivityToolRow } from "./workActivityToolRow";
 import { toolchainAfter } from "./toolchainAfter";
 
 export { activityIcon } from "./toolchainIcons";
-
-const WORK_BOOKKEEPING_TOOL_NAMES = new Set([
-  "start_work",
-  "continue_work",
-  "replace_work_plan",
-  "record_work_checkpoint",
-  "record_work_review",
-  "record_work_disposition",
-  "plan_review",
-  "completion_review",
-  "work_tool",
-  "tool_work",
-]);
 
 export function toolchainRowsForBlock(block: WorkBlockView): ProgressRow[] {
   return block.rows.filter((row) => isVisibleToolchainRow(row, block.label));
@@ -43,10 +31,7 @@ export function workActivityToolsFromRows(
   turnId?: string,
 ): WorkActivityToolItem[] {
   return rows
-    .filter((row) => !(
-      ["work", "work_block", "plan", "checkpoint", "disposition"].includes(row.kind?.toLowerCase() ?? "") ||
-      (row.safe_tool_name && WORK_BOOKKEEPING_TOOL_NAMES.has(row.safe_tool_name))
-    ))
+    .filter(isWorkActivityToolRow)
     .map((row, rowIndex) => ({
     id: row.thinking_title ? `thinking:${row.tool_call_id}` : `${row.id}:${rowIndex}`,
     icon: row.thinking_title ? <AiChip size="md" /> : activityIcon(row),

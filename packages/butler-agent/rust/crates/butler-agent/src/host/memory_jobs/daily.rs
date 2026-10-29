@@ -32,6 +32,7 @@ pub(in crate::host) struct DailyCognitionJobs {
     capsules: Arc<ProjectCapsuleService>,
     phases: CyclePhases,
     legacy: LegacySessionSync,
+    pub(in crate::host) gate: Arc<super::consolidation::ConsolidationRunGate>,
 }
 
 pub(in crate::host) struct DailyCognitionOwners {
@@ -51,7 +52,23 @@ pub(in crate::host) struct DailyCognitionOwners {
 }
 
 impl DailyCognitionJobs {
-    pub(in crate::host) fn new(owners: DailyCognitionOwners) -> Self {
+    pub(in crate::host) async fn open(
+        owners: DailyCognitionOwners,
+    ) -> Result<Self, crate::host::HostError> {
+        let gate = super::consolidation::ConsolidationRunGate::open(
+            owners.data_root.clone(),
+            owners.paths.clone(),
+            owners.coordinator.clone(),
+            owners.date_parser.clone(),
+        )
+        .await?;
+        Ok(Self::new(owners, gate))
+    }
+
+    fn new(
+        owners: DailyCognitionOwners,
+        gate: Arc<super::consolidation::ConsolidationRunGate>,
+    ) -> Self {
         let DailyCognitionOwners {
             data_root,
             paths,
@@ -85,7 +102,7 @@ impl DailyCognitionJobs {
             data_root.clone(),
             coordinator.clone(),
             provider.clone(),
-            configuration,
+            configuration.clone(),
             profile.clone(),
             ledger,
             date_parser,
@@ -95,6 +112,14 @@ impl DailyCognitionJobs {
             briefing_at: SystemTime::now().into(),
             metrics: cycle_metrics,
             briefing,
+            patterns: Arc::new(super::patterns::compose(
+                data_root.clone(),
+                coordinator.clone(),
+                provider,
+                configuration,
+                profile.clone(),
+                gate.clone(),
+            )),
             profile: Arc::new(ProfileConsolidation {
                 rules: feedback_rules(&data_root, &paths, coordinator.clone()),
                 profile,
@@ -114,7 +139,31 @@ impl DailyCognitionJobs {
             capsules,
             phases,
             legacy,
+            gate,
         }
+    }
+
+    pub(in crate::host) fn patterns(&self) -> &butler_memory::cognition::PatternRepository {
+        self.phases.patterns.repository()
+    }
+
+    pub(in crate::host) fn context_maintenance(
+        self: &Arc<Self>,
+        output: &butler_runtime::context::ToolOutput,
+        metrics: &Arc<MetricFiles>,
+        timezone: &Arc<DateParser>,
+    ) -> Arc<super::context_maintenance::ContextMaintenance> {
+        super::context_maintenance::ContextMaintenance::for_cognition(
+            &self.data_root,
+            output,
+            metrics,
+            timezone,
+            self,
+        )
+    }
+
+    pub(super) fn data_root(&self) -> &std::path::Path {
+        &self.data_root
     }
 
     pub(in crate::host) async fn session_sync(

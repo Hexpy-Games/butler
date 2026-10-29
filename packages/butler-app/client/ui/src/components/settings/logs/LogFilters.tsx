@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
-import { Inline, Input, Label, NativeSelect, Stack, Switch } from "@/butler-ds";
+import { Field, FieldLabel, Inline, Input, NativeSelect, Stack, Switch } from "@/butler-ds";
 import { LOG_PERIODS, LOG_SEVERITIES, type LogFilter, type LogPeriod } from "./logsApi";
 
 // The agent filters by process (agent, app); MCP servers are a category.
@@ -48,10 +48,10 @@ export function LogFilters({ filter, categories, live, onChange, onLiveChange }:
           onChange={(event) => onChange({ period: event.currentTarget.value as LogPeriod })}>
           {LOG_PERIODS.map((period) => <option key={period} value={period}>{copy.periods[period]}</option>)}
         </NativeSelect>
-        <Inline gap="xs" cross="center" wrap={false}>
+        <Field>
+          <FieldLabel htmlFor={liveId}>{copy.live}</FieldLabel>
           <Switch id={liveId} checked={live} onCheckedChange={onLiveChange} />
-          <Label htmlFor={liveId}>{copy.live}</Label>
-        </Inline>
+        </Field>
       </Inline>
     </Stack>
   );

@@ -51,12 +51,12 @@ function ColumnRows({ context, count }: { context: ShowcaseRenderContext; count:
 
 export const stories: ShowcaseStory[] = [
   {
-    // Settings nav with few sections: rows end on the column edge with either scrollbar style.
+    // Settings nav with few sections: rows end on the column edge with either scrollbar style, and no lane is reserved for a scrollbar that is not drawn.
     name: "Content fits",
     render: (context) => <ColumnRows context={context} count={3} />,
   },
   {
-    // The same column once it scrolls: a classic scrollbar takes the lane, rows keep the column edge.
+    // The same column once it scrolls: a classic scrollbar takes the lane only now, rows keep the column edge.
     name: "Content overflows",
     render: (context) => <ColumnRows context={context} count={12} />,
   },

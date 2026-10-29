@@ -77,6 +77,21 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()> {
         write::settle_question_followup(self.db, request_ref)
     }
+    fn settle_deferred_question(
+        &mut self,
+        owner: &str,
+        request_ref: &str,
+        receipt: &str,
+        now: &str,
+    ) -> AuthorityResult<()> {
+        self.db
+            .execute(
+                super::pending_asks::DISMISS,
+                rusqlite::params![request_ref, owner, receipt, now],
+            )
+            .map_err(query::sql)?;
+        Ok(())
+    }
     fn record_question_followup(
         &mut self,
         request_ref: &str,

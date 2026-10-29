@@ -8,6 +8,7 @@
 mod delegated;
 mod queries;
 mod regressions;
+mod reminders;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -32,7 +33,8 @@ async fn setup(
     let setup = Setup::new(name)?
         .access(butler_e2e::e2e::scenario::Access::AskAlways)
         .stub_cassette(butler_e2e::e2e::cassette::Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", url)
+        .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
     *script.root.lock().unwrap() = setup.sandbox.data.to_string_lossy().into_owned();
     let s = setup.start().await?;
     butler_e2e::e2e::fixtures::default_project_folder(&s).await?;

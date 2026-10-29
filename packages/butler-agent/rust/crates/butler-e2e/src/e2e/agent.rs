@@ -22,6 +22,7 @@ pub use process::read_all;
 /// Environment and layout needed to (re)start the agent.
 #[derive(Clone)]
 pub struct Launch {
+    pub service_args: Vec<String>,
     pub binary: PathBuf,
     pub install: PathBuf,
     pub resources: PathBuf,
@@ -73,6 +74,7 @@ impl Launch {
         fs::create_dir_all(tmp.join("test-secrets"))?;
         let (port, reservation) = ports::reserve()?;
         Ok(Self {
+            service_args: Vec::new(),
             binary: sandbox.binary.clone(),
             install: sandbox.install.clone(),
             resources: sandbox.resources.clone(),

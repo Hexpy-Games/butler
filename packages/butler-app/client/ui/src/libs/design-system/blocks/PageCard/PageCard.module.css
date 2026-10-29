@@ -10,7 +10,11 @@
    the row (--page-card-top), so the row reads as the pane around the
    toolbar and the page carries the card corners; a band arriving extends
    the surface up over the row as one card with the page. Only paint moves,
-   never the content area. */
+   never the content area.
+
+   Its corners are --page-card-radius (the popover radius by default); a
+   container that sets the card flush with its own edges (BrowserPane) sets
+   it to its own corner radius, or 0 where its corners are square. */
 @property --page-card-edge-angle {
   inherits: false;
   initial-value: 135deg;
@@ -26,7 +30,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  border-radius: var(--radius-popover);
+  border-radius: var(--page-card-radius);
 }
 
 .card:has(> .inner > .bandRow:empty) {
@@ -86,21 +90,29 @@
   inset: calc(var(--page-card-top) - var(--border-hairline))
     calc(var(--border-hairline) * -1)
     calc(var(--page-card-note, 0px) - var(--border-hairline));
-  border-radius: calc(var(--radius-popover) + var(--border-hairline));
+  border-radius: calc(
+    var(--page-card-radius) + var(--border-hairline) / var(--ui-scale)
+  );
   content: "";
   pointer-events: none;
 }
 
 /* Butler holds the tab: a slowly turning riso edge and a soft glow. The
    loop runs on --motion-agent-edge and --motion-loop-count, both 0 under
-   reduced motion, which leaves a static edge at 135deg. */
+   reduced motion, which leaves a static edge at 135deg. A container that
+   draws Butler's edge itself (BrowserPane, whose page card is flush with its
+   edges) sets --page-card-butler-edge: none and --page-card-butler-glow to
+   the card's plain shadow. */
 .card[data-holder="butler"]::before {
-  box-shadow:
+  box-shadow: var(
+    --page-card-butler-glow,
     0 0 0 4px color-mix(in srgb, var(--butler-ink-purple) 10%, transparent),
-    0 8px 32px color-mix(in srgb, var(--butler-ink-blue) 22%, transparent);
+    0 8px 32px color-mix(in srgb, var(--butler-ink-blue) 22%, transparent)
+  );
 }
 
 .card[data-holder="butler"]::after {
+  display: var(--page-card-butler-edge, block);
   padding: var(--border-width-strong);
   background: conic-gradient(
     from var(--page-card-edge-angle),
@@ -153,7 +165,7 @@
 /* No band: the line runs along the top of the surface, just above the
    native view, between the card corners. */
 .card:has(> .inner > .bandRow:empty) .loadLine {
-  inset-inline: var(--radius-popover);
+  inset-inline: var(--page-card-radius);
   top: var(--page-card-top);
   transform: translateY(-100%);
 }
@@ -167,7 +179,7 @@
   height: var(--browser-band-height);
   flex: none;
   flex-direction: column;
-  clip-path: inset(0 0 calc(var(--radius-popover) * -1));
+  clip-path: inset(0 0 calc(var(--page-card-radius) * -1));
 }
 
 /* Band and page are one surface: no line between them. The band fill runs
@@ -181,7 +193,7 @@
 .bandRow > [data-slot="page-band"]::after {
   position: absolute;
   inset: 100% 0 auto;
-  height: var(--radius-popover);
+  height: var(--page-card-radius);
   background: inherit;
   content: "";
   pointer-events: none;
@@ -202,8 +214,13 @@
 
 .card:has(> .inner > .bandRow:empty) .content {
   overflow: hidden;
-  border-radius: calc(var(--radius-popover) - var(--border-hairline))
-    calc(var(--radius-popover) - var(--border-hairline)) 0 0;
+  --page-card-content-radius: max(
+    0px,
+    var(--page-card-radius) - var(--border-hairline) / var(--ui-scale)
+  );
+
+  border-radius: var(--page-card-content-radius) var(--page-card-content-radius)
+    0 0;
 }
 
 /* Side letterbox of a fixed-size page in a pane wider than its aspect. */

@@ -85,11 +85,11 @@ export function SessionDetails({ locale, layout }: ShowcaseRenderContext & { lay
 }
 
 /** A conversation with the session details in its aside; the stage's width decides docked or floating. */
-export function AsideConversation({ locale, floatOpen = true }: ShowcaseRenderContext & { floatOpen?: boolean }) {
+export function AsideConversation({ locale, floatOpen = true, open = true }: ShowcaseRenderContext & { floatOpen?: boolean; open?: boolean }) {
   const text = copy[locale];
   return (
     <ConversationShell composerReserve={72} asideFloatOpen={floatOpen} asideLabel={text.label}
-      aside={(layout) => <SessionDetails locale={locale} layout={layout} />}>
+      aside={open ? (layout) => <SessionDetails locale={locale} layout={layout} /> : undefined}>
       <ConversationScroll>
         <MessageListSurface>
           {text.chat.map(([role, body], index) => (
@@ -107,6 +107,19 @@ export function AsideConversation({ locale, floatOpen = true }: ShowcaseRenderCo
 /** Docked: a 1100px chat card laid out at full size and scaled to the story width, so it docks at every viewer width. */
 export function DockedAside(context: ShowcaseRenderContext) {
   return <ScaledFrame width={1100} height={620}><div className={styles.asideStage}><AsideConversation {...context} /></div></ScaledFrame>;
+}
+
+/** Docked, opened and closed by the title-bar toggle: the column glides left as the aside rides in, and back. */
+export function DockedAsideToggle(context: ShowcaseRenderContext) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Stack gap="sm">
+      <ButtonContainer size="sm">
+        <Button size="sm" variant="secondary" aria-pressed={open} onClick={() => setOpen((value) => !value)}>{copy[context.locale].label}</Button>
+      </ButtonContainer>
+      <ScaledFrame width={1100} height={620}><div className={styles.asideStage}><AsideConversation {...context} open={open} /></div></ScaledFrame>
+    </Stack>
+  );
 }
 
 /** Floating: the title-bar toggle opens and closes the glass panel (DS fade). */

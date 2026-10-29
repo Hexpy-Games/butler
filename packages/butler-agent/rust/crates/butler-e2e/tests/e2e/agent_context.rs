@@ -220,7 +220,12 @@ async fn large_project(s: &butler_e2e::e2e::scenario::Scenario) -> Result<String
     std::fs::create_dir_all(memory.join("sessions"))?;
     let mut hash = format!(
         "{:x}",
-        Sha256::digest(session["session_hint"].as_str().unwrap().as_bytes())
+        Sha256::digest(
+            butler_turn::conversation::conversation_session_id_for_durable_session(
+                session["session_hint"].as_str().unwrap()
+            )
+            .as_bytes()
+        )
     );
     hash.truncate(32);
     std::fs::write(
@@ -291,6 +296,13 @@ async fn first_response_overhead_fresh_and_large_profile() -> Result<(), Harness
             assert!(section["stored_tokens"].as_u64().unwrap() > 0);
         }
         if large {
+            assert!(
+                value["sections"]["session-continuity"]["stored_tokens"]
+                    .as_u64()
+                    .unwrap()
+                    > 0,
+                "the canonical-keyed first-turn continuity fixture must reach the prompt"
+            );
             assert!(
                 value["sections"]["hot-cache"]["stored_tokens"]
                     .as_u64()

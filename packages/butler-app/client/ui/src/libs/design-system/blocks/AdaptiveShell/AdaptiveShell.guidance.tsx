@@ -91,7 +91,9 @@ export const guidance: ShowcaseGuidance = {
     "The scrim label is a verb: Close panel.",
     "Pass the app theme through the theme prop (appearance, sidebar, mainScreen); surfaces outside the shell (portals, first run) use adaptiveShellThemeClasses.",
     "frame=\"cards\" applies to the docked layout only; drawers (phones, tablets) stay full-bleed. Do not wrap AdaptiveShellSplit or a standalone BrowserPane in AdaptiveShellCard: they are cards already.",
+    "In cards the docked sidebar keeps the workspace's 1px top frame, so its first row fill starts level with the cards' top edge.",
     "A wallpaper inside a card resolves against the card and is clipped to its corners; the shell and the title row stay the window material.",
+    "Whatever AdaptiveShellSplit's pane holds (the browser sheet, a docked file viewer in AdaptiveShellCard) fills the slot's height, however short its content; scroll inside it with ScrollArea fill.",
   ],
   accessibility: [
     "The scrim is a button only while open; drawers keep focus order sidebar → workspace → inspector.",

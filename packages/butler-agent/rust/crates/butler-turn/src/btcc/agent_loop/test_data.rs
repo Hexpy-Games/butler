@@ -11,6 +11,8 @@ pub(crate) fn result(text: &str, calls: Vec<ModelRoundToolCall>, round: u32) -> 
     ModelRoundResult {
         nonfinal: false,
         output_truncated: false,
+        stop: crate::btcc::ModelStop::Complete,
+        continuation_text: None,
         reasoning_summary: None,
         text: Some(text.into()),
         tool_calls: calls,

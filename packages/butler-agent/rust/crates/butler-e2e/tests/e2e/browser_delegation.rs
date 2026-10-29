@@ -204,7 +204,7 @@ async fn serve_host(
                 json!({"status":"refused","reason":"blocked_by"})
             }
             "tab.image_collect" => {
-                json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(if answer && frame["args"]["ref"] == "image-ref-8" { include_bytes!("browser_outputs/second.jpg").as_slice() } else { include_bytes!("browser_outputs/pixel.jpg").as_slice() })}})
+                json!({"status":"ok","pixel_ratio":2,"source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(if answer && frame["args"]["ref"] == "image-ref-8" { include_bytes!("browser_outputs/second.jpg").as_slice() } else { include_bytes!("browser_outputs/pixel.jpg").as_slice() })}})
             }
             "tab.screenshot" => json!({"status":"ok","tab":tab_id,"url":url,
                 "image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}}),

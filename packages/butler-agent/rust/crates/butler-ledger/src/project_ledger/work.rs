@@ -4,6 +4,7 @@ mod abandonment;
 mod binding;
 mod closeout;
 mod codec;
+mod handoff;
 mod legacy;
 mod progress;
 mod publication;
@@ -135,6 +136,20 @@ impl MutationOwner {
 }
 
 impl DurableWorkRepository for ProjectWorkRepository {
+    fn work_for_turn(&self, turn: String, work: String) -> PortFuture<'_, Option<WorkView>> {
+        Box::pin(async move {
+            let snapshot = self.require_current(&work).await?;
+            self.shared
+                .projection
+                .load_original_request(WorkTurnScope {
+                    turn_id: turn,
+                    session_id: snapshot.view.session_id.clone(),
+                    project_ref: Some(self.scope.app_project_id.clone()),
+                })
+                .await?;
+            Ok(Some(snapshot.view))
+        })
+    }
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>> {
         Box::pin(async move { self.load_context_impl(scope).await })
     }
@@ -169,6 +184,15 @@ impl DurableWorkRepository for ProjectWorkRepository {
         Box::pin(async move {
             owner
                 .run(async move { repo.start_impl(command).await })
+                .await
+        })
+    }
+    fn start_handoff_work(&self, command: StartWorkCommand) -> PortFuture<'_, WorkView> {
+        let repo = self.clone();
+        let owner = self.shared.mutations.clone();
+        Box::pin(async move {
+            owner
+                .run(async move { repo.start_with_policy(command, true).await })
                 .await
         })
     }

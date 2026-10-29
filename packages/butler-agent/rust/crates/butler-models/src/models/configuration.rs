@@ -24,12 +24,14 @@ mod local_image_startup;
 mod logging;
 mod mcp;
 mod mutations;
+mod proactive;
 mod probes;
 mod provider;
 mod quota;
 mod read;
 mod secret_store;
 mod settings;
+pub use proactive::QuietHours;
 mod setup;
 mod store_policy;
 
@@ -48,7 +50,7 @@ pub(crate) use discovery::LocalModelDiscoveryResult;
 pub use key_check::{ProviderKeyCheck, ProviderKeyCheckError};
 pub use mcp::McpModelTarget;
 pub use mutations::{HostedModelMutation, LocalModelMutation, ProviderCredentialMutation};
-pub use secret_store::CredentialStoreError;
+pub use secret_store::{CredentialStoreError, fallback_file};
 pub use settings::SettingsError;
 pub use setup::{ProviderKeySaveError, SavedProviderKey};
 pub use store_policy::{

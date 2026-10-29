@@ -1,37 +1,45 @@
 /* The aside's own scroller (ConversationShell, ManagementPage). It reserves
-   the scrollbar gutter on both inline edges (scrollbar-gutter: stable
-   both-edges), so the content keeps one inset on its start and its end
-   whatever the scrollbar is: overlay (no gutter), classic, or hidden in a
-   headless capture (which still reserves a stable gutter). --aside-gutter is
-   that gutter, measured once on mount. Docked, the scroller bleeds it and the
-   focus-ring room past both edges of the aside's box, so the content lines up
-   with the box. Floating, it fills the glass and pads each side up to
-   --space-md, the gutter included, so the scrollbar stays inside the glass. A
-   ring at either edge always stays inside the scroller. */
+   no scrollbar gutter: a classic scrollbar (--scrollbar-width, 0px for
+   overlay scrollbars) takes its width only while the content overflows, and
+   then out of the content's inline-end padding (--aside-scroll-end), so the
+   content keeps one inset on its start and its end whether it fits or
+   scrolls. Docked, the scroller bleeds the focus-ring room past both edges of
+   the aside's box and the scrollbar lane past its end, so the content lines
+   up with the box. Floating, it fills the glass and insets the content
+   --space-md from each side, keeping the ring room beside a drawn scrollbar
+   (where that does not fit, the end inset grows only while the scrollbar is
+   drawn). A ring at either edge always stays inside the scroller. */
 .scroll {
-  --aside-gutter: 0px;
-  --scroll-fade-gutter: var(--aside-gutter);
+  --aside-scroll-end: var(--scrollbar-width, 0px);
+  --scroll-fade-gutter: var(--scrollbar-width, 0px);
 
   box-sizing: border-box;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  margin-inline: calc(-1 * (var(--aside-gutter) + var(--focus-ring-room)));
+  margin-inline: calc(-1 * var(--focus-ring-room))
+    calc(-1 * (var(--scrollbar-width, 0px) + var(--focus-ring-room)));
   padding: var(--scroll-fade-size) var(--focus-ring-room);
   overflow: hidden auto;
   overscroll-behavior: contain;
+  container-type: inline-size;
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
-  scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
 }
 
 .scroll[data-layout="floating"] {
+  --aside-scroll-end: max(0px, var(--space-md) - var(--focus-ring-room));
+
   margin-inline: 0;
-  padding-inline: max(
-    var(--focus-ring-room),
-    var(--space-md) - var(--aside-gutter)
-  );
+  padding-inline-start: max(var(--focus-ring-room), var(--space-md));
+}
+
+/* `100cqw - 100%` is the drawn scrollbar's width (0 when none is drawn): a
+   scroll container's container width leaves its scrollbar out. Taken in the
+   same layout that draws the scrollbar, so nothing moves for a frame. */
+.content {
+  padding-inline-end: max(0px, var(--aside-scroll-end) - (100cqw - 100%));
 }
 
 .scroll::-webkit-scrollbar {

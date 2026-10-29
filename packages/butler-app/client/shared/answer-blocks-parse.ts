@@ -3,7 +3,7 @@ import type { AnswerBlockView, AnswerBlocksView } from "./answer-blocks-view";
 
 type Rule = { $ref?: string; const?: unknown; enum?: unknown[]; type?: string | string[];
   oneOf?: Rule[]; required?: string[]; properties?: Record<string, Rule>; items?: Rule;
-  minItems?: number; maxItems?: number; minLength?: number; maxLength?: number;
+  minimum?: number; exclusiveMinimum?: number; minItems?: number; maxItems?: number; minLength?: number; maxLength?: number;
   pattern?: string; format?: string; not?: { required: string[] } };
 const definitions = schema.$defs as unknown as Record<string, Rule>;
 const invalid = Symbol("invalid");
@@ -15,6 +15,7 @@ function scalar(value: unknown, rule: Rule): unknown {
   const types = Array.isArray(rule.type) ? rule.type : [rule.type];
   if (rule.type && !types.includes(value === null ? "null" : typeof value)) return invalid;
   if (typeof value === "number" && !Number.isFinite(value)) return invalid;
+  if (typeof value === "number" && (value < (rule.minimum ?? -Infinity) || value <= (rule.exclusiveMinimum ?? -Infinity))) return invalid;
   if (typeof value !== "string") return value;
   const length = [...value].length;
   if (length < (rule.minLength ?? 0) || length > (rule.maxLength ?? Infinity)) return invalid;
@@ -54,6 +55,7 @@ function parse(value: unknown, rule: Rule): unknown {
     for (const [key, child] of Object.entries(rule.properties ?? {})) {
       if (!(key in value)) continue;
       const parsed = parse(value[key], child);
+      if (parsed === invalid && (child.minimum !== undefined || child.exclusiveMinimum !== undefined)) return invalid;
       if (parsed !== invalid) result[key] = parsed;
     }
     // HTTP decoration is transport metadata, outside the model-facing spec.
@@ -61,6 +63,9 @@ function parse(value: unknown, rule: Rule): unknown {
       && value.image_url.startsWith(`/message-assets/${encodeURIComponent(result.img)}?`)
       && /^\/message-assets\/img_[a-z0-9]{10,12}\?expires=\d+&signature=[a-zA-Z0-9_-]+$/u.test(value.image_url)) {
       result.image_url = value.image_url;
+      for (const key of ["image_width", "image_height"]) {
+        if (typeof value[key] === "number" && Number.isFinite(value[key]) && value[key] > 0) result[key] = value[key];
+      }
     }
     return rule.required?.some(key => !(key in result)) ? invalid : result;
   }
@@ -71,15 +76,19 @@ function block(value: unknown): AnswerBlockView | null {
   const parsed = parse(value, definitions.block);
   if (parsed === invalid) return null;
   const result = parsed as AnswerBlockView;
+  if (result.type === "columns" || result.type === "group") result.blocks = result.blocks.map(block).filter(item => item !== null) as typeof result.blocks;
+  if (result.type === "tabs") result.tabs = result.tabs.map(tab => ({ ...tab, blocks: tab.blocks.map(block).filter(item => item !== null) as typeof tab.blocks })).filter(tab => tab.blocks.length > 0);
+  if (result.type === "progress") result.items = result.items.filter(item => item.value <= (item.max ?? 100));
   if (result.type === "table") result.rows = result.rows.filter(row => row.length === result.columns.length);
   if (result.type === "chart") result.series = result.series.filter(series => series.values.length === result.x.length);
   if (result.type === "table" && !result.rows.length || result.type === "chart" && !result.series.length) return null;
+  if (result.type === "progress" && !result.items.length) return null;
   return result;
 }
 
 /** Accept old/partial records without exposing validation errors in the conversation. */
 export function parseAnswerBlocks(value: unknown): AnswerBlocksView | null {
-  if (!object(value) || value.v !== 1 || !Array.isArray(value.blocks)) return null;
+  if (!object(value) || (value.v !== 1 && value.v !== 2) || !Array.isArray(value.blocks)) return null;
   const blocks = value.blocks.map(block).filter((item): item is AnswerBlockView => item !== null);
-  return blocks.length ? { v: 1, blocks } : null;
+  return blocks.length ? { v: value.v, blocks } : null;
 }

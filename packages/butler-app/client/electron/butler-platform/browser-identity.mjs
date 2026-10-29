@@ -6,8 +6,11 @@ const PLATFORM_TOKENS = {
   linux: "X11; Linux x86_64",
 };
 
-/** The plain Chromium identity web content sees: no Electron or App token. */
-export function plainChromiumUserAgent(chromeVersion, platform = process.platform) {
+const major = (version) => version.split(".")[0];
+
+/** The identity web content sees: Chromium's reduced UA plus an honest
+ * `Butler/<major>` product token. No Electron token, no prerelease suffix. */
+export function webUserAgent(chromeVersion, appVersion, platform = process.platform) {
   const token = PLATFORM_TOKENS[platform] ?? PLATFORM_TOKENS.linux;
-  return `Mozilla/5.0 (${token}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion.split(".")[0]}.0.0.0 Safari/537.36`;
+  return `Mozilla/5.0 (${token}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major(chromeVersion)}.0.0.0 Safari/537.36 Butler/${major(appVersion)}`;
 }

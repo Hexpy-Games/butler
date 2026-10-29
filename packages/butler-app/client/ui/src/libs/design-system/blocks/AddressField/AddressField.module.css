@@ -1,14 +1,16 @@
-/* At rest a quiet filled pill; in edit mode the raised surface with the
-   focus ring around the whole field. */
+/* At rest a quiet filled pill with fully rounded ends (the text starts clear
+   of the curve); in edit mode the raised surface with the focus ring around
+   the whole field. One large control tall (34px), so it reads as heavy as
+   the tabs above it. */
 .field {
   display: flex;
   min-width: 0;
-  height: var(--control-height-md);
+  height: var(--control-height-lg);
   flex: 1 1 auto;
   align-items: center;
   gap: var(--space-sm);
-  padding-inline: var(--space-sm) var(--space-xs);
-  border-radius: var(--radius-control);
+  padding-inline: var(--space-md) var(--space-xs);
+  border-radius: var(--radius-pill);
   background: var(--selection);
   color: var(--text-primary);
   font-size: var(--font-size-2);

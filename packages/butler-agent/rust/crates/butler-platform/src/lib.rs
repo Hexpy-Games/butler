@@ -24,6 +24,7 @@
 //!   enforces read-only and write-protected access.
 //! - [`secure_fs`]: owner-only files and directories, atomic replacement,
 //!   no-follow opens, directory exchange and file identity.
+//! - [`system_wake`]: change-driven OS sleep/wake notifications.
 //! - [`time_zone`]: IANA time zone rules by name.
 //! - [`user_dirs`]: the user's home, the Agent home and the command
 //!   directory, and the system's own folders.
@@ -83,9 +84,11 @@ pub mod process_priority;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;
+pub mod shared_locks;
 pub mod sqlite;
 pub mod stdio;
 pub mod storage_size;
+pub mod system_wake;
 pub mod time_zone;
 pub mod tool_paths;
 pub mod user_auth;
@@ -97,3 +100,5 @@ mod process_table;
 pub mod hook_process;
 
 pub mod preview_process;
+
+pub mod plugin_files;

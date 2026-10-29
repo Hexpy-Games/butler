@@ -39,7 +39,7 @@ async fn schedule_first_browser_call_inherits_before_turn_id_is_recorded()
         s.gw.post(
             "/automations",
             json!({"title":"Read account","prompt_body":ASK,
-        "target_session_id":target,"interval_seconds":3600,"source_session_id":"general"}),
+        "target_session_id":target,"interval_seconds":3600,"browser_signin":true,"source_session_id":"general"}),
         )
         .await?;
     assert_eq!(created.status, 201, "{}", created.text);

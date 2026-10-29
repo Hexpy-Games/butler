@@ -10,7 +10,7 @@ import { seedCanonSidebar, showCanonSidebar, openPlan, createFromSidebar, showEp
 
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/canon-sidebar-smoke");
 mkdirSync(shots, { recursive: true });
-const cases = [1440, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "wallpaper"].map(surface => `${width}-${theme}-${surface}`)));
+const cases = [1440, 1024, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "wallpaper"].map(surface => `${width}-${theme}-${surface}`)));
 if (await runSmokeCases(cases, "BUTLER_CANON_SIDEBAR_CASE", import.meta.path, { isolate: true })) process.exit(0);
 const selected = process.env.BUTLER_CANON_SIDEBAR_CASE!;
 const [widthText, theme, surface] = selected.split("-");

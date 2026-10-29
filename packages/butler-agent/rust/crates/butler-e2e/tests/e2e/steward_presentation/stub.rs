@@ -22,6 +22,7 @@ pub(crate) const QUEUED_REPLY: &str = "Status noted.";
 #[derive(Default)]
 pub(crate) struct Script {
     pub(crate) answer_blocks: AtomicBool,
+    pub(crate) direction_effect: Mutex<Option<Value>>,
     pub(crate) deliverables: AtomicBool,
     answer_step: Mutex<usize>,
     pub(crate) browser: AtomicBool,
@@ -64,6 +65,15 @@ async fn reply(
     let key = matching::key("/v1/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
     let child = child_lane(&body);
+    if !child && crate::connectors::stub::find_spec(&body["input"]).is_some() {
+        let response = crate::connectors::stub::run(&body).unwrap();
+        let wire = response
+            .chunks
+            .into_iter()
+            .map(|c| c.text)
+            .collect::<String>();
+        return ([("content-type", "text/event-stream")], wire).into_response();
+    }
     if child
         && script.hold_direction.load(Ordering::SeqCst)
         && key.user_request.starts_with(DIRECTION)
@@ -167,25 +177,38 @@ pub(crate) fn child_lane(body: &Value) -> bool {
 /// With `presented`, the parent Plan decides to show the result as cards and
 /// a table, which the delegated task then carries.
 fn parent_item(step: usize, presented: bool) -> Value {
-    let mut parent_plan = plan(false, "steward");
+    let mut checks = vec![
+        "Approach verified",
+        REVISED_CHECK,
+        "Goal: Choose the better approach for the owner's next step",
+        "Deliver: A one-line recommendation",
+        "Next: Apply the chosen approach",
+        "Assumed: Both files are current",
+    ];
     if presented {
-        parent_plan["presentation"] = json!(["cards", "table"]);
+        checks.push("Presentation: cards, table");
     }
-    let mut revised_plan = parent_plan.clone();
-    revised_plan["checks"] = json!(["Approach verified", REVISED_CHECK]);
-    parent_plan["intent"] = json!({"goal":"Choose the better approach for the owner's next step","deliver":"A one-line recommendation","next":"Apply the chosen approach","assume":"Both files are current"});
     match step {
-        0 => call("start", "start_work", &json!({"objective":OWNER})),
-        1 => call("plan", "replace_work_plan", &parent_plan),
-        2 => call("plan-revise", "record_work_review", &revise()),
-        3 => call("plan-revision", "replace_work_plan", &revised_plan),
-        4 => call("review", "record_work_review", &review()),
-        5 => call("delegate", "delegate_to_steward", &json!({"request":OWNER})),
+        0 => call(
+            "delegate",
+            "delegate_to_steward",
+            &json!({"request":OWNER,"checks":checks}),
+        ),
         _ => message("Direction delivered."),
     }
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
+    if step == 4
+        && let Some(effect) = script.direction_effect.lock().unwrap().clone()
+    {
+        return call("direction-effect", "run_command", &effect);
+    }
+    let directed = script.direction_effect.lock().unwrap().is_some();
+    if directed && step == 6 {
+        return call("direction-plan-review", "record_work_review", &review());
+    }
+    let step = if directed && step > 6 { step - 1 } else { step };
     // Only the butler answers the user; a steward reports to it.
     let offered = butler_e2e::e2e::chatgpt_wire::functions(body);
     assert!(
@@ -379,10 +402,6 @@ fn plan(start_new: bool, mode: &str) -> Value {
     json!({"start_new":start_new,"objective":OWNER,"execution_mode":mode,"governing_refs":[],"actions":[{"action_key":"read","description":"Read source","dependency_keys":[]},{"action_key":"compare","description":"Compare approaches","dependency_keys":["read"]}],"checks":["Approach verified"]})
 }
 pub(crate) const REVISED_CHECK: &str = "Comparison names its deciding criterion";
-
-fn revise() -> Value {
-    json!({"subject":"plan","verdict":"revise","summary":"Name the deciding criterion","corrections":["Add a check that the comparison names its deciding criterion"],"correction_scope":"planning","action_updates":[]})
-}
 
 pub(crate) fn review() -> Value {
     json!({"subject":"plan","verdict":"accept","summary":"Ready","corrections":[],"action_updates":[]})

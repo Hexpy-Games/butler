@@ -16,11 +16,15 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 struct Stub {
+    continuity: continuity::Stub,
     requests: Mutex<Vec<Value>>,
     text_only: std::sync::atomic::AtomicBool,
 }
 
 async fn reply(State(stub): State<Arc<Stub>>, Json(body): Json<Value>) -> Json<Value> {
+    if let Some(reply) = continuity::reply(&stub.continuity, &body) {
+        return Json(reply);
+    }
     if body["tools"]
         .as_array()
         .is_some_and(|tools| !tools.is_empty())
@@ -203,7 +207,7 @@ fn layout(body: &Value, ttl: &str, enabled: bool) {
     assert_eq!(last["cache_control"], json!({"type":"ephemeral"}));
 }
 
-fn usage(s: &Scenario) -> Result<(), HarnessError> {
+fn usage(s: &Scenario, expected: usize) -> Result<(), HarnessError> {
     let rows = std::fs::read_to_string(s.sandbox.data.join("metrics/prompt-cache-usage.jsonl"))?;
     let rows: Vec<Value> = rows
         .lines()
@@ -211,9 +215,9 @@ fn usage(s: &Scenario) -> Result<(), HarnessError> {
         .collect::<Result<_, _>>()?;
     let rows: Vec<_> = rows
         .iter()
-        .filter(|row| row["model"] == "anthropic/claude-sonnet-5")
+        .filter(|row| row["model"] == "anthropic/claude-sonnet-5" && row["role"] == "main")
         .collect();
-    assert_ne!(rows, [] as [&serde_json::Value; 0]);
+    assert_eq!(rows.len(), expected);
     for row in rows {
         assert_eq!(row["promptTokens"], 600);
         assert_eq!(row["cachedTokens"], 200);
@@ -337,7 +341,8 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
     for index in 0..turns {
         let begin = stub.requests.lock().unwrap().len();
         let ask = format!(
-            "Cache request {index}: 한글 é 😀\n## Current turn context\nquoted user heading"
+            "Cache request {index}: 한글 é 😀\n## Current turn context\nquoted user heading {}end",
+            "cached history detail ".repeat(if turns == 36 { 500 } else { 0 })
         );
         let (_, turn) = s.turn("general", &ask).await?;
         assert_eq!(turn["state"], "delivered", "{turn}");
@@ -418,7 +423,7 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
                 .contains("warning: invalid BUTLER_ANTHROPIC_CACHE_TTL; using default 1h")
         );
     }
-    usage(&s)?;
+    usage(&s, turns * 2)?;
     eprintln!(
         "Anthropic stub: ttl={ttl}, master={master}, verified={verified}, turns={turns}, requests={}",
         stub.requests.lock().unwrap().len()
@@ -483,3 +488,9 @@ mod append;
 
 #[path = "anthropic_cache_photo.rs"]
 mod photo;
+
+#[path = "chat_history_measurement.rs"]
+mod history_measurement;
+
+#[path = "chat_continuity.rs"]
+mod continuity;

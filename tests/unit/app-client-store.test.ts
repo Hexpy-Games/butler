@@ -61,10 +61,7 @@ afterEach(() => {
     sendingChatId: null,
     sendingOperations: {},
     leftOpen: false,
-    rightOpen: true,
-    rightTab: "summary",
     leftPanelWidth: 304,
-    rightPanelWidth: 376,
     sidebarChatsCollapsed: false,
     sidebarProjectsCollapsed: false,
     sidebarCollapsedProjectIds: [],
@@ -423,7 +420,6 @@ test("optimistic session ids do not call server-backed session routes", async ()
     activeChatId: "optimistic:session:client-message-1",
     view: { kind: "session" },
     messageLoadPending: false,
-    rightOpen: true,
   });
 
   await useButlerStore.getState().refreshSessionView();
@@ -2822,10 +2818,7 @@ test("hydrateUiState restores sidebar and panel presentation state", () => {
     activeChatId: "project-session-restored",
     view: { kind: "session" },
     leftOpen: false,
-    rightOpen: false,
-    rightTab: "context",
     leftPanelWidth: 356,
-    rightPanelWidth: 440,
     sidebarChatsCollapsed: true,
     sidebarProjectsCollapsed: true,
     sidebarCollapsedProjectIds: ["project-a", "project-b"],

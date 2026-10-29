@@ -22,15 +22,21 @@ impl AppApplication {
         &self,
         command: SendMessageCommand,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        Box::pin(self.send_with_attachment_source(command, None)).await
+        Box::pin(self.send_with_attachment_source(command, None, None)).await
     }
 
     pub(super) async fn send_with_reused_attachments(
         &self,
         command: SendMessageCommand,
         source_user_message_id: String,
+        source_turn_id: String,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        Box::pin(self.send_with_attachment_source(command, Some(source_user_message_id))).await
+        Box::pin(self.send_with_attachment_source(
+            command,
+            Some(source_user_message_id),
+            Some(source_turn_id),
+        ))
+        .await
     }
 
     #[tracing::instrument(name = "turn.admit", skip_all, fields(trace_root = true, chat_id = %command.chat_id), err)]
@@ -38,11 +44,15 @@ impl AppApplication {
         &self,
         mut command: SendMessageCommand,
         reused_from_message_id: Option<String>,
+        retry_source_turn: Option<String>,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
         command
             .request
             .persist_editor_metadata()
             .map_err(GatewayApplicationError::internal_from)?;
+        if command.request.subsession_result.is_none() {
+            self.retry_model_results(command.chat_id.clone()).await?;
+        }
         self.recover_expired().await?;
         let chat_id = command.chat_id.clone();
         let request = command.request.clone();
@@ -95,8 +105,15 @@ impl AppApplication {
                 )
                 .await;
         }
-        self.send_new(chat_id, client_id, request, inspected, settings_facts)
-            .await
+        self.send_new(
+            chat_id,
+            client_id,
+            request,
+            inspected,
+            settings_facts,
+            retry_source_turn,
+        )
+        .await
     }
 
     async fn send_new(
@@ -106,6 +123,7 @@ impl AppApplication {
         request: crate::gateway::MessageSendRequest,
         inspected: admission::Inspected,
         settings_facts: Arc<AppSettingsFacts>,
+        retry_source_turn: Option<String>,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
         self.prompt_hook(&chat_id, &client_id, &request, &inspected)
             .await?;
@@ -149,6 +167,7 @@ impl AppApplication {
                 prepared.project_sources.clone(),
                 request.clone(),
                 settings_facts,
+                retry_source_turn,
             )
             .await?;
         let prepared = ResolvedAppAdmission {
@@ -178,6 +197,7 @@ impl AppApplication {
         sources: Value,
         request: crate::gateway::MessageSendRequest,
         settings_facts: Arc<AppSettingsFacts>,
+        retry_source_turn: Option<String>,
     ) -> Result<(bool, ControlResolution), GatewayApplicationError> {
         let mut context = butler_log::TraceContext::current();
         context.enqueued_at =
@@ -206,7 +226,7 @@ impl AppApplication {
                     transaction.commit().map_err(AppStorageError::sqlite)?;
                     return Ok((false, resolution));
                 }
-                let resolved = settings::resolve_for_message_send(
+                let resolved = admission_identity::resolve_message(
                     &transaction,
                     &subscribers,
                     &reservation_base.chat_id,
@@ -231,7 +251,11 @@ impl AppApplication {
                         )
                         .with_source(source)
                     })?;
-                let inserted = queue::reserve(&transaction, &reservation)?;
+                let inserted = if let Some(source) = retry_source_turn {
+                    retry::consume_fresh_retry(&transaction, &subscribers, &source, &reservation)?
+                } else {
+                    queue::reserve(&transaction, &reservation)?
+                };
                 if inserted {
                     transaction
                         .execute(

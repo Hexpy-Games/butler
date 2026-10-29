@@ -1,4 +1,4 @@
-//! rmcp stdio server for the retained eight-tool MCP surface.
+//! rmcp stdio server; canon handlers are registered from their own module.
 
 use std::path::PathBuf;
 
@@ -76,9 +76,9 @@ fn flatten_wait(
     }
 }
 
-struct McpServer {
-    installation: ResolvedInstallation,
-    data_root: PathBuf,
+pub(super) struct McpServer {
+    pub(super) installation: ResolvedInstallation,
+    pub(super) data_root: PathBuf,
     home: PathBuf,
     name: String,
 }
@@ -340,7 +340,7 @@ impl McpServer {
     }
 }
 
-#[tool_handler]
+#[tool_handler(router = (Self::tool_router() + Self::canon_router()))]
 impl ServerHandler for McpServer {
     fn list_tools(
         &self,
@@ -348,7 +348,7 @@ impl ServerHandler for McpServer {
         _context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> impl std::future::Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
     {
-        let mut tools = Self::tool_router().list_all();
+        let mut tools = (Self::tool_router() + Self::canon_router()).list_all();
         let result = butler_models::models::ModelCatalog::new()
             .map(|catalog| {
                 for tool in &mut tools {

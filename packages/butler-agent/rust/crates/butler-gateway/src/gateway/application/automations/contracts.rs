@@ -17,6 +17,8 @@ pub struct CreateAutomationRequest {
     /// The access the schedule's runs get; the target conversation's
     /// current access mode when omitted.
     pub access_mode: Option<AccessMode>,
+    pub browser_signin: Option<bool>,
+    pub browser_payment: Option<bool>,
     pub model: Option<String>,
     /// The conversation that created the schedule; its live site grants
     /// apply to runs in another target conversation.
@@ -37,6 +39,8 @@ pub struct UpdateAutomationRequest {
     pub state: Option<String>,
     /// Replaces the access the schedule's runs get.
     pub access_mode: Option<AccessMode>,
+    pub browser_signin: Option<bool>,
+    pub browser_payment: Option<bool>,
     pub model: Option<String>,
 }
 
@@ -57,6 +61,8 @@ pub struct AutomationSummary {
     pub schedule: Option<CalendarSchedule>,
     /// The access the schedule's runs get, whatever the target conversation's mode.
     pub access_mode: AccessMode,
+    pub browser_signin: bool,
+    pub browser_payment: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,6 +104,8 @@ pub struct AutomationRunSummary {
     pub state: String,
     pub trigger: String,
     pub started_at: String,
+    pub scheduled_at: Option<String>,
+    pub late: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -121,8 +129,10 @@ pub struct AutomationRunResult {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CalendarSchedule {
     pub kind: String,
+    #[serde(default)]
     pub time: String,
     #[serde(default)]
     pub weekdays: Vec<u8>,
+    #[serde(default)]
     pub tz: String,
 }

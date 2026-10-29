@@ -58,6 +58,9 @@ pub(super) fn result_message(
     } else {
         preview::fit(result, references, content)?
     };
+    if result.name != ToolName::ResolveAsk {
+        owner.state.lock().has_other_tool_result = true;
+    }
     Ok(ModelRoundMessage {
         role: ModelRoundRole::Tool,
         content: content.into(),

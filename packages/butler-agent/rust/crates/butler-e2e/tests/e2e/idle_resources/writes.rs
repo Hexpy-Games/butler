@@ -18,6 +18,8 @@ pub(crate) struct Watch {
     data: PathBuf,
     before: BTreeMap<PathBuf, (u64, SystemTime)>,
     changes: Arc<Mutex<Vec<String>>>,
+    barrier: PathBuf,
+    barrier_removed: Arc<tokio::sync::Notify>,
     _watcher: RecommendedWatcher,
 }
 impl Watch {
@@ -44,6 +46,10 @@ impl Watch {
         let changes = Arc::new(Mutex::new(Vec::new()));
         let sink = changes.clone();
         let root = data.to_path_buf();
+        let barrier = data.join(format!(".idle-watch-barrier-{}", uuid::Uuid::new_v4()));
+        let marker = barrier.clone();
+        let barrier_removed = Arc::new(tokio::sync::Notify::new());
+        let removed = barrier_removed.clone();
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
                 let mut changes = sink.lock().unwrap();
@@ -54,6 +60,15 @@ impl Watch {
                             || event.kind.is_remove() =>
                     {
                         for path in event.paths {
+                            if path == marker {
+                                if event.kind.is_remove() {
+                                    // Removal is ordered after all pre-barrier events, even
+                                    // when FSEvents delivers them after an empty quiet period.
+                                    changes.clear();
+                                    removed.notify_one();
+                                }
+                                continue;
+                            }
                             changes.push(
                                 path.strip_prefix(&root)
                                     .unwrap_or(&path)
@@ -75,6 +90,8 @@ impl Watch {
             data: data.to_path_buf(),
             before: snapshot(data)?,
             changes,
+            barrier,
+            barrier_removed,
             _watcher: watcher,
         })
     }
@@ -98,6 +115,7 @@ impl Watch {
                 continue;
             }
 
+            self.drain_barrier(deadline).await?;
             let before = snapshot(&self.data)?;
             let versions: Vec<_> = self
                 .databases
@@ -105,19 +123,55 @@ impl Watch {
                 .map(|(db, _)| data_version(db))
                 .collect();
             let changes = self.changes.lock().unwrap();
-            if changes.is_empty() {
-                if std::time::Instant::now() >= deadline {
-                    return Err(HarnessError(
-                        "timed out waiting for a quiet idle-watch baseline".into(),
-                    ));
-                }
-                self.before = before;
-                for ((_, version), next) in self.databases.iter_mut().zip(versions) {
-                    *version = next;
-                }
-                return Ok(());
+            if !changes.is_empty() {
+                continue;
             }
+            if std::time::Instant::now() >= deadline {
+                return Err(HarnessError(
+                    "timed out waiting for a quiet idle-watch baseline".into(),
+                ));
+            }
+            self.before = before;
+            for ((_, version), next) in self.databases.iter_mut().zip(versions) {
+                *version = next;
+            }
+            return Ok(());
         }
+    }
+
+    async fn drain_barrier(&self, deadline: std::time::Instant) -> Result<(), HarnessError> {
+        // create_new prevents overwriting any existing file. Remove it before
+        // waiting, so neither metadata baseline can contain the harness marker.
+        drop(fs::File::create_new(&self.barrier)?);
+        fs::remove_file(&self.barrier)?;
+        tokio::time::timeout_at(deadline.into(), self.barrier_removed.notified())
+            .await
+            .map_err(|_| HarnessError("timed out waiting for idle-watch barrier removal".into()))?;
+        Ok(())
+    }
+
+    pub(crate) fn assert_subtree_unchanged(&self, relative: &Path) -> Result<(), HarnessError> {
+        let changes = self.changes.lock().unwrap();
+        let relevant = changes
+            .iter()
+            .filter(|p| Path::new(p).starts_with(relative) || p.starts_with("watch failed:"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            relevant,
+            Vec::<&String>::new(),
+            "filesystem mutations under {}",
+            relative.display()
+        );
+        let root = self.data.join(relative);
+        let before = self
+            .before
+            .iter()
+            .filter(|(p, _)| p.starts_with(&root))
+            .map(|(p, v)| (p.clone(), *v))
+            .collect::<BTreeMap<_, _>>();
+        let after = snapshot(&root)?;
+        assert_eq!(before, after, "idle subtree metadata changed");
+        Ok(())
     }
 
     pub(crate) fn assert_unchanged(&mut self) {

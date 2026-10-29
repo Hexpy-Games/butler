@@ -15,20 +15,23 @@ const [caseLanguage, caseTheme] = cell.split("-") as [string, string];
 const evidence = join(root, cell);
 const baseline = process.env.BUTLER_BROWSER_BASELINE === "1";
 const stub = browserStub(), app = await browserAgentApp(evidence, stub.handler);
+const sessionTitle = "Timeline work";
+let sessionId: string;
 async function send(text: string) {
-  const old = (await app.gateway.api<any>("/session-view?session_id=general")).latest_turn?.id;
-  await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text, client_message_id: crypto.randomUUID() }) });
+  const old = (await app.gateway.api<any>(`/session-view?session_id=${sessionId}`)).latest_turn?.id;
+  await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: sessionId, text, client_message_id: crypto.randomUUID() }) });
   await waitBrowser(async () => {
-    const turn = (await app.gateway.api<any>("/session-view?session_id=general")).latest_turn;
+    const turn = (await app.gateway.api<any>(`/session-view?session_id=${sessionId}`)).latest_turn;
     return turn?.id !== old && turn?.state === "delivered";
   }, "timeline fixture turn delivered");
 }
 try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ access_mode: "full_access", language: "en" }) });
+  sessionId = (await app.gateway.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: sessionTitle }) })).session.id;
   stub.set([() => ({ name: "write_file", arguments: { path: "timeline/index.html", create_parents: true, content: "<!doctype html><title>Steps</title><button>Ready</button>" } }),
     () => ({ name: "output_publish", arguments: { path: "timeline", title: "Steps" } })]);
   await send("Publish steps");
-  const artifacts = await app.gateway.api<any>("/artifacts?session_id=general");
+  const artifacts = await app.gateway.api<any>(`/artifacts?session_id=${sessionId}`);
   const web = artifacts.artifacts.find((item: any) => item.kind === "web"); assert.ok(web);
   const view = await app.gateway.api<any>(`/outputs/${web.id}/view`);
   stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: view.url }), request => bridgeBrowser("browser_observe", { tab: latestBrowser(request, "tab").tab })]);
@@ -62,14 +65,14 @@ try {
   const facts: unknown[] = [];
   for (const phase of baseline ? ["pending", "attached"] : ["pending", "failed", "attached"]) {
     if (phase === "failed") {
-      const view = await app.gateway.api<any>("/session-view?session_id=general");
+      const view = await app.gateway.api<any>(`/session-view?session_id=${sessionId}`);
       const rows: any[] = [];
       const collect = (value: any) => { if (!value || typeof value !== "object") return; if (value.safe_tool_name === "browser_act" && value.tool_result_id) rows.push(value); Object.values(value).forEach(collect); };
       collect(view);
       const row = rows.at(-1); assert.ok(row);
       const raw = await app.gateway.api<any>(`/turns/${row.turn_id ?? view.latest_turn.id}/operations/${row.tool_call_id}/output?result_id=${row.tool_result_id}&offset=0`);
       const admin = JSON.parse(await Bun.file(join(app.gateway.butlerData, "app/runtime/auth/local-admin.json")).text()).secret;
-      await app.gateway.api("/internal/browser-host/stills", { method: "POST", headers: { "x-butler-admin": admin }, body: JSON.stringify({ act_id: raw.browser_stills.act_id, session: "general", tab: id, step: 1, reason: "capture_failed" }) });
+      await app.gateway.api("/internal/browser-host/stills", { method: "POST", headers: { "x-butler-admin": admin }, body: JSON.stringify({ act_id: raw.browser_stills.act_id, session: sessionId, tab: id, step: 1, reason: "capture_failed" }) });
       const copy = getAppCopy(appLocaleFromLanguage(caseLanguage)).browser;
       const label = copy.stillFailure.capture_failed;
       await waitBrowser(() => app.page.expression(`document.querySelector('[data-test-class=browser-step-still] [aria-disabled=true]')?.textContent.includes(${JSON.stringify(label)})`), "failed still is disabled");
@@ -95,8 +98,7 @@ try {
       await app.page.reload();
       await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="app-sidebar"]')));
       await shellReady(app, language);
-      const general = getAppCopy(appLocaleFromLanguage(language)).space.general;
-      await app.page.clickText(general, '[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]');
+      await app.page.clickText(sessionTitle, '[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]');
       await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-step-still"]')));
       }
       facts.push(await app.page.expression(`(()=>{const nodes=[...document.querySelectorAll('[data-test-class=browser-step-still] [data-slot=media-frame]')];return {phase:${JSON.stringify(phase)},language:${JSON.stringify(language)},theme:${JSON.stringify(theme)},frames:nodes.map(node=>({width:node.getBoundingClientRect().width,height:node.getBoundingClientRect().height,state:node.getAttribute('data-fit')}))}})()`));

@@ -97,6 +97,16 @@ pub struct StoredSessionBinding {
     pub metadata: Option<Map<String, Value>>,
 }
 
+/// Durable runtime session id of the app's ongoing Chats (대화) conversation.
+pub const CHATS_RUNTIME_SESSION_ID: &str = "butler/app-general";
+
+impl StoredSessionBinding {
+    /// The app's ongoing Chats conversation, identified by its durable runtime id.
+    pub fn is_chats(&self) -> bool {
+        self.role == SessionRole::Butler && self.session_id == CHATS_RUNTIME_SESSION_ID
+    }
+}
+
 /// An optional upsert field: keep the stored value, clear it, or set it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum OwnOptional<T> {

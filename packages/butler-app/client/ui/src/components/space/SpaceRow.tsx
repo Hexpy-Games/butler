@@ -13,6 +13,7 @@ import { useLongPressAction } from "../layout/useLongPressAction";
 import { SpaceIdentity } from "./SpaceIdentity";
 import { SpaceRowActions } from "./SpaceRowActions";
 import { SpaceDragRow } from "./SpaceDragRow";
+import { routeActiveChatId } from "@/app/space/routeActive";
 import { useSessionUnread } from "@/app/space/unread";
 
 export const SpaceRow = memo(function SpaceRow({ rowKey, flat = false, shortcut = false, depth = 0 }: {
@@ -27,7 +28,7 @@ export const SpaceRow = memo(function SpaceRow({ rowKey, flat = false, shortcut 
   const lastRow = useRef(liveRow);
   if (liveRow) lastRow.current = liveRow;
   const row = liveRow ?? lastRow.current;
-  const active = useButlerStore(s => s.activeChatId === row?.node.entityId);
+  const active = useButlerStore(s => routeActiveChatId(s) === row?.node.entityId);
   const sessionUnread = useSessionUnread(row?.session);
   const revealPath = useOrganization((s) => s.revealPath);
   const rowRef = useRef<HTMLDivElement>(null);

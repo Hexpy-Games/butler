@@ -30,6 +30,16 @@ function ToggleRow() {
 }
 // #endregion
 
+// #region recipe: Inline-editable text with room above and below
+function EditableText() {
+  return (
+    <Clickable bleed="both" stretch aria-label="Edit description" onClick={() => undefined}>
+      <Typo.Body>Collect the changes and review the release notes.</Typo.Body>
+    </Clickable>
+  );
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
   purpose: "Makes a row, tile or piece of text one keyboard-operable click target without a button's look.",
   whenToUse: [
@@ -50,6 +60,11 @@ export const guidance: ShowcaseGuidance = {
       description: "bleed=\"inline\" lines the row's text up with the label above it; selected makes it a pressed toggle.",
       render: () => <ToggleRow />,
     },
+    {
+      name: "Inline-editable text with room above and below",
+      description: "bleed=\"both\" gives the hover fill room on every side; the text and the rows around it do not move.",
+      render: () => <EditableText />,
+    },
   ],
   doDont: [
     {
@@ -63,6 +78,7 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "The content is the label; give an aria-label when it is only an icon or a long composite row.",
     "bleed=\"inline\" needs room beside the row: use it inside a padded surface (a settings card), not flush against a clipping edge.",
+    "bleed=\"block\" (or \"both\") reaches --space-xs above and below: keep at least that gap to the neighbouring rows, plus --focus-ring-room for the ring.",
     "Row fills already fade on the hover token and press lands at once; a className needs no background transition of its own.",
   ],
   accessibility: [
@@ -71,5 +87,5 @@ export const guidance: ShowcaseGuidance = {
     "Nested IconButtons must stop propagation so the row does not fire.",
     "With prefers-reduced-motion the fill fade is dropped: fills change at once.",
   ],
-  tokens: ["--selection", "--selection-strong", "--radius-control", "--focus-ring", "--interactive-disabled-fg", "--motion-fast", "--motion-instant", "--motion-ease-standard"],
+  tokens: ["--selection", "--selection-strong", "--radius-control", "--space-xs", "--focus-ring", "--interactive-disabled-fg", "--motion-fast", "--motion-instant", "--motion-ease-standard"],
 };

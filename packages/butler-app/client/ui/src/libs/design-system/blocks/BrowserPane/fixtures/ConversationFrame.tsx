@@ -65,6 +65,7 @@ export function DemoChat({ locale, wallpaper = false }: { locale: Locale; wallpa
 export interface ConversationFrameDemoProps extends Omit<BrowserDemoProps, "placement"> {
   width: number;
   height: number;
+  frame?: "flat" | "cards";
   /** `live-peek`: collapsed, and the left edge really peeks (useSidebarPeek); the button sends the host signal. */
   sidebar?: "open" | "collapsed" | "peek" | "live-peek";
   paneOpen?: boolean;
@@ -75,11 +76,11 @@ export interface ConversationFrameDemoProps extends Omit<BrowserDemoProps, "plac
 }
 
 /** The standalone Browser view: its title bar names the conversation that owns the tab (auto-sized leading). */
-export function StandaloneFrameDemo({ width, height, ...browser }: Omit<ConversationFrameDemoProps, "sidebar" | "paneOpen">) {
+export function StandaloneFrameDemo({ width, height, frame: shellFrame = "flat", ...browser }: Omit<ConversationFrameDemoProps, "sidebar" | "paneOpen">) {
   const demo = BROWSER_DEMO_COPY[browser.locale];
   return (
     <ScaledFrame width={width} height={height}>
-      <AdaptiveShell leftOpen rightOpen={false} UNSAFE_style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) }}>
+      <AdaptiveShell frame={shellFrame} leftOpen rightOpen={false} UNSAFE_style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) }}>
         <AdaptiveShellSidebar open><DemoSidebar locale={browser.locale} /></AdaptiveShellSidebar>
         <AdaptiveShellWorkspace>
           <TitlebarShell title={demo.browser} dragRegion leadingSize="auto" dataTestClass="custom-titlebar"
@@ -92,7 +93,7 @@ export function StandaloneFrameDemo({ width, height, ...browser }: Omit<Conversa
 }
 
 /** A whole window: sidebar, the conversation titlebar, chat | browser pane (AdaptiveShellSplit). */
-export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpen = true, autoCollapse = false, wallpaper = false, ...browser }: ConversationFrameDemoProps) {
+export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpen = true, autoCollapse = false, wallpaper = false, frame: shellFrame = "flat", ...browser }: ConversationFrameDemoProps) {
   const copy = SIDEBAR[browser.locale];
   const demo = BROWSER_DEMO_COPY[browser.locale];
   const [chatWidth, setChatWidth] = useState(400);
@@ -103,7 +104,7 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
   const browsing = browser.holder === undefined || browser.holder === "butler";
   const frame = (
     <ScaledFrame width={width} height={height}>
-      <AdaptiveShell ref={shell} leftOpen={leftOpen} rightOpen={false} splitOpen={paneOpen} leftPeek={sidebar === "peek" || peek.open}
+      <AdaptiveShell ref={shell} frame={shellFrame} leftOpen={leftOpen} rightOpen={false} splitOpen={paneOpen} leftPeek={sidebar === "peek" || peek.open}
         UNSAFE_style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) }}>
         {leftOpen ? null : (
           <ChromeFloatingToggleLayer>
@@ -117,7 +118,7 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
             trailing={(
               <ButtonContainer size="icon-sm">
                 <IconButton label={copy.actions} aria-haspopup="menu"><MoreHorizontal size="md" /></IconButton>
-                <IconButton label={paneOpen ? copy.hide : demo.browser} pressed={paneOpen} tone={browsing ? "riso" : paneOpen ? "butler" : "default"}
+                <IconButton label={paneOpen ? copy.hide : demo.browser} pane="browser" pressed={paneOpen} tone={browsing ? "riso" : paneOpen ? "butler" : "default"}
                   indicator={browsing && !paneOpen}><Globe2 size="md" /></IconButton>
                 <IconButton label={copy.inspector}><PanelRight size="md" /></IconButton>
               </ButtonContainer>

@@ -69,13 +69,10 @@ async fn reply(
 }
 fn parent(step: usize) -> Value {
     match step {
-        0 => call("start", "start_work", &json!({"objective":OWNER})),
-        1 => call("plan", "replace_work_plan", &plan("steward")),
-        2 => call("review", "record_work_review", &review()),
-        3 => call(
+        0 => call(
             "delegate",
             "delegate_to_steward",
-            &json!({"request":OWNER,"safe_title":"아침 브리핑 준비"}),
+            &json!({"request":OWNER,"checks":["예약 작업이 저장되어야 합니다."],"safe_title":"아침 브리핑 준비"}),
         ),
         _ => message("준비를 시작했습니다."),
     }

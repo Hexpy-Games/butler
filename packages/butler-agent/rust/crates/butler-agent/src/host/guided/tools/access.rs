@@ -85,7 +85,7 @@ pub(super) async fn decision_for_kind(
         TargetScope::NoTarget
     };
     let mode = &owner.binding.access_mode;
-    let decision = decide(
+    let mut decision = decide(
         mode,
         AccessRequest {
             kind,
@@ -98,6 +98,17 @@ pub(super) async fn decision_for_kind(
             taint: owner.taint(),
         },
     );
+    if matches!(
+        call.name.as_str(),
+        "create_automation" | "update_automation"
+    ) && owner.taint() == butler_turn::btcc::TurnTaint::External
+        && ["browser_signin", "browser_payment"]
+            .iter()
+            .any(|key| args[*key] == true)
+        && !matches!(decision, AccessDecision::Deny(_))
+    {
+        decision = AccessDecision::Ask(GrantUse::Ignore);
+    }
     let unsandboxed = call.name == ToolName::RunCommand && unsandboxed(mode, kind, decision, args);
     Ok(ClassifiedAccess {
         decision: if unsandboxed {

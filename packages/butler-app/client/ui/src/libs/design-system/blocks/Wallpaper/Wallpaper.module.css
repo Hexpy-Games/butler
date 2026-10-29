@@ -12,8 +12,8 @@
   inset: 0;
   width: 100%;
   height: var(--adaptive-viewport-block-size);
-  border-radius: var(--workspace-left-radius, 18px) 0 0
-    var(--workspace-left-radius, 18px);
+  border-radius: var(--workspace-left-radius, calc(18px / var(--ui-scale))) 0 0
+    var(--workspace-left-radius, calc(18px / var(--ui-scale)));
 }
 
 .container {

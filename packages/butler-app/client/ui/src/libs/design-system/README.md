@@ -69,6 +69,10 @@ ratchet mode: existing violations are baselined per file and may only shrink.
   motion and typography, never targets DS internals (element selectors,
   `[data-slot]`, `[data-state]`, `:global(.ds-class)`), and never sets DS
   custom properties such as `--clickable-*`, `--sidebar-*` or `--icon-button-*`.
+- Text size (큰 글자) zooms the whole App UI by `--ui-scale` (Electron page
+  zoom: 1, 1.15 or 1.3). Corner radii keep their 100% size: the `--radius-*`
+  tokens divide by `--ui-scale`, and any px length in a radius must too
+  (`calc(6px / var(--ui-scale))`). `lint:design` enforces it.
 
 When the DS cannot express what a screen needs, request a DS capability
 instead of working around it: add a prop, variant or block here (with a
@@ -76,6 +80,18 @@ showcase story, README and tests) or record the gap against
 `SPEC-BUTLER-DEDICATED-CLIENT-DESIGN-SYSTEM`, then migrate the product code
 and run `bun run lint:ds:baseline` to shrink the baseline. See
 `packages/butler-app/scripts/lint/README.md` for the rule details.
+
+## Switch Fields
+
+A switch field stacks like an input by default: label, description, then the
+switch underneath, left-aligned (`SettingsField`, or a vertical `Field`). The
+row layout (label and switch on one row, the switch at the row end, the
+description under the label) is `Field orientation="horizontal"`, allowed
+only on a phone layout or for a list item inside a closed container (a card,
+a list row). Never put a switch before its label. `lint:ds`
+(`switch-field-layout`) flags a `Switch` beside a label in a `Stack` or
+`Inline` row. Switch's README ("Placement", "Usage") holds the full rule.
+Row actions in a `CardListItem` center on the title's line.
 
 ## Responsive Contract
 

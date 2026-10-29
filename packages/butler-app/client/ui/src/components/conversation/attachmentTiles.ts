@@ -26,14 +26,14 @@ export function attachmentTile(file: MessageFileRef): Omit<AttachmentListItem, "
 }
 
 /**
- * Opens an attached file that is neither a picture nor a video in the session's inspector (ArtifactViewer).
+ * Opens an attached file that is neither a picture nor a video in the conversation's file viewer.
  * `kind: "attachment"` marks it as the user's own upload: it is shown, never run.
  */
-export function openAttachmentInInspector(file: MessageFileRef, sessionId: string) {
+export function openAttachmentInViewer(file: MessageFileRef, sessionId: string) {
   const artifact: SessionArtifactSummary = {
     id: file.file_id, session_id: sessionId || undefined, file_id: file.file_id, title: file.safe_name, kind: "attachment",
     safe_path_label: file.safe_name, url: file.url, signed_url: file.signed_url, size_bytes: file.size_bytes,
     created_at: file.created_at,
   };
-  useButlerStore.getState().openArtifact(artifact.id, artifact);
+  useButlerStore.getState().openArtifact(artifact);
 }

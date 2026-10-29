@@ -10,7 +10,8 @@ type AppLocale = ShowcaseRenderContext["locale"];
 export const TAB_STRIP_LABELS_KO: TabStripLabels = {
   tabs: "탭", myTabs: "내 탭", newTab: "새 탭", closeTab: "탭 닫기", untitled: "제목 없음", loading: "불러오는 중",
   working: "버틀러 작업 중", waiting: "승인 대기", crashed: "페이지 종료됨",
-  tabCount: (count) => `탭 ${count}개`, moved: (title, group, position) => `${title}: ${group}, ${position}번째`,
+  tabCount: (count) => `탭 ${count}개`, newTabIn: (group) => `${group}에 새 탭`, moreTabs: (count) => `+${count}`,
+  moved: (title, group, position) => `${title}: ${group}, ${position}번째`,
 };
 
 export const demoLabels = (locale: AppLocale) => (locale === "ko-KR" ? TAB_STRIP_LABELS_KO : undefined);
@@ -25,13 +26,29 @@ export const ICONS = { docs: favicon("3b6fd8", "D"), mail: favicon("d9473b", "M"
 const COPY = {
   "en-US": {
     mine: ["Butler design system", "Inbox — Mail", "Q3 report.pdf"], shoes: "Running shoes under $150", trip: "Book a Busan trip",
-    shop: ["Search results — Shop", "Checkout"], tripTabs: ["Hotel booking", "Train timetable"], sync: "Order sync", syncTab: "Seller console",
+    shop: ["Search results — Shop", "Checkout", "Size guide", "Reviews"], sync: "Order sync", syncTab: "Seller console",
+    tripTabs: ["Hotel booking", "Train timetable", "Beach weather", "Seafood market", "Car rental"],
   },
   "ko-KR": {
     mine: ["버틀러 디자인 시스템", "받은편지함 — 메일", "3분기 보고서.pdf"], shoes: "15만 원 이하 러닝화", trip: "부산 여행 예약",
-    shop: ["검색 결과 — 쇼핑", "결제"], tripTabs: ["호텔 예약", "KTX 시간표"], sync: "주문 동기화", syncTab: "판매자 콘솔",
+    shop: ["검색 결과 — 쇼핑", "결제", "사이즈 가이드", "구매 후기"], sync: "주문 동기화", syncTab: "판매자 콘솔",
+    tripTabs: ["호텔 예약", "KTX 시간표", "해운대 날씨", "자갈치 시장", "렌터카"],
   },
 } as const;
+
+function shoesGroup(locale: AppLocale, size = 2): TabStripGroup {
+  const copy = COPY[locale];
+  const tabs: TabStripTab[] = copy.shop.slice(0, size).map((title, index) => ({ id: `s${index + 1}`, title, faviconSrc: ICONS.shop }));
+  tabs[0] = { ...tabs[0]!, state: "working" };
+  return { id: "shoes", kind: "conversation", label: copy.shoes, state: "working", tabs };
+}
+
+/** A folded group of five tabs: its title previews three favicons and "+2". */
+function tripGroup(locale: AppLocale): TabStripGroup {
+  const icons = [ICONS.map, ICONS.broken, ICONS.docs, ICONS.mail, ICONS.shop];
+  return { id: "trip", kind: "conversation", label: COPY[locale].trip, state: "waiting", collapsed: true,
+    tabs: COPY[locale].tripTabs.map((title, index) => ({ id: `t${index + 1}`, title, faviconSrc: icons[index] })) };
+}
 
 export function demoGroups(locale: AppLocale, { crashed = false }: { crashed?: boolean } = {}): TabStripGroup[] {
   const copy = COPY[locale];
@@ -40,26 +57,31 @@ export function demoGroups(locale: AppLocale, { crashed = false }: { crashed?: b
       { id: "m1", title: copy.mine[0], faviconSrc: ICONS.docs }, { id: "m2", title: copy.mine[1], faviconSrc: ICONS.mail },
       { id: "m3", title: copy.mine[2], state: "loading" },
     ] },
-    { id: "shoes", kind: "conversation", label: copy.shoes, state: "working", tabs: [
-      { id: "s1", title: copy.shop[0], faviconSrc: ICONS.shop, state: "working" }, { id: "s2", title: copy.shop[1], faviconSrc: ICONS.shop },
-    ] },
-    { id: "trip", kind: "conversation", label: copy.trip, state: "waiting", collapsed: true, tabs: [
-      { id: "t1", title: copy.tripTabs[0], faviconSrc: ICONS.map }, { id: "t2", title: copy.tripTabs[1], faviconSrc: ICONS.broken },
-    ] },
+    shoesGroup(locale),
+    tripGroup(locale),
   ];
   if (crashed) groups.push({ id: "sync", kind: "conversation", label: copy.sync, state: "crashed", tabs: [{ id: "x1", title: copy.syncTab, state: "crashed" }] });
   return groups;
 }
 
-/** Many tabs, to show shrink-to-fit and the sideways scroll with edge fades. */
+/** My tabs beside one conversation group; with `middle`, the conversation has four tabs. */
+export function pairedGroups(locale: AppLocale, { middle = false }: { middle?: boolean } = {}): TabStripGroup[] {
+  const mine = demoGroups(locale)[0]!;
+  return [{ ...mine, tabs: mine.tabs.slice(0, 2) }, shoesGroup(locale, middle ? 4 : 2)];
+}
+
+/** One folded group beside an open one. */
+export function foldedGroups(locale: AppLocale): TabStripGroup[] {
+  return [shoesGroup(locale), tripGroup(locale)];
+}
+
 /** One conversation's own tabs, as its browser pane shows them. */
 export function conversationGroup(locale: AppLocale): TabStripGroup[] {
   const copy = COPY[locale];
-  return [{ id: "shoes", kind: "conversation", label: copy.shoes, state: "working", tabs: [
-    { id: "s1", title: copy.shop[0], faviconSrc: ICONS.shop, state: "working" }, { id: "s2", title: copy.shop[1], faviconSrc: ICONS.shop },
-  ] }];
+  return [shoesGroup(locale)];
 }
 
+/** Many tabs, to show shrink-to-fit and the sideways scroll with edge fades. */
 export function crowdedGroups(locale: AppLocale): TabStripGroup[] {
   const copy = COPY[locale];
   const titles = [...copy.mine, ...copy.shop, ...copy.tripTabs, copy.syncTab];
@@ -85,16 +107,15 @@ export function TabStripDemo({ locale, initial, activeTabId = "m2", ...props }: 
     setGroups((current) => current.map((group) => ({ ...group, tabs: group.tabs.filter((tab) => tab.id !== tabId) }))
       .filter((group) => group.kind === "mine" || group.tabs.length > 0));
   };
-  const newTab = () => {
+  // The row's + opens a tab in "my tabs", or in the only group shown (a conversation's own pane); a pill's + in its group.
+  const newTab = (target = groups.find((group) => group.kind === "mine")?.id ?? groups[0]?.id) => {
     const id = `new-${created}`;
     setCreated(created + 1);
-    // New tabs join "my tabs", or the only group shown (a conversation's own pane).
-    const target = groups.find((group) => group.kind === "mine")?.id ?? groups[0]?.id;
     setGroups((current) => current.map((group) => (group.id === target ? { ...group, tabs: [...group.tabs, { id, title: "" }] } : group)));
     setActive(id);
   };
   return (
-    <TabStrip groups={groups} activeTabId={active} labels={demoLabels(locale)} onActivate={setActive} onClose={close} onNewTab={newTab}
+    <TabStrip groups={groups} activeTabId={active} labels={demoLabels(locale)} onActivate={setActive} onClose={close} onNewTab={() => newTab()} onNewTabInGroup={newTab}
       onMove={(move) => setGroups((current) => applyTabStripMove(current, move))}
       onToggleGroup={(groupId, collapsed) => setGroups((current) => current.map((group) => (group.id === groupId ? { ...group, collapsed } : group)))}
       {...props} />

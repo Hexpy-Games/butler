@@ -20,7 +20,7 @@ impl GraphBuilder {
         count: usize,
         title: &str,
     ) -> Result<GraphWork, Error> {
-        let (_, mut work) = self.unplanned(parent, 1, title).await?;
+        let (_, mut work) = Box::pin(self.unplanned(parent, 1, title)).await?;
         self.plan(&mut work, "workers", actions(count)).await?;
         self.review(&mut work, "plan", "accept", json!([])).await?;
         Ok(work)

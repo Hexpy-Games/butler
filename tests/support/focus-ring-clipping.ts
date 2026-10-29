@@ -62,7 +62,7 @@ export async function probeFocusRingFrames(page: Page, act: () => Promise<void>,
 }
 
 // Self-contained: it runs in the page (page.evaluate and the per-frame sampler).
-const focusRingProbeInPage = (): FocusRingProbe | null => {
+export const focusRingProbeInPage = (): FocusRingProbe | null => {
   type Box = { left: number; top: number; right: number; bottom: number };
   const tolerance = 0.5;
   const describe = (element: Element) => {

@@ -22,6 +22,6 @@ export function MemoryFacts({ card, project }: { card?: MemoryCard; project?: Pr
   }
   const updated = project?.updated_at ?? card?.content_updated_at;
   if (updated) items.push({ label: copy.facts.updated, value: copy.ago(relativeAge(updated)) });
-  if (card?.kind === "automatic" && card.health.reclaimable_bytes) size(copy.facts.canFree, card.health.reclaimable_bytes);
+  if (card?.kind === "automatic" && card.health.reclaimable_bytes != null) size(copy.facts.canFree, card.health.reclaimable_bytes);
   return items.length ? <MetaList items={items} /> : <Typo.Caption tone="tertiary">{copy.notMeasured}</Typo.Caption>;
 }

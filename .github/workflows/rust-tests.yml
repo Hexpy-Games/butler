@@ -178,6 +178,8 @@ jobs:
               smoke settings-bugs-smoke
               smoke app-delegated-work-smoke
               smoke answer-blocks-ui
+              smoke block-scraps-ui
+              smoke documents-ui
               smoke composer-fold-smoke
               ;;
             ui-work)
@@ -223,6 +225,7 @@ jobs:
               smoke browser-control-electron
               smoke browser-downloads-electron
               smoke browser-shell-electron
+              smoke browser-capture-detach-electron
               smoke browser-area-electron
               smoke browser-history-electron
               smoke browser-preview-app

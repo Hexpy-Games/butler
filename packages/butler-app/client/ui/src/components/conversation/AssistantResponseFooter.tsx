@@ -20,6 +20,8 @@ const NON_TERMINAL_ASSISTANT_STATUSES = new Set([
 ]);
 
 export function AssistantResponseFooter({
+  bubble = false,
+  timeOnly = false,
   copied,
   meta,
   onCopy,
@@ -27,6 +29,8 @@ export function AssistantResponseFooter({
   suppressTerminalStatus = false,
   actions,
 }: {
+  bubble?: boolean;
+  timeOnly?: boolean;
   copied: boolean;
   meta: AssistantFooterMeta | null;
   onCopy: () => void;
@@ -42,22 +46,22 @@ export function AssistantResponseFooter({
   return (
     <>
       <MessageFooter>
-        <CopyButton
+        {!timeOnly && <CopyButton
           copied={copied}
           label={appCopy.conversation.messageActions.copyMessage}
           copiedLabel={appCopy.conversation.messageActions.copied}
           aria-label={appCopy.interfacePanels.copyResponse}
           onCopy={onCopy}
-        />
-        {actions}
-        {settledMeta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(settledMeta.durationLabel)}</span>}
+        />}
+        {!timeOnly && actions}
+        {!timeOnly && !bubble && settledMeta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(settledMeta.durationLabel)}</span>}
         {settledMeta?.timeLabel && (
           <Typo.Text as="time" dateTime={settledMeta.completedAtIso ?? undefined} numeric="tabular">
             {settledMeta.timeLabel}
           </Typo.Text>
         )}
       </MessageFooter>
-      {terminalStatus && !suppressTerminalStatus ? (
+      {terminalStatus && !suppressTerminalStatus && !(bubble && terminalStatus.state === "complete") ? (
         <MessageStatusRow dataTestClass="assistant-terminal-status-row">
           <AssistantStatusLabel
             label={terminalStatus.label}

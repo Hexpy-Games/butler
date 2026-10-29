@@ -68,6 +68,7 @@ async fn request_layout_diagnostics_are_complete_and_request_driven() -> Result<
                 | "delegated-tools"
                 | "runtime-state"
                 | "role"
+                | "chats-reply-rules"
                 | "runtime-system-contract"
         );
         if system_authored {
@@ -102,6 +103,7 @@ async fn request_layout_diagnostics_are_complete_and_request_driven() -> Result<
                     | "delegated-tools"
                     | "runtime-state"
                     | "role"
+                    | "chats-reply-rules"
                     | "runtime-system-contract"
             );
             if !system_authored {

@@ -173,6 +173,29 @@ async fn sched_model_03_deleted_and_omitted_models_inherit_chat() -> Result<(), 
 }
 
 #[tokio::test]
+async fn sched_model_05_cleared_model_inherits_chat() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, server, chat) = setup("SCHED-MODEL-05").await?;
+    let reply =
+        s.gw.patch(&format!("/sessions/{chat}/controls"), json!({"model":Z}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    s.patch_settings(json!({"model":Y}), "different default")
+        .await?;
+    let id = create(&s, Some(X), &chat).await?;
+    run(&s, &server, &id, &chat, X).await?;
+    let reply =
+        s.gw.patch(&format!("/automations/{id}"), json!({"model":""}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    assert!(reply.data()["automation"]["model"].is_null());
+    let read = s.gw.get(&format!("/automations/{id}")).await?;
+    assert!(read.data()["automation"]["model"].is_null());
+    run(&s, &server, &id, &chat, Z).await?;
+    s.finish().await
+}
+
+#[tokio::test]
 async fn sched_model_04_unknown_models_are_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, _server, chat) = setup("SCHED-MODEL-04").await?;

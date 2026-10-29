@@ -15,7 +15,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use serde_json::{Map, Value};
 use tokio::sync::Mutex;
 
@@ -115,6 +115,7 @@ pub struct ConversationAdmissionTurnInput {
 
 #[derive(Default)]
 struct AdmissionState {
+    documents: IndexMap<String, String>,
     known_tool_call_ids: HashSet<String>,
     evidence_refs: IndexSet<String>,
     tool_message_id: Option<String>,
@@ -130,12 +131,14 @@ pub struct ConversationAdmissionTurn {
 }
 
 impl ConversationAdmissionTurn {
-    /// Begins the conversation turn; the origin must be classified user input or internal control.
+    /// Begins the conversation turn; the origin must be classified from verified ingress.
     pub async fn begin(input: ConversationAdmissionTurnInput) -> ConversationResult<Self> {
         if input.origin.reference.as_deref().is_none_or(str::is_empty)
             || !matches!(
                 input.origin.kind,
-                ConversationOriginKind::UserInput | ConversationOriginKind::InternalControl
+                ConversationOriginKind::UserInput
+                    | ConversationOriginKind::InternalControl
+                    | ConversationOriginKind::Connector
             )
         {
             return Err(ConversationError::new(
@@ -191,6 +194,25 @@ impl ConversationAdmissionTurn {
         &self,
         event: RuntimeAdmissionEvent<'_>,
     ) -> ConversationResult<()> {
+        if event.kind == "tool.completed" {
+            let mut state = self.state.lock().await;
+            for item in event
+                .payload
+                .and_then(|p| p.get("deliverables"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if item.get("kind").and_then(Value::as_str) == Some("doc")
+                    && let (Some(id), Some(title)) = (
+                        item.get("id").and_then(Value::as_str),
+                        item.get("title").and_then(Value::as_str),
+                    )
+                {
+                    state.documents.insert(id.to_owned(), title.to_owned());
+                }
+            }
+        }
         let known = self.state.lock().await.known_tool_call_ids.clone();
         self.apply(ConversationAdmissionInput {
             source: AdmissionSource::RuntimeTurnEvent,
@@ -270,9 +292,12 @@ impl ConversationAdmissionTurn {
                 }),
             })
             .await?;
-        if status == "complete"
-            && let (Some(inbound), Some(outbound)) = (request, assistant)
-        {
+        if let Some(inbound) = request {
+            let outbound = if status == "complete" {
+                assistant.unwrap_or_default()
+            } else {
+                String::new()
+            };
             // Diagnostic only: memory catch-up reconciles canonical outcomes
             // whose notice was not accepted.
             let _ignored_observation = self

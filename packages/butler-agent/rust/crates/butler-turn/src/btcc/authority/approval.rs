@@ -7,8 +7,9 @@
 mod command_risk;
 mod operation;
 mod schedule;
+mod tool;
 pub(super) use operation::exact_operation;
-pub(super) use schedule::schedule;
+pub(super) use schedule::{schedule, schedule_update};
 
 use std::collections::HashSet;
 use std::path::{Component, Path};
@@ -148,12 +149,7 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             facts.target,
             ApprovalRisk::High,
         ),
-        "call_mcp_tool" => single(
-            ApprovalActionKind::UseConnector,
-            ApprovalTargetKind::Connector,
-            facts.target.strip_prefix("mcp:").unwrap_or(facts.target),
-            ApprovalRisk::High,
-        ),
+        "call_mcp_tool" => mcp(facts),
         "start_topic_conversation" => single(
             ApprovalActionKind::StartConversation,
             ApprovalTargetKind::Other,
@@ -188,49 +184,31 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
                 ApprovalRisk::Medium
             },
         ),
-        capability => by_tool(facts, ToolName::parse(capability)),
+        capability => tool::by_tool(facts, ToolName::parse(capability)),
     }
 }
 
-fn by_tool(facts: ApprovalFacts<'_>, tool: Option<ToolName>) -> AuthorityApproval {
-    let (kind, target, risk) = match tool {
-        Some(ToolName::WriteFile | ToolName::EditFile) => return file_edits(facts),
-        Some(ToolName::ReadFile | ToolName::ListFiles | ToolName::GrepFiles) => {
-            return file_reads(facts);
-        }
-        Some(ToolName::DeleteAutomation) => (
-            ApprovalActionKind::ManageSchedule,
-            ApprovalTargetKind::Schedule,
-            ApprovalRisk::High,
-        ),
-        Some(ToolName::CreateAutomation | ToolName::RunDueAutomations) => (
-            ApprovalActionKind::ManageSchedule,
-            ApprovalTargetKind::Schedule,
-            ApprovalRisk::Medium,
-        ),
-        Some(
-            ToolName::ProjectLedgerCreate
-            | ToolName::ProjectLedgerUpdate
-            | ToolName::ProjectLedgerWorkUpdate
-            | ToolName::ProjectLedgerWorkComplete
-            | ToolName::CompleteProjectWork
-            | ToolName::ProjectLedgerTaskUpdate
-            | ToolName::ProjectLedgerTaskComplete
-            | ToolName::ProjectLedgerAttemptStart
-            | ToolName::ProjectLedgerAttemptSucceed
-            | ToolName::ProjectLedgerAttemptFail,
-        ) => (
-            ApprovalActionKind::UpdateProject,
-            ApprovalTargetKind::Project,
-            ApprovalRisk::Low,
-        ),
-        _ => (
-            ApprovalActionKind::Other,
-            ApprovalTargetKind::Other,
-            ApprovalRisk::High,
-        ),
-    };
-    single(kind, target, facts.target, risk)
+fn mcp(facts: ApprovalFacts<'_>) -> AuthorityApproval {
+    let mut approval = single(
+        ApprovalActionKind::UseConnector,
+        ApprovalTargetKind::Connector,
+        facts.target.strip_prefix("mcp:").unwrap_or(facts.target),
+        ApprovalRisk::High,
+    );
+    if let Some(arguments) = facts
+        .input
+        .get("arguments")
+        .and_then(Value::as_object)
+        .filter(|a| !a.is_empty())
+    {
+        // Show the exact operation's arguments, independent of any connector or tool vocabulary.
+        approval
+            .examples
+            .push(butler_core::public_text::sanitize_public_delta(
+                &Value::Object(arguments.clone()).to_string(),
+            ));
+    }
+    approval
 }
 
 /// `write_file` (`path`) or `edit_file` (`path`, or `edits[].path`): the

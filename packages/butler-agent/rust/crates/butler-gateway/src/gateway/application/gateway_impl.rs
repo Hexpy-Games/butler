@@ -1,5 +1,5 @@
 use super::*;
-use crate::gateway::AppBrowserStillCommand;
+use crate::gateway::{AppBrowserStillCommand, TurnListView};
 use butler_runtime::operations::ProviderQuotaView as QuotaView;
 impl GatewayApplication for AppApplication {
     fn browser_still(&self, command: AppBrowserStillCommand) -> ApplicationFuture<Value> {
@@ -14,6 +14,9 @@ impl GatewayApplication for AppApplication {
     }
     fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
         self.library_owned(command)
+    }
+    fn plugins(&self) -> Option<Arc<dyn butler_core::plugins::PluginPort>> {
+        self.dependencies.plugins.clone()
     }
     fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
         self.dependencies.hooks.clone()
@@ -280,17 +283,10 @@ impl GatewayApplication for AppApplication {
     fn list_mcp_capabilities(
         &self,
         shutdown: tokio_util::sync::CancellationToken,
-    ) -> ApplicationFuture<serde_json::Value> {
-        let client = self.dependencies.mcp_client.clone();
-        Box::pin(async move {
-            Box::pin(client.list_capabilities(true, &shutdown))
-                .await
-                .map_err(|error| {
-                    GatewayApplicationError::public(500, error.code, error.message)
-                        .with_source(error)
-                })
-        })
+    ) -> ApplicationFuture<Value> {
+        self.list_mcp_capabilities_owned(shutdown)
     }
+
     fn create_mcp_server(&self, input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
         self.create_mcp_server_owned(input)
     }
@@ -314,7 +310,7 @@ impl GatewayApplication for AppApplication {
             client
                 .delete_server(id)
                 .await
-                .map_err(GatewayApplicationError::internal_from)
+                .map_err(super::mcp_servers::delete_error)
         })
     }
     fn send_message(&self, command: SendMessageCommand) -> ApplicationFuture<MessageSendResult> {
@@ -392,6 +388,9 @@ impl GatewayApplication for AppApplication {
                 .await
         })
     }
+    fn send_session_queue_now(&self, id: String) -> ApplicationFuture<SessionQueueView> {
+        self.send_session_queue_now_owned(id)
+    }
     fn delete_session_queue(
         &self,
         queued_message_id: String,
@@ -399,11 +398,7 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.delete_session_queue_owned(queued_message_id).await })
     }
-    fn list_turns(
-        &self,
-        chat_id: String,
-        after: f64,
-    ) -> ApplicationFuture<crate::gateway::TurnListView> {
+    fn list_turns(&self, chat_id: String, after: f64) -> ApplicationFuture<TurnListView> {
         let this = self.clone_handle();
         Box::pin(async move { this.turn_page(chat_id, after).await })
     }
@@ -434,6 +429,10 @@ impl GatewayApplication for AppApplication {
     ) -> ApplicationFuture<MessageSendResult> {
         let this = self.clone_handle();
         Box::pin(async move { this.retry_turn_with_current_controls_owned(turn_id).await })
+    }
+    fn canon_proposal(&self, action: String, input: Value) -> ApplicationFuture<Value> {
+        let app = self.clone_handle();
+        Box::pin(async move { super::canon_proposals::execute(&app, &action, input).await })
     }
     fn canon(&self, request: AppCanonRequest) -> ApplicationFuture<Value> {
         super::canon::execute(self, request)

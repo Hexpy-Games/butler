@@ -11,6 +11,7 @@ pub(in crate::host::guided::tools) struct Client {
     pub session: String,
     pub approval_handoff: bool,
     turn: String,
+    schedule_browser: Option<butler_turn::btcc::ScheduleBrowserOptions>,
 }
 impl Client {
     pub(in crate::host::guided::tools) async fn vision(&self, model: &str) -> bool {
@@ -44,6 +45,7 @@ impl Client {
             .clone();
         Some(Self {
             approval_handoff: false,
+            schedule_browser: owner.schedule_run().and_then(|run| run.browser),
             client,
             turn: owner.binding.turn_id.clone(),
             base: endpoint.base_url,
@@ -78,7 +80,7 @@ impl Client {
             .post(format!("{}{}", self.base, if op.starts_with("images.") {"/internal/images/calls"} else {"/internal/browser/calls"}))
             .bearer_auth(&self.bearer)
             .header("x-butler-admin", &self.admin)
-            .json(&json!({"op":op,"session":self.session,"tab":tab,"args":args,"call_id":call_id,"turn_id":self.turn}))
+            .json(&json!({"op":op,"session":self.session,"tab":tab,"args":args,"call_id":call_id,"turn_id":self.turn,"schedule_browser":self.schedule_browser}))
             .timeout(std::time::Duration::from_secs(31))
             .send();
         let request = async {

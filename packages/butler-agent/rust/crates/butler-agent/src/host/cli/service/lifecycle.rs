@@ -86,6 +86,9 @@ pub(super) async fn execute(
                 }));
             }
             let admission = acquire_admission(&data_root, &installation).await?;
+            crate::host::plugins::safe_mode::request(&data_root)
+                .await
+                .map_err(crate::host::HostError::from_error)?;
             if let Some(active) = active_service_async(&data_root).await?
                 && managed::is_managed(&data_root, &active)
             {
@@ -192,6 +195,9 @@ async fn start_service_admitted(
         let ready = wait_until_ready(config, None, Some(record.nonce.clone())).await?;
         return Ok(start_result(&ready, false));
     }
+    crate::host::plugins::safe_mode::request(data_root)
+        .await
+        .map_err(crate::host::HostError::from_error)?;
     if managed::job_is_ours(data_root)
         && butler_platform::service_registration::job().is_ok_and(|job| job.reachable)
     {
@@ -401,6 +407,9 @@ fn spawn_service(
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
+    if std::env::args_os().any(|s| s == "--safe-mode") {
+        command.arg("--safe-mode");
+    }
     process_control::prepare_detached_spawn().map_err(crate::host::HostError::from_error)?;
     process_control::detach(&mut command);
     command.spawn().map_err(|source| {

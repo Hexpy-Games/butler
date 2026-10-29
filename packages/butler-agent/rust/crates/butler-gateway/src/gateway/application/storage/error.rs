@@ -85,6 +85,7 @@ wire_codes! {
         QueuedMessageClaimMissing = "queued_message_claim_missing",
         QueuedMessageIdentityConflict = "queued_message_identity_conflict",
         QueuedMessageLinkIncomplete = "queued_message_link_incomplete",
+        QueuedMessageNotNext = "queued_message_not_next",
         QueuedMessageNotFound = "queued_message_not_found",
         SessionModelUnavailable = "session_model_unavailable",
         SessionNotFound = "session_not_found",

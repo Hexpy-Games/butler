@@ -12,6 +12,7 @@ use super::{
 #[derive(Clone)]
 pub struct McpClient {
     pub(super) data_root: PathBuf,
+    pub(super) overlay: Option<Arc<dyn super::McpOverlay>>,
     pub(super) environment: Arc<HashMap<String, String>>,
     pub(super) configuration_writes: Arc<butler_core::configuration::ConfigurationWrites>,
     pub(super) registry_path_guard: Arc<RegistryPathGuard>,
@@ -63,6 +64,7 @@ impl McpClient {
     pub fn new(data_root: PathBuf, environment: HashMap<String, String>) -> Self {
         Self {
             data_root,
+            overlay: None,
             environment: Arc::new(environment),
             configuration_writes: Arc::new(butler_core::configuration::ConfigurationWrites::new()),
             registry_path_guard: Arc::new(|_, _| Ok(())),
@@ -77,6 +79,7 @@ impl McpClient {
     ) -> Self {
         Self {
             data_root,
+            overlay: None,
             environment: Arc::new(environment),
             configuration_writes,
             registry_path_guard,
@@ -88,7 +91,7 @@ impl McpClient {
         include_disabled: bool,
         signal: &CancellationToken,
     ) -> Result<Value, McpClientError> {
-        let registry = read_registry(&self.data_root).map_err(|source| {
+        let mut registry = read_registry(&self.data_root).map_err(|source| {
             failure(
                 "mcp_registry_unavailable",
                 "MCP server registry is unavailable.",
@@ -96,6 +99,10 @@ impl McpClient {
             )
             .with_source(source)
         })?;
+        registry
+            .extend(self.overlay_servers().map_err(|_| {
+                failure("plugin_invalid", "Plugin registry is unavailable.", false)
+            })?);
         let mut servers = Vec::new();
         for server in registry {
             if signal.is_cancelled() {
@@ -233,6 +240,7 @@ impl McpClient {
                 false,
             ));
         }
+        self.check_connector_destination(&server.id, tool_name, &arguments)?;
         let request = Operation::CallTool {
             name: tool_name.to_owned(),
             arguments,
@@ -296,6 +304,7 @@ impl McpClient {
                 false,
             ));
         }
+        self.check_connector_destination(&server.id, tool_name, &arguments)?;
         Ok((server.id.clone(), tool_name.to_owned(), arguments))
     }
 
@@ -349,6 +358,16 @@ impl McpClient {
     }
 
     pub(super) fn find_server(&self, server_id: &str) -> Result<McpServerConfig, McpClientError> {
+        if server_id.contains('/') {
+            return self
+                .overlay_servers()
+                .map_err(|_| failure("plugin_invalid", "Plugin registry is unavailable.", false))?
+                .into_iter()
+                .find(|s| s.id == server_id)
+                .ok_or_else(|| {
+                    failure("mcp_server_not_found", "MCP server was not found.", false)
+                });
+        }
         let id = super::registry::normalize_server_id(server_id);
         read_registry(&self.data_root)
             .map_err(|source| {
@@ -372,6 +391,8 @@ impl McpClient {
         let base = json!({
             "id": server.id,
             "display_name": server.display_name,
+            "source": if server.plugin.is_some() { "plugin" } else { "user" },
+            "plugin": server.plugin,
             "enabled": server.enabled,
             "transport": server.transport.as_str(),
             "tools": [],
@@ -390,6 +411,8 @@ impl McpClient {
                 json!({
                     "id":server.id,
                     "display_name":server.display_name,
+                    "source":if server.plugin.is_some() { "plugin" } else { "user" },
+                    "plugin":server.plugin,
                     "enabled":server.enabled,
                     "transport":server.transport.as_str(),
                     "tools":project_tools(&server.id, probe.get("tools")),

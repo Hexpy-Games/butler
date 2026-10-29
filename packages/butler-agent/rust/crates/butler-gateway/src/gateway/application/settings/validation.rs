@@ -10,6 +10,11 @@ const UPDATE_KEYS: &[&str] = &[
     "recall_mode",
     "recall_judge_model",
     "consolidation_model",
+    "consolidation_time",
+    "proactive_level",
+    "quiet_hours_start",
+    "quiet_hours_end",
+    "chats_intro_seen",
     "consolidation_reasoning_effort",
     "context_window_tokens",
     "worker_profiles",
@@ -21,6 +26,7 @@ const UPDATE_KEYS: &[&str] = &[
     "follow_up_behavior",
     "multiline_send_behavior",
     "appearance_theme",
+    "text_size",
     "collapse_message_box",
     "show_thinking",
     "reduce_motion",
@@ -45,19 +51,19 @@ const UPDATE_KEYS: &[&str] = &[
 ];
 
 pub(super) fn is_request(value: &Value) -> bool {
-    if !super::browsing::valid(value) || !super::logging::valid(value) {
+    if !valid_native(value) || !super::browsing::valid(value) || !super::logging::valid(value) {
         return false;
     }
     let Some(input) = value.as_object() else {
         return false;
     };
-    if !input.keys().all(|key| UPDATE_KEYS.contains(&key.as_str())) {
+    if input
+        .get("text_size")
+        .is_some_and(|value| !matches!(value.as_str(), Some("default" | "large" | "larger")))
+    {
         return false;
     }
-    if input
-        .get("update_previews")
-        .is_some_and(|value| !value.is_boolean())
-    {
+    if !input.keys().all(|key| UPDATE_KEYS.contains(&key.as_str())) {
         return false;
     }
     if input
@@ -119,6 +125,22 @@ pub(super) fn is_request(value: &Value) -> bool {
         && input
             .get("collapse_message_box")
             .is_none_or(Value::is_boolean)
+}
+
+fn valid_native(input: &Value) -> bool {
+    if !super::proactive::valid(input) {
+        return false;
+    }
+    if input
+        .get("consolidation_time")
+        .is_some_and(|v| !v.as_str().is_some_and(valid_time_of_day))
+        || input
+            .get("update_previews")
+            .is_some_and(|value| !value.is_boolean())
+    {
+        return false;
+    }
+    true
 }
 
 pub(super) fn is_iana_timezone(value: &Value) -> bool {
@@ -303,4 +325,14 @@ fn bounded_text(value: &str, limit: usize) -> bool {
 
 fn utf16_len(value: &str) -> usize {
     value.encode_utf16().count()
+}
+
+pub(super) fn valid_time_of_day(value: &str) -> bool {
+    let b = value.as_bytes();
+    b.len() == 5
+        && b[2] == b':'
+        && b[0..2].iter().all(u8::is_ascii_digit)
+        && b[3..5].iter().all(u8::is_ascii_digit)
+        && &b[0..2] <= b"23".as_slice()
+        && &b[3..5] <= b"59".as_slice()
 }

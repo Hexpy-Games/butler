@@ -14,7 +14,7 @@ export function populatedSession(view: SessionView): SessionView {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       progress: { safe_progress_rows: [{ id: "session-info-running", kind: "todo", state: "running", safe_label: "변경 사항 검토" }] } },
     branch: { workspace_label: "butler", branch_name: "feat/session-info-pane", workspace_binding: "project", workspace_status: "available" },
-    context: { ...structuredClone(HARNESS_SUMMARY.context_details!), session_id: view.session_id },
+    context: sessionContext(view.session_id),
     artifacts: HARNESS_SUMMARY.artifacts!.map(item => ({ ...item, session_id: view.session_id, title: "검토 결과.md" })),
     automations: [{ automation_id: "session-schedule", title: "진행 상황 확인", schedule_type: "interval", interval_seconds: 3600 }],
     messages: [{ id: "session-info-message", chat_id: view.session_id, role: "assistant", text: "검토를 시작했습니다.", created_at: new Date().toISOString(),
@@ -50,16 +50,41 @@ export async function failPendingAsksRead(page: Page) {
   return () => page.unroute("**/sessions/*/pending-asks", fail);
 }
 
-export async function installSessionBrowser(page: Page) {
-  await page.addInitScript(() => {
-    const state = { enabled: true, blocked: false, activeId: null, nativeCovered: false, tabs: [] };
+/** A browser bridge stub; `tabs` are the open tabs (e.g. a conversation's agent tabs for the rail). */
+export async function installSessionBrowser(page: Page, tabs: Record<string, unknown>[] = []) {
+  await page.addInitScript((tabs) => {
+    const state = { enabled: true, blocked: false, activeId: null as string | null, restored: true, nativeCovered: false, tabs };
     const off = () => () => {};
-    Object.assign(window, { butlerBrowser: {
-      call: async (method: string) => method === "state" || method === "open" ? state : null,
-      subscribe: (handler: (value: typeof state) => void) => { queueMicrotask(() => handler(state)); return () => {}; },
-      onFrame: off, onPointer: off, onElementDrag: off, onSelectionAction: off, onDownload: off, onHistory: off, onAddress: off,
+    const subscriptions = new Map<string, number>();
+    const calls: { method: string; input?: { id?: string } }[] = [];
+    const handlers = new Set<(value: typeof state) => void>();
+    const canvas = document.createElement("canvas");
+    canvas.width = 16; canvas.height = 10;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#a4b5c6"; context.fillRect(0, 0, 16, 10);
+    const bytes = Uint8Array.from(atob(canvas.toDataURL("image/jpeg").split(",")[1]!), char => char.charCodeAt(0));
+    Object.assign(window, { __liveFrameSubs: subscriptions, __browserCalls: calls, __browserState: state, butlerBrowser: {
+      call: async (method: string, input?: { id?: string }) => {
+        calls.push({ method, input });
+        if (method === "activate" && input?.id) {
+          state.activeId = input.id;
+          for (const handler of handlers) handler({ ...state });
+        }
+        return method === "state" || method === "open" ? state : null;
+      },
+      subscribe: (handler: (value: typeof state) => void) => {
+        handlers.add(handler); queueMicrotask(() => handler(state)); return () => handlers.delete(handler);
+      },
+      onFrame: (id: string, handler: (frame: { tab: string; seq: number; bytes: Uint8Array; masked: boolean }) => void) => {
+        subscriptions.set(id, (subscriptions.get(id) ?? 0) + 1);
+        queueMicrotask(() => handler({ tab: id, seq: 1, bytes, masked: false }));
+        return () => {
+          const remaining = (subscriptions.get(id) ?? 1) - 1;
+          if (remaining) subscriptions.set(id, remaining); else subscriptions.delete(id);
+        };
+      }, onPointer: off, onElementDrag: off, onSelectionAction: off, onDownload: off, onHistory: off, onAddress: off,
     } });
-  });
+  }, tabs);
 }
 
 export function sessionQuestion(sessionId: string): NonNullable<SessionView["pending_questions"]>[number] {
@@ -109,4 +134,20 @@ export async function auditSessionInfoFocus(page: Page, scope: Locator) {
     stops++;
   }
   return { stops, clips };
+}
+
+/** The ten current server categories, including all reserves. */
+function sessionContext(sessionId: string) {
+  const categories = [
+    ["working", 41_400], ["current-input", 1_300], ["retrieved", 7_600], ["references", 900],
+    ["live-config", 6_800], ["static", 2_400], ["runtime-state", 2_400],
+    ["output-reserve", 16_000], ["tool-reserve", 16_000], ["compaction-reserve", 4_800],
+  ] as const;
+  const used = categories.slice(0, 7).reduce((sum, [, tokens]) => sum + tokens, 0);
+  return { ...structuredClone(HARNESS_SUMMARY.context_details!), session_id: sessionId,
+    used_tokens: used, ratio: used / 258_000,
+    categories: categories.map(([id, tokens]) => ({ id, label: id, used_tokens: tokens,
+      budget_tokens: 258_000, ratio: tokens / 258_000, safe_description: id,
+      source_kind: id.endsWith("-reserve") ? id.replaceAll("-", "_") : undefined })),
+  };
 }

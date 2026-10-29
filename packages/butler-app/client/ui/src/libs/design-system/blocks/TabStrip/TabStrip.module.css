@@ -1,6 +1,8 @@
 /* Tabs share one row: they shrink from --tab-strip-tab-max-width down to
    --tab-strip-tab-min-width, then the row scrolls sideways with edge fades. */
 .root {
+  --tab-strip-gap: 2px;
+
   display: flex;
   width: 100%;
   min-width: 0;
@@ -15,7 +17,7 @@
   min-width: 0;
   flex: 0 1 auto;
   align-items: center;
-  gap: 2px;
+  gap: var(--tab-strip-gap);
   padding: var(--focus-ring-width);
   overflow: auto hidden;
   overscroll-behavior-x: contain;
@@ -26,15 +28,71 @@
   display: none;
 }
 
+/* Group pills sit a step apart. */
+.scroller[data-grouped] {
+  gap: var(--space-xs);
+}
+
 .scroller[data-dragging="true"] {
   cursor: grabbing;
 }
 
 /* Groups and their tablists keep their semantics but not their boxes: every
-   chip and tab is a flex item of the scroller, so all tabs shrink together. */
+   tab is a flex item of the scroller, so all tabs shrink together. */
 .group,
 .tabs {
   display: contents;
+}
+
+/* A group beside other groups is one outline pill (no fill): its title, its
+   tabs and its own +. */
+.group[data-titled] {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: var(--tab-strip-gap);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-pill);
+  transition: border-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* A tab dragged over the title outlines the pill it joins. */
+.group[data-titled]:has(.chip[data-over]) {
+  border-color: var(--accent);
+}
+
+/* Folding closes the tabs and the + to zero width (the group view slides
+   the width with animateMotion). The clip keeps --focus-ring-room for rings;
+   the fade hides what the margin would show of folded tabs. */
+.fold {
+  display: flex;
+  min-width: 0;
+  flex: none;
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
+  transition: opacity var(--motion-base) var(--motion-ease-standard);
+}
+
+.fold[data-collapsed] {
+  width: 0;
+  opacity: 0;
+}
+
+.foldBody {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--tab-strip-gap);
+  padding-inline-start: var(--tab-strip-gap);
+}
+
+/* Inside pills every open tab takes the one width the strip measures
+   (--tab-strip-fit-width: the row's room after the pills' titles and +
+   buttons, shared by the open tabs), so they shrink together before the row
+   scrolls, as flat tabs do. */
+.group[data-titled] .slot {
+  width: var(--tab-strip-fit-width, var(--tab-strip-tab-max-width));
+  flex: none;
 }
 
 .slot {
@@ -55,8 +113,37 @@
   z-index: 1;
 }
 
+/* Thin dividers sit between tabs and after a pill's title; they hide beside
+   a filled neighbour (selected, hovered, dragged or keyboard-focused). */
+.slot + .slot::before,
+.group[data-titled] .slot:first-child::before {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--tab-strip-gap) / -2 - var(--border-hairline) / 2);
+  width: var(--border-hairline);
+  height: var(--icon-size-md);
+  background: var(--line);
+  content: "";
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.slot:is(
+    [data-active],
+    [data-dragging],
+    :hover,
+    :has(> .tab:focus-visible)
+  )::before,
+.slot:is([data-active], [data-dragging], :hover, :has(> .tab:focus-visible))
+  + .slot::before,
+.chipSlot:is(:hover, :has(:focus-visible)) + .fold .slot:first-child::before {
+  opacity: 0;
+}
+
 .slot > .tab[data-slot="clickable"] {
   min-height: var(--control-height-md);
+  border-radius: var(--radius-pill);
   padding-inline: var(--space-sm) var(--space-xs);
   gap: var(--space-sm);
   color: var(--text-primary);
@@ -114,7 +201,7 @@
 .favicon img {
   width: 100%;
   height: 100%;
-  border-radius: 2px;
+  border-radius: calc(2px / var(--ui-scale));
   object-fit: contain;
 }
 
@@ -127,8 +214,49 @@
   flex: 1 1 auto;
 }
 
-.close {
+/* The close button shows on hover or keyboard focus only, active tab included.
+   It keeps its slot, so the title never reflows; while hidden it takes no
+   clicks. Middle-click, Delete and Cmd/Ctrl+W still close. */
+.slot .close {
   flex: none;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
+}
+
+.slot:hover .close,
+.slot > .tab:focus-visible .close,
+.slot .close:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Touch has no hover: only the selected tab shows its close button. */
+@media (hover: none) {
+  .slot[data-active] .close {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Reduced motion: the close button and dividers appear at once, and a fold
+   opens or closes at once. */
+@media (prefers-reduced-motion: reduce) {
+  .slot .close {
+    transition:
+      background-color var(--motion-fast) var(--motion-ease-standard),
+      color var(--motion-fast) var(--motion-ease-standard),
+      scale var(--motion-fast) var(--motion-ease-standard);
+  }
+
+  .slot::before,
+  .fold {
+    transition: none;
+  }
 }
 
 /* Near the minimum, unselected tabs drop the close button so the title keeps
@@ -151,38 +279,24 @@
   }
 }
 
-/* A chip opens its group: wider space before it, a step after it. */
+/* A pill's title folds its group. Its label is capped (it truncates; the
+   tooltip keeps the full name) and never shrinks further, so tabs keep the
+   room. Folded, it previews a few favicons and counts the rest. */
 .chipSlot {
   display: flex;
-  /* Chips are secondary to tabs: capped (the label truncates, its tooltip
-     keeps the full name) and never shrink further, so tabs keep the room. */
-  max-width: var(--tab-strip-chip-max-width);
   flex: none;
-  margin-inline: var(--space-sm) var(--space-xs);
-}
-
-/* A folded chip stays compact: label, count, chevron. */
-.chipSlot[data-collapsed] {
-  max-width: calc(var(--tab-strip-chip-max-width) - var(--space-xl));
-}
-
-.scroller > .group:first-child > .chipSlot {
-  margin-inline-start: 0;
 }
 
 .chipSlot .chip[data-slot="clickable"] {
-  max-width: 100%;
-  min-height: var(--control-height-sm);
-  padding-inline: var(--space-sm);
-  gap: var(--space-xs);
-  border: var(--border-hairline) solid var(--line);
+  min-height: var(--control-height-md);
+  padding-inline: var(--space-md) var(--space-sm);
+  gap: var(--space-sm);
   border-radius: var(--radius-pill);
   color: var(--text-primary);
   font-size: var(--font-size-2);
   line-height: var(--typo-label-line-height-tight);
   transition:
     background-color var(--motion-fast) var(--motion-ease-standard),
-    border-color var(--motion-fast) var(--motion-ease-standard),
     scale var(--motion-fast) var(--motion-ease-standard);
 }
 
@@ -190,19 +304,24 @@
   color: var(--text-secondary);
 }
 
-.chipSlot .chip[data-active-within] {
+.chipSlot .chip[data-active-within],
+.chipSlot .chip[data-over][data-slot="clickable"] {
   background: var(--selection-strong);
   color: var(--text-primary);
 }
 
-.chipSlot .chip[data-over][data-slot="clickable"] {
-  border-color: var(--accent);
-  background: var(--selection-strong);
-}
-
 .chipSlot .chip .chipLabel {
   min-width: 2em;
+  max-width: var(--tab-strip-chip-max-width);
   flex: 0 1 auto;
+  font-weight: var(--font-weight-medium);
+}
+
+.folded {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .stateMark {
@@ -215,21 +334,9 @@
   color: var(--color-warning-text);
 }
 
-.chevron {
+.groupNew {
+  display: flex;
   flex: none;
-  opacity: 0.72;
-  transition: rotate var(--motion-fast) var(--motion-ease-standard);
-}
-
-.chip[aria-expanded="false"] .chevron {
-  rotate: -90deg;
-}
-
-/* Reduced motion: the chevron turns at once (the tab entrance is token-only and fades). */
-@media (prefers-reduced-motion: reduce) {
-  .chevron {
-    transition: none;
-  }
 }
 
 .newTab {

@@ -4,7 +4,9 @@
 `AddressField` is the browser toolbar's address: a security glyph, the bold
 host with a muted path (truncating at the end), tags and the bookmark star.
 A click, Enter or Space turns it into a plain `Input` with the full URL
-selected; Enter submits, Escape and blur cancel.
+selected; Enter submits, Escape and blur cancel. At rest and in edit mode it
+is a pill with fully rounded ends (`--radius-pill`), like the tabs above it,
+one `--control-height-lg` (34px) tall so it reads as heavy as the tabs.
 
 ## When to use this block
 Use it in `BrowserToolbar`. Butler pages (library, new tab) pass `title`

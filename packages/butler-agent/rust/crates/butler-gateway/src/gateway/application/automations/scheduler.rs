@@ -36,6 +36,7 @@ pub(crate) struct AutomationScheduler {
     cancellation: CancellationToken,
     wake: Arc<Notify>,
     task: Mutex<Option<JoinHandle<()>>>,
+    wake_task: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl AutomationScheduler {
@@ -44,15 +45,13 @@ impl AutomationScheduler {
             cancellation: CancellationToken::new(),
             wake,
             task: Mutex::new(None),
+            wake_task: Mutex::new(None),
         }
     }
 
     pub(crate) fn initialize(&self, app: AppApplication) -> Result<(), GatewayApplicationError> {
-        #[cfg(feature = "e2e-fixtures")]
-        {
-            NEXT_DUE_READS.store(0, Ordering::Relaxed);
-            DISPATCH_ATTEMPTS.store(0, Ordering::Relaxed);
-        }
+        reset_counters();
+        self.subscribe_to_wake();
         let cancel = self.cancellation.clone();
         let wake = self.wake.clone();
         *self.task.lock() = Some(tokio::spawn(async move {
@@ -65,12 +64,14 @@ impl AutomationScheduler {
                 () = cancel.cancelled() => return,
                 _ = app.dependencies.executor_readiness.wait_ready() => {},
             }
+            let proposals = app.dependencies.memory_management.proposals_changed();
+            let _ = app.collect_proposals().await;
             // Recovery also dispatches runs queued before a restart.
             let _ = dispatch(&app, &mut dispatch_failing).await;
             loop {
                 #[cfg(feature = "e2e-fixtures")]
                 NEXT_DUE_READS.fetch_add(1, Ordering::Relaxed);
-                let lookup = app.next_automation_due().await;
+                let lookup = next_due(&app).await;
                 let read_failed = lookup.is_err();
                 let next = match lookup {
                     Ok(next) => {
@@ -90,6 +91,11 @@ impl AutomationScheduler {
                             due_delay(&app, &next).min(butler_core::wall_clock::MAX_WAIT_SLICE);
                         tokio::select! {
                             () = cancel.cancelled() => return,
+                            () = proposal_signal(proposals.as_ref()) => {
+                                let _ = app.collect_proposals().await;
+                                let _ = dispatch(&app, &mut dispatch_failing).await;
+                                break;
+                            },
                             () = &mut notified => {
                                 let _ = dispatch(&app, &mut dispatch_failing).await;
                                 break;
@@ -113,6 +119,7 @@ impl AutomationScheduler {
                     // An empty store stays notify-only; failed lookups retry.
                     None => tokio::select! {
                         () = cancel.cancelled() => break,
+                        () = proposal_signal(proposals.as_ref()) => { let _ = app.collect_proposals().await; let _ = dispatch(&app, &mut dispatch_failing).await; },
                         () = &mut notified => { let _ = dispatch(&app, &mut dispatch_failing).await; },
                         () = tokio::time::sleep(butler_core::wall_clock::MAX_WAIT_SLICE), if read_failed => {},
                     },
@@ -122,8 +129,29 @@ impl AutomationScheduler {
         Ok(())
     }
 
+    fn subscribe_to_wake(&self) {
+        let mut events = butler_platform::system_wake::wake_events();
+        let wake = self.wake.clone();
+        let cancel = self.cancellation.clone();
+        *self.wake_task.lock() = Some(tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    () = cancel.cancelled() => break,
+                    event = events.changed() => {
+                        if event.is_err() { break; }
+                        wake.notify_one();
+                    }
+                }
+            }
+        }));
+    }
+
     pub(crate) async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancellation.cancel();
+        let wake_task = self.wake_task.lock().take();
+        if let Some(task) = wake_task {
+            task.await.map_err(GatewayApplicationError::internal_from)?;
+        }
         let task = self.task.lock().take();
         if let Some(task) = task {
             task.await.map_err(GatewayApplicationError::internal_from)?;
@@ -169,4 +197,27 @@ fn due_delay(app: &AppApplication, next: &str) -> Duration {
         return Duration::ZERO;
     };
     Duration::from_millis(u64::try_from((next - now).num_milliseconds()).unwrap_or_default())
+}
+
+async fn next_due(app: &AppApplication) -> Result<Option<String>, GatewayApplicationError> {
+    let schedule = app.next_automation_due().await?;
+    let initiated = app.next_initiated_due().await?;
+    Ok(match (schedule, initiated) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    })
+}
+async fn proposal_signal(signal: Option<&Arc<Notify>>) {
+    match signal {
+        Some(signal) => signal.notified().await,
+        None => std::future::pending().await,
+    }
+}
+
+fn reset_counters() {
+    #[cfg(feature = "e2e-fixtures")]
+    {
+        NEXT_DUE_READS.store(0, Ordering::Relaxed);
+        DISPATCH_ATTEMPTS.store(0, Ordering::Relaxed);
+    }
 }

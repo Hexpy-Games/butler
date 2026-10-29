@@ -19,7 +19,7 @@
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-xs);
   min-width: 0;
-  border-radius: 2px;
+  border-radius: calc(2px / var(--ui-scale));
   outline: none;
   /* Focus scrolling keeps the whole ring inside the scroller. */
   scroll-margin: calc(var(--focus-ring-room) + var(--focus-ring-width));
@@ -29,7 +29,7 @@
   --usage-bars-plot-height: var(--chart-height-panel);
   --usage-bars-column-max: 24px;
 
-  border-radius: 4px;
+  border-radius: calc(4px / var(--ui-scale));
 }
 
 .root[data-ticks="true"] {
@@ -84,7 +84,7 @@
     calc(var(--usage-bars-fraction) * (100% - var(--usage-bars-headroom)))
   );
   overflow: hidden;
-  border-radius: 2px 2px 0 0;
+  border-radius: calc(2px / var(--ui-scale)) calc(2px / var(--ui-scale)) 0 0;
   transform-origin: center bottom;
   transition: opacity var(--motion-fast) var(--motion-ease-standard);
 }
@@ -95,7 +95,7 @@
 
 .root[data-size="panel"] .column,
 .root[data-size="panel"] .skeletonColumn {
-  border-radius: 4px 4px 0 0;
+  border-radius: calc(4px / var(--ui-scale)) calc(4px / var(--ui-scale)) 0 0;
 }
 
 .root[data-selected="true"] .column:not([data-selected="true"]) {
@@ -304,5 +304,5 @@
   width: min(calc(100% - 2px), var(--usage-bars-column-max));
   min-height: 0;
   height: calc(var(--usage-bars-fraction) * 100%);
-  border-radius: 2px 2px 0 0;
+  border-radius: calc(2px / var(--ui-scale)) calc(2px / var(--ui-scale)) 0 0;
 }

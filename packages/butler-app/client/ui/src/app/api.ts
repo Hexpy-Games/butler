@@ -60,6 +60,9 @@ export interface PowerState {
 }
 
 interface ButlerAppBridge extends PendingAsksBridge {
+  onTextSizeShortcut?: (handler: (command: "increase" | "decrease" | "reset") => void) => () => void;
+  initialTextSize?: SettingsView["text_size"];
+  setTextSize?: (value: SettingsView["text_size"]) => Promise<void>;
   log?: (row: { level: "DEBUG"; category: "http.client"; event: "image.fetch"; attrs: { url: string } }) => void;
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
   history?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
@@ -89,6 +92,7 @@ interface ButlerAppBridge extends PendingAsksBridge {
     sessionId: string;
     target: SessionFolderLaunchTarget;
   }) => Promise<SessionFolderLaunchResult>;
+  exportDocument?: (input: { format: "markdown" | "pdf"; name: string; content: string }) => Promise<unknown>;
   saveMessageFile?: (input?: unknown) => Promise<unknown>;
   openMessageFile?: (input?: unknown) => Promise<unknown>;
   showDesktopNotification?: (input?: unknown) => Promise<unknown>;
@@ -308,6 +312,20 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   const traceparent = requestTraceparent(options.headers);
   if (url.pathname === "/browser-history" || url.pathname.startsWith("/browser-history/")) return callBridge<T>(bridge, "history", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname === "/library" && method === "GET") return callBridge<T>(bridge,"listLibrary",Object.fromEntries(url.searchParams));
+  if (method === "POST" && ["/library/documents", "/library/blocks"].includes(url.pathname)) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, url.pathname === "/library/documents" ? "saveLibraryDocument" : "saveLibraryBlock", parseBody(options.body)));
+  }
+  if (/^\/documents(?:\/|$)/u.test(url.pathname)) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "documents", { path: url.pathname + url.search, method,
+      ...(options.body == null ? {} : { body: parseBody(options.body) }) }));
+  }
+  const previewView = method === "GET" ? url.pathname.match(/^\/previews\/([^/]+)\/view$/u) : null;
+  if (previewView) {
+    let previewId: string;
+    try { previewId = decodeURIComponent(previewView[1]!); }
+    catch { throw new Error("Invalid preview"); }
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getPreviewView", { previewId, query: url.search }));
+  }
   if (url.pathname === "/library" && method === "POST") return callBridge<T>(bridge,"saveLibrary",parseBody(options.body));
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
@@ -520,6 +538,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (["/logs", "/logs/config", "/logs/storage", "/logs/trace"].includes(url.pathname) || url.pathname.startsWith("/logs/trace/")) {
     return await callBridge<T>(bridge, "logs", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   }
+  if (method === "GET" && url.pathname === "/usage-history") {
+    return await callBridge<T>(bridge, "getUsageHistory", { query: url.search });
+  }
   if (method === "GET" && url.pathname === "/usage-monitor") {
     return await callBridge<T>(bridge, "getUsageMonitor", {
       // Preserve the joint session/range filter for the native bridge as well as HTTP.
@@ -588,10 +609,11 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     });
   }
   if (url.pathname.startsWith("/memory/")) {
-    return await callBridge<T>(bridge, "memoryRequest", {
+    const result = await callBridge<BridgeResult<T> | T>(bridge, "memoryRequest", {
       path: url.pathname, method,
       ...(options.body == null ? {} : { body: parseBody(options.body) }),
     });
+    return /^\/memory\/(?:pattern-proposals(?:\/[^/]+)?|consolidation)$/u.test(url.pathname) ? unwrapBridgeResult<T>(result) : result as T;
   }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);
   if (projectMatch && method === "PATCH") {
@@ -671,6 +693,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionId: decodeURIComponent(sessionArchiveMatch[1]!),
     });
   }
+  const composingMatch = method === "POST" ? url.pathname.match(/^\/sessions\/([^/]+)\/composing$/u) : null;
+  if (composingMatch) return await callBridge<T>(bridge, "sessionComposing", { sessionId: decodeURIComponent(composingMatch[1]!) });
+  const reportPauseMatch = method === "POST" ? url.pathname.match(/^\/automations\/([^/]+)\/report-pause$/u) : null;
+  if (reportPauseMatch) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "decideReportPause", {
+    automationId: decodeURIComponent(reportPauseMatch[1]!), decision: parseBody(options.body).decision,
+  }));
   const sessionReadMatch = url.pathname.match(/^\/sessions\/([^/]+)\/read$/u);
   if (method === "POST" && sessionReadMatch) {
     return await callBridge<T>(bridge, "markSessionRead", {
@@ -792,6 +820,13 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       attachments: body.attachments,
       traceparent,
     }));
+  }
+  const queuedSendNowMatch = url.pathname.match(/^\/session-queue\/([^/]+)\/send-now$/u);
+  if (method === "POST" && queuedSendNowMatch) {
+    return await callBridge<T>(bridge, "sendQueuedMessageNow", {
+      queuedMessageId: decodeURIComponent(queuedSendNowMatch[1]!),
+      traceparent,
+    });
   }
   const queuedMessageMatch = url.pathname.match(/^\/session-queue\/([^/]+)$/u);
   if (method === "PATCH" && queuedMessageMatch) {
@@ -964,7 +999,21 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   throw new Error(`Unsupported Butler app API route: ${method} ${url.pathname}`);
 }
 
+export interface ProjectFolderPage {
+  root_name: string;
+  path: string;
+  folders: Array<{ name: string }>;
+  next_after: string | null;
+}
+
+export function listProjectFolders(path: string, after?: string): Promise<ProjectFolderPage> {
+  const query = new URLSearchParams({ path });
+  if (after !== undefined) query.set("after", after);
+  return api<ProjectFolderPage>(`/project-folders?${query}`);
+}
+
 export interface ProjectFolderSelection {
+  workspace_path?: string;
   cancelled?: boolean;
   display_name?: string;
   folder_path?: string;
@@ -1065,6 +1114,9 @@ const CODED_SETTINGS_METHODS = new Set([
 /** Settings → Browser → Sign-ins and browser import: main adds the admin credential. */
 function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]): { action: string; input?: unknown } | null {
   const payload = () => parseBody(body);
+  if (path === "/security/oauth" && method === "GET") return { action: "listOauthCredentials" };
+  const credential = path.match(/^\/security\/oauth\/([^/]+)$/u)?.[1];
+  if (credential && method === "DELETE") return { action: "removeOauthCredential", input: { id: decodeURIComponent(credential) } };
   if (path === "/security/signins") return method === "GET" ? { action: "listSignIns" } : method === "POST" ? { action: "addSignIn", input: payload() } : null;
   if (path === "/security/signins/site" && method === "POST") return { action: "updateSignInSite", input: payload() };
   const entry = path.match(/^\/security\/signins\/([0-9a-f-]{36})$/u)?.[1];

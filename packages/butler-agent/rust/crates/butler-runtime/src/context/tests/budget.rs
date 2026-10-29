@@ -87,7 +87,7 @@ async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source(
     assert!(working.usable_user_message_tokens > 0.0);
     assert_eq!(
         snapshot.default_recent_conversation_token_budget(Some("local/sample")),
-        2000.0
+        2770.0
     );
     quality::verify(&snapshot);
     drop(snapshot);

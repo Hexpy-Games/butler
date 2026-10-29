@@ -3,6 +3,7 @@ use super::*;
 
 pub trait GatewayApplication:
     GatewayMutationCommands
+    + project_folder::GatewayProjectFolders
     + GatewayPendingAsks
     + GatewayProjectDashboard
     + GatewaySessionControls
@@ -190,6 +191,10 @@ pub trait GatewayApplication:
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     /// User lifecycle hook service; absent without a host implementation.
+    /// Host-owned plugin administration; never a model tool.
+    fn plugins(&self) -> Option<std::sync::Arc<dyn butler_core::plugins::PluginPort>> {
+        None
+    }
     fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
         None
     }
@@ -254,6 +259,10 @@ pub trait GatewayApplication:
         queued_message_id: String,
         request: SessionQueueUpdateRequest,
     ) -> ApplicationFuture<SessionQueueView>;
+    fn send_session_queue_now(
+        &self,
+        queued_message_id: String,
+    ) -> ApplicationFuture<SessionQueueView>;
     fn delete_session_queue(
         &self,
         queued_message_id: String,
@@ -274,6 +283,13 @@ pub trait GatewayApplication:
         &self,
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
+    fn canon_proposal(
+        &self,
+        _action: String,
+        _input: serde_json::Value,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn canon(&self, _request: AppCanonRequest) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

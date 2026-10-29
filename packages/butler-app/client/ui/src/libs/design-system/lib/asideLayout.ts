@@ -21,6 +21,8 @@ export function nextAsideLayout(current: AsideLayout | null, width: number, min:
  */
 export function useAsideLayout(element: HTMLElement | null, enabled: boolean, min: number): AsideLayout | null {
   const [layout, setLayout] = useState<AsideLayout | null>(null);
+  // A closed aside forgets its layout: reopened after a resize, it must not mount where it last was.
+  if (!enabled && layout !== null) setLayout(null);
   useLayoutEffect(() => {
     if (!enabled || !element) return undefined;
     const update = () => setLayout((current) => nextAsideLayout(current, element.offsetWidth, min));

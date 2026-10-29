@@ -395,6 +395,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
     AppApplicationDependencies {
         canon: Arc::new(crate::gateway::UnavailableCanon),
         data_reset: None,
+        plugins: None,
         hooks: None,
         service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: test_updates(),

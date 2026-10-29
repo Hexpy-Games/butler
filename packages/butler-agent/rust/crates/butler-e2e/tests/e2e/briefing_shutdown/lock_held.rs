@@ -36,7 +36,7 @@ async fn daily_lock_held_runs_configured_and_counts_as_done() -> Result<(), Harn
     lock.execute_batch("ROLLBACK")?;
     stream.write_all(b"1").await?;
     tokio::time::timeout(Duration::from_secs(90), async {
-        while marker(&s).is_none() {
+        while marker(&s).is_none_or(|state| state["lastRunDate"] != NOW[..10]) {
             tokio::task::yield_now().await;
         }
     })

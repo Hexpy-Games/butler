@@ -273,17 +273,3 @@ pub(super) fn direction_row(
         created_at: row.get(4)?,
     })
 }
-
-pub(super) fn required_packet_string<'a>(
-    value: &'a str,
-    key: &str,
-) -> Result<&'a str, StorageError> {
-    Some(value)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            StorageError::new(
-                StorageCode::SubsessionPacketInvalid,
-                format!("Subsession packet is missing {key}"),
-            )
-        })
-}

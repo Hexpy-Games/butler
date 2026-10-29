@@ -86,6 +86,7 @@ fn system_authored(id: &str) -> bool {
             | "delegated-tools"
             | "runtime-state"
             | "role"
+            | "chats-reply-rules"
             | "runtime-system-contract"
     )
 }

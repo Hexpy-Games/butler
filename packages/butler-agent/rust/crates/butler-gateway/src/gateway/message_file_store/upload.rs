@@ -91,7 +91,14 @@ pub(super) fn read(
     file: &AppMessageFileSnapshot,
 ) -> Result<Bytes, GatewayApplicationError> {
     let path = file_path(root, file)?;
-    fs::read(path).map(Bytes::from).map_err(internal)
+    // A download can retain its row snapshot while cleanup unlinks the original.
+    fs::read(path).map(Bytes::from).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            public(404, "message_file_not_found", "Attachment file not found.")
+        } else {
+            internal(error)
+        }
+    })
 }
 
 fn file_path(

@@ -1,10 +1,16 @@
 //! Lexical candidates, retaining enough shell context to distinguish syntax.
 use super::shell;
 
+/// The script body screened by lexical command checks, using the same shell
+/// wrapper normalization as command execution.
+pub fn path_script(command: &str) -> &str {
+    shell::path_script(command)
+}
+
 /// Extract path candidates for screening, not shell interpretation. In
 /// particular, a PowerShell member-access dot is not the current directory.
 pub fn path_tokens(command: &str) -> Vec<&str> {
-    let command = shell::path_script(command);
+    let command = path_script(command);
     let mut tokens = Vec::new();
     let mut start = 0;
     let mut quote = None;

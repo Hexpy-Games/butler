@@ -22,6 +22,8 @@ pub(super) fn decorate(
         if !matches!(&message.role, MessageRole::Assistant) {
             continue;
         }
+        message.quiet = super::initiated::quiet(db, &message.id)?;
+        message.initiated = super::initiated::origin(db, &message.id)?;
         let Some(turn) = message.turn_id.as_deref() else {
             continue;
         };

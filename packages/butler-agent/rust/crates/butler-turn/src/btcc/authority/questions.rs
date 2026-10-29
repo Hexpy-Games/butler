@@ -349,14 +349,29 @@ fn answered_question(r: AuthorityRecord) -> AuthorityResult<AnsweredQuestion> {
         source_turn_id: r.source_turn_id,
         updated_at: r.updated_at,
         questions: serde_json::from_str(&r.normalized_input_json).map_err(|_| corrupt())?,
-        response: serde_json::from_str(
-            r.outcome_receipt_json
-                .as_deref()
-                .or(r.private_alternative_input.as_deref())
-                .unwrap_or(""),
-        )
-        .map_err(|_| corrupt())?,
+        response: chat_response(
+            serde_json::from_str::<serde_json::Value>(
+                r.outcome_receipt_json
+                    .as_deref()
+                    .or(r.private_alternative_input.as_deref())
+                    .unwrap_or(""),
+            )
+            .map_err(|_| corrupt())?,
+        )?,
     })
+}
+
+fn chat_response(value: serde_json::Value) -> AuthorityResult<UserQuestionResponse> {
+    let value =
+        if value.get("status").and_then(serde_json::Value::as_str) == Some("resolved_in_chat") {
+            value
+                .get("response")
+                .cloned()
+                .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?
+        } else {
+            value
+        };
+    serde_json::from_value(value).map_err(|_| AuthorityError::policy("authority_request_corrupt"))
 }
 
 pub(super) fn answer_deferred(

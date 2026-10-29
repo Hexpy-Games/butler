@@ -1,6 +1,7 @@
 //! Native BTCC Turn preparation in the source orchestration order.
 
 mod context;
+mod inherited_access;
 mod model;
 mod origin;
 mod request;
@@ -103,6 +104,15 @@ pub struct AdmissionModelCatalogSnapshot {
     pub retry_ceiling: Option<f64>,
 }
 
+type ParentAccessResolver = Arc<
+    dyn Fn(
+            StoredSessionBinding,
+            Option<crate::btcc::ScheduleRunContext>,
+        ) -> PortFuture<'static, crate::btcc::AccessMode>
+        + Send
+        + Sync,
+>;
+
 /// Prepares turns: replays stored admissions or admits new ones with context and model.
 pub struct DefaultTurnPreparation {
     binding_store: SessionBindingStore,
@@ -111,6 +121,7 @@ pub struct DefaultTurnPreparation {
     observer: Arc<dyn ConversationAdmissionObserver>,
     context: Arc<dyn AdmissionContextPort>,
     models: Arc<dyn AdmissionModelCatalogPort>,
+    parent_access: Option<ParentAccessResolver>,
 }
 
 impl DefaultTurnPreparation {
@@ -130,7 +141,14 @@ impl DefaultTurnPreparation {
             observer,
             context,
             models,
+            parent_access: None,
         }
+    }
+
+    /// Resolve App parent controls on demand when admitting a new child turn.
+    pub fn with_parent_access(mut self, resolver: ParentAccessResolver) -> Self {
+        self.parent_access = Some(resolver);
+        self
     }
 
     /// Prepares a turn: a known turn replays its stored admission; a new one
@@ -146,7 +164,7 @@ impl DefaultTurnPreparation {
         if let Some(turn) = stored {
             request::assert_replay_identity(&turn, &request)?;
             let binding = request::replay_binding(&turn, &request)?;
-            let command = request::resume_command(&request);
+            let command = self.inherited_resume_command(&request).await?;
             return self
                 .finish(request, binding, command, Admission::Replay)
                 .await;
@@ -172,6 +190,7 @@ impl DefaultTurnPreparation {
                     ),
                 )
             })?;
+        let binding = self.inherited_binding(binding).await?;
         request::assert_binding_role(&binding, &request)?;
         let subsession = subsession::read(&binding)?;
         let assembly = self

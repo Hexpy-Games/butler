@@ -196,6 +196,7 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
             &format!("Child output {number}"),
         );
         result.request.subsession_result = Some(butler_turn::btcc::SubsessionResultContext {
+            child_session_id: None,
             relation_id: format!("relation-{number}"),
             result_id: format!("result-{number}"),
             safe_title: "Child".into(),
@@ -318,6 +319,7 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     assert_eq!(native.0.lock().unwrap()[1].text, "Child output 1");
     let mut result = command("result-3", "Child output 3");
     result.request.subsession_result = Some(butler_turn::btcc::SubsessionResultContext {
+        child_session_id: None,
         relation_id: "relation-3".into(),
         result_id: "result-3".into(),
         safe_title: "Child".into(),

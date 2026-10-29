@@ -12,6 +12,7 @@ export type MotionDurationName =
   | "base"
   | "slow"
   | "deliberate"
+  | "flight"
   | "exit-menu"
   | "exit-fast"
   | "exit-base"
@@ -45,6 +46,7 @@ const DURATION_FALLBACK: Record<MotionDurationName, number> = {
   base: 160,
   slow: 220,
   deliberate: 320,
+  flight: 420,
   "exit-menu": 60,
   "exit-fast": 90,
   "exit-base": 110,
@@ -200,12 +202,14 @@ export interface MotionOptions {
   easing?: MotionEasingName;
   delay?: number;
   fill?: FillMode;
+  /** `add`: the keyframes add to the element's live value (a FLIP offset over a transform the CSS keeps changing). */
+  composite?: CompositeOperation;
 }
 
 export function animateMotion(
   element: Element,
   keyframes: Keyframe[],
-  { duration = "base", easing = "decelerate", delay, fill }: MotionOptions = {},
+  { duration = "base", easing = "decelerate", delay, fill, composite }: MotionOptions = {},
 ): Animation | null {
   if (typeof (element as Partial<Element>).animate !== "function") return null;
   const frames = prefersReducedMotion() ? reducedMotionKeyframes(keyframes) : keyframes;
@@ -215,6 +219,7 @@ export function animateMotion(
     easing: motionEasing(easing),
     ...(delay === undefined ? {} : { delay }),
     ...(fill === undefined ? {} : { fill }),
+    ...(composite === undefined ? {} : { composite }),
   });
 }
 

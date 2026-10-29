@@ -33,12 +33,10 @@ export function usePanelResize({
   leftOpen: boolean;
 }) {
   const preferredLeft = useButlerStore((state) => state.leftPanelWidth);
-  const preferredRight = useButlerStore((state) => state.rightPanelWidth);
-  const { shellRef, leftWidth: leftPanelWidth, rightWidth: rightPanelWidth, rightMin, rightMax } =
-    usePanelGeometry({ leftWidth: preferredLeft, rightWidth: preferredRight, leftOpen });
+  const { shellRef, leftWidth: leftPanelWidth } =
+    usePanelGeometry({ leftWidth: preferredLeft, rightWidth: DEFAULT_RIGHT_PANEL_WIDTH, leftOpen });
   const setLeftPanelWidth = useButlerStore((state) => state.setLeftPanelWidth);
-  const setRightPanelWidth = useButlerStore((state) => state.setRightPanelWidth);
-  const [resizingPanel, setResizingPanel] = useState<"left" | "right" | null>(null);
+  const [resizingPanel, setResizingPanel] = useState<"left" | null>(null);
 
   function resizeLeftPanel(nextWidth: number) {
     if (nextWidth < LEFT_PANEL_MIN_WIDTH) {
@@ -50,20 +48,13 @@ export function usePanelResize({
     );
   }
 
-  function resizeRightPanel(nextWidth: number) {
-    setRightPanelWidth(
-      clampPanelWidth(nextWidth, rightMin, rightMax),
-    );
-  }
-
   function beginPanelResize(
-    panel: "left" | "right",
+    panel: "left",
     event: ReactPointerEvent<HTMLDivElement>,
   ) {
     event.preventDefault();
     const startX = event.clientX;
     const startLeftWidth = leftPanelWidth;
-    const startRightWidth = rightPanelWidth;
     const previousCursor = document.body.style.cursor;
     const previousUserSelect = document.body.style.userSelect;
 
@@ -87,7 +78,6 @@ export function usePanelResize({
         if (startLeftWidth + delta < LEFT_PANEL_MIN_WIDTH) finishResize();
         return;
       }
-      resizeRightPanel(startRightWidth - delta);
     }
 
     window.addEventListener("pointermove", moveResize);
@@ -96,7 +86,7 @@ export function usePanelResize({
   }
 
   function handlePanelResizeKeyDown(
-    panel: "left" | "right",
+    panel: "left",
     event: ReactKeyboardEvent<HTMLDivElement>,
   ) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -116,35 +106,19 @@ export function usePanelResize({
       }
       return;
     }
-    if (event.key === "Home") {
-      resizeRightPanel(rightMin);
-    } else if (event.key === "End") {
-      resizeRightPanel(rightMax);
-    } else {
-      resizeRightPanel(
-        rightPanelWidth +
-          (event.key === "ArrowLeft"
-            ? KEYBOARD_RESIZE_STEP
-            : -KEYBOARD_RESIZE_STEP),
-      );
-    }
   }
 
   // Data-driven panel widths: passed to AdaptiveShell as UNSAFE_style.
   const panelStyle: UnsafeStyle = {
     "--sidebar-width": `${leftPanelWidth}px`,
-    "--right-panel-width": `${rightPanelWidth}px`,
   };
 
   return {
     shellRef,
-    rightMin,
-    rightMax,
     beginPanelResize,
     handlePanelResizeKeyDown,
     leftPanelWidth,
     panelStyle,
-    rightPanelWidth,
     resizingPanel,
   };
 }

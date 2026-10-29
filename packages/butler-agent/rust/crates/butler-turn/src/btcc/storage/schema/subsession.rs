@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
   root_work_id TEXT NOT NULL UNIQUE,
   packet_json TEXT NOT NULL,
   dispatch_intent_json TEXT,
+  instruction_run_context_json TEXT,
   dispatch_state TEXT CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending', 'enqueued')),
   created_at TEXT NOT NULL,
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)

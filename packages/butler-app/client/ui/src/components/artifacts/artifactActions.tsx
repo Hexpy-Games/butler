@@ -76,7 +76,8 @@ export function ArtifactSaveButton({ artifact }: { artifact: SessionArtifactSumm
   );
 }
 
-function OpenInAppButton({ artifact }: { artifact: SessionArtifactSummary }) {
+/** "Open in app" on the desktop for a type another app may open (disabled with a reason otherwise). */
+export function OpenInAppButton({ artifact }: { artifact: SessionArtifactSummary }) {
   const fileId = artifact.file_id;
   if (!fileId || typeof window === "undefined" || typeof window.butlerApp?.openMessageFile !== "function") return null;
   const name = artifact.safe_path_label || artifact.title;

@@ -5,6 +5,15 @@ use serde_json::Value;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppCanonResource {
     Canon,
+    List,
+    Spec,
+    Activity,
+    Comment,
+    ProposeSpec,
+    Grants,
+    AllowGrant,
+    DenyGrant,
+    RevokeGrant,
     Plan,
     Epic,
     EpicProgress,
@@ -25,6 +34,12 @@ pub struct AppCanonRequest {
     pub resource: AppCanonResource,
     pub id: String,
     pub input: Option<Value>,
+    pub delegate: Option<AppCanonDelegate>,
+}
+#[derive(Clone, Debug)]
+pub struct AppCanonDelegate {
+    pub name: String,
+    pub title: String,
 }
 #[derive(Clone, Debug)]
 pub struct AppCanonEvent {
@@ -63,6 +78,18 @@ pub enum AppCanonOperation {
 }
 
 pub trait AppCanonPort: Send + Sync + 'static {
+    fn admit(&self, _delegate: AppCanonDelegate, _capability: String) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn proposal(&self, action: String, _input: Value) -> ApplicationFuture<Value> {
+        Box::pin(async move {
+            if matches!(action.as_str(), "open" | "turns" | "attention") {
+                Ok(serde_json::json!([]))
+            } else {
+                Err(GatewayApplicationError::internal())
+            }
+        })
+    }
     fn canon_operation(&self, _operation: AppCanonOperation) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

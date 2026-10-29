@@ -10,7 +10,8 @@ import { workingFileRows } from "./workingFiles";
 
 const INITIAL_VISIBLE_FILES = 5;
 
-export function MessageChangedFiles({ files, attachments = [], artifacts = [], text = "" }: {
+export function MessageChangedFiles({ files, attachments = [], artifacts = [], text = "", bubble = false }: {
+  bubble?: boolean;
   files: ChangedFileDetail[];
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
@@ -27,7 +28,7 @@ export function MessageChangedFiles({ files, attachments = [], artifacts = [], t
   const deletions = files.reduce((total, file) => total + file.deletions, 0);
   return (
     <>
-      <Space size="md" />
+      {!bubble && <Space size="md" />}
       <Stack
         aria-label={appCopy.conversation.fileChanges.regionLabel}
         data-test-class="message-changed-file-list"

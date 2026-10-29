@@ -83,3 +83,19 @@ pub(super) fn restored_descriptions(
         .map(str::to_owned)
         .collect()
 }
+
+/// Restore per-turn discovery and result state with the continuation.
+pub(super) fn restored_state(
+    restored: Option<&butler_turn::btcc::AuthorityLoopContinuation>,
+) -> super::State {
+    super::State {
+        described_ids: restored_descriptions(restored),
+        has_other_tool_result: restored.is_some_and(|saved| {
+            saved
+                .tool_results
+                .iter()
+                .any(|result| result.name != "resolve_ask")
+        }),
+        ..super::State::default()
+    }
+}

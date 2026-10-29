@@ -65,6 +65,9 @@ async fn run(
     }
     let scope = act_scope(&prepared);
     let input = approval_input(&args, &mut prepared, &scope, !client.approval_handoff);
+    if let Some(refused) = schedule_payment_refusal(owner, call, &prepared, &input).await {
+        return finish_batch(&args, refused);
+    }
     if client.approval_handoff
         && (input["commit"] == true
             || input["always_confirm"] == true
@@ -72,19 +75,20 @@ async fn run(
     {
         return encoded(&handoff(&args, "approval_required"));
     }
-    let approval = match authority::act_gate(owner, call, occurrence, &input, &scope).await? {
-        authority::Gate::Pending(value) => {
-            client
-                .waiting(
-                    &args["tab"],
-                    value["authority_pending"] == true,
-                    invocation.cancellation,
-                )
-                .await;
-            return finish_batch(&args, value);
-        }
-        authority::Gate::Allowed(reference) => reference,
-    };
+    let (approval, allow_scope) =
+        match authority::act_gate(owner, call, occurrence, &input, &scope).await? {
+            authority::Gate::Pending(value) => {
+                client
+                    .waiting(
+                        &args["tab"],
+                        value["authority_pending"] == true,
+                        invocation.cancellation,
+                    )
+                    .await;
+                return finish_batch(&args, value);
+            }
+            authority::Gate::Allowed(reference, scope) => (reference, scope),
+        };
     apply(
         owner,
         invocation,
@@ -97,6 +101,7 @@ async fn run(
             input,
             scope,
             approval,
+            allow_scope,
         },
     )
     .await
@@ -107,6 +112,7 @@ struct PreparedAction {
     input: Value,
     scope: String,
     approval: Option<String>,
+    allow_scope: Option<String>,
 }
 
 async fn apply(
@@ -123,7 +129,21 @@ async fn apply(
         input,
         scope,
         approval,
+        allow_scope,
     } = batch;
+    if allow_scope.as_deref() == Some("site") {
+        let recorded = pay::allow_site(
+            &client,
+            &args["tab"],
+            &input["merchant_site"],
+            invocation.cancellation,
+        )
+        .await;
+        if recorded["status"] != "ok" {
+            settle(owner, approval, "failed").await?;
+            return finish_batch(args, recorded);
+        }
+    }
     client
         .waiting(&args["tab"], false, invocation.cancellation)
         .await;
@@ -168,4 +188,45 @@ fn executor_refusal(args: &Value, prepared: Value) -> Result<JsonDocument, ToolE
     } else {
         finish_batch(args, prepared)
     }
+}
+
+async fn schedule_payment_refusal(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    prepared: &Value,
+    input: &Value,
+) -> Option<Value> {
+    let run = owner.schedule_run()?;
+    if !prepared["steps"]
+        .as_array()
+        .is_some_and(|steps| steps.iter().any(authority::payment_step))
+    {
+        return None;
+    }
+    if !run.browser?.payment {
+        return super::super::turn_guard::schedule_browser_feedback(
+            owner,
+            call,
+            input,
+            &act_scope(prepared),
+            "schedule_payment_off",
+        )
+        .await;
+    }
+    if prepared["purchase_allowed"] != true {
+        super::super::attention::skipped_input(
+            owner,
+            call,
+            input.clone(),
+            &act_scope(prepared),
+            "schedule_permission_required",
+        )
+        .await;
+        return Some(super::super::turn_guard::unattended_feedback(
+            owner,
+            &call.name,
+            &act_scope(prepared),
+        ));
+    }
+    None
 }

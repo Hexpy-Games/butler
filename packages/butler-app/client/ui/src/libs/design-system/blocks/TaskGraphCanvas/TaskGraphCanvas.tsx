@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, type KeyboardEvent } from "react";
 import { indexTaskGraph, layoutTaskGraph, taskGraphEdgeState } from "../../lib/taskGraphLayout";
 import { ADAPTIVE_MEDIA, useMediaMatch } from "../../responsive";
-import { InspectorInset } from "../InspectorShell";
+import { InspectorInset } from "../InspectorPanel";
 import { ScrollArea } from "../ScrollArea";
 import { TaskGraphLanes } from "../TaskGraphLanes";
 import type { TaskGraphViewProps } from "./types";

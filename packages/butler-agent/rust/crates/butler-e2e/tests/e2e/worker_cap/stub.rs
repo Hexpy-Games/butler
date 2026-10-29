@@ -31,6 +31,7 @@ impl Gate {
 
 pub(crate) struct Script {
     count: usize,
+    pub(crate) requests: Mutex<Vec<(String, Value)>>,
     pub(crate) repeat_first: AtomicBool,
     pub(crate) repeated_outputs: Mutex<Vec<Value>>,
     pub(crate) steer: AtomicBool,
@@ -57,6 +58,7 @@ pub(crate) async fn start(
     let url = format!("http://{}/codex", listener.local_addr()?);
     let script = Arc::new(Script {
         count,
+        requests: Default::default(),
         repeat_first: AtomicBool::new(false),
         repeated_outputs: Default::default(),
         steer: AtomicBool::new(false),
@@ -87,6 +89,15 @@ async fn reply(
     Json(body): Json<Value>,
 ) -> impl axum::response::IntoResponse {
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    if crate::connectors::stub::find_spec(&body["input"]).is_some() {
+        let response = crate::connectors::stub::run(&body).unwrap();
+        let text = response
+            .chunks
+            .into_iter()
+            .map(|c| c.text)
+            .collect::<String>();
+        return ([("content-type", "text/event-stream")], text).into_response();
+    }
     let group = if key.user_request.contains("blue") {
         "blue"
     } else {
@@ -105,6 +116,11 @@ async fn reply(
     } else {
         "parent"
     };
+    script
+        .requests
+        .lock()
+        .unwrap()
+        .push((role.into(), body.clone()));
     let index = (0..4)
         .find(|i| key.user_request.contains(&format!("{group}-{i}")))
         .unwrap_or(0);
@@ -232,12 +248,9 @@ async fn reply(
 fn parent(step: usize, group: &str) -> Value {
     let objective = format!("Verify batch {group}");
     match step {
-        0 => call("start_work", json!({"objective":objective})),
-        1 => call("replace_work_plan", plan(&objective, "steward", 1)),
-        2 => call("record_work_review", review()),
-        3 => call(
+        0 => call(
             "delegate_to_steward",
-            json!({"request":objective,"safe_title":objective}),
+            json!({"request":objective,"checks":["Evidence verified"],"safe_title":objective}),
         ),
         _ => message("Verification delegated."),
     }

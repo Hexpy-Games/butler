@@ -13,12 +13,14 @@ pub(super) fn open(
     paths: &RuntimePaths,
     files: &WorkspaceFiles,
     mutations: &WorkspaceMutations,
+    plugins: Arc<crate::host::plugins::Plugins>,
 ) -> Result<SkillsOwner, BtccError> {
     let skills = Arc::new(Skills::for_installation(
         paths.resource_root.clone(),
         paths.data_root.clone(),
         paths.executable_path.clone(),
     ));
+    skills.set_plugin_provider(Arc::new(move || plugins.skill_roots()));
     let capabilities = Arc::new(Capabilities::with_skills(
         Arc::new(files.clone()),
         Arc::new(mutations.clone()),

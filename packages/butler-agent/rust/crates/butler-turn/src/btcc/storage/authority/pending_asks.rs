@@ -61,3 +61,20 @@ pub(super) fn changes(
 }
 
 pub(crate) const CLOSE_QUESTIONS: &str = "UPDATE btcc_authority_requests INDEXED BY idx_btcc_questions_deferred SET outcome_receipt_json=?2,outcome='applied',updated_at=?3 WHERE owner_session_id=?1 AND capability='ask_user' AND decision='modified' AND close_reason IS NULL AND outcome_receipt_json IS NULL AND json_extract(CASE WHEN capability='ask_user' THEN private_alternative_input END,'$.status')='deferred'";
+
+/// One per-turn read. Open rows use the deployed session projection unchanged.
+pub(crate) fn reminder_sql() -> String {
+    format!(
+        "{} \
+        UNION ALL {ROW} INDEXED BY idx_btcc_questions_settled \
+        WHERE owner_session_id=?1 AND capability='ask_user' AND outcome_receipt_json IS NOT NULL \
+        AND updated_at > COALESCE((SELECT created_at FROM btcc_messages WHERE message_id=( \
+            SELECT original_message_id FROM btcc_turns INDEXED BY idx_btcc_turns_session \
+            WHERE session_id=?1 AND rowid<(SELECT rowid FROM btcc_turns WHERE turn_id=?2) \
+            AND canonical_assistant_message_id IS NOT NULL ORDER BY rowid DESC LIMIT 1)), '') \
+        AND close_reason IS NULL AND decision='modified' \
+        AND json_extract(private_alternative_input,'$.status')='deferred' \
+        AND json_extract(outcome_receipt_json,'$.status')='answered'",
+        super::query::deferred_sql()
+    )
+}

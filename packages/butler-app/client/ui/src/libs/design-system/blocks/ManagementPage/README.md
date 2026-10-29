@@ -61,7 +61,7 @@ to draw, so the page keeps its plain look.
 
 `aside` shows a detail beside the content (the selected task on a project
 board). The page owns where it sits and scrolls it in a scroller of its own
-(the shared edge fade, the scrollbar gutter reserved on both edges):
+(the shared edge fade; a scrollbar lane only while a classic scrollbar is drawn):
 
 - Docked (a 1000px page or wider; a floating aside docks again from 1032px):
   flat in the right margin, 360px (`--management-aside-width`), `--space-lg`

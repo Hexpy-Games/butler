@@ -159,9 +159,11 @@ async fn provider_streaming_preserves_terminal_stop_reasons() -> Result<(), Harn
     butler_e2e::gate!();
     for (index, from, to) in [
         (0, "tool_use", "max_tokens"),
+        (0, "tool_use", "refusal"),
         (1, "completed", "incomplete"),
         (2, "STOP", "SAFETY"),
         (3, "tool_calls", "length"),
+        (3, "tool_calls", "content_filter"),
     ] {
         let mut fixture = fixtures().remove(index);
         let mut response: ResponseRecord = serde_json::from_value(fixture["response"].clone())?;
@@ -172,6 +174,11 @@ async fn provider_streaming_preserves_terminal_stop_reasons() -> Result<(), Harn
             _ => "/choices/0/finish_reason",
         };
         *fixture["expected"].pointer_mut(path).unwrap() = to.into();
+        let failure = match to {
+            "refusal" => Some("provider_response_refused"),
+            "SAFETY" | "content_filter" => Some("provider_safety_error"),
+            _ => None,
+        };
         let key = match index {
             0 => "stop_reason",
             1 => "status",
@@ -181,6 +188,9 @@ async fn provider_streaming_preserves_terminal_stop_reasons() -> Result<(), Harn
         let from = format!("\"{key}\":\"{from}\"");
         let to = format!("\"{key}\":\"{to}\"");
         if index == 1 {
+            fixture["expected"]["incomplete_details"] = json!({"reason":"max_output_tokens"});
+            response.chunks[0].text = response.chunks[0].text.replace(
+                "\"status\":\"completed\",\"output\":", "\"status\":\"completed\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"output\":");
             let body = &response.chunks[0].text;
             let terminal = body.find("\"type\":\"response.completed\"").unwrap();
             response.chunks[0].text = format!(
@@ -196,8 +206,15 @@ async fn provider_streaming_preserves_terminal_stop_reasons() -> Result<(), Harn
         }
         let server = Server::new(vec![(response, false)]).await?;
         let report = invoke(&server, &fixture, 1, 1).await?;
-        assert_eq!(report["results"][0]["raw"], fixture["expected"]);
-        verify_events(&report["events"], &report["results"][0], &fixture);
+        if let Some(code) = failure {
+            assert_eq!(
+                report["results"][0],
+                json!({"error":code,"retryable":false})
+            );
+        } else {
+            assert_eq!(report["results"][0]["raw"], fixture["expected"]);
+            verify_events(&report["events"], &report["results"][0], &fixture);
+        }
     }
     Ok(())
 }
@@ -445,3 +462,8 @@ async fn invoke(
 
 #[path = "provider_streaming/followups.rs"]
 mod followups;
+#[path = "provider_streaming/stops.rs"]
+mod stops;
+
+#[path = "provider_streaming/optional_finish_and_safety.rs"]
+mod optional_finish_and_safety;

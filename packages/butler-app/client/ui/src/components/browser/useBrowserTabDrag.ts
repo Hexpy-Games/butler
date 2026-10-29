@@ -9,6 +9,18 @@ import { endBrowserTabDrag, useBrowserTabDrag } from "./browserTabDrag";
 
 type Start = { tab: BrowserTab; x: number; y: number; strip: HTMLElement };
 
+/** What lies under the pointer: whether it left the strip's row, and the conversation row it is over. */
+function locate(source: Start, x: number, y: number) {
+  const box = source.strip.getBoundingClientRect();
+  const outside = y < box.top || y > box.bottom;
+  const hit = document.elementFromPoint(x, y);
+  const row = hit?.closest<HTMLElement>('[data-slot="nav-drop-target"][data-tree-item]');
+  const record = row && projectSpace(useButlerStore.getState().navigation).get(row.dataset.treeItem!);
+  const target = record?.session && record.node.kind === "session" && source.tab.owner !== `conversation:${record.session.id}`
+    ? { session: record.session.id, instance: row!.dataset.dragInstance!, title: record.title } : undefined;
+  return { outside, target, hit };
+}
+
 /** Extends the strip's own reorder gesture to conversation rows, without native page drag data. */
 export function useBrowserTabDragHandler(tabs: BrowserTab[]) {
   const start = useRef<Start | undefined>(undefined);
@@ -18,21 +30,18 @@ export function useBrowserTabDragHandler(tabs: BrowserTab[]) {
     const move = (event: globalThis.PointerEvent) => {
       const source = start.current;
       if (!source || Math.hypot(event.clientX - source.x, event.clientY - source.y) < 6) return;
-      const box = source.strip.getBoundingClientRect();
-      const outside = event.clientY < box.top || event.clientY > box.bottom;
-      const hit = document.elementFromPoint(event.clientX, event.clientY);
-      const row = hit?.closest<HTMLElement>('[data-slot="nav-drop-target"][data-tree-item]');
-      const record = row && projectSpace(useButlerStore.getState().navigation).get(row.dataset.treeItem!);
-      const target = record?.session && record.node.kind === "session" && source.tab.owner !== `conversation:${record.session.id}`
-        ? { session: record.session.id, instance: row!.dataset.dragInstance!, title: record.title } : undefined;
+      const { outside, target, hit } = locate(source, event.clientX, event.clientY);
       useBrowserTabDrag.setState({ tabId: source.tab.id, owner: source.tab.owner, outside, target,
         x: event.clientX, y: event.clientY, title: source.tab.title, favicon: source.tab.favicon });
       const scroller = hit?.closest<HTMLElement>('[data-test-class="sidebar-scroll"]');
       if (scroller) scroll.update(event.clientY, scroller); else scroll.stop();
     };
     const finish = (event: globalThis.PointerEvent) => {
-      if (!start.current) return;
-      const drag = useBrowserTabDrag.getState();
+      const source = start.current;
+      if (!source) return;
+      const last = useBrowserTabDrag.getState();
+      // A drop lands where the pointer is released, not where the last pointer move left the drag.
+      const drag = last.tabId && event.type === "pointerup" ? { ...last, ...locate(source, event.clientX, event.clientY) } : last;
       start.current = undefined; scroll.stop();
       if (event.type === "pointerup" && drag.outside && drag.tabId && drag.target) {
         const title = drag.target.title;
@@ -58,7 +67,9 @@ export function useBrowserTabDragHandler(tabs: BrowserTab[]) {
     if (event.button !== 0 || (event.target as Element).closest("button")) return;
     const strip = event.currentTarget;
     const node = (event.target as Element).closest('[role="tab"]');
-    const index = [...strip.querySelectorAll('[role="tab"]')].indexOf(node!);
+    // A folded group keeps its tabs mounted but inert; `tabs` lists only the tabs the strip shows.
+    const shown = [...strip.querySelectorAll('[role="tab"]')].filter((tab) => !tab.closest("[inert]"));
+    const index = shown.indexOf(node!);
     if (tabs[index]) start.current = { tab: tabs[index], x: event.clientX, y: event.clientY, strip };
   };
 }

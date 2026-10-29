@@ -1,6 +1,12 @@
 //! Session Work operations on the existing serialized BtccStorage connection.
 
 mod common;
+mod delegated_result;
+mod delegation;
+pub(in crate::btcc::storage) use delegated_result::settle as settle_steward_parent;
+pub(in crate::btcc::storage) use delegation::{
+    legacy_parent as legacy_steward_parent, prepare as prepare_steward_work,
+};
 mod disposition;
 mod legacy;
 mod monitoring;
@@ -80,6 +86,35 @@ impl SessionWorkRepository {
 }
 
 impl DurableWorkRepository for SessionWorkRepository {
+    fn work_for_turn(&self, turn: String, work: String) -> PortFuture<'_, Option<WorkView>> {
+        Box::pin(async move {
+            self.read(move |db| {
+                let session: String = db
+                    .query_row(
+                        "SELECT session_id FROM btcc_turns WHERE turn_id=?1",
+                        [&turn],
+                        |row| row.get(0),
+                    )
+                    .map_err(StorageError::sqlite)?;
+                let Some(row) = common::work(db, &work)? else {
+                    return Ok(None);
+                };
+                if row.session_id != session {
+                    return Ok(None);
+                }
+                read::view(db, &work).map(Some)
+            })
+            .await
+        })
+    }
+    fn steward_owns_work(&self, session: String, work: String) -> PortFuture<'_, bool> {
+        Box::pin(async move {
+            self.read(move |db| {
+            db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_session_relations r JOIN btcc_subsession_delegations d USING(relation_id) WHERE r.parent_session_id=?1 AND json_extract(d.packet_json,'$.parent_work_ref.work_id')=?2 AND json_extract(d.packet_json,'$.child_role')='steward' AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=r.relation_id))", rusqlite::params![session,work], |row| row.get(0)).map_err(StorageError::sqlite)
+        }).await
+        })
+    }
+
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>> {
         Box::pin(async move {
             self.read(move |db| {

@@ -1,5 +1,6 @@
 //! Project Work's SQLite observation runtime on the existing BTCC actor.
 
+mod delegated_result;
 mod legacy;
 pub(in crate::btcc) mod material;
 mod projection;

@@ -40,14 +40,14 @@ fn profile(event: TraceEvent<'_>) {
             CommandTiming::report_duration("sqlite_commit", "hook_to_profile", commit);
         }
         if duration.as_millis() >= 20 {
-            eprintln!(
+            butler_platform::stdio::diagnostic_line(format_args!(
                 "command_sql_work class={class} utc_us={} vm_steps_total={} fullscan_steps_total={} sorts_total={} mem_bytes={}",
                 utc_us(),
                 statement.get_status(rusqlite::StatementStatus::VmStep),
                 statement.get_status(rusqlite::StatementStatus::FullscanStep),
                 statement.get_status(rusqlite::StatementStatus::Sort),
                 statement.get_status(rusqlite::StatementStatus::MemUsed),
-            );
+            ));
         }
     }
 }
@@ -74,10 +74,10 @@ pub(super) fn wal_committed(pages: i32) {
     }
     let prior = LAST_WAL_PAGES.replace(pages);
     if pages < prior {
-        eprintln!(
+        butler_platform::stdio::diagnostic_line(format_args!(
             "command_wal_timing event=restarted utc_us={} pages={pages} prior_pages={prior}",
             utc_us()
-        );
+        ));
     }
 }
 

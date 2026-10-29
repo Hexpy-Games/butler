@@ -29,7 +29,10 @@ export function scheduleFrequency(value: Pick<AutomationSummary, "schedule" | "s
 }
 
 /** When a schedule a request would create runs: its frequency, then its first run time. */
-export function scheduleTiming(value: { scheduleType: string; runAt?: string; startAt?: string; intervalSeconds?: number }): string {
+export function scheduleTiming(value: { scheduleType: string; runAt?: string; startAt?: string; intervalSeconds?: number; time?: string }): string {
+  if ((value.scheduleType === "daily" || value.scheduleType === "weekdays") && value.time) {
+    return initiatedFrequency({ type: value.scheduleType, time: value.time });
+  }
   const frequency = scheduleFrequency({ schedule: null, schedule_type: value.scheduleType, interval_seconds: value.intervalSeconds });
   const once = value.scheduleType === "once";
   const at = once ? value.runAt : value.startAt;
@@ -49,4 +52,15 @@ export function scheduleNextRun(value: Pick<AutomationSummary, "schedule" | "nex
 
 export function localSchedule(kind: CalendarSchedule["kind"], weekdays: number[] = []): CalendarSchedule {
   return { kind, time: "08:00", weekdays, tz: Intl.DateTimeFormat().resolvedOptions().timeZone };
+}
+
+/** Local clock fields are formatted without applying a second timezone conversion. */
+export function initiatedFrequency(rule: import("./initiatedTypes").InitiatedSchedule): string {
+  const [hour, minute] = (rule.time ?? "00:00").split(":").map(Number);
+  const time = new Intl.DateTimeFormat(getAppLocale(), { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" })
+    .format(new Date(Date.UTC(1970, 0, 1, hour, minute)));
+  if (rule.type === "daily") return appCopy.conversation.initiated.dailyAt(time);
+  if (rule.type === "weekdays") return appCopy.conversation.initiated.weekdaysAt(time);
+  if (rule.type === "weekly") return appCopy.automations.weeklyAt((rule.weekdays ?? []).map(scheduleWeekday).join(", "), time);
+  return rule.type === "interval" ? appCopy.automations.interval : appCopy.automations.once;
 }

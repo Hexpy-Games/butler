@@ -58,11 +58,17 @@ pub(super) fn decide(
     } else {
         None
     };
+    let allow_scope = if action == AuthorityAction::Allow {
+        input.allow_scope.as_deref().unwrap_or("once")
+    } else {
+        "once"
+    };
     let write = DecisionWrite {
         request_ref: input.request_ref.clone(),
         owner_session_id: input.owner_session_id.clone(),
         source_session_id: current.source_session_id,
         action,
+        allow_scope: allow_scope.into(),
         permission,
         alternative_input: alternative.clone(),
         now: clock(),
@@ -158,6 +164,16 @@ fn check_allow_scope(
 ) -> AuthorityResult<()> {
     let normalized: serde_json::Value = serde_json::from_str(&current.normalized_input_json)
         .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+    if input.allow_scope.as_deref() == Some("site")
+        && !matches!(
+            normalized
+                .get("allow_site")
+                .and_then(serde_json::Value::as_str),
+            Some("signed_in" | "payment")
+        )
+    {
+        return Err(AuthorityError::policy("site_scope_invalid"));
+    }
     if input.allow_scope.as_deref() == Some("conversation")
         && (normalized.get("always_confirm") == Some(&serde_json::Value::Bool(true))
             || current.capability == "browser_wait_for_user")

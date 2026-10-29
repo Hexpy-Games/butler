@@ -154,7 +154,14 @@ async fn load(
             "planning_default_depth": planning.get("defaultDepth"),
         },
         "web_search_credentials": web_search_credentials(&private_environment),
+        "proactive_settings": {
+            "proactive_level": read.config.pointer("/proactive/level"),
+            "quiet_hours_start": read.config.pointer("/proactive/quietHours/start"),
+            "quiet_hours_end": read.config.pointer("/proactive/quietHours/end"),
+            "chats_intro_seen": read.config.pointer("/chats/introSeen"),
+        },
         "consolidation": {
+            "time_of_day": read.config.pointer("/cognition/consolidationCycle/timeOfDay").and_then(Value::as_str).unwrap_or("04:00"),
             "model": extractor.configured_model,
             "reasoning_effort": extractor.reasoning_effort,
             "effective_model": extractor.effective_model,

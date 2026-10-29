@@ -856,6 +856,12 @@ License: https://www.npmjs.com/package/devlop/v/1.1.0
 Copyright (c) 2023 Titus Wormer <tituswormer@gmail.com>
 
 =====
+diff 9.0.0
+BSD-3-Clause
+License: https://www.npmjs.com/package/diff/v/9.0.0
+Copyright (c) 2009-2015, Kevin Decker <kpdecker@gmail.com>
+
+=====
 electron 44.5.1
 MIT
 License: https://github.com/electron/electron/blob/v44.5.1/LICENSE

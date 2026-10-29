@@ -46,10 +46,10 @@ export function readStartupAppearance(data = process.env.BUTLER_DATA || join(hom
   let db;
   try {
     db = new DatabaseSync(path, { readOnly: true, timeout: 0 });
-    const row = db.prepare("SELECT json_extract(value_json, '$.wallpaper') AS wallpaper, json_extract(value_json, '$.main_screen_theme') AS legacy, json_extract(value_json, '$.main_screen_theme_preset') AS preset, json_extract(value_json, '$.main_screen_theme_custom_colors') AS colors, json_extract(value_json, '$.appearance_theme') AS theme, json_extract(value_json, '$.language') AS locale FROM app_settings WHERE key = 'settings'").get();
+    const row = db.prepare("SELECT json_extract(value_json, '$.wallpaper') AS wallpaper, json_extract(value_json, '$.main_screen_theme') AS legacy, json_extract(value_json, '$.main_screen_theme_preset') AS preset, json_extract(value_json, '$.main_screen_theme_custom_colors') AS colors, json_extract(value_json, '$.appearance_theme') AS theme, json_extract(value_json, '$.text_size') AS text_size, json_extract(value_json, '$.language') AS locale FROM app_settings WHERE key = 'settings'").get();
     const wallpaper = row?.wallpaper ? JSON.parse(row.wallpaper) : null;
     const source = startupSource(wallpaper, row);
-    return { source, reducedMotion: wallpaper?.motion === "paused", theme: row?.theme, locale: row?.locale };
+    return { source, reducedMotion: wallpaper?.motion === "paused", theme: row?.theme, textSize: row?.text_size, locale: row?.locale };
   } catch { return { source: RISO_SOURCE }; }
   finally { db?.close(); }
 }

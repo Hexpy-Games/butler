@@ -56,7 +56,7 @@ impl SqliteSubsessionRepository {
             let packet = &delegation.packet;
             let model = packet.model_ref.as_str();
             let reasoning = packet.reasoning_effort.as_str();
-            let access = required_packet_string(&packet.access_mode, "access_mode")?;
+            let access = packet.access_mode.as_str();
             let parent_chat = packet.parent_chat_id.as_deref();
             if model.is_empty() || reasoning.is_empty() { return Err(StorageError::new(StorageCode::SubsessionParentModelContextMissing,"Subsession model context is missing")); }
             let tx = db.transaction().map_err(StorageError::sqlite)?;
@@ -69,6 +69,9 @@ impl SqliteSubsessionRepository {
             // changes nothing, so a success is never re-keyed or delivered twice.
             if inserted == 0 {
                 return Ok(());
+            }
+            if packet.child_role == ChildRole::Steward {
+                super::super::work::settle_steward_parent(&tx, &delegation, (&result_id, &child_turn), &status, &summary, &evidence_refs, &now)?;
             }
             let feedback = delegation_feedback(&tx, &delegation, &result_id, failure_reason.as_deref())?;
             let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}{feedback}");
@@ -87,6 +90,7 @@ impl SqliteSubsessionRepository {
                     reasoning_effort: reasoning.into(), timestamp: now.clone(),
                 }),
                 ChildRole::Steward => ParentResultInput::ButlerApp(Box::new(StewardResultInput {
+                    child_session_id: Some(child_session.clone()),
                     relation_id: delegation.relation_id.clone(),
                     result_id: result_id.clone(),
                     parent_session_id: delegation.parent_session_id.clone(),
@@ -95,7 +99,7 @@ impl SqliteSubsessionRepository {
                     message_id: format!("subsession-result-message:{result_id}"),
                     safe_title: result_title(&delegation.safe_title), text: text.clone(), model_ref: model.into(),
                     reasoning_effort: reasoning.into(), access_mode: access.into(), timestamp: now.clone(),
-                    schedule_run: packet.schedule_run.clone(),
+                    schedule_run: super::instruction_context::current(&tx, &child_session, packet.schedule_run.clone())?,
                 })),
             };
             let input = serde_json::to_string(&input).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;

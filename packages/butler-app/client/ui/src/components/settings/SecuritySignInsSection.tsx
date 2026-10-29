@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { appCopy, getAppLocale } from "@/app/copy.ts";
 import {
-  Button, ButtonContainer, CardListItem, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  Button, ButtonContainer, CardListItem, DropdownMenu, Field, FieldContent, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   Globe2, IconButton, Input, MoreHorizontal, Plus, SegmentedControl, SettingsSection, Stack, Switch, Tag, Tooltip, Typo,
 } from "@/butler-ds";
 import { canSignOut, type SignInPolicy, type SignInSiteRow } from "./signInsApi";
@@ -16,11 +16,12 @@ function since(iso: string): string {
   return format.format(-Math.floor(seconds / 86400), "day");
 }
 
-/** Sign-ins, then import from another browser (which needs the same keychain). */
-export function SecuritySignInsSections() {
+/** Sign-ins, the sections in `children`, then import from another browser last (it needs the same keychain). */
+export function SecuritySignInsSections({ children }: { children?: ReactNode }) {
   const signIns = useSignIns();
   return <>
     <SecuritySignInsSection signIns={signIns} />
+    {children}
     <SecurityBrowserImportSection keychain={signIns.view?.available === true} onImported={() => void signIns.reload()} />
   </>;
 }
@@ -69,11 +70,11 @@ function SignInRow({ row, busy, actions }: { row: SignInSiteRow; busy: boolean; 
                 onValueChange={(value) => void actions.policy(row.entry!.id, value as SignInPolicy)} />
             </Stack>
           )}
-          <Stack as="span" align="row" cross="center" gap="sm">
+          <Field orientation="horizontal">
+            <FieldContent><Typo.Caption tone="secondary">{copy.allConversations}</Typo.Caption></FieldContent>
             <Switch aria-label={copy.allConversations} checked={row.all_conversations} disabled={busy}
               onCheckedChange={(value) => void actions.allConversations(row.site, value)} />
-            <Typo.Caption tone="secondary">{copy.allConversations}</Typo.Caption>
-          </Stack>
+          </Field>
         </Stack>
       )}
       actions={(

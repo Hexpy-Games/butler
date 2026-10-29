@@ -3,6 +3,8 @@
 //! session scoped to the calling Turn.
 
 mod catalog;
+mod connector;
+pub use connector::ConnectorSession;
 mod children;
 mod client;
 pub use children::stop_mcp_children;
@@ -23,3 +25,6 @@ pub use client::{McpClient, RegistryPathGuard};
 pub use registry::{McpRegistryError, normalize_server_id};
 
 mod logged_http;
+
+mod overlay;
+pub use overlay::{McpOverlay, PreparedOverlay};

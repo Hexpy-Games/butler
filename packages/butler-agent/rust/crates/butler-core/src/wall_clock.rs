@@ -4,6 +4,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// Re-read a wall clock at least this often while waiting for a deadline.
 pub const MAX_WAIT_SLICE: Duration = Duration::from_secs(60);
 
+/// Shared on-time allowance for scheduled work.
+pub const SCHEDULE_GRACE_MS: i64 = 2 * 60_000;
+
 /// Current Unix milliseconds, clamped to the supported integer range.
 pub fn now_millis() -> i64 {
     SystemTime::now()

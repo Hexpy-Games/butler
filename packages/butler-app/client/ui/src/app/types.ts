@@ -523,6 +523,11 @@ export interface SettingsView {
   reasoning_effort: ReasoningEffort;
   recall_mode: "faster" | "accurate";
   recall_judge_model: string;
+  proactive_level: "off" | "sometimes" | "often";
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+  chats_intro_seen: boolean;
+  consolidation_time: string;
   consolidation_model: string;
   consolidation_reasoning_effort: ReasoningEffort;
   effective_consolidation_model: string;
@@ -541,6 +546,7 @@ export interface SettingsView {
     | "modifier_enter_send_enter_newline"
     | "enter_send_shift_enter_newline";
   appearance_theme: "system" | "light" | "dark";
+  text_size: "default" | "large" | "larger";
   /** false follows the OS; true forces the DS reduced-motion path. */
   reduce_motion: boolean;
   collapse_message_box: boolean;
@@ -881,6 +887,11 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  canon_proposals?: import("../../../shared/canon-proposal-contracts.ts").CanonProposalAnchor[];
+  quiet?: boolean;
+  /** Terminal failure grouped with this turn's retained partial answer. */
+  failure_notice?: MessageRecord;
+  initiated?: import("./initiatedTypes").InitiatedOrigin;
   question_answer?: AnsweredUserQuestions;
   question_summary?: UserQuestion[];
   system_event_kind?: "context.compaction.started" | "context.compaction.completed";
@@ -909,6 +920,9 @@ export interface MessageRecord {
   limitations?: string[];
   safe_error_code?: string;
   retryable?: boolean;
+  incomplete?: boolean;
+  retry_mode?: "resume" | "fresh";
+  retry_with_current_controls?: boolean;
   cursor?: number;
   created_at?: string;
   updated_at?: string;
@@ -1181,6 +1195,7 @@ export interface SessionView {
   authority_requests?: unknown[];
   pending_questions?: PendingUserQuestions[];
   question_answers?: AnsweredUserQuestions[];
+  canon_proposals?: import("../../../shared/canon-proposal-contracts.ts").CanonProposalAnchor[];
   branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
   protocol_version?: string;
   session_id: string;
@@ -1724,6 +1739,8 @@ export interface TimelineEvent {
     line?: string | null;
     summary?: string;
     tainted?: boolean;
+    site?: string;
+    amount?: string;
     /** `automation.run`: the run's conversation and its safe error code. */
     target_session_id?: string;
     safe_error_code?: string;
@@ -1762,7 +1779,7 @@ export type LibraryKind = "scrap" | "document" | "bookmark" | "output";
  * The Library: the main screen, a kind's full view (`section`), a group in it (`group`: an id or "none"
  * for ungrouped) and a scrap's detail (`item`). Each level is one step up from the next (titlebar back).
  */
-export type LibraryView = { kind: "library"; section?: LibraryKind; group?: string; item?: string };
+export type LibraryView = { kind: "library"; section?: LibraryKind; group?: string; item?: string; doc?: string };
 
 export type AppView =
   | { kind: "browser" }
@@ -1787,6 +1804,8 @@ export interface CommandPaletteResult {
 }
 
 export interface AutomationSummary {
+  browser_signin?: boolean;
+  browser_payment?: boolean;
   id: string;
   title: string;
   target_label: string;
@@ -1884,10 +1903,10 @@ export type ApprovalRisk = "low" | "medium" | "high";
  */
 export interface ApprovalSummary {
   /** Exact local decision facts; do not apply workspace-label normalization. */
-  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
+  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; allow_site?: "signed_in" | "payment"; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
   /** What a reviewed schedule create sets up: its name, timing and run mode; never its id. */
-  schedule?: { title: string; scheduleType: "once" | "interval"; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };
+  schedule?: { title: string; scheduleType: "once" | "interval" | "daily" | "weekdays" | "update"; browserSignin?: boolean; browserPayment?: boolean; time?: string; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */
   targets: ApprovalTarget[];

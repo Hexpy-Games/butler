@@ -56,39 +56,7 @@ pub(super) fn collect(
     if exists.is_none() {
         return Err(failed("unknown_chat"));
     }
-    let digest = Sha256::digest(&image.bytes);
-    let hash = format!("{digest:x}");
-    let existing = tx
-        .query_row("SELECT id FROM app_assets WHERE sha256=?1", [&hash], |r| {
-            r.get::<_, String>(0)
-        })
-        .optional()
-        .map_err(AppStorageError::sqlite)?;
-    let id = if let Some(id) = existing {
-        id
-    } else {
-        let mut id = asset_id(&digest, 10);
-        if tx
-            .query_row("SELECT 1 FROM app_assets WHERE id=?1", [&id], |_| Ok(()))
-            .optional()
-            .map_err(AppStorageError::sqlite)?
-            .is_some()
-        {
-            id = asset_id(&digest, 12);
-        }
-        let target = file(root, &hash, "image/jpeg")?;
-        secure_fs::create_private_dir_all(
-            target
-                .parent()
-                .ok_or_else(|| failed("invalid_asset_path"))?,
-        )
-        .map_err(failed)?;
-        secure_fs::replace_private(&target, |f| f.write_all(&image.bytes), |e| e)
-            .map_err(failed)?;
-        tx.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at) VALUES(?1,?2,'image/jpeg',?3,?4,?5,?6,?7,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-            params![id,hash,image.width,image.height,image.bytes.len(),alt,url]).map_err(AppStorageError::sqlite)?;
-        id
-    };
+    let id = insert_collected(&tx, root, image, alt, url)?;
     let bound = tx
         .query_row(
             "SELECT 1 FROM app_asset_refs WHERE asset_id=?1 AND owner_kind='chat' AND owner_id=?2",
@@ -108,6 +76,54 @@ pub(super) fn collect(
     Ok(
         json!({"status":"ok","id":id,"width":image.width,"height":image.height,"alt":alt,"nearby_text":nearby,"url":format!("/message-assets/{id}")}),
     )
+}
+
+fn insert_collected(
+    db: &Connection,
+    root: &Path,
+    image: &NormalizedImage,
+    alt: &str,
+    url: &str,
+) -> Result<String, AppStorageError> {
+    let hash = format!("{:x}", Sha256::digest(&image.bytes));
+    let mut identity = Sha256::new();
+    identity.update(&image.bytes);
+    identity.update(image.pixel_ratio.to_le_bytes());
+    let digest = identity.finalize();
+    let existing = db
+        .query_row(
+            "SELECT id FROM app_assets WHERE sha256=?1 AND pixel_ratio=?2",
+            params![hash, image.pixel_ratio],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    let id = if let Some(id) = existing {
+        id
+    } else {
+        let mut id = asset_id(&digest, 10);
+        if db
+            .query_row("SELECT 1 FROM app_assets WHERE id=?1", [&id], |_| Ok(()))
+            .optional()
+            .map_err(AppStorageError::sqlite)?
+            .is_some()
+        {
+            id = asset_id(&digest, 12);
+        }
+        let target = file(root, &hash, "image/jpeg")?;
+        secure_fs::create_private_dir_all(
+            target
+                .parent()
+                .ok_or_else(|| failed("invalid_asset_path"))?,
+        )
+        .map_err(failed)?;
+        secure_fs::replace_private(&target, |f| f.write_all(&image.bytes), |e| e)
+            .map_err(failed)?;
+        db.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,pixel_ratio,created_at) VALUES(?1,?2,'image/jpeg',?3,?4,?5,?6,?7,?8,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+            params![id,hash,image.width,image.height,image.bytes.len(),alt,url,image.pixel_ratio]).map_err(AppStorageError::sqlite)?;
+        id
+    };
+    Ok(id)
 }
 
 pub(super) fn lookup(db: &Connection, ids: &[String]) -> Result<Value, AppStorageError> {

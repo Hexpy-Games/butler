@@ -25,13 +25,13 @@ export function ListRow({
   className,
 }: ListRowProps) {
   return (
-    <div className={cn(styles.row, className)}>
+    <div className={cn(styles.row, icon && styles.withIcon, className)}>
       {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
       <Stack gap="xs" className={dsClass(styles.content)}>
-        <Stack align="row" justify="between" cross="center">
+        <div className={styles.heading}>
           <Typo.Body className={dsClass(styles.title)}>{title}</Typo.Body>
           {meta && <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption>}
-        </Stack>
+        </div>
         {description && (
           <Typo.Caption className={dsClass(styles.description)}>{description}</Typo.Caption>
         )}

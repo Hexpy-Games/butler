@@ -6,6 +6,7 @@ use super::super::sessions::AppSessionSummary;
 pub enum AppProjectSource {
     Scratch,
     ExistingFolder,
+    WorkspaceFolder,
 }
 
 #[derive(Clone, Debug)]
@@ -13,6 +14,7 @@ pub struct AppCreateProjectRequest {
     pub source: AppProjectSource,
     pub display_name: Option<String>,
     pub folder_selection_token: Option<String>,
+    pub workspace_path: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

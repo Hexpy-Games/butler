@@ -38,7 +38,7 @@ function ConversationPane() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The browser sheet: tab row, toolbar and the page card, inset on a tinted pane whose top corners match the card.",
+  purpose: "The browser sheet: tab row and toolbar on a tinted pane, and the page card filling the pane edge to edge under them.",
   whenToUse: [
     "The browser beside a conversation (the AdaptiveShellSplit pane)",
     "The standalone Browser view under its title bar",
@@ -50,7 +50,7 @@ export const guidance: ShowcaseGuidance = {
   recipes: [{ name: "Browser pane in a conversation", description: "TabStrip (hideChip + bring-in), BrowserToolbar with AddressField, PageCard.", render: () => <ConversationPane /> }],
   doDont: [
     {
-      do: { caption: "Compose the rows from DS blocks; the pane owns the insets, the corner radius and the tint.", render: () => <ConversationPane /> },
+      do: { caption: "Compose the rows from DS blocks; the pane owns the row insets, the page corners (--page-card-radius) and the tint.", render: () => <ConversationPane /> },
       dont: { caption: "Glass over the page top: the page is a native view, so glass cannot blur it.", render: () => <Typo.Code>{"<TintedGlass><BrowserToolbar … /></TintedGlass>"}</Typo.Code> },
     },
   ],
@@ -61,6 +61,7 @@ export const guidance: ShowcaseGuidance = {
   accessibility: [
     "The pane is a labelled region; the toolbar row has role toolbar; tabs control the page card (TabStrip panelId = PageCard panelId).",
     "Every toolbar control is an IconButton with a label and tooltip.",
+    "While Butler controls the tab (PageCard holder=\"butler\") the pane edge turns to the riso inks; the PageBand says so in words, so the edge is never the only signal.",
   ],
-  tokens: ["--browser-pane-bg", "--browser-pane-radius", "--browser-card-inset", "--browser-band-height", "--menu-item-height"],
+  tokens: ["--browser-pane-bg", "--browser-pane-radius", "--browser-card-inset", "--browser-band-height", "--space-xs", "--menu-item-height", "--page-card-radius", "--shell-card-radius", "--butler-ink-blue", "--butler-ink-purple", "--butler-ink-pink", "--motion-agent-edge"],
 };

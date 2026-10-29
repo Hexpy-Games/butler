@@ -2,7 +2,10 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Grid } from "../../components/Grid";
 import { MessageSquarePlus, Popup, Trash2 } from "../../components/Icons";
 import { cropImage, stripCrop, viewImage } from "../BrowserPane/fixtures/pages";
+import { MetricCard } from "../MetricCard";
+import { MetricGrid } from "../MetricGrid";
 import { OverflowActionMenu } from "../OverflowActionMenu";
+import { StatusChecklist } from "../StatusChecklist";
 import { LibraryCard, type LibraryCardMedia } from "./LibraryCard";
 
 export const meta: ShowcaseMeta = {
@@ -14,7 +17,7 @@ export const meta: ShowcaseMeta = {
 
 const COPY = {
   "en-US": {
-    element: "Element", view: "View", doc: "Document", more: "More", attach: "Attach to chat", open: "Open source", remove: "Delete",
+    element: "Element", view: "View", doc: "Document", block: "Block", spend: "Spending", income: "Income", steps: ["Book the venue", "Send invitations", "Order the cake"], blockTitles: ["This month", "Party checklist"], more: "More", attach: "Attach to chat", open: "Open source", remove: "Delete",
     tags: ["chairs", "office", "under 150k", "reviews"], select: "Select", name: "Name",
     crops: ["Office chairs (heading)", "128 items (a line)", "Filters (a column)", "Getting started (a view)", "Browser fixture (page title)"],
     items: [
@@ -25,7 +28,7 @@ const COPY = {
     ],
   },
   "ko-KR": {
-    element: "요소", view: "화면", doc: "문서", more: "더 보기", attach: "대화에 첨부", open: "원본 열기", remove: "삭제",
+    element: "요소", view: "화면", doc: "문서", block: "블록", spend: "지출", income: "수입", steps: ["장소 예약", "초대장 보내기", "케이크 주문"], blockTitles: ["이번 달", "파티 준비"], more: "더 보기", attach: "대화에 첨부", open: "원본 열기", remove: "삭제",
     tags: ["의자", "사무실", "15만원 이하", "후기"], select: "선택", name: "이름",
     crops: ["사무용 의자 (제목)", "128개 상품 (한 줄)", "필터 (세로 칸)", "Getting started (화면)", "Browser fixture (페이지 제목)"],
     items: [
@@ -96,6 +99,23 @@ export const stories: ShowcaseStory[] = [
           {crops.map(([src, title, tag]) => (
             <LibraryCard key={title} media={{ kind: "image", src }} title={title} meta="shop.example.com" tag={tag} onOpen={() => undefined} />
           ))}
+        </Grid>
+      );
+    },
+  },
+  {
+    // Block scraps render the block itself, scaled into the media box: theme and content stay live.
+    name: "Block scraps",
+    widths: ["375", "app", "wide"],
+    render: ({ locale }) => {
+      const copy = COPY[locale];
+      const metrics = <MetricGrid><MetricCard label={copy.spend} value="₩1,240,000" change="+8%" trend="down" /><MetricCard label={copy.income} value="₩3,100,000" change="+2%" trend="up" /></MetricGrid>;
+      const checklist = <StatusChecklist items={copy.steps.map((text, index) => ({ text, done: index === 0 }))} />;
+      return (
+        <Grid columns={{ compact: "1", base: "3" }} gap="md">
+          <LibraryCard media={{ kind: "block", content: metrics }} title={copy.blockTitles[0]} meta="Butler · Today" tag={copy.block} onOpen={() => undefined} />
+          <LibraryCard media={{ kind: "block", content: checklist }} title={copy.blockTitles[1]} meta="Butler · Today" tag={copy.block} onOpen={() => undefined} />
+          <LibraryCard media={{ kind: "document" }} title={copy.items[7][0]} meta={copy.items[7][1]} tag={copy.doc} onOpen={() => undefined} />
         </Grid>
       );
     },

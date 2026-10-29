@@ -379,7 +379,9 @@ async fn sec_07_message_files_never_run_as_gateway_pages() -> Result<(), Harness
 async fn ui_bundle_assets_stay_public_and_collected_images_stay_private() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    let s = Setup::new("GW-ASSETS-PATH")?.start().await?;
+    let s = Setup::mutates_installation("GW-ASSETS-PATH")?
+        .start()
+        .await?;
     let bundle = s.agent.launch.resources.join("app-client/dist/assets");
     std::fs::create_dir_all(&bundle)?;
     let files = [

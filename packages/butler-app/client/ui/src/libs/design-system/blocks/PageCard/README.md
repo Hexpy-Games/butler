@@ -25,6 +25,17 @@ notch.
 ## When to use this block
 Use it for the page area of `BrowserPane`, one card for the visible tab.
 
+## Corners
+The card corners are `--page-card-radius` (the popover radius, 12px, by
+default). `BrowserPane` lays the card flush with its own edges and sets the
+radius to its own bottom corners: 0 beside the window frame, the shell card
+radius in the cards frame. There the card's hairline and the holder edges
+outside it sit under the pane's edges, so the `user` and `waiting` edges show
+only along the page's top, under the toolbar. Butler's edge moves to the pane:
+`BrowserPane` sets `--page-card-butler-edge: none` and
+`--page-card-butler-glow` to the plain card shadow, and draws the riso inks on
+its own edge.
+
 ## Container vs Presenter
 The App forwards `onBoundsChange` (x, y, width, height, visible, scale,
 radius) and `onOcclusion` to the main process and picks the holder:
@@ -63,6 +74,9 @@ only a stage too short for the page's aspect letterboxes it at the sides on
 - Do not fill an empty row with a status line nobody can act on.
 - Do not draw pick highlights or Butler's pointer in the page DOM; use the
   overlay layer (`AgentPointer`, `SelectionBar`).
+- Do not wrap an `internal` page in a `ScrollArea`: the slot already scrolls
+  it, and a ScrollArea bleeds its scrollbar lane past the card's inline end,
+  which the slot then scrolls sideways.
 
 ## Tags
 browser, page, native view, holder, riso edge, letterbox, loading

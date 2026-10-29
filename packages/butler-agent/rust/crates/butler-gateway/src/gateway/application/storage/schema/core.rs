@@ -249,6 +249,8 @@ const CORE_SCHEMA: &str = r"
       start_at TEXT,
       legacy_record_json TEXT,
       access_mode TEXT,
+      browser_signin INTEGER NOT NULL DEFAULT 0,
+      browser_payment INTEGER NOT NULL DEFAULT 0,
       state TEXT NOT NULL,
       next_run_at TEXT,
       last_run_at TEXT,

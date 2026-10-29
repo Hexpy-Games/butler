@@ -1,4 +1,5 @@
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
+import { useConnectedAccounts } from "./hooks/useConnectedAccounts";
 import { useSavedKeys } from "./hooks/useSavedKeys";
 import { useGrants } from "./useGrants";
 import { memo, useId, useState } from "react";
@@ -19,6 +20,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
   useAppLocale();
   const security = useSecuritySettings();
   const savedKeys = useSavedKeys();
+  const accounts = useConnectedAccounts();
   const grants = useGrants();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const settingsCopy = appCopy.settings;
@@ -37,7 +39,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
           errorMessage={load === "admin-required" ? settingsCopy.security.adminRequired : undefined}
           onRetry={security.retry}
         />
-        {securityAuthoritySections({ savedKeys, grants })}
+        {securityAuthoritySections({ savedKeys, grants, accounts })}
       </SettingsPage>
     );
   }
@@ -60,7 +62,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
           <SecurityDevicesSection disabled={busy !== null} />
         </>
       )}
-      {securityAuthoritySections({ savedKeys, grants })}
+      {securityAuthoritySections({ savedKeys, grants, accounts })}
       {view && <SecurityAdvancedSection security={security} open={advancedOpen} onToggle={() => setAdvancedOpen(!advancedOpen)} />}
     </SettingsPage>
   );

@@ -7,6 +7,7 @@
 )]
 mod agent;
 mod assets;
+pub(super) mod blocks;
 mod migration;
 mod organize;
 mod pages;
@@ -192,5 +193,32 @@ async fn scrap_snapshots_stay_out_of_pages_and_leave_with_their_scrap() -> Resul
         page(&s, "/library/plain/snapshot").await?["html"],
         Value::Null
     );
+    s.finish().await
+}
+
+#[tokio::test]
+async fn crop_scraps_allow_no_source_and_reject_invalid_sources() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("LIBRARY-CROP-SOURCE")?.start().await?;
+    let mut item = scrap("crop", "Picture without a source page");
+    item["url"] = json!("");
+    ok(&s.gw.post("/library", item.clone()).await?);
+    let listed = page(&s, "/library?kind=scrap").await?;
+    assert_eq!(listed["items"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["items"][0]["url"], "");
+    assert_eq!(listed["items"][0]["crop"], item["crop"]);
+    for url in [
+        "file:///x",
+        "javascript:alert(1)",
+        "data:text/html,x",
+        " ",
+        "https://user:pass@example.com/",
+    ] {
+        item["url"] = json!(url);
+        let rejected = s.gw.post("/library", item.clone()).await?;
+        assert_eq!(rejected.status, 400, "{}", rejected.text);
+        assert_eq!(rejected.error_code(), Some("invalid_library_item"));
+    }
+    assert_eq!(page(&s, "/library?kind=scrap").await?, listed);
     s.finish().await
 }

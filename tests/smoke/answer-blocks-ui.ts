@@ -1,4 +1,5 @@
 // UI behavior E2E: product conversation, offline HTTP/desktop bridge stubs, no model calls.
+import { checkImageSizing, sizingAsset } from "./answer-image-sizing";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,6 +13,8 @@ import { fixtureItems } from "../../packages/butler-app/client/ui/src/libs/desig
 import { toMarkdown } from "../../packages/butler-app/client/shared/answer-blocks-markdown";
 
 const root = process.cwd();
+const only = process.env.BUTLER_ANSWER_ONLY;
+const sizingOnly = only === "image-sizing";
 const stage = process.env.BUTLER_ANSWER_STAGE ?? "after";
 const locale = process.env.BUTLER_ANSWER_LOCALE === "en" ? "en" : "ko";
 const labels = locale === "en" ? {
@@ -23,7 +26,7 @@ const labels = locale === "en" ? {
   showMore: "더 보기", showLess: "접기", moreItems: (count: number) => `${count}개 더 보기`,
   checkedTime: "오후 5:41", checkedLabel: "오후 5:41 확인 · musinsa.com",
 };
-const evidence = process.env.BUTLER_ANSWER_EVIDENCE ?? resolve(".tmp/answer-blocks-ui");
+const evidence = process.env.BUTLER_ANSWER_EVIDENCE ?? resolve(process.env.TMPDIR ?? "/tmp", "answer-blocks-ui");
 mkdirSync(evidence, { recursive: true });
 const mock = JSON.parse(readFileSync(join(root, "tests/smoke/answer-blocks-mock.json"), "utf8")) as AnswerBlocks;
 const neutral = JSON.parse(readFileSync(join(root, "packages/butler-agent/rust/crates/butler-e2e/tests/answer_blocks/fixtures.json"), "utf8")).specs.neutral as AnswerBlocks;
@@ -35,7 +38,7 @@ const baseline = process.env.BUTLER_ANSWER_BASELINE;
 const baselineSources = new Map<string, string>();
 if (baseline) {
   assert.equal(stage, "before", "baseline mode is for before captures only");
-  for (const name of ["AnswerBlocks", "AnswerCards", "AnswerDataBlocks"]) {
+  for (const name of ["AnswerBlocks", "AnswerContainers", "AnswerCards", "AnswerDataBlocks", "AnswerLeafBlocks"]) {
     const file = `packages/butler-app/client/ui/src/components/conversation/${name}.tsx`;
     baselineSources.set(resolve(root, file), execFileSync("git", ["show", `${baseline}:${file}`], { cwd: root, encoding: "utf8" }));
   }
@@ -110,7 +113,7 @@ async function checkMock(page: Page, width: number, theme: string, background: s
     else assert(state.cardWidth >= 168, "every desktop card is at least 168px");
     await page.waitForFunction(() => [...document.querySelectorAll('[data-slot="media-frame"]')].every(node => ["empty", "failed"].includes(node.getAttribute("data-fit") ?? "")));
     assert.equal(await page.locator('[data-answer-block="table"] tbody tr').count(), 4);
-    assert.equal(await page.locator('[data-answer-block="actions"] button').count(), 3);
+    assert.equal(await page.locator('[data-answer-block="actions"] button:not([aria-haspopup="menu"])').count(), 3);
     assert((await cards.first().innerText()).includes("76,390"));
     assert((await cards.nth(3).innerText()).includes("368,000"), "the struck-through value uses the same format");
     assert((await cards.first().innerText()).includes(labels.checkedTime));
@@ -204,17 +207,30 @@ async function checkCardTargetsAndViewer(page: Page, width: number, theme: strin
   // Hover styles apply on the next frame after the pointer moves.
   const background = () => first.evaluate(node => new Promise<string>(resolve => requestAnimationFrame(() => requestAnimationFrame(() =>
     resolve(getComputedStyle(node.firstElementChild!).backgroundColor)))));
+  // A reader's scroll releases the conversation's bottom lock; a programmatic reveal does not.
+  const scroller = page.locator('[data-test-class~="conversation-scroll"]');
+  await scroller.hover();
+  await page.mouse.wheel(0, -await scroller.evaluate(node => node.scrollHeight));
   await first.locator("li").first().scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
   const resting = await background();
   const fact = await first.locator("li").first().boundingBox();
   await page.mouse.move(fact!.x + fact!.width / 2, fact!.y + fact!.height / 2);
   const bodyHover = await background();
+  const hoverTarget = await first.evaluate((node, point) => ({
+    hit: document.elementFromPoint(point.x + point.width / 2, point.y + point.height / 2)?.outerHTML,
+    hovered: [...document.querySelectorAll(":hover")].map(element => ({ tag: element.tagName, slot: element.getAttribute("data-slot"), className: element.className })),
+    card: node.outerHTML,
+    surface: getComputedStyle(node.firstElementChild!).getPropertyValue("--surface-raised"),
+  }), fact!);
   await first.screenshot({ path: join(evidence, `card-hover-body-${locale}-${width}-${theme}.png`) });
   await first.getByRole("button", { name: labels.save, exact: true }).hover();
   const actionHover = await background();
   await first.locator('[data-item-card-media="viewer"]').hover();
   const pictureHover = await background();
   await first.screenshot({ path: join(evidence, `card-hover-picture-${locale}-${width}-${theme}.png`) });
+  geometry.push({ cardHover: { width, theme, resting, bodyHover, actionHover, pictureHover } });
+  writeFileSync(join(evidence, `card-hover-${locale}-${width}-${theme}.json`), JSON.stringify({ resting, bodyHover, actionHover, pictureHover, fact, hoverTarget }, null, 2));
   assert.notEqual(bodyHover, resting, "the card body shows the open affordance");
   assert.deepEqual([actionHover, pictureHover], [resting, resting], "actions and the picture drop the card's open hover");
   assert.equal(await first.locator('[data-item-card-media="viewer"]').evaluate(node => getComputedStyle(node).cursor), "zoom-in", "the picture reads as a viewer target");
@@ -286,7 +302,7 @@ async function checkLeniencyAndExpand(page: Page) {
 
   const longItems = dsItems.map(item => ({ ...item, text: `${item.text} ${item.text} ${item.text} ${item.text}` }));
   await open(page, { v: 1, blocks: [{ type: "cards", items: longItems }] }, 320, "light");
-  await page.getByRole("button", { name: labels.showMore, exact: true }).first().click();
+  await page.locator('[data-slot="item-card"]').getByRole("button", { name: labels.showMore, exact: true }).first().click();
   await page.getByRole("button", { name: labels.showLess, exact: true }).first().waitFor();
 
   const card = neutral.blocks[0]; assert(card.type === "cards");
@@ -310,6 +326,66 @@ async function checkLeniencyAndExpand(page: Page) {
   assert.equal(await page.locator("tbody tr").count(), 12);
 }
 
+async function checkV2(page: Page, width: number, theme: string, background: string) {
+  const fixture = JSON.parse(readFileSync(join(root, "tests/smoke/answer-blocks-mock.json"), "utf8"));
+  const spec = fixture.v2 as AnswerBlocks;
+  const expected = fixture.v2Markdown as string;
+  servePhotos = true;
+  await open(page, spec, width, theme, background);
+  if (stage === "after") {
+    const columns = page.locator('[data-slot="block-columns"] [data-answer-block]');
+    const [first, second] = await columns.evaluateAll(nodes => nodes.map(node => {
+      const { x, y, width, height } = node.getBoundingClientRect();
+      return { x, y, width, height };
+    }));
+    assert(first && second);
+    if (width === 1440) assert(Math.abs(first.y - second.y) < 2 && second.x > first.x + first.width, "desktop columns share a row");
+    else assert(second.y >= first.y + first.height && Math.abs(first.x - second.x) < 2, "phone columns stack");
+    const checks = page.getByRole("checkbox");
+    assert.equal(await checks.count(), 2);
+    assert.deepEqual(await checks.evaluateAll(nodes => nodes.map(node => [node.getAttribute("aria-checked"), node.getAttribute("aria-readonly")])), [["true", "true"], ["false", "true"]]);
+    await page.getByRole("tab", { name: "Picture", exact: true }).click();
+    await page.locator('[data-answer-block="image"]').waitFor({ state: "visible" });
+    const imageBlock = page.locator('[data-answer-block="image"]');
+    const frame = await imageBlock.locator('[data-slot="media-frame"]').boundingBox();
+    const target = await imageBlock.getByRole("button", { name: viewerLabels.view("Record image"), exact: true }).boundingBox();
+    assert(frame && frame.width > 0 && frame.height > 0, "the image frame has visible dimensions");
+    assert(target && target.width >= frame.width && target.height >= frame.height, "the click target contains the image");
+    await page.waitForFunction(() => (document.querySelector('[data-answer-block="image"] img') as HTMLImageElement | null)?.naturalWidth);
+    geometry.push({ v2Image: { width, theme, background, frame, target } });
+    await page.getByRole("button", { name: viewerLabels.view("Record image"), exact: true }).click();
+    await page.getByRole("dialog").waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog").waitFor({ state: "detached" });
+    await page.waitForFunction(label => document.activeElement?.getAttribute("aria-label") === label, viewerLabels.view("Record image"));
+    await page.getByRole("tab", { name: "Picture", exact: true }).focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.getByRole("tab", { name: "Status", exact: true, selected: true }).waitFor();
+    assert.equal(await page.getByRole("tab", { name: "Status", exact: true }).getAttribute("aria-selected"), "true");
+    const progress = page.getByRole("progressbar", { name: "Tasks", exact: true });
+    assert.equal(await progress.getAttribute("aria-valuenow"), "25");
+    await page.locator('[data-answer-block="metrics"]').scrollIntoViewIfNeeded();
+    const danger = await page.locator('[data-answer-block="metrics"]').evaluate(node => {
+      const delta = [...node.querySelectorAll("*")].find(child => child.textContent === "+2" && child.children.length === 0);
+      const sample = document.createElement("span"); sample.style.color = "var(--color-danger)"; node.append(sample);
+      const result = [delta ? getComputedStyle(delta).color : "missing", getComputedStyle(sample).color]; sample.remove(); return result;
+    });
+    assert.equal(danger[0], danger[1], "positive down-good delta uses danger");
+    await page.locator('[data-test-class="assistant-footer"]').getByRole("button", { name: new RegExp(labels.copy) }).click();
+    assert.equal(await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText), `${message(spec).text}\n\n${expected}`);
+  }
+  await page.locator('[data-test-class~="conversation-scroll"]').evaluate(node => { node.scrollTop = 0; });
+  await page.screenshot({ path: join(evidence, `${locale}-${stage}-v2-${width}-${theme}-${background}.png`) });
+  if (stage === "after") {
+    await page.getByRole("tab", { name: "Picture", exact: true }).click();
+    await page.locator('[data-answer-block="image"]').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(evidence, `${locale}-${stage}-v2-image-${width}-${theme}-${background}.png`) });
+    await page.locator('[data-answer-block="group"]').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(evidence, `${locale}-${stage}-v2-notes-${width}-${theme}-${background}.png`) });
+  }
+  servePhotos = false;
+}
+
 try {
   const page = await browser.newPage({ timezoneId: "Asia/Seoul", locale: locale === "en" ? "en-US" : "ko-KR", reducedMotion: "reduce" });
   await initialize(page);
@@ -328,6 +404,7 @@ try {
       const data = url.pathname === "/library" ? body : { accepted: { ...message(null), role: "user", text: body.text, id: body.client_message_id }, replies: [] };
       return route.fulfill({ json: { ok: true, data } });
     }
+    if (url.pathname.startsWith("/message-assets/img_small") || url.pathname.startsWith("/message-assets/img_large")) return sizingAsset(route);
     if (servePhotos && url.pathname.startsWith("/message-assets/")) {
       const ids = mock.blocks[0].type === "cards" ? mock.blocks[0].items.map(item => item.img) : [];
       const index = Math.max(0, ids.indexOf(decodeURIComponent(url.pathname.split("/").at(-1)!)));
@@ -344,15 +421,19 @@ try {
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     return route.continue();
   });
-  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkMock(page, width, theme, background);
-  if (stage === "after") {
+  if (!only || only === "existing") for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkMock(page, width, theme, background);
+  if (!only || only === "existing") for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkV2(page, width, theme, background);
+  if (!only || sizingOnly) for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
+    geometry.push(await checkImageSizing(page, open, width, theme, stage, locale, evidence, viewerLabels));
+  }
+  if (stage === "after" && !sizingOnly) {
     await checkInteractions(page);
     await checkCardTargetsAndViewer(page, 1440, "light");
     await checkCardTargetsAndViewer(page, 390, "dark");
     await checkLeniencyAndExpand(page);
   }
   assert.deepEqual(errors, [], "no uncaught renderer errors");
-  const result = { stage, ok: true, screenshots: stage === "after" ? 16 : 8, geometry, interactions: calls.map(call => call.path), modelCalls: 0 };
+  const result = { stage, ok: true, screenshots: stage === "after" ? 40 : 16, geometry, interactions: calls.map(call => call.path), modelCalls: 0 };
   result.screenshots += locale === "en" && stage === "after" ? 1 : 0;
   writeFileSync(join(evidence, `${locale}-${stage}-result.json`), JSON.stringify({ ...result, locale }, null, 2));
   console.log(JSON.stringify({ ...result, locale }));
