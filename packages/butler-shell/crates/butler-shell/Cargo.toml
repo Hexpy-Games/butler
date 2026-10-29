@@ -1,0 +1,23 @@
+[package]
+name = "butler-shell"
+description = "Butler's experimental native desktop shell (gpui)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+futures.workspace = true
+gpui.workspace = true
+# macos-wgpu: the glass lens is drawn by the wgpu renderer (Metal's renderer has no lens).
+gpui_platform = { workspace = true, features = ["macos-wgpu"] }
+unicode-segmentation.workspace = true
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+gpui_wgpu = { workspace = true, features = ["test-support"] }
