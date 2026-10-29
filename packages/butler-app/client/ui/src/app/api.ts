@@ -191,6 +191,16 @@ export async function uploadMessageFile(file: File, sessionId?: string): Promise
   return payload.data.file as MessageFileRef;
 }
 
+/** An image-edit mask is binary: like a message file it crosses the desktop bridge as bytes, not as a JSON route. */
+export async function uploadImageMask(session: string, image: string, mask: Blob): Promise<string> {
+  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  if (bridge) return unwrapBridgeResult(await callBridge<BridgeResult<{ id: string }>>(bridge, "uploadImageMask",
+    { session, image, bytes: new Uint8Array(await mask.arrayBuffer()) })).id;
+  const path = `/message-assets/masks?${new URLSearchParams({ session, for: image })}`;
+  return (await browserRequest<{ id: string }>(path, withActionTrace(path,
+    { method: "POST", body: mask, headers: { "content-type": "image/png" } }))).id;
+}
+
 export async function importSkillZip(file: File, projectId?: string): Promise<SkillImportResult> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (typeof bridge?.importSkill === "function") {
@@ -330,6 +340,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname.startsWith("/library/") && method === "DELETE") return callBridge<T>(bridge,"deleteLibrary",decodeURIComponent(url.pathname.slice(9)));
+  if (url.pathname === "/settings/image-model" && (method === "GET" || method === "PUT"))
+    return unwrapBridgeResult<T>(await callBridge(bridge, "imageModelSettings", { method, body: method === "PUT" ? parseBody(options.body) : undefined }));
+  if (method === "GET" && /^\/message-assets\/img_[a-z0-9]+\/(meta|versions)$/u.test(url.pathname))
+    return unwrapBridgeResult<T>(await callBridge(bridge, "imageAssetInfo", { path: url.pathname }));
   const asks = pendingAsksBridgeInput(url, method);
   if (asks) return await callBridge<T>(bridge, asks.method, asks.input);
   const canon = canonBridgeInput(url, method, () => parseBody(options.body));
@@ -541,7 +555,6 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/usage-history") {
     return await callBridge<T>(bridge, "getUsageHistory", { query: url.search });
   }
-  if (method === "GET" && url.pathname === "/settings/image-model") return await callBridge<T>(bridge, "getImageModelSettings");
   if (method === "GET" && url.pathname === "/usage/images") {
     return await callBridge<T>(bridge, "getImageUsage", { days: numericSearchParam(url.searchParams, "days") });
   }
@@ -817,6 +830,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       chatId: body.chat_id,
       text: body.text,
       contentParts: body.content_parts,
+      imageEdit: body.image_edit,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -839,6 +853,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       queuedMessageId: decodeURIComponent(queuedMessageMatch[1]!),
       text: body.text,
       contentParts: body.content_parts,
+      imageEdit: body.image_edit,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -869,6 +884,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       text: body.text,
       clientMessageId: body.client_message_id,
       contentParts: body.content_parts,
+      imageEdit: body.image_edit,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,

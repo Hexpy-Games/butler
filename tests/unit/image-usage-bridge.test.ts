@@ -8,13 +8,13 @@ test("image usage and selection reads cross the renderer bridge with their range
   const previous = globalThis.window;
   const reads: unknown[] = [];
   Object.assign(globalThis, { window: { location: { origin: "http://localhost" }, butlerApp: {
-    getImageModelSettings: async () => { reads.push("settings"); return { selected: null }; },
+    imageModelSettings: async (input: unknown) => { reads.push(input); return { ok: true, data: { selected: null } }; },
     getImageUsage: async (input: unknown) => { reads.push(input); return { models: [] }; },
   } } });
   try {
     expect(await api<{ selected: null }>("/settings/image-model")).toEqual({ selected: null });
     for (const days of [7, 30]) expect(await api<{ models: unknown[] }>(`/usage/images?days=${days}`)).toEqual({ models: [] });
-    expect(reads).toEqual(["settings", { days: 7 }, { days: 30 }]);
+    expect(reads).toEqual([{ method: "GET", body: undefined }, { days: 7 }, { days: 30 }]);
   } finally { Object.assign(globalThis, { window: previous }); }
 });
 
@@ -33,7 +33,7 @@ test("the actual preload forwards image reads to the authenticated native gatewa
     };
     require(${JSON.stringify(preload)});
     (async () => {
-      await bridge.getImageModelSettings();
+      await bridge.imageModelSettings();
       await bridge.getImageUsage();
       await bridge.getImageUsage({ days: 30 });
       process.stdout.write(JSON.stringify(reads));

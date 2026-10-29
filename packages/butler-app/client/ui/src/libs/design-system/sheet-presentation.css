@@ -1,0 +1,41 @@
+/* Menus, popovers and selects with presentation="sheet" (or "auto" on a
+   narrow screen) keep their Radix behaviour but open as a BottomSheet: the
+   popper wrapper is pinned to the bottom edge instead of the anchor (its
+   position is inline, hence !important; this also overrides the exit freeze
+   in overlay-exit.css), and its ::before is the backdrop. A tap on the
+   backdrop lands outside the content, which closes it. */
+[data-radix-popper-content-wrapper]:has(> [data-presentation="sheet"]) {
+  position: fixed !important;
+  inset: auto 0 0 !important;
+  min-width: 0 !important;
+  transform: none !important;
+  touch-action: none;
+}
+
+[data-radix-popper-content-wrapper]:has(> [data-presentation="sheet"])::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--dialog-overlay-bg);
+  animation: sheet-backdrop-in var(--motion-base) var(--motion-ease-standard);
+  content: "";
+}
+
+[data-radix-popper-content-wrapper]:has(
+    > [data-presentation="sheet"][data-state="closed"]
+  )::before {
+  animation: sheet-backdrop-out var(--motion-exit-slow)
+    var(--motion-ease-accelerate) forwards;
+}
+
+@keyframes sheet-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-backdrop-out {
+  to {
+    opacity: 0;
+  }
+}

@@ -62,7 +62,8 @@ export async function withBridge<T>(bridge: object, run: () => Promise<T>): Prom
 
 // Representative opaque IDs also exercise route tables that validate UUIDs, hashes or trace IDs.
 export const placeholders = ["x", "00000000-0000-4000-8000-000000000000", "a".repeat(64), "a".repeat(32),
-  `p-${"a".repeat(64)}`, "file-00000000-0000-4000-8000-000000000000", "/message-files/file-00000000-0000-4000-8000-000000000000"];
+  `p-${"a".repeat(64)}`, "file-00000000-0000-4000-8000-000000000000", "/message-files/file-00000000-0000-4000-8000-000000000000",
+  `img_${"a".repeat(10)}`];
 export interface RecordedRoute {
   route: Route; path: string; candidate: string; placeholder: string; invocations: Invocation[];
 }

@@ -1,4 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
+import { ImageModelsSettings } from "./ImageModelsSettings";
 import { useState } from "react";
 import { DisclosureRow } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -44,6 +45,9 @@ function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: bool
       </SettingsSection>
       <SettingsSection id="backup-models" kind="form" title={sections.backupModels}>
         <BackupModelsSummary />
+      </SettingsSection>
+      <SettingsSection id="image-models" kind="form" title={sections.imageModels}>
+        <ImageModelsSettings />
       </SettingsSection>
       <SettingsSection id="advanced-models" kind="form" title={settingsCopy.modelsAdvanced.title}>
         <DisclosureRow

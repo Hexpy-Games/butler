@@ -1,3 +1,4 @@
+import { imageApprovalMedia } from "../images/ImageApprovalMedia";
 import type { ComposerDecisionMedia } from "@/butler-ds";
 import { useBrowserDecisionMedia } from "./useBrowserDecisionMedia";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
@@ -49,7 +50,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   const canOpenTab = canOpenHandoffTab();
   const handoff = browserHandoffView(request, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
   return {
-    media,
+    media: imageApprovalMedia(request) ?? media,
     ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn,
       onOpenTab: () => media?.onOpen ? media.onOpen() : void openHandoffTab(sessionId),
       onStop: () => void useButlerStore.getState().cancelActiveTurn() } } : {}),

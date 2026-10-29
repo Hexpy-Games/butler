@@ -5,9 +5,12 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "../../lib/utils";
 import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "../../lib/theme";
 import { usePopperExitFreezeRef } from "../../lib/popperExit";
+import { useComposedRefs } from "../../lib/composeRefs";
 import { sheetSide, usePopoverSheet, useSheetCollisionPadding } from "../../lib/popoverSheet";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import styles from "../../components/Popover/Popover.module.css";
+import { DEFAULT_OVERLAY_PRESENTATION, useSheetPresentation, type OverlayPresentation } from "../../lib/presentation";
+import { PresentedSheetBody, PresentedSheetHandle, sheetContentProps } from "../../components/BottomSheet/SheetPresentation";
 
 function Popover({
   ...props
@@ -32,6 +35,9 @@ function PopoverContent({
   theme,
   width = "default",
   density = "default",
+  presentation,
+  children,
+  onKeyDown,
   ...props
 }: DsBaseProps<React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>> & {
   ref?: React.Ref<HTMLDivElement>;
@@ -44,11 +50,37 @@ function PopoverContent({
   width?: "default" | "narrow" | "anchor";
   /** `list`: a 4px inset and no gap, for a list of rows (suggestions, options) that brings its own row padding. */
   density?: "default" | "list";
+  /**
+   * `auto`: a BottomSheet below 768px. `sheet`: always. `popover`: anchored. Defaults to the app-wide
+   * default, except `width="anchor"`, which stays attached to its field.
+   */
+  presentation?: OverlayPresentation;
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
+  const surfaceRef = React.useRef<HTMLDivElement | null>(null);
+  const sheetRef = useComposedRefs<HTMLDivElement>(ref, surfaceRef);
+  const asSheet = useSheetPresentation(presentation ?? (width === "anchor" ? "popover" : DEFAULT_OVERLAY_PRESENTATION));
   // Mobile sheet (see Popover.module.css): left/right open below; keep clear of safe areas.
   const sheet = usePopoverSheet();
   const collisionPadding = useSheetCollisionPadding(sheet);
+  if (asSheet) {
+    // Focus moves into the sheet and returns to the trigger, unlike the anchored popover.
+    return (
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          ref={sheetRef}
+          data-slot="popover-content"
+          onCloseAutoFocus={onCloseAutoFocus}
+          onOpenAutoFocus={onOpenAutoFocus}
+          {...props}
+          {...sheetContentProps(cn(theme && adaptiveShellThemeClasses(theme), className), onKeyDown)}
+        >
+          <PresentedSheetHandle surfaceRef={surfaceRef} />
+          <PresentedSheetBody>{children}</PresentedSheetBody>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    );
+  }
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -71,8 +103,11 @@ function PopoverContent({
           onOpenAutoFocus?.(event);
           if (!event.defaultPrevented) event.preventDefault();
         }}
+        onKeyDown={onKeyDown}
         {...props}
-      />
+      >
+        {children}
+      </PopoverPrimitive.Content>
     </PopoverPrimitive.Portal>
   );
 }
