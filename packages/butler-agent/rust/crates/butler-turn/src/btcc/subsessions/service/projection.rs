@@ -141,6 +141,7 @@ impl SubsessionService {
         } else {
             None
         };
+        let subtasks = self.open_subtasks(vec![session_id.to_owned()]).await?;
         let mut projection =
             own.unwrap_or_else(|| json!({"session_id":session_id,"relation":null,"status":"idle"}));
         let object = projection.as_object_mut().ok_or_else(|| {
@@ -163,8 +164,7 @@ impl SubsessionService {
         }
         object.insert("steward_children".into(), json!(stewards));
         object.insert("workers".into(), json!(workers));
-        let subtasks = self.open_subtasks(vec![session_id.to_owned()]).await?;
-        projection["subtasks"] = json!(subtasks);
+        object.insert("subtasks".into(), json!(subtasks));
         Ok(projection)
     }
 

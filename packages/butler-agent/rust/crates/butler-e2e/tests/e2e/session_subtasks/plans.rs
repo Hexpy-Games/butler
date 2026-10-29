@@ -63,7 +63,10 @@ fn check(data: &std::path::Path) -> Result<(), HarnessError> {
 }
 
 /// 600 visible chats with 20,000 finished children and three open ones.
-fn seed(db: &Connection) -> Result<(Vec<String>, usize, Vec<(String, String)>), HarnessError> {
+/// Seeded parents, finished-history size, and the open (parent, relation) rows in read order.
+type Seeded = (Vec<String>, usize, Vec<(String, String)>);
+
+fn seed(db: &Connection) -> Result<Seeded, HarnessError> {
     let parents = (0..600)
         .map(|i| format!("seed-chat-{i:03}"))
         .collect::<Vec<_>>();

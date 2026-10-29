@@ -98,6 +98,12 @@ pub(super) fn require_relation(projection: &Value) -> Result<(), GatewayApplicat
     }
 }
 
+/// The steward children and the unfinished subtasks of a parent projection.
+pub(super) fn copy_children(output: &mut Map<String, Value>, source: &Value) {
+    copy(output, "steward_children", source);
+    copy(output, "subtasks", source);
+}
+
 pub(super) fn copy(output: &mut Map<String, Value>, key: &str, source: &Value) {
     if let Some(value) = source.get(key) {
         output.insert(key.into(), value.clone());
