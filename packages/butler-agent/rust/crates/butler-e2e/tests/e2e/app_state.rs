@@ -17,7 +17,7 @@ use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::media;
 use butler_e2e::e2e::provider::Pacing;
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use serde_json::{Value, json};
 
 const LONG: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
@@ -286,7 +286,7 @@ async fn start_slow_turn(s: &Scenario) -> Result<String, HarnessError> {
         });
     }
     let accepted = s.gw.say("general", LONG).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(20);
     while s.provider()?.served() == 0 {
         assert!(Instant::now() < deadline, "provider not reached");

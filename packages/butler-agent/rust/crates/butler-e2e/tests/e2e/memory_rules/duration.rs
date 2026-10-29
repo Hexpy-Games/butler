@@ -364,7 +364,7 @@ async fn instruction_capture_never_waits_for_an_active_owner_transaction()
         state.join("rule-crash-arm.json"),
         json!({"stage":"intent"}).to_string(),
     )?;
-    butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say("general", forget::CORRECT).await?)?;
+    s.gw.say_turn("general", forget::CORRECT).await?;
     support::until(|| state.join("rule-crash-reached.json").exists()).await;
     let other = support::new_chat(&s, "Capture while a canonical writer is active").await?;
     let captured = support::tool(&s, &other, SEVEN, "update_explicit_memory").await?;

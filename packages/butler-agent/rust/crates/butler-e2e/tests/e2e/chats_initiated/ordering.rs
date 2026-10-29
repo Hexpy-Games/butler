@@ -32,7 +32,7 @@ async fn active_turn_and_queued_followup_precede_schedule() -> Result<(), Harnes
     butler_e2e::gate!();
     let (s, address) = setup("SS2-ORDER", "2026-10-27T12:00:00.000Z").await?;
     let held = s.provider()?.hold_next_reply("Wait for the report.");
-    let first = accepted_turn_id(&s.gw.say("general", "Wait for the report.").await?)?;
+    let first = s.gw.say_turn("general", "Wait for the report.").await?;
     s.gw.wait_turn(
         "general",
         &first,

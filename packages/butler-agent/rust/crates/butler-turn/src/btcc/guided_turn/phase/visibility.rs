@@ -104,10 +104,15 @@ pub(super) fn legacy_authorized<'a>(
 
 fn authorize_canon(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
     if policy.role == PolicyRole::Butler && policy.subsession.is_none() {
-        names.extend(["canon_read".into(), "canon_propose".into()]);
+        names.extend([
+            "canon_read".into(),
+            "canon_propose".into(),
+            "canon_queue".into(),
+        ]);
     } else {
         names.remove("canon_read");
         names.remove("canon_propose");
+        names.remove("canon_queue");
     }
 }
 
@@ -285,7 +290,7 @@ pub(super) fn legacy_visible<'a>(
         names.insert("project_ledger_create");
     }
     if policy.role == PolicyRole::Butler {
-        names.extend(["canon_read", "canon_propose"]);
+        names.extend(["canon_read", "canon_propose", "canon_queue"]);
         names.extend(STEWARD_PARENT.iter().copied());
     }
     if policy.role == PolicyRole::Steward {
@@ -337,7 +342,10 @@ pub(super) fn legacy_visible<'a>(
 }
 
 pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool {
-    if matches!(tool.name.as_str(), "canon_read" | "canon_propose") {
+    if matches!(
+        tool.name.as_str(),
+        "canon_read" | "canon_propose" | "canon_queue"
+    ) {
         return true;
     }
     if phase == GuidedPhase::Execution {

@@ -8,6 +8,9 @@ pub(super) async fn route(
     uri: &Uri,
 ) -> Result<Response, HttpError> {
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
+    if matches!(parts.as_slice(), ["sessions", _, "canon", "queue", ..]) {
+        return super::canon_queue::route(state, request, &parts).await;
+    }
     if matches!(
         parts.as_slice(),
         ["canon", "proposals", _] | ["sessions", _, "canon", _]

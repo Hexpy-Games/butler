@@ -1,11 +1,11 @@
 //! Flat ordered steps: membership is the only source of prerequisite edges.
-use crate::work_types::TaskId;
+use crate::work_types::EpicId;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step {
     pub index: usize,
-    pub tasks: Vec<TaskId>,
+    pub tasks: Vec<EpicId>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chain {
@@ -26,7 +26,7 @@ pub enum ChainError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Placement {
     NewStep(usize),
-    Stack(TaskId),
+    Stack(EpicId),
 }
 
 impl Chain {
@@ -45,7 +45,7 @@ impl Chain {
         }
         Ok(())
     }
-    pub fn edges(&self) -> Result<Vec<(TaskId, TaskId)>, ChainError> {
+    pub fn edges(&self) -> Result<Vec<(EpicId, EpicId)>, ChainError> {
         self.validate()?;
         Ok(self
             .steps
@@ -60,14 +60,14 @@ impl Chain {
             })
             .collect())
     }
-    fn locate(&self, id: &TaskId) -> Result<(usize, usize), ChainError> {
+    fn locate(&self, id: &EpicId) -> Result<(usize, usize), ChainError> {
         self.steps
             .iter()
             .enumerate()
             .find_map(|(i, s)| s.tasks.iter().position(|w| w == id).map(|j| (i, j)))
             .ok_or(ChainError::Unknown)
     }
-    fn remove(&mut self, id: &TaskId) -> Result<(), ChainError> {
+    fn remove(&mut self, id: &EpicId) -> Result<(), ChainError> {
         let (i, j) = self.locate(id)?;
         self.steps[i].tasks.remove(j);
         if self.steps[i].tasks.is_empty() {
@@ -75,12 +75,12 @@ impl Chain {
         }
         Ok(())
     }
-    fn pin(&self, id: &TaskId) -> Option<(usize, BTreeSet<TaskId>)> {
+    fn pin(&self, id: &EpicId) -> Option<(usize, BTreeSet<EpicId>)> {
         let (index, _) = self.locate(id).ok()?;
         let predecessors = index.checked_sub(1).map(|i| &self.steps[i].tasks);
         Some((index, predecessors.into_iter().flatten().cloned().collect()))
     }
-    fn finish(&self, mut next: Self, running: &BTreeSet<TaskId>) -> Result<Self, ChainError> {
+    fn finish(&self, mut next: Self, running: &BTreeSet<EpicId>) -> Result<Self, ChainError> {
         self.validate()?;
         for (i, step) in next.steps.iter_mut().enumerate() {
             step.index = i;
@@ -96,9 +96,9 @@ impl Chain {
     /// Index is interpreted in the chain after removing the selected Task.
     pub fn move_to_new_step(
         &self,
-        id: &TaskId,
+        id: &EpicId,
         index: usize,
-        running: &BTreeSet<TaskId>,
+        running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
         let mut next = self.clone();
         next.remove(id)?;
@@ -116,9 +116,9 @@ impl Chain {
     }
     pub fn join_stack(
         &self,
-        id: &TaskId,
-        target: &TaskId,
-        running: &BTreeSet<TaskId>,
+        id: &EpicId,
+        target: &EpicId,
+        running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
         let mut next = self.clone();
         next.remove(id)?;
@@ -129,7 +129,7 @@ impl Chain {
     pub fn split_stack(
         &self,
         index: usize,
-        running: &BTreeSet<TaskId>,
+        running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
         let mut next = self.clone();
         let step = next.steps.get(index).ok_or(ChainError::Unknown)?.clone();
@@ -142,10 +142,10 @@ impl Chain {
         );
         self.finish(next, running)
     }
-    pub fn detach(&self, id: &TaskId, running: &BTreeSet<TaskId>) -> Result<Self, ChainError> {
+    pub fn detach(&self, id: &EpicId, running: &BTreeSet<EpicId>) -> Result<Self, ChainError> {
         self.delete(id, running)
     }
-    pub fn delete(&self, id: &TaskId, running: &BTreeSet<TaskId>) -> Result<Self, ChainError> {
+    pub fn delete(&self, id: &EpicId, running: &BTreeSet<EpicId>) -> Result<Self, ChainError> {
         let mut next = self.clone();
         next.remove(id)?;
         self.finish(next, running)
@@ -153,9 +153,9 @@ impl Chain {
     /// Join the next step's stack, or append a last step if the target is last.
     pub fn place_after(
         &self,
-        id: TaskId,
-        target: &TaskId,
-        running: &BTreeSet<TaskId>,
+        id: EpicId,
+        target: &EpicId,
+        running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
         if self.locate(&id).is_ok() {
             return Err(ChainError::Membership);
@@ -177,9 +177,9 @@ impl Chain {
     pub fn move_between(
         &self,
         target: &Self,
-        id: &TaskId,
+        id: &EpicId,
         placement: Placement,
-        running: &BTreeSet<TaskId>,
+        running: &BTreeSet<EpicId>,
     ) -> Result<(Self, Self), ChainError> {
         self.validate()?;
         target.validate()?;

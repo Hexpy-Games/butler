@@ -42,6 +42,7 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
     .map_err(AppStorageError::sqlite)?;
     db.execute("CREATE INDEX IF NOT EXISTS initiated_posting_chat_idx ON app_initiated_messages(chat_id) WHERE state='held' AND kind='work_result' AND posting=1", []).map_err(AppStorageError::sqlite)?;
     db.execute("CREATE INDEX IF NOT EXISTS initiated_stuck_chat_idx ON app_initiated_messages(chat_id,attempts) WHERE state='held' AND kind='work_result'", []).map_err(AppStorageError::sqlite)?;
+    db.execute_batch("CREATE INDEX IF NOT EXISTS initiated_chat ON app_initiated_messages(chat_id); CREATE INDEX IF NOT EXISTS initiated_canon_steps ON app_initiated_messages(kind,source_key) WHERE kind='canon_step';").map_err(AppStorageError::sqlite)?;
     migration::ensure_column(db, "turns", "quiet", "INTEGER NOT NULL DEFAULT 0")?;
     db.execute("UPDATE app_initiated_messages SET payload_json=json_remove(payload_json,'$.access_mode'),bypass_quiet_hours=NOT (COALESCE(json_extract(payload_json,'$.schedule_run.unattended'),0) OR COALESCE(json_extract(payload_json,'$.schedule_run.connector_event'),0)) WHERE state='held' AND kind='work_result' AND json_valid(payload_json)", [])
         .map_err(AppStorageError::sqlite)?;

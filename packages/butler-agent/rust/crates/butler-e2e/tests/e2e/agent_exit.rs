@@ -7,11 +7,7 @@
 )]
 #[path = "agent_exit/stub.rs"]
 mod stub;
-use butler_e2e::e2e::{
-    HarnessError,
-    gateway::turn_state,
-    scenario::{Setup, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, gateway::turn_state, scenario::Setup};
 use serde_json::json;
 use std::time::{Duration, Instant};
 
@@ -118,7 +114,7 @@ async fn runtime_interrupt_keeps_process_and_drains_followups_truthfully()
         .await?;
     std::fs::write(s.sandbox.data.join("e2e-interrupt-tool"), b"once")?;
     let pid = s.agent.pid();
-    let turn = accepted_turn_id(&s.gw.say("general", stub::PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", stub::PROMPT).await?;
     s.gw.post(
         "/session-queue",
         json!({"chat_id":"general","text":"Reply with exactly the word: waiting",

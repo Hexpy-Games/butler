@@ -7,9 +7,7 @@ use super::super::fill::keychain_opt_in;
 use super::super::tool::waiting_card;
 use super::{CANARY, CARD, CHECKOUT, Cleanup, admin, attach, snapshot, tab, vault_scenario};
 use crate::gateway_pairing::support::helpers::{browser, connect, cookie_pair, issue};
-use butler_e2e::e2e::{
-    HarnessError, cassette::Cassette, gateway::turn_state, scenario::accepted_turn_id,
-};
+use butler_e2e::e2e::{HarnessError, cassette::Cassette, gateway::turn_state};
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -58,7 +56,7 @@ async fn pay_fill_asks_on_the_phone_hands_3ds_to_the_user_and_resumes() -> Resul
         })
     })).await?;
     snapshot(&admin, json!([tab("t1", "agent", CHECKOUT)])).await?;
-    let id = accepted_turn_id(&s.gw.say("general", ASK).await?)?;
+    let id = s.gw.say_turn("general", ASK).await?;
     let card = waiting_card(&s, &id).await?;
     let operation = &card["approval"]["operation"];
     assert_eq!(operation["tool"], "browser_pay_fill", "{card}");

@@ -29,6 +29,7 @@ macro_rules! owner_visible {
          (m.text GLOB 'Subsession result'||char(10)||'*' \
           AND m.text GLOB '*'||char(10)||'Relation ref: relation-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*' \
           AND m.text GLOB '*'||char(10)||'Result ref: steward-result-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*') \
+         OR EXISTS (SELECT 1 FROM app_initiated_messages ci WHERE ci.message_id=m.id AND ci.kind='canon_step') \
          OR EXISTS (SELECT 1 FROM turns dt WHERE dt.user_message_id=m.id AND \
          CASE WHEN json_valid(dt.execution_controls_json) \
          THEN json_extract(dt.execution_controls_json,'$.subsession_result') END IS NOT NULL) \

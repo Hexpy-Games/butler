@@ -14,7 +14,7 @@ mod schedule_prompt_budget;
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
-use butler_e2e::e2e::scenario::{Setup, accepted_turn_id, turn_timeout};
+use butler_e2e::e2e::scenario::{Setup, turn_timeout};
 use schedule_cassette::{bridge_result, discovery_cassette};
 use serde_json::json;
 use std::time::Duration;
@@ -66,7 +66,7 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
         )
         .await?;
     assert_eq!(controls.status, 200, "{}", controls.text);
-    let turn_id = accepted_turn_id(&s.gw.say("general", ASK).await?)?;
+    let turn_id = s.gw.say_turn("general", ASK).await?;
     let turn =
         s.gw.wait_turn(
             "general",
@@ -186,7 +186,7 @@ async fn manage_schedule(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), 
         ("아침 브리핑 예약 작업을 일시 중지해 줘", "paused"),
         ("아침 브리핑 예약 작업을 삭제해 줘", "deleted"),
     ] {
-        let id = accepted_turn_id(&s.gw.say("general", ask).await?)?;
+        let id = s.gw.say_turn("general", ask).await?;
         let turn =
             s.gw.wait_turn(
                 "general",
@@ -372,7 +372,7 @@ async fn delete_approval_resolves_once_and_missing_schedules() -> Result<(), Har
             )
             .await?;
         assert_eq!(controls.status, 200, "{}", controls.text);
-        let id = accepted_turn_id(&s.gw.say("general", ask).await?)?;
+        let id = s.gw.say_turn("general", ask).await?;
         let turn =
             s.gw.wait_turn(
                 "general",

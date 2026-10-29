@@ -2,7 +2,7 @@
 use super::{forget, support};
 use butler_e2e::e2e::{
     HarnessError,
-    scenario::{Fixture, Setup, accepted_turn_id},
+    scenario::{Fixture, Setup},
 };
 use serde_json::json;
 use std::time::Duration;
@@ -59,7 +59,7 @@ async fn rules_old_cursors_exclude_corrected_and_forgotten_sources() -> Result<(
     ] {
         let gate = s.provider()?.hold_after_tool(FIRST);
         let first_request = s.provider()?.requests().len();
-        let turn_id = accepted_turn_id(&s.gw.say("general", FIRST).await?)?;
+        let turn_id = s.gw.say_turn("general", FIRST).await?;
         support::until(|| s.provider().unwrap().requests().len() >= first_request + 2).await;
         let first = committed_recall(&s.sandbox.data, &turn_id);
         assert_eq!(first["ok"], true, "{first}");

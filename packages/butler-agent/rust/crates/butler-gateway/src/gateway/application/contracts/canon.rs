@@ -64,10 +64,27 @@ pub const APP_PERSON_ID: &str = "app-user";
 
 #[derive(Clone, Debug)]
 pub enum AppCanonOperation {
+    Queue {
+        session_id: String,
+        action: String,
+        input: Value,
+    },
+    StepTurnEnded {
+        op_id: String,
+        outcome: String,
+    },
+    SessionDeleted {
+        session_hint: String,
+        op_id: String,
+    },
+    BoundSessions,
     Link {
         work_id: String,
         session_id: Option<String>,
         new_session_id: String,
+    },
+    PendingQueue {
+        after: i64,
     },
     Pending {
         after: String,
@@ -104,6 +121,9 @@ pub trait AppCanonPort: Send + Sync + 'static {
     fn project_scope(&self, _resource: AppCanonResource, _id: String) -> ApplicationFuture<String> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    /// Retry durable pending work after its application locks become available.
+    /// This is a memory-only signal, with no database mutation.
+    fn wake_replay(&self) {}
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
         None
     }

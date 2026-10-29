@@ -8,7 +8,7 @@
 use butler_e2e::e2e::{
     HarnessError,
     gateway::{tool_rows, turn_state},
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use serde_json::{Value, json};
 use std::{fs, time::Duration};
@@ -81,11 +81,9 @@ async fn cli_project_folder_next_turn_and_validation() -> Result<(), HarnessErro
                 .to_string_lossy()
                 .as_ref()
         );
-        let id = accepted_turn_id(
-            &s.gw
-                .say("general", "List my default project folder.")
-                .await?,
-        )?;
+        let id =
+            s.gw.say_turn("general", "List my default project folder.")
+                .await?;
         let waiting =
             s.gw.wait_turn(
                 "general",

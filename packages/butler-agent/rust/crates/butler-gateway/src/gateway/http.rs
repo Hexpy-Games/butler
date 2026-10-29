@@ -48,6 +48,7 @@ mod security;
 pub(super) use security::RequestPolicy;
 mod canon;
 mod canon_proposals;
+mod canon_queue;
 mod canon_sidebar;
 mod security_settings;
 mod session_branches;

@@ -7,11 +7,7 @@
 )]
 mod requires_e2e_fixtures;
 mod stub;
-use butler_e2e::e2e::{
-    HarnessError,
-    gateway::turn_state,
-    scenario::{Scenario, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, gateway::turn_state, scenario::Scenario};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 use stub::Stub;
@@ -104,7 +100,7 @@ async fn owner_flow() -> Result<(), HarnessError> {
     let (mut stub, setup) = Stub::setup().await?;
     let s = setup.start().await?;
     stub.attach(&s)?;
-    let running = accepted_turn_id(&s.gw.say("general", ORIGINAL).await?)?;
+    let running = s.gw.say_turn("general", ORIGINAL).await?;
     let held = stub.next().await;
     let correction = queue(&s, CORRECTION).await?;
     queue(&s, SECOND).await?;
@@ -166,7 +162,7 @@ async fn double_click() -> Result<(), HarnessError> {
     let (mut stub, setup) = Stub::setup().await?;
     let s = setup.start().await?;
     stub.attach(&s)?;
-    let running = accepted_turn_id(&s.gw.say("general", ORIGINAL).await?)?;
+    let running = s.gw.say_turn("general", ORIGINAL).await?;
     let held = stub.next().await;
     let correction = queue(&s, CORRECTION).await?;
     let (a, b) = tokio::join!(sent(&s, &correction), sent(&s, &correction));
@@ -188,7 +184,7 @@ async fn not_next() -> Result<(), HarnessError> {
     let (mut stub, setup) = Stub::setup().await?;
     let s = setup.start().await?;
     stub.attach(&s)?;
-    let running = accepted_turn_id(&s.gw.say("general", ORIGINAL).await?)?;
+    let running = s.gw.say_turn("general", ORIGINAL).await?;
     let held = stub.next().await;
     queue(&s, CORRECTION).await?;
     let second = queue(&s, SECOND).await?;
@@ -216,7 +212,7 @@ async fn finishing_turn() -> Result<(), HarnessError> {
     let (mut stub, setup) = Stub::setup().await?;
     let s = setup.start().await?;
     stub.attach(&s)?;
-    let running = accepted_turn_id(&s.gw.say("general", ORIGINAL).await?)?;
+    let running = s.gw.say_turn("general", ORIGINAL).await?;
     let held = stub.next().await;
     let correction = queue(&s, CORRECTION).await?;
     // Stop leaves the head queued after its active turn has ended.
@@ -251,7 +247,7 @@ async fn pending_approval() -> Result<(), HarnessError> {
         .start()
         .await?;
     stub.attach(&s)?;
-    let running = accepted_turn_id(&s.gw.say("general", ORIGINAL).await?)?;
+    let running = s.gw.say_turn("general", ORIGINAL).await?;
     stub.next().await.command();
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {

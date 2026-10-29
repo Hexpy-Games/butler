@@ -3,7 +3,7 @@ use super::observation_stub as provider;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Setup, accepted_turn_id, turn_timeout},
+    scenario::{Access, Setup, turn_timeout},
 };
 use serde_json::json;
 use std::time::{Duration, Instant};
@@ -64,7 +64,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1");
     let s = setup.start().await?;
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
-    let id = accepted_turn_id(&accepted)?;
+    let id = s.gw.accepted_turn(&accepted).await?;
     // Permission-tiers D1/R1: every normal-chat command asks in AskAlways,
     // including commands the executor will subsequently refuse as protected.
     if access == Access::AskAlways {

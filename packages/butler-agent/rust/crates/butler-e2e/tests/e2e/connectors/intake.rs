@@ -143,7 +143,7 @@ async fn pc6_attended_send_names_tool_and_recipient_and_destination_has_no_card(
     );
     s.provider()?.set_chat_responder(stub::send);
     let accepted = s.gw.say("general", "Send the connected item.").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     let waited =
         s.gw.wait_turn(
             "general",

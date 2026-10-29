@@ -206,7 +206,7 @@ async fn materialize_keeps_project_root_when_a_parent_directory_is_swapped()
     ]
     .into();
     let accepted = s.gw.say(&chat, "Write working notes").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     super::handoff::wait_for(|| release.with_extension("held").exists()).await;
     let project = std::path::PathBuf::from(project);
     let outside = s.sandbox.home.join("outside-files");

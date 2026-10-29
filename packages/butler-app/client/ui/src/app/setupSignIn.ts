@@ -1,13 +1,7 @@
 import { api } from "./api.ts";
 import type { OpenAIOAuthLoginResult } from "@/components/settings/modelManagementApi";
-export type { ChatGptSignInKind as SignInKind } from "./types.ts";
-import type { ChatGptSignInKind as SignInKind } from "./types.ts";
-export interface ChatGptAccountView {
-  status: "signed_out" | "legacy_sign_in_required" | "sign_in_required" | "plan_off" | "signed_in";
-  label: string | null;
-  plan_notice_pending: boolean;
-  legacy_prompt_pending: boolean;
-}
+export type { ChatGptAccountView, ChatGptSignInKind as SignInKind } from "./types.ts";
+import type { ChatGptAccountView, ChatGptSignInKind as SignInKind } from "./types.ts";
 export interface SignInSession { backend: "agent"; view: OpenAIOAuthLoginResult }
 export async function startSignIn(input: { force?: boolean; kind?: SignInKind } = {}): Promise<SignInSession> {
   return { backend: "agent", view: await api<OpenAIOAuthLoginResult>("/setup/oauth/start", {

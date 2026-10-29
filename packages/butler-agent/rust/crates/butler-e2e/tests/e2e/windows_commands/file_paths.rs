@@ -3,7 +3,7 @@ use super::capability_stub::{self as provider, Case};
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use serde_json::{Value, json};
 use std::{
@@ -333,7 +333,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
     for (index, case) in items.iter().enumerate() {
         script.select(case.clone());
         let accepted = s.gw.say("general", provider::PROMPT).await?;
-        let id = accepted_turn_id(&accepted)?;
+        let id = s.gw.accepted_turn(&accepted).await?;
         if access == Access::AskAlways {
             approve(&s, &id, case, &script).await?;
         }
@@ -421,7 +421,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
             continued.args["cursor"] = json!(cursor);
             script.select(continued.clone());
             let accepted = s.gw.say("general", provider::PROMPT).await?;
-            let id = accepted_turn_id(&accepted)?;
+            let id = s.gw.accepted_turn(&accepted).await?;
             if access == Access::AskAlways {
                 approve(&s, &id, &continued, &script).await?;
             }

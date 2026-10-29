@@ -7,7 +7,7 @@
 )]
 use butler_e2e::e2e::{
     HarnessError,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -110,7 +110,7 @@ pub(crate) async fn held(s: &Scenario, kind: &str, count: i64) -> Result<(), Har
 async fn completion(hold: &str, restart: bool) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start(false, true).await?;
     let (mut s, address) = setup("SS6-WORK", &url).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", "Prepare evidence.").await?)?;
+    let turn = s.gw.say_turn("general", "Prepare evidence.").await?;
     tokio::time::timeout(Duration::from_secs(30), script.held.acquire())
         .await
         .unwrap()

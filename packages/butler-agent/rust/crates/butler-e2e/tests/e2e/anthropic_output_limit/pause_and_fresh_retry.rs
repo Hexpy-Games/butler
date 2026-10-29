@@ -68,7 +68,7 @@ async fn failure_before_tools_can_retry_exactly_once() -> Result<(), HarnessErro
         s.gw.post(&format!("/turns/{id}/retry-current"), json!({}))
             .await?;
     assert_eq!(retry.status, 202, "{}", retry.text);
-    let next = butler_e2e::e2e::scenario::accepted_turn_id(retry.data())?;
+    let next = s.gw.accepted_turn(retry.data()).await?;
     let recovered =
         s.gw.wait_terminal(&chat, &next, Duration::from_secs(turn_timeout()))
             .await?;
@@ -91,10 +91,7 @@ async fn failure_before_tools_can_retry_exactly_once() -> Result<(), HarnessErro
         s.gw.post(&format!("/turns/{id}/retry-current"), json!({}))
             .await?;
     assert_eq!(retry.status, 202, "{}", retry.text);
-    assert_eq!(
-        butler_e2e::e2e::scenario::accepted_turn_id(retry.data())?,
-        next
-    );
+    assert_eq!(s.gw.accepted_turn(retry.data()).await?, next);
     assert_eq!(
         s.gw.messages(&chat)
             .await?

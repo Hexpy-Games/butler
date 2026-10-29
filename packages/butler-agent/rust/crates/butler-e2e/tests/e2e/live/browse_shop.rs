@@ -77,7 +77,7 @@ async fn run_shop(
     let prompt = format!(
         "At {url}, compare the two products and add the cheaper one to the cart. Continue to checkout and request approval to place the order, showing the exact action. Do not approve or place the order."
     );
-    let id = accepted_turn_id(&s.gw.say("general", &prompt).await?)?;
+    let id = s.gw.say_turn("general", &prompt).await?;
     let turn =
         s.gw.wait_turn(
             "general",

@@ -12,6 +12,9 @@ pub(super) async fn execute(
     input: Value,
 ) -> Result<Value, GatewayApplicationError> {
     match action {
+        "queue" | "queue_get" | "queue_edit" | "queue_hold" | "queue_take" => {
+            super::canon_queue::execute(app, action, input).await
+        }
         "get" => read::detail(app, field(&input, "id")?).await,
         "read" => read::canon_read(app, input).await,
         "propose" => propose(app, input).await,

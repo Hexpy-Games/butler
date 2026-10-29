@@ -10,7 +10,7 @@ use super::{approve, delivered, outputs, paused};
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
@@ -114,7 +114,7 @@ async fn approved(
         .lock()
         .unwrap()
         .insert(prompt.clone(), vec![mutation(id, command)]);
-    let turn = accepted_turn_id(&s.gw.say(chat, &prompt).await?)?;
+    let turn = s.gw.say_turn(chat, &prompt).await?;
     let state =
         s.gw.wait_turn(
             chat,

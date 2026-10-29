@@ -2,28 +2,21 @@ use std::{
     fs::{self, DirBuilder, File},
     io,
     os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt},
-    path::Path,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
-use rustix::fs::{Mode, OFlags, openat};
+use rustix::fs::{CWD, Mode, OFlags, RenameFlags, openat, renameat_with};
 
 fn directory(namespace: &str) -> io::Result<File> {
     let path = Path::new("/tmp").join(namespace);
-    let created = match DirBuilder::new().mode(0o1777).create(&path) {
-        Ok(()) => true,
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => false,
-        Err(error) => return Err(error),
+    let directory = match open_directory(&path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            publish_directory(&path)?;
+            open_directory(&path)?
+        }
+        opened => opened?,
     };
-    let directory = File::from(openat(
-        rustix::fs::CWD,
-        &path,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-        Mode::empty(),
-    )?);
-    if created {
-        // Only the directory we created is widened, regardless of umask.
-        directory.set_permissions(fs::Permissions::from_mode(0o1777))?;
-    }
     if directory.metadata()?.mode() & 0o7777 != 0o1777 {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
@@ -31,6 +24,46 @@ fn directory(namespace: &str) -> io::Result<File> {
         ));
     }
     Ok(directory)
+}
+
+fn open_directory(path: &Path) -> io::Result<File> {
+    Ok(File::from(openat(
+        CWD,
+        path,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?))
+}
+
+struct UnpublishedDirectory(PathBuf);
+
+impl Drop for UnpublishedDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir(&self.0);
+    }
+}
+
+fn publish_directory(path: &Path) -> io::Result<()> {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let namespace = path.file_name().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "lock directory needs a name")
+    })?;
+    let mut name = std::ffi::OsString::from(".");
+    name.push(namespace);
+    name.push(format!(
+        ".tmp-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let temporary = path.with_file_name(name);
+    DirBuilder::new().mode(0o700).create(&temporary)?;
+    let temporary = UnpublishedDirectory(temporary);
+    // Publish only after chmod: mkdir's requested mode is filtered by umask.
+    fs::set_permissions(&temporary.0, fs::Permissions::from_mode(0o1777))?;
+    match renameat_with(CWD, &temporary.0, CWD, path, RenameFlags::NOREPLACE) {
+        Ok(()) | Err(rustix::io::Errno::EXIST) => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 pub(super) fn open(namespace: &str, name: &str) -> io::Result<File> {

@@ -108,7 +108,9 @@ async fn scheduled_child(resume_mode: &str) -> Result<(), HarnessError> {
         200
     );
     *script.relation.lock().unwrap() = relation;
-    let followup = accepted_turn_id(&s.gw.say("general", "Check the evidence again.").await?)?;
+    let followup =
+        s.gw.say_turn("general", "Check the evidence again.")
+            .await?;
     s.gw.wait_terminal("general", &followup, Duration::from_secs(30))
         .await?;
     let deadline = Instant::now() + Duration::from_secs(30);

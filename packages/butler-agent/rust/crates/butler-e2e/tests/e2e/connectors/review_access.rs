@@ -69,7 +69,7 @@ async fn review_attended_origin_requires_card_and_user_full_access_still_execute
         connection.execute("INSERT INTO app_connector_deliveries(id,account,payload,created_at,admitted_at) VALUES('attended-event',?1,'{}',0,'done')", [&id])?;
         drop(connection);
         let accepted = s.gw.send_message(json!({"chat_id":"general","text":"External event body","client_message_id":"attended-event"})).await?;
-        let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+        let turn = s.gw.accepted_turn(&accepted).await?;
         let waited =
             s.gw.wait_turn(
                 "general",

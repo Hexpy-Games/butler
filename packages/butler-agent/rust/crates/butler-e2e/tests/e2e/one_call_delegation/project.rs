@@ -1,6 +1,6 @@
 //! Project Ledger parent and child Work, including a crash before delegation.
 use super::*;
-use butler_e2e::e2e::scenario::{Scenario, accepted_turn_id};
+use butler_e2e::e2e::scenario::Scenario;
 use tokio::io::AsyncReadExt;
 
 #[tokio::test]
@@ -49,7 +49,7 @@ async fn project_flow(crash: bool, settle_crash: bool) -> Result<(), HarnessErro
     std::fs::write(workspace.join("source.txt"), "source evidence")?;
     bind_epic(&s, &script, &project, &chat).await?;
     let accepted = s.gw.say(&chat, stub::REQUEST).await?;
-    let turn = accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     if crash {
         crash_plan(&mut s, &barrier, &project, &turn, &chat).await?;
     }
