@@ -132,9 +132,6 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.branch_source_owned(session_id).await })
     }
-    fn list_revision(&self) -> ApplicationFuture<i64> {
-        self.list_revision_read()
-    }
     fn list_chats(&self, page: Option<AppListPage>) -> ApplicationFuture<Vec<AppChatSummary>> {
         self.list_chats_read(page)
     }

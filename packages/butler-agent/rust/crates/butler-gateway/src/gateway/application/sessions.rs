@@ -262,23 +262,6 @@ impl AppApplication {
         Box::pin(async move { this.list_sessions_page(kind, project_id, page).await })
     }
 
-    pub(crate) fn list_revision_read(&self) -> crate::gateway::ApplicationFuture<i64> {
-        let this = self.clone_handle();
-        Box::pin(async move {
-            this.storage
-                .read(|db| {
-                    db.query_row(
-                        "SELECT revision FROM app_list_revision WHERE id=1",
-                        [],
-                        |r| r.get(0),
-                    )
-                    .map_err(AppStorageError::sqlite)
-                })
-                .await
-                .map_err(app_error)
-        })
-    }
-
     pub(crate) async fn list_chats(
         &self,
         page: Option<AppListPage>,

@@ -1,8 +1,8 @@
-//! Small paging scenarios keep the Electron wire contract and a stable traversal.
+//! Small paging scenarios keep the Electron wire contract and a live traversal.
 use super::*;
 
 #[tokio::test]
-async fn updated_page_two_chat_is_returned_once_in_snapshot_order() -> Result<(), TestError> {
+async fn live_pages_return_each_unmoved_chat_once() -> Result<(), TestError> {
     butler_e2e::gate!();
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let clock = listener.local_addr()?.to_string();
@@ -70,15 +70,23 @@ async fn check_pages(
     };
     assert_eq!(rows.len(), 6);
     let changed = rows[3]["id"].as_str().unwrap();
+    let archived = rows[4]["id"].as_str().unwrap();
     crate::chats_initiated::support::clock(clock, now).await?;
+    let accepted = client.post_message(changed, now, "Reply briefly").await?;
+    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    s.gw.wait_terminal(changed, turn.as_str(), Duration::from_secs(30))
+        .await?;
     assert_eq!(
-        s.gw.patch(
-            &format!("/sessions/{changed}"),
-            json!({"title":"updated page two"})
-        )
-        .await?
-        .status,
+        s.gw.patch(&format!("/sessions/{archived}"), json!({"archived":true}))
+            .await?
+            .status,
         200
+    );
+    assert_eq!(
+        s.gw.post("/sessions", json!({"kind":"chat","title":"new chat"}))
+            .await?
+            .status,
+        201
     );
     let latest = s.gw.get(route).await?;
     let latest = if sessions {
@@ -86,8 +94,14 @@ async fn check_pages(
     } else {
         latest.data()
     };
-    assert_eq!(
-        latest[0]["id"], changed,
+    assert!(
+        latest
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|row| row["id"] == changed)
+            .unwrap()
+            < 2,
         "the update really moved a page-2 item before the cursor"
     );
     let mut items = first.items;
@@ -99,14 +113,21 @@ async fn check_pages(
         cursor = next.next_cursor;
     }
     assert!(cursor.is_none());
-    assert_eq!(items.len(), rows.len());
-    assert_eq!(
-        items.iter().map(|v| &v["id"]).collect::<Vec<_>>(),
-        rows.iter().map(|v| &v["id"]).collect::<Vec<_>>()
-    );
-    assert_eq!(
-        items.iter().find(|v| v["id"] == changed).unwrap()["title"],
-        "updated page two"
-    );
+    let ids: std::collections::HashSet<_> =
+        items.iter().map(|v| v["id"].as_str().unwrap()).collect();
+    assert_eq!(ids.len(), items.len(), "no duplicate rows");
+    assert!(!ids.contains(archived), "archive must apply to later pages");
+    let unmoved: Vec<_> = rows
+        .iter()
+        .map(|v| v["id"].as_str().unwrap())
+        .filter(|id| *id != changed && *id != archived)
+        .collect();
+    assert_eq!(unmoved.len(), 4);
+    let actual: Vec<_> = items
+        .iter()
+        .map(|v| v["id"].as_str().unwrap())
+        .filter(|id| unmoved.contains(id))
+        .collect();
+    assert_eq!(actual, unmoved, "all unmoved rows appear once in order");
     Ok(())
 }

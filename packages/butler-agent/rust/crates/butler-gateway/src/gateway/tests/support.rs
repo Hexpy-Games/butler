@@ -188,9 +188,6 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<AppCreateSessionResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn list_revision(&self) -> ApplicationFuture<i64> {
-        Box::pin(async { Ok(0) })
-    }
     fn list_chats(&self, _page: Option<AppListPage>) -> ApplicationFuture<Vec<AppChatSummary>> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

@@ -21,7 +21,7 @@ use crate::gateway::{
 };
 
 pub(super) async fn chats(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
-    let page = page_params(&state, uri).await?;
+    let page = page_params(&state, uri)?;
     let chats = state
         .application
         .list_chats(page.clone().map(|mut page| {
@@ -45,7 +45,7 @@ pub(super) async fn list(state: Arc<HttpState>, uri: &Uri) -> Result<Response, H
         .filter(|kind| matches!(kind.as_str(), "chat" | "project"))
         .cloned();
     let project_id = params.get("project_id").cloned();
-    let page = page_params(&state, uri).await?;
+    let page = page_params(&state, uri)?;
     let sessions = state
         .application
         .list_sessions(
@@ -156,7 +156,7 @@ fn parse_request(value: &Value) -> Option<AppCreateSessionRequest> {
     })
 }
 
-async fn page_params(state: &HttpState, uri: &Uri) -> Result<Option<AppListPage>, HttpError> {
+fn page_params(state: &HttpState, uri: &Uri) -> Result<Option<AppListPage>, HttpError> {
     let params = query(uri);
     if !params.contains_key("limit")
         && !params.contains_key("cursor")
@@ -183,10 +183,10 @@ async fn page_params(state: &HttpState, uri: &Uri) -> Result<Option<AppListPage>
     let cursor = if let Some(token) = params.get("cursor") {
         decode_cursor(token, &state.session_cursor_secret, &scope)?
     } else {
-        let expires = now() + 300;
         AppListCursor {
-            revision: state.application.list_revision().await?,
-            expires,
+            pinned: false,
+            updated_at: String::new(),
+            created_at: String::new(),
             after: None,
             scope,
         }
@@ -207,12 +207,17 @@ fn page_response<T: serde::Serialize>(
         rows.truncate(page.limit as usize);
         let next = if more {
             let mut cursor = page.cursor;
-            cursor.after = Some(
-                rows.last()
-                    .and_then(|r| r["id"].as_str())
-                    .ok_or(HttpError::Internal)?
-                    .into(),
-            );
+            let last = rows.last().ok_or(HttpError::Internal)?;
+            let string = |key: &str| {
+                last[key]
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or(HttpError::Internal)
+            };
+            cursor.after = Some(string("id")?);
+            cursor.pinned = last["pinned"].as_bool().unwrap_or(false);
+            cursor.updated_at = string("updated_at")?;
+            cursor.created_at = string("created_at")?;
             Some(encode_cursor(&cursor, secret)?)
         } else {
             None
@@ -225,11 +230,6 @@ fn page_response<T: serde::Serialize>(
     }
 }
 
-fn now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
-}
 fn encode_cursor(cursor: &AppListCursor, secret: &str) -> Result<String, HttpError> {
     let payload =
         URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).map_err(|_| HttpError::Internal)?);
@@ -245,7 +245,7 @@ fn decode_cursor(token: &str, secret: &str, scope: &str) -> Result<AppListCursor
     }
     let decoded = URL_SAFE_NO_PAD.decode(payload).map_err(|_| resync())?;
     let cursor: AppListCursor = serde_json::from_slice(&decoded).map_err(|_| resync())?;
-    if cursor.expires <= now() || cursor.scope != scope {
+    if cursor.scope != scope {
         return Err(resync());
     }
     Ok(cursor)
