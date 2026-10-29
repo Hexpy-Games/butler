@@ -32,6 +32,9 @@ const SURFACE: &[&str] = &[
     "provider_unsupported_capability",
     "provider_unsupported_input",
     "provider_response_incomplete",
+    "provider_response_refused",
+    "provider_stop_unrecognized",
+    "provider_output_truncated",
     "admission_invariant_violation",
     "provider_auth_error",
     "provider_context_limit_exceeded",
@@ -96,10 +99,11 @@ pub(super) fn reduce_outer(error: ModelRoundError) -> ReducedModelError {
             ReducedModelError::Operational(RuntimeFailure::new("turn_cancelled", false))
         }
         ModelRoundError::RequestAdmission(_)
-        | ModelRoundError::InvocationFailure { .. }
         | ModelRoundError::StablePrefix(_)
-        | ModelRoundError::ImageAdmission { .. }
-        | ModelRoundError::DispatchLimit => {
+        | ModelRoundError::ImageAdmission { .. } => {
+            ReducedModelError::Operational(RuntimeFailure::new("gateway_failed", false))
+        }
+        ModelRoundError::InvocationFailure { .. } | ModelRoundError::DispatchLimit => {
             ReducedModelError::Operational(RuntimeFailure::new("gateway_failed", true))
         }
     }

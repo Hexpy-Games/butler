@@ -34,6 +34,7 @@ struct State {
 }
 
 pub(crate) struct ConversationObserver {
+    continuity: Arc<Mutex<Option<Arc<crate::host::memory_jobs::continuity::Continuity>>>>,
     state: Mutex<State>,
 }
 
@@ -49,6 +50,10 @@ impl ConversationObserver {
         let now_iso = Arc::new(move || clock.now_iso());
         let publisher = CompletionPublisher::new(data_root, paths, now_iso);
         let metrics = ConversationMetrics::new(metric_files);
+        let continuity: Arc<Mutex<Option<Arc<crate::host::memory_jobs::continuity::Continuity>>>> =
+            Arc::new(Mutex::new(None));
+        let fold_owner = continuity.clone();
+        let runtime = tokio::runtime::Handle::current();
         let mut prewarm = prewarm::Prewarm::new(data_root, paths, embedding);
         let worker = std::thread::Builder::new()
             .name("butler-completion-observer".into())
@@ -72,19 +77,33 @@ impl ConversationObserver {
                             prewarm.on_admission(&input);
                         }
                         Job::Completion(input) => {
-                            let published = publisher.publish(&input);
-                            metrics.completion(input.project_id.is_some(), published.is_ok());
+                            let fold = runtime.block_on(fold_owner.lock()).clone();
+                            if let Some(fold) = fold {
+                                runtime.block_on(fold.notify(input.clone()));
+                            }
+                            if !input.outbound_message_id.is_empty() {
+                                let published = publisher.publish(&input);
+                                metrics.completion(input.project_id.is_some(), published.is_ok());
+                            }
                         }
                     }
                 }
                 prewarm.drain();
             })?;
         Ok(Self {
+            continuity,
             state: Mutex::new(State {
                 sender: Some(sender),
                 worker: Some(worker),
             }),
         })
+    }
+
+    pub(crate) async fn set_continuity(
+        &self,
+        owner: Arc<crate::host::memory_jobs::continuity::Continuity>,
+    ) {
+        *self.continuity.lock().await = Some(owner);
     }
 
     async fn enqueue(&self, job: Job) -> Result<(), ConversationError> {
@@ -122,6 +141,9 @@ impl ConversationObserver {
                     .with_source(error)
                 })?
                 .map_err(|_| closed())?;
+        }
+        if let Some(owner) = self.continuity.lock().await.as_ref() {
+            owner.close().await;
         }
         Ok(())
     }

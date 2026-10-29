@@ -1,5 +1,4 @@
-//! This process's stdin and stdout as one async byte stream, for protocols
-//! spoken over stdio (the MCP server).
+//! This process's diagnostic output and async stdio protocol transport.
 //!
 //! Reading never occupies a runtime worker, so shutting the runtime down
 //! never waits for input that may never come: Unix reads non-blocking
@@ -58,4 +57,14 @@ impl AsyncWrite for ProcessStdio {
     fn poll_shutdown(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.get_mut().0).poll_shutdown(context)
     }
+}
+
+/// Writes a complete diagnostic line with one stderr write. Format before
+/// locking stderr: formatted writes otherwise issue a write per argument and
+/// literal, multiplying file I/O and lock contention on diagnostic-heavy paths.
+/// No lines or fields are dropped, and no background writer is kept alive.
+pub fn diagnostic_line(arguments: std::fmt::Arguments<'_>) {
+    let mut line = std::fmt::format(arguments);
+    line.push('\n');
+    eprint!("{line}");
 }

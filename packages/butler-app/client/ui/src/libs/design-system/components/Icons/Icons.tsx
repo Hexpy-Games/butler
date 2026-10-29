@@ -14,7 +14,7 @@ import {
   ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowUpDownIcon, AttachmentIcon,
   BookOpen01Icon, BotIcon, Briefcase01Icon, BubbleChatIcon, Cancel01Icon, CancelCircleIcon,
   CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
-  Copy01Icon, CubeIcon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
+  Copy01Icon, Heading01Icon, LeftToRightListBulletIcon, TextBoldIcon, CubeIcon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
   FilterIcon, Flag02Icon, FloppyDiskIcon, Folder01Icon, Folder02Icon, FolderAddIcon, GitBranchIcon,
   Globe02Icon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
   MessageAdd01Icon, MinusSignIcon, Moon02Icon, MoreHorizontalIcon as MoreHorizontalGlyph,
@@ -60,6 +60,9 @@ export const Circle = createIcon(CircleIcon);
 export const Clock3 = createIcon(Clock03Icon);
 export const Command = createIcon(CommandIcon);
 export const Copy = createIcon(Copy01Icon);
+export const Bold = createIcon(TextBoldIcon);
+export const Heading = createIcon(Heading01Icon);
+export const ListBullet = createIcon(LeftToRightListBulletIcon);
 export const Database = createIcon(DatabaseIcon);
 /** Six-dot vertical grip for drag handles (sortable rows and cards). */
 export const GripVertical = createIcon(DragDropVerticalIcon);

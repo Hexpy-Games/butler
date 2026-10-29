@@ -14,7 +14,7 @@ function ToolbarAddress() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The browser toolbar's address: security glyph, bold host with a muted path, tags and the star; a click edits the full URL.",
+  purpose: "The browser toolbar's address (34px, --control-height-lg, as heavy as the tabs above it): security glyph, bold host with a muted path, tags and the star; a click edits the full URL.",
   whenToUse: ["The address in BrowserToolbar", "Address suggestions while typing (listbox, onInputChange, onInputKeyDown with SuggestionList)", "A Butler page's name in the same place (library, new tab)"],
   whenNotToUse: [
     { when: "A plain URL setting in a form", use: "Input" },
@@ -33,5 +33,5 @@ export const guidance: ShowcaseGuidance = {
     "The whole field shows the focus ring while editing; the lock and warning glyphs carry their own names.",
     "With listbox={{ id, expanded, activeOptionId }} the editing input is a combobox for a SuggestionList; arrows move the highlight while focus stays in the field.",
   ],
-  tokens: ["--control-height-md", "--selection", "--focus-ring", "--radius-control", "--placeholder"],
+  tokens: ["--control-height-lg", "--selection", "--focus-ring", "--radius-pill", "--placeholder"],
 };

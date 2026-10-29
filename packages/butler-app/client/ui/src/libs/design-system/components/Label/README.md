@@ -30,6 +30,14 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.
 - Keep domain data, app state, and business decisions outside this component.
 
+## Label and switch
+A switch field stacks like an input: the label, its description, then the
+switch underneath, left-aligned (a vertical `Field`, or `SettingsField` in
+settings). The row layout (label and switch on one row, the switch at the
+row end) is `Field orientation="horizontal"`, only on a phone or for a list
+item inside a card or list row. Never put a switch before its label. See
+Switch, "Placement".
+
 ## Wrong use cases
 - Do not use Label as a domain-specific component with embedded feature logic; create a domain component under `src/components` and compose this component instead.
 - Do not import from `@/butler-ds/shadcn/ui` in app code; import from `@/butler-ds` so the public API remains stable.

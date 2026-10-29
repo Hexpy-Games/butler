@@ -205,6 +205,8 @@ pub struct ReviewCommand {
 /// A validated disposition with its normalized content and expected material.
 #[derive(Clone, Debug)]
 pub struct DispositionCommand {
+    /// Runtime result authority; absent on model-authored Work mutations.
+    pub delegated_result_id: Option<String>,
     pub input: DispositionInput,
     pub request_sha256: String,
     pub normalized_summary: String,

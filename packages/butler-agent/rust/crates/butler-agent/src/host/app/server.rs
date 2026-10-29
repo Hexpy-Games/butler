@@ -46,7 +46,7 @@ pub(crate) struct AppServer {
     /// Bound address, kept after the listener stops.
     address: SocketAddr,
     listener_ready: Arc<AtomicBool>,
-    application: Arc<AppApplication>,
+    pub(super) application: Arc<AppApplication>,
     artifacts: Arc<AppMessageFiles>,
     setup: AppSetup,
 }
@@ -148,6 +148,22 @@ impl AppServer {
         )
         .await?;
         let application = open_application(app_config, data_root, dependencies, &owners).await?;
+        use butler_core::plugins::PluginPort;
+        crate::host::plugins::Admin(runtime.plugins.clone())
+            .bind_connector_store(application.connector_store());
+        let memory_application = Arc::downgrade(&application);
+        runtime
+            .daily_cognition
+            .gate
+            .set_sink(Arc::new(move |payload| {
+                let application = memory_application.upgrade();
+                Box::pin(async move {
+                    if let Some(application) = application {
+                        application.memory_event_sink()(payload).await?;
+                    }
+                    Ok(())
+                })
+            }));
         let draft_application = Arc::downgrade(&application);
         runtime.answer_drafts.set_sink(Arc::new(move |payload| {
             if let Some(application) = draft_application.upgrade() {

@@ -1,0 +1,146 @@
+/* DocumentEditor: a title row over the page. The page takes MarkdownContent's
+   document typography (the .markdown class) and adds only what editing needs. */
+.editor {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: var(--space-lg);
+}
+
+/* The title line is one control tall (the touch target where controls grow
+   to it, as IconButton does), and the title and the actions are centred on
+   it; the status line is a second row under the title, so it never moves
+   them. A title taller than a control grows the line, and the actions stay
+   centred on it. */
+.header {
+  --document-title-line: var(--control-height-md);
+
+  container: document-title / inline-size;
+
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(var(--document-title-line), auto);
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+}
+
+@media (width <= 640px) {
+  .header:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    --document-title-line: max(
+      var(--control-height-md),
+      var(--control-hit-target)
+    );
+  }
+}
+
+@media (pointer: coarse) {
+  .header {
+    --document-title-line: max(
+      var(--control-height-md),
+      var(--control-hit-target)
+    );
+  }
+}
+
+.title {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.header > .status {
+  grid-area: 2 / 1;
+}
+
+.status {
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+
+.actions,
+.inline {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.actions {
+  grid-area: 1 / 2;
+}
+
+/* A narrow title line folds the document actions into the ⋯ menu (when the
+   caller gives menuActions), so the title keeps the width; host controls
+   such as close stay. Below 30rem the touch-size actions, close and back
+   would take about half the line; a phone's line is well under it and a
+   side panel's well over it. */
+.menu {
+  display: none;
+}
+
+@container document-title (width < 30rem) {
+  .actions[data-folds="true"] > .inline {
+    display: none;
+  }
+
+  .actions[data-folds="true"] > .menu {
+    display: flex;
+  }
+}
+
+.page {
+  min-width: 0;
+}
+
+/* The editable root: no outline of its own (the page is the field), the
+   caret in the accent, room under the last line. */
+.root {
+  min-height: 12rem;
+  padding-block-end: var(--space-2xl);
+  caret-color: var(--accent);
+  outline: none;
+}
+
+/* The page starts at its first line: the first block (often a heading)
+   drops its top margin, as MarkdownContent's direct children do. */
+.root > :first-child {
+  margin-block-start: 0;
+}
+
+.bold {
+  font-weight: var(--font-weight-semibold);
+}
+
+.italic {
+  font-style: italic;
+}
+
+/* A block in the text: its own spacing, an outline when selected as a unit. */
+.blockEmbed {
+  margin-block: var(--space-md);
+  border-radius: var(--radius-control);
+  outline: var(--border-width-strong) solid transparent;
+  outline-offset: var(--space-xs);
+  transition: outline-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.blockEmbed[data-selected="true"] {
+  outline-color: var(--accent);
+}
+
+/* Butler is changing this paragraph: a wash of the Butler inks and an ink
+   rule at the start edge, fading in; it fades out when the change lands. */
+.page [data-butler-editing] {
+  border-radius: var(--radius-control);
+  background: transparent;
+  box-shadow: inset var(--border-width-strong) 0 0 transparent;
+  transition:
+    background-color var(--motion-slow) var(--motion-ease-standard),
+    box-shadow var(--motion-slow) var(--motion-ease-standard);
+}
+
+.page [data-butler-editing="true"] {
+  background: color-mix(in srgb, var(--butler-ink-purple) 9%, transparent);
+  box-shadow: inset var(--border-width-strong) 0 0 var(--butler-ink-blue);
+}

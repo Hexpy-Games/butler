@@ -1,0 +1,172 @@
+/* TimePicker. Tokens only; the field
+   matches Input/Select (height, line, radius, raised surface, accent border
+   on focus, --focus-ring on keyboard focus). */
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  width: 100%;
+  min-width: 0;
+  block-size: var(--control-height-lg);
+  padding: 0 var(--space-xs) 0 var(--space-sm);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  color: var(--text-primary);
+  transition: border-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.field:focus-within,
+.field[data-open] {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+}
+
+/* The ring sits outside the field, like Input; settings rows leave
+   --focus-ring-room around controls, so it is never clipped. */
+.field:has(.segment:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+.field[data-disabled] {
+  background: var(--color-disabled-bg);
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
+}
+
+.segments {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.segmentWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Hour and minute read as one time ("04:00"); the day period stands apart. */
+.segmentWrap:has([data-segment="period"]):first-child {
+  margin-inline-end: var(--space-xs);
+}
+
+.segmentWrap:has([data-segment="period"]):last-child {
+  margin-inline-start: var(--space-xs);
+}
+
+.separator {
+  color: var(--text-tertiary);
+}
+
+/* A segment is selected as a whole while focused (no caret), like a native
+   time field: typing replaces it, arrows step it. */
+.segment {
+  padding: 2px 3px;
+  border-radius: calc(var(--space-xs) / var(--ui-scale));
+  caret-color: transparent;
+  cursor: default;
+  outline: none;
+  user-select: none;
+  transition: background-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.segment:focus {
+  background: var(--selection-strong);
+}
+
+/* Phones and coarse pointers: the same hit target as Input. */
+@media (width <= 640px), (pointer: coarse) {
+  .field {
+    block-size: auto;
+    min-block-size: var(--control-hit-target);
+  }
+}
+
+/* Popover body: one column per segment. */
+.columns {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.columnName {
+  color: var(--text-tertiary);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+  text-align: center;
+
+  /* Intl.DisplayNames gives "hour" / "minute" in English; a caption starts with a capital. */
+  text-transform: capitalize;
+}
+
+/* A wheel: five rows tall, two rows of padding above and below, so the
+   selected row of every column sits on the same center row. Snaps to rows;
+   the scrollbar is hidden like the DS rails (PromptSuggestionList,
+   AttachmentTiles), since rows, not a bar, show the position. */
+.wheel {
+  height: calc(var(--menu-item-height) * 5);
+  padding-block: calc(var(--menu-item-height) * 2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  outline: none;
+}
+
+.wheel::-webkit-scrollbar {
+  display: none;
+}
+
+.option {
+  display: flex;
+  height: var(--menu-item-height);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  outline: none;
+  scroll-snap-align: center;
+  transition: background-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* One selected style per column: the flat selection fill (DS active rows). */
+.option[aria-selected="true"] {
+  background: var(--selection-strong);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Hover only where a pointer can hover, so a tap never leaves a second fill. */
+@media (hover: hover) {
+  .option:not([aria-selected="true"]):hover {
+    background: var(--selection);
+    color: var(--text-primary);
+  }
+}
+
+/* Keyboard focus is its own state: an inset ring (the wheel clips, so an
+   outside ring would be cut). */
+.option:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field,
+  .segment,
+  .option {
+    transition: none;
+  }
+}

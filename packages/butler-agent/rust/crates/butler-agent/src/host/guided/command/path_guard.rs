@@ -25,13 +25,18 @@ impl GuidedCommand {
         let data = scope.butler_data.to_path_buf();
         let installation = scope.installation_root.map(Path::to_path_buf);
         let home = self.host_environment.get("HOME").map(PathBuf::from);
+        let deny_secret_reads = scope.deny_secret_reads;
+        let inventory = scope.read_inventory();
+        let environment = self.host_environment.clone();
         let path_form = super::directory_path_form(scope.contained_reads);
         timing.mark("before_job");
         let rejected = self.jobs.run(move || {
             let timing = super::timing::CommandTiming::new("guard_work");
             let cwd = Commands::guarded_directory_in_scope(&root, requested.as_deref(), path_form)?;
             timing.mark("cwd_done");
-            let denied = sensitive(&command, &cwd, &data, home.as_deref())
+            let inventory = deny_secret_reads.then(|| inventory.unwrap_or_else(||
+                butler_platform::secure_fs::SecretInventory::for_environment(&data, &environment)));
+            let denied = sensitive(&command, &cwd, &data, home.as_deref(), inventory.as_deref())
                 .or_else(|| ledger_guard::guard(&command, &cwd, &root, &data, installation.as_deref(), home.as_deref()));
             timing.mark("guard_done");
             Ok::<_, butler_turn::workspace::CommandError>(denied.map(|denied| json!({
@@ -49,27 +54,46 @@ impl GuidedCommand {
     }
 }
 
-fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Option<Value> {
+fn sensitive(
+    command: &str,
+    cwd: &Path,
+    data: &Path,
+    home: Option<&Path>,
+    inventory: Option<&butler_platform::secure_fs::SecretInventory>,
+) -> Option<Value> {
     let denied = |target: &str| {
         json!({"error":"protected_path", "message":"Credential paths are protected.",
         "protected_path":target,
         "next":[{"action":"Use credential tools for credentials; inspect ordinary files with normal approval."}]})
     };
+    let credentials: Vec<_> = if let Some(inventory) = inventory {
+        inventory
+            .paths()
+            .iter()
+            .cloned()
+            .chain(inventory.resolved_paths())
+            .collect()
+    } else {
+        butler_platform::data_paths::GATEWAY_CREDENTIAL_DIRS
+            .iter()
+            .map(|path| ledger_guard::real_or_nearest(&data.join(path)))
+            .collect()
+    };
     for directory in [
         cwd.to_path_buf(),
         cwd.canonical().unwrap_or_else(|_| cwd.to_path_buf()),
     ] {
-        if looks_sensitive(&directory.to_string_lossy()) {
+        if looks_sensitive(&directory.to_string_lossy())
+            || inventory.is_some_and(|inventory| inventory.protects_path(&directory))
+        {
             return Some(denied(&directory.to_string_lossy()));
         }
     }
-    let credentials: Vec<_> = butler_platform::data_paths::GATEWAY_CREDENTIAL_DIRS
-        .iter()
-        .map(|path| ledger_guard::real_or_nearest(&data.join(path)))
-        .collect();
     for raw in butler_platform::command_sandbox::path_tokens(command) {
         let token = butler_platform::command_sandbox::normalize_path_token(raw);
-        if looks_sensitive(&token) || names_any(&token, cwd, data, home, &credentials) {
+        if looks_sensitive(&token)
+            || names_any(&token, cwd, data, home, &credentials, inventory.is_some())
+        {
             return Some(denied(raw));
         }
     }
@@ -84,11 +108,13 @@ fn names_any(
     data: &Path,
     home: Option<&Path>,
     credentials: &[PathBuf],
+    lexical: bool,
 ) -> bool {
     ledger_guard::resolve(token, cwd, data, home).is_some_and(|path| {
-        let path = ledger_guard::real_or_nearest(&path);
-        credentials
-            .iter()
-            .any(|credential| butler_platform::secure_fs::path_is_within(&path, credential))
+        let real = ledger_guard::real_or_nearest(&path);
+        credentials.iter().any(|credential| {
+            butler_platform::secure_fs::path_is_within(&real, credential)
+                || (lexical && butler_platform::secure_fs::path_is_within(&path, credential))
+        })
     })
 }

@@ -9,5 +9,10 @@ pub(super) fn normalize(mut content: Vec<Value>) -> Vec<Value> {
             block["input"] = json!({});
         }
     }
+    if let Some(block) = content.last_mut().filter(|block| block["type"] == "text")
+        && let Some(text) = block["text"].as_str()
+    {
+        block["text"] = text.trim_end().into();
+    }
     content
 }

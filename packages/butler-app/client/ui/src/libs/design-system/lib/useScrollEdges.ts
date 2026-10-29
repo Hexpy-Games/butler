@@ -130,6 +130,8 @@ export function revealFocusInFades(
   if (Math.abs(delta) < 0.5) return;
   if (axis === "x") element.scrollLeft += delta;
   else element.scrollTop += delta;
+  // A focus scroll can clamp at an edge; refresh its mask before that frame paints.
+  writeScrollEdges(element, readScrollEdges(element, axis));
 }
 
 /**

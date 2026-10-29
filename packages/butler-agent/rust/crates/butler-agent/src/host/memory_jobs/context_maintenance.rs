@@ -104,6 +104,8 @@ impl ContextMaintenance {
         let timezone = Arc::clone(&self.timezone);
         let daily_cognition = Arc::clone(&self.daily_cognition);
         let cancellation = self.cancellation.clone();
+        let mut system_wake = butler_platform::system_wake::wake_events();
+        let mut schedule_changes = daily_cognition.gate.subscribe();
         *task = Some(tokio::spawn(async move {
             loop {
                 if cancellation.is_cancelled() {
@@ -134,12 +136,22 @@ impl ContextMaintenance {
                         butler_core::diagnostic!("[context-maintenance] {}", error.code());
                     }
                 }
+                let now_ms = current_epoch_millis();
                 let deadline = now_ms.saturating_add(
-                    i64::try_from(next_tick_delay(&timezone, now_ms).as_millis())
-                        .unwrap_or(i64::MAX),
+                    i64::try_from(
+                        super::consolidation_schedule::next_delay(
+                            &timezone,
+                            now_ms,
+                            &daily_cognition.gate,
+                        )
+                        .as_millis(),
+                    )
+                    .unwrap_or(i64::MAX),
                 );
                 tokio::select! {
                     () = cancellation.cancelled() => break,
+                    _ = schedule_changes.changed() => {},
+                    _ = system_wake.changed() => {},
                     () = butler_core::wall_clock::wait_until(deadline, current_epoch_millis) => {}
                 }
             }
@@ -152,6 +164,7 @@ impl ContextMaintenance {
         if let Some(task) = task {
             let _ = task.await;
         }
+        self.daily_cognition.gate.wait_idle().await;
     }
 }
 
@@ -182,17 +195,7 @@ async fn run_daily_jobs(
     if cancellation.is_cancelled() {
         return;
     }
-    if let Err(error) = daily_schedule::run_due(
-        data_root,
-        "consolidation-cycle",
-        day,
-        minute,
-        now_ms,
-        cancellation,
-        |run_id, started| daily.consolidation_cycle(run_id, started, cancellation),
-    )
-    .await
-    {
+    if let Err(error) = super::consolidation_schedule::run_due(daily, now_ms, cancellation).await {
         butler_core::diagnostic!("[consolidation-cycle] {error}");
     }
 }

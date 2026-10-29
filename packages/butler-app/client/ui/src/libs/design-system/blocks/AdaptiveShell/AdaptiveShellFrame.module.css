@@ -77,6 +77,13 @@
   animation: pane-in var(--motion-slow) var(--motion-ease-emphasized);
 }
 
+/* Whatever the pane holds (the browser sheet, a file viewer card) fills its
+   height, as the chat column's child does, however short its content. */
+.pane > * {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 @keyframes pane-in {
   from {
     opacity: 0;

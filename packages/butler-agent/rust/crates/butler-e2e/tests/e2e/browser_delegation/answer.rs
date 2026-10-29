@@ -25,12 +25,15 @@ pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
             assert_eq!(ids.len(), 2, "parent received two collected ids");
             (
                 "answer_blocks",
-                json!({"v":1,"blocks":[
+                with_v2_children(
+                    json!({"v":2,"blocks":[
                 {"type":"cards","items":[
                     {"title":"First image","img":ids[0],"source":"https://example.com/","checked":chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(5 * 3600 + 45 * 60).unwrap()).to_rfc3339(),"value":{"amount":2,"unit":"items"}},
                     {"title":"Second image","img":ids[1]}]},
                 {"type":"gallery","items":[{"img":ids[0],"caption":"First image"},{"img":ids[1],"caption":"Second image"}]},
                 {"type":"table","columns":["Image","Count"],"rows":[["First",1],["Second",1]]}]}),
+                    &ids[0],
+                ),
             )
         }
         _ => {
@@ -42,13 +45,22 @@ pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
     json!({"type":"function_call","id":format!("parent-{current}"),"call_id":format!("parent-{current}"),"name":name,"arguments":args.to_string(),"status":"completed"})
 }
 
+fn with_v2_children(mut spec: Value, image: &str) -> Value {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../answer_blocks/fixtures.json")).unwrap();
+    let mut blocks = fixture["specs"]["v2"]["blocks"].as_array().unwrap().clone();
+    blocks[1]["tabs"][1]["blocks"][0]["img"] = json!(image);
+    spec["blocks"].as_array_mut().unwrap().extend(blocks);
+    spec
+}
+
 #[tokio::test]
 async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
     script.browser.store(true, Ordering::SeqCst);
     script.answer_blocks.store(true, Ordering::SeqCst);
-    let setup = Setup::new("ANSWER-BLOCKS-COLLECTED")?
+    let setup = Setup::mutates_installation("ANSWER-BLOCKS-COLLECTED")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let (static_path, static_bytes) = install_ui_asset(&setup)?;
@@ -94,7 +106,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         "a table shown as a block is not repeated in the prose"
     );
     let sets = &message["answer_blocks"];
-    assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
+    assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 6);
     assert!(
         sets[0]["spec"]["blocks"][0]["items"][0]["checked"]
             .as_str()
@@ -126,6 +138,31 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
             )?;
         }
     }
+    let image = sets[0]["spec"]["blocks"][0]["items"][0]["img"]
+        .as_str()
+        .unwrap();
+    let mut expected = with_v2_children(json!({"v":2,"blocks":[]}), image);
+    butler_runtime::capabilities::answer_blocks::normalize(&mut expected);
+    let picture = &mut expected["blocks"][1]["tabs"][1]["blocks"][0];
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    let (width, height, ratio): (f64, f64, f64) = db.query_row(
+        "SELECT width,height,pixel_ratio FROM app_assets WHERE id=?1",
+        [image],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    assert_eq!(
+        ratio, 2.0,
+        "the browser capture ratio reaches durable storage"
+    );
+    picture["image_width"] = json!((width / ratio).round());
+    picture["image_height"] = json!((height / ratio).round());
+    drop(db);
+    let mut actual = sets[0]["spec"].clone();
+    strip_signatures(&mut actual);
+    assert_eq!(
+        &actual["blocks"].as_array().unwrap()[3..],
+        expected["blocks"].as_array().unwrap()
+    );
     assert_stored_ids(&s)?;
     assert_request_view_hides_presentation(&s, &session).await?;
     s.restart().await?;
@@ -155,7 +192,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
             serde_json::to_vec_pretty(&reopened)?,
         )?;
     }
-    verify_asset_sweep(&s, &session, &reopened).await?;
+    super::super::browser_library::blocks::asset_lifetime(&s, &session, &reopened).await?;
     s.finish().await?;
     server.abort();
     Ok(())
@@ -298,8 +335,19 @@ fn assert_acceptance_contract(parent: &Value, steward: &Value) {
             .unwrap_or_else(|| panic!("{name} offered"))
             .clone()
     };
+    let handoff =
+        tool(parent, "delegate_to_steward")["parameters"]["properties"]["checks"]["description"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+    assert!(
+        handoff.contains("each explicit constraint in the request its own check")
+            && handoff.contains("each observable with a tool")
+            && handoff.contains("Steward's acceptance criteria"),
+        "{handoff}"
+    );
     let checks =
-        tool(parent, "replace_work_plan")["parameters"]["properties"]["checks"]["description"]
+        tool(steward, "replace_work_plan")["parameters"]["properties"]["checks"]["description"]
             .as_str()
             .unwrap_or_default()
             .to_owned();
@@ -389,44 +437,5 @@ fn assert_remaining_capture_source(
         .expect("parent final payload artifacts");
     assert_eq!(artifacts.len(), 1, "only the unpictured page capture stays");
     assert_eq!(artifacts[0]["sourceUrl"], "https://example.org/");
-    Ok(())
-}
-
-async fn verify_asset_sweep(
-    s: &butler_e2e::e2e::scenario::Scenario,
-    session: &str,
-    message: &Value,
-) -> Result<(), HarnessError> {
-    let items = message["answer_blocks"][0]["spec"]["blocks"][0]["items"]
-        .as_array()
-        .unwrap();
-    for item in items {
-        let response = reqwest::get(format!(
-            "{}{}",
-            s.gw.base,
-            item["image_url"].as_str().unwrap()
-        ))
-        .await?;
-        assert_eq!(response.status(), 200, "Reopened image remains loadable");
-    }
-    assert_eq!(
-        s.gw.delete(&format!("/sessions/{session}?permanent=true"))
-            .await?
-            .status,
-        200
-    );
-    for item in items {
-        let response = reqwest::get(format!(
-            "{}{}",
-            s.gw.base,
-            item["image_url"].as_str().unwrap()
-        ))
-        .await?;
-        assert_eq!(
-            response.status(),
-            404,
-            "Deleted chat sweeps its collected image"
-        );
-    }
     Ok(())
 }

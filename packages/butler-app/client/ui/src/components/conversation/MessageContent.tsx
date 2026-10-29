@@ -1,3 +1,4 @@
+import { isGeneralChat } from "@/app/isGeneralChat";
 import { ConversationRequestAnchor } from "./ConversationRequestContext.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { memo, useCallback } from "react";
@@ -55,9 +56,9 @@ function MessageContentComponent({
       {message.role === "assistant" ? (
         <AssistantMessageBody message={message} running={running} liveActivity={liveActivity} failureNotice={failureNotice}
           stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} attachedParts={<>
-            <MessageArtifacts text={message.text} artifacts={artifacts} attachments={message.attachments ?? []}
+            <MessageArtifacts origin={message.initiated} bubble={isGeneralChat(message.chat_id)} text={message.text} artifacts={artifacts} attachments={message.attachments ?? []}
               refreshFileUrls={refreshFileUrls} />
-            <MessageChangedFiles files={message.changed_files ?? []} attachments={message.attachments ?? []}
+            <MessageChangedFiles bubble={isGeneralChat(message.chat_id)} files={message.changed_files ?? []} attachments={message.attachments ?? []}
               artifacts={artifacts} text={message.text} />
           </>} />
       ) : message.role === "user" ? (
@@ -71,10 +72,12 @@ function MessageContentComponent({
       {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}
       {message.role === "assistant" && !running && onCopyAssistantMessage && (
         <AssistantResponseFooter
+          bubble={isGeneralChat(message.chat_id)}
+          timeOnly={message.initiated?.kind === "approval_needed" || message.initiated?.kind === "work_failed"}
           copied={copied}
           meta={footerMeta}
-          status={message.status}
-          suppressTerminalStatus={Boolean(stewardProgress)}
+          status={message.failure_notice ? "failed" : message.status}
+          suppressTerminalStatus={message.initiated?.kind === "work_failed" || Boolean(stewardProgress) || (message.incomplete === true && !message.failure_notice)}
           onCopy={() => onCopyAssistantMessage(message)}
           actions={<><AssistantBranchActions message={message} /><MessageTraceMenu message={message} /></>}
         />

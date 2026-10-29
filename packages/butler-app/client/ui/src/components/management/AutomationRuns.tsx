@@ -25,6 +25,8 @@ export function AutomationRuns({ runs }: AutomationRunsProps) {
 
 function automationRunLabel({ state, safe_error_code }: AutomationRunSummary): string {
   const copy = appCopy.automations.runs;
+  if (safe_error_code === "schedule_signin_off") return copy.signinOff;
+  if (safe_error_code === "schedule_payment_off") return copy.paymentOff;
   if (safe_error_code === "schedule_permission_required") return copy.needsPermission;
   if (state === "queued") return copy.queued;
   if (state === "succeeded") return copy.succeeded;

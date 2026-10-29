@@ -72,10 +72,7 @@ impl AnswerBlocksStream {
                 }
             }
         }
-        let ids: Vec<_> = values
-            .iter()
-            .filter_map(|value| value["img"].as_str().map(str::to_owned))
-            .collect();
+        let ids = answer_blocks::image_ids(&json!(values));
         if !ids.is_empty() {
             call.images
                 .extend(super::browser::lookup_assets(&self.tools, ids).await);

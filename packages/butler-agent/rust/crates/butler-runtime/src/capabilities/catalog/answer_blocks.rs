@@ -15,11 +15,14 @@ mod scanner;
 mod schema;
 #[path = "answer_blocks_sets.rs"]
 mod sets;
+#[path = "answer_blocks_walk.rs"]
+mod walk;
 pub use draft::{AnswerBlocksDraftOp, AnswerBlocksDraftUnit, AnswerBlocksParser};
 pub use sets::{accept, normalize, pictured_sources, shown, sources};
+pub use walk::{image_ids, walk};
 
 pub const ANSWER_BLOCKS_SCHEMA: &str = include_str!("answer-blocks.schema.json");
-pub const MAX_SPEC_BYTES: usize = 24 * 1024;
+pub const MAX_SPEC_BYTES: usize = 32 * 1024;
 const MAX_PROBLEMS: usize = 10;
 static CONTRACT: LazyLock<Result<Value, serde_json::Error>> =
     LazyLock::new(|| serde_json::from_str(ANSWER_BLOCKS_SCHEMA));
@@ -47,7 +50,7 @@ pub fn validate_answer_blocks(
         push(
             &mut problems,
             "",
-            "spec exceeds 24 KB; move detail to reply text or send separate calls",
+            "spec exceeds 32 KB; move detail to reply text or send separate calls",
         );
         return Err(problems);
     }
@@ -60,6 +63,7 @@ pub fn validate_answer_blocks(
         return Err(problems);
     };
     schema::validate(spec, contract, contract, "", &mut problems);
+    walk::structure(spec, &mut problems);
     let read = context
         .read_sources
         .iter()
@@ -133,12 +137,7 @@ fn semantic(
             }
         }
         Value::Array(items) => {
-            unique(
-                items,
-                if path == "/blocks" { "id" } else { "key" },
-                path,
-                problems,
-            );
+            unique(items, "key", path, problems);
             for (i, item) in items.iter().enumerate() {
                 semantic(
                     item,
@@ -208,6 +207,11 @@ fn provenance(
 }
 
 fn dimensions(value: &Value, path: &str, problems: &mut Vec<AnswerBlocksProblem>) {
+    if value["type"] == "progress" {
+        for (i, item) in value["items"].as_array().into_iter().flatten().enumerate() {
+            progress(item, &format!("{path}/items/{i}"), problems);
+        }
+    }
     if let (Some(columns), Some(rows)) = (
         value.get("columns").and_then(Value::as_array),
         value.get("rows").and_then(Value::as_array),
@@ -288,6 +292,7 @@ fn unique(items: &[Value], key: &str, path: &str, problems: &mut Vec<AnswerBlock
 /// Applies the exact final normalization to one closed field or item.
 pub fn normalize_unit(value: &mut Value) {
     sets::trim(value);
+    walk::defaults(value);
 }
 
 /// Checks a closed field/item against its block's schema and final evidence rules.
@@ -301,14 +306,7 @@ pub fn validate_draft_unit(
     let Ok(contract) = CONTRACT.as_ref() else {
         return false;
     };
-    let Some(variant) = contract["$defs"]["block"]["oneOf"]
-        .as_array()
-        .and_then(|variants| {
-            variants
-                .iter()
-                .find(|v| v["properties"]["type"]["const"] == block["type"])
-        })
-    else {
+    let Some(variant) = schema::variant(block, &contract["$defs"]["block"], contract) else {
         return false;
     };
     let Some(mut rule) = variant["properties"].get(field) else {
@@ -334,6 +332,9 @@ pub fn validate_draft_unit(
         .filter_map(|s| source_identity(s))
         .collect();
     if index.is_some() {
+        if block["type"] == "progress" && field == "items" {
+            progress(value, "", &mut problems);
+        }
         semantic(value, "", context, &read, &mut problems);
     } else {
         let mut combined = block.clone();
@@ -349,4 +350,16 @@ pub fn validate_draft_unit(
         );
     }
     problems.is_empty()
+}
+
+fn progress(item: &Value, path: &str, problems: &mut Vec<AnswerBlocksProblem>) {
+    if let Some(value) = item["value"].as_f64()
+        && value > item["max"].as_f64().unwrap_or(100.0)
+    {
+        push(
+            problems,
+            &pointer(path, "value"),
+            "value must be at most max (default 100); correct value or max",
+        );
+    }
 }

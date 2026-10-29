@@ -152,7 +152,7 @@ async fn siwc_17_account_windows_and_incremental_tail() -> Result<(), HarnessErr
 
 async fn completed(axum::Json(body): axum::Json<Value>) -> impl axum::response::IntoResponse {
     let key = butler_e2e::e2e::matching::key("/v1/responses", &body, &Default::default());
-    let mut response = json!({"id":"usage-round","model":"gpt-6-luna","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}]});
+    let mut response = json!({"id":"usage-round","status":"completed","model":"gpt-6-luna","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}]});
     if key.user_request.starts_with("usage-account-round") {
         response["usage"] = json!({"input_tokens":1000,"input_tokens_details":{"cached_tokens":400},"output_tokens":200,"total_tokens":1200});
     }

@@ -8,7 +8,7 @@ import { toMarkdown } from "../../packages/butler-app/client/shared/answer-block
 interface Rule {
   $ref?: string;
   const?: string | number;
-  enum?: string[];
+  enum?: (string | number)[];
   type?: string | string[];
   oneOf?: Rule[];
   not?: { required: string[] };
@@ -22,7 +22,7 @@ const base = "packages/butler-agent/rust/crates/butler-runtime/";
 const schema: Rule = JSON.parse(readFileSync(`${base}src/capabilities/catalog/answer-blocks.schema.json`, "utf8"));
 const names: Record<string, string> = {
   id: "AnswerBlockId", title: "AnswerBlockTitle", source: "AnswerSource", checked: "Checked",
-  img: "AssetId", media: "AnswerMedia", value: "CardValue", card: "CardItem", cell: "AnswerCell", block: "AnswerBlock",
+  img: "AssetId", media: "AnswerMedia", value: "CardValue", card: "CardItem", cell: "AnswerCell", block: "AnswerBlock", leaf: "AnswerLeafBlock",
 };
 
 function type(rule: Rule): string {
@@ -46,17 +46,10 @@ function type(rule: Rule): string {
 const project = new Project({ useInMemoryFileSystem: true });
 const actual = project.createSourceFile("actual.ts", readFileSync("packages/butler-app/client/shared/app-contracts.ts", "utf8"));
 const expectedTypes: Record<string, string> = {};
-for (const [key, rule] of Object.entries(schema.$defs!)) {
-  if (key !== "block") expectedTypes[names[key]] = type(rule);
+for (const key of Object.keys(schema.$defs!)) {
+  names[key] ??= `${key[0].toUpperCase()}${key.slice(1)}Block`;
 }
-const blockNames: string[] = [];
-for (const rule of schema.$defs!.block.oneOf!) {
-  const kind = rule.properties!.type.const as string;
-  const name = `${kind[0].toUpperCase()}${kind.slice(1)}Block`;
-  blockNames.push(name);
-  expectedTypes[name] = type(rule);
-}
-expectedTypes.AnswerBlock = blockNames.join(" | ");
+for (const [key, rule] of Object.entries(schema.$defs!)) expectedTypes[names[key]] = type(rule);
 expectedTypes.AnswerBlocks = type(schema);
 for (const [name, definition] of Object.entries(expectedTypes)) {
   const expected = project.createSourceFile(`${name}.ts`, `type ${name} = ${definition};`);

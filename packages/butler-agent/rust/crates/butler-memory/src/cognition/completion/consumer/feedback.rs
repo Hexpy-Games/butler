@@ -5,6 +5,10 @@ pub(super) async fn drain(input: &Input) -> CognitionResult<Option<MemorySyncPol
     if input.target.is_some() {
         return Ok(None);
     }
+    #[cfg(feature = "e2e-fixtures")]
+    if input.instruction_owner.capture_drain_held().await {
+        return Ok(None);
+    }
     match input.instruction_owner.drain_captures().await {
         Ok(count) if count > 0 => Ok(Some(MemorySyncPoll::Processed)),
         Err(error) if error.message() == "rule_write_busy" => Ok(Some(MemorySyncPoll::Deferred)),

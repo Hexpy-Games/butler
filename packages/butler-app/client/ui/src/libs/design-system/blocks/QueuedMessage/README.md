@@ -22,7 +22,9 @@ and the delivered message resolves in place (MessageRow
 ## How to use this component
 Pass the formatted text as children, the status label, the tone
 (`queued`, `sending` or `failed`), copy for the controls, and the handlers.
-Pass `onSendNow` only for the message that would be sent next. `entering`
+Pass `onSendNow` only for the message that would be sent next ("Send now",
+ko "지금 보내기"); after it is pressed, pass `tone="sending"` with a
+"Sending…" status until the message is delivered or the request fails. `entering`
 marks a just-queued row: its bubble flies in from the composer when a send
 origin was recorded (`recordSendOrigin`), otherwise the row fades in with a
 small rise; reduced motion keeps only the fade.

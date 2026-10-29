@@ -96,12 +96,13 @@ export const guidance: ShowcaseGuidance = {
     "The jump button says what is below (New messages) or where it goes (Jump to latest).",
     "rail takes a TabRail and railView the conversation id: the column moves left only as far as needed, once per view.",
     "aside holds session details, not actions on a message: a few short sections (NavSection rows), empty ones hidden. Name it with asideLabel.",
-    "A docked aside and a TabRail share the right margin: show one at a time.",
+    "A docked aside and a TabRail share the right margin: show one at a time. The shell holds a rail back until a leaving aside has gone, then fades it in.",
   ],
   accessibility: [
     "Auto-scroll only when already at the bottom or while sending; the jump button is keyboard reachable.",
     "The background layer is decorative: aria-hidden and never takes pointer input.",
     "The aside is a complementary landmark (asideLabel names it); its content scrolls on its own and focus rings keep --focus-ring-room.",
+    "Opening or closing a docked aside glides the column on a transform (--motion-slow, emphasized) and the aside rides in or out with it; under reduced motion both move at once. The transcript keeps its scroll position.",
   ],
-  tokens: ["--composer-reserve", "--page-max-width-reading", "--conversation-bg", "--tab-rail-clearance", "--tab-rail-shelf-height"],
+  tokens: ["--composer-reserve", "--page-max-width-reading", "--conversation-bg", "--tab-rail-clearance", "--tab-rail-shelf-height", "--motion-slow", "--motion-ease-emphasized"],
 };

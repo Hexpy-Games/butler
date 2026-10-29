@@ -1,3 +1,5 @@
+import { capturePage } from "./view-capture.mjs";
+
 /** A private capture cannot outlive its document or block on a native dialog. */
 export async function guardedCapture(tab, task, notifyUnavailable = true) {
   if (tab.dialog) return undefined;
@@ -50,7 +52,7 @@ export async function settledBitmap(tab, contents, current, beforeCapture, settl
   if (!current()) return undefined;
   await beforeCapture?.();
   if (!current()) return undefined;
-  const image = await contents.capturePage(undefined, { stayHidden: true }).catch(() => null);
+  const image = await capturePage(tab, undefined, undefined, contents).catch(() => null);
   if (!current()) return undefined;
   tab.afterCapture?.(image);
   return image && !image.isEmpty() ? image : undefined;

@@ -2,7 +2,7 @@ import { useProjectDashboardBackground } from "@/hooks/useProjectDashboardBackgr
 import { useButlerStore } from "@/app/store.ts";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, DashboardHeader, Grid, ManagementPage, Notice, IconButton, Pencil, Plus, ProgressMeter, Stack, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, DashboardHeader, ManagementPage, Notice, IconButton, Pencil, Plus, ProgressMeter, Stack, Typo } from "@/butler-ds";
 import { EpicCreateDialog } from "./EpicCreateDialog.tsx";
 import { PlanFormDialog } from "./PlanFormDialog.tsx";
 import { PlanEpicList } from "./PlanEpicList.tsx";
@@ -12,14 +12,14 @@ export function PlanOverview({ projectId, planId }: { projectId: string; planId:
   const locale = useAppLocale();
   const state = usePlanOverview(projectId, planId);
   const project = useButlerStore(state => state.navigation.projects.find(project => project.id === projectId));
-  const { background, columnRef } = useProjectDashboardBackground(project);
+  const { background, onColumnRect } = useProjectDashboardBackground(project);
   const [dialog, setDialog] = useState<"create" | "edit" | null>(null);
   const copy = appCopy.canon;
   const title = state.plan?.title ?? copy.backlog;
   const done = state.rows.filter(epic => epic.canon_status === "done").length;
   const due = state.plan?.due_on;
   const meta = due ? copy.due(new Intl.DateTimeFormat(locale, { month: "long", day: "numeric" }).format(new Date(`${due}T00:00:00`))) : undefined;
-  return <ManagementPage dataTestClass="canon-plan-overview" background={background} backgroundTreatment="none"><Grid columns="1" ref={columnRef}><Stack gap="xl">
+  return <ManagementPage dataTestClass="canon-plan-overview" background={background} backgroundTreatment="none" onColumnRect={onColumnRect}><Stack gap="xl">
     <Stack gap="md">
       <Typo.Caption tone="secondary">{planId ? copy.plan : copy.noPlan}</Typo.Caption>
       <DashboardHeader title={title} meta={meta} action={<ButtonContainer size="default">
@@ -38,7 +38,7 @@ export function PlanOverview({ projectId, planId }: { projectId: string; planId:
             <PlanEpicList projectId={projectId} rows={state.rows} plans={state.canon.plans} backlog={!planId} busy={state.busy}
               onWrite={(epic, input, message) => void state.write(epic, input, message)} onReorder={ids => void state.reorder(ids)} />}
     </Stack>
-  </Stack></Grid>
+  </Stack>
     {dialog === "create" && state.canon && <EpicCreateDialog projectId={projectId} plans={state.canon.plans} defaultPlanId={planId}
       onClose={() => setDialog(null)} onRefresh={state.refresh} onCreated={() => void state.refresh()} />}
     {dialog === "edit" && state.plan && <PlanFormDialog projectId={projectId} plan={state.plan} onClose={() => setDialog(null)} onRefresh={state.refresh} />}

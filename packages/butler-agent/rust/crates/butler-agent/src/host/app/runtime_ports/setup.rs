@@ -208,6 +208,18 @@ impl AppSetupPort for AppSetup {
     ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState> {
         chatgpt_account::notice(self.0.configuration.clone(), input)
     }
+    fn oauth_credentials(
+        &self,
+    ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::OauthCredentials> {
+        chatgpt_account::credentials(self.0.configuration.clone())
+    }
+    fn remove_oauth_credential(
+        &self,
+        id: String,
+    ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential>
+    {
+        chatgpt_account::remove_credential(self.0.configuration.clone(), id)
+    }
     fn chatgpt_sign_out(&self) -> ApplicationFuture<butler_gateway::gateway::ChatGptSignOutView> {
         chatgpt_account::sign_out(self.0.configuration.clone())
     }

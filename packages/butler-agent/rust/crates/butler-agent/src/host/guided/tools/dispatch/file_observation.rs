@@ -112,9 +112,9 @@ pub(in crate::host::guided::tools) async fn gate(
         }
         return Ok(Gate::Allowed(Some(reference.clone())));
     }
-    let admitted = owner
-        .authority
-        .admit(AuthorityAdmissionInput {
+    let admitted = super::super::attention::admit(
+        owner,
+        AuthorityAdmissionInput {
             owner_session_id: owner.binding.owner_session_id.clone(),
             source_session_id: owner.binding.source_session_id.clone(),
             source_turn_id: owner.binding.turn_id.clone(),
@@ -134,9 +134,10 @@ pub(in crate::host::guided::tools) async fn gate(
             honor_standing_permission: !unsandboxed
                 && !matches!(call.name.as_str(), "web_read" | "web_search"),
             unattended: owner.unattended(),
-        })
-        .await
-        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+        },
+    )
+    .await
+    .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
     Ok(match admitted {
         AuthorityAdmissionResult::Granted => Gate::Allowed(None),
         AuthorityAdmissionResult::Pending { request_ref, .. }
@@ -149,8 +150,7 @@ pub(in crate::host::guided::tools) async fn gate(
             Gate::Pending(json!({"ok":false,"error":"authority_request_modified"}))
         }
         AuthorityAdmissionResult::Unattended => Gate::Pending(
-            super::super::turn_guard::unattended_feedback(owner, &call.name, &observed(call, args))
-                .await,
+            super::super::turn_guard::unattended_feedback(owner, &call.name, &observed(call, args)),
         ),
     })
 }

@@ -40,6 +40,7 @@ pub use storage::{
 };
 pub use task_graph_identity::{decode as decode_task_graph_id, encode as encode_task_graph_id};
 mod turn;
+pub use turn::runtime_failure_message;
 mod work;
 
 use std::sync::Arc;
@@ -94,7 +95,7 @@ pub use agent_loop::{
     GuidedPolicyDependencies, GuidedPresentation, GuidedTurnFactory, GuidedTurnInputs,
     GuidedTurnStart, JournalCloseout, JournalPort, LoopPhase, ModelRoundError, ModelRoundMessage,
     ModelRoundObserver, ModelRoundPort, ModelRoundRequest, ModelRoundResult, ModelRoundRole,
-    ModelRoundTool, ModelRoundToolCall, OperationResultMessageReferences,
+    ModelRoundTool, ModelRoundToolCall, ModelStop, OperationResultMessageReferences,
     OperationResultReplayFactory, OperationResultRuntime, OperationResultRuntimeFactory,
     OperationResultScope, PendingTool, ProductionAgentLoop, PromptImages, PromptPort,
     ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver, RenderedGuidedPrompt,
@@ -132,8 +133,8 @@ pub use effects::workspace_edit::{
 pub use effects::workspace_file::{WorkspaceFileEffectAdapter, normalized_workspace_effect_path};
 pub use effects::{EffectService, accepted_plan_effect_id};
 pub use execution_controls::{
-    ControlResolution, ControlSource, ExecutionControls, ModelFallback, ScheduleRunContext,
-    SubsessionResultContext, VerifiedExecutionControls,
+    ControlResolution, ControlSource, ExecutionControls, ModelFallback, ScheduleBrowserOptions,
+    ScheduleRunContext, SubsessionResultContext, VerifiedExecutionControls,
 };
 pub use guided_budget::{GuidedContinuationBudgetFactory, TurnContinuationBudgetPort};
 pub use guided_turn::{
@@ -234,6 +235,11 @@ impl Btcc {
         self.inner.run_turn(request).await
     }
 
+    /// Whether a session has a live turn flight, including preparation and delivery.
+    pub fn has_active_session_execution(&self, session_id: &str) -> bool {
+        self.inner.has_active_session_execution(session_id)
+    }
+
     /// Stops a turn and reports how it ended.
     pub async fn stop_turn(&self, request: StopRequest) -> Result<TurnOutcome, BtccError> {
         #[cfg(feature = "e2e-fixtures")]
@@ -287,3 +293,4 @@ mod test_pause;
 pub use test_pause::reach as pause_for_test;
 
 pub use authority::pending_asks::{PendingAsk, PendingAskChange};
+pub use authority::resolve_ask::{ResolveAsk, guard as resolve_ask_guard};

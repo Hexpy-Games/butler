@@ -239,6 +239,10 @@
 /* The card hugs its ordinal and copy: the start surface carries no art, so no
    empty slot is held between them. Cards in a row share the tallest height. */
 .item {
+  /* Focus scrolls a card in with room for its lift and the card's ring. */
+  scroll-margin-block: calc(
+    var(--focus-ring-room) + var(--focus-ring-width) + var(--prompt-card-lift)
+  );
   display: grid;
   width: 100%;
   height: 100%;

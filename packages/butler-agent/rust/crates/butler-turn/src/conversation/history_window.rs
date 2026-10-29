@@ -3,12 +3,19 @@ use super::types::*;
 use super::{AgentConversationStore, ConversationError, ConversationResult, summaries};
 use rusqlite::Connection;
 mod budget;
+mod continuity;
 mod load;
+mod visible;
+pub use visible::VisibleHistory;
+pub(super) type VisibleWindows =
+    std::sync::Mutex<std::collections::HashMap<String, VisibleHistory>>;
+pub use continuity::{ContinuityBatch, ContinuityTurn};
 
 pub struct HistoryWindow {
     pub material: PromptMaterial,
     pub digest: String,
     pub late_turn_ids: Vec<String>,
+    pub omitted_turns: usize,
 }
 
 impl AgentConversationStore {
@@ -66,12 +73,17 @@ pub(super) fn read(
         .map(|s| s.covers_to_seq)
         .fold(0.0_f64, f64::max);
     let sizes = completed_sizes(db, session, epoch)?;
+    let epoch_turns = epoch_turns(db, session, epoch, &sizes)?;
     let summary_bytes: usize = summaries.iter().map(|s| s.summary_text.len() + 128).sum();
-    let start = window_start(&sizes, cap, summary_bytes + cap / 10);
+    let start = window_start(
+        &sizes,
+        cap,
+        summary_bytes.div_ceil(3) + (cap / 20).min(1_000) + 64,
+    );
     let ids: Vec<_> = sizes
         .iter()
         .skip(start)
-        .map(|(id, _, _)| id.clone())
+        .map(|size| size.id.clone())
         .collect();
     let mut material = load::material(db, session, &ids, epoch)?;
     material.summaries = summaries;
@@ -80,13 +92,34 @@ pub(super) fn read(
         db,
         session,
         sizes.get(..start).unwrap_or_default(),
-        cap / 10,
+        (cap / 20).min(1_000),
     )?;
     Ok(HistoryWindow {
         material,
         digest,
         late_turn_ids,
+        omitted_turns: epoch_turns + start,
     })
+}
+
+fn epoch_turns(
+    db: &Connection,
+    session: &str,
+    epoch: f64,
+    remaining: &[CompletedSize],
+) -> ConversationResult<usize> {
+    if epoch <= 0.0 {
+        return Ok(0);
+    }
+    let ids = serde_json::to_string(&remaining.iter().map(|s| &s.id).collect::<Vec<_>>())
+        .map_err(ConversationError::json)?;
+    // Count only completed, wholly omitted turns in the indexed summarized
+    // prefix. A turn straddling an epoch remains in `remaining`.
+    db.query_row("SELECT COUNT(DISTINCT m.turn_id) FROM conversation_messages m \
+        INDEXED BY conversation_messages_session_seq_idx JOIN conversation_turns t ON t.id=m.turn_id \
+        WHERE m.session_id=?1 AND m.seq<=?2 AND t.completed_at IS NOT NULL \
+        AND m.turn_id NOT IN (SELECT value FROM json_each(?3))",rusqlite::params![session,epoch,ids],|r|r.get(0))
+        .map_err(ConversationError::sqlite)
 }
 
 fn late_ids(turns: &[ConversationTurn]) -> Vec<String> {
@@ -103,17 +136,17 @@ fn late_ids(turns: &[ConversationTurn]) -> Vec<String> {
         .collect()
 }
 
-fn window_start(sizes: &[(String, usize, Option<f64>)], cap: usize, reserved: usize) -> usize {
+fn window_start(sizes: &[CompletedSize], cap: usize, reserved: usize) -> usize {
     let mut start = 0;
     let mut used = reserved;
-    for (end, (_, size, _)) in sizes.iter().enumerate() {
-        used = used.saturating_add(*size);
+    for (end, size) in sizes.iter().enumerate() {
+        used = used.saturating_add(size.tokens);
         if used > cap && end + 1 - start > 4 {
             while used > cap * 3 / 5 && end + 1 - start > 4 {
-                let Some((_, size, _)) = sizes.get(start) else {
+                let Some(size) = sizes.get(start) else {
                     break;
                 };
-                used = used.saturating_sub(*size);
+                used = used.saturating_sub(size.tokens);
                 start += 1;
             }
         }
@@ -121,20 +154,36 @@ fn window_start(sizes: &[(String, usize, Option<f64>)], cap: usize, reserved: us
     start
 }
 
+struct CompletedSize {
+    id: String,
+    tokens: usize,
+    request_seq: Option<f64>,
+    through_seq: u64,
+}
+
 fn completed_sizes(
     db: &Connection,
     session: &str,
     epoch: f64,
-) -> ConversationResult<Vec<(String, usize, Option<f64>)>> {
-    // octet_length reads SQLite's stored size, without loading overflow pages.
-    // Capsules and envelopes are charged alongside the condensed tool labels.
+) -> ConversationResult<Vec<CompletedSize>> {
+    // No message bodies cross this size-only query. UTF-8 excess approximates
+    // wide characters; tool payloads cost only one condensed label per turn.
+    // Header/outcome JSON are charged at their rendered character sizes.
     let mut query = db.prepare(
-        "SELECT t.id,768+s.bytes+ \
-         COALESCE((SELECT octet_length(evidence_refs_json)+octet_length(unresolved_obligations_json)+ \
-         COALESCE(octet_length(continuation_json),0)+512 FROM conversation_turn_outcomes o WHERE o.turn_id=t.id),0),s.request_seq \
+        "SELECT t.id,CAST(s.tokens+(14+length(t.id)+length(t.status))/3.8+ \
+         CASE WHEN s.tools>0 THEN 10 ELSE 0 END+CASE WHEN o.id IS NULL THEN 0 ELSE (31+length(json_object( \
+         'source_hash',o.source_hash,'request_message_id',o.request_message_id, \
+         'public_assistant_message_id',o.public_assistant_message_id, \
+         'evidence_refs',json(o.evidence_refs_json), \
+         'unresolved_obligations',json(o.unresolved_obligations_json), \
+         'continuation',json(o.continuation_json),'safe_code',o.safe_code)))/3.8 END+0.999999 AS INTEGER), \
+         s.request_seq,s.through_seq \
          FROM (SELECT m.turn_id,SUM(CASE WHEN p.kind IN ('tool_call','tool_result') \
-         THEN 160 ELSE octet_length(p.content_json)+64 END) bytes,MIN(CASE WHEN m.role='user' AND p.kind='text' THEN m.seq END) request_seq, \
-         MIN(CASE WHEN m.role='assistant' AND m.status IN ('complete','compacted') THEN m.seq END) terminal_seq \
+         THEN 0 ELSE (octet_length(p.content_json)-length(p.content_json))/2.0+ \
+         (length(p.content_json)-(octet_length(p.content_json)-length(p.content_json))/2.0)/3.8 END) tokens, \
+         SUM(p.kind IN ('tool_call','tool_result')) tools, \
+         MIN(CASE WHEN m.role='user' AND p.kind='text' THEN m.seq END) request_seq,MAX(m.seq) through_seq, \
+         MAX(CASE WHEN m.role='assistant' AND m.status IN ('complete','compacted') THEN m.seq END) terminal_seq \
          FROM conversation_messages m INDEXED BY conversation_messages_session_seq_idx \
          JOIN conversation_parts p ON p.message_id=m.id \
          WHERE m.session_id=?1 AND m.seq>?2 \
@@ -147,7 +196,12 @@ fn completed_sizes(
     ).map_err(ConversationError::sqlite)?;
     query
         .query_map(rusqlite::params![session, epoch], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            Ok(CompletedSize {
+                id: r.get(0)?,
+                tokens: r.get(1)?,
+                request_seq: r.get(2)?,
+                through_seq: r.get(3)?,
+            })
         })
         .map_err(ConversationError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
@@ -170,7 +224,7 @@ fn valid_summaries(db: &Connection, session: &str) -> ConversationResult<Vec<Con
 fn dropped_digest(
     db: &Connection,
     session: &str,
-    dropped: &[(String, usize, Option<f64>)],
+    dropped: &[CompletedSize],
     cap: usize,
 ) -> ConversationResult<String> {
     let mut lines = Vec::new();
@@ -181,7 +235,9 @@ fn dropped_digest(
          JOIN conversation_parts p ON p.message_id=m.id \
         WHERE m.session_id=?1 AND m.seq=?2 AND m.role='user' AND p.kind='text' ORDER BY p.part_index LIMIT 1")
         .map_err(ConversationError::sqlite)?;
-    for (id, _, request_seq) in dropped.iter().rev() {
+    for size in dropped.iter().rev() {
+        let id = &size.id;
+        let request_seq = size.request_seq;
         use rusqlite::OptionalExtension;
         let request: Option<String> = if let Some(seq) = request_seq {
             query
@@ -198,10 +254,11 @@ fn dropped_digest(
             end -= 1;
         }
         let line = format!("dropped turn {id}: {}", &text[..end]);
-        let bytes = serde_json::to_string(&line)
-            .map_err(ConversationError::json)?
-            .len()
-            + 1;
+        let chars = line.chars().count();
+        let wide = (line.len() - chars) / 2;
+        let bytes = butler_core::json::saturating_usize(
+            (wide as f64 + chars.saturating_sub(wide) as f64 / 3.8).ceil(),
+        ) + 1;
         if used + bytes > cap {
             break;
         }
@@ -210,4 +267,11 @@ fn dropped_digest(
     }
     lines.reverse();
     Ok(lines.join("\n"))
+}
+
+/// Stable guidance when the visible window omits earlier completed turns.
+pub fn omitted_history_notice(count: usize) -> String {
+    format!(
+        "Older turns omitted: {count} earlier turns of this chat are not shown below. Session Continuity summarizes them; read_conversation_context returns their exact text. Look things up there before asking the user about anything they may already have said."
+    )
 }

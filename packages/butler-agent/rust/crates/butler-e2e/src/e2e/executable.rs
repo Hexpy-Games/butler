@@ -20,22 +20,31 @@ fn publish(
             .create_new(true)
             .open(&staging)?;
         write(&mut file, &staging)?;
-        file.sync_all()?;
         drop(file);
         fs::rename(&staging, path)
     })();
     if result.is_err() {
-        let _ = fs::remove_file(&staging);
+        let _ = butler_platform::command_sandbox::FixtureInstallation::remove_staging(&staging);
     }
     result
 }
 
-/// Copies an executable without ever opening its published inode for writing.
+/// Copies privately, closing the writer before publishing the executable.
 pub fn copy(source: &Path, path: &Path) -> io::Result<()> {
-    publish(path, |file, _| {
-        io::copy(&mut fs::File::open(source)?, file)?;
-        file.set_permissions(fs::metadata(source)?.permissions())
-    })
+    super::installation::install(source, path, super::installation::Access::Mutable)
+}
+
+/// Publishes only complete files; the installer closes all writers before returning.
+pub(super) fn publish_path(
+    path: &Path,
+    populate: impl FnOnce(&Path) -> io::Result<()>,
+) -> io::Result<()> {
+    let staging = path.with_file_name(format!(".e2e-{}", uuid::Uuid::new_v4()));
+    let result = populate(&staging).and_then(|()| fs::rename(&staging, path));
+    if result.is_err() {
+        let _ = butler_platform::command_sandbox::FixtureInstallation::remove_staging(&staging);
+    }
+    result
 }
 
 /// Writes a runnable script and sets its mode before publishing it.

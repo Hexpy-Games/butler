@@ -54,6 +54,11 @@ pub(super) fn validate(
         );
         return;
     }
+    if let (Some(number), Some(min)) = (value.as_f64(), schema["exclusiveMinimum"].as_f64())
+        && number <= min
+    {
+        push(problems, path, format!("use a number greater than {min}"));
+    }
     if let Some(text) = value.as_str() {
         string_check(text, schema, path, problems);
     }
@@ -69,6 +74,18 @@ pub(super) fn validate(
     }
 }
 
+/// Resolve references before choosing by type, including the leaf union.
+pub(super) fn variant<'a>(value: &Value, schema: &'a Value, root: &'a Value) -> Option<&'a Value> {
+    let rule = resolve(schema, root);
+    if let Some(variants) = rule["oneOf"].as_array() {
+        return variants
+            .iter()
+            .find_map(|candidate| variant(value, candidate, root));
+    }
+    (rule.pointer("/properties/type/const") == value.get("type") && value.get("type").is_some())
+        .then_some(rule)
+}
+
 fn variants_check(
     value: &Value,
     variants: &[Value],
@@ -76,12 +93,24 @@ fn variants_check(
     path: &str,
     problems: &mut Vec<AnswerBlocksProblem>,
 ) {
+    if let Some(selected) = variants.iter().find_map(|rule| variant(value, rule, root)) {
+        validate(value, selected, root, path, problems);
+        return;
+    }
+    if matches!(value["type"].as_str(), Some("columns" | "tabs" | "group")) {
+        push(
+            problems,
+            path,
+            "containers never nest; move this container to the top level",
+        );
+        return;
+    }
     let results: Vec<_> = variants
         .iter()
         .map(|variant| {
             let mut result = Vec::new();
             validate(value, variant, root, path, &mut result);
-            (variant, result)
+            (resolve(variant, root), result)
         })
         .collect();
     let matched = results

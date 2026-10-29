@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { CanonOverview, CanonTag, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
-import { closeCanonInspector } from "./canon-board-inspector.ts";
+import { closeCanonAside } from "./canon-board-aside.ts";
 import { selectBoardPlan } from "./canon-board-selector.ts";
 const boardSelector = '[data-test-class="canon-board"]';
 const detailSelector = '[data-test-class="canon-epic-detail"]';
@@ -25,6 +25,7 @@ export async function pickerMenu(page: Page, name: string) {
 }
 export async function assertNoChipControls(page: Page) {
   const field = page.locator(fieldSelector);
+  await field.getByRole("combobox", { name: "태그", exact: true }).waitFor();
   assert.equal(await field.locator('[data-editable="true"], [data-removable="true"]').count(), 0);
   assert.equal(await field.locator('button[aria-label$=" 태그 메뉴"]').count(), 0);
   assert.equal(await field.getByRole("combobox", { name: "태그", exact: true }).count(), 1);
@@ -60,7 +61,7 @@ async function createTaggedEpic(page: Page, server: NativeAppServerHandle, proje
   const epic = (await created.json()).data as EpicDetail;
   assert.deepEqual(epic.tags.map(tag => [tag.name, tag.color]), [["새 태그", "blue"]]);
   await page.locator(boardSelector).locator(`[data-kanban-item="${epic.id}"] [data-test-class="canon-tags"]`).getByText("새 태그", { exact: true }).waitFor();
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
   return epic;
 }
 async function assignmentFlow(page: Page, server: NativeAppServerHandle, epic: EpicDetail, tag: CanonTag) {
@@ -78,7 +79,7 @@ async function assignmentFlow(page: Page, server: NativeAppServerHandle, epic: E
   saved = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
   assert(saved.revision > revision); assert(!saved.tags.some(item => item.id === tag.id));
   await page.locator(boardSelector).locator(`[data-kanban-item="${epic.id}"]`).getByText(tag.name, { exact: true }).waitFor({ state: "hidden" });
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
 }
 async function manageFlow(page: Page, server: NativeAppServerHandle, epic: EpicDetail) {
   await openEpic(page, epic.title);
@@ -97,7 +98,7 @@ async function manageFlow(page: Page, server: NativeAppServerHandle, epic: EpicD
   const saved = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
   assert(saved.tags.some(tag => tag.name === "고친 태그" && tag.color === "teal"));
   await page.locator(boardSelector).locator(`[data-kanban-item="${epic.id}"] [data-tone="teal"]`).getByText("고친 태그", { exact: true }).waitFor();
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
 }
 const actionsOpacity = (row: ReturnType<Page["locator"]>) =>
   row.locator('[data-slot="filtered-select-item-actions"]').evaluate(element => getComputedStyle(element).opacity);
@@ -137,7 +138,7 @@ async function unattachedFlow(page: Page, server: NativeAppServerHandle, project
   const remove = page.getByRole("dialog", { name: "‘외톨이 고침’ 태그를 지울까요?", exact: true });
   await tagRequest(page, "DELETE", `/canon/tags/${loose.id}`, () => remove.getByRole("button", { name: "삭제", exact: true }).click());
   assert(!(await server.api<CanonTag[]>(`/projects/${projectId}/canon/tags`)).some(tag => tag.id === loose.id));
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
 }
 async function duplicateFlow(page: Page, server: NativeAppServerHandle, projectId: string) {
   await page.locator(boardSelector).getByRole("button", { name: "새 과제", exact: true }).first().click();
@@ -157,7 +158,7 @@ async function duplicateFlow(page: Page, server: NativeAppServerHandle, projectI
     () => dialog.getByRole("button", { name: "만들기", exact: true }).click(), 201);
   assert.deepEqual((await created.json()).data.tags.map((tag: CanonTag) => tag.id), [bug.id]);
   assert.equal((await server.api<CanonTag[]>(`/projects/${projectId}/canon/tags`)).filter(tag => tag.name.toLowerCase() === "bug").length, 1);
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
 }
 async function deleteFlow(page: Page, server: NativeAppServerHandle, projectId: string) {
   const tag = await server.api<CanonTag>(`/projects/${projectId}/canon/tags`, post({ name: "공유 태그", color: "purple" }));
@@ -175,7 +176,7 @@ async function deleteFlow(page: Page, server: NativeAppServerHandle, projectId: 
     assert.equal(saved.tags.length, 0); assert.equal(saved.revision, epic.revision);
     await page.locator(boardSelector).locator(`[data-kanban-item="${epic.id}"]`).getByText("공유 태그", { exact: true }).waitFor({ state: "hidden" });
   }
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
 }
 async function filterFlow(page: Page, server: NativeAppServerHandle, projectId: string, tags: CanonTag[], planTitle: string) {
   const canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
@@ -217,7 +218,7 @@ async function conflictFlow(page: Page, server: NativeAppServerHandle, epic: Epi
     await page.getByText("다른 사람이 먼저 고쳤습니다", { exact: true }).first().waitFor();
     await page.locator(detailSelector).getByText("다른 편집", { exact: true }).waitFor();
     assert(!(await server.api<EpicDetail>(path)).tags.some(item => item.id === tag.id));
-    await closeCanonInspector(page);
+    await closeCanonAside(page);
   }
 }
 export async function verifyTagFlows(page: Page, server: NativeAppServerHandle, projectId: string, tags: CanonTag[]) {

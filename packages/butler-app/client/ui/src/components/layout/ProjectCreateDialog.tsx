@@ -1,4 +1,5 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { ProjectFolderBrowser } from "./ProjectFolderBrowser";
 import { splitProjectFolderPath } from "./projectFolderPath";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { canSelectProjectFolder } from "@/app/api.ts";
@@ -11,31 +12,44 @@ import { useProjectCreateForm, type ProjectCreateDialogProps } from "./useProjec
 export function ProjectCreateDialog(props: ProjectCreateDialogProps = {}) {
   useAppLocale();
   const form = useProjectCreateForm(props);
+  const [browsing, setBrowsing] = useState(false);
+  const back = () => {
+    setBrowsing(false);
+    requestAnimationFrame(() => document.getElementById("project-create-folder")?.focus());
+  };
   return (
-    <Dialog open={form.open} onOpenChange={form.onOpenChange}>
+    <Dialog open={form.open} onOpenChange={(open) => { form.onOpenChange(open); if (!open) setBrowsing(false); }}>
       <DialogContent closeLabel={appCopy.common.close} aria-describedby={undefined}
+        onEscapeKeyDown={(event) => { if (browsing) { event.preventDefault(); back(); } }}
         data-test-class="modal-card" glassRadius="composer" showCloseButton={!form.pending}>
-        <DialogTitle visuallyHidden>{appCopy.sidebar.projectCreateTitle}</DialogTitle>
+        <DialogTitle visuallyHidden>{browsing ? appCopy.sidebar.chooseProjectFolder : appCopy.sidebar.projectCreateTitle}</DialogTitle>
         <Stack minWidth="0">
-          <DialogForm title={appCopy.sidebar.projectCreateTitle} busy={form.pending}
-            onSubmit={() => void form.submit()}
-            footer={
-              <ButtonContainer size="default" justify="end">
-                <Button type="button" variant="outline" disabled={form.pending}
-                  onClick={() => form.onOpenChange(false)}>{appCopy.common.cancel}</Button>
-                <Button type="submit" disabled={!form.canSubmit}>{appCopy.common.create}</Button>
-              </ButtonContainer>
-            }>
-            <ProjectCreateFields form={form} />
-          </DialogForm>
+          {browsing ? (
+            <ProjectFolderBrowser
+              initialPath={form.folder?.workspace_path ?? ""}
+              onBack={back}
+              onSelect={(selection) => { form.selectFolder(selection); back(); }}
+            />
+          ) : (
+            <DialogForm title={appCopy.sidebar.projectCreateTitle} busy={form.pending}
+              onSubmit={() => void form.submit()}
+              footer={
+                <ButtonContainer size="default" justify="end">
+                  <Button type="button" variant="outline" disabled={form.pending}
+                    onClick={() => form.onOpenChange(false)}>{appCopy.common.cancel}</Button>
+                  <Button type="submit" disabled={!form.canSubmit}>{appCopy.common.create}</Button>
+                </ButtonContainer>
+              }>
+              <ProjectCreateFields form={form} onBrowse={() => setBrowsing(true)} />
+            </DialogForm>
+          )}
         </Stack>
       </DialogContent>
     </Dialog>
   );
 }
 
-function ProjectCreateFields({ form }: { form: ReturnType<typeof useProjectCreateForm> }) {
-  const pickerAvailable = canSelectProjectFolder();
+function ProjectCreateFields({ form, onBrowse }: { form: ReturnType<typeof useProjectCreateForm>; onBrowse: () => void }) {
   const pickerRef = useRef<HTMLButtonElement>(null);
   return (
     <>
@@ -59,14 +73,12 @@ function ProjectCreateFields({ form }: { form: ReturnType<typeof useProjectCreat
                 {appCopy.sidebar.projectFolderAuto}
               </Typo.Body>}
           <ButtonContainer size="sm">
-            <Tooltip label={pickerAvailable ? undefined : appCopy.sidebar.availableInDesktop}>
-              <Button id="project-create-folder" ref={pickerRef} type="button" variant="outline" size="sm"
-                disabled={form.pending} aria-disabled={!pickerAvailable || undefined}
-                aria-label={form.folder ? appCopy.sidebar.changeProjectFolder : appCopy.sidebar.chooseProjectFolder}
-                onClick={() => void form.pickFolder()}>
-                {form.folder ? appCopy.sidebar.changeProjectFolder : appCopy.sidebar.chooseProjectFolder}
-              </Button>
-            </Tooltip>
+            <Button id="project-create-folder" ref={pickerRef} type="button" variant="outline" size="sm"
+              disabled={form.pending}
+              aria-label={form.folder ? appCopy.sidebar.changeProjectFolder : appCopy.sidebar.chooseProjectFolder}
+              onClick={() => { if (canSelectProjectFolder()) void form.pickFolder(); else onBrowse(); }}>
+              {form.folder ? appCopy.sidebar.changeProjectFolder : appCopy.sidebar.chooseProjectFolder}
+            </Button>
             {form.folder && <IconButton disabled={form.pending} label={appCopy.sidebar.resetProjectFolder}
               onClick={() => { form.resetFolder(); pickerRef.current?.focus(); }}>
               <IconSlot size="sm"><X /></IconSlot>

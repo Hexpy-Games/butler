@@ -35,7 +35,7 @@ pub(super) async fn execute(
     .to_owned();
     let approval = match authority::gate(owner, call, occurrence, &input, &target).await? {
         authority::Gate::Pending(value) => return encoded(&value),
-        authority::Gate::Allowed(reference) => reference,
+        authority::Gate::Allowed(reference, _) => reference,
     };
     let work = owner
         .work

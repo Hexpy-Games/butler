@@ -1,5 +1,5 @@
 //! Worker delegation input and parent Work-stream linkage.
-use super::{GuidedTools, access_mode, encoded};
+use super::{GuidedTools, encoded};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
     BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError, WorkerDelegationRequest,
@@ -90,8 +90,8 @@ fn request(
             .get("profile_id")
             .and_then(Value::as_str)
             .map(str::to_owned),
-        access_mode: access_mode(owner),
-        schedule_run: owner.unattended_run(),
+        access_mode: owner.binding.access_mode.clone(),
+        schedule_run: owner.inherited_run(),
     })
 }
 

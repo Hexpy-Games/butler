@@ -45,6 +45,7 @@ async fn upload_checks_content_refusals_and_consumes_stages() -> Result<(), Harn
     let host = Host::attach(&s).await?;
     let (id, card) = ask(&s, prompt).await?;
     let card = card.expect("an upload requires owner confirmation");
+    assert!(card["approval"]["operation"]["allow_site"].is_null());
     assert_eq!(host.uploads(), Vec::<String>::new());
     allow(&s, &id, &card).await?;
     assert_eq!(host.uploads(), ["uploaded-after", "complete-public"]);

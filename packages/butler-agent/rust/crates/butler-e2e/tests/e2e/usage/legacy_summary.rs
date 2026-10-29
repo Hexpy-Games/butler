@@ -64,15 +64,16 @@ async fn use_legacy_summary_counts_toward_its_chat() -> Result<(), HarnessError>
     for job in JOBS {
         std::fs::remove_file(s.sandbox.data.join(format!("state/scheduler/{job}.json")))?;
     }
+    super::super::memory_fixture::arm_consolidation(&s.sandbox.data, "2026-10-02T03:59:00.000Z")?;
     s.gw = s.agent.start_again().await?;
     let cache = s.sandbox.data.join("cognition/memory/hot/cache.md");
     // Durable completion barrier; the timeout only guards against a hang.
     tokio::time::timeout(std::time::Duration::from_secs(90), async {
         while !JOBS.iter().all(|job| {
-            s.sandbox
-                .data
-                .join(format!("state/scheduler/{job}.json"))
-                .exists()
+            std::fs::read(s.sandbox.data.join(format!("state/scheduler/{job}.json")))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                .is_some_and(|state| state["lastRunDate"] == NOW[..10])
         }) {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }

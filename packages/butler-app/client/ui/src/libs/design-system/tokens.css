@@ -4,6 +4,9 @@
 
 :root {
   color-scheme: light;
+  /* Text size (큰 글자): the App zooms its whole UI by this factor (1, 1.15
+     or 1.3). Radii divide by it so corners keep their 100% size. */
+  --ui-scale: 1;
   --adaptive-viewport-block-size: 100vh;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
@@ -60,7 +63,7 @@
   --z-drop-hint: 31;
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
-  --adaptive-composer-radius: 30px;
+  --adaptive-composer-radius: calc(30px / var(--ui-scale));
   /* Motion scale ("Linear-crisp", see the DS spec Motion Contract): instant
      for press feedback, menu for dropdown/context/select, fast for hover,
      tooltips, popovers and dialogs, base for disclosure, message insert and
@@ -72,6 +75,9 @@
   --motion-base: 160ms;
   --motion-slow: 220ms;
   --motion-deliberate: 320ms;
+  /* A saved piece of content flying into its destination (save flight):
+     long enough to follow across the window, still under half a second. */
+  --motion-flight: 420ms;
   --motion-exit-menu: 60ms;
   --motion-exit-fast: 90ms;
   --motion-exit-base: 110ms;
@@ -237,6 +243,9 @@
      match the page card; the card stands --browser-card-inset off the pane
      edges; the chat column beside the pane resizes between min and max. */
   --browser-pane-radius: var(--radius-popover);
+  /* PageCard corners; BrowserPane sets the card flush with its edges and
+     gives it its own bottom corner radius (0 beside the window frame). */
+  --page-card-radius: var(--radius-popover);
   --browser-card-inset: var(--space-sm);
   --browser-band-height: 40px;
   --browser-chat-width: 400px;
@@ -774,11 +783,11 @@
   --sidebar-action-size: 24px;
   --sidebar-icon-column: 18px;
   --sidebar-row-gap: 10px;
-  --radius-control: 8px;
-  --radius-panel: 10px;
-  --radius-popover: 12px;
-  --radius-composer: 22px;
-  --radius-pill: 999px;
+  --radius-control: calc(8px / var(--ui-scale));
+  --radius-panel: calc(10px / var(--ui-scale));
+  --radius-popover: calc(12px / var(--ui-scale));
+  --radius-composer: calc(22px / var(--ui-scale));
+  --radius-pill: calc(999px / var(--ui-scale));
   --surface: rgba(255, 255, 255, 0.9);
   --surface-raised: var(--color-surface-raised);
   --workspace-bg: rgba(255, 255, 255, 0.94);
@@ -1815,7 +1824,7 @@ input[type="radio"]:not(:disabled),
   --menu-group-label-size: var(--typo-section-title-size);
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
-  --adaptive-composer-radius: 30px;
+  --adaptive-composer-radius: calc(30px / var(--ui-scale));
   --adaptive-drawer-width: min(88vw, 320px);
   --chrome-floating-toggle-size: var(--control-height-md);
   --chrome-floating-toggle-icon-size: var(--icon-size-md);

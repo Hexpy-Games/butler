@@ -77,7 +77,8 @@ pub(super) fn prepare_runtime_payload(
 fn valid_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "turn.started"
+        "turn.tool_batch.recorded"
+            | "turn.started"
             | "turn.first_progress"
             | "turn.iteration.started"
             | "assistant.decision.delta"
@@ -308,7 +309,23 @@ pub(super) fn terminal_turn(db: &Connection, turn: &str) -> Result<bool, AppStor
     ))
 }
 
-pub(super) fn btcc_retains_authority(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
+pub(super) fn terminal_authority_pending(
+    db: &Connection,
+    turn: &str,
+) -> Result<bool, AppStorageError> {
+    // Crash recovery can report an interrupted run before the durable Stop
+    // finishes. That report cannot replace the owner's pending cancellation.
+    let stopping: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM turns t JOIN app_turn_cancel_outbox c ON c.turn_id=t.id \
+         WHERE t.id=?1 AND t.state='cancelling' AND c.state IN ('pending','accepted'))",
+            [turn],
+            |row| row.get(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if stopping {
+        return Ok(true);
+    }
     let exists = db
         .query_row(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='btcc_turns'",
@@ -330,4 +347,20 @@ pub(super) fn btcc_retains_authority(db: &Connection, turn: &str) -> Result<bool
         .optional()
         .map_err(AppStorageError::sqlite)?;
     Ok(state.is_some_and(|state| !matches!(state.as_str(), "delivered" | "cancelled")))
+}
+
+/// Persist admitted tool work once, even when no public tool progress is emitted.
+pub(super) fn record_tool_work(
+    db: &Connection,
+    turn: &str,
+    kind: &str,
+) -> Result<(), AppStorageError> {
+    if kind == "turn.tool_batch.recorded" {
+        db.execute(
+            "UPDATE turns SET tool_work_recorded=1 WHERE id=?1 AND tool_work_recorded=0",
+            [turn],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    }
+    Ok(())
 }

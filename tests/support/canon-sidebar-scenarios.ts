@@ -17,11 +17,6 @@ export async function seedCanonSidebar(server: NativeAppServerHandle) {
 export async function showCanonSidebar(page: Page) {
   // The visibility checks below are instantaneous; wait until the chrome has rendered its sidebar toggle.
   await page.getByRole("button", { name: /^사이드바 (보기|숨기기)$/u }).first().waitFor();
-  const hideInspector = page.getByRole("button", { name: "오른쪽 패널 숨기기", exact: true });
-  if (page.viewportSize()!.width === 390 && await hideInspector.isVisible()) {
-    await hideInspector.click();
-    await page.locator('[data-slot="adaptive-shell-inspector"][data-open="true"]').waitFor({ state: "hidden" });
-  }
   const show = page.getByRole("button", { name: "사이드바 보기", exact: true });
   if (await show.isVisible()) await show.click();
   const project = page.locator('[data-tree-item^="p:"] [data-test-class="tree-row"]').filter({ hasText: "캐논 보드" });

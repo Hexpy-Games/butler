@@ -31,14 +31,43 @@ export async function toggleState(app: ShellApp, tone: string | null, dot: boole
   assert.equal(await app.page.expression(`document.querySelector('${toggle}').hasAttribute('data-selected')`), false);
 }
 
+/** No finite motion on the window, the workspace, inside the browser pane, or on anything that carries the page card. */
+export const sheetSettled = `(() => {
+  const running = n => Boolean(n?.getAnimations().some(a => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity));
+  const root = document.querySelector('[data-test-class=mac-window]'), frame = document.querySelector('[data-slot=native-view-frame]');
+  if (!frame || root.hasAttribute('data-track-switching') || running(root) || running(document.querySelector('[data-slot=adaptive-shell-workspace]'))) return false;
+  if (document.querySelector('[data-slot=browser-pane]').getAnimations({ subtree: true }).some(a => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity)) return false;
+  // The split pane enters with its own animation (pane-in); the page card moves with it.
+  for (let node = frame.parentElement; node; node = node.parentElement) if (running(node)) return false;
+  return true;
+})()`;
+
 export async function nativeAligned(app: ShellApp) {
-  await waitBrowser(() => app.page.expression("!document.querySelector('[data-test-class=mac-window]').hasAttribute('data-track-switching') && !document.querySelector('[data-slot=adaptive-shell-workspace]').getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity) && !document.querySelector('[data-slot=browser-pane]').getAnimations({subtree:true}).some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity) && !document.querySelector('[data-test-class=mac-window]').getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity)"), "browser sheet motion settles");
-  await waitBrowser(() => app.main<boolean>(`(async () => {
-    const w=${app.win}, b=globalThis.browserAgentSubject, t=b?.tabs.get(b.activeId);
-    if(!t?.attached || t.covered) return false;
-    const r=await w.webContents.executeJavaScript("document.querySelector('[data-slot=native-view-frame]')?.getBoundingClientRect().toJSON()");
-    const n=t.view.getBounds(); return r && ['x','y','width','height'].every(k=>Math.abs(r[k]-n[k])<=1);
-  })()`), "native view follows the page card");
+  await waitBrowser(() => app.page.expression(sheetSettled), "browser sheet motion settles");
+  try {
+    await waitBrowser(() => app.main<boolean>(`(async () => {
+      const w=${app.win}, b=globalThis.browserAgentSubject, t=b?.tabs.get(b.activeId);
+      if(!t?.attached || t.covered) return false;
+      const r=await w.webContents.executeJavaScript("document.querySelector('[data-slot=native-view-frame]')?.getBoundingClientRect().toJSON()");
+      const n=t.view.getBounds(); return r && ['x','y','width','height'].every(k=>Math.abs(r[k]-n[k])<=1);
+    })()`), "native view follows the page card");
+  } catch (error) {
+    const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
+    if (evidence) {
+      const state = await app.main(`(async()=>{
+        const w=${app.win},b=globalThis.browserAgentSubject,t=b?.tabs.get(b.activeId),view=t?.view,contents=view?.webContents;
+        const attached=t?.attached,live=contents&&!contents.isDestroyed(),startedHidden=[...t?.captures?.values()??[]];
+        return {id:t?.id??null,attached:attached&&!attached.isDestroyed()?{id:attached.id,visible:attached.isVisible()}:null,
+          covered:t?.covered??null,slot:t?.slot??null,bounds:live?view.getBounds():null,viewVisible:live?view.getVisible():null,
+          attachWait:!!t?.attachWait,placeHold:!!t?.placeHold,detachWait:!!t?.detachWait,
+          captures:{count:startedHidden.length,startedHidden},backgroundThrottling:live?contents.getBackgroundThrottling():null,
+          beingCaptured:live?contents.isBeingCaptured():null,
+          frame:await w.webContents.executeJavaScript("document.querySelector('[data-slot=native-view-frame]')?.getBoundingClientRect().toJSON()??null").catch(()=>null)};
+      })()`).catch(diagnosticError => ({ error: String(diagnosticError) }));
+      writeFileSync(join(evidence, "native-align-failure.json"), JSON.stringify(state, null, 2));
+    }
+    throw error;
+  }
 }
 
 export async function shellGeometry(app: ShellApp, width: number, evidence: string) {
@@ -104,4 +133,30 @@ export async function nativePeekDismiss(app: ShellApp, name: string, evidence: s
   const elapsedMs = Date.now() - start;
   await app.shot(`${name}-peek-closed`, true);
   return { elapsedMs };
+}
+
+const aside = '[data-slot="conversation-aside"]';
+const asideLayout = (app: ShellApp) => app.page.expression<string | null>(`document.querySelector('${aside}')?.getAttribute('data-layout') ?? null`);
+
+/** #1549, #1557: 세션 정보 replaced the right inspector. Beside an open browser it floats in the
+ * conversation column; the browser pane stays open and its native page stays uncovered. */
+export async function sessionInfoBesideBrowser(app: ShellApp) {
+  const label = getAppCopy("en-US").sessionInfo.title, open = `Boolean(document.querySelector('${pane}'))`;
+  await app.click(label);
+  await waitBrowser(async () => await asideLayout(app) === "floating", "session info floats beside the browser");
+  assert.equal(await app.page.expression(`document.querySelector('[data-test-class="session-info-toggle"]').getAttribute('aria-pressed')`), "true");
+  assert.equal(await app.page.expression(open), true, "session info keeps the browser open");
+  await nativeAligned(app);
+  assert.deepEqual(await app.page.expression(`(() => {
+    const a=document.querySelector('${aside}').getBoundingClientRect(), c=document.querySelector('[data-slot=adaptive-shell-split-chat]').getBoundingClientRect();
+    const f=document.querySelector('[data-slot=native-view-frame]').getBoundingClientRect();
+    return { inChat: a.left >= c.left - 1 && a.right <= c.right + 1, clearOfPage: a.right <= f.left };
+  })()`), { inChat: true, clearOfPage: true }, "the floating aside stays in the conversation column, clear of the native page");
+  await togglePane(app, false);
+  await waitBrowser(async () => await asideLayout(app) === "docked", "session info docks once the browser closes");
+  await togglePane(app, true); await nativeAligned(app);
+  await waitBrowser(async () => await asideLayout(app) === "floating", "session info floats beside the reopened browser");
+  await app.click(label);
+  await waitBrowser(async () => await asideLayout(app) === null, "session info closes");
+  assert.equal(await app.page.expression(open), true, "closing session info keeps the browser open");
 }

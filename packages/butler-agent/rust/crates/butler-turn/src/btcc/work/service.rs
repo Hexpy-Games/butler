@@ -15,6 +15,19 @@ use crate::btcc::BtccCode;
 
 /// Durable Work storage; each command is idempotent by its mutation call id.
 pub trait DurableWorkRepository: Send + Sync {
+    /// Whether an active Steward owns this parent Work.
+    fn steward_owns_work(&self, _session: String, _work: String) -> PortFuture<'_, bool> {
+        Box::pin(async { Ok(false) })
+    }
+    /// Reads an explicitly named Work owned by the turn's session and store.
+    fn work_for_turn(&self, turn: String, work: String) -> PortFuture<'_, Option<WorkView>> {
+        Box::pin(async move {
+            Ok(self
+                .bound_work_for_turn(turn)
+                .await?
+                .filter(|view| view.work_id == work))
+        })
+    }
     /// The turn's bound Work with its request and results.
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>>;
     /// Imports the scope's open legacy Work, if any.
@@ -28,6 +41,10 @@ pub trait DurableWorkRepository: Send + Sync {
     ) -> PortFuture<'_, Option<WorkView>>;
     /// Starts new Work for the turn.
     fn start_work(&self, command: StartWorkCommand) -> PortFuture<'_, WorkView>;
+    /// Starts handoff Work, allowing a new binding while preserving the prior Work.
+    fn start_handoff_work(&self, command: StartWorkCommand) -> PortFuture<'_, WorkView> {
+        self.start_work(command)
+    }
     /// Continues existing Work in the turn.
     fn continue_work(&self, command: ContinueWorkCommand) -> PortFuture<'_, WorkView>;
     /// Records a new plan revision.
@@ -58,6 +75,23 @@ impl DurableWorkService {
     /// A service over the Work repository.
     pub fn new(repository: Arc<dyn DurableWorkRepository>) -> Self {
         Self { repository }
+    }
+
+    /// Whether parent closeout belongs to an active Steward.
+    pub async fn steward_owns_work(
+        &self,
+        session: String,
+        work: String,
+    ) -> Result<bool, BtccError> {
+        self.repository.steward_owns_work(session, work).await
+    }
+
+    pub(crate) async fn work_for_turn(
+        &self,
+        turn: String,
+        work: String,
+    ) -> Result<Option<WorkView>, BtccError> {
+        self.repository.work_for_turn(turn, work).await
     }
 
     /// The turn's bound Work context.

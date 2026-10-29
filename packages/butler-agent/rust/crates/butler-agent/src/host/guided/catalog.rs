@@ -23,6 +23,7 @@ impl std::fmt::Display for GuidedCatalogError {
 /// selection. No service owner, model response, or Turn is retained here.
 pub(crate) struct GuidedCatalog {
     snapshot: GuidedCatalogSnapshot,
+    plan_effects: std::collections::HashSet<String>,
 }
 
 impl GuidedCatalog {
@@ -30,7 +31,15 @@ impl GuidedCatalog {
         let source = ToolCatalog::load(capabilities).map_err(GuidedCatalogError::Source)?;
         let snapshot =
             GuidedCatalogSnapshot::parse(source.source()).map_err(GuidedCatalogError::Policy)?;
-        Ok(Self { snapshot })
+        let plan_effects = snapshot.steward_plan_effects().map(str::to_owned).collect();
+        Ok(Self {
+            snapshot,
+            plan_effects,
+        })
+    }
+
+    pub(crate) fn steward_plan_effect(&self, name: &str) -> bool {
+        self.plan_effects.contains(name)
     }
 
     pub(crate) fn snapshot(&self) -> &GuidedCatalogSnapshot {

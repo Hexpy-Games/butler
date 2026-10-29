@@ -31,6 +31,20 @@ pub(super) fn sequence(
             json!({"subject":subject,"verdict":"accept","summary":"Evidence verified"}),
         )
     };
+    if !worker && !steward {
+        return if returning {
+            vec![]
+        } else {
+            vec![(
+                "delegate_to_steward",
+                json!({
+                    "request":"Verify release evidence", "safe_title":"Evidence review",
+                    "checks":["Evidence verified"],
+                    "epic_ref":format!("canon:epic/{}", script.epics.lock().unwrap()[0])
+                }),
+            )]
+        };
+    }
     let mut calls = Vec::new();
     if !returning {
         let mode = if worker {
@@ -47,14 +61,6 @@ pub(super) fn sequence(
         };
         calls.push(("replace_work_plan",json!({"objective":"Verify release evidence","execution_mode":mode,"governing_refs":refs,"actions":[{"action_key":"verify","description":"Verify release evidence"}],"checks":["Evidence verified"]})));
         calls.push(review("plan"));
-        if !worker && !steward {
-            calls.push((
-                "delegate_to_steward",
-                json!({"request":"Verify release evidence","safe_title":"Evidence review"}),
-            ));
-            calls.push(("record_work_disposition",json!({"work_id":work,"disposition":"open","summary":"Evidence review delegated","remaining_actions":["Review steward evidence"],"next_condition":"Steward result arrives","followups":[]})));
-            return calls;
-        }
         if worker {
             calls.push(("read_file", json!({"path":*script.path.lock().unwrap()})));
         } else {

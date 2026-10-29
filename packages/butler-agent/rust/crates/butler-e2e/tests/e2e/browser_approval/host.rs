@@ -95,7 +95,7 @@ impl Host {
     }
 
     /// Every dispatched host op, in order.
-    pub(super) fn ops(&self) -> Vec<String> {
+    pub(crate) fn ops(&self) -> Vec<String> {
         self.frames
             .lock()
             .unwrap()
@@ -115,7 +115,7 @@ impl Host {
     }
 
     /// The args of every dispatched `tab.act`, in order.
-    pub(super) fn acts(&self) -> Vec<Value> {
+    pub(crate) fn acts(&self) -> Vec<Value> {
         self.frames
             .lock()
             .unwrap()

@@ -1,5 +1,6 @@
 //! Principal authority decisions over durable, session-bound operations.
 
+mod action_identity;
 mod admission;
 pub(in crate::btcc) mod approval;
 pub(in crate::btcc) mod contracts;
@@ -12,6 +13,7 @@ mod permission_management;
 mod projection;
 pub(super) mod questions;
 mod receipt;
+pub(super) mod resolve_ask;
 mod service;
 
 #[cfg(any(test, feature = "test-support"))]

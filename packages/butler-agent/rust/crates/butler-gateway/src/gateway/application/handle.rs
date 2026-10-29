@@ -14,6 +14,8 @@ impl AppApplication {
             queue_dispatcher: None,
             queue_wake: self.queue_wake.clone(),
             automation_scheduler: None,
+            composing: self.composing.clone(),
+            initiated_decisions: self.initiated_decisions.clone(),
             automation_wake: self.automation_wake.clone(),
             automation_queued: self.automation_queued.clone(),
             automation_runs: self.automation_runs.clone(),
@@ -53,4 +55,22 @@ pub(super) async fn open_storage(
     )
     .await
     .map_err(app_error)
+}
+
+pub(super) async fn start_retention(
+    storage: &AppStorage,
+    subscribers: &super::EventSubscribers,
+) -> Result<
+    (
+        super::retention::RetentionOwner,
+        super::retention::RetentionWake,
+    ),
+    GatewayApplicationError,
+> {
+    let cursor = super::latest_event_cursor(storage).await?;
+    Ok(super::retention::RetentionOwner::start(
+        storage.clone(),
+        subscribers,
+        cursor,
+    ))
 }

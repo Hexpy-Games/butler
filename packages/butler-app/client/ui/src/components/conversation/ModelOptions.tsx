@@ -6,9 +6,8 @@ import type { AppModelSummary } from "@/app/types.ts";
 import { modelDisplayName, tokenWindowLabel } from "@/app/utils.ts";
 
 /**
- * The model choices with search and provider filters. The composer's model
- * menu and the schedule form share it, so both read the same. `footer` adds
- * the composer's reasoning choices below the list. `filter` lets a caller
+ * The composer's model choices with search and provider filters. `footer`
+ * adds reasoning choices below the list. `filter` lets a caller
  * keep the search and provider filter across reopening; without it they reset.
  */
 export function ModelOptions({

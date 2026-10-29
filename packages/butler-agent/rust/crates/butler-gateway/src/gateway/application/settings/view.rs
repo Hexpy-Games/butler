@@ -140,42 +140,7 @@ pub(super) fn read(
     );
     output.insert("model".into(), json!(controls.model.clone()));
     output.insert("reasoning_effort".into(), json!(controls.reasoning));
-    let consolidation = native.get("consolidation").map(object).unwrap_or_default();
-    let configured_consolidation = consolidation
-        .get("model")
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("default");
-    let effective_consolidation = consolidation
-        .get("effective_model")
-        .and_then(Value::as_str)
-        .unwrap_or(&controls.model);
-    let uses_butler = consolidation
-        .get("uses_butler_model")
-        .and_then(Value::as_bool)
-        == Some(true);
-    output.insert(
-        "consolidation_model".into(),
-        json!(configured_consolidation),
-    );
-    output.insert(
-        "consolidation_reasoning_effort".into(),
-        json!(
-            consolidation
-                .get("reasoning_effort")
-                .and_then(Value::as_str)
-                .unwrap_or("xhigh")
-        ),
-    );
-    output.insert(
-        "effective_consolidation_model".into(),
-        json!(if uses_butler {
-            controls.model.as_str()
-        } else {
-            effective_consolidation
-        }),
-    );
-    output.insert("consolidation_uses_butler_model".into(), json!(uses_butler));
+    consolidation_settings(&native, &mut output, &controls.model);
     output.insert("context_window_tokens".into(), json!(context_window));
     output.insert(
         "worker_profiles".into(),
@@ -270,6 +235,14 @@ fn insert_access(
 /// The legacy main-screen keys, normalized, and the `wallpaper` setting, which
 /// they describe until a PATCH stores one.
 fn appearance(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
+    output.insert(
+        "text_size".into(),
+        json!(enum_value(
+            stored.get("text_size"),
+            &["default", "large", "larger"],
+            "default"
+        )),
+    );
     output.insert(
         "appearance_theme".into(),
         json!(enum_value(
@@ -423,4 +396,55 @@ fn search_provider(value: Option<&Value>) -> String {
     } else {
         provider
     }
+}
+
+fn consolidation_settings(
+    native: &Map<String, Value>,
+    output: &mut Map<String, Value>,
+    model: &str,
+) {
+    super::proactive::view(native, output);
+    let consolidation = native.get("consolidation").map(object).unwrap_or_default();
+    let configured_consolidation = consolidation
+        .get("model")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("default");
+    let effective_consolidation = consolidation
+        .get("effective_model")
+        .and_then(Value::as_str)
+        .unwrap_or(model);
+    let uses_butler = consolidation
+        .get("uses_butler_model")
+        .and_then(Value::as_bool)
+        == Some(true);
+    output.insert(
+        "consolidation_model".into(),
+        json!(configured_consolidation),
+    );
+    output.insert(
+        "consolidation_reasoning_effort".into(),
+        json!(
+            consolidation
+                .get("reasoning_effort")
+                .and_then(Value::as_str)
+                .unwrap_or("xhigh")
+        ),
+    );
+    output.insert(
+        "effective_consolidation_model".into(),
+        json!(if uses_butler {
+            model
+        } else {
+            effective_consolidation
+        }),
+    );
+    output.insert(
+        "consolidation_time".into(),
+        consolidation
+            .get("time_of_day")
+            .cloned()
+            .unwrap_or(json!("04:00")),
+    );
+    output.insert("consolidation_uses_butler_model".into(), json!(uses_butler));
 }

@@ -85,7 +85,7 @@ pub(super) fn retry_snapshot(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    ensure_retryable(db, turn_id, &turn.2, turn.3, turn.6.as_deref())?;
+    ensure_resume_retryable(db, turn_id, &turn.2, turn.3, turn.6.as_deref())?;
     let user_message_id = turn.1.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -218,8 +218,7 @@ pub(super) fn current_controls_retry_source(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    ensure_retryable(db, turn_id, &state, retryable_flag, code.as_deref())?;
-    ensure_fresh_retry_allowed(code.as_deref())?;
+    ensure_current_retryable(db, turn_id, &state, retryable_flag, code.as_deref())?;
     let user_message_id = user_message_id.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -285,19 +284,19 @@ fn source_subsession_result(
         .map_err(|source| execution_controls_error().with_source(source))
 }
 
-/// Refuses all but a retryable runtime fault or a turn interrupted by a
-/// service crash.
+/// Failed turns carry runtime retry eligibility on the row. Runtime faults
+/// retain their existing validated fault-event requirement.
 fn ensure_retryable(
     db: &Connection,
     turn_id: &str,
     state: &str,
     retryable: i64,
-    safe_error_code: Option<&str>,
+    _safe_error_code: Option<&str>,
 ) -> Result<(), AppStorageError> {
     let allowed = retryable == 1
         && match state {
             "runtime_fault" => runtime_fault_retryable(db, turn_id)?,
-            "failed" => safe_error_code == Some(super::INTERRUPTED_TURN_CODE),
+            "failed" => true,
             _ => false,
         };
     if allowed {
@@ -305,6 +304,21 @@ fn ensure_retryable(
     } else {
         Err(not_retryable_error())
     }
+}
+
+/// A durable resume is reserved for runtime faults and crash interruptions.
+fn ensure_resume_retryable(
+    db: &Connection,
+    turn_id: &str,
+    state: &str,
+    retryable: i64,
+    code: Option<&str>,
+) -> Result<(), AppStorageError> {
+    ensure_retryable(db, turn_id, state, retryable, code)?;
+    if state == "failed" && code != Some(super::INTERRUPTED_TURN_CODE) {
+        return Err(not_retryable_error());
+    }
+    Ok(())
 }
 
 /// `/retry-current` starts a fresh turn. A crash-interrupted turn may have run
@@ -349,4 +363,26 @@ fn runtime_fault_retryable(db: &Connection, turn_id: &str) -> Result<bool, AppSt
             .is_some_and(|value| !value.is_empty())
     });
     Ok(has_safe_identity && fault.get("retryable").and_then(Value::as_bool) == Some(true))
+}
+
+/// A concurrent caller may already have reserved this source's durable retry identity.
+fn ensure_current_retryable(
+    db: &Connection,
+    turn_id: &str,
+    state: &str,
+    retryable_flag: i64,
+    code: Option<&str>,
+) -> Result<(), AppStorageError> {
+    let linked: bool = db
+        .query_row(
+            "SELECT fresh_retry_queue_id IS NOT NULL FROM turns WHERE id=?1",
+            [turn_id],
+            |r| r.get(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if !linked {
+        ensure_retryable(db, turn_id, state, retryable_flag, code)?;
+    }
+    ensure_fresh_retry_allowed(code)?;
+    Ok(())
 }

@@ -12,6 +12,7 @@ pub struct NormalizedImage {
     pub bytes: Vec<u8>,
     pub width: u32,
     pub height: u32,
+    pub pixel_ratio: f64,
 }
 
 pub fn normalize(bytes: &[u8]) -> Result<NormalizedImage, &'static str> {
@@ -41,6 +42,7 @@ pub fn normalize(bytes: &[u8]) -> Result<NormalizedImage, &'static str> {
                     bytes,
                     width,
                     height,
+                    pixel_ratio: 1.0,
                 });
             }
         }

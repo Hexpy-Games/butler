@@ -1,6 +1,7 @@
 //! Official ChatGPT account registration. Model transport switches in P2.
 pub mod authority;
 pub mod authorize;
+pub mod credentials;
 pub mod exchange;
 pub mod id_token;
 pub mod models;

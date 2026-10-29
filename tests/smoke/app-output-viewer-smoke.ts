@@ -91,7 +91,8 @@ async function remoteClients(server: NativeAppServerHandle, language: string, ad
     await page.route(`${lan}**`, route=>route.continue({ headers:{ ...route.request().headers(), ...server.authHeaders } }));
     await openViewer(page, { ...server, url:lan });
     await capture(page, `lan-output-${language}-390`);
-    await page.locator('[data-test-class="right-panel-overlay-close"]').click();
+    await page.locator('[data-test-class="file-viewer-close"]').click();
+    await page.locator('[data-test-class="file-viewer"]').waitFor({ state: "detached" });
     await page.locator('[data-test-class="message-artifact-list"]').getByText("standalone.HTML", { exact: true }).click();
     await page.frameLocator('[data-test-class="artifact-viewer"] iframe').locator("#html-output").waitFor();
     await page.frameLocator('[data-test-class="artifact-viewer"] iframe').getByRole("button", { name: "Interactive", exact: true }).click();
@@ -108,7 +109,8 @@ async function remoteClients(server: NativeAppServerHandle, language: string, ad
     assert.equal(new URL(forwarded.url).origin, `https://${proxy.contentHost}`);
     await openViewer(tunnel, { ...server, url:`https://${proxy.apiHost}/` });
     await capture(tunnel, `tunnel-output-${language}-390`);
-    await tunnel.locator('[data-test-class="right-panel-overlay-close"]').click();
+    await tunnel.locator('[data-test-class="file-viewer-close"]').click();
+    await tunnel.locator('[data-test-class="file-viewer"]').waitFor({ state: "detached" });
     await tunnel.locator('[data-test-class="message-artifact-list"]').getByText("standalone.HTML", { exact: true }).click();
     await tunnel.frameLocator('[data-test-class="artifact-viewer"] iframe').locator("#html-output").waitFor();
     const src = await tunnel.locator('[data-test-class="artifact-viewer"] iframe').getAttribute("src");
@@ -147,7 +149,9 @@ async function captureCell(server: NativeAppServerHandle, secret: string, langua
     }
     await capture(page, `viewer-${language}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`);
     if (width === 390) {
-      await page.locator('[data-test-class="right-panel-overlay-close"]').click();
+      // On a phone the file viewer holds the workspace; closing it returns to the chat.
+      await page.locator('[data-test-class="file-viewer-close"]').click();
+      await page.locator('[data-test-class="file-viewer"]').waitFor({ state: "detached" });
       await page.getByRole("button", { name:appCopy.titlebar.showLeftPanel, exact:true }).click();
     }
     await page.getByRole("button", { name:appCopy.sidebar.settings, exact:true }).click();

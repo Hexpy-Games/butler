@@ -5,6 +5,14 @@ pub mod queries;
 use super::*;
 pub use feed::{catch_up, prepare};
 pub use progress::{enrich, progress, project_works};
+pub fn epic_running(db: &Connection, epic: &str) -> Result<bool> {
+    for work in rows(db, Query::Works.sql(), [epic])? {
+        if progress::running(db, &work)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
 pub type ProjectViews = std::collections::HashMap<String, Value>;
 use queries::Query;
 use rusqlite::params;
@@ -50,7 +58,7 @@ pub fn precheck(
         .query_row(Query::Bound.sql(), params![session, epic], |_| Ok(()))
         .optional()?
         .is_some();
-    Ok((!bound).then(|| json!({"code":"canon_epic_not_bound","message":format!("canon:epic/{epic} is not bound to this conversation. Use an epic_ref from the canon epics section, or call replace_work_plan again without it so the Work stays private. If the user means that epic, confirm it with them first.")})))
+    Ok((!bound).then(|| json!({"code":"canon_epic_not_bound","message":format!("canon:epic/{epic} is not bound to this conversation. If the user clearly means that epic, bind it with canon_read (view epic, bind true) and call replace_work_plan again; otherwise call it without the epic_ref so the Work stays private.")})))
 }
 
 pub fn link(
@@ -120,7 +128,11 @@ fn advance_label(tx: &Transaction<'_>, ctx: &Context, id: &str, target: &str) ->
     if rank(text(&row, "canon_status")?) >= rank(target) {
         return Ok(());
     }
+    if target == "done" && epic_running(tx, id)? {
+        return Err(Error::Running);
+    }
     tx.execute(Query::AdvanceLabel.sql(), params![id, target, ctx.now])?;
+    activity::status(tx, ctx, id, text(&row, "canon_status")?, target)?;
     event(
         tx,
         ctx,

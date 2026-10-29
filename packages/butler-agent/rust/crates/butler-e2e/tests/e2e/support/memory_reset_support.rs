@@ -75,18 +75,18 @@ pub(super) async fn cycle(s: &mut Scenario) -> Result<(), HarnessError> {
         "BUTLER_E2E_APP_NOW",
         later.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     );
-    for job in ["session-sync", "consolidation-cycle"] {
-        let path = s.sandbox.data.join(format!("state/scheduler/{job}.json"));
-        if path.exists() {
-            std::fs::remove_file(path)?;
-        }
-    }
     s.gw = s.agent.start_again().await?;
     let marker = s
         .sandbox
         .data
         .join("state/scheduler/consolidation-cycle.json");
-    until(|| marker.exists()).await;
+    until(|| {
+        std::fs::read(&marker)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .is_some_and(|state| state["lastRunDate"] == later.format("%Y-%m-%d").to_string())
+    })
+    .await;
     let result: Value = serde_json::from_slice(&std::fs::read(marker)?)?;
     assert_eq!(result["status"], "ok", "{result}");
     Ok(())
@@ -113,6 +113,8 @@ async fn profile_reply(axum::Json(request): axum::Json<Value>) -> axum::response
         .filter_map(|message| message["content"].as_str())
         .find_map(|text| serde_json::from_str::<Value>(text).ok());
     let text = match prompt.as_ref() {
+        Some(value) if value["task"] == "pattern_extraction" => json!({"updates":[]}).to_string(),
+        Some(value) if value["task"] == "pattern_proposal" => json!({"candidates":[]}).to_string(),
         Some(value) if value["task"] == "extract_profile_candidates" => {
             let observations = value["observations"].as_array().unwrap();
             let references: Vec<Value> = observations

@@ -115,10 +115,17 @@ pub(super) fn facets(
     kind: &str,
     group: Option<&str>,
 ) -> Result<Value, AppStorageError> {
+    let kinds = json!(kind.split(',').collect::<Vec<_>>()).to_string();
     let (scope, args): (&str, Vec<&str>) = match group {
-        None => ("l.kind=?1", vec![kind]),
-        Some("none") => ("l.kind=?1 AND l.group_id IS NULL", vec![kind]),
-        Some(id) => ("l.kind=?1 AND l.group_id=?2", vec![kind, id]),
+        None => ("l.kind IN (SELECT value FROM json_each(?1))", vec![&kinds]),
+        Some("none") => (
+            "l.kind IN (SELECT value FROM json_each(?1)) AND l.group_id IS NULL",
+            vec![&kinds],
+        ),
+        Some(id) => (
+            "l.kind IN (SELECT value FROM json_each(?1)) AND l.group_id=?2",
+            vec![&kinds, id],
+        ),
     };
     let count = |extra: &str| -> Result<i64, AppStorageError> {
         db.query_row(

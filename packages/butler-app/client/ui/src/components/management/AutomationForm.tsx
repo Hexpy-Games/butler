@@ -17,6 +17,7 @@ import type { AutomationFormField } from "@/stores/automationForm.ts";
 import { scheduleState } from "@/app/scheduleLabels";
 import { ScheduleTimingFields } from "./ScheduleTimingFields";
 import { AutomationAccessField } from "./AutomationAccessField";
+import { AutomationBrowserFields } from "./AutomationBrowserFields";
 import { AutomationModelField } from "./AutomationModelField";
 
 interface AutomationFormProps {
@@ -65,31 +66,34 @@ export function AutomationForm({ children }: AutomationFormProps) {
           <FieldError>{errorFor("prompt")}</FieldError>
         </Field>
       </Stack>
-      <Section title={copy.fields.details}>
-        <Field>
-          <FieldLabel>{copy.fields.targetChat}</FieldLabel>
-          <Select value={targetSessionId} onValueChange={setTargetSessionId}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {sessionOptions.map((session) => (
-                  <SelectItem key={session.id} value={session.id}>
-                    {session.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <AutomationModelField />
-        <AutomationAccessField />
-        <ScheduleTimingFields />
-        <KeyValueRow label={copy.fields.state} value={scheduleState(state)} />
-        <FieldError>{errorFor("form")}</FieldError>
-        {children}
-      </Section>
+      <Stack gap="xl">
+        <Section title={copy.fields.details}>
+          <Field>
+            <FieldLabel>{copy.fields.targetChat}</FieldLabel>
+            <Select value={targetSessionId} onValueChange={setTargetSessionId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {sessionOptions.map((session) => (
+                    <SelectItem key={session.id} value={session.id}>
+                      {session.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <AutomationModelField />
+          <AutomationAccessField />
+          <ScheduleTimingFields />
+          <KeyValueRow label={copy.fields.state} value={scheduleState(state)} />
+          <FieldError>{errorFor("form")}</FieldError>
+          {children}
+        </Section>
+        <AutomationBrowserFields />
+      </Stack>
     </Grid>
   );
 }

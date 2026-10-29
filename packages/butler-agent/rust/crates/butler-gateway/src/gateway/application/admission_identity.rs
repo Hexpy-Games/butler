@@ -18,18 +18,23 @@ pub(super) fn stable_client_id(
     let Some(value) = trimmed else {
         return Ok(format!("client-{}", clock.new_uuid()));
     };
+    Ok(canonical_client_id(value))
+}
+
+/// Canonical identity used by admission and durable custody lookups alike.
+pub(super) fn canonical_client_id(value: &str) -> String {
     if valid_client_uuid(value) {
-        return Ok(value.to_ascii_lowercase());
+        return value.to_ascii_lowercase();
     }
     let hash = format!("{:x}", Sha256::digest(value.as_bytes()));
-    Ok(format!(
+    format!(
         "client-{}-{}-4{}-8{}-{}",
         &hash[..8],
         &hash[8..12],
         &hash[13..16],
         &hash[17..20],
         &hash[20..32]
-    ))
+    )
 }
 
 fn valid_client_uuid(value: &str) -> bool {
@@ -111,4 +116,38 @@ pub(super) fn serialize_optional(
 }
 pub(super) fn stringify(value: &impl serde::Serialize) -> Result<String, GatewayApplicationError> {
     serde_json::to_string(value).map_err(GatewayApplicationError::internal_from)
+}
+
+/// Generated question replies are still queued messages, but cannot authorize chat settlements.
+pub(super) fn resolve_message(
+    db: &rusqlite::Connection,
+    subscribers: &super::EventSubscribers,
+    chat: &str,
+    request: &crate::gateway::MessageSendRequest,
+    facts: &std::sync::Arc<super::AppSettingsFacts>,
+    now: &str,
+) -> Result<super::settings::ResolvedControls, super::storage::AppStorageError> {
+    let mut resolution =
+        super::settings::resolve_for_message_send(db, subscribers, chat, request, facts, now)?;
+    if request
+        .client_message_id
+        .as_ref()
+        .and_then(Value::as_str)
+        .is_some_and(|id| id.starts_with("question-followup-"))
+    {
+        resolution.persisted["message_origin"] = "question_followup".into();
+    }
+    if let Some(id) = request.client_message_id.as_ref().and_then(Value::as_str) {
+        let connected: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM app_connector_deliveries WHERE id=?1)",
+                [id],
+                |r| r.get(0),
+            )
+            .map_err(super::storage::AppStorageError::sqlite)?;
+        if connected {
+            resolution.persisted["message_origin"] = "connector".into();
+        }
+    }
+    Ok(resolution)
 }

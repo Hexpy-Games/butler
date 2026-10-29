@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test";
 import { TAB_STRIP_LABELS, chipAccessibleLabel, tabAccessibleLabel } from "./tabStripLabels";
 import {
-  chipKey, focusAfterClose, moveTabByStep, moveTabOnDrop, nextFocusKey, stripItems, tabKey, type TabStripGroup,
+  chipKey, focusAfterClose, moveTabByStep, moveTabOnDrop, newTabKey, nextFocusKey, stripItems, tabKey, type TabStripGroup,
 } from "./tabStripModel";
 
 const groups: TabStripGroup[] = [
@@ -62,4 +62,25 @@ test("accessible names carry the title, count and state", () => {
   expect(tabAccessibleLabel({ id: "x", title: " ", state: "crashed" }, TAB_STRIP_LABELS)).toBe("Untitled, Page stopped");
   expect(chipAccessibleLabel(groups[1]!, TAB_STRIP_LABELS)).toBe("Shopping, 2 tabs, Butler is working");
   expect(chipAccessibleLabel(groups[0]!, TAB_STRIP_LABELS)).toBe("My tabs, 2 tabs");
+});
+
+// test-category: pure-logic
+test("group new-tab stops follow open titled groups and stay out of folded or untitled groups", () => {
+  expect(stripItems(groups, false, true).map((item) => item.key)).toEqual([
+    chipKey("mine"), tabKey("a1"), tabKey("a2"), newTabKey("mine"),
+    chipKey("c1"), tabKey("b1"), tabKey("b2"), newTabKey("c1"), chipKey("c2"),
+  ]);
+  expect(stripItems(groups, false, false).some((item) => item.kind === "new")).toBe(false);
+  expect(stripItems([groups[0]!], false, true).map((item) => item.key)).toEqual([tabKey("a1"), tabKey("a2")]);
+  expect(stripItems([groups[1]!], true, true).map((item) => item.key)).toEqual([tabKey("b1"), tabKey("b2")]);
+});
+
+// test-category: pure-logic
+test("arrows and End reach group new-tab stops and wrap around them", () => {
+  const items = stripItems(groups.slice(0, 2), false, true);
+  expect(nextFocusKey(items, tabKey("a2"), "ArrowRight")).toBe(newTabKey("mine"));
+  expect(nextFocusKey(items, newTabKey("mine"), "ArrowRight")).toBe(chipKey("c1"));
+  expect(nextFocusKey(items, tabKey("b1"), "End")).toBe(newTabKey("c1"));
+  expect(nextFocusKey(items, chipKey("mine"), "ArrowLeft")).toBe(newTabKey("c1"));
+  expect(nextFocusKey(items, newTabKey("c1"), "ArrowRight")).toBe(chipKey("mine"));
 });

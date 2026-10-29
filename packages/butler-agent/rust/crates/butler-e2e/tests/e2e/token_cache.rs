@@ -16,6 +16,12 @@ fn prompt_budget_ratchet() -> Result<(), HarnessError> {
     let tokenizer = tiktoken_rs::o200k_base().map_err(|error| HarnessError(error.to_string()))?;
     for (profile, prefix) in prefixes {
         let tokens = tokenizer.encode_ordinary(&prefix).len();
+        if profile == "phase_minimal|butler|direct" {
+            eprintln!(
+                "DIRECT_PREFIX tokens={tokens} budget={}",
+                baseline[&profile]
+            );
+        }
         assert!(
             tokens <= baseline[&profile],
             "{profile}: {tokens} tokens exceeds {}",

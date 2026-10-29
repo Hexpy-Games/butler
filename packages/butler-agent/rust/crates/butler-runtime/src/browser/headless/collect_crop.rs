@@ -50,5 +50,7 @@ pub(crate) async fn capture(page: &Page, args: &Value, epoch: u64) -> Result<Val
         .shared
         .with_tab(&page.tab, |t| t.url.clone())
         .unwrap_or_default();
-    Ok(json!({"status":"ok","source_url":url,"alt":"","nearby_text":"","image":{"data":data}}))
+    Ok(
+        json!({"status":"ok","pixel_ratio":1,"source_url":url,"alt":"","nearby_text":"","image":{"data":data}}),
+    )
 }

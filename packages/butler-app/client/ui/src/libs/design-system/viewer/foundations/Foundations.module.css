@@ -820,7 +820,7 @@
   display: block;
   width: var(--step);
   height: var(--step);
-  border-radius: calc(var(--space-xs) / 2);
+  border-radius: calc(var(--space-xs) / 2 / var(--ui-scale));
   background: var(--accent);
   outline: var(--border-hairline) dashed var(--line-strong);
 }
@@ -871,7 +871,7 @@
 }
 
 .anatomyFill {
-  border-radius: calc(var(--space-xs) / 2);
+  border-radius: calc(var(--space-xs) / 2 / var(--ui-scale));
   background: var(--color-surface-base);
 }
 
@@ -1298,7 +1298,7 @@
 .miniStair > span {
   width: calc(var(--step) * 1.5);
   height: calc(var(--step) * 1.5);
-  border-radius: calc(var(--space-xs) / 2);
+  border-radius: calc(var(--space-xs) / 2 / var(--ui-scale));
   background: var(--accent);
 }
 

@@ -256,14 +256,11 @@ fn delegated(mode: &str, request: &str, out: &[Value]) -> Value {
         };
     }
     match n {
-        0 => call(n, "start_work", &json!({"objective":case.prompt})),
-        1 => call(n, "replace_work_plan", &plan("steward")),
-        2 => call(
+        0 => call(
             n,
-            "record_work_review",
-            &json!({"subject":"plan","verdict":"accept","summary":"Ready"}),
+            "delegate_to_steward",
+            &json!({"request":case.prompt,"checks":["Latest stable 2.6.1 (2026-09-28)"]}),
         ),
-        3 => call(n, "delegate_to_steward", &json!({"request":case.prompt})),
         _ => message("Direction delivered."),
     }
 }

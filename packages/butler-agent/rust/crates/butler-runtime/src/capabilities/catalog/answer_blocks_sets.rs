@@ -4,22 +4,7 @@ use std::collections::BTreeSet;
 
 pub fn normalize(spec: &mut Value) {
     trim(spec);
-    if let Some(blocks) = spec.get_mut("blocks").and_then(Value::as_array_mut) {
-        for block in blocks {
-            let Some(fields) = block.as_object_mut() else {
-                continue;
-            };
-            match fields.get("type").and_then(Value::as_str) {
-                Some("cards" | "gallery") => {
-                    fields.entry("media").or_insert(json!("1:1"));
-                }
-                Some("callout") => {
-                    fields.entry("tone").or_insert(json!("neutral"));
-                }
-                _ => {}
-            }
-        }
-    }
+    super::walk::defaults(spec);
 }
 
 pub(super) fn trim(value: &mut Value) {
@@ -42,69 +27,46 @@ pub(super) fn trim(value: &mut Value) {
 }
 
 pub fn sources(spec: &Value) -> Vec<String> {
-    fn visit(value: &Value, found: &mut BTreeSet<String>) {
-        match value {
-            Value::Object(fields) => {
-                if let Some(source) = fields.get("source").and_then(Value::as_str)
-                    && let Some(id) = super::source_identity(source)
-                {
-                    found.insert(id);
-                }
-                for field in fields.values() {
-                    visit(field, found);
-                }
-            }
-            Value::Array(items) => {
-                for item in items {
-                    visit(item, found);
-                }
-            }
-            _ => {}
-        }
-    }
     let mut found = BTreeSet::new();
-    visit(spec, &mut found);
+    super::walk(spec, &mut |value| {
+        if let Some(id) = value
+            .get("source")
+            .and_then(Value::as_str)
+            .and_then(super::source_identity)
+        {
+            found.insert(id);
+        }
+    });
     found.into_iter().collect()
 }
 
-/// Source identities of the items an answer pictures (an item with both `img` and `source`).
+/// Sources pictured by either image leaves or items, including container children.
 pub fn pictured_sources(sets: &[Value]) -> BTreeSet<String> {
-    fn visit(value: &Value, found: &mut BTreeSet<String>) {
-        match value {
-            Value::Object(fields) => {
-                if fields.get("img").and_then(Value::as_str).is_some()
-                    && let Some(id) = fields
-                        .get("source")
-                        .and_then(Value::as_str)
-                        .and_then(super::page_identity)
-                {
-                    found.insert(id);
-                }
-                for field in fields.values() {
-                    visit(field, found);
-                }
-            }
-            Value::Array(items) => {
-                for item in items {
-                    visit(item, found);
-                }
-            }
-            _ => {}
-        }
-    }
     let mut found = BTreeSet::new();
     for set in sets {
-        visit(&set["spec"], &mut found);
+        super::walk(&set["spec"], &mut |value| {
+            if value.get("img").and_then(Value::as_str).is_some()
+                && let Some(id) = value
+                    .get("source")
+                    .and_then(Value::as_str)
+                    .and_then(super::page_identity)
+            {
+                found.insert(id);
+            }
+        });
     }
     found
 }
 
 pub fn shown(spec: &Value) -> Map<String, Value> {
     let mut counts = Map::new();
-    for block in spec["blocks"].as_array().into_iter().flatten() {
+    super::walk(spec, &mut |block| {
         let Some(kind) = block["type"].as_str() else {
-            continue;
+            return;
         };
+        if matches!(kind, "columns" | "tabs" | "group") {
+            return;
+        }
         let count = if matches!(kind, "cards" | "gallery") {
             block["items"].as_array().map_or(0, Vec::len) as u64
         } else {
@@ -112,10 +74,11 @@ pub fn shown(spec: &Value) -> Map<String, Value> {
         };
         let previous = counts.get(kind).and_then(Value::as_u64).unwrap_or(0);
         counts.insert(kind.into(), json!(previous + count));
-    }
+    });
     counts
 }
 
+/// Child ids are globally unique, but replacement happens per top-level block.
 pub fn accept(sets: &mut Vec<Value>, call_id: &str, spec: Value) {
     let ids: BTreeSet<String> = spec["blocks"]
         .as_array()

@@ -30,8 +30,17 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.
 - Keep domain data, app state, and business decisions outside this component.
 
-## Horizontal fields
-With `orientation="horizontal"`, put the control first, then `FieldContent` (label, optional description). The control centers on the label's line; the description runs below the label, never beside the control.
+## Switch fields: stacked by default, row as the exception
+A switch field is laid out like an input: `FieldLabel`, then
+`FieldDescription`, then the `Switch` underneath, left-aligned (the default
+vertical `Field`). Every desktop settings field and form uses it.
+
+The row layout, `orientation="horizontal"` with `FieldContent` first and the
+control after it, puts the label and the switch on one row with the switch at
+the row end and the description under the label; the control centers on the
+label's line. Use it only on a phone layout or for a list item inside a
+closed container (a card, a list row) where the width has to be used. Never
+put the switch before its label.
 
 ## Wrong use cases
 - Do not use Field as a domain-specific component with embedded feature logic; create a domain component under `src/components` and compose this component instead.

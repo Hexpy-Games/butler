@@ -395,6 +395,7 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
         include_recent_context(
             &owner,
             RecentConversationInput {
+                cognition: None,
                 transport: "app",
                 runtime_session_id: "runtime",
                 model_ref: Some("google/gemini-3.8-flash"),
@@ -412,6 +413,7 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
     let assembly = include_recent_context(
         &owner,
         RecentConversationInput {
+            cognition: None,
             transport: "app",
             runtime_session_id: "runtime",
             model_ref: Some("google/gemini-3.8-flash"),

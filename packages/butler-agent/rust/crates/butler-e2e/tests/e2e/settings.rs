@@ -155,6 +155,36 @@ async fn set_02_unavailable_and_malformed_settings_are_rejected() -> Result<(), 
 /// SET-02: unknown fields, wrong types, invalid JSON and an oversize body
 /// are rejected with their public error codes.
 async fn assert_malformed_settings_rejected(gw: &Gateway) -> Result<(), HarnessError> {
+    for value in [
+        json!(null),
+        json!(true),
+        json!(400),
+        json!([]),
+        json!({}),
+        json!(""),
+        json!("4:00"),
+        json!("24:00"),
+        json!("04:60"),
+        json!("04:0"),
+        json!(" 04:00"),
+        json!("04:00 "),
+        json!("04:00:00"),
+        json!("０４:００"),
+        json!("-1:00"),
+    ] {
+        let reply = gw
+            .patch(
+                "/settings",
+                json!({"consolidation_time":value,"language":"ko"}),
+            )
+            .await?;
+        assert_eq!(
+            (reply.status, reply.error_code()),
+            (400, Some("invalid_settings_request")),
+            "{}",
+            reply.text
+        );
+    }
     let reply = gw
         .patch("/settings", json!({"no_such_setting": true}))
         .await?;
@@ -343,5 +373,27 @@ async fn set_05_concurrent_settings_edits_keep_every_write() -> Result<(), Harne
     assert!(config.is_object());
     s.restart().await?;
     check(&s.gw.settings().await?);
+    s.finish().await
+}
+
+/// Text size defaults, every supported value persists, and malformed values are refused.
+#[tokio::test]
+async fn text_size_round_trip() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("SET-TEXT-SIZE")?.start().await?;
+    assert_eq!(s.gw.settings().await?["text_size"], "default");
+    for value in ["large", "larger", "default"] {
+        let reply = s.gw.patch("/settings", json!({"text_size": value})).await?;
+        assert_eq!(reply.status, 200, "{}", reply.text);
+        assert_eq!(reply.data()["text_size"], value);
+        assert_eq!(s.gw.settings().await?["text_size"], value);
+        s.restart().await?;
+        assert_eq!(s.gw.settings().await?["text_size"], value);
+    }
+    for value in [json!("huge"), json!(1.3), Value::Null] {
+        let reply = s.gw.patch("/settings", json!({"text_size": value})).await?;
+        assert_eq!(reply.status, 400, "{}", reply.text);
+        assert_eq!(s.gw.settings().await?["text_size"], "default");
+    }
     s.finish().await
 }

@@ -31,6 +31,15 @@ import { SurfacePanel, PanelHeader } from "@/butler-ds";
 </SurfacePanel>
 ```
 
+`radius` picks the corner tier: `control` (default, `--radius-control`, 8px)
+for settings rows and groups, `lg` (`--radius-popover`, 12px) for a panel in
+the conversation, such as the background-work card, so it matches the message
+bubbles and document cards around it.
+
+```tsx
+<SurfacePanel elevation="none" radius="lg">{workProgress}</SurfacePanel>
+```
+
 ## Accessibility
 
 - Standard div container

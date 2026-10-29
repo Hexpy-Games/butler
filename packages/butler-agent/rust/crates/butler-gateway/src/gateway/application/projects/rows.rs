@@ -238,7 +238,7 @@ fn append_created(
     Ok(())
 }
 
-pub(super) fn summary(
+pub(in crate::gateway::application) fn summary(
     row: ProjectRow,
     sessions: Option<Vec<AppSessionSummary>>,
 ) -> AppProjectSummary {

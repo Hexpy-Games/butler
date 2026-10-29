@@ -4,8 +4,10 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
-import { nativeAligned, nativePeekDismiss, pane, shellGeometry, shellReady, toggle, togglePane, toggleState } from "../support/browser-shell-acceptance";
-import { newTabHub } from "../support/browser-newtab-acceptance";
+import { nativeAligned, nativePeekDismiss, pane, sessionInfoBesideBrowser, shellGeometry, shellReady, toggle, togglePane, toggleState } from "../support/browser-shell-acceptance";
+import { assertNewTabContent, newTabHub } from "../support/browser-newtab-acceptance";
+import { playingVideoFixture, routeReturnKeepsPage } from "../support/browser-route-return";
+import { assertSidebarRouteActive } from "../support/sidebar-route-active";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 assert.ok(evidence);
@@ -49,13 +51,20 @@ try {
     await toggleState(app, "butler", false); await app.shot(`${locale}-${theme}-${width}-toggle-busy-open`);
     await togglePane(app, false); await toggleState(app, "riso", true); await app.shot(`${locale}-${theme}-${width}-toggle-busy-closed`);
     await app.main(`(()=>{const b=globalThis.browserAgentSubject;b.tabs.get(${JSON.stringify(first)}).busy=false;b.publish()})()`);
+    const general = getAppCopy(locale === "ko" ? "ko-KR" : "en-US").space.general;
+    if (width === 1440) await assertSidebarRouteActive(app, "session", general);
     await app.click(locale === "ko" ? "브라우저" : "Browser");
     await app.call("activate", { id: first }); await nativeAligned(app);
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-split-chat]'))"), false);
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-inspector][data-open=true]'))"), false);
     await app.shot(`${locale}-${theme}-${width}-hub-corners`);
+    if (width === 1440) {
+      await assertSidebarRouteActive(app, "browser", locale === "ko" ? "브라우저" : "Browser");
+      await app.shot(`${locale}-${theme}-1440-sidebar-browser-active`);
+    }
     await app.page.clickSelector('[data-slot="titlebar-leading"] button');
     await waitBrowser(() => app.page.expression(`document.querySelector('${toggle}')?.getAttribute('aria-pressed') === 'true'`), "hub conversation entry");
+    if (width === 1440) await assertSidebarRouteActive(app, "session", general);
   }
   await app.main(`${app.win}.setContentSize(1440,900)`);
   await nativeAligned(app);
@@ -73,20 +82,38 @@ try {
   await togglePane(app, false); await togglePane(app, true);
   assert.equal((await app.call<{ activeId: string }>("state")).activeId, second);
   await app.click("Second conversation");
+  await assertSidebarRouteActive(app, "session", "Second conversation");
   await waitBrowser(() => app.page.expression(`!document.querySelector('${pane}') && document.querySelector('[data-test-class=custom-titlebar]')?.textContent.includes('Second conversation')`), "second conversation has its own closed browser pane");
   assert.equal(await app.page.expression(`Boolean(document.querySelector('${pane}'))`), false);
   await togglePane(app, true);
-  // 8edeb6fce5: conversation panes create tabs only through New tab.
-  await app.click("New tab");
-  await waitBrowser(async () => (await app.call<{ activeId: string }>("state")).activeId !== second, "second conversation creates its own tab");
+  // A conversation pane opened with no tabs opens one new tab at once (no empty state, no New tab click).
+  const ownTabs = async () => (await app.call<{ tabs: Array<{ id: string; owner: string }> }>("state")).tabs.filter((tab) => tab.owner === `conversation:${created.session.id}`);
+  await waitBrowser(async () => (await ownTabs()).length === 1 && (await app.call<{ activeId: string }>("state")).activeId === (await ownTabs())[0]?.id, "second conversation opens its own tab");
   const other = (await app.call<{ activeId: string }>("state")).activeId;
   assert.notEqual(other, second);
+  assert.equal((await ownTabs()).length, 1);
+  await waitBrowser(() => app.page.expression("document.activeElement?.closest('[data-slot=address-field]') !== null"), "conversation new-tab address focus");
+  await assertNewTabContent(app.page, "en");
   await app.click(getAppCopy("en-US").space.general); await nativeAligned(app);
   assert.equal((await app.call<{ activeId: string }>("state")).activeId, second);
-  await app.click("Show right panel");
-  await waitBrowser(() => app.page.expression(`!document.querySelector('${pane}')`), "inspector closes browser");
-  await togglePane(app, true);
-  assert.equal(await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-right-open')"), "false");
+  // A playing page stays on screen, with its favicon, through session and Settings round trips and a reload.
+  const video = playingVideoFixture();
+  try {
+    const playing = await app.call<string>("create", { owner: "conversation:general", url: video.url.href });
+    await app.call("activate", { id: playing }); await nativeAligned(app);
+    await waitBrowser(() => app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(playing)}).view.webContents.executeJavaScript("!document.querySelector('video').paused")`), "fixture video plays");
+    // Precondition: playing media turns throttling off, so the page stays visible while detached.
+    await waitBrowser(() => app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(playing)}).view.webContents.getBackgroundThrottling() === false`), "playing page runs unthrottled");
+    await routeReturnKeepsPage(app, playing, new URL("/icon.png", video.url).href, "Second conversation");
+    await app.shot("en-light-1440-route-return");
+    // A page that reports no icon (an error page) does not keep the previous page's favicon.
+    await app.call("navigate", { id: playing, value: "http://127.0.0.1:1/" });
+    await waitBrowser(async () => (await app.call<{ tabs: Array<{ id: string; status: string; favicon: string }> }>("state")).tabs
+      .some((tab) => tab.id === playing && tab.status === "idle" && tab.favicon === ""), "error page drops the previous favicon");
+    await app.call("close", { id: playing });
+  } finally { video.stop(true); }
+  await app.call("activate", { id: second }); await nativeAligned(app);
+  await sessionInfoBesideBrowser(app);
   await app.click("Browser"); await app.call("activate", { id: mine });
   await app.click("Move to a conversation");
   await waitBrowser(() => app.page.expression("[...document.querySelectorAll('[role=menuitem]')].some(n=>n.textContent?.trim()==='Second conversation')"), "conversation move menu");
@@ -95,7 +122,12 @@ try {
   await app.click("Library");
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="library-page"]')));
   assert.equal(await app.page.expression(`Boolean(document.querySelector('${pane}'))`), false);
+  await assertSidebarRouteActive(app, "library", "Library");
   await app.shot("en-dark-library");
+  await app.click("Browser");
+  await assertSidebarRouteActive(app, "browser", "Browser");
+  await app.click("Second conversation");
+  await assertSidebarRouteActive(app, "session", "Second conversation");
   // #1188: the window shrinks to its minimum, and the Browser's tab strip and toolbar still fit there.
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });

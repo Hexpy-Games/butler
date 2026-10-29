@@ -17,7 +17,7 @@ pub(super) type Reviewed<'a> = (&'a WorkPlan, &'a WorkReview);
 pub(super) fn steward_identity<'a>(
     request: &'a StewardDelegationRequest,
     reviewed: &'a WorkView,
-    (plan, review): Reviewed<'a>,
+    (plan, review): (&'a WorkPlan, Option<&'a WorkReview>),
 ) -> StewardIdentity<'a> {
     StewardIdentity {
         parent_session_id: &request.parent_session_id,
@@ -25,7 +25,7 @@ pub(super) fn steward_identity<'a>(
         request: &request.request,
         work_id: &reviewed.work_id,
         plan_revision_id: &plan.plan_revision_id,
-        review_revision_id: &review.review_revision_id,
+        review_revision_id: review.map(|review| review.review_revision_id.as_str()),
         previous_relation_id: request.previous_relation_id.as_deref(),
     }
 }
@@ -52,7 +52,7 @@ pub(super) fn steward(
     request: &StewardDelegationRequest,
     parent_chat_id: String,
     reviewed: &WorkView,
-    (plan, review): Reviewed<'_>,
+    (plan, review): (&WorkPlan, Option<&WorkReview>),
 ) -> SubsessionPacket {
     SubsessionPacket {
         child_role: ChildRole::Steward,
@@ -64,7 +64,7 @@ pub(super) fn steward(
         parent_chat_id: Some(parent_chat_id),
         relation_id: ids.relation_id.clone(),
         access_mode: request.access_mode.clone(),
-        execution_mode: PacketExecutionMode::for_access(&request.access_mode),
+        execution_mode: PacketExecutionMode::for_access(request.access_mode.as_str()),
         objective: request.request.clone(),
         prior_context: None,
         acceptance_criteria: plan.checks.clone(),
@@ -72,8 +72,8 @@ pub(super) fn steward(
         plan_action: None,
         task_or_plan_refs: vec![plan.plan_revision_id.clone()],
         constraints_and_non_goals: Vec::new(),
-        allowed_tools_and_effects: allowed_effects(&request.access_mode),
-        mutation_scope: mutation_scope(&request.access_mode),
+        allowed_tools_and_effects: allowed_effects(request.access_mode.as_str()),
+        mutation_scope: mutation_scope(request.access_mode.as_str()),
         parent_work_ref: Some(parent_work_ref(
             reviewed,
             &request.parent_turn_id,
@@ -106,7 +106,7 @@ pub(super) fn worker(
         parent_chat_id: None,
         relation_id: ids.relation_id.clone(),
         access_mode: request.access_mode.clone(),
-        execution_mode: PacketExecutionMode::for_access(&request.access_mode),
+        execution_mode: PacketExecutionMode::for_access(request.access_mode.as_str()),
         objective: request.objective.clone(),
         prior_context: None,
         acceptance_criteria: request.acceptance_criteria.clone(),
@@ -120,13 +120,13 @@ pub(super) fn worker(
         constraints_and_non_goals: vec![
             "Execute only this bounded Task and report to the Steward.".into(),
         ],
-        allowed_tools_and_effects: allowed_effects(&request.access_mode),
-        mutation_scope: mutation_scope(&request.access_mode),
+        allowed_tools_and_effects: allowed_effects(request.access_mode.as_str()),
+        mutation_scope: mutation_scope(request.access_mode.as_str()),
         parent_work_ref: Some(parent_work_ref(
             reviewed,
             &request.parent_turn_id,
             plan,
-            review,
+            Some(review),
         )),
         worker_profile: Some(crate::btcc::PacketWorkerProfile {
             id: profile.id.clone(),

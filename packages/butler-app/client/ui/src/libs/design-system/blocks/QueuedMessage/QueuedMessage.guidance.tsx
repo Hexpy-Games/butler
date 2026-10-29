@@ -27,7 +27,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A normal user bubble pretends the message was delivered.", render: () => <MessageRow role="user">Also mention that MCP secrets stay redacted.</MessageRow> },
     },
   ],
-  content: ["Status: Queued, Queued · 2 of 3, Sending…, Send failed (대기 중 · 3개 중 2번째)."],
+  content: [
+    "Status: Queued, Queued · 2 of 3, Sending…, Send failed (대기 중 · 3개 중 2번째).",
+    "Send now (지금 보내기) is offered on the next waiting message only; its tooltip says it stops the current response.",
+  ],
   accessibility: ["Edit and delete are labelled IconButtons; long text toggles with Show more / Show less."],
   tokens: ["--user-message-bg", "--border-hairline", "--motion-slow", "--motion-ease-decelerate"],
 };

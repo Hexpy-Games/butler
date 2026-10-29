@@ -155,7 +155,10 @@ impl ChatState {
                 self.emit_calls(calls, observer);
             }
         }
-        if let Some(value) = event.pointer("/choices/0/finish_reason") {
+        if let Some(value) = event
+            .pointer("/choices/0/finish_reason")
+            .filter(|v| v.is_string())
+        {
             self.finish_reason = value.clone();
         }
         true

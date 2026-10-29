@@ -26,6 +26,7 @@ use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
 
 mod budget;
+pub mod delegation_eval;
 mod hold;
 pub use hold::ReplyGate;
 mod memory;

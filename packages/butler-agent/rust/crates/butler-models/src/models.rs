@@ -99,14 +99,15 @@ pub use configuration::{
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
     CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
     SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
-    credential_store_policy, reset_secret_keys,
+    credential_store_policy, fallback_file, reset_secret_keys,
 };
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, ImageModelError, ImageModelSelection,
     LocalModelMutation, McpModelTarget, ModelConfiguration, ModelConfigurationClock,
     ModelConfigurationEnvironment, ModelConfigurationRead, ModelContextMetadataRead,
     ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError, ProviderKeySaveError,
-    ResolvedImageModel, SavedProviderKey, SettingsError, generate_pkce_verifier, pkce_challenge,
+    QuietHours, ResolvedImageModel, SavedProviderKey, SettingsError, generate_pkce_verifier,
+    pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 

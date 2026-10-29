@@ -97,7 +97,7 @@ async function verifyCancelledMove(page: Page, server: NativeAppServerHandle, pr
 async function moveFromBacklog(page: Page, title: string, planId: string) {
   await selectBoardPlan(page, "백로그");
   await item(page, title).getByRole("button").click();
-  const detail = page.locator('[data-test-class="canon-epic-detail"]');
+  const detail = page.locator('[data-slot="management-page-aside"][data-state="open"] [data-test-class="canon-epic-detail"]');
   await detail.getByRole("combobox", { name: "계획", exact: true }).selectOption(planId);
   await waitToast(page, "프리뷰 14에 넣었습니다");
   await selectBoardPlan(page, "프리뷰 14");

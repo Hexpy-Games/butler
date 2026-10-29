@@ -48,6 +48,7 @@ pub(in crate::gateway::http) async fn route(
         Handler::Preview => content::preview::view(&state, &request),
         Handler::Output => content::view(state, request).await,
         Handler::Security => security_settings::route(state, request).await,
+        Handler::Plugins => plugins::route(state, request).await,
         Handler::Hooks => hooks::route(state, request).await,
         Handler::OpenedFiles => opened_files::route(state, request).await,
         Handler::Settings if request.method() == Method::GET => {
@@ -98,7 +99,12 @@ async fn commands(
             message_files::route(state, request).await
         }
         Handler::Wallpapers => wallpapers::route(state, request).await,
-        Handler::Queue if matches!(*request.method(), Method::PATCH | Method::DELETE) => {
+        Handler::Queue
+            if matches!(
+                *request.method(),
+                Method::POST | Method::PATCH | Method::DELETE
+            ) =>
+        {
             session_queue::route(state, request, uri).await
         }
         Handler::Mcp => mcp_servers::route(state, request, uri).await,

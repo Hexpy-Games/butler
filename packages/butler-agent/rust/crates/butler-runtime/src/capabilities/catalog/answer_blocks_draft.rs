@@ -9,6 +9,8 @@ use std::collections::{HashMap, HashSet};
 pub struct AnswerBlocksDraftUnit {
     /// Block position within the call, never the provider call id.
     pub bi: usize,
+    /// Container-relative closed child or tab label path.
+    pub path: Vec<String>,
     /// Closed field/list name, absent at block close.
     pub field: Option<String>,
     /// Item position, absent for fields and structural closes.
@@ -35,7 +37,7 @@ struct Block {
     opened: bool,
 }
 
-/// Incremental per-call parser, bounded by the final 24 KB contract.
+/// Incremental per-call parser, bounded by the final 32 KB contract.
 #[derive(Default)]
 pub struct AnswerBlocksParser {
     scanner: scanner::Scanner,
@@ -56,6 +58,7 @@ impl AnswerBlocksParser {
                 }
                 Some(AnswerBlocksDraftUnit {
                     bi,
+                    path: unit.path[2..].to_vec(),
                     field: unit.path.get(2).cloned(),
                     index: unit.path.get(3).and_then(|index| index.parse().ok()),
                     value: unit.value,
@@ -121,9 +124,14 @@ fn apply(
         return block.opened.then(|| json!({"op":"block_end", "bi":bi}));
     };
     let Some(value) = &unit.value else {
-        return (block.opened && unit.index.is_none() && matches!(field, "items" | "rows"))
-            .then(|| json!({"op":"list_end", "bi":bi,"list":field}));
+        return (block.opened
+            && unit.index.is_none()
+            && matches!(field, "items" | "rows" | "blocks" | "tabs"))
+        .then(|| json!({"op":"list_end", "bi":bi,"list":field}));
     };
+    if unit.path.len() > 2 {
+        return nested(block, unit, context);
+    }
     if field == "type" {
         let mut spec = json!({"blocks":[{"type":value}]});
         normalize(&mut spec);
@@ -161,7 +169,10 @@ fn needs_evidence(block: &Block, unit: &AnswerBlocksDraftUnit) -> bool {
     }
     // A block-level source is only shown once `checked` proved it was read;
     // until then it is staged for validation but never released.
-    if unit.index.is_none() && unit.field.as_deref() == Some("source") {
+    if block.fields.get("type").and_then(Value::as_str) == Some("chart")
+        && unit.index.is_none()
+        && unit.field.as_deref() == Some("source")
+    {
         return !block.fields.contains_key("checked");
     }
     unit.field.as_deref() == Some("series")
@@ -219,4 +230,39 @@ fn flush_pending(block: &mut Block, context: &AnswerBlocksContext<'_>) -> Vec<Va
         }
     }
     values
+}
+
+fn nested(
+    block: &Block,
+    unit: &AnswerBlocksDraftUnit,
+    context: &AnswerBlocksContext<'_>,
+) -> Option<Value> {
+    if block.fields.get("type")?.as_str()? != "tabs" || unit.path.first()?.as_str() != "tabs" {
+        return None;
+    }
+    let tab = unit.index?;
+    if tab >= 5 {
+        return None;
+    }
+    let value = unit.value.as_ref()?;
+    if unit.path.len() == 3 && unit.path[2] == "label" {
+        let label = value.as_str()?;
+        if label.is_empty() || label.chars().count() > 24 {
+            return None;
+        }
+        return Some(json!({"op":"tab", "bi":unit.bi, "index":tab, "label":label}));
+    }
+    if unit.path.len() != 4 || unit.path[2] != "blocks" {
+        return None;
+    }
+    let child: usize = unit.path[3].parse().ok()?;
+    if child >= 4 {
+        return None;
+    }
+    let tab_value = json!({"label":"tab", "blocks":[value]});
+    let metadata = Value::Object(block.fields.clone());
+    if !validate_draft_unit(&metadata, "tabs", Some(tab), &tab_value, context) {
+        return None;
+    }
+    Some(json!({"op":"child", "bi":unit.bi, "tab":tab, "index":child, "value":value}))
 }

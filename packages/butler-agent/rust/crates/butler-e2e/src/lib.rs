@@ -60,3 +60,6 @@ macro_rules! assert_wall_clock_budget {
         }
     }};
 }
+
+#[cfg(test)]
+mod workspace_folder_security;

@@ -151,15 +151,21 @@ pub(super) fn list_permissions(
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql)
 }
+pub(super) fn deferred_sql() -> String {
+    format!(
+        "{ROW} INDEXED BY idx_btcc_questions_deferred WHERE owner_session_id=?1 AND capability='ask_user' AND decision='modified' \
+        AND close_reason IS NULL AND outcome_receipt_json IS NULL \
+        AND json_extract(CASE WHEN capability='ask_user' THEN private_alternative_input END,'$.status')='deferred'"
+    )
+}
 pub(super) fn pending_sql() -> String {
     format!(
         "SELECT * FROM ({ROW} WHERE owner_session_id=?1 AND close_reason IS NULL \
         AND decision='pending' AND source_call_id IS NOT NULL AND EXISTS (SELECT 1 FROM btcc_turns turn \
         WHERE turn.turn_id=source_turn_id AND turn.suspension_reason='authority_pending') \
-        UNION ALL {ROW} INDEXED BY idx_btcc_questions_deferred WHERE owner_session_id=?1 AND capability='ask_user' AND decision='modified' \
-        AND close_reason IS NULL AND outcome_receipt_json IS NULL \
-        AND json_extract(CASE WHEN capability='ask_user' THEN private_alternative_input END,'$.status')='deferred') \
-        ORDER BY CASE WHEN decision='pending' THEN 0 ELSE 1 END, created_at ASC"
+        UNION ALL {}) \
+        ORDER BY CASE WHEN decision='pending' THEN 0 ELSE 1 END, created_at ASC",
+        deferred_sql()
     )
 }
 pub(super) fn list_pending(db: &Connection, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
@@ -270,7 +276,7 @@ pub(super) fn question_history(
         } else {
             "source_turn_id"
         };
-        records.extend(many(db, &format!("{ROW} WHERE owner_session_id=?1 AND capability='ask_user' AND {column}=?2 AND decision='modified' AND close_reason IS NULL AND (outcome_receipt_json IS NULL OR json_extract(outcome_receipt_json,'$.status')='answered') ORDER BY created_at"), &[&owner, &turn])?);
+        records.extend(many(db, &format!("{ROW} WHERE owner_session_id=?1 AND capability='ask_user' AND {column}=?2 AND decision='modified' AND close_reason IS NULL AND (outcome_receipt_json IS NULL OR json_extract(outcome_receipt_json,'$.status') IN ('answered','resolved_in_chat')) ORDER BY created_at"), &[&owner, &turn])?);
     }
     let mut seen = std::collections::HashSet::new();
     records.retain(|r| seen.insert(r.request_ref.clone()));

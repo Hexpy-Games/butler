@@ -1,3 +1,7 @@
+import { publishCanonTrustEvent } from "@/app/canonTrust.ts";
+import { notifyStatus } from "@/app/notifications.ts";
+import { publishDocumentEvent } from "@/app/documentEvents";
+import { publishCanonProposalEvent } from "@/app/canonProposals.ts";
 import { publishPendingAsksEvent } from "@/app/pendingAsks.ts";
 import { publishCanonEvent } from "@/app/canonEvents.ts";
 import { publishChatGptEvent } from "@/app/chatGptEvents.ts";
@@ -86,12 +90,18 @@ export function useLiveSessionEvents(): void {
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
       }
+      if (event.type === "browser.payment_confirmation_skipped" && isRecentEvent(event)) {
+        notifyStatus(appCopy.interfaceDetails.paymentSkipped(String(event.payload?.site ?? ""), String(event.payload?.amount ?? "")), { id: `payment-skipped-${event.id}`, tone: "ok" });
+      }
       receiveUpdateProgress(event);
       publishMemoryEvent(event);
       publishChatGptEvent(event);
       publishLibraryEvent(event);
+      publishDocumentEvent(event);
       publishCanonEvent(event);
+      publishCanonTrustEvent(event);
       publishPendingAsksEvent(event);
+      publishCanonProposalEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
@@ -160,6 +170,7 @@ export function useLiveSessionEvents(): void {
         event.type.startsWith("question.") || event.type.startsWith("authority.") ||
         event.type.startsWith("worker.") || event.type.startsWith("worker_") ||
         event.type === "session_queue.changed" || event.type === "session.queue.changed" ||
+        isDeliveredAssistantMessage(event) ||
         (event.type === "session.updated" && !isProjectNavigationEvent(event))
       ) {
         if (!isProjectNavigationEvent(event)) {
@@ -203,6 +214,7 @@ export function useLiveSessionEvents(): void {
       },
       onRecovered: () => {
         refreshVisibleTaskGraphs();
+        publishCanonTrustEvent({ type: "stream.reconcile_required" } as TimelineEvent);
         // Module changes may have been missed while disconnected.
         void userWallpaperModules.refresh();
         const view = useButlerStore.getState().view;
@@ -260,15 +272,17 @@ function notifyDesktopEvent(
   if (!settings.enabled || !isRecentEvent(event)) return;
   if (
     event.type === "automation.run" &&
-    event.payload?.safe_error_code === "schedule_permission_required"
+    ["schedule_permission_required", "schedule_signin_off", "schedule_payment_off"].includes(String(event.payload?.safe_error_code))
   ) {
     void showDesktopNotification({
       kind: "task_completion",
       title: appCopy.firstRun.product,
-      body: event.payload?.tainted === true
+      body: event.payload?.safe_error_code === "schedule_signin_off" ? appCopy.automations.signinOffNotify
+        : event.payload?.safe_error_code === "schedule_payment_off" ? appCopy.automations.paymentOffNotify
+        : event.payload?.tainted === true
         ? `${appCopy.automations.needsPermissionNotify} ${appCopy.interfaceTemplates.approvalRequest.taintReason}`
         : appCopy.automations.needsPermissionNotify,
-      sessionId: event.payload.target_session_id,
+      sessionId: event.payload?.target_session_id,
     });
     return;
   }
@@ -276,6 +290,7 @@ function notifyDesktopEvent(
   if (
     settings.assistant_messages &&
     isDeliveredAssistantMessage(event) &&
+    message?.quiet !== true &&
     message?.id &&
     !messageIdsRef.current.has(message.id)
   ) {

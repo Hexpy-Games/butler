@@ -113,6 +113,12 @@ pub(super) async fn operation(
         payload.insert("resultByteLength".into(), Value::from(body.len()));
         (id, sha256)
     });
+    if matches!(status, Status::Completed)
+        && let Some(raw) = output.and_then(|value| value.field("deliverables").ok().flatten())
+        && let Ok(deliverables) = serde_json::from_str::<Value>(raw)
+    {
+        payload.insert("deliverables".into(), deliverables);
+    }
     event.payload = Some(payload);
     // The transcript row and its output exist only as these events: a failed
     // append fails the caller rather than leaving the row silently incomplete.

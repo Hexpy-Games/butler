@@ -1,4 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
+ipcRenderer.on("butler:text-size", (_event, factor) => {
+  if (typeof factor === "number" && Number.isFinite(factor) && factor > 0) document.documentElement.style.setProperty("--ui-scale", String(factor));
+});
 
 // Capture links before nested message menus; non-web schemes keep their handlers.
 for (const type of ["click", "contextmenu"]) globalThis.window?.addEventListener(type, event => {
@@ -259,7 +262,7 @@ function normalizeLocalServerUrl(value) {
 
 function recordWorkAction(path, options) {
   const traceparent = options.headers?.traceparent;
-  const action = path === "/messages" || path === "/session-queue" ? "send"
+  const action = path === "/messages" || path === "/session-queue" || /^\/session-queue\/[^/]+\/send-now$/u.test(path) ? "send"
     : /\/turns\/[^/]+\/cancel$/u.test(path) ? "stop"
     : /\/turns\/[^/]+\/retry(?:-current)?$/u.test(path) ? "retry"
     : /\/sessions\/[^/]+\/controls$/u.test(path) && options.method === "PATCH" ? "model_pick" : null;
@@ -692,6 +695,17 @@ function writeAppUiStateCache(snapshot) {
 
 const butlerApp = Object.freeze({
   log: row => ipcRenderer.send("butler:app-log", row),
+  documents: ({ path, method = "GET", body } = {}) => {
+    method = String(method).toUpperCase();
+    const url = new URL(String(path ?? ""), "http://local");
+    const read = method === "GET" && /^\/documents\/[^/]+(?:\/revisions(?:\/[1-9][0-9]*)?|\/diff)?$/u.test(url.pathname);
+    const write = (method === "POST" && (url.pathname === "/documents" || /^\/documents\/[^/]+\/(restore|seen|blocks\/[0-9]+)$/u.test(url.pathname)))
+      || (method === "PUT" && /^\/documents\/[^/]+$/u.test(url.pathname));
+    if (!read && !write) throw new Error("Unsupported document route.");
+    return requestBridgeResult(url.pathname + url.search, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  },
+  saveLibraryDocument: (body) => requestBridgeResult("/library/documents", { method: "POST", body: JSON.stringify(body) }),
+  saveLibraryBlock: (body) => requestBridgeResult("/library/blocks", { method: "POST", body: JSON.stringify(body) }),
   organizeLibrary: ({ path, method, body }) => {
     const route = new URL(path, "http://butler.invalid");
     const allowed = /^\/library\/(groups|tags|facets|items)(\/|$)/.test(route.pathname);
@@ -870,7 +884,14 @@ const butlerApp = Object.freeze({
     const existing = /^\/memory\/(inventory(?:\/check)?|instructions(?:\/[A-Za-z0-9]+)?|projects\/[A-Za-z0-9_-]+|cleanup(?:\/[a-f0-9-]+)?)$/.test(path);
     const reset = (method === "POST" && /^\/memory\/reset\/(chat-memory|profile|projects\/[A-Za-z0-9_-]+)$/.test(path)) ||
       (method === "GET" && /^\/memory\/reset\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path));
-    if (!existing && !reset) throw new Error("Invalid memory path");
+    const patterns = (method === "GET" && path === "/memory/patterns") ||
+      (method === "DELETE" && /^\/memory\/patterns\/[A-Za-z0-9_-]+$/.test(path));
+    const proposals = (method === "GET" && path === "/memory/pattern-proposals") ||
+      (method === "POST" && /^\/memory\/pattern-proposals\/[A-Za-z0-9_-]+$/.test(path));
+    if (proposals) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
+    const consolidation = path === "/memory/consolidation" && ["GET", "POST"].includes(method);
+    if (consolidation) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
+    if (!existing && !reset && !patterns) throw new Error("Invalid memory path");
     return requestJson(path, { method, ...(body && method !== "GET" && method !== "HEAD" ? { body: JSON.stringify(body) } : {}) });
   },
   listProjects: ({ includeSessions = false } = {}) => {
@@ -964,6 +985,12 @@ const butlerApp = Object.freeze({
   archiveSession: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/archive`, {
     method: "POST",
     body: JSON.stringify({}),
+  }),
+  sessionComposing: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/composing`, {
+    method: "POST", body: JSON.stringify({}),
+  }),
+  decideReportPause: ({ automationId, decision }) => requestBridgeResult(`/automations/${encodeURIComponent(automationId)}/report-pause`, {
+    method: "POST", body: JSON.stringify({ decision }),
   }),
   markSessionRead: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/read`, {
     method: "POST",
@@ -1134,6 +1161,11 @@ const butlerApp = Object.freeze({
         attachments,
       }),
     }),
+  sendQueuedMessageNow: ({ queuedMessageId, traceparent } = {}) => requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}/send-now`, {
+    method: "POST",
+    headers: traceHeaders(traceparent),
+    body: JSON.stringify({}),
+  }),
   deleteQueuedMessage: ({ queuedMessageId } = {}) => requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}`, {
     method: "DELETE",
   }),
@@ -1279,6 +1311,13 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  initialTextSize: process.argv.find(arg => arg.startsWith("--butler-text-size="))?.split("=")[1] ?? "default",
+  setTextSize: value => ipcRenderer.invoke("butler:set-text-size", value),
+  onTextSizeShortcut: handler => {
+    const listener = (_event, command) => handler(command);
+    ipcRenderer.on("butler:text-size-shortcut", listener);
+    return () => ipcRenderer.removeListener("butler:text-size-shortcut", listener);
+  },
   setNativeAppearanceTheme: ({ theme } = {}) => ipcRenderer.invoke("butler:set-native-appearance-theme", { theme }),
   getPersonalization: () => requestJson("/personalization"),
   getProfileImportPrompt: ({ locale } = {}) => {
@@ -1336,6 +1375,8 @@ const butlerApp = Object.freeze({
     return result;
   },
   // Envelopes keep the code and status of the gateway's local-only rule.
+  listOauthCredentials: () => requestSecurity("listOauthCredentials"),
+  removeOauthCredential: ({ id } = {}) => requestSecurity("removeOauthCredential", { id }),
   getSecurity: () => requestSecurity("getSecurity"),
   issuePairingCode: () => requestSecurity("issuePairingCode"),
   getPairingStatus: () => requestSecurity("getPairingStatus"),
@@ -1419,6 +1460,11 @@ const butlerApp = Object.freeze({
   subscribeLogs: (handlers = {}) => subscribeLogs(handlers),
   exportLogs: ({ since, includeBodies } = {}) =>
     ipcRenderer.invoke("butler:export-logs", { since, includeBodies: includeBodies === true }),
+  getUsageHistory: ({ query = "" } = {}) => {
+    const url = new URL(`/usage-history${String(query)}`, "http://local");
+    if (url.pathname !== "/usage-history") throw new Error("Unsupported usage history route.");
+    return requestJson(url.pathname + url.search, { method: "GET" });
+  },
   getImageModelSettings: () => requestJson("/settings/image-model"),
   getImageUsage: ({ days = 7 } = {}) => {
     const params = new URLSearchParams({ days: String(days) });
@@ -1439,6 +1485,14 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);
   },
+  getCanonGrants: ({ state }) => requestBridgeResult(`/canon/mcp-grants${state === "pending" ? "?state=pending" : ""}`),
+  decideCanonGrant: ({ id, action }) => {
+    if (!["allow", "deny", "revoke"].includes(action)) throw new Error("Invalid grant action");
+    return requestCanonWrite(`/canon/mcp-grants/${encodeURIComponent(id)}/${action}`, "POST", {});
+  },
+  getCanonActivity: ({ id, before }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}/activity${before == null ? "" : `?before=${encodeURIComponent(before)}`}`),
+  getCanonProposal: ({ id }) => requestBridgeResult(`/canon/proposals/${encodeURIComponent(id)}`),
+  resolveCanonProposal: ({ id, body }) => requestCanonWrite(`/canon/proposals/${encodeURIComponent(id)}`, "POST", body),
   getCanonSidebar: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon/sidebar`),
   orderCanonSidebar: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/sidebar-order`, "POST", body),
   linkCanonConversation: ({ id, sessionId }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}/conversation`, "POST", { session_id: sessionId }),
@@ -1476,6 +1530,7 @@ const butlerApp = Object.freeze({
     }
     return requestBridgeResult(`/session-view?${params.toString()}`);
   },
+  exportDocument: (input) => ipcRenderer.invoke("butler:export-document", input),
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
   openMessageFile: ({ fileId } = {}) =>
@@ -1491,6 +1546,13 @@ const butlerApp = Object.freeze({
   getMessageFileView: ({ fileId } = {}) => {
     if (typeof fileId !== "string" || !/^file-[0-9a-f-]{36}$/iu.test(fileId)) throw new Error("Invalid file");
     return requestBridgeResult(`/message-files/${encodeURIComponent(fileId)}/view`);
+  },
+  getPreviewView: ({ previewId, query = "" } = {}) => {
+    if (typeof previewId !== "string" || !/^p-[a-f0-9]{64}$/u.test(previewId)) throw new Error("Invalid preview");
+    const path = `/previews/${encodeURIComponent(previewId)}/view`;
+    const url = new URL(path + String(query), "http://local");
+    if (url.pathname !== path) throw new Error("Unsupported preview route.");
+    return requestBridgeResult(url.pathname + url.search);
   },
   getOutputView: ({ outputId, revision } = {}) => {
     if (typeof outputId !== "string" || !/^[a-f0-9]{64}$/u.test(outputId)) throw new Error("Invalid output");

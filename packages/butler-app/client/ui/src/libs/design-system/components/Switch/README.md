@@ -21,6 +21,32 @@ import { Switch } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
+### Placement
+
+- **Stacked (the default).** Like an input: the label, its description,
+  then the switch underneath, left-aligned. Every desktop settings field and
+  form: `SettingsField` in settings, a vertical `Field` elsewhere.
+- **Row (the exception).** `Field orientation="horizontal"` with
+  `FieldContent` first: the label and the switch on one row, the switch at the
+  row end, the description under the label. Only on a phone layout, or for a
+  list item inside a closed container (a card, a list row) where the width has
+  to be used.
+- Never put a switch before its label. A trailing toggle that is a list row's
+  own action (a `CardListItem` `actions` slot) stays at the row end.
+
+`bun run lint:ds` (`switch-field-layout`) flags a `Switch` beside a label in a
+`Stack` or `Inline` row in product code; the row layout goes through
+`Field orientation="horizontal"`.
+
+### Usage
+
+- An immediate on/off setting that applies as soon as it is flipped, with no
+  save step.
+- Selections, or choices confirmed with a submit button: a checkbox
+  (`CheckCard`).
+- More than two states: `SegmentedControl`.
+- A disabled switch carries its reason in a tooltip (`disabledReason`).
+
 ### Unavailable with a reason
 
 Pass `disabledReason` (a few words, localized) when the setting cannot be
@@ -37,7 +63,7 @@ over `disabled`. Use plain `disabled` only when no reason is worth showing.
 
 The reason opens to the **right** of the switch by default
 (`disabledReasonSide="right"`, `disabledReasonAlign="center"`). A switch sits
-under its label and description in a `SettingsField`, or after them in a row,
+under its label and description (stacked), or at the row end (row layout),
 so its right side is the one place the tooltip covers neither. Without room
 there it flips (see Tooltip "Placement"). Pass another side only when the
 layout puts something the reader needs to the right of the switch:

@@ -2,10 +2,10 @@ import type { PlanDocumentRecord } from "@/app/types.ts";
 import { ListChecks, Space, Stack, SurfacePanel, Tag, Typo } from "@/butler-ds";
 import { ProjectDocumentMarkdownContent } from "@/components/management/ProjectDocumentMarkdownContent.tsx";
 
-export function PlanDocumentMessage({ plan }: { plan: PlanDocumentRecord }) {
+export function PlanDocumentMessage({ plan, bubble = false }: { plan: PlanDocumentRecord; bubble?: boolean }) {
   return (
     <>
-      <Space size="sm" />
+      {!bubble && <Space size="sm" />}
       <SurfacePanel
         aria-label={`Plan: ${plan.title}`}
         data-test-class="plan-document-message"

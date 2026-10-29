@@ -7,8 +7,8 @@ use super::{
     store::publish,
 };
 use crate::gateway::application::queue_dispatcher::session_has_active_turn;
-use crate::gateway::application::settings;
 use crate::gateway::application::storage::AppStorageCode;
+use crate::gateway::application::{initiated::Hold, settings};
 use crate::gateway::{
     MessageSendRequest,
     application::{
@@ -46,7 +46,9 @@ impl AppApplication {
     pub(crate) async fn dispatch_due_owned(
         &self,
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
-        self.automation_runs.due().await
+        let runs = self.automation_runs.due().await?;
+        self.deliver_initiated().await?;
+        Ok(runs)
     }
 
     pub(crate) async fn execute_automation(
@@ -54,6 +56,22 @@ impl AppApplication {
         id: String,
         trigger: &'static str,
     ) -> Result<AutomationRunResult, GatewayApplicationError> {
+        let hold = self
+            .automation_hold(
+                self.get_automation_owned(id.clone())
+                    .await?
+                    .automation
+                    .summary
+                    .target_session_id,
+                trigger,
+            )
+            .await?;
+        let held = !matches!(hold, Hold::Free);
+        let paused = if held {
+            false
+        } else {
+            self.pause_unopened_report(id.clone(), trigger).await?
+        };
         let started = self.dependencies.identity_clock.now_iso();
         let run_id = format!(
             "automation-run-{}",
@@ -67,14 +85,17 @@ impl AppApplication {
         let automation_id = id.clone();
         let (row, queued) = self.storage.execute(move |db| {
             let row = records::active(db, &automation_id)?;
-            if trigger == "scheduled" && row.state != "enabled" {
+            if trigger == "scheduled" && row.state != "enabled" && !paused {
                 return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Schedule is not enabled."));
             }
-            let busy = session_has_active_turn(db, &row.target_id)?;
+            let scheduled_at = if trigger == "scheduled" { super::occurrence::latest(&row, &started)? } else { None };
+            let late = super::occurrence::is_late(scheduled_at.as_deref(), &started);
+            let busy = held || session_has_active_turn(db, &row.target_id)?;
             db.execute(
-                "INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at) VALUES(?1,?2,?3,'running',?4,?5)",
-                params![run,row.id,row.target_id,trigger,started],
+                "INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,scheduled_at,late) VALUES(?1,?2,?3,'running',?4,?5,?6,?7)",
+                params![run,row.id,row.target_id,trigger,started,scheduled_at,late],
             ).map_err(AppStorageError::sqlite)?;
+            super::holds::record(db, &run, hold, &started)?;
             // Bind the schedule input before dispatch can run any browser tools.
             db.execute(
                 "INSERT INTO app_automation_run_inputs(message_id,run_id) VALUES(?1,?2)",
@@ -82,17 +103,23 @@ impl AppApplication {
             ).map_err(AppStorageError::sqlite)?;
             Ok((row, busy))
         }).await.map_err(app_error)?;
-        if queued {
-            self.automation_queued
-                .store(true, std::sync::atomic::Ordering::Release);
-            self.automation_wake.notify_one();
+        if paused || queued {
+            if queued && !paused {
+                self.automation_queued
+                    .store(true, std::sync::atomic::Ordering::Release);
+                self.automation_wake.notify_one();
+            }
             return self
                 .complete_fresh_run(
                     row,
                     run_id,
                     trigger,
                     DispatchResult {
-                        state: "queued",
+                        state: if paused {
+                            "skipped_report_unopened"
+                        } else {
+                            "queued"
+                        },
                         safe_error: None,
                         turn_id: None,
                     },
@@ -118,10 +145,17 @@ impl AppApplication {
         let batch_full = queued.len() == 20;
         let mut dispatched_queued = 0;
         for row in queued {
-            if self
-                .target_has_active_turn(row.run_target_id.clone())
-                .await?
-            {
+            let hold = self
+                .automation_hold(row.run_target_id.clone(), &row.trigger)
+                .await?;
+            let held = !matches!(hold, Hold::Free);
+            let run = row.run_id.clone();
+            let now = self.dependencies.identity_clock.now_iso();
+            self.storage
+                .execute(move |db| super::holds::record(db, &run, hold, &now))
+                .await
+                .map_err(app_error)?;
+            if held {
                 still_queued = true;
                 continue;
             }
@@ -147,20 +181,16 @@ impl AppApplication {
         Ok(AutomationRunListView { runs })
     }
 
-    async fn target_has_active_turn(
-        &self,
-        target_id: String,
-    ) -> Result<bool, GatewayApplicationError> {
-        self.storage
-            .read(move |db| session_has_active_turn(db, &target_id))
-            .await
-            .map_err(app_error)
-    }
-
     async fn dispatch_queued(
         &self,
         queued: QueuedRunRow,
     ) -> Result<AutomationRunSummary, GatewayApplicationError> {
+        if self
+            .pause_unopened_report(queued.automation.id.clone(), &queued.trigger)
+            .await?
+        {
+            return self.skip_unopened_queued(queued.run_id).await;
+        }
         let mut dispatch = queued.automation.clone();
         dispatch.target_id = queued.run_target_id.clone();
         let mut result = self
@@ -182,13 +212,7 @@ impl AppApplication {
                 db,
                 &subscribers,
                 "automation.run",
-                &run_event(
-                    &queued.automation.id,
-                    &queued.run_target_id,
-                    &run.state.clone(),
-                    &queued.trigger,
-                    run.safe_error_code.clone(),
-                ),
+                &run_event(&run),
                 &completed,
             )?;
             Ok(run)
@@ -202,6 +226,13 @@ impl AppApplication {
         run_id: &str,
         trigger: &str,
     ) -> DispatchResult {
+        let Ok(context) = self.schedule_context(&row.id, run_id, trigger).await else {
+            return DispatchResult {
+                state: "failed",
+                safe_error: Some("automation_dispatch_failed".into()),
+                turn_id: None,
+            };
+        };
         let model = self.automation_model_override(row.model.as_deref());
         let request = MessageSendRequest {
             image_edit: None,
@@ -219,11 +250,7 @@ impl AppApplication {
             subsession_result: None,
             // A scheduler-started run has nobody to answer an approval (D8);
             // "run now" is attended and asks as usual.
-            schedule_run: Some(butler_turn::btcc::ScheduleRunContext {
-                automation_id: row.id.clone(),
-                run_id: run_id.to_owned(),
-                unattended: trigger == "scheduled",
-            }),
+            schedule_run: Some(context),
         };
         let result = match self
             .send(SendMessageCommand {
@@ -311,7 +338,6 @@ impl AppApplication {
             row.next.clone()
         };
         let subscribers = self.subscribers.clone();
-        let trigger = trigger.to_owned();
         self.storage.execute(move|db|{
             record_run(db,&run_id,&result,&completed)?;
             db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=COALESCE(?4,(SELECT safe_error_code FROM app_automation_runs WHERE id=?6)),run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id,run_id]).map_err(AppStorageError::sqlite)?;
@@ -320,13 +346,7 @@ impl AppApplication {
                 db,
                 &subscribers,
                 "automation.run",
-                &run_event(
-                    &row.id.clone(),
-                    &row.target_id.clone(),
-                    &run.state.clone(),
-                    &trigger,
-                    run.safe_error_code.clone(),
-                ),
+                &run_event(&run),
                 &completed,
             )?;
             Ok(AutomationRunResult{automation:records::summary(records::active(db,&row.id)?),run})
@@ -334,20 +354,13 @@ impl AppApplication {
     }
 }
 
-pub(super) fn run_event(
-    automation_id: &str,
-    target_session_id: &str,
-    state: &str,
-    trigger: &str,
-    safe_error_code: Option<String>,
-) -> serde_json::Value {
+pub(super) fn run_event(run: &AutomationRunSummary) -> serde_json::Value {
     let mut event = json!({
-        "automation_id": automation_id,
-        "target_session_id": target_session_id,
-        "state": state,
-        "trigger": trigger,
+        "automation_id": run.automation_id, "target_session_id": run.target_session_id,
+        "state": run.state, "trigger": run.trigger,
+        "scheduled_at": run.scheduled_at, "late": run.late,
     });
-    if let Some(code) = safe_error_code {
+    if let Some(code) = &run.safe_error_code {
         event["safe_error_code"] = json!(code);
     }
     event

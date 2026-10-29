@@ -101,6 +101,30 @@ impl ModelConfiguration {
         .map_err(SettingsError::WriteTask)?
     }
 
+    /// Persist the local consolidation time while retaining unrelated configuration.
+    pub async fn set_consolidation_time(
+        &self,
+        time: &str,
+        root: &Path,
+    ) -> Result<(), SettingsError> {
+        let guard = self.configuration_writes.acquire_owned().await;
+        let path = root.join("butler.config.json");
+        let time = time.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let _guard = guard;
+            let _change = configuration::lock_file(&path)?;
+            let mut config = configuration::read_json_object(&path)?;
+            let root = butler_core::json::object_mut(&mut config);
+            let cognition = butler_core::json::object_field_mut(root, "cognition");
+            butler_core::json::object_field_mut(cognition, "consolidationCycle")
+                .insert("timeOfDay".into(), Value::String(time));
+            configuration::write_json_atomic(&path, &config)?;
+            Ok(())
+        })
+        .await
+        .map_err(SettingsError::WriteTask)?
+    }
+
     /// Persist the update channel in the shared Agent configuration.
     pub async fn set_update_previews(
         &self,

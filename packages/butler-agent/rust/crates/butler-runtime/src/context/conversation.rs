@@ -18,6 +18,7 @@ use super::{ContextBudgetEnvironment, ContextBudgetOwner};
 
 #[derive(Clone)]
 pub struct ContextConversation {
+    pub(crate) recent_history: Arc<super::recent::history::HistoryStarts>,
     store: AgentConversationStore,
     budget: Arc<ContextBudgetOwner>,
 }
@@ -30,6 +31,7 @@ impl ContextConversation {
         environment: ContextBudgetEnvironment,
     ) -> Self {
         Self {
+            recent_history: Default::default(),
             store,
             budget: Arc::new(ContextBudgetOwner::new(configuration, catalog, environment)),
         }

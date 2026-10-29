@@ -10,6 +10,12 @@ test("ArtifactPreviewFrame fills the preview by default", () => {
   expect(markup).not.toContain("style=");
 });
 
+test("ArtifactPreview is the card by default and marks only the page surface", () => {
+  expect(renderToStaticMarkup(<ArtifactPreview>x</ArtifactPreview>)).not.toContain("data-surface");
+  expect(renderToStaticMarkup(<ArtifactPreview surface="card">x</ArtifactPreview>)).not.toContain("data-surface");
+  expect(renderToStaticMarkup(<ArtifactPreview surface="page">x</ArtifactPreview>)).toContain('data-surface="page"');
+});
+
 test("ArtifactPreviewFrame with intrinsicSize takes exactly that CSS size and keeps the sandbox", () => {
   const markup = renderToStaticMarkup(<ArtifactPreviewFrame srcDoc="<p>x</p>" title="Clipped card" sandbox="" intrinsicSize={{ width: 320.5, height: 140 }} />);
   expect(markup).toContain('data-intrinsic=""');

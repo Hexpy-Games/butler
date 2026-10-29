@@ -68,13 +68,14 @@
 }
 
 /* Block, not flex: a Typo stays a block container so its text trim applies
-   (the row centres them). */
+   (the row centres them). The caption line box holds the glyphs whole; a
+   1 line-height box cut them at fractional page zoom (큰 글자). */
 .label,
 .detail {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1;
+  line-height: var(--typo-caption-line-height);
   white-space: nowrap;
 }
 

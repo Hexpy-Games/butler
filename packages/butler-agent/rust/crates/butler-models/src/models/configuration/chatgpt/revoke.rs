@@ -11,14 +11,16 @@ impl ModelConfiguration {
             .filter(|s| !s.is_empty())
         {
             None => true,
-            Some(token) => {
+            Some(token) => tokio::time::timeout(
+                std::time::Duration::from_secs(5),
                 revoke(
                     &self.chatgpt_authority,
                     token,
                     registration["client_id"].as_str().unwrap_or(""),
-                )
-                .await
-            }
+                ),
+            )
+            .await
+            .unwrap_or(false),
         };
         if registration != serde_json::json!({}) {
             store::update(&paths, paths.registration.clone(), |raw| {

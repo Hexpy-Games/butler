@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { timeBasedFiniteAnimationsSettled } from "../support/animation-settle.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { assertNewChatSurfaces } from "../support/newchat-visual.ts";
 
@@ -21,8 +22,7 @@ const report: unknown[] = [];
 
 async function capture(page: Page, directory: string, name: string) {
   await page.evaluate(() => document.fonts.ready);
-  await page.waitForFunction(() => document.getAnimations().every(animation =>
-    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+  await page.waitForFunction(timeBasedFiniteAnimationsSettled);
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: horizontal overflow`);
   await page.screenshot({ path: join(directory, `${name}.png`), fullPage: true });
 }

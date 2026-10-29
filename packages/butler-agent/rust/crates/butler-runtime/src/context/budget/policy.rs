@@ -244,13 +244,20 @@ impl ContextBudgetSnapshot<'_> {
         }
     }
 
-    pub(crate) fn default_recent_conversation_token_budget(&self, model_ref: Option<&str>) -> f64 {
-        (self
-            .resolve(model_ref, &ContextBudgetOverrides::default())
-            .context_window_tokens
-            * 0.05)
+    pub fn default_recent_conversation_token_budget(&self, model_ref: Option<&str>) -> f64 {
+        let working = self.evaluate_working(&WorkingContextBudgetInput {
+            model_ref: model_ref.map(str::to_owned),
+            working_context_tokens: 0.0,
+            static_context_tokens: None,
+            live_configuration_tokens: None,
+            runtime_state_tokens: None,
+            compaction_prompt_reserve_tokens: None,
+            overrides: ContextBudgetOverrides::default(),
+        });
+        (working.config.context_window_tokens * 0.12)
             .floor()
-            .clamp(2_000.0, 16_000.0)
+            .clamp(4_000.0, 64_000.0)
+            .min((working.available_working_context_tokens * 0.25).floor())
     }
 }
 

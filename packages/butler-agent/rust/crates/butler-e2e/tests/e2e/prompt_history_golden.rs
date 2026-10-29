@@ -23,6 +23,15 @@ fn capture_frame(
     request: &Value,
     placeholders: &butler_e2e::e2e::sanitize::Placeholders,
 ) -> Result<Value, HarnessError> {
+    let tools = butler_e2e::e2e::chatgpt_wire::tools(request).collect::<Vec<_>>();
+    if let Ok(directory) = std::env::var("BUTLER_PROMPT_CAPTURE_DIR") {
+        let body = serde_json::to_vec(&tools)?;
+        let hash = format!("{:x}", Sha256::digest(&body));
+        std::fs::write(
+            std::path::Path::new(&directory).join(format!("tools-{hash}.json")),
+            body,
+        )?;
+    }
     let text = source(request);
     assert_canonical_history(data, text)?;
     let blocks = fingerprints(&blocks(text, placeholders));

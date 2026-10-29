@@ -169,7 +169,7 @@ async fn server(
                 socket.write_all(bytes).await.unwrap();
                 continue;
             }
-            let response = json!({"id":"resp_loop","model":"gpt-5.5","output":[
+            let response = json!({"id":"resp_loop","model":"gpt-5.5","status":"completed","output":[
                 {"type":"message","content":[{"type":"output_text",
                     "text":if is_summary { "short working summary" } else { "done" }}]}
             ]});

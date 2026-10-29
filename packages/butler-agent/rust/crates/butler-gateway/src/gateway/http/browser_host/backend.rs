@@ -33,7 +33,7 @@ pub(super) fn select(state: &HttpState, hub: &mut Inner, frame: &Value) -> Backe
     // only in the App browser. Without the App, headless refuses signed-in.
     let signed_in = op == "tab.open"
         && (frame["args"]["signed_in"] == true || frame["args"]["profile"] == "signed_in");
-    if op == "signin.grant" || signed_in && hub.host.is_some() {
+    if matches!(op, "signin.grant" | "pay.allow_site") || signed_in && hub.host.is_some() {
         return Backend::App;
     }
     if !matches!(op, "tab.open" | "tabs.list" | "owner.closed") {

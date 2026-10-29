@@ -122,6 +122,22 @@ impl AgentConversationStore {
         .await
     }
 
+    /// All canonical conversations bound to an external session, across transports.
+    pub async fn conversation_ids_for_external_session(
+        &self,
+        external_session_id: &str,
+    ) -> ConversationResult<Vec<String>> {
+        let external = external_session_id.to_owned();
+        self.execute(move |db| {
+            let mut statement = db.prepare(
+                "SELECT DISTINCT conversation_session_id FROM conversation_bindings WHERE external_session_id=?1"
+            ).map_err(ConversationError::sqlite)?;
+            statement.query_map([external], |row| row.get(0))
+                .map_err(ConversationError::sqlite)?
+                .collect::<Result<Vec<_>, _>>().map_err(ConversationError::sqlite)
+        }).await
+    }
+
     /// A session's binding for a gateway.
     pub async fn get_gateway_binding_for_conversation(
         &self,

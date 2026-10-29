@@ -136,6 +136,10 @@ async fn url_source(page: &Page, args: &Value, epoch: u64) -> Result<Value, Stri
     if page.epoch() != Some(epoch) {
         return Err("control_changed".into());
     }
-    source["status"] = json!("ok");
+    source["status"] = json!(if source["reason"].is_string() {
+        "refused"
+    } else {
+        "ok"
+    });
     Ok(source)
 }

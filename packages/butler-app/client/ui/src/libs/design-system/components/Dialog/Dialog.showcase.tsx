@@ -18,6 +18,7 @@ import {
   DialogTrigger,
 } from "./Dialog";
 import { ContainedDialogDemo } from "./Dialog.contained.demo";
+import { TitleOnlyConfirmDemo } from "./Dialog.titleOnly.demo";
 import { FullHeightDialogDemo } from "./Dialog.fullHeight.demo";
 
 export const meta: ShowcaseMeta = {
@@ -131,6 +132,7 @@ export const stories: ShowcaseStory[] = [
       </Dialog>
     ),
   },
+  { name: "Title-only confirmation (minimum height)", states: ["open"], render: (context) => <TitleOnlyConfirmDemo {...context} /> },
   {
     name: "Palette motion",
     render: (context) => (

@@ -28,6 +28,8 @@ const SECURITY_ROUTES = Object.freeze({
   saveHooks: { method: "PUT", path: "/hooks" },
   getHookRuns: { method: "GET", path: "/hooks/runs" },
   testHook: { method: "POST", path: "/hooks", hook: true },
+  listOauthCredentials: { method: "GET", path: "/security/oauth" },
+  removeOauthCredential: { method: "DELETE", path: "/security/oauth", credential: true },
   getSecurity: { method: "GET", path: "/security" },
   issuePairingCode: { method: "POST", path: "/security/pairing" },
   getPairingStatus: { method: "GET", path: "/security/pairing" },
@@ -132,9 +134,11 @@ export async function requestSecurityRoute(
   if (route?.hook && (typeof hookId !== "string" || !/^[a-z0-9_-]{1,128}$/iu.test(hookId))) return failure("invalid_request");
   const entryId = input?.body?.id;
   if (route?.entry && (typeof entryId !== "string" || !ENTRY_ID.test(entryId))) return failure("invalid_request");
+  const credentialId = input?.body?.id;
+  if (route?.credential && (typeof credentialId !== "string" || !/^[a-z0-9_-]{1,128}$/iu.test(credentialId))) return failure("invalid_request");
   const payload = input?.body?.payload;
   if (route?.payload && (typeof payload !== "object" || payload === null)) return failure("invalid_request");
-  const path = route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.suffix ?? ""}` : route?.path;
+  const path = route?.credential ? `${route.path}/${encodeURIComponent(credentialId)}` : route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.suffix ?? ""}` : route?.path;
   const security = input?.body?.security;
   const needsBody = input?.route === "updateSecuritySettings" || input?.route === "saveHooks" || route?.hook || route?.payload;
   if (!route || (input?.route === "updateSecuritySettings" && (typeof security !== "object" || security === null))) {

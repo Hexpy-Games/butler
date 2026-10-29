@@ -94,9 +94,11 @@ impl AppGatewayLifecycle {
     ) -> Result<bool, BtccError> {
         let mut current = self.current.lock().await;
         if !initial.enabled {
+            self.endpoint.clear();
             return Ok(false);
         }
-        self.require_captured_dependencies(initial)?;
+        self.require_captured_dependencies(initial)
+            .inspect_err(|_| self.endpoint.clear())?;
         self.start_locked(&mut current, initial, listener).await
     }
 
@@ -112,6 +114,7 @@ impl AppGatewayLifecycle {
                 let desired = AppServiceConfiguration::capture(&self.data_root);
                 self.require_captured_dependencies_text(&desired)?;
                 if !desired.enabled {
+                    self.endpoint.clear();
                     let mut view = self.view(current.as_ref()).await?;
                     view["started"] = Value::Bool(false);
                     view["reason"] = Value::String("disabled".into());
@@ -138,6 +141,7 @@ impl AppGatewayLifecycle {
                 let desired = AppServiceConfiguration::capture(&self.data_root);
                 self.require_captured_dependencies_text(&desired)?;
                 if !desired.enabled {
+                    self.endpoint.clear();
                     let mut view = self.view(current.as_ref()).await?;
                     view["restarted"] = Value::Bool(false);
                     view["reason"] = Value::String("disabled".into());
@@ -191,7 +195,9 @@ impl AppGatewayLifecycle {
         };
         let listener = match listener {
             Some(listener) => listener,
-            None => AppServer::bind(&app_config.host, port).await?,
+            None => AppServer::bind(&app_config.host, port)
+                .await
+                .inspect_err(|_| self.endpoint.clear())?,
         };
         let mut server = AppServer::open(
             &self.runtime,
@@ -206,7 +212,8 @@ impl AppGatewayLifecycle {
             },
             listener,
         )
-        .await?;
+        .await
+        .inspect_err(|_| self.endpoint.clear())?;
         let address = server.local_addr();
         if app_config.port == 0 {
             self.allocated_port.store(address.port(), Ordering::Relaxed);
@@ -232,6 +239,8 @@ impl AppGatewayLifecycle {
                 error.to_string(),
             ));
         }
+        self.endpoint
+            .publish_application(server.application.clone());
         *current = Some(server);
         Ok(true)
     }
@@ -263,6 +272,7 @@ impl AppGatewayLifecycle {
         if self.captured_dependencies.matches(desired) {
             Ok(())
         } else {
+            self.endpoint.clear();
             Err(BtccError::relayed(
                 "service_restart_required",
                 "App database or local authority changed; restart the native service to apply it",

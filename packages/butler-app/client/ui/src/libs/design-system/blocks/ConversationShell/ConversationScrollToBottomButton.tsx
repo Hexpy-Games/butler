@@ -21,6 +21,7 @@ export function ConversationScrollToBottomButton({
       className={dsClass(styles.scrollToBottomButton)}
       surface="glass"
       data-test-class="scroll-to-bottom-button"
+      data-column-glide=""
       data-unread-messages={hasUnreadMessages ? "true" : "false"}
       icon={<ChevronDownIcon size="md" />}
       onClick={onScrollToBottom}

@@ -10,6 +10,13 @@ void iconButtonStyles;
 /** Icon colour only (never a fill): `butler` the Butler ink blue, `riso` the riso ink gradient (Butler is acting). */
 export type IconButtonTone = "default" | "butler" | "riso";
 
+/**
+ * The pane a title-bar toggle opens: `aside` the conversation aside (세션 정보),
+ * `browser` the browser pane, `viewer` a card pane such as the file viewer.
+ * While `pressed`, the button fills with that pane's own surface, opaque.
+ */
+export type IconButtonPane = "aside" | "browser" | "viewer";
+
 interface IconButtonProps extends DsBaseProps<React.ButtonHTMLAttributes<HTMLButtonElement>> {
   label: string;
   selected?: boolean;
@@ -23,8 +30,10 @@ interface IconButtonProps extends DsBaseProps<React.ButtonHTMLAttributes<HTMLBut
   indicator?: boolean;
   /** A count at the top-end corner (hidden at 0); the label should carry the count for screen readers. */
   badge?: number;
-  /** Toggle state for assistive tech (`aria-pressed`); unlike `selected` it paints no fill. */
+  /** Toggle state for assistive tech (`aria-pressed`); unlike `selected` it paints no fill, unless `pane` is set. */
   pressed?: boolean;
+  /** The pane this toggle opens; while pressed (`aria-pressed`) the button fills with that pane's surface. */
+  pane?: IconButtonPane;
 }
 
 function classNames(...values: Array<string | false | undefined>): string {
@@ -48,7 +57,7 @@ function RisoPaint({ id }: { id: string }) {
 
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({
   children, className, label, selected, opticalAlign, onClick, disabled, tone = "default", indicator = false, badge, pressed,
-  style, ...props
+  pane, style, ...props
 }, ref) {
   const paintId = `icon-button-riso-${useId().replace(/[^\w-]/gu, "")}`;
   const riso = tone === "riso";
@@ -69,6 +78,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
       aria-pressed={pressed}
       data-optical-align={opticalAlign}
       data-tone={tone === "default" ? undefined : tone}
+      data-pane={pane}
       data-badge={count ? "" : undefined}
       onClick={onClick}
       disabled={disabled}

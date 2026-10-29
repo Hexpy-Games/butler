@@ -9,6 +9,12 @@ mod completion;
 mod configured_cycle;
 mod configured_projects;
 mod consolidation;
+mod continuity;
+pub use continuity::{
+    HEADER as CONTINUITY_HEADER, INSTRUCTIONS as CONTINUITY_INSTRUCTIONS,
+    Summary as ContinuitySummary, prompt as continuity_prompt, read as read_continuity,
+    remove as remove_continuity, write as write_continuity,
+};
 mod continuity_recovery;
 mod embedding;
 mod embedding_port;
@@ -31,6 +37,11 @@ mod memory_recall;
 mod migration;
 mod mutable_paths;
 mod paths;
+mod patterns;
+pub use patterns::{
+    PatternError, PatternEvent, PatternExtractionService, PatternFuture, PatternInput,
+    PatternInputSource, PatternRepository,
+};
 mod project_capsule;
 mod prompt;
 mod recall;

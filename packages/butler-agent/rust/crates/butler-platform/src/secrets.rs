@@ -30,7 +30,9 @@ mod test_file;
 mod test_keychain;
 #[cfg(feature = "test-support")]
 pub use test_keychain::{
-    delete_system_secret_for_test, prepare_system_keychain_for_test, system_secret_present_for_test,
+    delete_system_secret_for_test, isolated_system_secret_present_for_test,
+    make_system_keychain_unavailable_for_test, prepare_system_keychain_for_test,
+    system_secret_present_for_test,
 };
 #[cfg(feature = "test-support")]
 mod test_seed;
@@ -283,8 +285,11 @@ impl SecretStore {
     /// its [`SecretError::AccessDenied`]. May block, and on a desktop may ask
     /// the user to unlock the store.
     pub fn system() -> Result<Self, SecretError> {
-        #[cfg(all(not(target_os = "macos"), feature = "test-support"))]
+        #[cfg(feature = "test-support")]
         if let Some(path) = std::env::var_os("BUTLER_TEST_SECRET_STORE") {
+            #[cfg(target_os = "macos")]
+            test_keychain::validate_store_path(Path::new(&path))?;
+            #[cfg(not(target_os = "macos"))]
             return test_file::open(Path::new(&path));
         }
         let store = sys::open()?;

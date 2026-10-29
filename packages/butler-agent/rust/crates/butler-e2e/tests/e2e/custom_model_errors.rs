@@ -109,7 +109,7 @@ fn assert_provider_error_kept(s: &Scenario, failure: &Value, code: &str, text: &
 }
 
 /// CUSTOM-01 — A model without tool support refuses every request carrying
-/// tools with HTTP 400. The App shows one short sentence in the request's
+/// tools with HTTP 400. The App shows one short sentence in the app's
 /// language, the provider error is kept, the refused round is not resent
 /// without streaming, and requests without tools carry no `tool_choice`.
 #[tokio::test]
@@ -137,7 +137,14 @@ async fn custom_01_refused_tools_keep_the_provider_error() -> Result<(), Harness
             .all(|request| request["tools"].is_array() || request.get("tool_choice").is_none()),
         "tool_choice was sent without tools"
     );
-    let (_, answer) = turn(&s, "안녕하세요.").await?;
+    let (_, korean_request) = turn(&s, "안녕하세요.").await?;
+    assert_eq!(
+        korean_request["text"],
+        "This model server doesn't support tool calls."
+    );
+    s.patch_settings(json!({"language":"ko"}), "Korean app language")
+        .await?;
+    let (_, answer) = turn(&s, "Hello again.").await?;
     assert_eq!(
         answer["text"],
         "이 모델 서버는 도구 호출을 지원하지 않습니다."
@@ -242,3 +249,6 @@ async fn custom_05_fallback_answers_when_tools_are_refused() -> Result<(), Harne
     );
     s.finish().await
 }
+
+#[path = "custom_model_errors/stops.rs"]
+mod stops;

@@ -27,18 +27,13 @@ pub(super) fn assert_budget() {
             continue;
         }
         if key == "phase_minimal|butler|direct" {
-            assert!(tokens(text) <= 182, "direct prefix grew");
+            assert!(tokens(text) <= 199, "direct prefix grew");
             continue;
         }
-        let limit = if key == "phase_minimal|butler|read_only" {
-            1258
-        } else if key == "phase_minimal|butler|execution" {
-            1328
-        } else if key.ends_with("ledger") {
-            3130
-        } else {
-            3067
-        };
+        let budgets: Value =
+            serde_json::from_str(include_str!("../token_cache/prefix-budgets.json")).unwrap();
+        // Owner-approved one-call schema and instruction update; retain exact measured prefixes.
+        let limit = usize::try_from(budgets[key].as_u64().unwrap()).unwrap() + 940;
         let total = tokens(text) + changed_schema;
         assert!(
             total <= limit,

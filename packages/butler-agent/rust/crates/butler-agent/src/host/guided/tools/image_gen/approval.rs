@@ -52,13 +52,14 @@ pub(super) async fn gate(
         return Ok(Gate::Allowed(None));
     }
     let input = admission(owner, call, occurrence, facts);
-    let result = owner
-        .authority
-        .admit(input)
+    let result = super::super::attention::admit(owner, input)
         .await
         .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
     Ok(match result {
         AuthorityAdmissionResult::Granted => Gate::Allowed(None),
+        AuthorityAdmissionResult::Unattended => Gate::Return(
+            super::super::turn_guard::unattended_feedback(owner, &call.name, &call.name),
+        ),
         AuthorityAdmissionResult::Pending { request_ref, .. }
         | AuthorityAdmissionResult::Allowed { request_ref, .. } => Gate::Return(
             json!({"ok":true,"authority_pending":true,"request_ref":request_ref,"status":"awaiting_allow"}),
@@ -66,7 +67,7 @@ pub(super) async fn gate(
         AuthorityAdmissionResult::Denied { denial_text, .. } => Gate::Return(
             json!({"ok":false,"error":{"code":"authority_request_denied","message":denial_text}}),
         ),
-        _ => Gate::Return(
+        AuthorityAdmissionResult::Modified { .. } => Gate::Return(
             json!({"ok":false,"error":{"code":"authority_request_denied","message":"Image request not authorized."}}),
         ),
     })

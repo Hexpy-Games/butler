@@ -22,6 +22,10 @@ same ramp, same 24px separation, and the consequence stated before the click.
 (a `ButtonContainer` only when two actions act on the same thing, View and
 Clear). The caller keeps behavior: the confirm dialog of a destructive action,
 the disabled state with its tooltip reason, the busy spinner.
+`details` (optional) holds read-only facts the action works on, a
+`SurfacePanel elevation="subtle"` facts card, between the description and the
+button: details first, then the action, at the field's control gap (8px,
+`--settings-field-control-gap`). The description still describes the button.
 `afterControl` sits directly under the button (a progress line with a Cancel);
 `meta` holds facts about what the action affects (sizes, counts, last change)
 and comes last. `settingId`, `id` and `descriptionId` work as on
@@ -36,6 +40,14 @@ joins its `aria-describedby`; a button wrapped in a `Tooltip` sets
   description="Erases everything remembered from chats. This can't be undone."
   action={<Button variant="outline" size="sm" onClick={confirmReset}>Reset</Button>}
   meta={<MetaList items={facts} />}
+/>
+
+<SettingsActionField
+  settingId="free-space"
+  label="Storage"
+  description="Deletes unused old copies. Memories stay."
+  details={<SurfacePanel elevation="subtle"><MetaList items={storageFacts} /></SurfacePanel>}
+  action={<Button variant="outline" size="sm" onClick={freeUpSpace}>Free up space</Button>}
 />
 ```
 
@@ -54,6 +66,7 @@ Do not put an action in a section header `actions` slot: header actions are
 list toolbars (add, refresh, filter on a `kind="list"` section), and
 `bun run lint:ds` rejects them elsewhere (`butler-ds/settings-field-grouping`).
 Do not place a button beside a `ListRow` to make a settings action. Do not
+stack a facts panel and a button in `action` by hand; use `details`. Do not
 use it for a value (a switch, a select); use `SettingsField`.
 
 ## Tags

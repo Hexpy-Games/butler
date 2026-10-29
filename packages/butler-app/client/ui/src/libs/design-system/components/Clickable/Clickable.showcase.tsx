@@ -4,7 +4,7 @@ import { Clock3, FileText, Sparkles } from "../Icons";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { Clickable } from "./Clickable";
-import { ToggleRows, toggleRowTitle } from "./Clickable.showcaseParts";
+import { EditableFields, ToggleRows, toggleRowTitle } from "./Clickable.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "Clickable",
@@ -74,6 +74,12 @@ export const stories: ShowcaseStory[] = [
     states: ["selected", "hover", "focus-visible"],
     widths: ["320", "375", "app"],
     render: (context) => <ToggleRows context={context} />,
+  },
+  {
+    name: "Editable fields with block bleed (task detail)",
+    states: ["hover", "focus-visible"],
+    widths: ["320", "375", "app"],
+    render: (context) => <EditableFields context={context} />,
   },
   {
     name: "Artifact row",

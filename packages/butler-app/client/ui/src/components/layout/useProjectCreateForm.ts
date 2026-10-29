@@ -34,6 +34,12 @@ export function useProjectCreateForm(props: ProjectCreateDialogProps) {
     setError(null);
   }, [open, props.initialDisplayName]);
 
+  function selectFolder(selection: ProjectFolderSelection) {
+    setFolder(selection);
+    setValue((name) => name.trim() ? name : selection.display_name ?? splitProjectFolderPath(selection.folder_path!).basename);
+    setError(null);
+  }
+
   async function pickFolder() {
     if (pending || !canSelectProjectFolder()) return;
     setBusy(true);
@@ -44,9 +50,7 @@ export function useProjectCreateForm(props: ProjectCreateDialogProps) {
         setError(appCopy.interfaceFeedback.projectFolderFailed);
         return;
       }
-      setFolder(selection);
-      setValue((name) => name.trim() ? name : selection.display_name ?? splitProjectFolderPath(selection.folder_path!).basename);
-      setError(null);
+      selectFolder(selection);
     } catch {
       setError(appCopy.interfaceFeedback.projectFolderFailed);
     } finally {
@@ -76,6 +80,6 @@ export function useProjectCreateForm(props: ProjectCreateDialogProps) {
     setError(null);
   }
 
-  return { open, value, setValue, folder, error, pending, canSubmit, pickFolder, resetFolder, submit,
+  return { open, value, setValue, folder, error, pending, canSubmit, pickFolder, selectFolder, resetFolder, submit,
     onOpenChange: (next: boolean) => { if (!pending) onOpenChange(next); } };
 }

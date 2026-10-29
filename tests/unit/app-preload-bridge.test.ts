@@ -371,6 +371,7 @@ test("renderer and actual preload carry clear, reset and audited UI routes", asy
     ["GET", "/automations/a1/runs"], ["POST", "/automations/a1/run"],
     ["POST", "/automations/a1/pause"], ["POST", "/automations/a1/resume"], ["DELETE", "/automations/a1"],
     ["GET", "/authority-permissions"], ["POST", "/authority-permissions/revoke", { grants: [] }],
+    ["POST", "/authority-requests/site-ref/allow?session_id=chat-a", { scope: "site" }],
     ["GET", "/projects/p1/canon/tags"],
     ["POST", "/projects/p1/canon/tags", { name: "Bug", color: "blue" }],
     ["PATCH", "/canon/tags/tag1", { expected_revision: 0, name: "Feature", color: "teal" }],

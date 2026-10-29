@@ -97,6 +97,22 @@ pub(crate) async fn until(mut ready: impl FnMut() -> bool) {
     .expect("production owner did not publish completion");
 }
 
+/// The capture receipt is published after the canonical rule transaction commits.
+pub(crate) async fn committed(data: &Path, output: &Value) {
+    use sha2::{Digest, Sha256};
+    let receipt = data
+        .join("cognition/memory/rules/capture-receipts")
+        .join(format!(
+            "{:x}.json",
+            Sha256::digest(output["operation_id"].as_str().unwrap().as_bytes())
+        ));
+    until(|| {
+        read_json(&receipt)
+            .is_some_and(|row| row["submitted"]["operation_id"] == output["operation_id"])
+    })
+    .await;
+}
+
 pub(crate) fn active_rules(data: &Path) -> Vec<Value> {
     let bytes = match std::fs::read(data.join("cognition/memory/rules/manifest.json")) {
         Ok(bytes) => bytes,

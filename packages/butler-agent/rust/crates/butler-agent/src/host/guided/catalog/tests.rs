@@ -335,6 +335,7 @@ fn ask_first_admits_the_attached_image_tool() {
 // test-category: security
 #[test]
 fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
+    crate::host::guided::tools::assert_steward_mutation_predicate();
     let catalog = catalog();
     let catalog = catalog.snapshot();
     let approval_free = [

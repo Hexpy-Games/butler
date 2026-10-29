@@ -6,6 +6,7 @@
 const TRACED_ACTIONS: ReadonlyArray<readonly [string, RegExp]> = [
   ["POST", /^\/messages$/u],
   ["POST", /^\/session-queue$/u],
+  ["POST", /^\/session-queue\/[^/]+\/send-now$/u],
   ["POST", /^\/turns\/[^/]+\/(?:retry|retry-current|cancel)$/u],
   ["PATCH", /^\/sessions\/[^/]+\/controls$/u],
 ];

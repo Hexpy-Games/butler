@@ -9,7 +9,7 @@ import { captureTagViews, seedTagPalette } from "../support/canon-tags-visuals.t
 import { verifyTagFlows } from "../support/canon-tags-flows.ts";
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/canon-tags-smoke");
 mkdirSync(shots, { recursive: true });
-const cases = [1440, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "riso", "photo"].map(surface => `${width}-${theme}-${surface}`)));
+const cases = [1440, 1024, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "riso", "photo"].map(surface => `${width}-${theme}-${surface}`)));
 if (await runSmokeCases(cases, "BUTLER_CANON_TAGS_CASE", import.meta.path, { isolate: true })) process.exit(0);
 const cell = process.env.BUTLER_CANON_TAGS_CASE!;
 const [widthText, theme, surface] = cell.split("-");

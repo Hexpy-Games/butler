@@ -5,6 +5,7 @@ import { isPickShortcut } from "../butler-platform/browser-shortcuts.mjs";
 import { nativeWorldOf } from "./native-worlds.mjs";
 import { pickPage } from "./pick-page.mjs";
 import { SNAPSHOT_SOURCE, snapshotPick } from "./snapshot.mjs";
+import { capturePage } from "./view-capture.mjs";
 
 /** DOM content is read in isolated worlds (pick-page.mjs), never inserted into the page. */
 const PAGE = pickPage.toString();
@@ -306,7 +307,7 @@ export class BrowserSelection {
   async crop(tab, cropRect, masks) {
     const scale = tab.bounds?.scale ?? 1, x = Math.floor(cropRect.x * scale), y = Math.floor(cropRect.y * scale);
     const rect = { x, y, width: Math.ceil((cropRect.x + cropRect.width) * scale) - x, height: Math.ceil((cropRect.y + cropRect.height) * scale) - y };
-    let image = await tab.view.webContents.capturePage(rect, { stayHidden: true });
+    let image = await capturePage(tab, rect);
     if (image.isEmpty()) return null;
     if (masks.length) image = maskImage(image, rect, masks.map(mask => ({ x: mask.x * scale, y: mask.y * scale, width: mask.width * scale, height: mask.height * scale })));
     return `data:image/jpeg;base64,${image.toJPEG(85).toString("base64")}`;

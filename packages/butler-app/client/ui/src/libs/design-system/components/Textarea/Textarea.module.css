@@ -37,15 +37,15 @@
 
 /* autoGrow: grows with its content from the min height to
    --textarea-grow-max-lines, then scrolls. Native content sizing (no script, no
-   measuring frame); a stable gutter keeps the text width when the scrollbar
-   appears. Height changes are instant, so reduced motion has nothing to stop. */
+   measuring frame). No gutter is reserved: a classic scrollbar takes its width
+   only once the text scrolls. Height changes are instant, so reduced motion
+   has nothing to stop. */
 .textarea[data-auto-grow] {
   /* Lines plus the block padding and border (border-box). */
   max-height: calc(var(--textarea-grow-max-lines) * 1lh + 2 * (9px + 1px));
   field-sizing: content;
   overflow-y: auto;
   resize: none;
-  scrollbar-gutter: stable;
 }
 
 .textarea[aria-invalid="true"] {

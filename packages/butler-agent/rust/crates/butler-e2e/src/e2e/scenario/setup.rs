@@ -4,6 +4,25 @@ use super::{
 };
 
 impl Setup {
+    /// A fixed App clock after the daily jobs have already run, for non-scheduler scenarios.
+    pub fn clock_after_daily_jobs(self, at: &str) -> Result<Self, HarnessError> {
+        fixtures::scheduler_ran_today(&self.sandbox.data, at)?;
+        let path = self.sandbox.data.join("butler.config.json");
+        let mut config: serde_json::Value = if path.exists() {
+            serde_json::from_slice(&std::fs::read(&path)?)?
+        } else {
+            serde_json::json!({})
+        };
+        if config["user"].is_null() {
+            config["user"] = serde_json::json!({});
+        }
+        config["user"]["timezone"] = fixtures::FIXTURE_TIMEZONE.into();
+        std::fs::write(path, serde_json::to_vec_pretty(&config)?)?;
+        Ok(self
+            .env("TZ", fixtures::FIXTURE_TIMEZONE)
+            .env("BUTLER_E2E_APP_NOW", at))
+    }
+
     /// Removes a variable from child commands, including harness defaults.
     pub fn unset_env(mut self, key: &str) -> Self {
         self.unset_env.push(key.to_owned());
@@ -12,6 +31,11 @@ impl Setup {
 
     pub fn new(id: &str) -> Result<Self, HarnessError> {
         Ok(Self::from_sandbox(id, Sandbox::new(id)?))
+    }
+
+    /// Allocate private writable binary/resources for an installation-mutating fixture.
+    pub fn mutates_installation(id: &str) -> Result<Self, HarnessError> {
+        Ok(Self::from_sandbox(id, Sandbox::mutates_installation(id)?))
     }
 
     /// Independent data/provider/home using a caller-owned immutable installation.

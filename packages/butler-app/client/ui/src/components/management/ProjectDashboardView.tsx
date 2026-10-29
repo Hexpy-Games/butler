@@ -1,10 +1,10 @@
-import { useAppLocale } from "@/app/copy.ts";
+import { CanonAside } from "../canon/CanonAside.tsx";
+import { useCanonSelection } from "../canon/useCanonSelection.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import { useProjectDashboard } from "@/hooks/useProjectDashboard.ts";
-import { Grid, Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
-import { appCopy } from "@/app/copy.ts";
-import { ManagementPage } from "@/butler-ds";
+import { ManagementPage, Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
 import type {
   ProjectDashboardDocument,
   ProjectDashboardView as ProjectDashboardData,
@@ -59,7 +59,8 @@ export function ProjectDashboardView({
   const setTab = (tab: string) => { if (project) updateDashboardState(project.id, { tab }); };
   const selectionEpoch = useRef(0);
   const attachArtifact = useProjectArtifactAttachment(project?.id);
-  const { background, columnRef, onComposerRect } = useProjectDashboardBackground(project);
+  const { background, onColumnRect, onComposerRect } = useProjectDashboardBackground(project);
+  const { selected } = useCanonSelection(project?.id ?? "");
   const ledgerRevision = dashboard?.overview?.status === "ready" ? dashboard.overview.sourceRevision : "unavailable";
   const publicRevision = `${ledgerRevision}:${sessions.map((session) => `${session.id}:${session.last_activity_at}:${session.active_turn_state ?? ""}`).join("|")}`;
   useEffect(() => { selectionEpoch.current++; setSelectedDocument(null); }, [project?.id]);
@@ -74,7 +75,7 @@ export function ProjectDashboardView({
   if (status !== "ready") {
     const copy = appCopy.feedback;
     return (
-      <ManagementPage dataTestClass="project-dashboard-view" background={background} backgroundTreatment="none">
+      <ManagementPage dataTestClass="project-dashboard-view" background={background} backgroundTreatment="none" onColumnRect={onColumnRect}>
         <div role="status" aria-live="polite" data-test-class="project-dashboard-status">
           <Notice tone={status === "error" ? "error" : "info"}
             title={status === "error" ? copy.dashboardFailed : status === "missing" ? copy.projectMissing : undefined}
@@ -90,10 +91,12 @@ export function ProjectDashboardView({
   }
 
   return (
-    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} background={background} backgroundTreatment="none"
+    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} background={background} backgroundTreatment="none" onColumnRect={onColumnRect}
+      aside={project && selected ? layout => <CanonAside key={selected} projectId={project.id} epicId={selected} layout={layout} /> : null}
+      asideFloatOpen={Boolean(selected)} asideLabel={appCopy.canon.epic}
       footerPlacement="overlay" footerReserve={composerHeight}
       footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} onReserveChange={setComposerHeight} onWallpaperRect={onComposerRect} />}>
-      <Grid columns="1" ref={columnRef}><Stack as="main" gap="xl">
+      <Stack as="main" gap="xl">
         {refreshFailed && <Notice tone="error" title={appCopy.feedback.dashboardFailed} message={appCopy.feedback.dashboardRetry}
           action={<Button variant="outline" onClick={retry}>{appCopy.feedback.retry}</Button>} />}
         <Stack gap="xl">
@@ -133,7 +136,7 @@ export function ProjectDashboardView({
           <ProjectResultsPanel key={`${project.id}:${publicRevision}`} projectId={project.id} preferences={dashboard?.preferences} onUpdated={retry} onSelect={selectDocument} /></Stack>}</TabsContent>
         <TabsContent value="history">{project && <ProjectHistoryPanel key={`${project.id}:${publicRevision}`} projectId={project.id} onSelect={selectDocument} onOpenSession={onOpenSession ?? openSession} />}</TabsContent>
         </Tabs></Stack>
-      </Stack></Grid>
+      </Stack>
       <ProjectDocumentDialog
         document={selectedDocument}
         onClose={() => { selectionEpoch.current++; setSelectedDocument(null); }}

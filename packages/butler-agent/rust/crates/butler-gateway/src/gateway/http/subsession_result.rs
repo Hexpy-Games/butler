@@ -50,14 +50,14 @@ pub(super) async fn post(
         .map(serde_json::from_value::<butler_turn::btcc::ScheduleRunContext>)
         .transpose()
         .map_err(|_| invalid_request())?
-        .filter(|run| run.unattended);
+        .filter(|run| run.unattended || run.connector_event);
     let client = format!(
         "subsession-result:{}",
         butler_turn::btcc::digest_identity(&format!("{relation_id}\0{result_id}"))
     );
     let result = state
         .application
-        .send_message(SendMessageCommand {
+        .send_subsession_result(SendMessageCommand {
             chat_id,
             request: crate::gateway::MessageSendRequest {
                 image_edit: None,
@@ -72,6 +72,10 @@ pub(super) async fn post(
                 access_mode: Some(access.into()),
                 plan_mode: None,
                 subsession_result: Some(butler_turn::btcc::SubsessionResultContext {
+                    child_session_id: object
+                        .get("child_session_id")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
                     relation_id,
                     result_id,
                     safe_title,

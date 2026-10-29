@@ -4,6 +4,8 @@ mod authority;
 mod phase;
 mod work;
 
+pub(crate) use phase::GuidedExecutionPolicy;
+
 pub use authority::{GuidedAuthorityDecision, guided_authority_loop_decision};
 pub use phase::{
     GuidedCatalogRead, GuidedCatalogSnapshot, GuidedPhase, GuidedPhaseInput, GuidedPhaseSelection,

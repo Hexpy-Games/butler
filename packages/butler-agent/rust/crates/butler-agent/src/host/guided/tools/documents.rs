@@ -79,7 +79,7 @@ async fn run(
         })
         .ok_or_else(|| failure("invalid_id", "Provide a document id."))?;
     if name == "document_edit" {
-        return edit(owner, id, args).await;
+        return edit(owner, id, args, message_id).await;
     }
     let head = call(owner, Method::GET, &format!("/documents/{id}"), &[], None).await?;
     seen(owner, id, &head["rev"]).await?;
@@ -103,7 +103,12 @@ async fn create(
         json!({"ok":true,"id":id,"rev":head["rev"],"deliverables":[{"kind":"doc","id":id,"title":head["title"]}]}),
     )
 }
-async fn edit(owner: &GuidedTools, id: &str, args: &Value) -> Result<Value, Value> {
+async fn edit(
+    owner: &GuidedTools,
+    id: &str,
+    args: &Value,
+    message_id: Option<&str>,
+) -> Result<Value, Value> {
     let base_rev = args["base_rev"]
         .as_i64()
         .filter(|r| *r > 0)
@@ -126,7 +131,7 @@ async fn edit(owner: &GuidedTools, id: &str, args: &Value) -> Result<Value, Valu
     )
     .map_err(|error| json!({"ok":false,"error":error}))?;
     embeds::validate(owner, &body).await?;
-    let mut input = json!({"expected_rev":head["rev"],"body":body,"author":"butler"});
+    let mut input = json!({"expected_rev":head["rev"],"body":body,"author":"butler","chat_id":chat(owner),"message_id":message_id});
     if let Some(title) = args.get("title") {
         input["title"] = title.clone();
     }

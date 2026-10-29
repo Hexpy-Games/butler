@@ -28,17 +28,17 @@ DROP TRIGGER IF EXISTS general_history_delete;
 CREATE VIEW app_owned_messages AS
 SELECT rowid AS rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
        conversation_message_id, role, text, status, created_at, updated_at,
-       safe_error_code, retryable, plan_json, blocks_json, content_parts_json FROM messages WHERE chat_id <> 'general'
+       safe_error_code, retryable, retry_mode, retry_with_current_controls, incomplete, plan_json, blocks_json, content_parts_json FROM messages WHERE chat_id <> 'general'
 UNION ALL
 SELECT rowid AS rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
        conversation_message_id, role, text, status, created_at, updated_at,
-       safe_error_code, retryable, plan_json, blocks_json, content_parts_json FROM messages
+       safe_error_code, retryable, retry_mode, retry_with_current_controls, incomplete, plan_json, blocks_json, content_parts_json FROM messages
 WHERE chat_id = 'general'
   AND rowid > COALESCE((SELECT MAX(last_rowid) FROM app_general_history), 0)
 UNION ALL
 SELECT m.rowid, m.id, h.archive_id, m.turn_id, m.conversation_session_id,
        m.conversation_turn_id, m.conversation_message_id, m.role, m.text,
-       m.status, m.created_at, m.updated_at, m.safe_error_code, m.retryable,
+       m.status, m.created_at, m.updated_at, m.safe_error_code, m.retryable, m.retry_mode, m.retry_with_current_controls, m.incomplete,
        m.plan_json, m.blocks_json, m.content_parts_json
 FROM app_general_history h CROSS JOIN messages m
 WHERE m.chat_id = 'general' AND m.rowid BETWEEN h.first_rowid AND h.last_rowid;

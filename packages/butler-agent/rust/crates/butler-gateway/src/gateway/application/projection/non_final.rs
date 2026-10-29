@@ -8,6 +8,8 @@ mod runtime_event;
 mod runtime_progress;
 mod runtime_values;
 mod stream_message;
+#[cfg(test)]
+pub(in crate::gateway::application) mod terminal_tests;
 mod transaction;
 pub(in crate::gateway::application::projection) use stream_message::fail_unanswered;
 mod values;
@@ -194,7 +196,7 @@ fn apply_claimed(
     if input.kind == "turn_suspended" {
         return apply_suspended(tx, &input);
     }
-    if input.kind == "turn_failed" && btcc_retains_authority(&tx, &input.turn_id)? {
+    if input.kind == "turn_failed" && terminal_authority_pending(&tx, &input.turn_id)? {
         return skip(tx, input.action_id, input.cursor, input.now);
     }
     apply_projection(tx, input)
@@ -339,7 +341,7 @@ fn project_kind(
         FailedProjection {
             metadata: input.metadata,
             message: input.message,
-            retryable: false,
+            retryable: input.metadata.get("retryable").and_then(Value::as_bool) == Some(true),
         },
         input.now,
         &input.ids,
@@ -414,6 +416,7 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
         visibility,
         source.get("payload").and_then(Value::as_object),
     )?;
+    record_tool_work(db, turn, &kind)?;
     internal_continuation::remember(db, turn, source)?;
     if visibility != "internal" {
         runtime_event::publish(input, source, &kind, normalized_payload)?;

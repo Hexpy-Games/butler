@@ -128,6 +128,7 @@ impl LiveProvider {
         match self.provider.as_str() {
             "openai-subscription" => Some("https://api.openai.com"),
             "openai" => Some("https://api.openai.com/v1"),
+            "anthropic" => Some("https://api.anthropic.com/v1"),
             // The origin: the Coding Plan's model and quota endpoints differ
             // in path (see `base_path`).
             "zai" => Some("https://api.z.ai"),

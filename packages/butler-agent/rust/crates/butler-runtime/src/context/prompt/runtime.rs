@@ -76,6 +76,11 @@ pub(super) fn runtime_state(input: RuntimeStateInput<'_>) -> ContextResult<Conte
     }
     lines.push(format!("Workspace Path: {}", input.binding.workspace_path));
     lines.extend(default_project_folder(input.request));
+    lines.extend(super::schedule::late_notice(
+        input.request,
+        input.clock,
+        &timezone,
+    ));
     Ok(section(
         "runtime-state",
         "Runtime State",

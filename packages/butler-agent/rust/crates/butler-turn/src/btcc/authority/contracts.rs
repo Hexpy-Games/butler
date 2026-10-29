@@ -205,6 +205,7 @@ pub struct AuthorityStoredExecution {
     // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub normalized_input: Value,
     pub decision: RequestDecision,
+    pub allow_scope: String,
     pub(crate) alternative_input: Option<String>,
     pub(crate) outcome: RequestOutcome,
     // Passthrough: tool/effect receipts, shaped by the capability.
@@ -428,6 +429,7 @@ pub(crate) struct DecisionWrite {
     pub(crate) owner_session_id: String,
     pub(crate) source_session_id: String,
     pub(crate) action: AuthorityAction,
+    pub(crate) allow_scope: String,
     pub(crate) permission: Option<ConversationPermission>,
     pub(crate) alternative_input: Option<String>,
     pub(crate) now: String,
@@ -457,6 +459,13 @@ pub(crate) trait AuthorityRepository {
     fn find_ref(&mut self, request_ref: &str) -> AuthorityResult<Option<AuthorityRecord>>;
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>>;
     fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()>;
+    fn settle_deferred_question(
+        &mut self,
+        owner: &str,
+        request_ref: &str,
+        receipt: &str,
+        now: &str,
+    ) -> AuthorityResult<()>;
     fn record_question_followup(
         &mut self,
         request_ref: &str,

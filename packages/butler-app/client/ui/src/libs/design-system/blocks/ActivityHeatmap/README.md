@@ -24,7 +24,7 @@ Any Butler client surface that needs activity density or date drilldown.
 Keep labels date-specific and pair the heatmap with a nearby section title.
 
 ## Wrong use cases
-Do not use it for scheduling calendar events. Use a table, chart, or list when exact comparison is required. Default cells retain 24px targets and 16px visual squares; long periods scroll within the component with edge fades. Unknown days have a dashed border, distinct from zero activity.
+Do not use it for scheduling calendar events. Use a table, chart, or list when exact comparison is required. Default cells retain 24px targets and 16px visual squares; long periods scroll within the component with edge fades. Under a larger App text size (큰 글자) the cells shrink to fit the weeks, staying square, but never below their on-screen size at 100%, so the zoom alone does not push weeks out of view. Unknown days have a dashed border, distinct from zero activity.
 
 ## Tags
 dashboard, activity, density, heatmap, responsive

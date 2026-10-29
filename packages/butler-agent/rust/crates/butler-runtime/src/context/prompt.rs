@@ -5,6 +5,7 @@ mod cache;
 mod files;
 mod project_instructions;
 mod runtime;
+mod schedule;
 mod sections;
 #[cfg(test)]
 mod tests;
