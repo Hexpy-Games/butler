@@ -152,8 +152,7 @@ def check(repository, candidate, sha):
 
 # Files read only by the tag build itself. Commits touching nothing else
 # reuse their first parent's integration evidence (and waivers).
-RELEASE_ONLY = {'.github/workflows/release.yml', '.github/workflows/npm-publish.yml',
-                '.github/scripts/integration-proof.py'}
+RELEASE_ONLY = {'.github/workflows/release.yml', '.github/scripts/integration-proof.py'}
 
 
 def proven_sha(sha):

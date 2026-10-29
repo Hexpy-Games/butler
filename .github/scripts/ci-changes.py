@@ -29,7 +29,7 @@ WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts',
                           'tests/support/smoke-browser*', 'tests/support/bun-child-stdio.ts')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
              'packages/butler-app/main/*', 'packages/butler-app/scripts/release/*',
-             'packages/butler-app/scripts/windows/*', 'packages/butler-npm/*', 'deploy/*',
+             'packages/butler-app/scripts/windows/*', 'deploy/*',
              'tests/smoke/*update*', 'tests/smoke/quick-fixes*', 'tests/smoke/settings-release*',
              'tests/support/quick-fixes*', 'tests/support/native-app-server*',
              'tests/support/update-work*', 'tests/support/electron-page-cdp*',
@@ -64,7 +64,7 @@ WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions
 # Lint-only inputs have no product consumer. Matching consumer rules below also
 # apply: integration reuse hashes must observe release-only workflow changes.
 CI_LINT_ONLY = (
-    '.github/workflows/ci-windows-main-failure.yml', '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
+    '.github/workflows/ci-windows-main-failure.yml', '.github/workflows/release*.yml',
     '.github/workflows/post-release-verify.yml', '.github/workflows/macos-release-recovery.yml',
     '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml', '.github/workflows/ds-approval.yml', '.github/workflows/ci-store-maintenance.yml',
     '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py', '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
@@ -293,7 +293,7 @@ ARTIFACTS = {
     'macos-native': ['agent-payload-darwin-arm64'],
     'linux-arm64-native': ['agent-payload-linux-arm64'],
     'macos-updates': ['macos-update-agent-builds'],
-    'install-x64': ['agent-linux-x64', 'butler-npm-x64'], 'install-arm64': ['agent-linux-arm64'],
+    'install-x64': ['agent-linux-x64'], 'install-arm64': ['agent-linux-arm64'],
     'install-macos': ['agent-darwin-arm64'],
     'build': ['agent-windows-x64'], 'stub': ['windows-e2e'],
     'release': ['windows-completed-installed'],
