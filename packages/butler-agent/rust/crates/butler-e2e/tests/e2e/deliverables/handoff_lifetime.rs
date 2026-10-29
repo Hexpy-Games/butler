@@ -241,10 +241,11 @@ async fn handoff_lifetime_follows_final_or_resumable_parent_state() -> Result<()
             [parent],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )?;
-        let client = format!(
+        // Seed the admission row the way admission stores it: by canonical client identity.
+        let client = butler_gateway::gateway::admission_client_id(&format!(
             "subsession-result:{}",
             butler_turn::btcc::digest_identity(&format!("{relation}\0{result}"))
-        );
+        ));
         db.execute("INSERT INTO session_queued_messages(id,chat_id,text,client_message_id,controls_json,attachments_json,state,turn_id,created_at,updated_at) VALUES(?1,'general','Result',?2,'{}','[]','dispatched',?3,'2026-01-01','2026-01-01')", rusqlite::params![state, client, consumer])?;
         for (name, turn, session) in [
             ("root", parent.as_str(), None),

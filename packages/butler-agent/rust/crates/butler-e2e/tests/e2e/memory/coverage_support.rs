@@ -12,6 +12,7 @@ use super::memory_stubs::graph_path;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
+    provider::Pacing,
     scenario::{Scenario, Setup},
 };
 use butler_platform::sqlite;
@@ -41,12 +42,20 @@ pub(super) async fn start(id: &str, variants: &[Variant]) -> Result<Scenario, Ha
         added.extend([call, answer]);
     }
     cassette.exchanges.extend(added);
-    Setup::new(id)?
+    let s = Setup::new(id)?
         .stub_cassette(cassette)
         .env("BUTLER_METRICS_ENABLED", "1")
         .env("BUTLER_MEMORY_SYNC_TRACE", "1")
         .start()
-        .await
+        .await?;
+    // Coverage compares recall outputs, not streaming: replay each recorded
+    // chunk without its recorded inter-chunk delay (about 0.6 s per turn).
+    s.provider()?.set_pacing(Pacing {
+        scale: 0.0,
+        cap_ms: 0,
+        min_ms: 0,
+    });
+    Ok(s)
 }
 
 pub(super) fn canonical_path(data: &Path) -> PathBuf {
@@ -241,7 +250,7 @@ pub(super) async fn recall_in(
     chat_id: &str,
     variant: &Variant,
 ) -> Result<(Value, f64), HarnessError> {
-    let start = s.provider()?.requests().len();
+    let start = s.provider()?.request_count();
     let started = std::time::Instant::now();
     let (_, turn) = s.turn(chat_id, variant.prompt).await?;
     eprintln!(
@@ -249,8 +258,8 @@ pub(super) async fn recall_in(
         started.elapsed().as_millis()
     );
     assert_eq!(turn["state"], "delivered", "{turn}");
-    let requests = s.provider()?.requests();
-    let output = requests[start..]
+    let requests = s.provider()?.requests_since(start);
+    let output = requests
         .iter()
         .filter_map(|r| r["input"].as_array())
         .flatten()

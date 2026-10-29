@@ -12,6 +12,8 @@ mod data_reset;
 pub use assets::{AppAssetCommand, GeneratedAssetKind, composite, mask_bounds};
 mod admission;
 mod admission_identity;
+#[cfg(feature = "test-support")]
+pub(crate) use admission_identity::canonical_client_id;
 mod answer_drafts;
 mod authority_permissions;
 mod authority_recovery;
