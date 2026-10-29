@@ -14,11 +14,13 @@ fn matched(hooks: &Hooks, payload: &HookEnvelope) -> Vec<HookDefinition> {
         .config
         .hooks
         .iter()
+        .chain(hooks.plugins.hooks().iter())
         .filter(|h| {
             h.event == payload.hook_event_name && h.matches(payload.payload.tool_name.as_deref())
         })
         .filter(|h| {
             seen.insert((
+                h.id.split_once('/').map(|(plugin, _)| plugin.to_owned()),
                 h.command.clone(),
                 h.args.clone(),
                 h.env.clone(),
@@ -70,7 +72,12 @@ async fn execute(
     cancel: CancellationToken,
 ) -> HookRun {
     let start = Instant::now();
-    let result = match input(hooks, hook, payload) {
+    let prepared = prepare_input(hooks, hook, payload).await;
+    let (input, redact) = match prepared {
+        Ok((i, r)) => (Ok(i), r),
+        Err(e) => (Err(e), Vec::new()),
+    };
+    let result = match input {
         Ok(input) => {
             let mut future = Box::pin(run(input, cancel.clone()));
             tokio::select! {
@@ -81,23 +88,35 @@ async fn execute(
         Err(error) => Err(error),
     };
     let (outcome, reason) = super::decision::resolve(hook, &result);
+    if outcome == "approval_ignored" {
+        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = if hook.id.contains('/') { "plugin" } else { "user" });
+    }
+    let clean = |text: &str| {
+        let mut text = text.to_owned();
+        for value in &redact {
+            if !value.is_empty() {
+                text = text.replace(value, "[redacted]");
+            }
+        }
+        text
+    };
     let record = HookRun {
         time: chrono::Utc::now().to_rfc3339(),
         hook_id: hook.id.clone(),
         event: hook.event,
         session_id: payload.session_id.clone(),
         outcome,
-        reason,
+        reason: reason.map(|s| clean(&s)),
         exit_code: result.as_ref().ok().and_then(|o| o.exit_code),
         duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
         stdout: result
             .as_ref()
             .ok()
-            .map(|o| excerpt(&o.stdout))
+            .map(|o| excerpt(&clean(&o.stdout)))
             .unwrap_or_default(),
         stderr: result
             .as_ref()
-            .map(|o| excerpt(&o.stderr))
+            .map(|o| excerpt(&clean(&o.stderr)))
             .unwrap_or_else(ToString::to_string),
     };
     hooks.record(record.clone());
@@ -193,7 +212,11 @@ fn input(
         envelope: payload,
         hook: Identity {
             id: &hook.id,
-            scope: "user",
+            scope: if hook.id.contains('/') {
+                "plugin"
+            } else {
+                "user"
+            },
         },
     })
     .map_err(|e| butler_platform::hook_process::HookProcessError::Process(e.to_string()))?;
@@ -215,4 +238,28 @@ fn input(
         stdin,
         timeout: Duration::from_millis(hook.timeout_ms),
     })
+}
+
+async fn prepare_input(
+    hooks: &Hooks,
+    hook: &HookDefinition,
+    payload: &HookEnvelope,
+) -> Result<(HookProcess, Vec<String>), butler_platform::hook_process::HookProcessError> {
+    if !hook.id.contains('/') {
+        return input(hooks, hook, payload).map(|i| (i, Vec::new()));
+    }
+    let plugins = hooks.plugins.clone();
+    let mut hook = hook.clone();
+    let (hook, cwd, redact) = tokio::task::spawn_blocking(move || {
+        let (cwd, redact) = plugins.hook_execution(&mut hook)?;
+        Ok::<_, butler_core::plugins::PluginError>((hook, cwd, redact))
+    })
+    .await
+    .map_err(|_| {
+        butler_platform::hook_process::HookProcessError::Process("plugin_task_failed".into())
+    })?
+    .map_err(|e| butler_platform::hook_process::HookProcessError::Process(e.code.into()))?;
+    let mut payload = payload.clone();
+    payload.cwd = cwd.to_string_lossy().into_owned();
+    Ok((input(hooks, &hook, &payload)?, redact))
 }

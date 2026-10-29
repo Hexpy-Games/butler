@@ -69,7 +69,7 @@ export function BrowserDemo({
     <BrowserPane placement={placement} label={copy.browser}
       tabs={(
         <TabStrip groups={groups} activeTabId="t1" hideChip={placement === "conversation"} labels={demoLabels(locale)}
-          onActivate={() => undefined} onClose={() => undefined} onNewTab={() => undefined}
+          onActivate={() => undefined} onClose={() => undefined} onNewTab={() => undefined} onNewTabInGroup={() => undefined}
           trailing={placement === "conversation" ? <IconButton label={copy.bringTab}><TabIn size="md" /></IconButton> : undefined} />
       )}
       toolbar={(

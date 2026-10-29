@@ -13,6 +13,7 @@ the same logic for components that render through a portal, such as Tooltip.
 | --- | --- |
 | `present` | `boolean` |
 | `motion` | `none` (default; the child styles its own `[data-state]` keyframes), `fade`, `rise` (fade + `--motion-distance-sm`) |
+| `onExitComplete` | `() => void`, called once the exit has ended and the element unmounted (at once without exit motion) |
 | `children` | one element that accepts `ref`, `className` and `data-state` |
 
 ## How to use this component
@@ -26,6 +27,8 @@ import { Presence } from "@/butler-ds";
 ```
 
 ## Best practice
+- Something that must wait for the element to be gone (another layer taking
+  its place) waits for `onExitComplete`, never a timer.
 - Enter uses `--motion-base` with decelerate; exit uses `--motion-exit-base`
   with accelerate. Reduced motion keeps the fade and drops the rise.
 - Prefer Radix `data-state` for Radix overlays; Presence is for DS surfaces

@@ -3,6 +3,10 @@ import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
 import { nativeContextMenuCopy } from "../i18n/native-context-menu.mjs";
 
+/** The icons a document lists, or its origin's default icon when it lists none. */
+const DOCUMENT_ICONS = `(() => { const icons = [...document.querySelectorAll("link[rel~=icon]")].map((link) => link.href);
+  return icons.length ? icons : /^https?:$/u.test(location.protocol) ? [location.origin + "/favicon.ico"] : []; })()`;
+
 export function protectPartition(partition, browser) {
   const profile = session.fromPartition(partition);
   profile.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -27,7 +31,19 @@ export function wireTab(tab, actions) {
   contents.on("media-started-playing", () => contents.setBackgroundThrottling(false));
   contents.on("media-paused", () => { if (!tab.agent && !tab.driven) contents.setBackgroundThrottling(true); });
   for (const name of ["page-title-updated", "did-start-loading", "did-stop-loading", "did-navigate", "did-navigate-in-page"]) contents.on(name, update);
-  contents.on("page-favicon-updated", (_event, urls) => { tab.favicon = urls.find((url) => webUrl(url)) ?? ""; update(); });
+  contents.on("page-favicon-updated", (_event, urls) => { tab.favicon = urls.find((url) => webUrl(url)) ?? ""; tab.documentIcon = true; update(); });
+  // page-favicon-updated reports only a changed icon list: a page with the same icons (a reload) sends
+  // none, and so does an error page. Once a new document loads, the tab keeps its icon only if it lists it.
+  contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => { if (mainFrame && !inPlace) tab.documentIcon = false; });
+  contents.on("did-stop-loading", () => {
+    if (tab.documentIcon !== false) return;
+    const keep = (icons) => {
+      if (tab.documentIcon !== false) return;
+      tab.documentIcon = true;
+      if (!icons.includes(tab.favicon)) { tab.favicon = ""; update(); }
+    };
+    contents.executeJavaScript(DOCUMENT_ICONS).then(keep, () => keep([]));
+  });
   contents.on("did-stop-loading", () => void actions.capture(tab));
   contents.on("render-process-gone", () => { tab.status = "crashed"; actions.detach(tab); actions.publish(); });
   for (const name of ["will-frame-navigate", "will-redirect"]) {

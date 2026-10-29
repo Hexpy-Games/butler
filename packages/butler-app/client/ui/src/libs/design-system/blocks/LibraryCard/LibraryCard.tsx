@@ -6,16 +6,18 @@ import { MediaFrame } from "../../components/MediaFrame";
 import { Tag } from "../../components/Tag";
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { dsClass } from "../../lib/internal";
+import { LibraryBlockPreview } from "./LibraryBlockPreview";
 import { LibraryTitleInput, type LibraryCardEditing } from "./LibraryTitleInput";
 import styles from "./LibraryCard.module.css";
 
 export type { LibraryCardEditing } from "./LibraryTitleInput";
 
-/** What the card previews: a picture (element crop, page view), a quote (a text scrap) or a document. */
+/** What the card previews: a picture (element crop, page view), a quote (a text scrap), a document or a block (a block scrap, rendered live). */
 export type LibraryCardMedia =
   | { kind: "image"; src: string; alt?: string }
   | { kind: "quote"; text: string }
-  | { kind: "document" };
+  | { kind: "document" }
+  | { kind: "block"; content: ReactNode };
 
 export interface LibraryCardProps extends DsPrivateStyleProps {
   media: LibraryCardMedia;
@@ -49,6 +51,7 @@ export interface LibraryCardProps extends DsPrivateStyleProps {
 
 function Media({ media }: { media: Exclude<LibraryCardMedia, { kind: "image" }> }) {
   if (media.kind === "quote") return <span className={styles.quote}>{media.text}</span>;
+  if (media.kind === "block") return <LibraryBlockPreview>{media.content}</LibraryBlockPreview>;
   return (
     <span className={styles.document} aria-hidden="true">
       <span /><span /><span /><span />

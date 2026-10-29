@@ -90,6 +90,8 @@ test("the admin credential file is read from the data folder; a missing or inval
 test("the security routes carry the admin header next to the bearer token", async () => {
   const routes: Array<[unknown, string, string]> = [
     [{ route: "getSecurity" }, "GET", "/security"],
+    [{ route: "listOauthCredentials" }, "GET", "/security/oauth"],
+    [{ route: "removeOauthCredential", body: { id: "account-credential_2" } }, "DELETE", "/security/oauth/account-credential_2"],
     [{ route: "issuePairingCode" }, "POST", "/security/pairing"],
     [{ route: "rotateConnectionCode" }, "POST", "/security/connection-code/rotate"],
     [{ route: "updateSecuritySettings", body: { security: { allowed_hosts: ["a.example"] } } }, "PATCH", "/settings"],
@@ -106,7 +108,7 @@ test("the security routes carry the admin header next to the bearer token", asyn
     expect(sent[0]?.headers[APP_ADMIN_HEADER]).toBe(ADMIN);
     expect(sent[0]?.headers.authorization).toBe("Bearer token");
   }
-  const patch = await send(routes[3]![0]);
+  const patch = await send(routes.find(([input]) => (input as { route: string }).route === "updateSecuritySettings")![0]);
   expect(JSON.parse(patch.sent[0]!.body!)).toEqual({ security: { allowed_hosts: ["a.example"] } });
 });
 
@@ -114,6 +116,9 @@ test("the security routes carry the admin header next to the bearer token", asyn
 test("anything else is refused before a request is sent", async () => {
   for (const input of [
     { route: "getSettings" },
+    { route: "removeOauthCredential" },
+    { route: "removeOauthCredential", body: { id: "../settings" } },
+    { route: "removeOauthCredential", body: { id: "" } },
     { route: "updateSecuritySettings", body: { language: "en" } },
     { route: "updateSecuritySettings" },
     null,

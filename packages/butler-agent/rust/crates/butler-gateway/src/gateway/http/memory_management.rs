@@ -9,13 +9,30 @@ use axum::{
     response::Response,
 };
 use std::sync::Arc;
+mod patterns;
 
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: axum::http::Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
+    if uri.path().starts_with("/memory/patterns")
+        || uri.path().starts_with("/memory/pattern-proposals")
+    {
+        return execute(
+            state,
+            patterns::command(request, uri.path()).await?,
+            StatusCode::OK,
+        )
+        .await;
+    }
     let (command, status) = match (request.method(), uri.path()) {
+        (&Method::GET, "/memory/consolidation") => {
+            (AppMemoryCommand::Consolidation, StatusCode::OK)
+        }
+        (&Method::POST, "/memory/consolidation") => {
+            (consolidation_request(request).await?, StatusCode::ACCEPTED)
+        }
         (&Method::GET, "/memory/instructions") => (AppMemoryCommand::Instructions, StatusCode::OK),
         (&Method::DELETE, path) if path.starts_with("/memory/instructions/") => {
             (delete_instruction(request, path).await?, StatusCode::OK)
@@ -70,10 +87,26 @@ pub(super) async fn route(
         ),
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
-    let data = state
+    execute(state, command, status).await
+}
+
+async fn execute(
+    state: Arc<HttpState>,
+    command: AppMemoryCommand,
+    status: StatusCode,
+) -> Result<Response, HttpError> {
+    let mut data = state
         .application
         .memory_management(command, state.shutdown.child_token())
         .await?;
+    let status = if data
+        .as_object_mut()
+        .is_some_and(|v| v.remove("already_active").is_some())
+    {
+        StatusCode::OK
+    } else {
+        status
+    };
     json(
         status,
         ApiEnvelope {
@@ -195,4 +228,25 @@ fn reset_id(path: &str) -> Result<String, HttpError> {
     } else {
         Err(invalid())
     }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConsolidationInput {
+    operation_id: String,
+}
+
+async fn consolidation_request(
+    request: axum::http::Request<Body>,
+) -> Result<AppMemoryCommand, HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), 4096).await?;
+    let input: ConsolidationInput = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    if !uuid::Uuid::parse_str(&input.operation_id)
+        .is_ok_and(|id| id.to_string() == input.operation_id)
+    {
+        return Err(invalid());
+    }
+    Ok(AppMemoryCommand::RunConsolidation {
+        operation_id: input.operation_id,
+    })
 }

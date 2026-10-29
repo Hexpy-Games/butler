@@ -6,6 +6,8 @@
 //! publishes `model.stream.completed` with status `discarded` for that stream,
 //! after its deltas.
 
+mod partial;
+
 use butler_core::tool_protocol::ToolCallStreamEvent;
 use parking_lot::Mutex;
 use std::collections::HashSet;
@@ -69,6 +71,7 @@ pub struct StreamRelay {
 struct RelayObserver {
     sender: mpsc::UnboundedSender<Relayed>,
     calls: Mutex<HashSet<(String, u64)>>,
+    partial: Mutex<partial::Partial>,
 }
 
 impl ProviderStreamObserver for RelayObserver {
@@ -111,6 +114,7 @@ impl ProviderStreamObserver for RelayObserver {
         if text.is_empty() {
             return;
         }
+        self.partial.lock().delta(stream_id, text);
         // A closed queue means the loop has finished; late deltas are dropped.
         let _ = self.sender.send(Relayed::Delta {
             stream_id: stream_id.to_owned(),
@@ -146,12 +150,18 @@ impl ProviderStreamObserver for RelayObserver {
         }
     }
 
+    fn round_text_continued(&self, text: &str) {
+        self.partial.lock().retain(text);
+    }
+
     fn round_text_discarded(&self) {
+        self.partial.lock().discard();
         self.calls.lock().clear();
         let _ = self.sender.send(Relayed::Discard { rejected: false });
     }
 
     fn round_text_rejected(&self) {
+        self.partial.lock().reject();
         self.calls.lock().clear();
         let _ = self.sender.send(Relayed::Discard { rejected: true });
     }
@@ -171,6 +181,7 @@ impl StreamRelay {
             observer: Arc::new(RelayObserver {
                 sender,
                 calls: Mutex::default(),
+                partial: Mutex::default(),
             }),
             receiver,
             answer_blocks: None,
@@ -196,7 +207,7 @@ impl StreamRelay {
             mut receiver,
             answer_blocks,
         } = self;
-        drop(observer);
+        let partial = observer;
         // The stream whose text the App shows, until a discard closes it.
         let mut open = None;
         let mut thinking = super::thinking_line::ThinkingLine::default();
@@ -237,6 +248,18 @@ impl StreamRelay {
         }
         let rest = forward_tools(rest, answer_blocks.as_deref(), progress, &mut thinking).await;
         emit(progress, frames(&mut open, rest)).await;
+        let joined = partial.partial.lock().joined();
+        if let Some(text) = joined {
+            emit(
+                progress,
+                vec![Frame::Text {
+                    stream_id: "joined-answer".into(),
+                    sequence: 1,
+                    text,
+                }],
+            )
+            .await;
+        }
         thinking.clear(progress).await;
     }
 }

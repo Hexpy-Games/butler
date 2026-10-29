@@ -184,3 +184,27 @@ async fn a_failed_rebuild_rolls_back_and_logs_its_cause() -> Result<(), HarnessE
     drop(db);
     s.finish().await
 }
+
+#[tokio::test]
+async fn existing_assets_gain_default_pixel_ratio() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("APP-DB-ASSET-RATIO")?.start().await?;
+    s.agent.terminate().await?;
+    let db = app_db(&s)?;
+    db.execute_batch(
+        "ALTER TABLE app_assets DROP COLUMN pixel_ratio;
+        INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at)
+        VALUES('img_0123456789','hash','image/png',120,80,0,'','','2026-10-25');",
+    )?;
+    drop(db);
+    s.gw = s.agent.start_again().await?;
+    let db = app_db(&s)?;
+    let ratio: f64 = db.query_row(
+        "SELECT pixel_ratio FROM app_assets WHERE id='img_0123456789'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(ratio, 1.0);
+    drop(db);
+    s.finish().await
+}

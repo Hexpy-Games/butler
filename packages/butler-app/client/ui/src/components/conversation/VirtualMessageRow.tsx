@@ -8,6 +8,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/butler-ds";
+import { isGeneralChat } from "@/app/isGeneralChat";
 import { MessageRow } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageRecord } from "@/app/types.ts";
@@ -43,6 +44,7 @@ export function VirtualMessageRow({
       <ContextMenuTrigger asChild>
         <MessageRow
           role={message.role}
+          bubble={message.role === "assistant" && isGeneralChat(message.chat_id)}
           tone={messageTone(message)}
           footer={message.role === "user" ? <UserMessageFooter message={message} /> : undefined}
           compactionEvent={isCompactionEvent}

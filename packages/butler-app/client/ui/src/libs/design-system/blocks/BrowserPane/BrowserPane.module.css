@@ -1,4 +1,4 @@
-/* A sheet whose two top corners use the page card radius (12px). One edge,
+/* A sheet whose two top corners use the popover radius (12px). One edge,
    one hairline: the sheet's leading hairline is the chat | pane divider (the
    chat column draws none); its trailing and bottom edges meet the window,
    whose frame (the workspace border) draws them, so the sheet tucks its own
@@ -42,7 +42,7 @@
 }
 
 /* The first tab sits --browser-card-inset off the card's top and left edges,
-   level with the page card's edge below it. The tab strip pads itself by the
+   level with the toolbar's controls below it. The tab strip pads itself by the
    focus ring's width, so the row gives the rest. The toolbar keeps its place. */
 [data-panel-layout="docked"] .pane[data-frame="cards"] .tabRow {
   height: auto;
@@ -70,16 +70,20 @@
   flex: 1 1 auto;
 }
 
+/* --space-xs above the row clears the tabs: the address field sits as far
+   below the tabs as the tabs sit below the sheet's top edge. The row is one
+   band plus two --space-xs tall: the 34px address field keeps 7px under the
+   tabs and centres with the 28px buttons. */
 .toolbar {
   container-name: browser-toolbar;
   container-type: inline-size;
   display: flex;
   min-width: 0;
-  height: var(--browser-band-height);
+  height: calc(var(--browser-band-height) + var(--space-xs) * 2);
   flex: none;
   align-items: center;
   gap: var(--space-sm);
-  padding: 0 var(--browser-card-inset) var(--space-xs);
+  padding: var(--space-xs) var(--browser-card-inset) var(--space-xs);
 }
 
 .group {
@@ -110,11 +114,69 @@
   }
 }
 
+/* Butler controls the tab (its page card holds holder="butler"): the
+   sheet's own edge takes the riso inks on all its edges, turning slowly like
+   the page card's edge did, in place of that edge. Only paint changes: the
+   hairline keeps its width, so nothing moves. The loop runs on
+   --motion-agent-edge and --motion-loop-count (0 under reduced motion: a
+   static edge at 135deg). */
+@property --browser-pane-edge-angle {
+  inherits: false;
+  initial-value: 135deg;
+  syntax: "<angle>";
+}
+
+.pane:has(.stage [data-slot="page-card"][data-holder="butler"]) {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--browser-pane-bg), var(--browser-pane-bg)) padding-box,
+    conic-gradient(
+        from var(--browser-pane-edge-angle),
+        var(--butler-ink-blue),
+        var(--butler-ink-purple),
+        var(--butler-ink-pink),
+        var(--butler-ink-blue)
+      )
+      border-box;
+  animation: browser-pane-edge var(--motion-agent-edge)
+    var(--motion-ease-linear) var(--motion-loop-count);
+}
+
+@keyframes browser-pane-edge {
+  from {
+    --browser-pane-edge-angle: 135deg;
+  }
+
+  to {
+    --browser-pane-edge-angle: 495deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane:has(.stage [data-slot="page-card"][data-holder="butler"]) {
+    animation: none;
+  }
+}
+
+/* The page fills the sheet edge to edge, under the toolbar. The page card's
+   transparent hairline border sits under the sheet's own edges (the sheet
+   clips it), so the native view starts right inside the sheet's hairline:
+   no strip of card surface between the sheet edge and the page. The card
+   corners follow the sheet's bottom corners: square here (the window frame
+   meets the sheet), the shell card radius in the cards frame. */
 .stage {
+  --page-card-radius: 0px;
+  --page-card-butler-edge: none;
+  --page-card-butler-glow: var(--browser-card-shadow);
+
   display: flex;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  padding: 0 var(--browser-card-inset) var(--browser-card-inset);
+  margin: 0 calc(var(--border-hairline) * -1) calc(var(--border-hairline) * -1);
+}
+
+[data-panel-layout="docked"] .pane[data-frame="cards"] .stage {
+  --page-card-radius: var(--shell-card-radius);
 }

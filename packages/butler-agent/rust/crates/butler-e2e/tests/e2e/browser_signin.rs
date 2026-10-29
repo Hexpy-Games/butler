@@ -8,6 +8,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod always;
 mod fill;
 mod history_import;
 mod host;

@@ -5,7 +5,7 @@ import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { CanonTag, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import { selectBoardPlan } from "./canon-board-selector.ts";
-import { closeCanonInspector } from "./canon-board-inspector.ts";
+import { closeCanonAside } from "./canon-board-aside.ts";
 import { assertNoChipControls, chooseTag } from "./canon-tags-flows.ts";
 export const tones = ["gray", "red", "orange", "yellow", "green", "teal", "blue", "purple"] as const;
 const names = ["회색", "빨강", "주황", "노랑", "초록", "청록", "파랑", "보라"];
@@ -43,7 +43,7 @@ export async function captureTagViews(page: Page, shots: string, name: string, t
   const detail = page.locator('[data-test-class="canon-epic-detail"]');
   await detail.waitFor();
   await captureInspectorTags(page, tags, before, capture);
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
   await board.getByRole("button", { name: "새 과제", exact: true }).first().click();
   await page.getByRole("dialog").getByLabel("제목", { exact: true }).fill("태그가 있는 과제");
   if (!before) {
@@ -85,7 +85,9 @@ async function captureInspectorTags(page: Page, tags: CanonTag[], before: boolea
   await page.getByRole("menuitem", { name: "색 바꾸기", exact: true }).waitFor();
   await capture("picker-menu");
   await page.keyboard.press("Escape");
+  await page.getByRole("menu").waitFor({ state: "hidden" });
   await page.keyboard.press("Escape");
+  await popover.waitFor({ state: "hidden" });
   if (!before) {
     await detail.getByRole("button", { name: "제목 수정", exact: true }).click();
     assert.equal(await detail.locator('[data-canon-inline-editor] [data-test-class="canon-tags-field"]').count(), 0, "Inline editor keeps the immediate-save tag row outside the draft");

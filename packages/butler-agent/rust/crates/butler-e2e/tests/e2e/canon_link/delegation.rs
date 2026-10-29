@@ -1,8 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn cb_02_15_parent_report_ends_while_reviewed_steward_still_runs() -> Result<(), HarnessError>
-{
+async fn cb_02_15_one_call_parent_settles_from_steward_result() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server, id, chat) = setup("CB-02-15", false, false).await?;
     script
@@ -60,10 +59,39 @@ async fn cb_02_15_parent_report_ends_while_reviewed_steward_still_runs() -> Resu
         "SELECT count(*) FROM (SELECT DISTINCT json_extract(result_json,'$.work.work_id'),json_extract(arguments_json,'$.subject') FROM btcc_guided_tool_calls WHERE tool_name='record_work_review' AND status='completed' AND json_extract(arguments_json,'$.verdict')='accept' AND json_extract(result_json,'$.ok')=1)",
         [], |r| r.get(0),
     )?;
+    let parent_calls: i64 = db.query_row(
+        "SELECT count(*) FROM btcc_guided_tool_calls c JOIN btcc_turns t USING(turn_id) WHERE t.session_id=(SELECT parent_session_id FROM btcc_session_relations ORDER BY ordinal LIMIT 1) AND c.tool_name IN ('start_work','replace_work_plan','record_work_review','record_work_disposition')",
+        [], |r| r.get(0))?;
+    assert_eq!(
+        parent_calls, 0,
+        "Butler hands off in one call and needs no closeout reviews"
+    );
+    let (status, ledger, packet): (String, String, String) = db.query_row(
+        "SELECT w.status,w.ledger_project_id,d.packet_json FROM btcc_subsession_delegations d JOIN btcc_guided_works w ON w.work_id=json_extract(d.packet_json,'$.parent_work_ref.work_id') WHERE json_extract(d.packet_json,'$.child_role')='steward'", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+    assert_eq!(status, "completed");
+    let packet: Value = serde_json::from_str(&packet)?;
+    let plan_id = packet["parent_work_ref"]["plan_revision_id"]
+        .as_str()
+        .unwrap();
+    let plan = std::fs::read_to_string(
+        s.sandbox
+            .data
+            .join("project-ledger/projects")
+            .join(ledger)
+            .join("plans")
+            .join(format!("{plan_id}.md")),
+    )?;
+    let plan: Value = serde_json::from_str(plan.split_once("\n---\n").unwrap().1.trim())?;
+    assert_eq!(plan["plan"]["checks"], packet["acceptance_criteria"]);
+    assert!(
+        packet["parent_work_ref"]
+            .get("review_revision_id")
+            .is_none()
+    );
     drop(db);
     assert_eq!(
-        reviews, 9,
-        "Parent, steward and Worker each keep plan, result and completion reviews"
+        reviews, 6,
+        "Steward and Worker keep plan, result and completion reviews; parent has none"
     );
     s.finish().await?;
     server.abort();

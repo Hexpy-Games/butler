@@ -11,8 +11,8 @@ import { InlineUnsavedDialog } from "./InlineUnsavedDialog.tsx";
 import { useInlineExitGuard } from "./useInlineExitGuard.ts";
 import { useEpicInlineEdit, type EpicTextField } from "./useEpicInlineEdit.ts";
 
-export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = false, summary, properties }: {
-  compact?: boolean; summary?: ReactNode; properties?: ReactNode;
+export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = false, summary }: {
+  compact?: boolean; summary?: ReactNode;
   epic: EpicDetail; busy: boolean; titleRef?: Ref<HTMLElement>;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
@@ -33,7 +33,7 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
   }, [edit.draft]);
   const references = epicAttachmentReferences(epic.description);
   const unreferenced = (epic.attachments ?? []).filter(file => !references.has(file.file_id));
-  const guard = useInlineExitGuard({ editing: Boolean(edit.draft), dirty: edit.dirty || Boolean(uploads.pendingFile), save, cancel: edit.cancel, focus });
+  const guard = useInlineExitGuard({ editing: Boolean(edit.draft), busy, dirty: edit.dirty || Boolean(uploads.pendingFile), save, cancel: edit.cancel, focus });
   const remountedDraft = useRef(Boolean(edit.draft));
   useLayoutEffect(() => { if (remountedDraft.current) { remountedDraft.current = false; void guard.leave(); } }, []);
   const begin = async (field: EpicTextField) => {
@@ -45,14 +45,15 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
       if (event.relatedTarget == null && !document.hasFocus()) return;
       const field = (event.target as HTMLElement).closest("[data-canon-inline-editor]");
       if (!edit.draft || guard.open || !field || field.contains(event.relatedTarget as Node)) return;
+      if (guard.acting() || !(event.target as HTMLElement).isConnected || (event.target as HTMLButtonElement).disabled) return;
       guard.blur();
     }}>
       {(["title", "description"] as const).map(field => <Stack gap="sm" key={field}>
         {edit.draft?.field === field
           ? <EpicFieldInput epic={epic} field={field} value={edit.draft.value} busy={busy} valid={edit.valid}
-            current={edit.draft.current} base={edit.draft.base} onChange={edit.change} onSave={save} onCancel={edit.cancel} />
+            current={edit.draft.current} base={edit.draft.base} onChange={edit.change} onSave={guard.save} onCancel={guard.cancel} />
           : <EpicFieldRest field={field} epic={epic} compact={compact} titleRef={titleRef} triggerRef={triggers[field]} busy={busy} onEdit={() => void begin(field)} />}
-        {field === "title" && <>{summary}{properties}</>}
+        {field === "title" && summary}
         {field === "description" && edit.draft?.field !== field && unreferenced.length > 0 && <AttachmentList
           items={unreferenced.map(file => ({ id: file.file_id, name: file.safe_name,
             href: messageFileSource(file) ? absoluteGatewayUrl(messageFileSource(file)!) : undefined }))} />}
@@ -69,7 +70,7 @@ function EpicFieldRest({ field, epic, compact, busy, onEdit, titleRef, triggerRe
   const title = field === "title", value = epic[field];
   const Title = compact ? Typo.Body : Typo.PanelTitle;
   const label = appCopy.canon.inlineEdit[field];
-  return <Tooltip label={label}><Clickable stretch disabled={busy} aria-label={label}
+  return <Tooltip label={label}><Clickable bleed="both" stretch disabled={busy} aria-label={label}
     role={title ? "button" : "group"} tabIndex={title ? 0 : -1}
     onClick={event => { if (!(event.target as HTMLElement).closest("a, button")) onEdit(); }}
     onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -82,10 +83,10 @@ function EpicFieldRest({ field, epic, compact, busy, onEdit, titleRef, triggerRe
         : <Box grow minWidth="0">{value ? <EpicMarkdown epicId={epic.id} description={value} attachments={epic.attachments} density="compact" />
           : <Typo.Caption>{appCopy.canon.descriptionPlaceholder}</Typo.Caption>}</Box>}
       {title ? <Presence present={hover || focused} motion="fade"><Box shrink={false}><Pencil size="sm" /></Box></Presence>
-        : <Box shrink={false}><IconButton label={label} disabled={busy} ref={node => { triggerRef.current = node; }}
+        : <Stack align="row" shrink={false}><IconButton label={label} disabled={busy} ref={node => { triggerRef.current = node; }}
           onClick={event => { event.stopPropagation(); onEdit(); }}>
           <Presence present={hover || focused} motion="fade"><Pencil size="sm" /></Presence>
-        </IconButton></Box>}
+        </IconButton></Stack>}
     </Stack>
   </Clickable></Tooltip>;
 }

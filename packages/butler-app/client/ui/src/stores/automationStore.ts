@@ -38,6 +38,10 @@ interface AutomationStore {
   startAt?: string;
   /** The access the schedule's runs get, independent of the target conversation. */
   accessMode: AccessMode;
+  browserSignin: boolean;
+  browserPayment: boolean;
+  setBrowserSignin: (on: boolean) => void;
+  setBrowserPayment: (on: boolean) => void;
   /** The schedule's own model; empty follows the target chat's model. */
   model: string;
   /** The model as loaded, so a save sends `model` only when it changed. */
@@ -99,6 +103,11 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   saveError: null,
   sessionOptions: [],
 
+  browserSignin: false,
+  browserPayment: false,
+  setBrowserSignin: (browserSignin) => set({ browserSignin }),
+  setBrowserPayment: (browserPayment) => set({ browserPayment }),
+
   // Setters
   setSchedule: (schedule) => set((current) => ({ schedule, scheduleType: schedule?.kind ?? "interval", saveError: withoutFieldError(current.saveError, "interval") })),
   setTitle: (title) =>
@@ -130,6 +139,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
     if (isNew) {
       const targetSessionId = sessionOptions[0]?.id ?? "general";
       set({
+        browserSignin: false,
+        browserPayment: false,
         title: "",
         promptBody: "",
         targetSessionId,
@@ -161,6 +172,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
       );
 
       set({
+        browserSignin: detail.automation.browser_signin === true,
+        browserPayment: detail.automation.browser_payment === true,
         title: detail.automation.title,
         promptBody: detail.automation.prompt_body,
         targetSessionId: detail.automation.target_session_id,
@@ -193,6 +206,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
 
     try {
       const body = JSON.stringify({
+        browser_signin: get().browserSignin,
+        browser_payment: get().browserPayment,
         title,
         prompt_body: promptBody,
         target_session_id: targetSessionId,

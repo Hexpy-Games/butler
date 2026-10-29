@@ -9,7 +9,7 @@ import {
   MessageListSurface,
 } from "./ConversationShell";
 import { SharedBackground } from "./ConversationShell.demo";
-import { AsideBesideBrowser, DockedAside, FloatingAside } from "./ConversationShell.asideDemo";
+import { AsideBesideBrowser, DockedAside, DockedAsideToggle, FloatingAside } from "./ConversationShell.asideDemo";
 import { InConversation } from "../TabRail/tabRailDemo";
 import styles from "./ConversationShell.showcase.module.css";
 
@@ -79,6 +79,9 @@ export const stories: ShowcaseStory[] = [
   { name: "Tab rail beside the messages", widths: ["320", "375", "app", "wide"], render: ({ locale }) => <InConversation locale={locale} /> },
   // aside: docked flat in the margin from a 960px shell (Wide), one Card per section (margin variant B).
   { name: "Aside docked: margin cards", widths: ["app", "wide"], render: (context) => <DockedAside {...context} /> },
+  // Open/close: the column glides on a transform and the aside rides in or out with it (--motion-slow, emphasized).
+  // Reduced motion (the viewer's motion=reduced): both move at once, no fade, same end state.
+  { name: "Aside docked: open and close", states: ["open"], widths: ["app", "wide"], render: (context) => <DockedAsideToggle {...context} /> },
   { name: "Aside floating", states: ["open"], widths: ["375", "app", "wide"], render: (context) => <FloatingAside {...context} /> },
   { name: "Aside floating beside the browser pane", widths: ["app", "wide"], render: (context) => <AsideBesideBrowser {...context} /> },
 ];

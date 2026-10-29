@@ -1,14 +1,16 @@
+import { openDocument } from "../components/documents/documentApi";
+import { initialDocumentView, persistDocumentView } from "./documentRoute";
 import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
 import { leaveCanonEditor } from "./canonEditGuard.ts";
 import { useProjectDashboardState } from "./projectDashboardState.ts";
+import { useFileViewerState } from "./fileViewerState.ts";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
   currentAdaptiveMode,
-  normalizeAdaptivePanelState,
   restoreAdaptivePanelState,
 } from "../libs/design-system/responsive.ts";
 import {
@@ -65,7 +67,6 @@ import {
 } from "./projectWorkspaceKinds.ts";
 import {
   DEFAULT_LEFT_PANEL_WIDTH,
-  DEFAULT_RIGHT_PANEL_WIDTH,
 } from "./panelSizing.ts";
 import type {
   AppView,
@@ -139,14 +140,9 @@ export interface NavigationSetOptions {
 
 interface ButlerStore {
   leftOpen: boolean;
-  rightOpen: boolean;
   sessionInfoOpen: boolean;
   taskGraphEnabled: boolean;
-  rightTab: string;
-  selectedArtifactId: string | null;
-  selectedArtifact: SessionArtifactSummary | null;
   leftPanelWidth: number;
-  rightPanelWidth: number;
   sidebarChatsCollapsed: boolean;
   sidebarProjectsCollapsed: boolean;
   sidebarCollapsedProjectIds: string[];
@@ -155,6 +151,8 @@ interface ButlerStore {
   activeChatId: string;
   activeChatTitle?: string;
   navigation: NavigationView;
+  /** False until the first navigation response (or its unavailable fallback) is applied. */
+  navigationLoaded: boolean;
   navigationGeneration: number;
   messages: MessageRecord[];
   sessionView: SessionView | null;
@@ -194,12 +192,9 @@ interface ButlerStore {
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
   setLeftOpen: (value: Updater<boolean>) => void;
-  setRightOpen: (value: Updater<boolean>) => void;
-  setRightTab: (rightTab: string) => void;
-  setSelectedArtifactId: (artifactId: string | null) => void;
-  openArtifact: (artifactId: string, artifact?: SessionArtifactSummary) => void;
+  /** Opens a file in a conversation's file viewer (the right slot): the active one unless `session` names another. */
+  openArtifact: (artifact: SessionArtifactSummary, session?: string) => void;
   setLeftPanelWidth: (leftPanelWidth: number) => void;
-  setRightPanelWidth: (rightPanelWidth: number) => void;
   setSidebarChatsCollapsed: (value: Updater<boolean>) => void;
   setSidebarProjectsCollapsed: (value: Updater<boolean>) => void;
   setSidebarCollapsedProjectIds: (projectIds: Updater<string[]>) => void;
@@ -269,7 +264,7 @@ interface ButlerStore {
   allowAuthorityRequest: (
     requestRef: string,
     sessionId?: string,
-    scope?: "once" | "conversation",
+    scope?: "once" | "conversation" | "site",
   ) => Promise<boolean>;
   revokeConversationPermission: (grantRef: string, sessionId?: string) => Promise<boolean>;
   denyAuthorityRequest: (
@@ -288,6 +283,7 @@ interface ButlerStore {
     controls?: ComposerControls,
   ) => Promise<void>;
   deleteQueuedMessage: (queuedMessageId: string) => Promise<void>;
+  sendQueuedMessageNow: (queuedMessageId: string) => Promise<void>;
   cancelActiveTurn: () => Promise<void>;
   createScratchProject: (displayName: string) => Promise<boolean>;
   createProjectFromExistingFolder: (selection: ProjectFolderSelection, displayName: string) => Promise<boolean>;
@@ -340,6 +336,7 @@ function messageRecordsEqual(
       message.turn_id === other.turn_id &&
       message.text === other.text &&
       structurallyEqual(message.content_parts, other.content_parts) &&
+      structurallyEqual(message.initiated, other.initiated) &&
       message.delivery_state === other.delivery_state &&
       structurallyEqual(message.limitation_codes ?? [], other.limitation_codes ?? []) &&
       structurallyEqual(message.limitations ?? [], other.limitations ?? []) &&
@@ -803,7 +800,7 @@ function normalizedAuthorityAlternative(value: string): string | null {
 
 async function submitAuthorityDecision(input: {
   action: AuthorityDecisionAction;
-  scope?: "once" | "conversation";
+  scope?: "once" | "conversation" | "site";
   alternative?: string;
   decision: AuthorityDecisionKind;
   requestRef: string;
@@ -835,6 +832,8 @@ function applySessionView(
   const retained = [...loaded, ...view.messages];
   const turns = new Set(retained.map(m => m.turn_id));
   const messageIds = new Set(retained.map(m => m.id));
+  const proposals = new Map([...previous?.canon_proposals ?? [], ...view.canon_proposals ?? []].map(p => [p.proposal_id, p]));
+  view = { ...view, canon_proposals: [...proposals.values()].filter(p => turns.has(p.turn_id)) };
   const answers = new Map([...previous?.question_answers ?? [], ...view.question_answers ?? []].map(a => [a.request_ref, a]));
   view = { ...view, question_answers: [...answers.values()].filter(a => turns.has(a.source_turn_id) || messageIds.has(`question-followup-${a.request_ref}`)) };
   const sessionViews = upsertSessionView(state.sessionViews, view);
@@ -950,22 +949,17 @@ setAppCopyLanguage(initialSettings.language);
 
 export const useButlerStore = create<ButlerStore>()((set, get) => ({
   leftOpen: false,
-  // New users start without the inspector; a saved UI state restores it.
-  rightOpen: false,
   sessionInfoOpen: false,
   taskGraphEnabled: false,
-  rightTab: "summary",
-  selectedArtifactId: null,
-  selectedArtifact: null,
   leftPanelWidth: DEFAULT_LEFT_PANEL_WIDTH,
-  rightPanelWidth: DEFAULT_RIGHT_PANEL_WIDTH,
   sidebarChatsCollapsed: false,
   sidebarProjectsCollapsed: false,
   sidebarCollapsedProjectIds: [],
-  view: { kind: "session" },
+  view: initialDocumentView(),
   settingsReturnView: { kind: "session" },
   activeChatId: "draft:chat",
   navigation: EMPTY_NAVIGATION,
+  navigationLoaded: false,
   navigationGeneration: 0,
   messages: [],
   sessionView: null,
@@ -999,53 +993,14 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
   renameProject: null,
   renameSession: null,
 
-  setLeftOpen: (value) =>
-    set((state) => {
-      const leftOpen = resolveUpdate(value, state.leftOpen);
-      const panels = leftOpen
-        ? normalizeAdaptivePanelState({
-            mode: currentAdaptiveMode(chromeEnvironment()),
-            requested: "left",
-            leftOpen,
-            rightOpen: state.rightOpen,
-          })
-        : { leftOpen: false, rightOpen: state.rightOpen };
-      return { ...panels, ...(panels.rightOpen === false && state.view.kind === "project-dashboard"
-        ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
-    }),
-  setRightOpen: async (value) => {
-    const leave = leaveCanonEditor();
-    if (leave !== true && !await leave) return;
-    set((state) => {
-      const rightOpen = resolveUpdate(value, state.rightOpen);
-      return rightOpen
-        ? normalizeAdaptivePanelState({
-            mode: currentAdaptiveMode(chromeEnvironment()),
-            requested: "right",
-            leftOpen: state.leftOpen,
-            rightOpen,
-          })
-        : { rightOpen: false, ...(state.view.kind === "project-dashboard"
-          ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
-    });
+  setLeftOpen: (value) => set(state => ({ leftOpen: resolveUpdate(value, state.leftOpen) })),
+  openArtifact: (artifact, session) => {
+    if (artifact.kind === "doc") { openDocument({ ...artifact, chat_id: artifact.session_id }); return; }
+    const state = get();
+    useFileViewerState.getState().open(session || state.activeChatId, { kind: "artifact", id: artifact.id, artifact });
+    if (state.view.kind !== "session") void state.setView({ kind: "session" });
   },
-  setRightTab: (rightTab) => set({ rightTab }),
-  setSelectedArtifactId: (artifactId) =>
-    set({ selectedArtifactId: artifactId, selectedArtifact: null }),
-  openArtifact: (artifactId, artifact) =>
-    set((state) => ({
-      ...(state.view.kind === "session" ? { sessionInfoOpen: true } : normalizeAdaptivePanelState({
-        mode: currentAdaptiveMode(chromeEnvironment()),
-        requested: "right",
-        leftOpen: state.leftOpen,
-        rightOpen: true,
-      })),
-      rightTab: "artifacts",
-      selectedArtifactId: artifactId,
-      selectedArtifact: artifact ?? null,
-    })),
   setLeftPanelWidth: (leftPanelWidth) => set({ leftPanelWidth }),
-  setRightPanelWidth: (rightPanelWidth) => set({ rightPanelWidth }),
   setSidebarChatsCollapsed: (value) =>
     set((state) => ({
       sidebarChatsCollapsed: resolveUpdate(value, state.sidebarChatsCollapsed),
@@ -1065,27 +1020,20 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       ),
     })),
   hydrateFreshUiState: () =>
-    set((state) =>
-      freshAppUiPanelState(
-        currentAdaptiveMode(chromeEnvironment()),
-        state.rightOpen,
-      ),
-    ),
+    set({ leftOpen: freshAppUiPanelState(currentAdaptiveMode(chromeEnvironment()), false).leftOpen }),
   hydrateUiState: (uiState) => {
     const panels = restoreAdaptivePanelState({
       mode: currentAdaptiveMode(chromeEnvironment()),
       leftOpen: uiState.left_open,
-      rightOpen: uiState.right_open,
+      rightOpen: false,
     });
     set({
       activeChatId: uiState.active_session_id,
-      view: { kind: "session" },
-      ...panels,
-      rightTab: uiState.right_tab,
+      view: initialDocumentView(),
+      leftOpen: panels.leftOpen,
       sessionInfoOpen: uiState.session_info_open === true,
       taskGraphEnabled: uiState.task_graph_enabled === true,
       leftPanelWidth: uiState.left_panel_width,
-      rightPanelWidth: uiState.right_panel_width,
       sidebarChatsCollapsed: uiState.sidebar_chats_collapsed,
       sidebarProjectsCollapsed: uiState.sidebar_projects_collapsed,
       sidebarCollapsedProjectIds: uiState.sidebar_collapsed_project_ids,
@@ -1115,8 +1063,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       observerSessionId: null,
       observerTargetTurnId: null,
       observerHistory: [],
-      selectedArtifactId: null,
-      selectedArtifact: null,
     }),
   noteNavigationEvent: () =>
     set((state) => ({ navigationGeneration: state.navigationGeneration + 1 })),
@@ -1143,9 +1089,8 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         !findSessionSummary(nextNavigation, state.activeChatId)
           ? navigationWithSessionSummary(nextNavigation, activeLocalSession)
           : nextNavigation;
-      return structurallyEqual(state.navigation, displayedNavigation)
-        ? state
-        : { navigation: displayedNavigation };
+      if (structurallyEqual(state.navigation, displayedNavigation)) return state.navigationLoaded ? state : { navigationLoaded: true };
+      return { navigation: displayedNavigation, navigationLoaded: true };
     }),
   setMessages: (messages) =>
     set((state) => {
@@ -1329,8 +1274,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         observerTargetTurnId: null,
         observerHistory: [],
         view: { kind: "session" },
-        selectedArtifactId: null,
-        selectedArtifact: null,
         summary: storedSessionView
           ? summaryFromSessionView(storedSessionView)
           : null,
@@ -1367,8 +1310,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
     set((state) => ({
       view: { kind: "project-dashboard", projectId },
       leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded" ? state.leftOpen : false,
-      selectedArtifactId: null,
-      selectedArtifact: null,
     }));
   },
 
@@ -1753,6 +1694,16 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
     }
   },
 
+  sendQueuedMessageNow: async (queuedMessageId) => {
+    const targetChatId = get().activeChatId;
+    const data = await api<SessionQueueView>(
+      `/session-queue/${encodeURIComponent(queuedMessageId)}/send-now`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+    if (get().activeChatId === targetChatId)
+      set({ sessionQueue: data.queued_messages });
+  },
+
   deleteQueuedMessage: async (queuedMessageId) => {
     const targetChatId = get().activeChatId;
     set((state) => ({
@@ -1828,8 +1779,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       },
       activeChatId: optimisticStart?.id ?? state.activeChatId,
       view: optimisticStart && !dashboardTarget ? { kind: "session" } : state.view,
-      selectedArtifactId: optimisticStart ? null : state.selectedArtifactId,
-      selectedArtifact: optimisticStart ? null : state.selectedArtifact,
       navigation: optimisticStart
         ? navigationWithOptimisticSession(state.navigation, optimisticStart)
         : state.navigation,
@@ -1931,8 +1880,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
             [sendOperationId]: targetChatId,
           },
           view: dashboardTarget ? state.view : { kind: "session" },
-          selectedArtifactId: null,
-          selectedArtifact: null,
           navigation: navigationReplacingOptimisticSession(
             state.navigation,
             previousChatId,
@@ -2268,9 +2215,11 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       const result = await api<{ project: ProjectSummary }>("/projects", {
         method: "POST",
         body: JSON.stringify({
-          source: "existing_folder",
+          source: selection.workspace_path !== undefined ? "workspace_folder" : "existing_folder",
           display_name: displayName.trim(),
-          folder_selection_token: selection.folder_selection_token,
+          ...(selection.workspace_path !== undefined
+            ? { workspace_path: selection.workspace_path }
+            : { folder_selection_token: selection.folder_selection_token }),
         }),
       });
       await get().refreshNavigation();
@@ -2483,6 +2432,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
 }));
 
 useButlerStore.subscribe((state, previousState) => {
+  if (state.view !== previousState.view && typeof window !== "undefined") persistDocumentView(state.view);
   if (state.activeChatId !== previousState.activeChatId) {
     activeSessionGeneration += 1;
     // Session navigation/hydration re-projects the durable authority stack
@@ -2528,10 +2478,6 @@ export const selectActiveChat = (state: ButlerStore) =>
   activeChatFromNavigation(state.navigation, state.activeChatId);
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
-export const selectRightAvailable = (state: ButlerStore) =>
-  (state.view.kind === "project-dashboard" && Boolean(state.view.epicId));
-export const selectEffectiveRightOpen = (state: ButlerStore) =>
-  state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>
   activeTitleForView(state.view, selectActiveChat(state));
 export const selectIsSettingsView = (state: ButlerStore) =>

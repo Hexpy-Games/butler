@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef, SessionArtifactSummary } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { ArtifactList, FileText, MarkdownContent, Space, Stack } from "@/butler-ds";
+import { ArtifactList, Eye, FileText, MarkdownContent, Space, Stack } from "@/butler-ds";
 import { artifactCardActions } from "@/components/artifacts/artifactActions";
 import { artifactDescription } from "@/components/artifacts/artifactDisplay";
 import { useEffect, useId, useMemo } from "react";
@@ -17,7 +17,11 @@ export function MessageArtifacts({
   attachments = [],
   text = "",
   refreshFileUrls,
+  bubble = false,
+  origin,
 }: {
+  bubble?: boolean;
+  origin?: import("@/app/initiatedTypes").InitiatedOrigin;
   artifacts: SessionArtifactSummary[];
   attachments?: MessageFileRef[];
   text?: string;
@@ -42,26 +46,33 @@ export function MessageArtifacts({
     document.getElementById(listId)?.querySelectorAll<HTMLElement>(':scope > [role="button"]')[promotedIndex]?.focus();
     usePromotedFile.setState({ fileId: undefined });
   }, [listId, promotedIndex]);
-  if (visibleArtifacts.length === 0) return null;
+  const workLink = (origin?.kind === "work_result" || origin?.kind === "work_failed") && origin.work_session_id ? [{
+    id: `work:${origin.relation_id ?? origin.work_session_id}`,
+    title: origin.work_title ?? "",
+    description: appCopy.conversation.initiated.viewWork,
+    icon: <Eye size="lg" />,
+    onOpen: () => useButlerStore.getState().openSessionObserver(origin.work_session_id!),
+  }] : [];
+  if (visibleArtifacts.length === 0 && workLink.length === 0) return null;
   return (
     <>
-      <Space size="md" />
-      <Stack gap="md">{images.map(artifact => <MarkdownContent key={artifact.id}>
+      {!bubble && <Space size="md" />}
+      <Stack gap={bubble ? "lg" : "md"}>{images.map(artifact => <MarkdownContent key={artifact.id}>
         <MessageInlineImage src={artifact.url} alt={artifact.title} attachments={attachments}
           artifacts={artifacts} refreshFileUrls={refreshFileUrls} />
       </MarkdownContent>)}
-      {files.length > 0 && <ArtifactList
+      {(files.length > 0 || workLink.length > 0) && <ArtifactList
         aria-label={appCopy.interfacePanels.artifacts}
         id={listId}
         data-test-class="message-artifact-list"
-        items={files.map((artifact) => ({
+        items={[...files.map((artifact) => ({
           id: artifact.id,
           title: artifact.title,
           description: artifactDescription(artifact),
           icon: <FileText size="lg" />,
           actions: artifactCardActions(artifact),
-          onOpen: () => openArtifact(artifact.id, artifact),
-        }))}
+          onOpen: () => openArtifact(artifact),
+        })), ...workLink]}
       />}
       </Stack>
     </>

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { getAppCopy } from "./copy.ts";
-import { approvalRequestView, normalizeApprovalSummary } from "./approvalRequest.ts";
+import { approvalActionView, approvalRequestView, normalizeApprovalSummary } from "./approvalRequest.ts";
 import type { ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
 
 const en = getAppCopy("en-US").interfaceTemplates.approvalRequest;
@@ -137,6 +137,21 @@ test("the badge shows the risk the agent sent: the App never classifies commands
 
 // test-category: security
 test("outside paths stay absolute and inside paths remain project-relative", () => {
+  for (const [input, masked] of [
+    ["curl -H 'Authorization: Bearer sample-value' https://example.com", "curl -H 'Authorization: Bearer ••••' https://example.com"],
+    ["curl -H 'Authorization: Basic sample-value'", "curl -H 'Authorization: Basic ••••'"],
+    ["run --api-key sample-value --token=sample-value secret='two words'", "run --api-key •••• --token=•••• secret=••••"],
+    ['run api_key="two words" access_token=sample-value', "run api_key=•••• access_token=••••"],
+    ["fetch https://example.com/?token=sample-value&limit=5", "fetch https://example.com/?token=••••&limit=5"],
+    ["send Bearer sample-value", "send Bearer sample-value"],
+  ]) {
+    const request = normalizeApprovalSummary({ action_kind: "run_command", examples: [input],
+      operation: { tool: "exec_command", access: "change", targets: [], command: input } })!;
+    for (const copy of [en, ko]) {
+      expect(approvalRequestView(card(request), copy).details).toEqual([masked]);
+      expect(approvalActionView(request, copy, {}).target).toBe(masked);
+    }
+  }
   const approval = summary("edit_files", {
     targets: [folder("/home/mina/.butler"), { kind: "outside", path: "/tmp/reports/a.txt" }],
     examples: ["/tmp/reports/a.txt"],
@@ -174,6 +189,12 @@ test("a request without examples shows what it acts on: its target, else the leg
   expect(approvalRequestView(card(connector), en).details).toEqual(["github/create_issue"]);
   const schedule = summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation:delete:daily-news" }] });
   expect(approvalRequestView(card(schedule), en).details).toEqual([en.scheduleUnavailable]);
+  for (const copy of [en, ko]) {
+    const edit = { ...schedule, schedule: { title: "Evening summary", scheduleType: "update" as const } };
+    expect(approvalRequestView(card(edit), copy).details).toEqual(["Evening summary", copy.scheduleUnavailable]);
+    expect(approvalRequestView(card({ ...edit, schedule: { ...edit.schedule, browserSignin: true } }), copy).details)
+      .toEqual(["Evening summary", copy.scheduleSignin(true)]);
+  }
   const topic = summary("start_conversation", { targets: [{ kind: "other", path: "Weekly review" }] });
   expect(approvalRequestView(card(topic), en).details).toEqual(["Weekly review"]);
 });

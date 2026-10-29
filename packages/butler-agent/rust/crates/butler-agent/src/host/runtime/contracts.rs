@@ -26,6 +26,7 @@ pub(crate) struct RuntimePaths {
 
 /// Ingress holds this owner, admits via BTCC, then awaits close before process exit.
 pub(crate) struct AgentRuntime {
+    pub plugins: Arc<crate::host::plugins::Plugins>,
     pub hooks: Arc<dyn butler_core::hooks::HookPort>,
     pub data_reset: Arc<crate::host::service::data_reset::Control>,
     pub memory_acquisition: Arc<crate::host::embedding::worker::assets::Acquisition>,
@@ -35,6 +36,7 @@ pub(crate) struct AgentRuntime {
     pub bindings: SessionBindingStore,
     pub models: ProcessModels,
     pub context_budget: Arc<ContextBudgetOwner>,
+    pub continuity: Arc<crate::host::memory_jobs::continuity::Continuity>,
     pub context_compactions: ContextCompactionRepository,
     pub collation: Arc<LocaleCollation>,
     pub progress: StorageProgressPublication,
@@ -55,6 +57,7 @@ pub(crate) struct AgentRuntime {
     pub work_streams: Arc<WorkStreams>,
     pub skills: Arc<Skills>,
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
+    pub(in crate::host) daily_cognition: Arc<crate::host::memory_jobs::daily::DailyCognitionJobs>,
     pub context_maintenance: Arc<ContextMaintenance>,
     pub memory_writes: Arc<butler_memory::cognition::RememberedRuleOwner>,
     pub memory_management: Arc<butler_memory::management::MemoryManagement>,

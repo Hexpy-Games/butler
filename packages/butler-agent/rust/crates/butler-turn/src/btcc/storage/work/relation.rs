@@ -389,7 +389,7 @@ fn record(
     Ok(())
 }
 
-fn create_and_bind(
+pub(super) fn create_and_bind(
     db: &Connection,
     scope: &WorkTurnScope,
     call_id: &str,

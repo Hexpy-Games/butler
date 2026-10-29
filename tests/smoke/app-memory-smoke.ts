@@ -1,7 +1,8 @@
 // Real App screenshots with deterministic Memory route fixtures. No model calls.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Page } from "playwright";
+import { webkit, type Page } from "playwright";
+import { checkConsolidationControls, checkInstructionGeometry, checkInstructionScroll, checkTimePicker } from "../support/memory-settings-acceptance.ts";
 import { auditMemoryDesign } from "../support/memory-page-audit.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
@@ -12,13 +13,13 @@ import { installMemoryDesktopBridge, assertPopulatedMemorySections } from "../su
 const output = process.env.BUTLER_MEMORY_SHOTS ?? resolve(".tmp/memory-shots");
 mkdirSync(output, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
-const browser = await launchSmokeBrowser();
+const browser = await (process.env.BUTLER_MEMORY_BROWSER === "webkit" ? webkit.launch() : launchSmokeBrowser()).catch(async (error) => { await server.stop(); throw error; });
 const report: Array<{ file: string; result: string; audit: unknown }> = [];
 const operationId = "00000000-0000-4000-8000-000000000777";
 const now = new Date().toISOString();
 const themes = ["light", "dark"] as const;
 const locales = ["ko", "en"] as const;
-const states = ["populated", "long", "confirm", "confirm-long", "deleting", "empty", "load-failure", "loading", "not-measured", "unavailable", "no-projects", "delete-failed", "deleted", "nothing-to-free", "cleanup-waiting", "cleanup-running", "cleanup-done", "cleanup-stopped", "cleanup-cancelled", "personalization", "system-events", ...["chat", "profile", "project"].flatMap(kind => ["confirm", "running", "done", "failed"].map(state => `reset-${kind}-${state}`))];
+const states = ["populated", "long", "instructions-scroll", "time-picker", "models", "consolidation-idle", "consolidation-running", "consolidation-done", "consolidation-failed", "consolidation-busy", "consolidation-scheduled", "consolidation-race", "confirm", "confirm-long", "deleting", "empty", "load-failure", "loading", "not-measured", "unavailable", "no-projects", "delete-failed", "deleted", "nothing-to-free", "cleanup-waiting", "cleanup-running", "cleanup-done", "cleanup-stopped", "cleanup-cancelled", "personalization", "system-events", ...["chat", "profile", "project"].flatMap(kind => ["confirm", "running", "done", "failed"].map(state => `reset-${kind}-${state}`))];
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 function selected<T extends string | number>(key: string, values: readonly T[]): T[] {
   const requested = process.env[`BUTLER_MEMORY_SHOT_${key}`]?.split(",");
@@ -47,12 +48,12 @@ function inventory(state: string) {
     operation: state === "cleanup-waiting" || state === "cleanup-running" ? { operation_id: operationId, phase: state === "cleanup-waiting" ? "preparing" : "removing", sequence: 1, bytes_reclaimed: 312 * 1024 ** 2 } : undefined };
 }
 // The App may be between live streams (the gateway ends one after stream.reconcile_required); deliver on the open one.
-async function emit(page: Page, phase: string, kind?: string) {
+async function emit(page: Page, phase: string, kind?: string, id = operationId, trigger?: string) {
   await page.waitForFunction(() => (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams.some(stream => stream.readyState === EventSource.OPEN));
-  await page.evaluate(({ phase, operationId, kind }) => {
+  await page.evaluate(({ phase, operationId, kind, trigger }) => {
     const streams = (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams.filter(stream => stream.readyState === EventSource.OPEN);
-    for (const stream of streams) stream.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ id: 10001, type: "memory.operation", payload: { kind, operation_id: operationId, phase, sequence: 2, bytes_reclaimed: 512 * 1024 ** 2 } }) }));
-  }, { phase, operationId, kind });
+    for (const stream of streams) stream.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ id: 10001, type: "memory.operation", payload: { kind, trigger, operation_id: operationId, phase, sequence: 2, bytes_reclaimed: 512 * 1024 ** 2 } }) }));
+  }, { phase, operationId: id, kind, trigger });
 }
 async function audit(page: Page) {
   return await page.evaluate(() => {
@@ -60,7 +61,7 @@ async function audit(page: Page) {
     const rows = [...document.querySelectorAll<HTMLElement>('[data-test-class="instruction-row"]')];
     const text = rows.flatMap((row) => [...row.querySelectorAll<HTMLElement>('[id^="instruction-text-"]')]).map((node) => {
       const css = getComputedStyle(node);
-      return { fullText: css.textOverflow !== "ellipsis" && css.webkitLineClamp === "none", wraps: node.scrollWidth <= node.clientWidth + 1 };
+      return { expectedClamp: css.webkitLineClamp === (node.closest("[data-expanded]") ? "none" : "1"), wraps: node.scrollWidth <= node.clientWidth + 1 };
     });
     const surfaces = [...document.querySelectorAll<HTMLElement>('[data-slot="form-section"] [data-kind]')].map((node) => ({ background: getComputedStyle(node).backgroundColor, inset: getComputedStyle(node).padding }));
     const toastFonts = [...document.querySelectorAll<HTMLElement>("[data-sonner-toast]")].map((node) => getComputedStyle(node).fontFamily);
@@ -80,9 +81,15 @@ try {
         (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams = streams;
         window.EventSource = class extends Original { constructor(url: string | URL, options?: EventSourceInit) { super(url, options); streams.push(this); } };
       }, { key: LEGACY_FIRST_RUN_STORAGE_KEY, value: JSON.stringify(legacyFirstRunCompleteRecord()) });
-      let instructionRows = rows(locale, (state === "long" || state === "confirm-long"));
+      let instructionRows = rows(locale, ["long", "confirm-long", "instructions-scroll"].includes(state));
+      if (state === "instructions-scroll") instructionRows = Array.from({ length: 12 }, (_, index) => ({ ...instructionRows[index % 3]!, handle: `R${String(index).padStart(10, "0")}`, text: `${instructionRows[index % 3]!.text}\n${instructionRows[0]!.text}` }));
       if (state === "empty") instructionRows = [];
       let reads = 0;
+      let consolidationReads = 0;
+      let consolidationPosts = 0;
+      let consolidationId = operationId;
+      let consolidationActive = state === "consolidation-scheduled";
+      let consolidationLast: { at: string; status: string } | null = null;
       let finished = false;
       const resetKind = state.includes("profile") ? "profile" : state.includes("project") ? "project_memory" : "automatic";
       let release: (() => void) | undefined;
@@ -90,6 +97,17 @@ try {
       await page.route("**/memory/**", async (route) => {
         const path = new URL(route.request().url()).pathname;
         const send = async (data: unknown, status = 200) => await route.fulfill({ status, contentType: "application/json", body: JSON.stringify({ protocol_version: "butler.app.v1", data }) });
+        if (path === "/memory/consolidation") {
+          if (route.request().method() === "POST") {
+            consolidationPosts++;
+            if (state === "consolidation-race") return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: { code: "memory_operation_unavailable" } }) });
+            consolidationId = route.request().postDataJSON().operation_id;
+            consolidationActive = true;
+            return send({ kind: "consolidation", operation_id: route.request().postDataJSON().operation_id, sequence: 1, phase: "running", trigger: "manual" }, 202);
+          }
+          consolidationReads++;
+          return send({ active: consolidationActive ? { kind: "consolidation", operation_id: consolidationId, sequence: 1, phase: "running", trigger: "scheduled" } : undefined, last_run: consolidationLast, time_of_day: "04:00" });
+        }
         if (path.startsWith("/memory/reset/") && route.request().method() === "POST") {
           return send({ operation_id: operationId, kind: resetKind, phase: "preparing", sequence: 1 }, 202);
         }
@@ -104,7 +122,7 @@ try {
           instructionRows = instructionRows.filter((row) => !path.endsWith(row.handle));
           return send({ state: "forgotten" });
         }
-        if (path.includes("inventory")) { reads++; if (state === "loading") await held; const value = inventory(state === "cleanup-done" && finished ? "nothing-to-free" : state);
+        if (path.includes("inventory")) { reads++; if (state === "loading") await held; const value = inventory(state === "consolidation-busy" ? "cleanup-running" : state === "cleanup-done" && finished ? "nothing-to-free" : state);
           if (finished && state.startsWith("reset") && !state.endsWith("failed")) {
             if (resetKind === "project_memory") value.kinds[0]!.item_count = instructionRows.length;
             else { const card = value.kinds.find(c => c.kind === (resetKind === "profile" ? "profile" : "automatic"))!; card.item_count = 0; card.allocated_bytes = 0; if (card.pending_count != null) card.pending_count = 0; }
@@ -125,14 +143,24 @@ try {
       if (!await settingsButton.isVisible()) await page.getByRole("button", { name: locale === "ko" ? "사이드바 보기" : "Show sidebar", exact: true }).click();
       await settingsButton.click();
       if (state === "populated") await installMemoryDesktopBridge(page, server);
-      const target = state === "personalization" ? (locale === "ko" ? "개인화" : "Personalization") : state === "system-events" ? (locale === "ko" ? "시스템 이벤트" : "System events") : locale === "ko" ? "기억" : "Memory";
+      const target = state === "models" ? (locale === "ko" ? "모델" : "Models") : state === "personalization" ? (locale === "ko" ? "개인화" : "Personalization") : state === "system-events" ? (locale === "ko" ? "시스템 이벤트" : "System events") : locale === "ko" ? "기억" : "Memory";
       await page.getByRole("button", { name: target, exact: true }).click();
       if (state === "populated") await assertPopulatedMemorySections(page);
-      if (state === "long") await page.locator('[data-test-class="instruction-row"]').first().locator("[aria-expanded]").click();
+      if (state === "long") await checkInstructionGeometry(page);
+      if (state === "instructions-scroll") await checkInstructionScroll(page);
+      if (state === "time-picker") await checkTimePicker(page, locale);
+      if (state.startsWith("consolidation-")) await checkConsolidationControls(page, locale, state, {
+        finish: async (failed) => {
+          consolidationActive = false;
+          consolidationLast = { at: now, status: failed ? "error" : "ok" };
+          await emit(page, failed ? "failed" : "complete", "consolidation", consolidationId, state === "consolidation-scheduled" ? "scheduled" : "manual");
+        },
+        counts: () => ({ reads: consolidationReads, posts: consolidationPosts }),
+      });
+      if (state === "models") await page.locator('[data-test-class="settings-models-advanced"]').getByRole("button").click();
       const deleteName = locale === "ko" ? "삭제" : "Delete";
       if (["confirm", "confirm-long", "deleting", "deleted", "delete-failed"].includes(state)) {
         const first = page.locator('[data-test-class="instruction-row"]').first();
-        await first.locator("[aria-expanded]").click();
         await first.getByRole("button", { name: deleteName }).click();
         const dialog = page.getByRole("alertdialog");
         await dialog.waitFor();
@@ -171,7 +199,7 @@ try {
         await emit(page, state === "cleanup-done" ? "complete" : state === "cleanup-stopped" ? "failed" : "cancelled");
         await page.getByText(locale === "ko" ? (state === "cleanup-done" ? "공간 정리 완료 · 512.0 MB 확보" : state === "cleanup-stopped" ? "공간 정리 중단 · 512.0 MB 확보" : "공간 정리 취소 · 512.0 MB 확보") : state === "cleanup-done" ? "Freed up 512.0 MB" : state === "cleanup-stopped" ? "Couldn't finish. Freed up 512.0 MB." : "Cancelled. Freed up 512.0 MB.", { exact: true }).waitFor();
       }
-      if (!(["personalization", "system-events", "loading"].includes(state))) {
+      if (!(["personalization", "system-events", "loading", "models"].includes(state))) {
         await page.locator('[data-settings-section-id="profile-memory"]').waitFor();
         await page.waitForFunction(() => document.querySelector('[data-settings-section-id="instructions"]')?.getAttribute("aria-busy") !== "true");
       }
@@ -190,7 +218,7 @@ try {
       const viewportWidth = await page.evaluate(() => window.innerWidth);
       assert(viewportWidth === width, `viewport ${viewportWidth} expected ${width}`);
       if (state === "populated") {
-        const captions = (await page.locator('[data-test-class="instruction-row"] [data-slot="disclosure-row-meta"]').allTextContents()).map((value) => value.trim());
+        const captions = (await page.locator('[data-test-class="instruction-row"] [data-slot="expandable-text"] > div > span:first-child').allTextContents()).map((value) => value.trim());
         const expected = locale === "ko"
           ? ["모든 채팅", "butler-site · 7일 후 만료", "이 채팅에서만"]
           : ["All chats", "butler-site · Expires in 7 days", "This chat only"];
@@ -199,7 +227,7 @@ try {
       const expectedInset = width <= 760 ? "16px" : "24px";
       assert(checks.design.padding.every(row => row.values.every(v => v === expectedInset)), `card insets ${locale}/${theme}/${width}, expected ${expectedInset}: ${JSON.stringify(checks.design.padding)}`);
       assert(checks.design.minimumTextContrast == null || checks.design.minimumTextContrast >= 4.5, `text contrast ${locale}/${theme}/${width}/${state}: ${JSON.stringify(checks.design.contrastFailures)}`);
-      assert(!checks.horizontalScroll && checks.text.every((row) => row.fullText && row.wraps), `overflow or truncated text: ${JSON.stringify(checks)}`);
+      assert(!checks.horizontalScroll && checks.text.every((row) => row.expectedClamp && row.wraps), `overflow or truncated text: ${JSON.stringify(checks)}`);
       assert(checks.toastFonts.every((font) => font.includes("Pretendard")), `toast must use bundled font: ${JSON.stringify(checks.toastFonts)}`);
       report.push({ file, result: "pass", audit: checks });
       release?.();

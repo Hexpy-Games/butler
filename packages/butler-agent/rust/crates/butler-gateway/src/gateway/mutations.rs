@@ -3,6 +3,19 @@
 use super::*;
 
 pub trait GatewayMutationCommands: Send + Sync + 'static {
+    fn send_subsession_result(
+        &self,
+        _command: SendMessageCommand,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn composing(&self, _id: String) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn report_pause(&self, _id: String, _decision: String) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+
     fn upload_canon_file(
         &self,
         _project: String,
@@ -35,6 +48,7 @@ pub trait GatewayMutationCommands: Send + Sync + 'static {
         _run_id: String,
         _code: String,
         _tainted: bool,
+        _action: Option<serde_json::Value>,
     ) -> ApplicationFuture<AutomationRunSummary> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

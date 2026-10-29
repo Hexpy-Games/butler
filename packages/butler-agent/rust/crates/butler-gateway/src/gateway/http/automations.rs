@@ -48,6 +48,18 @@ pub(super) async fn route(
         );
     }
     let suffix = path.strip_prefix("/automations/").ok_or_else(not_found)?;
+    if method == Method::POST
+        && let Some(id) = suffix.strip_suffix("/report-pause")
+    {
+        let input: ReportPauseRequest = body(request).await?;
+        return json(
+            StatusCode::OK,
+            state
+                .application
+                .report_pause(decode(id)?, input.decision)
+                .await?,
+        );
+    }
     // An unattended run reports a step it skipped for want of permission (D8).
     if method == Method::POST
         && let Some((id, run_id)) = suffix
@@ -59,7 +71,13 @@ pub(super) async fn route(
             StatusCode::OK,
             state
                 .application
-                .automation_run_attention(decode(id)?, decode(run_id)?, input.code, input.tainted)
+                .automation_run_attention(
+                    decode(id)?,
+                    decode(run_id)?,
+                    input.code,
+                    input.tainted,
+                    input.action,
+                )
                 .await?,
         );
     }
@@ -190,6 +208,8 @@ fn list_query(uri: &Uri) -> (Option<String>, bool) {
 #[derive(serde::Deserialize)]
 struct AttentionRequest {
     #[serde(default)]
+    action: Option<serde_json::Value>,
+    #[serde(default)]
     tainted: bool,
     code: String,
 }
@@ -204,4 +224,9 @@ fn json<T: serde::Serialize>(status: StatusCode, data: T) -> Result<Response, Ht
             data,
         },
     )
+}
+
+#[derive(serde::Deserialize)]
+struct ReportPauseRequest {
+    decision: String,
 }

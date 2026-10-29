@@ -20,7 +20,18 @@ pub(super) struct TokenizerOwner {
 impl TokenizerOwner {
     fn encoding(&self) -> Result<&CoreBPE, ModelCatalogError> {
         self.encoding
-            .get_or_init(|| o200k_base().map_err(|error| Arc::from(error.into_boxed_dyn_error())))
+            .get_or_init(|| {
+                let started = std::time::Instant::now();
+                let encoding =
+                    o200k_base().map_err(|error| Arc::from(error.into_boxed_dyn_error()));
+                if std::env::var("BUTLER_STARTUP_TRACE").as_deref() == Ok("1") {
+                    eprintln!(
+                        "[tokenizer-init] elapsed_us={}",
+                        started.elapsed().as_micros()
+                    );
+                }
+                encoding
+            })
             .as_ref()
             .map_err(|error| ModelCatalogError::Tokenizer(Arc::clone(error)))
     }

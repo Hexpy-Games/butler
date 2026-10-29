@@ -197,12 +197,15 @@ async fn site(state: &Arc<HttpState>, body: &Value) -> Result<Value, HttpError> 
     let value = body["all_conversations"]
         .as_bool()
         .ok_or_else(|| invalid("Missing setting."))?;
-    state
+    let result = state
         .application
         .signins(AppSignInCommand::SetAllConversations {
             site: site.into(),
             value,
         })
-        .await
-        .map_err(Into::into)
+        .await?;
+    if !value {
+        super::browser_host::signed_in::fence_site(state, site);
+    }
+    Ok(result)
 }

@@ -14,6 +14,8 @@ pub(super) fn event(id: u64) -> AppEventEnvelope {
 pub(super) fn message_result() -> MessageSendResult {
     MessageSendResult {
         accepted: Some(MessageRecord {
+            quiet: false,
+            initiated: None,
             content_parts: None,
             id: "message-1".into(),
             chat_id: "general".into(),
@@ -31,6 +33,9 @@ pub(super) fn message_result() -> MessageSendResult {
             limitation_codes: None,
             limitations: None,
             retryable: false,
+            retry_mode: None,
+            incomplete: None,
+            retry_with_current_controls: false,
             cursor: 1,
             attachments: None,
             artifacts: None,

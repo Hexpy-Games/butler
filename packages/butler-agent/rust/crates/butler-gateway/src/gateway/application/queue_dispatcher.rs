@@ -319,6 +319,7 @@ async fn drain_chat(
                 .await;
         }
     }
+    app.automation_wake.notify_one();
     Ok(())
 }
 
@@ -412,9 +413,16 @@ pub(super) fn session_has_active_turn(
     db: &Connection,
     chat: &str,
 ) -> Result<bool, AppStorageError> {
-    db.query_row_cached("SELECT 1 FROM turns t WHERE chat_id=?1 AND NOT EXISTS (SELECT 1 FROM session_queued_messages q WHERE q.chat_id=t.chat_id AND q.turn_id=t.id AND q.state='queued' AND q.state IN ('queued','dispatching')) AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
-        .optional().map(|row| row.is_some()).map_err(AppStorageError::sqlite)
+    active_turn(db, chat).map(|turn| turn.is_some())
 }
+
+/// The turn that must settle before FIFO dispatch; cancellation still owns
+/// its input even when restart recovery has released that input's claim.
+pub(super) fn active_turn(db: &Connection, chat: &str) -> Result<Option<String>, AppStorageError> {
+    db.query_row_cached("SELECT id FROM turns t WHERE chat_id=?1 AND (state='cancelling' OR NOT EXISTS (SELECT 1 FROM session_queued_messages q WHERE q.chat_id=t.chat_id AND q.turn_id=t.id AND q.state='queued' AND q.state IN ('queued','dispatching'))) AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |row| row.get(0))
+        .optional().map_err(AppStorageError::sqlite)
+}
+
 async fn next_deadline(app: &AppApplication) -> Result<Option<Duration>, GatewayApplicationError> {
     let owner = app.queue_owner.clone();
     let now = app.dependencies.identity_clock.now_iso();

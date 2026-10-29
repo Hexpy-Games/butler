@@ -1,3 +1,5 @@
+import { createElement, type ReactNode } from "react";
+import { ProviderMark } from "./ProviderMark";
 import { modelDisplayName, tokenWindowLabel } from "@/app/utils.ts";
 import type { AppModelSummary, PersonaPresetView } from "@/app/types.ts";
 import type { SettingsCopy } from "./settingsTypes";
@@ -44,12 +46,13 @@ export function profilingExtractorModelOptionsFrom(
   models: AppModelSummary[],
   defaultLabel: string,
   defaultDescription: string,
-) {
+): Array<{ value: string; label: string; description?: string; icon?: ReactNode }> {
   return [
     { value: "default", label: defaultLabel, description: defaultDescription },
     ...models.map((model) => ({
       value: model.model_ref,
       label: `${model.provider_label} / ${modelDisplayName(model)} (${tokenWindowLabel(model.context_window_tokens)})`,
+      icon: createElement(ProviderMark, { providerId: model.provider_id, platform: model.platform }),
     })),
   ];
 }

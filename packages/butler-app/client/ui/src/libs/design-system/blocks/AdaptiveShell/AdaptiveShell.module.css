@@ -38,7 +38,7 @@
 .root:not(
     [data-chrome-environment="electron"]
   )[data-panel-layout="docked"][data-left-track="true"] {
-  --workspace-left-radius: 18px;
+  --workspace-left-radius: calc(18px / var(--ui-scale));
 }
 
 .root[data-chrome-environment="browser"] {

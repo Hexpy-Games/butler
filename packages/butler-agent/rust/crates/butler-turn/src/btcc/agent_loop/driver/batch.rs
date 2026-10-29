@@ -18,6 +18,10 @@ pub(super) async fn run_tool_batch(
     iteration: u32,
     resumed_batch: Option<AuthorityBatch>,
 ) -> Result<Step, AgentLoopError> {
+    // Record the batch before any tool runs, including tools hidden from the transcript.
+    let mut event = crate::btcc::RuntimeTurnEventInput::new("turn.tool_batch.recorded");
+    event.visibility = Some(crate::btcc::EventVisibility::Internal);
+    input.progress.emit(event).await.map_err(propagated)?;
     let prepared_calls: Vec<_> = reply
         .calls
         .iter()

@@ -1,0 +1,14 @@
+/* The save-flight ghost: the saved content's box, fixed to the viewport
+   above everything, never hit-tested. Only translate, scale and opacity
+   animate (compositor only). */
+.ghost {
+  position: fixed;
+  z-index: var(--z-drag);
+  box-sizing: border-box;
+  border: var(--border-hairline) solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-drag-lift);
+  pointer-events: none;
+  transform-origin: center;
+}

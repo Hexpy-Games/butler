@@ -16,6 +16,8 @@ export interface ComposerAuthorityDecision {
   /** What "Always allow in this conversation" covers; the grant needs the legacy `scope`. */
   conversationScope?: string; scope: AuthorityApprovalCard["scope"]; pending: boolean; error?: string;
   composingMessage: boolean; pendingCount: number;
+  allowSite?: "signed_in" | "payment";
+  onAllowSite?: () => void;
   onAllow: () => void; onAllowConversation: () => void; onDeny: () => void;
   onShowDecision: () => void; onOpenSource: () => void;
   onComposeMessage: () => void;
@@ -35,7 +37,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   const inFlight = useRef(new Set<string>());
   if (!request) return undefined;
   const key = `${sessionId}:${request.requestRef}`;
-  const decide = async (action: "allow" | "deny", scope: "once" | "conversation" = "once") => {
+  const decide = async (action: "allow" | "deny", scope: "once" | "conversation" | "site" = "once") => {
     if (inFlight.current.has(key)) return;
     inFlight.current.add(key); setPending(new Set(inFlight.current)); setFailed(undefined);
     const store = useButlerStore.getState();
@@ -57,6 +59,8 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     composingMessage: collapsed === key, pendingCount: requests.length,
+    allowSite: request.approval?.operation?.allow_site,
+    onAllowSite: () => void decide("allow", "site"),
     onAllow: () => void decide("allow"),
     onAllowConversation: () => void decide("allow", "conversation"),
     onDeny: () => void decide("deny"),

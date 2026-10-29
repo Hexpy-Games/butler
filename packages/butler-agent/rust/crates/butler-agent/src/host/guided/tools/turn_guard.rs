@@ -4,7 +4,6 @@
 
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{AuthorityLoopContinuation, ToolExecutionError, TurnTaint};
-use reqwest::Method;
 use serde_json::{Map, Value, json};
 
 use super::GuidedTools;
@@ -15,44 +14,22 @@ const TAINT_KEY: &str = "turnTaint";
 /// search result ids across a suspension.
 const WEB_KEY: &str = "turnWeb";
 
-/// A schedule run nobody attends. The ids are absent for schedules the agent
-/// dispatches itself, which have no App run to flag.
-#[derive(Clone, Debug)]
-pub(crate) struct UnattendedRun {
-    automation_id: Option<String>,
-    run_id: Option<String>,
-}
-
 /// What a turn starts with: whether anyone attends it, and its taint.
 #[derive(Clone, Debug)]
 pub(crate) struct TurnGuard {
-    pub(super) unattended: Option<UnattendedRun>,
+    pub(super) schedule_run: Option<butler_turn::btcc::ScheduleRunContext>,
     pub(super) initial_taint: TurnTaint,
 }
 
 impl TurnGuard {
     pub(crate) fn new(context: &Value, restored: Option<&AuthorityLoopContinuation>) -> Self {
         Self {
-            unattended: UnattendedRun::from_context(context),
+            schedule_run: context
+                .get("scheduleRun")
+                .cloned()
+                .and_then(|run| serde_json::from_value(run).ok()),
             initial_taint: initial_taint(context, restored),
         }
-    }
-}
-
-impl UnattendedRun {
-    /// The unattended run the turn context marks (`scheduleRun`), if any.
-    fn from_context(context: &Value) -> Option<Self> {
-        let run = context.get("scheduleRun")?;
-        let text = |key: &str| {
-            run.get(key)
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-                .map(str::to_owned)
-        };
-        (run.get("unattended") == Some(&Value::Bool(true))).then(|| Self {
-            automation_id: text("automation_id"),
-            run_id: text("run_id"),
-        })
     }
 }
 
@@ -61,13 +38,18 @@ impl UnattendedRun {
 fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) -> TurnTaint {
     let resumed = restored
         .and_then(|continuation| continuation.extensions.get(TAINT_KEY))
-        .and_then(Value::as_str)
-        == Some("external");
+        .and_then(Value::as_str);
+    if resumed == Some("connector_event")
+        || context["messageOrigin"] == "connector"
+        || context["scheduleRun"]["connector_event"] == true
+    {
+        return TurnTaint::ConnectorEvent;
+    }
     let attached = context
         .get("attachments")
         .and_then(Value::as_array)
         .is_some_and(|items| !items.is_empty());
-    if resumed || attached {
+    if resumed == Some("external") || attached {
         TurnTaint::External
     } else {
         TurnTaint::Clean
@@ -100,6 +82,7 @@ fn reads_external(name: &str, args: &Value) -> bool {
                 | "web_read"
                 | "call_mcp_tool"
                 | "read_mcp_resource"
+                | "connector_fetch"
                 | "browser_open"
                 | "browser_observe"
                 | "browser_act"
@@ -116,7 +99,10 @@ impl GuidedTools {
 
     /// The turn read content from outside the project and the user.
     pub(super) fn mark_external(&self) {
-        *self.turn_taint.lock() = TurnTaint::External;
+        let mut taint = self.turn_taint.lock();
+        if *taint == TurnTaint::Clean {
+            *taint = TurnTaint::External;
+        }
     }
 
     /// Records the taint a finished call of `effective_name` brings in.
@@ -128,8 +114,14 @@ impl GuidedTools {
 
     pub(super) fn taint_extensions(&self) -> Map<String, Value> {
         let mut extensions = Map::new();
-        if self.taint() == TurnTaint::External {
-            extensions.insert(TAINT_KEY.into(), "external".into());
+        match self.taint() {
+            TurnTaint::Clean => (),
+            TurnTaint::External => {
+                extensions.insert(TAINT_KEY.into(), "external".into());
+            }
+            TurnTaint::ConnectorEvent => {
+                extensions.insert(TAINT_KEY.into(), "connector_event".into());
+            }
         }
         if let Some(web) = self.web_session.snapshot() {
             extensions.insert(WEB_KEY.into(), web);
@@ -137,18 +129,62 @@ impl GuidedTools {
         extensions
     }
 
-    pub(super) fn unattended(&self) -> bool {
-        self.binding.turn_guard.unattended.is_some()
+    pub(super) async fn refresh_instruction_context(&self) -> Result<(), ToolExecutionError> {
+        let run = self
+            .subsessions
+            .instruction_run_context(&self.binding.source_session_id)
+            .await
+            .map_err(ToolExecutionError::Integrity)?;
+        if let Some(run) = run {
+            if run.connector_event {
+                *self.turn_taint.lock() = TurnTaint::ConnectorEvent;
+            }
+            *self.instruction_run.lock() = Some(run);
+        }
+        Ok(())
     }
 
-    /// The unattended run a delegated child inherits, so it cannot wait either.
-    pub(super) fn unattended_run(&self) -> Option<butler_turn::btcc::ScheduleRunContext> {
-        let run = self.binding.turn_guard.unattended.as_ref()?;
-        Some(butler_turn::btcc::ScheduleRunContext {
-            automation_id: run.automation_id.clone().unwrap_or_default(),
-            run_id: run.run_id.clone().unwrap_or_default(),
-            unattended: true,
-        })
+    fn current_run(&self) -> Option<butler_turn::btcc::ScheduleRunContext> {
+        self.instruction_run
+            .lock()
+            .clone()
+            .or_else(|| self.binding.turn_guard.schedule_run.clone())
+            .map(|mut run| {
+                // Older schedule contexts have no switch snapshot; keep them off.
+                if run.browser.is_none()
+                    && !run.connector_event
+                    && (run.unattended || !run.automation_id.is_empty() || !run.run_id.is_empty())
+                {
+                    run.browser = Some(Default::default());
+                }
+                run
+            })
+    }
+
+    pub(super) fn unattended(&self) -> bool {
+        self.current_run().is_some_and(|run| run.unattended)
+    }
+
+    /// Browser switches apply to schedules, not standalone connector events.
+    pub(super) fn schedule_run(&self) -> Option<butler_turn::btcc::ScheduleRunContext> {
+        self.current_run().filter(|run| run.browser.is_some())
+    }
+
+    /// Keep the complete schedule snapshot while inheriting connector provenance.
+    pub(super) fn inherited_run(&self) -> Option<butler_turn::btcc::ScheduleRunContext> {
+        let connector_event = self.taint() == TurnTaint::ConnectorEvent;
+        let mut result = self.current_run().or_else(|| {
+            connector_event.then(|| butler_turn::btcc::ScheduleRunContext {
+                automation_id: String::new(),
+                run_id: String::new(),
+                unattended: false,
+                connector_event,
+                scheduled_at: None,
+                browser: None,
+            })
+        })?;
+        result.connector_event |= connector_event;
+        Some(result)
     }
 }
 
@@ -173,23 +209,18 @@ fn grant_kind(capability: &str) -> &'static str {
 
 /// D8: the result an unattended run gets instead of an approval it cannot
 /// receive. No authority request exists; the run reports the skipped step.
-pub(super) async fn unattended_result(
+pub(super) fn unattended_result(
     owner: &GuidedTools,
     capability: &str,
     subject: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let value = unattended_feedback(owner, capability, subject).await;
+    let value = unattended_feedback(owner, capability, subject);
     JsonDocument::from_value(&value).map_err(super::effect::wire_error)
 }
 
-pub(super) async fn unattended_feedback(
-    owner: &GuidedTools,
-    capability: &str,
-    subject: &str,
-) -> Value {
-    notify(owner).await;
+pub(super) fn unattended_feedback(owner: &GuidedTools, capability: &str, subject: &str) -> Value {
     json!({"ok":false,"error":{
-        "reason": (owner.taint() == TurnTaint::External)
+        "reason": (owner.taint() != TurnTaint::Clean)
             .then_some("This run read outside content, so the step needs a fresh permission."),
         "code":"schedule_permission_required",
         "message":"This scheduled run cannot ask for permission, so this step did not run.",
@@ -209,44 +240,41 @@ pub(super) fn unattended_question() -> Value {
     }})
 }
 
-/// Flags the App run once per turn so the schedule shows it needs permission.
-/// Best effort: the model still reports the skipped step if this fails.
-async fn notify(owner: &GuidedTools) {
-    let Some(run) = owner.binding.turn_guard.unattended.as_ref() else {
-        return;
-    };
-    let (Some(automation), Some(run_id)) = (&run.automation_id, &run.run_id) else {
-        return;
-    };
-    if std::mem::replace(&mut *owner.attention_sent.lock(), true) {
-        return;
-    }
-    let Ok(client) = crate::host::automation::client::ScheduleClient::active(&owner.app_endpoint)
-    else {
-        return;
-    };
-    let path = format!(
-        "/automations/{}/runs/{}/attention",
-        encode(automation),
-        encode(run_id)
-    );
-    let body = json!({"code":"schedule_permission_required", "tainted":owner.taint() == TurnTaint::External});
-    let _ = client.request(Method::POST, &path, Some(body)).await;
-}
-
-fn encode(segment: &str) -> String {
-    url::form_urlencoded::byte_serialize(segment.as_bytes()).collect()
-}
-
 /// A denied scheduled action needs a different mode, rather than a waiting review.
 pub(super) async fn unattended_denial(
     owner: &GuidedTools,
     call: &butler_turn::btcc::ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    super::attention::skipped_call(owner, call).await;
     let subject = call
         .arguments
         .get("path")
         .and_then(Value::as_str)
         .unwrap_or(&call.name);
-    unattended_result(owner, &call.name, subject).await
+    unattended_result(owner, &call.name, subject)
+}
+
+/// The same fail-fast response and run attention for scheduled and Run now turns.
+pub(super) async fn schedule_browser_feedback(
+    owner: &GuidedTools,
+    call: &butler_turn::btcc::ModelRoundToolCall,
+    input: &Value,
+    target: &str,
+    code: &str,
+) -> Option<Value> {
+    let message = match code {
+        "schedule_signin_off" => {
+            "This schedule's Use sign-in info option (로그인 정보 사용) is off, so this run cannot use signed-in sites."
+        }
+        "schedule_payment_off" => {
+            "This schedule's Use payment info option (결제 정보 사용) is off, so this run cannot pay."
+        }
+        _ => return None,
+    };
+    super::attention::skipped_input(owner, call, input.clone(), target, code).await;
+    Some(
+        json!({"ok":false,"status":"not_dispatched","reason":code,"error":{
+            "code":code,"message":message,"recoverable":true,"next_action":super::feedback::repair(code)
+        }}),
+    )
 }

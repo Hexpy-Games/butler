@@ -168,6 +168,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     for job in ["session-sync", "consolidation-cycle"] {
         std::fs::remove_file(s.sandbox.data.join(format!("state/scheduler/{job}.json")))?;
     }
+    super::memory_fixture::arm_consolidation(&s.sandbox.data, "2026-10-02T03:59:00.000Z")?;
     // Seed dormant Box data after initialization, including an expired item and
     // an invalid index. Daily maintenance must neither validate nor rewrite it.
     let box_root = s.sandbox.data.join("cognition/box");
@@ -182,10 +183,10 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     s.gw = s.agent.start_again().await?;
     until(|| {
         ["session-sync", "consolidation-cycle"].iter().all(|job| {
-            s.sandbox
-                .data
-                .join(format!("state/scheduler/{job}.json"))
-                .exists()
+            std::fs::read(s.sandbox.data.join(format!("state/scheduler/{job}.json")))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                .is_some_and(|state| state["lastRunDate"] == NOW[..10])
         })
     })
     .await;

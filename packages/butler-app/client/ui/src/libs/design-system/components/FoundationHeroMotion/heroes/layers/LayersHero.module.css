@@ -67,7 +67,7 @@
 
 .screen {
   --adaptive-viewport-block-size: 100%;
-  --app-window-radius: 18px;
+  --app-window-radius: calc(18px / var(--ui-scale));
 
   position: relative;
   inline-size: calc(var(--space-4xl) * 27.5);
@@ -209,7 +209,9 @@
   right: 1px;
   left: calc(var(--sidebar-width) + 1px);
   overflow: hidden;
-  border-top-left-radius: calc(var(--app-window-radius) - 1px);
+  border-top-left-radius: calc(
+    var(--app-window-radius) - 1px / var(--ui-scale)
+  );
 }
 
 [data-layout="tall"] .titlebar {

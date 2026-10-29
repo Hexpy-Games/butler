@@ -11,6 +11,7 @@ async fn canon(app: &AppApplication, id: String) -> Result<Value, GatewayApplica
             resource: AppCanonResource::Canon,
             id,
             input: None,
+            delegate: None,
         },
     )
     .await
@@ -88,6 +89,7 @@ pub(crate) async fn conversation(
             resource: AppCanonResource::Epic,
             id: id.clone(),
             input: None,
+            delegate: None,
         },
     )
     .await?;
@@ -208,6 +210,7 @@ async fn validate_intent(
             resource: AppCanonResource::Epic,
             id: work_id.to_owned(),
             input: None,
+            delegate: None,
         },
     )
     .await?;
@@ -260,6 +263,7 @@ pub(super) fn start(app: &AppApplication) {
     });
 }
 async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
+    super::canon_proposals::recover(app).await?;
     let mut after = String::new();
     loop {
         let rows = app

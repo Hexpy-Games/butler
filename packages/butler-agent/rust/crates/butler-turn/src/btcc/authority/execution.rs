@@ -67,6 +67,7 @@ pub(super) fn execution(
         category: record.category,
         normalized_input,
         decision: record.decision,
+        allow_scope: record.allow_scope,
         alternative_input: record
             .private_alternative_input
             .filter(|value| !value.is_empty()),

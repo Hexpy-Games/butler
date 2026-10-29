@@ -85,7 +85,7 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
                 index += 2;
             }
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive"
-            | "--dry-run" | "--detached" | "--if-absent" | "--files-only" => {
+            | "--dry-run" | "--detached" | "--if-absent" | "--files-only" | "--safe-mode" => {
                 saw_option = true;
                 index += 1;
             }
@@ -327,7 +327,7 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
             "--quiet" | "--silent" => options.quiet = true,
             // The service configuration reads harness port overrides from argv.
             value if value.starts_with("--port=") => {}
-            "--verbose" | "--yes" | "--non-interactive" => {}
+            "--verbose" | "--yes" | "--non-interactive" | "--safe-mode" => {}
             "--dry-run" => options.dry_run = true,
             "--detached" => options.detached = true,
             "--if-absent" => options.if_absent = true,

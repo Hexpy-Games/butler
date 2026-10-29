@@ -75,6 +75,7 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
     assert_eq!(
         fresh.keys().map(String::as_str).collect::<Vec<_>>(),
         vec![
+            "canon_activity",
             "canon_audit",
             "canon_counters",
             "canon_cursors",
@@ -83,7 +84,9 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
             "canon_epics",
             "canon_events",
             "canon_intents",
+            "canon_mcp_grants",
             "canon_plans",
+            "canon_proposals",
             "canon_session_epics",
             "canon_spec_bodies",
             "canon_spec_criteria",
@@ -288,5 +291,76 @@ async fn cb_12_reupgrade_discards_colliding_history_and_outpaces_stale_receipts(
     );
 
     drop(db);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn cb_12_proposal_upgrade_preserves_rows_and_indexes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("CB-12-PROPOSALS")?.start().await?;
+    s.agent.terminate().await?;
+    let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+    let db = Connection::open(&path)?;
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT name FROM sqlite_schema WHERE name='canon_proposals_open'"
+        )?,
+        Vec::<Vec<Value>>::new()
+    );
+    db.execute_batch("DROP TABLE canon_proposals;
+        CREATE TABLE canon_proposals(id TEXT PRIMARY KEY NOT NULL,session_id TEXT NOT NULL,
+        source_turn_id TEXT NOT NULL,source_call_id TEXT NOT NULL,project_id TEXT,
+        summary TEXT NOT NULL,changes_json TEXT NOT NULL CHECK(json_valid(changes_json)),
+        state TEXT NOT NULL CHECK(state IN('open','applied','cancelled','superseded','stale')),
+        resolved_by TEXT CHECK(resolved_by IN('card','chat')),created_at TEXT NOT NULL,resolved_at TEXT);
+        CREATE INDEX canon_proposals_open ON canon_proposals(created_at) WHERE state='open';
+        INSERT INTO canon_proposals VALUES('old','session','turn','call','project','summary',
+        '{\"changes\":[]}', 'applied','card','created','resolved');")?;
+    let columns = "id,session_id,source_turn_id,source_call_id,project_id,summary,changes_json,state,resolved_by,created_at,resolved_at";
+    let before = rows(&db, &format!("SELECT {columns} FROM canon_proposals"))?;
+    drop(db);
+    s.restart().await?;
+    s.agent.terminate().await?;
+    let db = Connection::open(&path)?;
+    assert_eq!(
+        rows(&db, &format!("SELECT {columns} FROM canon_proposals"))?,
+        before
+    );
+    assert_eq!(
+        rows(&db, "SELECT source,actor_json FROM canon_proposals")?,
+        vec![vec![Value::Text("chat".into()), Value::Null]]
+    );
+    for sql in [
+        butler_canon::store::proposals::queries::GET,
+        butler_canon::store::proposals::queries::OPEN_SESSION,
+        butler_canon::store::proposals::queries::OPEN_PAGE,
+        butler_canon::store::proposals::queries::TURN,
+    ] {
+        db.prepare(sql)?;
+    }
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT name FROM sqlite_schema WHERE name='canon_proposals_open'"
+        )?,
+        Vec::<Vec<Value>>::new()
+    );
+    let before = snapshot(&db)?;
+    db.execute_batch(
+        "CREATE INDEX canon_proposals_open ON canon_proposals(created_at) WHERE state='open';",
+    )?;
+    drop(db);
+    s.restart().await?;
+    s.agent.terminate().await?;
+    let db = Connection::open(path)?;
+    assert_eq!(snapshot(&db)?, before);
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT name FROM sqlite_schema WHERE name='canon_proposals_open'"
+        )?,
+        Vec::<Vec<Value>>::new()
+    );
     s.finish().await
 }

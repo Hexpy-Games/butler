@@ -2,9 +2,15 @@
   width: 100%;
   padding: var(--space-2);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   align-items: start;
+}
+
+/* Without an icon the content takes the whole row, so the meta reaches the
+   row's end. */
+.withIcon {
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
 /* The icon box is one title line tall, so it centers on the first line of
@@ -20,7 +26,20 @@
   min-width: 0;
 }
 
+/* Title and meta share a line while the meta fits beside a title that keeps
+   at least half the line. A longer meta, or a narrow row, moves the meta to
+   its own line under the title, where it wraps instead of overflowing. The
+   rule follows the row's own width, so it holds in any container. */
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+}
+
 .title {
+  flex: 1 1 50%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -35,5 +54,6 @@
 .meta {
   color: var(--text-tertiary);
   font-size: var(--font-size-1);
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }

@@ -29,17 +29,11 @@ async fn gateway_port_pair_stays_reserved_between_processes() -> Result<(), Harn
     use butler_platform::instance::{InstanceLock, LockError};
     let mut s = Setup::new("PORT-PAIR-RESTART")?.start().await?;
     let port = s.agent.launch.port;
-    let path = std::env::temp_dir()
-        .join("butler-e2e/port-pairs")
-        .join(format!("{port}.lock"));
+    let name = format!("{port}.lock");
     let contended = || {
         matches!(
             InstanceLock::try_exclusive(
-                std::fs::OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(&path)
-                    .unwrap()
+                butler_platform::shared_locks::open("butler-e2e-port-pairs", &name).unwrap()
             ),
             Err(LockError::Busy)
         )
@@ -55,12 +49,10 @@ async fn gateway_port_pair_stays_reserved_between_processes() -> Result<(), Harn
     assert_eq!(s.gw.get("/health").await?.status, 200);
     s.finish().await?;
     assert!(
-        InstanceLock::try_exclusive(
-            std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&path)?
-        )
+        InstanceLock::try_exclusive(butler_platform::shared_locks::open(
+            "butler-e2e-port-pairs",
+            &name
+        )?)
         .is_ok()
     );
     Ok(())

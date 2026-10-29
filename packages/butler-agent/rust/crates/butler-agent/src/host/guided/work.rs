@@ -93,6 +93,14 @@ impl GuidedWorkAdapter {
             return Ok(CandidateDisposition::Accepted(None));
         }
         let bound = self.bound().await?;
+        if let Some(work) = &bound
+            && self
+                .service
+                .steward_owns_work(self.scope.session_id.clone(), work.work_id.clone())
+                .await?
+        {
+            return Ok(CandidateDisposition::Accepted(None));
+        }
         if let decision::ReportDecision::Continue(observation) =
             decision::decide(bound.as_ref(), &self.scope.turn_id, bound.is_some())?
         {
@@ -140,6 +148,13 @@ impl GuidedWorkAdapter {
         let Some(bound) = bound else {
             return Ok(text.into());
         };
+        if self
+            .service
+            .steward_owns_work(self.scope.session_id.clone(), bound.work_id.clone())
+            .await?
+        {
+            return Ok(text.into());
+        }
         if decision::fresh(Some(&bound), &self.scope.turn_id)? {
             return Ok(
                 if bound

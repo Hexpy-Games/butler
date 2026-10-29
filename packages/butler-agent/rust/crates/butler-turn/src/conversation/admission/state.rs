@@ -95,7 +95,7 @@ impl ConversationAdmissionTurn {
             return self.accept_existing(existing, role, &text).await;
         }
         let (origin_kind, origin_reason) = self.message_origin(role);
-        let parts = self.user_parts(role, &text);
+        let parts = self.message_parts(role, &text).await;
         let input = AppendMessageInput {
             session_id: self.turn.session_id.clone(),
             turn_id: Some(self.turn.id.clone()),
@@ -131,6 +131,40 @@ impl ConversationAdmissionTurn {
         Ok(())
     }
 
+    async fn message_parts(
+        &self,
+        role: ConversationRole,
+        text: &str,
+    ) -> Option<Vec<MessagePartInput>> {
+        let mut parts = self.user_parts(role, text);
+        if role != ConversationRole::Assistant {
+            return parts;
+        }
+        let state = self.state.lock().await;
+        if state.documents.is_empty() {
+            return parts;
+        }
+        let entries = parts.get_or_insert_with(|| {
+            vec![MessagePartInput {
+                kind: ConversationPartKind::Text,
+                content_json: json!({"text":text}),
+                tool_call_id: None,
+                parent_tool_call_id: None,
+                provider_shape: None,
+                status: None,
+            }]
+        });
+        entries.extend(state.documents.iter().map(|(id, title)| MessagePartInput {
+            kind: ConversationPartKind::AttachmentRef,
+            content_json: json!({"kind":"doc","id":id,"title":title}),
+            tool_call_id: None,
+            parent_tool_call_id: None,
+            provider_shape: None,
+            status: None,
+        }));
+        parts
+    }
+
     /// The origin recorded on an appended message: assistant messages are
     /// public unless the turn is internal control.
     fn message_origin(&self, role: ConversationRole) -> (ConversationOriginKind, String) {
@@ -138,7 +172,12 @@ impl ConversationAdmissionTurn {
         if role != ConversationRole::Assistant {
             return (origin.kind, origin.reason.clone());
         }
-        if origin.kind == ConversationOriginKind::InternalControl {
+        if connector_origin(origin) {
+            (
+                ConversationOriginKind::Connector,
+                "derived_connector_content".into(),
+            )
+        } else if origin.kind == ConversationOriginKind::InternalControl {
             (origin.kind, "verified_internal_control".into())
         } else {
             (
@@ -262,6 +301,7 @@ impl ConversationAdmissionTurn {
             event_kind,
         } = input;
         let existing = self.state.lock().await.tool_message_id.clone();
+        let origin = connector_origin(&self.input.origin).then_some(&self.input.origin);
         let message_id = if let Some(message) = existing {
             self.input
                 .store
@@ -293,11 +333,11 @@ impl ConversationAdmissionTurn {
                         "{}:{event_kind}:{tool_call_id}",
                         self.input.turn_id
                     )),
-                    origin_kind: None,
-                    origin_ref: None,
-                    origin_reason: None,
-                    origin_version: None,
-                    origin_evidence: None,
+                    origin_kind: origin.map(|_| ConversationOriginKind::Connector),
+                    origin_ref: origin.and_then(|o| o.reference.clone()),
+                    origin_reason: origin.map(|o| o.reason.clone()),
+                    origin_version: origin.map(|o| o.version.clone()),
+                    origin_evidence: origin.map(|o| o.evidence.clone()),
                     now: None,
                     parts: Some(vec![MessagePartInput {
                         kind,
@@ -316,4 +356,9 @@ impl ConversationAdmissionTurn {
         state.known_tool_call_ids.insert(tool_call_id);
         Ok(())
     }
+}
+
+fn connector_origin(origin: &crate::conversation::ConversationOriginDecision) -> bool {
+    origin.kind == ConversationOriginKind::Connector
+        || origin.evidence.iter().any(|e| e.kind == "connector_taint")
 }

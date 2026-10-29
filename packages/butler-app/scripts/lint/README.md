@@ -21,7 +21,11 @@ boundaries.
   must take their spacing from the section card and `SettingsPage`, and
   section header `actions` on a section whose `kind` is not `"list"`; a
   product component counts as a field or section when its module renders one,
-  followed through imports and re-exports).
+  followed through imports and re-exports),
+  `switch-field-layout` (`butler-ds/switch-rules.ts`: a `Switch` beside a
+  `Label`, `FieldLabel` or `Typo` in a `Stack align="row"` or `Inline`; a
+  switch field stacks like an input in `Field`, and the row layout allowed on
+  a phone or for a list item in a card is `Field orientation="horizontal"`).
 - Stylelint rules (`butler-ds/stylelint-plugin.ts`): `token-only-values`,
   `no-ds-internal-selector`, `no-ds-custom-prop-override`.
 - `no-new-css-module`: product `*.module.css` files are frozen to the

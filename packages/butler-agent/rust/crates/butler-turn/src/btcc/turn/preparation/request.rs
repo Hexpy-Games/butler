@@ -146,6 +146,9 @@ pub(super) fn replay_binding(
 
 pub(super) fn resume_command(request: &TurnRequest) -> TurnCommand {
     TurnCommand::Resume(ResumeCommand {
+        access_ceiling: None,
+        released_tools: Vec::new(),
+        released_profiles: Vec::new(),
         turn_id: request.turn_id.clone(),
         recovery_attempt: recovery_attempt(request),
     })
@@ -291,6 +294,7 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
         }
         for (source, target) in [
             ("branchSeed", "branchSeed"),
+            ("language", "language"),
             ("defaultProjectFolder", "defaultProjectFolder"),
             ("contentParts", "messageContent"),
             ("documentEdits", "documentEdits"),

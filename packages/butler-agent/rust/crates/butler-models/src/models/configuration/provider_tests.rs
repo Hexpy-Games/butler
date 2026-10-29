@@ -237,7 +237,8 @@ async fn registered_chatgpt_ignores_api_key_and_legacy_file() {
     fixture.write(
         "auth/chatgpt.json",
         &json!({"schema_version":1,"client_id":"issued-client",
-        "subject":"subject","access_token":"registration-token","refresh_token":"refresh",
+        "subject":"subject","access_token":"registration-token","refresh_token":"distinctive-refresh",
+        "id_token":"distinctive-id-token", "signed_in_at":"2026-09-14T00:00:00Z",
         "expires_at":i64::MAX,"scopes":["chatgpt.tokens.use.direct"]}),
     );
     fixture.write(
@@ -263,6 +264,31 @@ async fn registered_chatgpt_ignores_api_key_and_legacy_file() {
         .unwrap();
     assert!(
         matches!(config.auth, ProviderAuth::ChatGptPlan { authorization, .. } if authorization.as_str() == "Bearer registration-token")
+    );
+    let listing = owner.oauth_credentials().await.unwrap();
+    assert_eq!(listing.credentials.len(), 2);
+    let serialized = serde_json::to_string(&listing).unwrap();
+    for secret in [
+        "registration-token",
+        "distinctive-refresh",
+        "distinctive-id-token",
+        "legacy-token",
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "accessToken",
+    ] {
+        assert!(
+            !serialized.contains(secret),
+            "inventory must exclude secrets and token fields"
+        );
+    }
+    assert_eq!(listing.credentials[0].obtained_at, Some(1_789_344_000));
+    assert!(
+        listing
+            .credentials
+            .iter()
+            .all(|row| row.expires_at.is_none())
     );
 }
 

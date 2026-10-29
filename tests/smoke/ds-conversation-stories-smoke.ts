@@ -20,7 +20,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
-const screenshotDir = resolve(root, ".tmp", "ds-conversation-stories");
+const screenshotDir = resolve(process.env.TMPDIR ?? "/tmp", "ds-conversation-stories");
 mkdirSync(screenshotDir, { recursive: true });
 
 function assert(condition: unknown, message: string): asserts condition {

@@ -7,6 +7,7 @@ performance.mark("state_start");
 const slots = Object.fromEntries(Array.from(document.querySelectorAll<HTMLElement>("[data-slot]"), (element) => [element.dataset.slot!, element]));
 const rest = document.querySelector<SVGElement>('[data-slot="mark-rest"]')!;
 const query = new URLSearchParams(location.search);
+document.documentElement.style.setProperty("--ui-scale", query.get("scale") ?? "1");
 let current = Object.fromEntries(query) as unknown as State;
 const bridge = runtime.butlerLifecycle;
 const classes = JSON.parse(document.documentElement.dataset.classes!);

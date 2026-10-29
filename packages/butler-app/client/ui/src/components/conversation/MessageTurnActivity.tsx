@@ -39,7 +39,8 @@ export function MessageTurnActivity({ message, live, kept }: {
  * The answer with its live parts: work without a phase timeline (blocks or a decision) above it
  * and the status line below it. Each folds away with its spacing when the turn settles.
  */
-export function MessageLiveGroup({ live, kept, children }: {
+export function MessageLiveGroup({ live, kept, children, bubble = false }: {
+  bubble?: boolean;
   live?: LiveTurnActivity;
   kept?: LiveTurnActivity;
   children: ReactNode;
@@ -47,7 +48,7 @@ export function MessageLiveGroup({ live, kept, children }: {
   useAppLocale();
   const work = kept ? liveWork(kept) : null;
   return (
-    <Stack gap="none">
+    <Stack gap="none" alignSelf={bubble ? "stretch" : undefined}>
       <Collapsible open={Boolean(live && work)} data-test-class="turn-live-work">
         <Stack gap="none">{work}<Space size="lg" /></Stack>
       </Collapsible>
@@ -57,7 +58,7 @@ export function MessageLiveGroup({ live, kept, children }: {
         <Stack gap="none">
           <Space size="lg" />
           {/* A flex column keeps the inline status label the same height it has as a body row. */}
-          <Stack gap="none" data-test-class="turn-live-status-line">{kept ? <TurnActivityStatus {...kept} /> : null}</Stack>
+          <Stack gap="none" data-test-class="turn-live-status-line">{kept ? <TurnActivityStatus {...kept} chat={bubble} /> : null}</Stack>
         </Stack>
       </Collapsible>
     </Stack>

@@ -97,8 +97,14 @@ fn binding_ref(binding: &Value) -> Result<(), ProjectLedgerReadError> {
     exact(
         object(Some(binding))?,
         &["bindingRevisionId", "turnId", "revision"],
-        &[],
+        &["isCurrent"],
     )?;
+    if binding
+        .get("isCurrent")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return Err(invalid());
+    }
     required_string(binding, "bindingRevisionId")?;
     required_string(binding, "turnId")?;
     if binding

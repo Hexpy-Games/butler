@@ -51,8 +51,18 @@ pub struct AppRelocationTransportBinding {
 #[derive(Clone, Debug)]
 pub struct AppRelocationSnapshot {
     pub binding: Option<AppRelocationBinding>,
+    /// A live flight, retained authority continuation, or a changing runtime snapshot.
     pub active_execution: bool,
+    /// Durable non-terminal turn identities; interrupted turns may be resumable history.
+    pub unfinished_turn_ids: Vec<String>,
     pub open_child: bool,
+}
+
+impl AppRelocationSnapshot {
+    /// Relocation waits for every unfinished turn, including retained retry checkpoints.
+    pub(crate) fn has_work(&self) -> bool {
+        self.active_execution || !self.unfinished_turn_ids.is_empty() || self.open_child
+    }
 }
 
 #[derive(Clone, Debug)]

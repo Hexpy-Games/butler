@@ -12,6 +12,8 @@ export interface ElectronPage {
   screenshot(): Promise<Uint8Array>;
   clickText(text: string, scope: string): Promise<void>;
   clickSelector(selector: string): Promise<void>;
+  /** Clicks the one element whose computed role and accessible name match exactly. */
+  clickRole(role: string, name: string): Promise<void>;
   movePointer(x: number, y: number): Promise<void>;
   rightClick(x: number, y: number): Promise<void>;
   pointerDown(x: number, y: number): Promise<void>;
@@ -104,6 +106,17 @@ async function transport(url: string) {
   return { socket, send, errors, contexts };
 }
 
+/** In-page `this` → centre point of an enabled, hit-testable click target. */
+const CLICK_POINT = `function() {
+  'use strict';
+  const node=this;
+  if(!node || node.disabled || node.getAttribute('aria-disabled')==='true')throw new Error('Click target unavailable');
+  node.scrollIntoView({block:'center'});
+  const box=node.getBoundingClientRect(),x=box.x+box.width/2,y=box.y+box.height/2;
+  if(!box.width || !box.height || !node.contains(document.elementFromPoint(x,y)))throw new Error('Click target not hit-testable');
+  return {x,y};
+}`;
+
 async function connect(url: string): Promise<ElectronPage> {
   const { socket, send, errors, contexts } = await transport(url);
   async function expression<T>(text: string, contextId?: number): Promise<T> {
@@ -124,6 +137,10 @@ async function connect(url: string): Promise<ElectronPage> {
       await new Promise(done => setTimeout(done, 200));
     }
     throw new Error(`Electron UI did not become ready: ${fn.toString()}; ${JSON.stringify(await diagnostics())}`);
+  }
+  async function clickPoint(point: { x: number; y: number }) {
+    await send("Input.dispatchMouseEvent", {type:"mousePressed",...point,button:"left",clickCount:1});
+    await send("Input.dispatchMouseEvent", {type:"mouseReleased",...point,button:"left",clickCount:1});
   }
   return {
     expression, waitForFunction, diagnostics,
@@ -162,16 +179,17 @@ async function connect(url: string): Promise<ElectronPage> {
       return Buffer.from(result.data, "base64");
     },
     clickSelector: async selector => {
-      const point = await expression<{x:number;y:number}>(`(() => {
-        const node=document.querySelector(${JSON.stringify(selector)});
-        if(!node || node.disabled || node.getAttribute('aria-disabled')==='true')throw new Error('Click target unavailable');
-        node.scrollIntoView({block:'center'});
-        const box=node.getBoundingClientRect(),x=box.x+box.width/2,y=box.y+box.height/2;
-        if(!box.width || !box.height || !node.contains(document.elementFromPoint(x,y)))throw new Error('Click target not hit-testable');
-        return {x,y};
-      })()`);
-      await send("Input.dispatchMouseEvent", {type:"mousePressed",...point,button:"left",clickCount:1});
-      await send("Input.dispatchMouseEvent", {type:"mouseReleased",...point,button:"left",clickCount:1});
+      await clickPoint(await expression<{x:number;y:number}>(`(${CLICK_POINT}).call(document.querySelector(${JSON.stringify(selector)}))`));
+    },
+    clickRole: async (role, name) => {
+      const { root } = await send("DOM.getDocument", { depth: 0 }) as { root: { nodeId: number } };
+      const { nodes } = await send("Accessibility.queryAXTree", { nodeId: root.nodeId, role, accessibleName: name }) as { nodes: Array<{ ignored: boolean; backendDOMNodeId?: number }> };
+      const found = nodes.filter(node => !node.ignored && node.backendDOMNodeId);
+      if (found.length !== 1) throw new Error(`Click target unavailable: ${found.length} ${role} named ${JSON.stringify(name)}`);
+      const { object } = await send("DOM.resolveNode", { backendNodeId: found[0]!.backendDOMNodeId }) as { object: { objectId: string } };
+      const result = await send("Runtime.callFunctionOn", { objectId: object.objectId, functionDeclaration: CLICK_POINT, returnByValue: true }) as { exceptionDetails?: unknown; result: { value: { x: number; y: number } } };
+      assert.ok(!result.exceptionDetails, `Electron evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
+      await clickPoint(result.result.value);
     },
     clickText: async (text, scope) => {
       const point = await expression<{ x:number;y:number }>(`(() => {

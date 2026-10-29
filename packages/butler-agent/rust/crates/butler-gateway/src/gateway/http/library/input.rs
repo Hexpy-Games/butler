@@ -104,10 +104,26 @@ fn filters(args: &HashMap<String, String>, query: &mut AppLibraryQuery) -> Resul
     };
     Ok(())
 }
-/// `GET /library`: one kind, every filter, pages of 60.
+pub(super) fn kinds(args: &HashMap<String, String>) -> Result<String, HttpError> {
+    let Some(values) = args.get("kinds") else {
+        return kind(args.get("kind"));
+    };
+    let mut result = Vec::new();
+    for value in values.split(',').take(6) {
+        let value = kind(Some(&value.to_owned()))?;
+        if !result.contains(&value) {
+            result.push(value);
+        }
+    }
+    if result.is_empty() || values.split(',').count() > 5 {
+        return Err(invalid("Choose one to five kinds."));
+    }
+    Ok(result.join(","))
+}
+/// `GET /library`: indexed kinds, every filter, pages of 60.
 pub(super) fn page(args: &HashMap<String, String>) -> Result<AppLibraryQuery, HttpError> {
     let mut query = AppLibraryQuery {
-        kind: Some(kind(args.get("kind"))?),
+        kind: Some(kinds(args)?),
         limit: 60,
         ..AppLibraryQuery::default()
     };
@@ -169,6 +185,7 @@ pub(super) fn change(value: &Value, by_name: bool) -> Result<AppLibraryChange, H
     })
 }
 /// `POST /library`: a scrap or bookmark, optionally with its group id and tags.
+/// Scraps have an optional web origin and exactly one JPEG crop or stored picture.
 pub(super) fn item(value: Value) -> Result<Value, HttpError> {
     let organized = (value["group"].is_null()
         || value["group"]
@@ -176,7 +193,7 @@ pub(super) fn item(value: Value) -> Result<Value, HttpError> {
             .is_some_and(|id| !id.is_empty() && id.len() <= 128))
         && (value.get("tags").is_none()
             || value["tags"].is_array() && tags(&value["tags"]).is_ok());
-    if organized && valid(&value) {
+    if organized && value.get("block").is_none() && value.get("origin").is_none() && valid(&value) {
         Ok(value)
     } else {
         Err(HttpError::public(
@@ -207,16 +224,13 @@ fn valid(value: &Value) -> bool {
     base && match value["kind"].as_str() {
         Some("scrap") => {
             value["text"].is_string()
+                && (web_url || value["url"] == "")
                 && match (value.get("crop"), value.get("asset")) {
-                    (Some(crop), None) => {
-                        web_url
-                            && crop
-                                .as_str()
-                                .is_some_and(|s| s.starts_with("data:image/jpeg;base64,"))
-                    }
+                    (Some(crop), None) => crop
+                        .as_str()
+                        .is_some_and(|s| s.starts_with("data:image/jpeg;base64,")),
                     (None, Some(asset)) => {
                         asset.as_str().is_some_and(super::super::assets::valid_id)
-                            && (web_url || value["url"] == "")
                     }
                     _ => false,
                 }

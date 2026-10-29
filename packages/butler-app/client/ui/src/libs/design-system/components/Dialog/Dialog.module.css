@@ -46,13 +46,22 @@
   overflow: auto;
   padding: var(--space-4);
   outline: none;
+  container-type: inline-size;
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
-  /* Both edges: a classic scrollbar's lane is mirrored so the form stays
-     centered; overlay scrollbars reserve nothing. */
-  scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
   transform: translate(-50%, -50%);
+}
+
+/* No gutter is reserved: a classic scrollbar takes its width only while the
+   dialog overflows, and then out of the inline-end padding. The dialog is an
+   inline-size container, and a scroll container's container width leaves its
+   scrollbar out, so `100% - 100cqw` is minus the drawn scrollbar's width (0
+   when none is drawn): the in-flow children take it back in the same layout
+   that draws it, so the form keeps its width and centre, never moving for a
+   frame. */
+.content > :not([data-slot="dialog-close"]) {
+  margin-inline-end: calc(100% - 100cqw);
 }
 
 .content[data-state="open"] {
@@ -129,6 +138,18 @@
   display: grid;
   gap: var(--space-2);
   padding-right: var(--space-6);
+}
+
+/* A dialog that is only a header and its actions (a confirmation) is never
+   shorter than a confirmation with one line of description: a title-only
+   header keeps that height and centres its title in it. A header with a
+   description already fills it, so it renders unchanged. */
+.header:has(+ .footer) {
+  min-height: calc(
+    var(--typo-panel-title-line-height) + var(--space-2) +
+      var(--typo-body-line-height)
+  );
+  align-content: center;
 }
 
 .footer {

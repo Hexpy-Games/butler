@@ -105,6 +105,10 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
         .await?;
     assert_eq!(s.gw.settings().await?["access_mode"], "full_access");
 
+    // Keep this midnight access-mode fixture outside quiet hours.
+    s.patch_settings(json!({"quiet_hours_end":"23:00"}), "quiet-hours window")
+        .await?;
+
     let asked = format!("ask-{token}.txt");
     let schedule = create(&s, "general", &make_file(&asked), Some("ask_first")).await?;
     assert_eq!(schedule["access_mode"], "ask_first", "{schedule}");

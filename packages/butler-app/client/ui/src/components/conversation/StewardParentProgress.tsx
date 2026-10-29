@@ -61,6 +61,7 @@ export function StewardParentProgress({
       aria-label={child.title}
       data-test-class="steward-parent-progress steward-parent-progress-card"
       elevation="none"
+      radius="lg"
       role="region"
     >
       <Stack gap="sm">

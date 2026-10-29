@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy";
 import { relativeAge } from "@/app/utils.ts";
 import type { SessionArtifactSummary } from "@/app/types.ts";
 import { absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts";
@@ -44,12 +45,12 @@ export function artifactUrl(
   return source ? absoluteGatewayUrl(source) : undefined;
 }
 
+/**
+ * The artifact's size, as attachment tiles show it. Its type comes from the file name; the stored kind is an
+ * internal, untranslated value (document, code, report, …), so it is never shown.
+ */
 export function artifactDescription(artifact: SessionArtifactSummary): string {
-  const size =
-    typeof artifact.size_bytes === "number"
-      ? formatArtifactSize(artifact.size_bytes)
-      : "";
-  return [artifact.kind, size].filter(Boolean).join(" / ");
+  return typeof artifact.size_bytes === "number" ? formatArtifactSize(artifact.size_bytes) : "";
 }
 
 export function artifactMeta(artifact: SessionArtifactSummary): string {

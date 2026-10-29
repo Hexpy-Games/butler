@@ -236,26 +236,13 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
 }
 
 async fn committed_seed() -> Result<(Scenario, serde_json::Value), HarnessError> {
-    use sha2::{Digest, Sha256};
     let setup = Setup::new("RULES-CRASH-SEED")?
         .fixture(Fixture::Empty)
         .stub_cassette(forget::stub()?);
     let mut s = forget::start(setup).await?;
     let output = support::tool(&s, "general", forget::GLOBAL, "update_explicit_memory").await?;
     assert_eq!(output["ok"], true, "{output}");
-    let receipt = s
-        .sandbox
-        .data
-        .join("cognition/memory/rules/capture-receipts")
-        .join(format!(
-            "{:x}.json",
-            Sha256::digest(output["operation_id"].as_str().unwrap().as_bytes())
-        ));
-    support::until(|| {
-        support::read_json(&receipt)
-            .is_some_and(|row| row["submitted"]["operation_id"] == output["operation_id"])
-    })
-    .await;
+    support::committed(&s.sandbox.data, &output).await;
     s.agent.terminate().await?;
     assert!(
         !s.sandbox
@@ -294,10 +281,9 @@ async fn rules_contended_and_cancelled_lease_waiters_write_nothing() -> Result<(
         .stub_cassette(forget::stub()?)
         .env("BUTLER_E2E_RULE_CRASH_POINTS", "1");
     let mut s = forget::start(setup).await?;
-    assert_eq!(
-        support::tool(&s, "general", forget::GLOBAL, "update_explicit_memory").await?["ok"],
-        true
-    );
+    let output = support::tool(&s, "general", forget::GLOBAL, "update_explicit_memory").await?;
+    assert_eq!(output["ok"], true, "{output}");
+    support::committed(&s.sandbox.data, &output).await;
     let original = support::active_rules(&s.sandbox.data).pop().unwrap();
     s.provider()?
         .add_placeholder("TARGET", original["handle"].as_str().unwrap());

@@ -39,12 +39,19 @@ Product engineers, design-system maintainers, and coding agents can use it when 
   `height="full"` makes the cap its height, so a `scroll-body` whose body is
   short or empty (an empty task graph) fills it instead of collapsing to a strip.
   Without it nothing changes.
+- A dialog that is only a header and its actions (a confirmation) is never
+  shorter than a confirmation with one line of description: a title-only header
+  keeps the height of a title, `--space-2` and one `--typo-body-line-height`
+  line, with the title centred in it. A header with a description already fills
+  it and renders unchanged. Do not add spacers or padding to make a short
+  confirm taller.
 - Use ScrollArea for independently scrolling bodies. Do not mask the entire
   modal surface, which would also fade its border, header and shadow.
-- A dialog that scrolls itself reserves `scrollbar-gutter: stable both-edges`:
-  a classic scrollbar's lane is mirrored on both sides, so the form stays
-  centered and its width does not jump when content starts to scroll. Overlay
-  scrollbars reserve nothing.
+- A dialog reserves no scrollbar gutter. When one that scrolls itself
+  overflows, a classic scrollbar takes its width out of the inline-end padding
+  and the content gives it back, so the form keeps its width and centre when
+  content starts or stops scrolling, and a dialog that fits shows no empty
+  lane. Overlay scrollbars change nothing.
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.

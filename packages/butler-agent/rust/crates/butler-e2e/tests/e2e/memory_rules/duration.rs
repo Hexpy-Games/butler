@@ -107,18 +107,22 @@ async fn temporary_instruction_scopes_expiry_repetition_and_dormant_feedback()
     );
     let chat = support::tool(&s, &a, CHAT, "update_explicit_memory").await?;
     assert_eq!(chat["ok"], true, "{chat}");
+    support::committed(&s.sandbox.data, &chat).await;
     assert!(prompt(&s, &a).await?.contains("mango-chat-style"));
     assert!(!prompt(&s, "general").await?.contains("mango-chat-style"));
     // Trusted fixture advances this instruction's fixed expiry without a timer or live model.
     let manifest = s.sandbox.data.join("cognition/memory/rules/manifest.json");
     let mut data: Value = serde_json::from_slice(&std::fs::read(&manifest)?)?;
+    let mut changed = 0;
     for scope in data["scopes"].as_object_mut().unwrap().values_mut() {
         for row in scope.as_object_mut().unwrap().values_mut() {
             if row["handle"] == chat["rule"] {
                 row["expires_at"] = json!("2000-01-01T00:00:00Z");
+                changed += 1;
             }
         }
     }
+    assert_eq!(changed, 1, "expiry fixture must change exactly one rule");
     std::fs::write(&manifest, data.to_string())?;
     assert!(!prompt(&s, &a).await?.contains("mango-chat-style"));
     assert_eq!(rows(&s).await?.len(), 1);
@@ -274,18 +278,16 @@ async fn daily(s: &mut Scenario) -> Result<(), HarnessError> {
         "BUTLER_E2E_APP_NOW",
         later.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     );
-    for job in ["session-sync", "consolidation-cycle"] {
-        let path = s.sandbox.data.join(format!("state/scheduler/{job}.json"));
-        if path.exists() {
-            std::fs::remove_file(path)?;
-        }
-    }
     s.gw = s.agent.start_again().await?;
     let marker = s
         .sandbox
         .data
         .join("state/scheduler/consolidation-cycle.json");
-    support::until(|| marker.exists()).await;
+    support::until(|| {
+        support::read_json(&marker)
+            .is_some_and(|state| state["lastRunDate"] == later.format("%Y-%m-%d").to_string())
+    })
+    .await;
     assert_eq!(support::read_json(&marker).unwrap()["status"], "ok");
     Ok(())
 }

@@ -80,6 +80,17 @@ async fn ordered(endpoint: &str, restart: bool) -> Result<(), HarnessError> {
     assert_pending(&s, &script, &followups).await?;
     acknowledgement.write_all(b"!").await?;
     drop(acknowledgement);
+    let cursor =
+        s.gw.events_since(0)
+            .await?
+            .last()
+            .and_then(|event| event["id"].as_u64())
+            .unwrap_or(0);
+    let events = if restart {
+        None
+    } else {
+        Some(butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, cursor).await?)
+    };
     if restart {
         quit(&mut s).await?;
         s.gw = s.agent.start_again().await?;
@@ -88,7 +99,11 @@ async fn ordered(endpoint: &str, restart: bool) -> Result<(), HarnessError> {
         s.gw.wait_terminal("general", &busy_turn, Duration::from_secs(20))
             .await?;
     }
-    assert_ordered(&s, &script, &followups).await?;
+    let events = match events {
+        Some(events) => events,
+        None => butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, cursor).await?,
+    };
+    assert_ordered(&s, &script, &followups, &events).await?;
     s.finish().await?;
     server.abort();
     Ok(())
@@ -164,8 +179,8 @@ async fn assert_ordered(
     s: &Scenario,
     script: &stub::Script,
     followups: &[&str],
+    events: &butler_e2e::e2e::events::LiveEvents,
 ) -> Result<(), HarnessError> {
-    let events = butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, 0).await?;
     for text in followups {
         let user = events
             .wait_for(Duration::from_secs(30), |event| {

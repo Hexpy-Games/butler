@@ -24,7 +24,7 @@ function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
     ? `${path.slice(0, 30)}…${path.slice(-25)}` : path;
   const display = decision.pathDetails?.includes(text) ? shorten(text)
     : text === decision.title ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : text;
-  return <Typo.Text title={text} aria-label={text}>{display}</Typo.Text>;
+  return display === text ? text : <span title={text} aria-label={text}>{display}</span>;
 }
 
 export function ComposerAuthorityDecisionSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision }) {
@@ -40,8 +40,8 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     title={decision.title}
     details={decision.details}
     renderText={(text) => approvalPathText(text, decision)}
-    detailsShowMoreLabel={decision.actionKind === "generate_image" || decision.actionKind === "edit_image" ? undefined : appCopy.conversation.messageActions.showMore}
-    detailsShowLessLabel={decision.actionKind === "generate_image" || decision.actionKind === "edit_image" ? undefined : appCopy.conversation.messageActions.showLess}
+    detailsShowMoreLabel={decision.actionKind === "manage_schedule" || decision.actionKind === "generate_image" || decision.actionKind === "edit_image" ? undefined : appCopy.conversation.messageActions.showMore}
+    detailsShowLessLabel={decision.actionKind === "manage_schedule" || decision.actionKind === "generate_image" || decision.actionKind === "edit_image" ? undefined : appCopy.conversation.messageActions.showLess}
     onOpen={decision.onOpenSource}
     error={decision.error}
     aside={<>
@@ -53,9 +53,13 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     data-test-class="composer-authority-decision"
     actions={(complete) => <ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{appCopy.interfaceDetails.deny}</Button>
-      <SplitButton size="sm" text={appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}
+      <SplitButton size="sm" text={decision.allowSite ? appCopy.interfaceDetails.allowInChat : appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}
         menuLabel={appCopy.interfaceDetails.allowScope} menuSide="top"
-        items={[{
+        items={decision.allowSite ? [{
+          key: "site", label: decision.allowSite === "payment" ? appCopy.interfaceDetails.allowPaymentSite : appCopy.interfaceDetails.allowSite,
+          description: decision.allowSite === "signed_in" ? appCopy.interfaceDetails.allowSiteDescription : undefined,
+          onSelect: () => complete(decision.onAllowSite ?? decision.onAllow),
+        }] : [{
           key: "conversation", label: appCopy.interfaceDetails.allowConversation, disabled: !decision.scope,
           description: [decision.conversationScope, appCopy.interfaceDetails.allowDescription], onSelect: () => complete(decision.onAllowConversation),
         }]} />

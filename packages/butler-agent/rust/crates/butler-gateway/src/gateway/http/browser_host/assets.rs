@@ -21,39 +21,8 @@ pub(super) async fn finish(
         .or_else(|| result["url"].as_str())
         .unwrap_or("")
         .to_owned();
-    let pixels = result.as_object_mut().and_then(|o| o.remove("image"));
-    let rendered = pixels.map(|pixels| {
-        pixels["data"]
-            .as_str()
-            .filter(|raw| raw.len() <= 12 * 1024 * 1024)
-            .and_then(|raw| STANDARD.decode(raw).ok())
-            .ok_or("invalid_image")
-    });
-    let original = || {
-        butler_runtime::browser::fetch_image(
-            &source_url,
-            result["referer"].as_str().unwrap_or(""),
-            result["user_agent"].as_str().unwrap_or(""),
-        )
-    };
-    let bytes = match rendered {
-        // A photo whose pixels the page withholds is collected from its own file
-        // (full size, whatever covers it); its rendered crop is the fallback.
-        Some(rendered) if result["fetch_source"] == true => match original().await {
-            Ok(bytes) => match tokio::task::spawn_blocking(move || {
-                butler_runtime::browser::normalize_image(&bytes).map(|_| bytes)
-            })
-            .await
-            {
-                Ok(Ok(bytes)) => Ok(bytes),
-                _ => rendered,
-            },
-            Err(reason) => rendered.or(Err(reason)),
-        },
-        Some(rendered) => rendered,
-        None => original().await,
-    };
-    let bytes = match bytes {
+    let bytes = collected_source(result, &source_url).await;
+    let (bytes, pixel_ratio) = match bytes {
         Ok(bytes) => bytes,
         Err(reason) => {
             *result = json!({"status":"refused","reason":reason});
@@ -64,6 +33,7 @@ pub(super) async fn finish(
     let command = AppAssetCommand::Collect {
         session: session.into(),
         bytes,
+        pixel_ratio,
         alt: result["alt"].as_str().unwrap_or("").into(),
         nearby_text: result["nearby_text"].as_str().unwrap_or("").into(),
         source_url,
@@ -78,6 +48,53 @@ pub(super) async fn finish(
     explain_refusal(result);
     Ok(())
 }
+async fn collected_source(
+    result: &mut Value,
+    source_url: &str,
+) -> Result<(Vec<u8>, f64), &'static str> {
+    let pixels = result.as_object_mut().and_then(|o| o.remove("image"));
+    let rendered = pixels.map(|pixels| {
+        pixels["data"]
+            .as_str()
+            .filter(|raw| raw.len() <= 12 * 1024 * 1024)
+            .and_then(|raw| STANDARD.decode(raw).ok())
+            .ok_or("invalid_image")
+    });
+    let original = || async {
+        if source_url.is_empty() {
+            return Err("invalid_image");
+        }
+        butler_runtime::browser::fetch_image(
+            source_url,
+            result["referer"].as_str().unwrap_or(""),
+            result["user_agent"].as_str().unwrap_or(""),
+        )
+        .await
+    };
+    let capture_ratio = result["pixel_ratio"]
+        .as_f64()
+        .filter(|r| r.is_finite() && *r > 0.0)
+        .unwrap_or(1.0);
+    let rendered = rendered.map(|bytes| bytes.map(|bytes| (bytes, capture_ratio)));
+    match rendered {
+        // A photo whose pixels the page withholds is collected from its own file
+        // (full size, whatever covers it); its rendered crop is the fallback.
+        Some(rendered) if result["fetch_source"] == true => match original().await {
+            Ok(bytes) => match tokio::task::spawn_blocking(move || {
+                butler_runtime::browser::normalize_image(&bytes).map(|_| bytes)
+            })
+            .await
+            {
+                Ok(Ok(bytes)) => Ok((bytes, 1.0)),
+                _ => rendered,
+            },
+            Err(reason) => rendered.or(Err(reason)),
+        },
+        Some(rendered) => rendered,
+        None => original().await.map(|bytes| (bytes, 1.0)),
+    }
+}
+
 pub(super) async fn lookup(state: &HttpState, args: &Value) -> Result<Value, HttpError> {
     let ids = args["ids"]
         .as_array()

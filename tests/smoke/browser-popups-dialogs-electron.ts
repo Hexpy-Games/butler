@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser } from "../support/browser-agent-stub";
+import { pageShownBeforeNativeInput } from "../support/electron-view-input";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
@@ -39,6 +40,7 @@ const send = async (text: string) => {
 };
 const delivered = () => waitBrowser(async () => (await app.gateway.api<any>("/session-view?session_id=general")).latest_turn?.state === "delivered", "stub delivered");
 async function nativeClick(id: string, selector: string) {
+  await pageShownBeforeNativeInput(app, contents(id));
   await app.main(`(async()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)});const w=t.view.webContents;
     const point=await w.executeJavaScript(${JSON.stringify(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});n.scrollIntoView({block:'center'});const b=n.getBoundingClientRect();if(!n.contains(document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)))throw Error('target not hit-testable');return{x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)}})()`)});
     (t.popupWindow ?? ${app.win}).focus();w.focus();w.sendInputEvent({type:'mouseDown',...point,button:'left',clickCount:1});w.sendInputEvent({type:'mouseUp',...point,button:'left',clickCount:1});
@@ -79,6 +81,20 @@ async function popupShot(name: string, parent: string) {
   if (!name.includes("allowed-once")) await waitBrowser(() => app.main(`${contents(parent)}.executeJavaScript("document.querySelector('#result').textContent !== 'Ready'")`), "postMessage returns to opener");
   console.log(`popup passed ${name}`);
 }
+function approvalLayout() {
+  const card = document.querySelector('[data-test-class="composer-authority-decision"]')!;
+  // The DS MessageRow body is the transcript content column, outside the reply bubble's width cap.
+  const body = card.closest('[data-test-class="message-body"]')!;
+  const style = getComputedStyle(body);
+  const title = card.querySelector('[data-slot="composer-decision-subject"] [data-slot="clickable"] label')!;
+  return { width: card.getBoundingClientRect().width,
+    contentWidth: body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+    titleLines: title.getBoundingClientRect().height / parseFloat(getComputedStyle(title).lineHeight) };
+}
+function assertApprovalLayout(layout: ReturnType<typeof approvalLayout>) {
+  assert.ok(layout.width >= layout.contentWidth * .95, `approval fills transcript body: ${JSON.stringify(layout)}`);
+  assert.ok(layout.titleLines <= 3, `approval title fits three lines: ${JSON.stringify(layout)}`);
+}
 try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light", access_mode: "full_access" }) });
   await app.page.reload(); await app.click("Browser");
@@ -110,7 +126,10 @@ try {
       await answer(mine, type !== "print", { value: "Owner answer" });
     }
     await nativeClick(mine, "#beforeunload");
-    if (name === "ko-light-1440") await app.main(`${contents(mine)}.sendInputEvent({type:'keyDown',keyCode:'W',modifiers:['control']})`);
+    if (name === "ko-light-1440") {
+      await pageShownBeforeNativeInput(app, contents(mine));
+      await app.main(`${contents(mine)}.sendInputEvent({type:'keyDown',keyCode:'W',modifiers:['control']})`);
+    }
     else await app.call("close", { id: mine });
     await waitBrowser(async () => (await state()).tabs.find(t => t.id === mine)?.dialog?.type === "beforeunload", "beforeunload anchored");
     await app.shot(`${name}-beforeunload`);
@@ -202,6 +221,7 @@ try {
     await app.main(`${app.win}.setContentSize(${width},900)`); await app.page.reload();
     await app.click(getAppCopy(appLocaleFromLanguage(locale)).space.general);
     await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="composer-authority-decision"]')));
+    assertApprovalLayout(await app.page.evaluate(approvalLayout));
     assert.equal(await app.main(`[...globalThis.browserAgentSubject.tabs.values()].some(t=>t.attached===${app.win})`), false, "no native page obscures the conversation approval");
     await app.shot(`${locale}-${theme}-${width}-agent-confirm-approval`);
   }
@@ -216,6 +236,7 @@ try {
       await phone.getByRole("button", { name: getAppCopy(appLocaleFromLanguage(locale)).space.general, exact: true }).click();
       await phone.getByRole("button", { name: locale === "ko" ? "이번만 허용" : "Allow once", exact: true }).waitFor();
       assert.ok((await phone.locator('[data-test-class="composer-authority-decision"]').innerText()).includes("Continue?"));
+      assertApprovalLayout(await phone.evaluate(approvalLayout));
       assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await phone.screenshot({ path: join(evidence, `${locale}-${theme}-390-agent-confirm-approval.png`) });
     }

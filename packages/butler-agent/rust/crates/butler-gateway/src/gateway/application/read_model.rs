@@ -68,7 +68,7 @@ pub(super) fn list_message_page(
     let query = format!(
         "SELECT m.rowid,m.id,o.chat_id,m.turn_id,m.conversation_session_id,m.conversation_turn_id,\
          m.conversation_message_id,m.role,m.text,m.content_parts_json,m.status,m.created_at,m.updated_at,\
-         m.safe_error_code,m.retryable,m.plan_json,m.blocks_json FROM app_message_owners o CROSS JOIN messages m \
+         m.safe_error_code,m.retryable,m.plan_json,m.blocks_json,m.retry_mode,m.retry_with_current_controls,m.incomplete FROM app_message_owners o CROSS JOIN messages m \
          WHERE o.chat_id=?1 AND m.chat_id=o.source_chat_id \
          AND m.rowid BETWEEN o.first_rowid AND o.last_rowid AND m.rowid{operator}?2 \
          AND NOT (role='assistant' AND safe_error_code IS NOT NULL AND \
@@ -91,10 +91,21 @@ pub(super) fn list_message_page(
     }
     let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
     let attachments = attachments(connection, &ids)?;
+    let docs = artifacts::documents(connection, chat_id, &ids)?;
     let changed_files = changed_files(connection, &ids)?;
     let mut messages = rows
         .into_iter()
-        .map(|row| message(row, &attachments, &changed_files))
+        .map(|row| {
+            let documents = docs.get(&row.id).cloned().unwrap_or_default();
+            let mut record = message(row, &attachments, &changed_files)?;
+            if !documents.is_empty() {
+                record
+                    .artifacts
+                    .get_or_insert_with(Vec::new)
+                    .extend(documents);
+            }
+            Ok(record)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let next_cursor = messages
         .last()
@@ -234,6 +245,9 @@ struct MessageRow {
     updated_at: String,
     safe_error_code: Option<String>,
     retryable: i64,
+    retry_mode: Option<String>,
+    incomplete: Option<bool>,
+    retry_with_current_controls: bool,
     plan_json: Option<String>,
     blocks_json: Option<String>,
 }
@@ -283,7 +297,19 @@ fn message(
     let changed = files::pair_changes(changed.get(&row.id).cloned().unwrap_or_default(), &files);
     let artifacts =
         (row.role == "assistant").then(|| files.iter().map(|file| artifact(&row, file)).collect());
+    // Rows written by older builds have no mode, even after a previous upgrade.
+    let legacy_resume = row.retry_mode.is_none()
+        && row.retryable == 1
+        && matches!(
+            row.safe_error_code.as_deref(),
+            Some("runtime_fault" | "turn_interrupted")
+        );
+    let retry_current = row.retry_with_current_controls
+        || (legacy_resume && row.safe_error_code.as_deref() == Some("runtime_fault"));
     Ok(MessageRecord {
+        quiet: false,
+        incomplete: row.incomplete,
+        initiated: None,
         content_parts: parse_optional(row.content_parts_json.as_deref())?,
         id: row.id.clone(),
         chat_id: row.chat_id,
@@ -301,6 +327,13 @@ fn message(
         limitation_codes: None,
         limitations: None,
         retryable: row.retryable == 1,
+        retry_mode: row
+            .retry_mode
+            .as_deref()
+            .or(legacy_resume.then_some("resume"))
+            .map(parse_enum)
+            .transpose()?,
+        retry_with_current_controls: retry_current,
         cursor: row.cursor,
         attachments: (!files.is_empty()).then_some(files),
         artifacts: artifacts.filter(|items: &Vec<_>| !items.is_empty()),

@@ -64,7 +64,7 @@ fn seed_image(s: &Scenario) -> Result<(), HarnessError> {
     std::fs::create_dir_all(&path)?;
     std::fs::write(path.join(format!("{hash}.jpg")), &image.bytes)?;
     let db = db(s)?;
-    db.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at) VALUES(?1,?2,'image/jpeg',?3,?4,?5,'Image alt','https://example.org/image','2026-10-25T00:00:00Z')",params![IMAGE,hash,image.width,image.height,image.bytes.len()])?;
+    db.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at,pixel_ratio) VALUES(?1,?2,'image/jpeg',1200,800,?3,'Image alt','https://example.org/image','2026-10-25T00:00:00Z',2)",params![IMAGE,hash,image.bytes.len()])?;
     db.execute(
         "INSERT INTO app_asset_refs VALUES(?1,'chat','general')",
         [IMAGE],
@@ -89,14 +89,31 @@ async fn editable_document_create_correct_search_coalesce_diff_edit_restore_dele
     let id = items[0]["id"].as_str().unwrap();
     let head = ok(s.gw.get(&format!("/documents/{id}")).await?);
     assert_eq!(head["body"], body());
+    assert_document_image(&head);
+    let original = ok(s.gw.get(&format!("/documents/{id}/revisions/1")).await?);
+    assert_document_image(&original);
     assert_eq!(head["rev"], 1);
     assert_eq!(head["author"], "butler");
     let messages = s.gw.messages("general").await?;
-    assert!(
-        messages
-            .iter()
-            .any(|message| message["role"] == "assistant" && message["id"] == head["message_id"])
-    );
+    assert!(messages.iter().any(|message| {
+        message["role"] == "assistant"
+            && message["id"] == head["message_id"]
+            && message["artifacts"].as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["kind"] == "doc" && item["id"] == id && item["deliverable"] == true
+                })
+            })
+    }));
+    mixed_document_section(&s, id)?;
+    let mixed = ok(s.gw.get("/library?kinds=doc,document").await?);
+    let kinds = mixed["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["kind"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(kinds, vec!["document", "doc"]);
+    assert_eq!(mixed["items"][1]["id"], id);
     for word in ["청자", "orchard"] {
         let url = reqwest::Url::parse_with_params(
             "http://localhost/library",
@@ -196,6 +213,15 @@ async fn editable_document_create_correct_search_coalesce_diff_edit_restore_dele
         .find(|m| m["role"] == "user" && m["turn_id"] == turn_id)
         .unwrap();
     assert_eq!(user["text"], EDIT);
+    assert!(messages.iter().any(|message| {
+        message["role"] == "assistant"
+            && message["turn_id"] == turn_id
+            && message["artifacts"].as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["kind"] == "doc" && item["id"] == id && item["deliverable"] == true
+                })
+            })
+    }));
     assert!(!json!(messages).to_string().contains("invalid_embeds"));
     let restored = ok(s
         .gw
@@ -288,4 +314,23 @@ async fn editable_document_create_correct_search_coalesce_diff_edit_restore_dele
         "documents: 6 revisions (2 user saves coalesced); 2 language searches; asset refs released"
     );
     s.finish().await
+}
+
+fn mixed_document_section(s: &Scenario, _id: &str) -> Result<(), HarnessError> {
+    let payload = json!({"id":"file-deliverable","kind":"document","title":"Deliverable","url":"/message-files/file","capturedAt":"2099-01-01T00:00:00Z"});
+    db(s)?.execute("INSERT INTO browser_library(id,kind,title,url,payload,created_at) VALUES('file-deliverable','document','Deliverable','/message-files/file',?1,'2099-01-01T00:00:00Z')", [payload.to_string()])?;
+    Ok(())
+}
+
+fn assert_document_image(document: &Value) {
+    let asset = &document["assets"][0];
+    assert_eq!(asset["id"], IMAGE);
+    assert_eq!(asset["image_width"], 600.0);
+    assert_eq!(asset["image_height"], 400.0);
+    assert!(
+        asset["signed_url"]
+            .as_str()
+            .unwrap()
+            .contains("/message-assets/")
+    );
 }

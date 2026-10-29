@@ -191,6 +191,8 @@ export interface ApprovalRequestCopy {
   taintReason: string;
   unsandboxedReason: string;
   scheduleMode: (mode: string) => string;
+  scheduleSignin: (on: boolean) => string;
+  schedulePayment: (on: boolean) => string;
   scheduleUnavailable: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
@@ -243,6 +245,18 @@ interface ConversationWorkCopy {
 }
 
 interface ConversationCopy {
+  chatsIntro: string;
+  initiated: {
+    viewWork: string; needsApproval: string;
+    workFailed: (state: "retrying" | "failed" | undefined, reasonCode: string | undefined) => string;
+    noThanks: string; soundsGood: string;
+    created: (action: string) => string; skipped: (action: string) => string;
+    continuing: (action: string) => string; paused: (action: string) => string;
+    alreadyHandled: string; failed: string;
+    dailyAt: (time: string) => string; weekdaysAt: (time: string) => string;
+    unopened: (count: number) => string;
+    action: (frequency: string, title: string, date?: string) => string;
+  };
   messageActions: {
     showMore: string;
     showLess: string;
@@ -263,6 +277,10 @@ interface ConversationCopy {
     copy: string;
     copied: string;
     savedToLibrary: string;
+    makeDocument: string;
+    documentCreated: string;
+    openOriginChat: string;
+    block: string;
     actionFailed: string;
     openImage: string;
     image: string;
@@ -294,6 +312,7 @@ interface ConversationCopy {
     checked: (time: string) => string;
   };
   work: ConversationWorkCopy;
+  incompleteStatus: string;
   stoppedStatus: string;
   attachmentUnavailable: string;
   /** File-type label on an attachment tile whose extension is unknown. */
@@ -334,9 +353,9 @@ export interface BrowserCopy {
   };
   siteData: { title: string; label: string; description: string; clear: string; confirmTitle: string; confirmMessage: string; items: string; itemList: string; kept: string; cleared: string; failed: string; desktopOnly: string };
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; pageLabel: string; pageDescription: string; };
-  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
+  tabCount: string; newTabIn: string; moreTabs: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
-  reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
+  reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
@@ -464,10 +483,14 @@ export interface AppCopy {
   };
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   sessionInfo: typeof import("./locales/session-info.ts").SESSION_INFO_COPY["en-US"];
+  fileViewer: typeof import("./locales/file-viewer.ts").FILE_VIEWER_COPY["en-US"];
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
   library: LibraryCopy;
+  documents: { title: string; saved: string; editing: string; edited: string; restore: string;
+    versions: string; current: string; me: string; butler: string; export: string; markdown: string; pdf: string; moreActions: string; exportMarkdown: string; exportPdf: string;
+    bold: string; heading: string; list: string; addBlock: string; format: string; originalChat: string };
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;
@@ -631,6 +654,8 @@ export interface AppCopy {
     emptyLane: (label: string) => string;
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
+    /** 대화's live status: the current tool's label, with the count its activity group already shows. */
+    chatActivity: (tool: string, count: number) => string;
     pendingApprovals: (count: number) => string;
     approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;
@@ -701,6 +726,11 @@ export interface AppCopy {
     composeLater: string;
     deny: string;
     allowOnce: string;
+    allowInChat: string;
+    allowSite: string;
+    allowPaymentSite: string;
+    allowSiteDescription: string;
+    paymentSkipped: (site: string, amount: string) => string;
     allowScope: string;
     allowConversation: string;
     allowDescription: string;
@@ -968,7 +998,6 @@ export interface AppCopy {
     expandChats: string;
     collapseChats: string;
     newProject: string;
-    availableInDesktop: string;
     projectDashboard: string;
     newProjectChat: string;
     projectMenu: string;
@@ -978,6 +1007,14 @@ export interface AppCopy {
     projectFolder: string;
     projectFolderAuto: string;
     chooseProjectFolder: string;
+    useThisFolder: string;
+    openSubfolderFirst: string;
+    noSubfolders: string;
+    showMoreFolders: string;
+    parentFolder: string;
+    folderPathLabel: string;
+    subfoldersLabel: string;
+    foldersLoadFailed: string;
     changeProjectFolder: string;
     resetProjectFolder: string;
     pin: string;
@@ -1033,6 +1070,9 @@ export interface AppCopy {
     stop: string;
     queuedMessages: string;
     queuedMessage: string;
+    sendNow: string;
+    sendingStatus: string;
+    sendNowFailed: string;
     queuedMessageStatus: string;
     queuedAttachmentCount: (count: number) => string;
     editQueuedMessage: string;
@@ -1138,6 +1178,7 @@ export interface AppCopy {
     recommended: string;
   };
   automations: {
+    modelDefaultDescription: string;
     saved: string;
     frequency: string;
     time: string;
@@ -1186,6 +1227,9 @@ export interface AppCopy {
     accessHint: string;
     /** Desktop notification when an unattended run skipped a step for permission. */
     needsPermissionNotify: string;
+    signinOffNotify: string;
+    paymentOffNotify: string;
+    browser: { title: string; signin: string; signinDescription: string; payment: string; paymentDescription: string; unavailable: string };
     saveFailed: string;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
@@ -1205,6 +1249,8 @@ export interface AppCopy {
       skippedTargetUnavailable: string;
       /** A run that skipped a step needing permission. */
       needsPermission: string;
+      signinOff: string;
+      paymentOff: string;
       cancelled: string;
       notRun: string;
     };
@@ -1218,7 +1264,6 @@ export interface AppCopy {
     contentHostRequired: string;
     title: string;
     empty: string;
-    backToList: string;
     open: string;
     save: string;
     saved: string;
@@ -1365,8 +1410,8 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
-    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
+    pageSections: Record<"noticedPatterns" | "instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSectionDescriptions: Record<"noticedPatterns" | "instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
       kind: Record<"command" | "fileWrite" | "network" | "tool" | "other", string>;
@@ -1392,12 +1437,21 @@ export interface AppCopy {
       linkLabel: string; linkDescription: string; linkOpen: string; linkOpenLabel: string;
       freeSpace: string; project: string; none: string; profileBuildingOff: string;
       notMeasured: string; unavailable: string; noProjects: string; allChats: string;
+      patternsEmpty: string; deletePatternTitle: string; deletePatternBody: string; patternDeleted: string;
+      patternDays: (n: number) => string; patternWeeks: (n: number) => string; patternMonths: (n: number) => string;
+      patternCount: (n: number) => string;
+      proactiveLevel: string; proactiveDescription: string; proactiveOff: string; proactiveSometimes: string; proactiveOften: string;
+      quietHours: string; quietHoursDescription: string; quietHoursStart: string; quietHoursEnd: string;
       deleting: string; instructionsEmpty: string; deleteInstructionTitle: string;
       chatsKept: string; instructionDeleted: string; deleteFailed: string;
       freeWaiting: string; nothingToFree: string; inUse: string;
       storageLabel: string; freeSpaceDescription: string;
       resetChatLabel: string; resetChatDescription: string; resetProfileLabel: string; resetProfileDescription: string;
       resetProjectLabel: string; resetProjectDescription: string;
+      pickTime: string; runNowLabel: string; runNowDescription: string; runNow: string; running: string;
+      consolidationDone: string; consolidationFailed: string;
+      lastRun: (when: string) => string; lastRunFailed: (when: string) => string; neverRun: string;
+      today: string; yesterday: string;
       ago: (age: string) => string;
       freeing: (bytes: string) => string; freed: (bytes: string) => string;
       freeStopped: (bytes: string) => string; freeCancelled: (bytes: string) => string;
@@ -1510,6 +1564,7 @@ export interface AppCopy {
       butlerModel: string;
       butlerReasoning: string;
       consolidationModel: string;
+      consolidationTime: string;
       localReasoningBudget: string;
       contextLimit: string;
       /** Settings → General → Default permission: the new-chat field. */
@@ -1527,6 +1582,7 @@ export interface AppCopy {
       model: string;
       reasoning: string;
       theme: string;
+      textSize: string;
       showThinking: string;
       conversationBackground: string; conversationOverlay: string; conversationPlain: string;
       wallpaper: string;
@@ -1579,6 +1635,9 @@ export interface AppCopy {
       modifierEnterSendEnterNewline: (modifier: string) => string;
       enterSendShiftEnterNewline: string;
       system: string;
+      textSizeDefault: string;
+      textSizeLarge: string;
+      textSizeLarger: string;
       light: string;
       dark: string;
       local: string;
@@ -1622,6 +1681,7 @@ export interface AppCopy {
       language: string;
       timezone: string;
       consolidationModel: string;
+      consolidationTime: string;
       consolidationModelDefault: string;
       localReasoningBudget: string;
       wallpaper: string;
@@ -1974,6 +2034,19 @@ export interface AppCopy {
       };
     };
     /** Settings > Models saved API keys (#217). */
+    connectedAccounts: {
+      empty: string;
+      provider: string;
+      kind: Record<"sign_in" | "legacy_sign_in", string>;
+      obtained: (date: string) => string;
+      expires: (date: string) => string;
+      signOut: string;
+      signOutOf: (name: string) => string;
+      confirm: (name: string) => string;
+      done: string;
+      revokeUnconfirmed: string;
+      error: string;
+    };
     savedKeys: {
       empty: string;
       /** Registered models that use the key; 0 reads as not in use. */
@@ -2138,6 +2211,16 @@ export interface AppCopy {
       fullDiskAccess: string;
       failed: string;
       needsKeychain: string;
+      /** The settings button and the import dialog's title. */
+      open: string;
+      /** Label of the settings row that opens the dialog. */
+      dataLabel: string;
+      /** Dialog step names (step 2 uses chooseItems, step 3 uses run) and the stepper's accessible name. */
+      chooseBrowser: string;
+      steps: string;
+      next: string;
+      back: string;
+      done: string;
     };
     /** Import from other AI tools: instructions and MCP servers, never secrets. */
     agentImport: {

@@ -24,7 +24,7 @@ export type MotionFinding = { rule: MotionRule; path: string; line: number; mess
 const DS_PREFIX = "libs/design-system/";
 const MOTION_HELPER = "libs/design-system/lib/motion.ts";
 /** DS reveal components may transition height/block-size with interpolate-size. */
-const REVEAL_COMPONENTS = ["libs/design-system/components/Collapsible/"];
+const REVEAL_COMPONENTS = ["libs/design-system/components/Collapsible/", "libs/design-system/components/ExpandableText/"];
 
 /** Compositor and paint-only properties that may transition or animate. */
 const ALLOWED_PROPERTIES = new Set([

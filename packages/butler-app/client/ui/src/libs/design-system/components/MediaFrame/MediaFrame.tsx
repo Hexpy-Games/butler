@@ -1,4 +1,4 @@
-import { useCallback, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useCallback, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { useReducedMotion } from "../../lib/useReducedMotion";
 import { cn } from "../../lib/utils";
@@ -19,8 +19,14 @@ export interface MediaFrameProps extends DsBaseProps<HTMLAttributes<HTMLSpanElem
   src?: string;
   /** Alternative text. Default "" (decorative: the owning title names the item). */
   alt?: string;
-  /** Frame shape. Default 16:10. */
+  /** Frame shape. Default 16:10. Ignored with `natural`. */
   aspect?: MediaFrameAspect;
+  /**
+   * The picture's own display size in CSS px (its pixel size divided by its pixel ratio). The frame takes the
+   * picture's exact shape and is never wider than this width: a small picture stays small, a large one shrinks
+   * to its container. The shape is reserved before the picture loads, so nothing shifts.
+   */
+  natural?: { width: number; height: number };
   /** How the picture meets the frame. Default `contain`. */
   fit?: MediaFrameFit;
   /** A missing or broken picture shows a tinted placeholder with a centered icon instead of the bare matte. */
@@ -74,12 +80,14 @@ function Placeholder({ icon }: { icon?: string }) {
  * (`--motion-slow`, at once under reduced motion), and a failed one's placeholder fades in.
  */
 export function MediaFrame({
-  src, alt, aspect = "16:10", fit: fitMode = "contain", placeholder = false, placeholderIcon, clearTop = false, reducedMotion, children, className, ...props
+  src, alt, aspect = "16:10", natural, fit: fitMode = "contain", placeholder = false, placeholderIcon, clearTop = false, reducedMotion, children, className, ...props
 }: MediaFrameProps) {
   const [fit, setFit] = useState<{ src: string; fit: "fill" | "matte" | "failed" } | null>(null);
+  const shaped = Boolean(natural && natural.width > 0 && natural.height > 0);
   const measure = useCallback((image: HTMLImageElement | null) => {
-    if (src && image?.complete && image.naturalWidth) setFit({ src, fit: mediaFrameFit(image.naturalWidth, image.naturalHeight) });
-  }, [src]);
+    // A frame in the picture's own shape always spans it; no matte inset is needed.
+    if (src && image?.complete && image.naturalWidth) setFit({ src, fit: shaped ? "fill" : mediaFrameFit(image.naturalWidth, image.naturalHeight) });
+  }, [src, shaped]);
   const known = fit && fit.src === src ? fit.fit : undefined;
   const state: MediaFrameState = !src ? "empty" : known === "failed" ? "failed" : fitMode === "cover" ? "cover" : known ?? "pending";
   const missing = placeholder && (state === "empty" || state === "failed");
@@ -87,8 +95,12 @@ export function MediaFrame({
   const loaded = known === "fill" || known === "matte";
   const systemReduced = useReducedMotion();
   const reduced = reducedMotion ?? systemReduced;
+  const shape = shaped && natural
+    ? { "--media-natural-width": `${natural.width}px`, "--media-natural-ratio": `${natural.width} / ${natural.height}` } as CSSProperties
+    : undefined;
   return (
-    <span className={cn(styles.frame, className)} data-slot="media-frame" data-aspect={aspect} data-fit={state}
+    <span className={cn(styles.frame, className)} data-slot="media-frame" data-aspect={shaped ? undefined : aspect}
+      data-natural={shaped ? "true" : undefined} style={shape} data-fit={state}
       data-loaded={loaded ? "true" : undefined} data-reduced={reduced ? "true" : undefined} data-placeholder={missing ? "true" : undefined}
       data-clear-top={clearTop ? "true" : undefined} {...props}>
       {src && state !== "failed" ? (

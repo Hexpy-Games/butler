@@ -23,12 +23,7 @@ export function assetSource(asset: Pick<ImageAsset, "image_url">, width?: number
   if (download) params.set("download", "1");
   return params.size ? `${src}${src.includes("?") ? "&" : "?"}${params}` : src;
 }
-export async function uploadImageMask(session: string, image: string, mask: Blob): Promise<string> {
-  const result = await api<{ id: string }>(`/message-assets/masks?${new URLSearchParams({ session, for: image })}`, {
-    method: "POST", body: mask, headers: { "content-type": "image/png" },
-  });
-  return result.id;
-}
+export { uploadImageMask } from "@/app/api";
 /** Distance in log-ratio treats portrait and landscape deviations symmetrically. */
 export function imageAspect(width: number, height: number): MediaFrameAspect {
   const aspects: MediaFrameAspect[] = ["1:1", "4:5", "3:4", "16:10", "16:9"];

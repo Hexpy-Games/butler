@@ -70,6 +70,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
     AppApplicationDependencies {
         canon: Arc::new(crate::gateway::UnavailableCanon),
         data_reset: None,
+        plugins: None,
         hooks: None,
         service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: Arc::new(

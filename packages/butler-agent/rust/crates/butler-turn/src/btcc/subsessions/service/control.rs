@@ -22,6 +22,7 @@ pub struct SubsessionDirectionRequest {
     pub instruction: String,
     pub child_role: SessionRole,
     pub access_mode: String,
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 /// A parent's request to cancel one of its subsessions.
@@ -208,6 +209,13 @@ impl SubsessionService {
         {
             return self.closed_feedback(&relation).await;
         }
+        self.repository
+            .restrict_instruction_context(
+                relation.relation_id.clone(),
+                request.schedule_run.clone(),
+            )
+            .await
+            .map_err(BtccError::from)?;
         let identity = json!({"relation_id":relation.relation_id,"source_message_id":request.source_message_id,"instruction":instruction});
         let instruction_id = format!(
             "steward-direction-{}",
@@ -420,6 +428,9 @@ impl SubsessionService {
             "steward"
         };
         let turn_id = crate::btcc::storage::direction_turn_id(&direction.instruction_id);
+        let schedule_run = self
+            .instruction_run_context(&relation.child_session_id)
+            .await?;
         self.enqueue_child(super::SubsessionEnqueue {
             envelope: json!({
             "eventId":format!("subsession-direction:{}",direction.instruction_id),"transport":"app","accountId":"local",
@@ -427,7 +438,7 @@ impl SubsessionService {
             "sender":{"id":if role=="worker"{"steward-worker-direction"}else{"butler-steward-direction"},"displayName":if role=="worker"{"Steward"}else{"Butler"}},
             "message":{"id":format!("subsession-direction-message:{}",direction.instruction_id),"text":direction_text(&direction.instruction),"timestamp":direction.created_at},
             "routingHints":{"sessionId":relation.child_session_id,"turnId":turn_id},
-            "nativeStewardContext":{"version":1,"role":role,"projectName":child.project_id.unwrap_or_default(),"workspacePath":child.workspace_path,"modelRef":child.model_ref,"reasoningEffort":child.metadata.as_ref().and_then(|m|m.get("reasoning_effort")).and_then(Value::as_str).unwrap_or("")},
+            "nativeStewardContext":{"version":1,"role":role,"scheduleRun":schedule_run,"projectName":child.project_id.unwrap_or_default(),"workspacePath":child.workspace_path,"modelRef":child.model_ref,"reasoningEffort":child.metadata.as_ref().and_then(|m|m.get("reasoning_effort")).and_then(Value::as_str).unwrap_or("")},
             "raw":{"source":"btcc-subsession-direction","instruction_id":direction.instruction_id}
             }),
             metadata: serde_json::Map::new(),

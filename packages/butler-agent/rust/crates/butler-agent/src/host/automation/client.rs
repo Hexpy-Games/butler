@@ -137,7 +137,14 @@ impl ScheduleClient {
                     "prompt_body": prompt, "target_session_id": args.get("session_id").and_then(Value::as_str).unwrap_or(session),
                     "schedule_type": kind, "run_at": args.get("run_at"), "start_at": args.get("start_at"),
                     "interval_seconds": seconds,
+                    "schedule": match kind {
+                        "daily" => json!({"kind":"daily", "time":args.get("time").and_then(Value::as_str).unwrap_or("")}),
+                        "weekdays" => json!({"kind":"weekly", "weekdays":[1,2,3,4,5], "time":args.get("time").and_then(Value::as_str).unwrap_or("")}),
+                        _ => Value::Null,
+                    },
                     "access_mode": args.get("access_mode"),
+                    "browser_signin": args.get("browser_signin"),
+                    "browser_payment": args.get("browser_payment"),
                     "source_session_id": session,
                 }))).await?
             }

@@ -100,6 +100,7 @@ async fn allow_scope(request: Request<Body>) -> Result<String, HttpError> {
     match value.get("scope").and_then(Value::as_str) {
         Some("once") => Ok("once".into()),
         Some("conversation") => Ok("conversation".into()),
+        Some("site") => Ok("site".into()),
         _ => Err(scope_error()),
     }
 }

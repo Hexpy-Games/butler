@@ -21,7 +21,7 @@ export interface TitlebarShellProps extends DsPrivateStyleProps {
   /** Shown on nested screens only; top-level screens pass nothing. The App binds ⌘[ / Alt+← to the same action. */
   back?: TitlebarBack;
   subtitle?: ReactNode;
-  /** Controls right after the title text (the conversation's ⋯ menu), before the subtitle. */
+  /** Controls after the whole title line, title then subtitle (the conversation's ⋯ menu). */
   titleActions?: ReactNode;
   leading?: ReactNode;
   leadingVisibility?: "always" | "narrow";
@@ -74,9 +74,9 @@ function TitlebarIdentity({ title, back, subtitle, titleActions, leading, leadin
           {title}
         </Typo.AppTitle>
         {subtitle ? (
-          <Typo.Caption className={dsClass(styles.subtitle)}>{subtitle}</Typo.Caption>
+          <Typo.Caption className={dsClass(styles.subtitle)} data-slot="titlebar-subtitle">{subtitle}</Typo.Caption>
         ) : null}
-        {/* After the subtitle in reading order, so title and subtitle read as one unit; shown after the title. */}
+        {/* After the subtitle, on screen and in reading order: title and subtitle read as one unit. */}
         {titleActions ? (
           <span className={cn(styles.titleActions, "no-drag")} data-slot="titlebar-title-actions">{titleActions}</span>
         ) : null}

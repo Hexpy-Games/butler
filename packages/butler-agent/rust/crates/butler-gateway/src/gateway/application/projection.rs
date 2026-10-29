@@ -14,6 +14,8 @@ mod final_turn_events;
 mod handoffs;
 mod non_final;
 pub(in crate::gateway::application) use non_final::row_from_runtime_event;
+#[cfg(test)]
+pub(in crate::gateway::application) use non_final::terminal_tests::assert_terminal_projection_contracts;
 pub(super) use non_final::{
     FailedProjection, ProjectionIds, project_failed, settle_confirmed_stop,
 };
@@ -58,16 +60,10 @@ pub(super) struct ProjectionContext {
     queue_wake: super::queue_dispatcher::QueueWake,
     retention_wake: super::retention::RetentionWake,
     automation_wake: std::sync::Arc<tokio::sync::Notify>,
-    automation_queued: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 impl ProjectionContext {
     fn wake_queued_automations(&self) {
-        if self
-            .automation_queued
-            .load(std::sync::atomic::Ordering::Acquire)
-        {
-            self.automation_wake.notify_one();
-        }
+        self.automation_wake.notify_one();
     }
 
     async fn finish_terminal_turn(&self, turn: String) -> Result<(), GatewayApplicationError> {
@@ -83,10 +79,7 @@ impl ProjectionContext {
         butler_data: PathBuf,
         queue_wake: super::queue_dispatcher::QueueWake,
         retention_wake: super::retention::RetentionWake,
-        automation_signals: (
-            std::sync::Arc<tokio::sync::Notify>,
-            std::sync::Arc<std::sync::atomic::AtomicBool>,
-        ),
+        automation_wake: std::sync::Arc<tokio::sync::Notify>,
     ) -> Self {
         Self {
             streaming: std::sync::Arc::default(),
@@ -96,8 +89,7 @@ impl ProjectionContext {
             butler_data,
             queue_wake,
             retention_wake,
-            automation_wake: automation_signals.0,
-            automation_queued: automation_signals.1,
+            automation_wake,
         }
     }
 }
@@ -211,6 +203,7 @@ async fn project_final(
     let subscribers = context.subscribers.clone();
     let settled_chat = candidate.chat_id.clone();
     let settled_turn = candidate.turn_id.clone();
+    let facts = context.dependencies.settings_facts.snapshot()?;
     let projected = context
         .storage
         .execute(move |db| {
@@ -218,6 +211,8 @@ async fn project_final(
                 db,
                 &candidate,
                 final_result::FinalApply {
+                    facts: &facts,
+                    language: super::settings::ui_language(db, &facts)?,
                     files,
                     reply_id: &reply_id,
                     now: &now,

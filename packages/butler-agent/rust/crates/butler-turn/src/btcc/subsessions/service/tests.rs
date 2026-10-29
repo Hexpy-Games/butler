@@ -193,12 +193,20 @@ pub(crate) fn delegation_identities_are_byte_stable() {
         request: "req",
         work_id: "w",
         plan_revision_id: "p",
-        review_revision_id: "r",
+        review_revision_id: Some("r"),
         previous_relation_id: None,
     };
     assert_eq!(
         serde_json::to_string(&steward).unwrap(),
         r#"{"parent_session_id":"ps","parent_turn_id":"pt","request":"req","work_id":"w","plan_revision_id":"p","review_revision_id":"r"}"#
+    );
+    let one_call = super::helpers::StewardIdentity {
+        review_revision_id: None,
+        ..steward
+    };
+    assert_eq!(
+        serde_json::to_string(&one_call).unwrap(),
+        r#"{"parent_session_id":"ps","parent_turn_id":"pt","request":"req","work_id":"w","plan_revision_id":"p"}"#
     );
     let worker = super::helpers::WorkerIdentity {
         parent_session_id: "ps",

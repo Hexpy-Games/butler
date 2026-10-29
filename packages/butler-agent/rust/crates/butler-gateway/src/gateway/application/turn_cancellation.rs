@@ -14,6 +14,12 @@ const SENT_CANCEL_SQL: &str = "SELECT 1 FROM app_turn_cancel_outbox outbox \
     AND outbox.state IN ('pending','accepted') AND outbox.queue_id IS NOT NULL \
     AND turns.state='cancelling'";
 
+#[derive(Clone, Copy)]
+pub(super) enum QueueAfterCancel {
+    Pause,
+    KeepRunning,
+}
+
 impl AppApplication {
     pub(super) async fn recover_turn_cancellations(&self) -> Result<(), GatewayApplicationError> {
         let pending = self
@@ -66,7 +72,7 @@ impl AppApplication {
 
     /// Settles a sent Stop the App is still waiting on once BTCC confirmed it
     /// (an acknowledgement an earlier version dropped, or a Stop pressed again).
-    async fn settle_confirmed_stop(
+    pub(super) async fn settle_confirmed_stop(
         &self,
         chat_id: String,
         turn_id: String,
@@ -120,7 +126,12 @@ impl AppApplication {
         let turn = turn_id.clone();
         let prepared = self
             .storage
-            .execute(move |db| prepare_cancel(db, &turn, &stored_at))
+            .execute(move |db| {
+                let mut tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+                let prepared = prepare_cancel(&mut tx, &turn, &stored_at, QueueAfterCancel::Pause)?;
+                tx.commit().map_err(AppStorageError::sqlite)?;
+                Ok(prepared)
+            })
             .await
             .map_err(app_error)?;
         if prepared.2 {
@@ -144,7 +155,7 @@ impl AppApplication {
         Ok(json!({"turn":turn,"replies":[],"next_cursor":0}))
     }
 
-    async fn dispatch_cancel(
+    pub(super) async fn dispatch_cancel(
         &self,
         chat_id: String,
         turn_id: String,
@@ -177,10 +188,11 @@ impl AppApplication {
     }
 }
 
-fn prepare_cancel(
-    db: &mut rusqlite::Connection,
+pub(super) fn prepare_cancel(
+    db: &mut rusqlite::Savepoint<'_>,
     turn: &str,
     stored_at: &str,
+    queue_after: QueueAfterCancel,
 ) -> Result<(String, Option<String>, bool), AppStorageError> {
     let row = db
         .query_row(
@@ -209,7 +221,7 @@ fn prepare_cancel(
         ));
     }
     let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
-    mark_cancelling(&tx, &row.0, turn, stored_at)?;
+    mark_cancelling(&tx, &row.0, turn, stored_at, queue_after)?;
     let queued = tx
         .query_row(
             "SELECT queue_id FROM app_turn_cancel_outbox WHERE turn_id=?1",
@@ -230,14 +242,13 @@ fn prepare_cancel(
     Ok((row.0, claim, queued.is_some()))
 }
 
-/// Marks the turn cancelling, queues its cancel outbox entry and pauses the
-/// session queue: a user's Stop holds queued messages until the user sends
-/// again.
+/// Marks the turn cancelling and queues its cancel through the shared outbox.
 fn mark_cancelling(
     tx: &rusqlite::Savepoint<'_>,
     chat_id: &str,
     turn_id: &str,
     now: &str,
+    queue_after: QueueAfterCancel,
 ) -> Result<(), AppStorageError> {
     tx.execute(
         "UPDATE turns SET state='cancelling',safe_status_label='Stopping',safe_error_code=NULL,retryable=0,cancellable=0,updated_at=?1 WHERE id=?2 AND state NOT IN ('cancelled','delivered','failed','runtime_fault')",
@@ -249,5 +260,8 @@ fn mark_cancelling(
         params![turn_id, now],
     )
     .map_err(AppStorageError::sqlite)?;
-    queue::pause(tx, chat_id, turn_id, now)
+    match queue_after {
+        QueueAfterCancel::Pause => queue::pause(tx, chat_id, turn_id, now),
+        QueueAfterCancel::KeepRunning => queue::resume(tx, chat_id),
+    }
 }

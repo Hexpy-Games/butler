@@ -15,6 +15,13 @@ pub(super) fn handler(request: &Request<Body>) -> Option<Handler> {
         (path.starts_with("/outputs/"), Handler::Output),
         (family(path, "/security"), Handler::Security),
         (family(path, "/hooks"), Handler::Hooks),
+        (
+            family(path, "/plugins")
+                || family(path, "/plugin-registries")
+                || family(path, "/connectors")
+                || family(path, "/connector-rules"),
+            Handler::Plugins,
+        ),
     ]
     .into_iter()
     .find_map(|(matches, handler)| matches.then_some(handler));
@@ -48,12 +55,20 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
         (
             matches!(
                 parts.as_slice(),
-                ["projects", _, "canon"]
+                ["canon", "list" | "mcp-grants"]
+                    | ["canon", "mcp-grants", _, "allow" | "deny" | "revoke"]
+                    | ["canon", "specs", _, "proposals"]
+                    | ["canon", "epics", _, "comments" | "activity" | "progress"]
+                    | ["sessions", _, "canon", _]
+                    | ["projects", _, "canon"]
                     | ["projects", _, "canon", "plans" | "epics" | "tags" | "files"]
                     | ["projects", _, "canon", "backlog", "order"]
-                    | ["canon", "plans" | "epics" | "tags", _]
+                    | [
+                        "canon",
+                        "specs" | "proposals" | "plans" | "epics" | "tags",
+                        _
+                    ]
                     | ["canon", "plans", _, "order"]
-                    | ["canon", "epics", _, "progress"]
             ),
             Handler::Canon,
         ),
@@ -145,7 +160,12 @@ fn mutations(request: &Request<Body>) -> Option<Handler> {
             matches!(*request.method(), Method::PATCH | Method::DELETE)
                 && path
                     .strip_prefix("/session-queue/")
-                    .is_some_and(|id| !id.is_empty() && !id.contains('/')),
+                    .is_some_and(|id| !id.is_empty() && !id.contains('/'))
+                || *request.method() == Method::POST
+                    && path
+                        .strip_prefix("/session-queue/")
+                        .and_then(|tail| tail.strip_suffix("/send-now"))
+                        .is_some_and(|id| !id.is_empty() && !id.contains('/')),
             Handler::Queue,
         ),
         (

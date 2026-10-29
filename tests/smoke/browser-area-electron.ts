@@ -12,7 +12,7 @@ import { createNativeAppServer, freePort } from "../support/native-app-server";
 import { alignment, publicationStub } from "../support/browser-area-acceptance";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { electronMain } from "../support/electron-main-cdp";
-import { assertNewTabContent, populatedNewTab } from "../support/browser-newtab-acceptance";
+import { assertNewTabContent, clickSettled, populatedNewTab } from "../support/browser-newtab-acceptance";
 import { smokeElectronArgs } from "../support/smoke-browser";
 
 const root = process.cwd();
@@ -147,7 +147,9 @@ async function launch({ holdRestore = false } = {}): Promise<Page> {
 /** Hold the real snapshot read until the mounted renderer has flushed its effects and IPC. */
 async function openDuringRestore(page: Page) {
   try {
-    if (!await page.expression("Boolean(document.querySelector('[data-test-class=browser-area]'))")) await click(page, "Browser");
+    // The App reopens the last view, which may be a conversation with its own browser pane; open the hub itself.
+    await clickSettled(page, '[data-test-class="browser-entry"]');
+    await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-area"][data-placement="standalone"]')));
     await waitUntil(() => main<boolean>("Boolean(globalThis.releaseBrowserRestore)"), "restore read held");
     await waitUntil(() => main<boolean>("globalThis.browserTrace.some(e=>e.op==='scope' && e.value===false && e.owner==='mine')"), "browser mount effects");
     // The scope and automatic-create effects run in the same passive-effect flush.
@@ -206,7 +208,7 @@ async function navigate(page: Page, url: string) {
 }
 
 async function state(page: Page) {
-  return await page.expression('window.butlerBrowser.call("state")') as { activeId: string; tabs: Array<{ id: string; title: string; url: string; status: string; canBack: boolean }> };
+  return await page.expression('window.butlerBrowser.call("state")') as { activeId: string; tabs: Array<{ id: string; owner: string; title: string; url: string; status: string; canBack: boolean }> };
 }
 async function call(page: Page, op: string, input = {}) {
   return await page.expression(`window.butlerBrowser.call(${JSON.stringify(op)}, ${JSON.stringify(input)})`);
@@ -331,7 +333,8 @@ try {
   await call(page, "activate", { id:first });
   await waitUntil(() => main<boolean>(`${nativeCount} === 1`), "native page after artifact return");
   await shot(page, "after-artifact-return");
-  const restoredUrls = (await state(page)).tabs.map(tab=>tab.url);
+  // Restart restores the owner's own tabs; conversation tabs (here the pane's empty new tab) belong to their chat.
+  const restoredUrls = (await state(page)).tabs.filter(tab=>tab.owner==="mine").map(tab=>tab.url);
   await quitAndStop(page);
   page = await launch({ holdRestore: true });
   await main(`${win}.setSize(1440,900)`);

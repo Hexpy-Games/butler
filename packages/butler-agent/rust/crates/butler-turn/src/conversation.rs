@@ -33,7 +33,9 @@ pub use historical_recovery::{
     HistoricalRecoveryInput, plan_historical_recovery, read_historical_app_rows,
     read_historical_transcript_rows,
 };
-pub use history_window::HistoryWindow;
+pub use history_window::{
+    ContinuityBatch, ContinuityTurn, HistoryWindow, VisibleHistory, omitted_history_notice,
+};
 pub use source::{
     Archived, CanonicalMemoryReadBinding, ConversationScalar, ConversationSourceReader,
     MessageOrigins, PageOrder, PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow,
@@ -105,6 +107,7 @@ pub struct AgentConversationStore {
 
 struct StoreInner {
     lane: AsyncMutex<LaneState>,
+    visible_history: history_window::VisibleWindows,
     identity_clock: Arc<dyn ConversationIdentityClock>,
     collation: Arc<dyn ConversationLocaleCollation>,
 }
@@ -142,6 +145,7 @@ impl AgentConversationStore {
                         close_result: None,
                         close_waiters: Vec::new(),
                     }),
+                    visible_history: Default::default(),
                     identity_clock: config.identity_clock,
                     collation: config.collation,
                 }),

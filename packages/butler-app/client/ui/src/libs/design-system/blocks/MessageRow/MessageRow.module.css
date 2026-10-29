@@ -1,4 +1,7 @@
 .row {
+  /* One width for the user bubble, the Butler bubble and what sits under it. */
+  --message-bubble-max-width: min(440px, 68%);
+
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
   gap: var(--space-md);
@@ -44,11 +47,12 @@
   line-height: var(--typo-body-line-height-document);
 }
 
-.user .body {
+.user .body,
+.bubble {
   width: fit-content;
-  max-width: min(440px, 68%);
+  max-width: var(--message-bubble-max-width);
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-popover);
   background: var(--user-message-bg);
   overflow-wrap: anywhere;
   padding: 6px 10px;
@@ -62,6 +66,30 @@
   padding: 2px 0 var(--space-xs);
   color: var(--text-primary);
   white-space: normal;
+}
+
+/* Bubble row (대화): the answer bubble mirrors the user bubble on the left;
+   attachments align to its left edge and never grow past its max width. */
+.bubbleRow .body {
+  align-items: flex-start;
+}
+
+.bubbleRow .body > * {
+  max-width: 100%;
+}
+
+.bubble {
+  min-width: 0;
+  color: var(--text-primary);
+  white-space: normal;
+}
+
+.bubbleAttachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  width: var(--message-bubble-max-width);
+  min-width: 0;
 }
 
 .assistant .body > .footer,

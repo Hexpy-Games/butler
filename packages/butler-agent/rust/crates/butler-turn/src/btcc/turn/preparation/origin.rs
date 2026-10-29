@@ -5,7 +5,7 @@ use crate::btcc::BtccError;
 use crate::btcc::{TurnRequest, TurnTrigger};
 use crate::conversation::{
     ConversationLocaleCollation, ConversationOriginDecision, ConversationOriginEvidence,
-    ConversationOriginFacts, classify_conversation_origin,
+    ConversationOriginFacts, ConversationOriginKind, classify_conversation_origin,
 };
 use crate::workspace::{SessionRole, StoredSessionBinding};
 
@@ -48,16 +48,44 @@ pub(super) fn resolve(
     if let Some(authority) = authority {
         evidence.push(item("authority_continuation", authority));
     }
-    Ok(classify_conversation_origin(
+    let mut decision = classify_conversation_origin(
         collation,
         ConversationOriginFacts {
-            reference: Some(reference),
+            reference: Some(reference.clone()),
             public_ingress: !internal,
             internal_control: internal,
             evidence_available: true,
             evidence,
         },
-    ))
+    );
+    if request
+        .app_turn_context
+        .as_ref()
+        .is_some_and(|c| c["messageOrigin"] == "connector")
+    {
+        decision.kind = ConversationOriginKind::Connector;
+        decision.reason = "verified_connector_ingress".into();
+        decision.evidence.push(item("connector", &reference));
+    }
+    if connector_taint(request)? {
+        decision.evidence.push(item("connector_taint", &reference));
+    }
+    Ok(decision)
+}
+
+fn connector_taint(request: &TurnRequest) -> Result<bool, BtccError> {
+    let app = request.app_turn_context.as_ref();
+    let controls = request
+        .execution_controls
+        .as_ref()
+        .map(crate::btcc::execution_controls::ExecutionControls::verify)
+        .transpose()?;
+    Ok(app.is_some_and(|c| {
+        c["messageOrigin"] == "connector"
+            || c.pointer("/scheduleRun/connector_event") == Some(&Value::Bool(true))
+    }) || controls
+        .and_then(|c| c.schedule_run)
+        .is_some_and(|run| run.connector_event))
 }
 
 fn authority_ref(request: &TurnRequest) -> Option<&str> {

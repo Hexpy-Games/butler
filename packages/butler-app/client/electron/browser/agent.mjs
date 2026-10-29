@@ -15,6 +15,7 @@ import { applySignedInPolicy, revokeSignedInSite, signedInPlace } from "./signed
 import { fillSignIn } from "./signin-fill.mjs";
 import { fillPay, inspectPay } from "./pay-fill.mjs";
 import { makeAgentRoom } from "./capacity.mjs";
+import { attachView } from "./view-capture.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
@@ -103,11 +104,12 @@ export function backgroundTab(browser, tab) {
   if (!browser.agentWindow || browser.agentWindow.isDestroyed()) {
     browser.agentWindow = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true } });
   }
-  browser.agentWindow.contentView.addChildView(tab.view); tab.attached = browser.agentWindow;
   // Hidden agent pages use the full logical viewport, not the last pane's
   // scale (which can be zero while its slot unmounts). Tools and frames share it.
   if (tab.agent) tab.bounds = { x: 0, y: 0, width: 1280, height: 800, scale: 1, visible: false };
-  tab.view.setBounds({ x: 0, y: 0, width: tab.agent ? 1280 : Math.round(tab.bounds?.width ?? 1280), height: tab.agent ? 800 : Math.round(tab.bounds?.height ?? 800) }); emulation(tab);
+  attachView(tab, browser.agentWindow, -1, () => {
+    tab.view.setBounds({ x: 0, y: 0, width: tab.agent ? 1280 : Math.round(tab.bounds?.width ?? 1280), height: tab.agent ? 800 : Math.round(tab.bounds?.height ?? 800) }); emulation(tab);
+  }, () => { if (browser.tabs.get(tab.id) === tab) browser.sync(tab); });
 }
 function armExpiry(browser, tab) {
   if (!tab.agent || tab.owner === "mine" || tab.userViewed) {clearTimeout(tab.expiry);tab.expiry=null;return;}

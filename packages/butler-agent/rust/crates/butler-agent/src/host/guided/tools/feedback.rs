@@ -10,8 +10,14 @@ pub(super) fn solvable(code: &str) -> bool {
 }
 
 pub(super) const SOLVABLE: &[&str] = &[
+    "steward_plan_review_required",
+    "canon_epic_refs_multiple",
+    "canon_epic_not_bound",
+    "canon_epic_link_conflict",
     "schedule_access_exceeds_turn",
     "schedule_permission_required",
+    "schedule_signin_off",
+    "schedule_payment_off",
     "schedule_question_unavailable",
     "delegation_reviewed_plan_required",
     "delegation_allowed_effects_required",
@@ -87,7 +93,7 @@ pub(super) const SOLVABLE: &[&str] = &[
 pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionError> {
     let message = match error.code() {
         "delegation_reviewed_plan_required" => {
-            "Create or continue parent Work, record a Plan with execution_mode steward or workers, and record an accepting Plan Review bound to that current Plan revision. Then retry delegation. No delegation was started."
+            "Record your Plan with execution_mode workers and an accepting Plan Review bound to that current Plan revision, then retry. No Worker was assigned."
         }
         "steward_delegation_plan_mode_required" => {
             "Revise the current Plan to execution_mode steward and record an accepting Plan Review before retrying."
@@ -102,7 +108,7 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
             "Each todo requires a unique id. Correct the duplicate ids, then retry."
         }
         "steward_relation_not_found" | "active_steward_relation_not_found" => {
-            "Check the exact relation_id and current delegation state. For a new request after the previous Work closed, start and review a fresh Work, then delegate_to_steward with previous_relation_id in this same turn. Do not ask the user to restart. No child was steered or cancelled."
+            "Check the exact relation_id and current delegation state. For a new request after the previous Work closed, call delegate_to_steward with previous_relation_id in this same turn. Do not ask the user to restart. No child was steered or cancelled."
         }
         _ => error.message(),
     };
@@ -110,6 +116,11 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
         "code":error.code(),"message":message,"recoverable":true,
         "next_action":"Inspect the current Work, Plan execution_mode, action status and dependency results in context. Correct the named field using the tool schema (or describe_tools for a discovered tool). Resolve pending dependencies first; choose a permitted action or revise the Plan before retrying. Wait for an active child through the existing delegation flow, using wait_for_worker when it is available. Ask the user only for an input or decision that they alone can provide."
     }});
+    if error.code() == "steward_plan_review_required" {
+        value["error"]["next_action"] = json!([
+            {"tool":"replace_work_plan"}, {"tool":"record_work_review","subject":"plan","verdict":"accept"}
+        ]);
+    }
     if error.code().starts_with("effect_") {
         value["error"]["next_action"] = repair(error.code()).into();
     }
@@ -160,6 +171,12 @@ pub(super) fn repair(code: &str) -> &'static str {
     match code {
         "schedule_access_exceeds_turn" => {
             return "Omit access_mode to use this conversation's access.";
+        }
+        "schedule_signin_off" => {
+            return "Do not retry or change the schedule in this run. Finish what you can without signing in, then tell the user this step needs Use sign-in info (로그인 정보 사용), which they can turn on in the schedule's Browser (브라우저) section or ask you to turn on.";
+        }
+        "schedule_payment_off" => {
+            return "Do not retry or change the schedule in this run. Finish what you can without paying, then tell the user this step needs Use payment info (결제 정보 사용), which they can turn on in the schedule's Browser (브라우저) section or ask you to turn on.";
         }
         "schedule_permission_required" => {
             return "This scheduled run cannot ask. Skip this step, finish what you can, and report what needs permission.";

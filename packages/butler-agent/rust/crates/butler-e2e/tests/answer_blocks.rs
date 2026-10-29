@@ -158,3 +158,33 @@ fn run_stream_requests(requests: &[Value]) -> Result<Vec<Value>, Box<dyn std::er
     );
     Ok(serde_json::from_slice(&output.stdout)?)
 }
+
+#[test]
+fn answer_blocks_container_children_close_before_tab() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let raw = r#"{"v":2,"blocks":[{"type":"tabs","title":"Details","tabs":[{"label":"Status","blocks":[{"type":"text","text":"First"},{"type":"text","text":"Second"}]},{"label":"Other","blocks":[{"type":"quote","text":"Complete"}]}]}]}"#;
+    let prefix = raw
+        .find(",{\"type\":\"text\",\"text\":\"Second")
+        .ok_or("prefix missing")?;
+    let results = run_stream_requests(&[
+        serde_json::json!({"spec":serde_json::from_str::<Value>(raw)?,"raw":raw,"prefix":prefix,"images":[],"sources":[],"now":"2026-10-12T12:00:00Z","stream":true}),
+    ])?;
+    let ops = results[0]["prefixOps"]
+        .as_array()
+        .ok_or("prefix ops missing")?;
+    assert!(
+        ops.iter()
+            .any(|op| op["op"] == "tab" && op["label"] == "Status")
+    );
+    let children: Vec<_> = ops.iter().filter(|op| op["op"] == "child").collect();
+    assert_eq!(children.len(), 1);
+    assert_eq!(
+        children[0]["value"],
+        serde_json::json!({"type":"text","text":"First"})
+    );
+    assert!(
+        !ops.iter()
+            .any(|op| op["op"] == "block_end" || (op["op"] == "item" && op["list"] == "tabs"))
+    );
+    Ok(())
+}

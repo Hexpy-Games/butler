@@ -3,44 +3,13 @@
   "parent": [
     {
       "type": "function_call",
-      "name": "start_work",
-      "arguments": {
-        "objective": "AI 연구를 조사해 주세요."
-      }
-    },
-    {
-      "type": "function_call",
-      "name": "replace_work_plan",
-      "arguments": {
-        "objective": "AI 연구를 조사해 주세요.",
-        "execution_mode": "steward",
-        "actions": [
-          {
-            "action_key": "research",
-            "description": "AI 연구를 조사해 주세요.",
-            "dependency_keys": []
-          }
-        ],
-        "checks": [
-          "원문 근거 확인"
-        ]
-      }
-    },
-    {
-      "type": "function_call",
-      "name": "record_work_review",
-      "arguments": {
-        "subject": "plan",
-        "verdict": "accept",
-        "summary": "Ready"
-      }
-    },
-    {
-      "type": "function_call",
       "name": "delegate_to_steward",
       "arguments": {
         "request": "AI 연구를 조사해 주세요.",
-        "safe_title": "AI 연구"
+        "safe_title": "AI 연구",
+        "checks": [
+          "원문 근거 확인"
+        ]
       }
     }
   ],
@@ -106,45 +75,14 @@
     },
     {
       "type": "function_call",
-      "name": "start_work",
-      "arguments": {
-        "objective": "AI 연구를 조사해 주세요."
-      }
-    },
-    {
-      "type": "function_call",
-      "name": "replace_work_plan",
-      "arguments": {
-        "objective": "AI 연구를 조사해 주세요.",
-        "execution_mode": "steward",
-        "actions": [
-          {
-            "action_key": "research",
-            "description": "AI 연구를 조사해 주세요.",
-            "dependency_keys": []
-          }
-        ],
-        "checks": [
-          "원문 근거 확인"
-        ]
-      }
-    },
-    {
-      "type": "function_call",
-      "name": "record_work_review",
-      "arguments": {
-        "subject": "plan",
-        "verdict": "accept",
-        "summary": "Ready"
-      }
-    },
-    {
-      "type": "function_call",
       "name": "delegate_to_steward",
       "arguments": {
         "request": "다시 조사해줄래? 추가 원문도 확인해 주세요.",
         "safe_title": "AI 연구 재조사",
-        "previous_relation_id": "{{RELATION}}"
+        "previous_relation_id": "{{RELATION}}",
+        "checks": [
+          "원문 근거 확인"
+        ]
       }
     }
   ],

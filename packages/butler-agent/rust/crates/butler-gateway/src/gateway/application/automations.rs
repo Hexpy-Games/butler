@@ -3,11 +3,13 @@
 mod attention;
 mod contracts;
 mod dispatch;
+mod holds;
+mod occurrence;
 mod owner;
-mod records;
+pub(super) mod records;
 mod scheduler;
 mod store;
-mod timing;
+pub(super) mod timing;
 
 #[cfg(test)]
 pub(in crate::gateway::application) use records::queued_sql;

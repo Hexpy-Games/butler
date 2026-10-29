@@ -8,8 +8,8 @@ import { describeBrowser, bridgeBrowser, latestBrowser, type browserStub } from 
 
 type App = Awaited<ReturnType<typeof browserAgentApp>>;
 type Request = { request_ref: string; approval: { operation: { allow_conversation: boolean; targets: string[] } } };
-export async function browserAuthorityChecks(app: App, stub: ReturnType<typeof browserStub>, tab: string, send: (text: string) => Promise<void>, delivered: () => Promise<void>, evidence:string) {
-  const requests = () => app.gateway.api<{requests: Request[]}>("/authority-requests?session_id=general");
+export async function browserAuthorityChecks(app: App, stub: ReturnType<typeof browserStub>, tab: string, send: (text: string) => Promise<void>, delivered: () => Promise<void>, evidence:string, sessionId:string) {
+  const requests = () => app.gateway.api<{requests: Request[]}>(`/authority-requests?session_id=${sessionId}`);
   const act = async (text: string, name = "Confirm") => {
     stub.set([describeBrowser, () => bridgeBrowser("browser_observe", {tab}), request => {
       const observation = latestBrowser(request, "obs");
@@ -25,7 +25,7 @@ export async function browserAuthorityChecks(app: App, stub: ReturnType<typeof b
     await waitBrowser(async () => (await requests()).requests.length === 1, "one durable browser approval");
     return (await requests()).requests[0]!;
   };
-  const allow = (reference: string, scope: string) => app.gateway.api(`/authority-requests/${reference}/allow?session_id=general`, {method:"POST",body:JSON.stringify({scope})});
+  const allow = (reference: string, scope: string) => app.gateway.api(`/authority-requests/${reference}/allow?session_id=${sessionId}`, {method:"POST",body:JSON.stringify({scope})});
   const contents = `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.webContents`;
   await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({access_mode:"ask_except_reads"})});
   await act("Refuse a changed target after approval.");
@@ -53,7 +53,7 @@ export async function browserAuthorityChecks(app: App, stub: ReturnType<typeof b
   await app.main(`${contents}.executeJavaScript("document.getElementById('confirm').textContent='Confirm payment';document.body.insertAdjacentHTML('beforeend','<input id=payment-field aria-label=Card&#32;number autocomplete=cc-number>')")`);
   await act("Confirm the payment-like submit, even in full access.", "Confirm payment");
   const payment = await pending(); assert.equal(payment.approval.operation.allow_conversation,false);
-  const response = await fetch(`${app.gateway.url}/authority-requests/${payment.request_ref}/allow?session_id=general`,{method:"POST",headers:{...app.gateway.authHeaders,"content-type":"application/json"},body:JSON.stringify({scope:"conversation"})});
+  const response = await fetch(`${app.gateway.url}/authority-requests/${payment.request_ref}/allow?session_id=${sessionId}`,{method:"POST",headers:{...app.gateway.authHeaders,"content-type":"application/json"},body:JSON.stringify({scope:"conversation"})});
   assert.equal(response.status,400); assert.match(await response.text(),/browser_confirm_once_required/u);
   await allow(payment.request_ref,"once"); await delivered();
   await app.main(`${contents}.executeJavaScript("document.getElementById('payment-field').remove();document.getElementById('confirm').textContent='Confirm dialog';window.dialogClicks=0;document.getElementById('confirm').onclick=()=>{window.dialogClicks++;if(confirm('Continue?'))document.getElementById('result').textContent='Confirmed'};void 0")`);

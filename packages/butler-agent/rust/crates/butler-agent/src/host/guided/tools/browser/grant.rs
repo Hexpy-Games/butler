@@ -27,7 +27,18 @@ pub(super) async fn call(
 ) -> Result<Value, ToolExecutionError> {
     let (op, tab, args) = request;
     let result = client.call(op, tab, args, signal).await;
-    let Some(grant) = needed(&result) else {
+    if let Some(refusal) = super::super::turn_guard::schedule_browser_feedback(
+        owner,
+        tool,
+        &json!({"grant":{"site":result["site"]},"tab":tab,"mode":"signed_in","always_confirm":true,"allow_site":"signed_in"}),
+        &butler_runtime::browser::signed_in_scope(result["site"].as_str().unwrap_or("")),
+        result["reason"].as_str().unwrap_or(""),
+    )
+    .await
+    {
+        return Ok(refusal);
+    }
+    let Some(mut grant) = needed(&result) else {
         return Ok(result);
     };
     if client.approval_handoff {
@@ -35,13 +46,14 @@ pub(super) async fn call(
     }
     let site = grant["site"].as_str().unwrap_or("").to_owned();
     let target = butler_runtime::browser::signed_in_scope(&site);
-    let input = json!({"grant": grant, "tab": tab, "mode": "signed_in", "always_confirm": true});
+    let input = json!({"grant": grant, "tab": tab, "mode": "signed_in", "always_confirm": true, "allow_site": "signed_in"});
     match authority::gate(owner, tool, occurrence, &input, &target).await? {
         authority::Gate::Pending(mut pending) => {
             pending["site"] = json!(site);
             Ok(pending)
         }
-        authority::Gate::Allowed(reference) => {
+        authority::Gate::Allowed(reference, scope) => {
+            grant["always"] = json!(scope.as_deref() == Some("site"));
             let recorded = client.call("signin.grant", tab, &grant, signal).await;
             let status = if recorded["status"] == "ok" {
                 "ok"

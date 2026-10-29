@@ -1,12 +1,15 @@
 .root {
-  /* Cell size and gap; the month axis, weekday labels and tooltip anchor share them. */
-  --heatmap-cell: 24px;
+  /* Cell size and gap; the month axis, weekday labels and tooltip anchor share them.
+     The cell is the base size, or under a larger App text size the smaller fit
+     the block measures (useFitCell) so the zoom does not push weeks out. */
+  --heatmap-cell-base: 24px;
+  --heatmap-cell: var(--heatmap-cell-fit, var(--heatmap-cell-base));
   --heatmap-gap: 0px;
   --heatmap-pitch: calc(var(--heatmap-cell) + var(--heatmap-gap));
   min-width: 0;
 }
 .root[data-cell="compact"] {
-  --heatmap-cell: 10px;
+  --heatmap-cell-base: 10px;
   --heatmap-gap: 3px;
 }
 /* Weekday labels stay pinned beside the scroller. */
@@ -16,7 +19,9 @@
   min-width: 0;
 }
 .viewport {
-  flex: 1 1 auto;
+  /* Takes the row's free width whatever the calendar's size, so the fit
+     measure can grow the cells back. */
+  flex: 1 1 0;
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
@@ -120,12 +125,12 @@
     box-shadow var(--motion-fast) var(--motion-ease-standard);
 }
 .root[data-cell="compact"] .day.day {
-  border-radius: 3px;
+  border-radius: calc(3px / var(--ui-scale));
 }
 .root[data-cell="compact"] .day::before {
   width: 100%;
   height: 100%;
-  border-radius: 3px;
+  border-radius: calc(3px / var(--ui-scale));
 }
 /* Light steps darken with intensity; dark steps brighten. */
 .day[data-level="1"]::before {

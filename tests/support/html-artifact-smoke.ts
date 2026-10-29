@@ -34,11 +34,18 @@ export async function htmlArtifactSmoke(server: NativeAppServerHandle, browser: 
     await page.locator('[data-test-class="app-sidebar"]').getByText(sessionTitle, { exact: true }).click();
     await page.locator('[data-test-class="message-artifact-list"]').getByText("standalone.HTML", { exact: true }).click();
     await verify(page, "file-card");
-    await page.getByRole("button", { name: appCopy.artifacts.backToList, exact: true }).click();
+    // The file viewer holds the right slot; close it and open the same file from 세션 정보's results.
+    await page.locator('[data-test-class="file-viewer-close"]').click();
+    await page.locator('[data-test-class="file-viewer"]').waitFor({ state: "detached" });
+    if (await page.locator('[data-test-class="session-info-toggle"]').getAttribute("aria-pressed") !== "true") await page.locator('[data-test-class="session-info-toggle"]').click();
     await page.locator('[data-slot="document-tile"]').getByText("standalone.HTML", { exact: true }).click();
     await verify(page, "preview-panel");
+    // Close it again, so only the 서랍 entry can bring the file back into the viewer.
+    await page.locator('[data-test-class="file-viewer-close"]').click();
+    await page.locator('[data-test-class="file-viewer"]').waitFor({ state: "detached" });
     await page.getByRole("button", { name: appCopy.library.title, exact: true }).click();
     await page.locator('[data-library-kind="document"]').getByText("standalone.HTML", { exact: true }).click();
+    await page.locator('[data-test-class="file-viewer"]').waitFor();
     await verify(page, "library");
     if (!baseline) {
       const frame = page.frames().find(frame => frame.url().includes("/__o/"))!;

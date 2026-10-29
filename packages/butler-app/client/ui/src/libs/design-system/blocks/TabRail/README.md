@@ -10,7 +10,7 @@ outside the cards. It picks its layout from that parent's width:
 | --- | --- | --- |
 | 960px or more | `full` | 208px cards (32px title row, 16:10 frame), 16px from the top and end edge, 12px apart |
 | 720–959px | `compact` | 128×80 thumbnails. The title is a tooltip. Needs-you adds an xs **열어서 확인** button |
-| under 720px | `shelf` | A 46px TintedGlass strip across the top with 48×30 chips. It scrolls sideways on overflow without a scrollbar (the TabStrip rule), never the page |
+| under 720px | `shelf` | A 46px TintedGlass strip across the top with 48×30 chips (52px where controls grow to the 44px touch target, so the +N pill's focus ring stays inside the glass). It scrolls sideways on overflow without a scrollbar (the TabStrip rule), never the page |
 
 - Up to 3 cards, or 2 when the parent is shorter than 600px.
 - The rest collapse into "+N": stacked favicons plus a count, named by `labels.more(count)`.

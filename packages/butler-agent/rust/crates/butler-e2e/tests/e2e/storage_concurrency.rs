@@ -230,7 +230,12 @@ fn storage_metrics(
 }
 
 async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, HarnessError> {
-    let mut setup = Setup::new(if baseline {
+    let allocate = if baseline && std::env::var_os("BUTLER_E2E_STORAGE_MAIN_BIN").is_some() {
+        Setup::mutates_installation
+    } else {
+        Setup::new
+    };
+    let mut setup = allocate(if baseline {
         "STORAGE-BEFORE"
     } else {
         "STORAGE-AFTER"

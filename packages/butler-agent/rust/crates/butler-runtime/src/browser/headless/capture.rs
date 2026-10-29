@@ -343,7 +343,7 @@ pub(crate) async fn screenshot(page: &Page, args: &Value) -> Result<Value, Strin
         .with_tab(&page.tab, |t| t.url.clone())
         .unwrap_or_default();
     let mut out = json!({"status":if captured.contains_key("image") {"ok"} else {"refused"},"tab":page.tab,"url":url,
-        "source_observation":observation.obs,"untrusted_content":{"fields":observation.fields}});
+        "source_observation":observation.obs,"pixel_ratio":1,"untrusted_content":{"fields":observation.fields}});
     if let Some(map) = out.as_object_mut() {
         map.extend(captured);
     }

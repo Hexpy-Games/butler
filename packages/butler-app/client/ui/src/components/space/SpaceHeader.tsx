@@ -15,6 +15,7 @@ import {
   Typo,
 } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
+import { routeActiveChatId } from "@/app/space/routeActive";
 import { useOrganization } from "@/app/space/organization";
 import type { SpaceRowData } from "@/app/space/projection";
 import { BrowserEntry } from "../browser/BrowserEntry";
@@ -25,7 +26,8 @@ import { SpaceRow } from "./SpaceRow";
 export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
   useAppLocale();
   const setDialog = useOrganization((s) => s.setDialog);
-  const active = useButlerStore((s) => s.activeChatId);
+  const active = useButlerStore(routeActiveChatId);
+  const schedulesActive = useButlerStore((s) => s.view.kind === "automations" || s.view.kind === "automation-detail");
   const favorites = [...rows.values()].filter((r) => r.pinned);
   return (
     <Stack gap="2xl">
@@ -44,6 +46,7 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
         <NavRow
           icon={<IconSlot size="sidebar" minHeight="line"><Clock3 /></IconSlot>}
           label={appCopy.space.automations}
+          active={schedulesActive}
           onClick={() => useButlerStore.getState().setView({ kind: "automations" })}
         />
         <BrowserEntry />

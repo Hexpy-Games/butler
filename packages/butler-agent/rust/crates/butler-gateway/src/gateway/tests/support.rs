@@ -111,6 +111,7 @@ impl GatewayMutationCommands for TestApplication {
     }
 }
 
+impl project_folder::GatewayProjectFolders for TestApplication {}
 impl crate::gateway::GatewayPendingAsks for TestApplication {}
 
 impl GatewayApplication for TestApplication {
@@ -374,6 +375,12 @@ impl GatewayApplication for TestApplication {
         &self,
         _queued_message_id: String,
         _request: SessionQueueUpdateRequest,
+    ) -> ApplicationFuture<SessionQueueView> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn send_session_queue_now(
+        &self,
+        _queued_message_id: String,
     ) -> ApplicationFuture<SessionQueueView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

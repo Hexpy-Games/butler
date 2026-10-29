@@ -114,7 +114,7 @@ async function openAttachment(name: string, file: string) {
   if (name) { await assertUnsupported("attachment"); await capture(`attachment-${name}`); }
 }
 
-/** The viewer shows the unsupported state with save and an enabled "open in app", and none of the zip's bytes. */
+/** The viewer shows the unsupported state with an enabled "open in app" (its header saves), and none of the zip's bytes. */
 async function assertUnsupported(label: string) {
   const read = () => app.page.expression<string>(`document.querySelector('${viewer}').textContent`);
   await waitBrowser(async () => ![copy.artifacts.loading, ""].includes(await read()), `${label} loaded`);
@@ -123,7 +123,9 @@ async function assertUnsupported(label: string) {
   assert.ok(text.includes(copy.artifacts.unsupported), `${label}: unsupported state; got ${text.slice(0, 80)}`);
   assert.ok(!text.includes("[Content_Types].xml"), `${label}: no zip bytes`);
   const buttons = await app.page.expression<Array<{ text: string; disabled: boolean }>>(`[...document.querySelectorAll('${viewer} button')].map((b) => ({ text: b.textContent.trim(), disabled: b.disabled }))`);
-  assert.deepEqual(buttons, [{ text: copy.artifacts.save, disabled: false }, { text: copy.artifacts.openInApp, disabled: false }], label);
+  // Saving is the file viewer header's 저장하기; the page itself offers only "open in app".
+  assert.deepEqual(buttons, [{ text: copy.artifacts.openInApp, disabled: false }], label);
+  assert.ok(await app.page.expression<boolean>(`Boolean(document.querySelector('[data-test-class="file-viewer-save"]'))`), `${label}: the header saves`);
 }
 
 async function assertOpensMarkedCopy() {

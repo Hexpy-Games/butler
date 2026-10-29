@@ -35,12 +35,26 @@
   width: auto;
 }
 
+/* The shelf clips (glass), so it stays tall enough for a touch-size control
+   (--control-hit-target, 44px on touch) plus its focus ring room and the
+   glass hairlines: 46px, 52px on touch. */
 .shelf {
   display: flex;
-  height: var(--tab-rail-shelf-height);
+  height: max(
+    var(--tab-rail-shelf-height),
+    calc(
+      var(--control-hit-target) + var(--focus-ring-room) * 2 +
+        var(--border-hairline) * 2
+    )
+  );
   min-width: 0;
   align-items: center;
   gap: var(--space-xs);
+}
+
+/* Its --space-xs ends keep the end pill's focus ring inside the glass; the
+   rail selector outweighs the glass's own padding="none" rule. */
+.rail[data-mode="shelf"] > .shelf {
   padding-inline: var(--space-xs);
 }
 

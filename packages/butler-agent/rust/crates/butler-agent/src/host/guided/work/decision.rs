@@ -24,7 +24,10 @@ pub(super) fn fresh(work: Option<&WorkView>, turn_id: &str) -> Result<bool, Btcc
             | (DispositionStatus::Open, DurableWorkStatus::Open)
             | (DispositionStatus::Blocked, DurableWorkStatus::Blocked)
     );
-    Ok(disposition.origin_turn_id == turn_id
+    Ok((disposition.origin_turn_id == turn_id
+        || disposition
+            .disposition_revision_id
+            .starts_with("steward-result-disposition:"))
         && aligned
         && !disposition.material_fingerprint.is_empty()
         && disposition.material_fingerprint == disposition_material_fingerprint(work)?)

@@ -118,6 +118,44 @@ pub(super) async fn route(
                 .ok_or_else(code_unavailable)?
                 .pairing_status())
         }
+        (Method::GET, "/security/oauth") => {
+            ok(state.application.setup()?.oauth_credentials().await?)
+        }
+        (Method::DELETE, path) if path.starts_with("/security/oauth/") => ok(state
+            .application
+            .setup()?
+            .remove_oauth_credential(path.trim_start_matches("/security/oauth/").into())
+            .await?),
+        (_, path) if path == "/security/devices" || path.starts_with("/security/devices/") => {
+            devices(&state, request.method(), path).await
+        }
+        #[cfg(feature = "e2e-fixtures")]
+        (Method::POST, "/security/pairing/clock") => {
+            let seconds = super::query(request.uri())
+                .get("seconds")
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0)
+                .min(3600);
+            let keyed = state.security.sessions().ok_or_else(code_unavailable)?;
+            keyed
+                .sessions
+                .as_ref()
+                .ok_or_else(code_unavailable)?
+                .advance(seconds);
+            state.devices.advance(seconds);
+            ok(serde_json::json!({"advanced": seconds}))
+        }
+        (Method::POST, "/security/connection-code/rotate") => rotate(&state, client).await,
+        _ => Err(HttpError::public(404, "not_found", "Route not found.")),
+    }
+}
+
+async fn devices(
+    state: &Arc<HttpState>,
+    method: &Method,
+    path: &str,
+) -> Result<Response, HttpError> {
+    match (method.clone(), path) {
         (Method::GET, "/security/devices") => ok(state.devices.list()),
         (Method::GET, path) if path.starts_with("/security/devices/") => {
             let device = state
@@ -142,23 +180,6 @@ pub(super) async fn route(
             state.devices.revoke(Some(id.into())).await?;
             ok(serde_json::json!({"revoked": true}))
         }
-        #[cfg(feature = "e2e-fixtures")]
-        (Method::POST, "/security/pairing/clock") => {
-            let seconds = super::query(request.uri())
-                .get("seconds")
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(0)
-                .min(3600);
-            let keyed = state.security.sessions().ok_or_else(code_unavailable)?;
-            keyed
-                .sessions
-                .as_ref()
-                .ok_or_else(code_unavailable)?
-                .advance(seconds);
-            state.devices.advance(seconds);
-            ok(serde_json::json!({"advanced": seconds}))
-        }
-        (Method::POST, "/security/connection-code/rotate") => rotate(&state, client).await,
         _ => Err(HttpError::public(404, "not_found", "Route not found.")),
     }
 }

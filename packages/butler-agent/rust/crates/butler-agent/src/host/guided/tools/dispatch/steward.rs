@@ -1,4 +1,4 @@
-//! Reviewed Steward delegation and its WorkStream link.
+//! One-call Steward handoff and its WorkStream link.
 use super::{GuidedTools, ToolName, access_mode, encoded};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
@@ -7,41 +7,24 @@ pub(super) async fn execute(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
+    call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     if call.name == ToolName::ReadPriorDelegation {
         return read_prior_delegation(owner).await;
     }
-    let request = call
-        .arguments
-        .get("request")
-        .and_then(Value::as_str)
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            ToolExecutionError::Integrity(BtccError::relayed(
-                "steward_delegation_input_invalid",
-                "request is required",
-            ))
-        })?;
-    let reviewed = owner
-        .work
-        .bound_work()
-        .await
-        .map_err(ToolExecutionError::Integrity)?
-        .ok_or_else(|| {
-            ToolExecutionError::Integrity(BtccError::relayed(
-                "delegation_reviewed_plan_required",
-                "Reviewed parent Work is required",
-            ))
-        })?;
+    let HandoffInput {
+        request,
+        checks,
+        epic_ref,
+    } = input(call)?;
     let result = owner
         .subsessions
-        .delegate_steward(
+        .handoff_steward(
             butler_turn::btcc::StewardDelegationRequest {
                 parent_session_id: owner.binding.source_session_id.clone(),
                 parent_turn_id: owner.binding.turn_id.clone(),
                 anchor_message_id: invocation.turn.original_message_id.clone(),
-                request: request.to_owned(),
+                request,
                 previous_relation_id: call
                     .arguments
                     .get("previous_relation_id")
@@ -54,15 +37,75 @@ pub(super) async fn execute(
                     .map(str::to_owned),
                 model_ref: owner.binding.model_ref.clone(),
                 reasoning_effort: owner.binding.reasoning_effort.clone(),
-                access_mode: access_mode(owner),
-                schedule_run: owner.unattended_run(),
+                access_mode: owner.binding.access_mode.clone(),
+                schedule_run: owner.inherited_run(),
             },
-            &reviewed,
+            owner.work.scope(),
+            call_id.to_owned(),
+            checks,
+            epic_ref,
         )
         .await
         .map_err(ToolExecutionError::Integrity)?;
     link_orchestration(owner, &result).await?;
     encoded(&result)
+}
+
+struct HandoffInput {
+    request: String,
+    checks: Option<Vec<String>>,
+    epic_ref: Option<String>,
+}
+
+fn input(call: &ModelRoundToolCall) -> Result<HandoffInput, ToolExecutionError> {
+    let request = call
+        .arguments
+        .get("request")
+        .and_then(Value::as_str)
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ToolExecutionError::Integrity(BtccError::relayed(
+                "steward_delegation_input_invalid",
+                "request is required",
+            ))
+        })?;
+    let checks: Option<Vec<String>> = call
+        .arguments
+        .get("checks")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|_| {
+            ToolExecutionError::Integrity(BtccError::relayed(
+                "steward_delegation_input_invalid",
+                "checks must be an array of strings",
+            ))
+        })?;
+    let epic_ref = call
+        .arguments
+        .get("epic_ref")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    if checks.as_ref().is_some_and(|checks| checks.len() > 8)
+        || call
+            .arguments
+            .get("epic_ref")
+            .is_some_and(|value| !value.is_string())
+        || epic_ref
+            .as_ref()
+            .is_some_and(|epic| !epic.starts_with("canon:epic/"))
+    {
+        return Err(ToolExecutionError::Integrity(BtccError::relayed(
+            "steward_delegation_input_invalid",
+            "checks accepts at most eight strings; epic_ref must name a canon epic",
+        )));
+    }
+    Ok(HandoffInput {
+        request: request.to_owned(),
+        checks,
+        epic_ref,
+    })
 }
 
 async fn link_orchestration(owner: &GuidedTools, result: &Value) -> Result<(), ToolExecutionError> {
@@ -127,6 +170,7 @@ pub(super) async fn steer(
                 butler_turn::workspace::SessionRole::Steward
             },
             access_mode: access_mode(owner),
+            schedule_run: owner.inherited_run(),
         })
         .await
         .map_err(ToolExecutionError::Integrity)?;

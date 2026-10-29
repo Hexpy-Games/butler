@@ -262,6 +262,6 @@ pub(in crate::gateway::application) fn editable_document(
 ) -> Result<Value, AppStorageError> {
     let id = item["id"].as_str().unwrap_or_default();
     db.execute("INSERT INTO browser_library(id,kind,title,url,payload,created_at) VALUES(?1,'doc',?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET title=excluded.title,payload=excluded.payload,created_at=excluded.created_at",
-        params![id,item["title"].as_str(),item["url"].as_str(),item.to_string(),item["capturedAt"].as_str()]).map_err(sql)?;
+        params![id,item["title"].as_str(),item["url"].as_str(),item.to_string(),item["updatedAt"].as_str()]).map_err(sql)?;
     item::refresh(db, id)
 }

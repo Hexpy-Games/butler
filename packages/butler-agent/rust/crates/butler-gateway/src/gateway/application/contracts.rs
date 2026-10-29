@@ -236,6 +236,7 @@ pub struct VisualAdmissionRequest {
 }
 pub struct AppApplicationDependencies {
     /// User lifecycle hooks, absent for applications without the host dispatcher.
+    pub plugins: Option<Arc<dyn butler_core::plugins::PluginPort>>,
     pub hooks: Option<Arc<dyn butler_core::hooks::HookPort>>,
     pub data_reset: Option<Arc<dyn crate::gateway::AppDataResetPort>>,
     /// Process stop fences queue admission before active turns are interrupted.
@@ -387,6 +388,7 @@ pub struct ProjectSnapshot {
 
 #[derive(Clone, Debug)]
 pub struct ClaimedNativeSnapshot {
+    pub message_origin: Option<String>,
     pub chat_id: String,
     pub turn_id: String,
     pub message_id: String,

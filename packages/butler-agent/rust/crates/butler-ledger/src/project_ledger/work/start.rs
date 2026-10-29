@@ -17,6 +17,14 @@ impl ProjectWorkRepository {
         &self,
         command: StartWorkCommand,
     ) -> Result<WorkView, BtccError> {
+        self.start_with_policy(command, false).await
+    }
+
+    pub(super) async fn start_with_policy(
+        &self,
+        command: StartWorkCommand,
+        handoff: bool,
+    ) -> Result<WorkView, BtccError> {
         self.assert_scope(&command.input.scope)?;
         let identity =
             codec::mutation_identity(&command.input.mutation_call_id, &command.request_sha256);
@@ -27,7 +35,7 @@ impl ProjectWorkRepository {
         self.publish(
             identity,
             move || async move {
-                repo.start_updates(&command, &requested_id, &prepare_identity)
+                repo.start_updates(&command, &requested_id, &prepare_identity, handoff)
                     .await
                     .map(Some)
             },
@@ -44,10 +52,11 @@ impl ProjectWorkRepository {
         command: &StartWorkCommand,
         work_id: &str,
         identity: &ProjectWorkOperationIdentity,
+        handoff: bool,
     ) -> Result<Vec<ProjectLedgerRecordUpdate>, BtccError> {
         let scope = &command.input.scope;
         let relation = self.relation(scope).await?;
-        if relation.binding.is_some() {
+        if relation.binding.is_some() && !handoff {
             return Err(invalid("project_work_turn_already_bound"));
         }
         if self.read_current(work_id).await?.is_some() {
@@ -70,18 +79,31 @@ impl ProjectWorkRepository {
             &original.message_id,
             &at,
         );
-        let (binding_id, binding) =
-            binding_child(&scope.turn_id, &scope.session_id, work_id, 1, identity, &at);
+        let binding_revision =
+            super::handoff::next_binding_revision(relation.binding.as_ref(), &scope.turn_id);
+        let (binding_id, binding) = binding_child(
+            &scope.turn_id,
+            &scope.session_id,
+            work_id,
+            binding_revision,
+            identity,
+            &at,
+        );
         let mut updates = Vec::<ProjectLedgerRecordUpdate>::new();
         if let Some(prior) = relation.head {
-            updates.push(self.abandon_prior_head(&prior, identity, &at).await?);
+            updates.push(if handoff {
+                self.retire_handoff_head(&prior, &scope.turn_id, identity, &at)
+                    .await?
+            } else {
+                self.abandon_prior_head(&prior, identity, &at).await?
+            });
         }
         updates.push(
             self.manifest_update(super::write::ManifestPublicationInput {
                 prior: None,
                 view: &view,
                 identity,
-                binding_refs: json!([{"bindingRevisionId":binding_id,"turnId":scope.turn_id,"revision":1}]),
+                binding_refs: json!([{"bindingRevisionId":binding_id,"turnId":scope.turn_id,"revision":binding_revision}]),
                 session_head: true,
                 revisions: &codec::Revisions::default(),
                 operation: ProjectLedgerRecordOperation::Create,

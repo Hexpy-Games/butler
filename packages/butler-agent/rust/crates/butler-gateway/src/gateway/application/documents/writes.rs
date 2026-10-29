@@ -73,6 +73,7 @@ pub(super) fn create(
         params![id, hash, input["author"].as_str(), now],
     )
     .map_err(AppStorageError::sqlite)?;
+    delivery(db, &id, input)?;
     finish(db, &id, "", subscribers)
 }
 pub(super) fn save(
@@ -117,6 +118,7 @@ pub(super) fn save(
     .map_err(AppStorageError::sqlite)?;
     db.execute("INSERT INTO document_revisions VALUES(?1,?2,?3,?4,?5,?5) ON CONFLICT(document_id,rev) DO UPDATE SET sha256=excluded.sha256,updated_at=excluded.updated_at", params![id,rev,hash,input["author"].as_str(),now]).map_err(AppStorageError::sqlite)?;
     prune(db, &old_hash)?;
+    delivery(db, id, input)?;
     finish(db, id, body(&old), subscribers)
 }
 fn coalesces(
@@ -159,7 +161,7 @@ fn finish(
     let plain = markdown::parse(body(&result)).text;
     super::super::library::editable_document(
         db,
-        &json!({"id":id,"kind":"doc","title":result["title"],"url":format!("/documents/{id}"),"session":result["chat_id"],"message":result["message_id"],"rev":result["rev"],"updatedAt":result["updated_at"],"capturedAt":result["created_at"],"excerpt":plain.chars().take(200).collect::<String>()}),
+        &json!({"id":id,"kind":"doc","title":result["title"],"url":format!("/documents/{id}"),"session":result["chat_id"],"message":result["message_id"],"rev":result["rev"],"author":result["author"],"updatedAt":result["updated_at"],"capturedAt":result["created_at"],"excerpt":plain.chars().take(200).collect::<String>()}),
     )?;
     let payload = json!({"id":id,"rev":result["rev"],"author":result["author"],"changed":markdown::changed(previous,body(&result))});
     events::append(

@@ -2,6 +2,7 @@
 use super::{identity::runtime_hint, read};
 use crate::gateway::application::{
     AppApplication, AppIdentityClock, AppStorageError, app_error, events,
+    retry::INTERRUPTED_TURN_CODE,
 };
 use crate::gateway::{AppEventEnvelope, GatewayApplicationError};
 use rusqlite::{Connection, params};
@@ -26,9 +27,10 @@ impl AppApplication {
         // Drain already committed output before transferring its checkpoint and ownership.
         self.projection.refresh("general".to_owned()).await?;
         let clock = self.dependencies.identity_clock.clone();
+        let unfinished_turn_ids = snapshot.unfinished_turn_ids;
         let (result, event) = self
             .storage
-            .exclusive(move |db| Ok(clear(db, &title, clock.as_ref())))
+            .exclusive(move |db| Ok(clear(db, &title, clock.as_ref(), &unfinished_turn_ids)))
             .await
             .map_err(app_error)??;
         self.recover_output_transfers().await?;
@@ -41,6 +43,7 @@ fn clear(
     db: &mut Connection,
     title: &str,
     clock: &dyn AppIdentityClock,
+    unfinished_turn_ids: &[String],
 ) -> Result<(Value, AppEventEnvelope), GatewayApplicationError> {
     let total = std::time::Instant::now();
     let tx = db
@@ -52,7 +55,7 @@ fn clear(
         "SELECT EXISTS(SELECT 1 FROM turns WHERE chat_id='general' AND (state NOT IN ('delivered','cancelled','failed','runtime_fault'))) OR EXISTS(SELECT 1 FROM session_queued_messages WHERE chat_id='general' AND state IN ('queued','dispatching')) OR EXISTS(SELECT 1 FROM app_session_context_gate WHERE session_id='general')",
         [], |row| row.get(0)).map_err(sql_error)?;
     profile_read("SELECT busy", phase);
-    if busy_now {
+    if busy_now || has_blocking_execution(&tx, unfinished_turn_ids)? {
         return Err(busy());
     }
     let archived_id = format!("general-archive-{}", clock.new_uuid());
@@ -73,6 +76,28 @@ fn clear(
     .map_err(sql_error)?;
     timed_execute(&tx, "INSERT INTO app_work_monitor(chat_id,runtime_session_id,summary,artifacts_json) VALUES('general',?1,NULL,'[]')", [&fresh_hint]).map_err(sql_error)?;
     finish_clear(tx, &archived_id, &now, total)
+}
+
+/// Only an App interruption report proves that a retained BTCC checkpoint is idle.
+/// Finalizing, suspended, unrelated and unowned turns must still block clearing.
+fn has_blocking_execution(
+    db: &Connection,
+    unfinished_turn_ids: &[String],
+) -> Result<bool, GatewayApplicationError> {
+    for turn in unfinished_turn_ids {
+        let interrupted: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM turns WHERE id=?1 AND chat_id='general' \
+             AND state='failed' AND safe_error_code=?2 AND retryable=1)",
+                params![turn, INTERRUPTED_TURN_CODE],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        if !interrupted {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn finish_clear(

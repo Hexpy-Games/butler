@@ -26,6 +26,8 @@ const labels = {
     error: "Could not submit the decision. Try again.",
     rename: "Edit 24 files in 'Desktop'?", more: "+21 more", showMore: "Show more", showLess: "Show less", medium: "Medium risk",
     command: "Run a command in 'garden'?", high: "High risk",
+    memory: "Save or change an instruction?", reread: "Butler just read outside content, so it asks again.",
+    memoryInput: JSON.stringify({ kind: "instruction", text: "From now on, check the amount and deadline first on quote mails from vendors, and tell me right away when an amount rises more than 10% over the previous quote. Always draft replies politely, and list attachment names and sizes as well. Reflect this in the morning report too.", duration: "always", source: "Connected mail" }),
   },
   "ko-KR": {
     plan: "디자인 시스템 최종 정리 계획: 제품 CSS 모듈 제거와 픽셀 동등성 검증까지 한 번에 진행",
@@ -35,6 +37,8 @@ const labels = {
     error: "결정을 전달하지 못했습니다.",
     rename: "'Desktop'의 파일 24개를 수정할까요?", more: "외 21개", showMore: "더보기", showLess: "접기", medium: "위험 보통",
     command: "'garden'에서 명령을 실행할까요?", high: "위험 높음",
+    memory: "지침 저장 · 변경 허용할까요?", reread: "방금 외부에서 가져온 내용을 읽어서 다시 확인합니다.",
+    memoryInput: JSON.stringify({ kind: "instruction", text: "다음부터 거래처에서 오는 견적 메일은 금액과 마감일을 먼저 확인하고, 금액이 지난 견적보다 10% 넘게 오르면 바로 알려 주세요. 회신 초안은 항상 정중한 존댓말로 쓰고, 첨부 파일 이름과 크기도 함께 정리해 주세요. 이 지침은 매일 오전 보고에도 반영해 주세요.", duration: "always", source: "연결된 메일" }),
   },
 } as const;
 
@@ -91,12 +95,26 @@ function ApprovalRequest({ context, command, placement }: { context: ShowcaseRen
   );
 }
 
+/** A complete reviewed input as a later detail line: the clamp keeps the first lines, Show more reveals the whole input. */
+function LongReviewedInput({ context }: { context: ShowcaseRenderContext }) {
+  const copy = labels[context.locale];
+  return (
+    <ComposerDecisionPanel icon={<ShieldCheck aria-hidden="true" size="lg" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"} title={copy.memory} onOpen={() => undefined}
+      details={[copy.reread, "update_explicit_memory", copy.memoryInput]}
+      detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
+      aside={<><Tag tone="warning">{copy.medium}</Tag></>}
+      actions={<AuthorityActions copy={copy} />} />
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   // ComposerPlanDecisionSurface: a plan waiting for acceptance.
   { name: "Plan decision", widths: ["375", "app"], render: (context) => <ComposerCard><Plan context={context} /></ComposerCard> },
   // ComposerAuthorityDecisionSurface: a question, examples with "+N more", a risk Tag, Deny and Allow once.
   { name: "Approval request", widths: ["375", "app"], render: (context) => <ComposerCard><ApprovalRequest context={context} /></ComposerCard> },
   { name: "High-risk command", widths: ["375", "app"], render: (context) => <ComposerCard><ApprovalRequest context={context} command /></ComposerCard> },
+  // A short line, the tool, then a long reviewed input: clamped with Show more even though the first lines are short.
+  { name: "Long reviewed input", widths: ["375", "app"], render: (context) => <ComposerCard><LongReviewedInput context={context} /></ComposerCard> },
   // An agent without structured approvals: the legacy title, a pending count.
   { name: "Authority decision", widths: ["375", "app"], render: (context) => <ComposerCard><Authority context={context} /></ComposerCard> },
   { name: "Failed decision", render: (context) => <ComposerCard><Authority context={context} error /></ComposerCard> },

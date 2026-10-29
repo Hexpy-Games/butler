@@ -366,6 +366,7 @@ pub(super) fn origin_text(value: ConversationOriginKind) -> &'static str {
         ConversationOriginKind::UserInput => "user_input",
         ConversationOriginKind::AssistantPublic => "assistant_public",
         ConversationOriginKind::InternalControl => "internal_control",
+        ConversationOriginKind::Connector => "connector",
         ConversationOriginKind::Unknown => "unknown",
     }
 }
@@ -437,6 +438,7 @@ fn origin(value: &str) -> ConversationResult<ConversationOriginKind> {
         "user_input" => Ok(ConversationOriginKind::UserInput),
         "assistant_public" => Ok(ConversationOriginKind::AssistantPublic),
         "internal_control" => Ok(ConversationOriginKind::InternalControl),
+        "connector" => Ok(ConversationOriginKind::Connector),
         "unknown" => Ok(ConversationOriginKind::Unknown),
         _ => Err(invalid("origin", value)),
     }

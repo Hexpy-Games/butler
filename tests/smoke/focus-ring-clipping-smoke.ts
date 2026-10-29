@@ -4,7 +4,8 @@
 // chat, browser, command palette, menus, Settings, plus the drag-enabled
 // KanbanBoard, editable Tag and FilteredSelectPopover row-actions stories of
 // the DS viewer) over an offline gateway
-// stub; no model calls, no native agent. Run `npm --prefix
+// stub, plus real session/dashboard inline-edit panes through an isolated
+// native App; no model calls. Run `npm --prefix
 // packages/butler-app/client/ui run build` first (`bun run app:focus-ring:smoke`).
 //
 // Every screen is walked with the keyboard (Tab, and arrow keys inside menus
@@ -19,6 +20,7 @@
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
 import { historyFixture } from "../support/usage-insights-fixtures";
 import { canonFocusResponse } from "../support/canon-sidebar-fixture.ts";
+import { auditInlinePanes } from "../support/session-pane-focus.ts";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, sep } from "node:path";
@@ -30,17 +32,27 @@ import { delegatedUsageView } from "../../packages/butler-app/client/ui/src/comp
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { auditTabOrder, formatClips, probeFocusRing, probeFocusRingFrames, type FocusRingClip } from "../support/focus-ring-clipping";
 
+import { textSizeFactor } from "../../packages/butler-app/client/ui/src/app/textSize";
+import type { SettingsView } from "../../packages/butler-app/client/ui/src/app/types";
+
+const textSize = process.env.BUTLER_SMOKE_TEXT_SIZE ?? "default";
+assert(["default", "large", "larger"].includes(textSize), "invalid smoke text size");
+const uiScale = textSizeFactor(textSize as SettingsView["text_size"]);
+/** The CSS viewport the App shows in a window of `cell` DIPs under its page zoom, never below the App's minimum window. */
+const cssViewport = (cell: { width: number; height: number }) =>
+  ({ width: Math.max(Math.round(cell.width / uiScale), 344), height: Math.max(Math.round(cell.height / uiScale), 480) });
 const root = process.cwd();
 const copy = getAppCopy("ko-KR");
 const shots = process.env.BUTLER_FOCUS_RING_SHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 const mock = JSON.parse(readFileSync(join(root, "tests/smoke/answer-blocks-mock.json"), "utf8")) as AnswerBlocks;
 const answer: MessageRecord = { id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered",
+  artifacts: [{ id: "doc-focus", title: "Focus document", kind: "doc", session_id: "butler-client", message_id: "answer", created_at: "2026-10-25T00:00:00Z" }],
   text: "조건에 맞는 후보를 비교했습니다.", created_at: "2026-10-12T08:51:00Z", answer_blocks: [{ call_id: "blocks", set_ids: [], spec: mock }] };
 const myTabs = ["https://news.ycombinator.com/", "https://developer.mozilla.org/"].map((url, index) => ({
   id: `m${index + 1}`, owner: "mine", url, title: `My tab ${index + 1}`, favicon: "", status: "idle", canBack: false, canForward: false,
 }));
-const agentTabs = ["https://www.musinsa.com/products/4471209", "https://map.naver.com/", "https://example.com/a-very-long-path"].map((url, index) => ({
+const agentTabs = ["https://www.musinsa.com/products/4471209", "https://map.naver.com/", "https://example.com/a-very-long-path", "https://example.org/"].map((url, index) => ({
   id: `t${index + 1}`, owner: "conversation:butler-client", url, title: `Tab ${index + 1}`, favicon: "", agent: true, holder: "agent",
   agentAt: 1_760_000_000_000 - index, status: "idle", canBack: false, canForward: false, ...(index === 0 ? { waiting: true } : {}),
 }));
@@ -72,11 +84,12 @@ function record(cell: Cell, screen: string, result: { stops: number; clipped: Fo
   checked += result.stops;
   if (process.env.BUTLER_FOCUS_RING_VERBOSE) {
     console.error(`${screen} @ ${cell.width}px ${cell.theme} ${cell.background}: ${result.stops} stops: ${(result.visited ?? []).join(" | ")}`);
+    if (result.clipped.length) console.error(JSON.stringify({ screen, cell, clips: result.clipped }));
     if (result.unmarked?.length) console.error(`  no indicator: ${result.unmarked.join(" | ")}`);
   }
   assert(result.stops > 0, `${screen}: the keyboard reached no control`);
   if (result.clipped.length) {
-    const failure = `${screen} @ ${cell.width}px ${cell.theme} ${cell.background}: ${result.clipped.length} clipped ring(s)\n${formatClips(result.clipped)}`;
+    const failure = `${screen} @ ${cell.width}px${uiScale === 1 ? "" : ` (${cssViewport(cell).width} CSS px at ${uiScale})`} ${cell.theme} ${cell.background}: ${result.clipped.length} clipped ring(s)\n${formatClips(result.clipped)}`;
     failures.push(failure);
     if (process.env.BUTLER_FOCUS_RING_VERBOSE) console.error(failure);
   }
@@ -101,7 +114,7 @@ function usageMonitor(url: URL): UsageMonitorView {
 /** `auth` picks the harness model's billing; a tracked one (api_key) shows usage in the context popover. */
 async function open(page: Page, cell: Cell, auth?: string) {
   fixture = { messages: [answer], background: cell.background };
-  await page.setViewportSize({ width: cell.width, height: cell.height });
+  await page.setViewportSize(cssViewport(cell));
   await page.goto(`${base}?visual=components&theme=${cell.theme}&locale=ko${auth ? `&auth=${auth}` : ""}`);
   await page.locator('[data-slot="item-card"]').first().waitFor();
   await page.locator('[data-slot="tab-rail"]').first().waitFor();
@@ -219,6 +232,21 @@ async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope:
   await page.evaluate(() => document.querySelectorAll("[data-focus-audit-scroller]").forEach((element) => element.removeAttribute("data-focus-audit-scroller")));
 }
 
+async function auditShelf(page: Page, cell: Cell) {
+  await open(page, cell);
+  await page.keyboard.press("Escape");
+  const shelf = '[data-slot="tab-rail"][data-mode="shelf"]';
+  const pill = page.locator(`${shelf} button`).filter({ hasText: /^\+\d+$/u });
+  await pill.waitFor();
+  await focusBefore(page, `${shelf} button[aria-label^="탭 "]`);
+  await page.keyboard.press("Tab");
+  assert(await pill.evaluate(element => element === document.activeElement), "shelf overflow pill takes keyboard focus");
+  const probe = await probeFocusRing(page);
+  assert(probe, "shelf overflow pill has a focus ring");
+  record(cell, "tab-rail-shelf", { stops: 1, clipped: probe.clips });
+  await capture(page, `tab-rail-shelf-${cell.width}-${cell.theme}-${cell.background}`);
+}
+
 async function auditCell(page: Page, cell: Cell) {
   await open(page, cell);
   await openSidebar(page);
@@ -235,12 +263,39 @@ async function auditCell(page: Page, cell: Cell) {
   // Conversation: answer cards' buttons, the agent tab rail and the composer.
   if (cell.width < 768) await page.keyboard.press("Escape");
   await auditScope(page, cell, "conversation", '[data-test-class~="conversation"]', 160);
+  await page.locator('[data-test-class="message-artifact-list"]').getByText("Focus document", { exact: true }).click();
+  await page.getByRole("textbox", { name: copy.documents.title, exact: true }).waitFor();
+  await auditScope(page, cell, "document-page", '[data-test-class="editable-document"]', 30);
+  const documentMenu = page.locator('[data-slot="document-editor-menu"] button');
+  if (await documentMenu.isVisible()) {
+    await focusBefore(page, '[data-slot="document-editor-menu"]');
+    await page.keyboard.press("Tab");
+    const probe = await probeFocusRing(page);
+    assert(probe, "document overflow trigger has a focus ring");
+    record(cell, "document-overflow-trigger", { stops: 1, clipped: probe.clips });
+    await page.keyboard.press("Enter"); await page.getByRole("menu").waitFor();
+    await auditArrows(page, cell, "document-overflow-items", await page.getByRole("menuitem").count());
+    await page.keyboard.press("Escape");
+  }
+  await open(page, cell);
   // A menu: a sidebar row's menu walked with arrow keys.
   await openSidebar(page);
   await page.locator('[data-test-class="app-sidebar"] [data-slot="dropdown-menu-trigger"]').first().focus();
   await page.keyboard.press("Enter");
   await page.locator('[role="menu"]').first().waitFor();
   await auditArrows(page, cell, "menu", 6);
+  await page.keyboard.press("Escape");
+  // Browser project folder navigation uses the existing scroll-area focus room.
+  await page.getByRole("button", { name: copy.space.menu, exact: true }).click();
+  await page.getByRole("menuitem", { name: copy.sidebar.newProject, exact: true }).click();
+  await page.getByRole("button", { name: copy.sidebar.chooseProjectFolder, exact: true }).click();
+  await page.locator('[data-test-class="project-folder-row"]').first().waitFor();
+  await page.keyboard.press("Enter");
+  await page.locator('[data-test-class="project-folder-up"]').waitFor();
+  await auditArrows(page, cell, "project-folder-browser-arrows", 6);
+  await auditScope(page, cell, "project-folder-browser", '[role="dialog"]', 80);
+  await page.keyboard.press("Escape");
+  await page.getByLabel(copy.sidebar.projectName, { exact: true }).waitFor();
   await page.keyboard.press("Escape");
   // Command palette (search) walked with arrow keys.
   await openSidebar(page);
@@ -270,6 +325,18 @@ async function auditCell(page: Page, cell: Cell) {
   await page.goto(`${base}?visual=design-system&page=blocks/KanbanBoard&theme=${cell.theme}&locale=ko`);
   await page.locator('[data-slot="kanban-drag-scope"] [data-kanban-item]').first().waitFor();
   await auditScope(page, cell, "kanban-drag-board", '[data-slot="kanban-drag-scope"]', 40);
+  // Folded titles and each open pill's + are part of the strip's arrow order.
+  await page.goto(`${base}?visual=design-system&page=blocks/TabStrip&theme=${cell.theme}&locale=ko`);
+  const stripStory = '[data-ds-story="Folded group: three favicons and +N beside an open group"]';
+  const stops = page.locator(`${stripStory} [data-tab-strip-stop]:not([inert] *)`);
+  await stops.first().waitFor();
+  await stops.first().focus();
+  for (let index = 0; index < await stops.count(); index += 1) {
+    const clipped = await probeFocusRingFrames(page, () => page.keyboard.press(index === 0 ? "Home" : "ArrowRight"));
+    const probe = await probeFocusRing(page);
+    assert(probe, "TabStrip arrow stop has a focus indicator");
+    record(cell, "tab-strip-folded-group", { stops: 1, clipped: [...clipped, ...probe.clips] });
+  }
   // Tag edit pencils (DS viewer stories): an editable Tag, and FilteredSelectPopover rows whose edit menu sits at the scroller's edge.
   await page.goto(`${base}?visual=design-system&page=components/Tag&theme=${cell.theme}&locale=ko`);
   await page.locator('[data-ds-story="Editable"] [aria-haspopup="menu"]').first().waitFor();
@@ -282,6 +349,32 @@ async function auditCell(page: Page, cell: Cell) {
   const aside = '[data-ds-story="Aside floating"] [data-slot="conversation-aside"]';
   await page.locator(`${aside} [data-slot="clickable"]`).first().waitFor();
   await auditScope(page, cell, "conversation-aside-floating", aside, 20);
+  await auditCardListControls(page, cell);
+}
+
+/** Settings › 브라우저: controls inside a CardList description (the sign-in switch, the payment site field), keyboard-focused. */
+async function auditCardListControls(page: Page, cell: Cell) {
+  await open(page, cell);
+  await openSidebar(page);
+  await page.getByRole("button", { name: copy.sidebar.settings }).first().click();
+  await page.getByRole("button", { name: copy.settings.sections.browser, exact: true }).first().click();
+  for (const [screen, selector] of [
+    ["settings-sign-in-switch", '[data-test-class="sign-in-row"] [role="switch"]'],
+    ["settings-payment-site-field", '[data-test-class="vault-card-row"] input'],
+  ] as const) {
+    const control = page.locator(selector).first();
+    await control.waitFor();
+    // Programmatic focus is not :focus-visible; step out and back in with the keyboard.
+    await control.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(100);
+    assert(await control.evaluate((node) => node === document.activeElement), `${screen}: keyboard focus reached the control`);
+    const probe = await probeFocusRing(page);
+    assert(probe, `${screen}: focus indicator`);
+    record(cell, screen, { stops: 1, clipped: probe.clips });
+    if (probe.clips.length) await capture(page, `${screen}-${cell.width}-${cell.theme}-${cell.background}`);
+  }
 }
 
 /** Settings › Usage with a delegating chat selected (linked split rows, the chart), then the context popover. */
@@ -303,6 +396,9 @@ async function auditUsage(page: Page, cell: Cell) {
 try {
   const page = await browser.newPage({ reducedMotion: "reduce", locale: "ko-KR", timezoneId: "Asia/Seoul" });
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript((scale) => {
+    document.addEventListener("DOMContentLoaded", () => document.documentElement.style.setProperty("--ui-scale", String(scale)), { once: true });
+  }, uiScale);
   await page.addInitScript((tabs) => {
     const state = { enabled: true, blocked: false, activeId: "m1", nativeCovered: false, tabs };
     (window as Window & { butlerBrowser?: unknown }).butlerBrowser = {
@@ -327,13 +423,28 @@ try {
     // The gateway: just what the harness reads, offline.
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client",
       revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
+    if (url.pathname === "/documents/doc-focus") return route.fulfill({ json: { ok: true, data: {
+      id: "doc-focus", title: "Focus document", body: "# Focus document\n\nEditable paragraph.\n", rev: 1, author: "user",
+      created_at: "2026-10-25T00:00:00Z", updated_at: "2026-10-25T00:00:00Z",
+    } } });
+    if (url.pathname === "/project-folders") return route.fulfill({ json: { ok: true, data: {
+      root_name: "Workspace", path: url.searchParams.get("path") ?? "",
+      folders: Array.from({ length: 40 }, (_, index) => ({ name: `Folder ${index + 1}` })), next_after: null,
+    } } });
+    if (url.pathname === "/security/signins") return route.fulfill({ json: { ok: true, data: { available: true, sites: [{ site: "example.test",
+      entry: { id: "12345678-1234-1234-1234-123456789012", username: "reader@example.test", policy: "ask", last_used_at: null },
+      conversations: 0, all_conversations: false, uses: [] }] } } });
+    if (url.pathname === "/security/vault") return route.fulfill({ json: { ok: true, data: { available: true, reveal_available: true, purchase_sites: [],
+      cards: [{ id: "card-1", nickname: "Test card", brand: "visa", last4: "4242", exp_month: 12, exp_year: 2030, holder_name: "Test Holder",
+        extras: [], sites: [], uses: [], last_used_at: null }], profiles: [] } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     if (url.pathname === "/usage-history") return route.fulfill({ json: { ok: true, data: historyFixture() } });
     if (url.pathname === "/usage-monitor") return route.fulfill({ json: { ok: true, data: usageMonitor(url) } });
     return route.fulfill({ status: 404, json: { ok: false, error: { code: "not_found" } } });
   });
-  for (const [width, height] of [[1280, 860], [390, 844]]) {
+  for (const theme of ["light", "dark"] as const) await auditShelf(page, { width: 344, height: 480, theme, background: "plain" });
+  for (const [width, height] of [[1280, 860], [390, 844], [985, 662], [1280, 800]]) {
     for (const theme of ["light", "dark"] as const) {
       for (const background of ["plain", "wallpaper"] as const) {
         const only = process.env.BUTLER_FOCUS_RING_CELL;
@@ -342,6 +453,7 @@ try {
       }
     }
   }
+  console.log(JSON.stringify({ inlinePanes: await auditInlinePanes(browser) }));
   console.log(JSON.stringify({ stops: checked, scrolledStops, clippedScreens: failures.length, rendererErrors: errors.length }));
   assert(scrolledStops > 0, "no scrolled scroller with keyboard stops was audited");
   assert.deepEqual(failures, [], `focus rings are clipped:\n${failures.join("\n")}`);

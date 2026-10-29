@@ -127,3 +127,5 @@ pub fn windows_shell_file_contract() {
 }
 
 pub(super) mod ledger;
+
+pub(super) mod installation;

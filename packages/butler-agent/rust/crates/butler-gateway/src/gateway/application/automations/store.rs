@@ -64,6 +64,7 @@ impl AppApplication {
         &self,
         input: CreateAutomationRequest,
     ) -> Result<AutomationMutationResult, GatewayApplicationError> {
+        let input = self.calendar_timezone(input).await?;
         let model = self
             .validate_automation_model(input.model.as_deref())
             .await?;
@@ -119,8 +120,8 @@ impl AppApplication {
                 None => settings::schedule_access_mode(db)?,
             };
             db.execute(
-                "INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,schedule_type,run_at,start_at,access_mode,schedule_json,state,next_run_at,last_run_at,last_run_state,last_safe_error_code,run_count,consecutive_failure_count,created_at,updated_at,model) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?13,'enabled',?11,NULL,'never_run',NULL,0,0,?12,?12,?14)",
-                params![id,title,prompt,kind,target,input.interval_seconds,schedule_type,input.run_at,input.start_at,settings::access_mode_name(&access),next,now,input.schedule.as_ref().map(serde_json::to_string).transpose().map_err(json_error)?,model],
+                "INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,schedule_type,run_at,start_at,access_mode,schedule_json,state,next_run_at,last_run_at,last_run_state,last_safe_error_code,run_count,consecutive_failure_count,created_at,updated_at,model,browser_signin,browser_payment) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?13,'enabled',?11,NULL,'never_run',NULL,0,0,?12,?12,?14,?15,?16)",
+                params![id,title,prompt,kind,target,input.interval_seconds,schedule_type,input.run_at,input.start_at,settings::access_mode_name(&access),next,now,input.schedule.as_ref().map(serde_json::to_string).transpose().map_err(json_error)?,model,input.browser_signin.unwrap_or(false),input.browser_payment.unwrap_or(false)],
             ).map_err(AppStorageError::sqlite)?;
             // A schedule for another conversation runs on its creator's live site grants.
             if let Some(source) = input.source_session_id.as_deref().map(str::trim).filter(|s| !s.is_empty() && *s != target) {
@@ -134,6 +135,22 @@ impl AppApplication {
             self.automation_wake.notify_one();
         }
         result
+    }
+
+    async fn calendar_timezone(
+        &self,
+        mut input: CreateAutomationRequest,
+    ) -> Result<CreateAutomationRequest, GatewayApplicationError> {
+        let Some(rule) = input.schedule.as_mut().filter(|rule| rule.tz.is_empty()) else {
+            return Ok(input);
+        };
+        let facts = self.dependencies.settings_facts.snapshot()?;
+        rule.tz = self
+            .storage
+            .read(move |db| settings::effective_timezone(db, &facts))
+            .await
+            .map_err(app_error)?;
+        Ok(input)
     }
 
     pub(crate) async fn update_automation_owned(
@@ -162,7 +179,7 @@ impl AppApplication {
             let calendar_next = schedule.as_ref().map(|rule| super::timing::next(rule, &now)).transpose()?;
             if schedule.is_none() { validate_timing_row(&schedule_type, seconds, run_at.as_deref(), start_at.as_deref())?; }
             let access = input.access_mode.unwrap_or(old.access);
-            let model = model.or(old.model);
+            let model = if input.model.is_some() { model } else { old.model };
             let state = input.state.unwrap_or_else(|| old.state.clone());
             if state != "enabled" && state != "paused" {
                 return Err(AppStorageError::new(AppStorageCode::AutomationStateInvalid, "Schedule state must be enabled or paused."));
@@ -170,8 +187,8 @@ impl AppApplication {
             let changed = timing_changed || old.state != state;
             let next = if state == "enabled" && changed { Some(calendar_next.unwrap_or_else(|| next_time(&schedule_type, run_at.as_deref(), start_at.as_deref(), seconds, &now, &clock))) } else { old.next };
             db.execute(
-                "UPDATE app_automations SET title=?1,prompt_body=?2,target_kind=?3,target_session_id=?4,interval_seconds=?5,state=?6,next_run_at=?7,updated_at=?8,access_mode=?9,schedule_type=?10,run_at=?11,start_at=?12,schedule_json=?14,model=?15 WHERE id=?13",
-                params![title,prompt,kind,target_id,seconds,state,next,now,settings::access_mode_name(&access),schedule_type,run_at,start_at,id,schedule.as_ref().map(serde_json::to_string).transpose().map_err(json_error)?,model],
+                "UPDATE app_automations SET title=?1,prompt_body=?2,target_kind=?3,target_session_id=?4,interval_seconds=?5,state=?6,next_run_at=?7,updated_at=?8,access_mode=?9,schedule_type=?10,run_at=?11,start_at=?12,schedule_json=?14,model=?15,browser_signin=?16,browser_payment=?17 WHERE id=?13",
+                params![title,prompt,kind,target_id,seconds,state,next,now,settings::access_mode_name(&access),schedule_type,run_at,start_at,id,schedule.as_ref().map(serde_json::to_string).transpose().map_err(json_error)?,model,input.browser_signin.unwrap_or(old.browser_signin),input.browser_payment.unwrap_or(old.browser_payment)],
             ).map_err(AppStorageError::sqlite)?;
             let automation = detail(records::active(db, &id)?);
             publish(db, &subscribers, "automation.updated", &json!({"automation":automation.summary}), &now)?;
@@ -187,7 +204,9 @@ impl AppApplication {
         &self,
         model: Option<&str>,
     ) -> Result<Option<String>, GatewayApplicationError> {
-        let Some(model) = model else { return Ok(None) };
+        let Some(model) = model.filter(|model| !model.is_empty()) else {
+            return Ok(None);
+        };
         self.dependencies.settings_facts.refresh().await?;
         let facts = self.dependencies.settings_facts.snapshot()?;
         settings::selectable_model_ref(&facts, model)
@@ -288,7 +307,7 @@ fn detail(row: records::AutomationRow) -> AutomationDetail {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn target_summary(value: AutomationSummary) -> Value {
-    json!({"automation_id":value.id,"title":value.title,"state":value.state,"interval_seconds":value.interval_seconds,"schedule_type":value.schedule_type,"schedule":value.schedule,"access_mode":value.access_mode,"next_run_at":value.next_run_at,"last_run_state":value.last_run_state,"safe_error_code":value.last_safe_error_code})
+    json!({"automation_id":value.id,"title":value.title,"state":value.state,"interval_seconds":value.interval_seconds,"schedule_type":value.schedule_type,"schedule":value.schedule,"access_mode":value.access_mode,"browser_signin":value.browser_signin,"browser_payment":value.browser_payment,"next_run_at":value.next_run_at,"last_run_state":value.last_run_state,"safe_error_code":value.last_safe_error_code})
 }
 fn required(
     value: &str,

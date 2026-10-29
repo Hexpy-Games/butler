@@ -16,6 +16,7 @@ butler-canon = { path = "../butler-canon" }
 butler-log = { path = "../butler-log", features = ["e2e-fixtures"] }
 butler-gateway = { path = "../butler-gateway", features = ["test-support"] }
 butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
+butler-mail-connector = { path = "../butler-mail-connector" }
 butler-core = { path = "../butler-core" }
 butler-models = { path = "../butler-models" }
 butler-turn = { path = "../butler-turn", features = ["test-support"] }
@@ -38,6 +39,7 @@ notify.workspace = true
 regex.workspace = true
 regress.workspace = true
 reqwest.workspace = true
+rmcp.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -49,6 +51,9 @@ tiktoken-rs.workspace = true
 uuid.workspace = true
 zip.workspace = true
 zstd = "0.13.3"
+
+[dev-dependencies]
+butler-memory = { path = "../butler-memory" }
 
 [lints]
 workspace = true

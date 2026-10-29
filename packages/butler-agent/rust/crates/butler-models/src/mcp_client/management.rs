@@ -16,24 +16,28 @@ use super::{
 impl McpClient {
     pub fn list_servers(&self) -> Result<Value, McpRegistryError> {
         let registry = read_registry_value(&self.data_root)?;
-        let servers = normalized_servers(&registry)?;
-        Ok(json!({
-            "storage_path": registry_path(&self.data_root).to_string_lossy(),
-            "servers": servers.iter().map(redact_server).collect::<Vec<_>>(),
-        }))
+        let mut servers = normalized_servers(&registry)?;
+        servers.extend(self.overlay_servers()?);
+        let servers = servers
+            .iter()
+            .map(|server| {
+                let mut view = redact_server(server);
+                if let Some(plugin) = &server.plugin {
+                    view["source"] = json!("plugin");
+                    view["plugin"] = json!(plugin);
+                    view["id"] = json!(server.id);
+                }
+                view
+            })
+            .collect::<Vec<_>>();
+        Ok(
+            json!({"storage_path":registry_path(&self.data_root).to_string_lossy(),"servers":servers}),
+        )
     }
 
     pub async fn upsert_server(&self, input: Value) -> Result<Value, McpRegistryError> {
+        let id = upsert_id(&input)?;
         self.write_registry(move |data_root, guard| {
-            let id_input = input
-                .get("id")
-                .and_then(Value::as_str)
-                .or_else(|| input.get("display_name").and_then(Value::as_str))
-                .unwrap_or("");
-            let id = normalize_server_id(id_input);
-            if id.is_empty() {
-                return Err(McpRegistryError::ServerIdRequired);
-            }
             let now = now_iso();
             let mut registry = read_registry_value(data_root)?;
             let mut servers = normalized_server_values(&registry)?;
@@ -109,6 +113,9 @@ impl McpClient {
         server_id: String,
         input: Value,
     ) -> Result<Value, McpRegistryError> {
+        if server_id.contains('/') {
+            return Err(McpRegistryError::PluginReadOnly);
+        }
         self.write_registry(move |data_root, guard| {
             let id = normalize_server_id(&server_id);
             let mut registry = read_registry_value(data_root)?;
@@ -164,6 +171,9 @@ impl McpClient {
     }
 
     pub async fn delete_server(&self, server_id: String) -> Result<Value, McpRegistryError> {
+        if server_id.contains('/') {
+            return Err(McpRegistryError::PluginReadOnly);
+        }
         self.write_registry(move |data_root, guard| {
             let id = normalize_server_id(&server_id);
             let mut registry = read_registry_value(data_root)?;
@@ -300,3 +310,23 @@ fn write_registry(
 
 #[cfg(test)]
 mod tests;
+
+fn upsert_id(input: &Value) -> Result<String, McpRegistryError> {
+    if input
+        .get("id")
+        .and_then(Value::as_str)
+        .is_some_and(|id| id.contains('/'))
+    {
+        return Err(McpRegistryError::PluginReadOnly);
+    }
+    let input = input
+        .get("id")
+        .and_then(Value::as_str)
+        .or_else(|| input.get("display_name").and_then(Value::as_str))
+        .unwrap_or("");
+    let id = normalize_server_id(input);
+    if id.is_empty() {
+        return Err(McpRegistryError::ServerIdRequired);
+    }
+    Ok(id)
+}

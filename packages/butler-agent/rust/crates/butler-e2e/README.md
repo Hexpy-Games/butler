@@ -316,3 +316,122 @@ archive, and runs the unchanged hung-MCP shutdown assertions there.
 `perf_turn` scripts six distinct file reads and a final answer. Every request
 retains complete, ordered tool history, and the final delivered answer is
 checked exactly. Timing helpers retain the existing per-round budget.
+
+## On-demand delegation evaluations
+
+These owner-run evaluations are outside CI. No cassettes are recorded. The
+ignored tests require `BUTLER_E2E_DELEGATION_EVAL=1` (set by the runner), an
+explicit live tier and live credentials. `self-test` uses a local fake upstream
+with the stub tier, including raw-body SHA-256 equality and zero executed
+first-decision tools. It exercises namespaced Responses calls in both SSE item
+and final JSON shapes, direct text, Anthropic routing/auth/cache wiring, exact
+round admission, and both local Butler scripts against the new debug Agent.
+It requires only the new debug Agent binary. The real merge-base executable is
+exercised only by the owner's live runs.
+
+From the Rust workspace, after sourcing the toolchain and preparing static ORT
+as described in the Rust README:
+
+```sh
+crates/butler-e2e/scripts/delegation_eval.sh prepare
+export BUTLER_E2E_CHATGPT_AUTH_DIR=/absolute/path/to/dedicated/auth
+crates/butler-e2e/scripts/delegation_eval.sh first-decision --model openai/gpt-6-luna
+# Anthropic: export ANTHROPIC_API_KEY, or name its variable with BUTLER_E2E_API_KEY_ENV.
+crates/butler-e2e/scripts/delegation_eval.sh first-decision --model anthropic/claude-sonnet-5-5
+crates/butler-e2e/scripts/delegation_eval.sh first-decision --model anthropic/claude-opus-5-5
+crates/butler-e2e/scripts/delegation_eval.sh steward --model openai/gpt-6-luna
+crates/butler-e2e/scripts/delegation_eval.sh steward --model anthropic/claude-opus-5-5 --cases w03-three-proposals,w07-small-fix,w09-translate-files
+crates/butler-e2e/scripts/delegation_eval.sh self-test
+```
+
+`prepare` builds the merge-base of HEAD and origin/main in a disposable detached
+worktree under TMPDIR, with a separate target directory, then builds the current
+worktree in its shared debug target. Both enable `e2e-fixtures`. It removes the
+old worktree, retaining its executable and SHA. All tests use the new harness;
+`BUTLER_E2E_BIN` selects the variant's real Agent. Re-run prepare after changing
+product code. No branch changes, commits or pushes are made.
+
+Both modes default to `--variants old,new` and `--repeat 1`; first-decision
+selects all 43 cases by default. In steward mode, `old` answers Butler locally
+with `start_work`, `replace_work_plan` (steward mode and case checks),
+`record_work_review` (plan accept), then `delegate_to_steward`, one per round.
+`new` uses one-call delegation. Steward and Worker requests go upstream for both.
+The old runtime has no plan gate: its refusal count is zero; review-before-mutation
+is still scored from recorded tool order, including unsuccessful attempts.
+`--cases id,id` narrows either evaluation. Each case uses an ordinary App chat with only its isolated workspace binding
+seeded through the existing SessionBindingStore API; no project Ledger or setup
+conversation is introduced. Seeded prior turns are answered locally with their fixture text. The product builds the complete provider
+request, including the stable prefix, default phase-minimal tools, cache fields,
+effort and conversation history. For Anthropic the verified-endpoint override
+asserts that the loopback recorder supports the official cache contract, so the
+real serializer emits the same breakpoints and default 1h TTL. The evaluator forwards those exact bytes via
+the existing harness recorder transport once, retains the upstream first-round
+calls for scoring, and answers the Agent with local text. Thus proposed tools
+cannot execute. Headers carry the Agent's own provider authentication and are
+never retained. API-key models are registered through the gateway using the
+harness credential and explicit proxy URL before the evaluation turn. Butler's calls in steward mode are local; only Steward/Worker
+rounds go upstream, with all Worker profiles selecting the evaluation model.
+
+Routing counts any first-round `delegate_to_steward`, `start_work`, `continue_work`,
+or steward-mode `replace_work_plan` as delegation; ask-only rounds are `ask`;
+all others are direct. Reports include ordered calls, confusion counts, recall,
+false-delegation rate, accuracy, raw provider usage and catalog-price USD
+estimates. Each sample records `first_output_item` with only the raw first item's
+`type`, `name`, and `namespace`, without arguments. Calls use the same namespace
+projection as the product decoder. `extraction_mismatch` flags function-call
+metadata (including `fc_` usage items) with no extracted calls; it cannot silently
+score as a valid direct answer. Raw rows and the summary identify `invalid_reason`
+(timeout, harness error, absent samples, upstream HTTP error, missing upstream or
+Agent terminal result, or extraction mismatch). `outcome` distinguishes `completed`,
+`limit_hit`, and `invalid`; the summary counts limit hits separately. Invalid and
+limited requests remain in the denominator.
+Steward scoring reads only the case's stopped, isolated BTCC database: Plan
+Review binding, review-before-mutation attempts (including gate refusals), chosen
+mode, successful Worker calls and terminal child/parent Work. Checks are
+report-only for human review, without an LLM judge. The complete workspace and
+journals are retained for inspection.
+
+Steward defaults: 80 upstream model rounds and 900 seconds per case; adjust with
+`--max-rounds` and `--seconds`. The round budget is shared by that case's Steward
+and Workers only. Local Butler answers (including seeded history and all four old
+steps), metadata discovery, and background answers consume no upstream rounds.
+Exactly N upstream requests are admitted for `--max-rounds N`; request N+1 is
+refused and reports `limit_hit`. Product HTTP retries consume the same allowance.
+`upstream_rounds` counts admitted requests; report `rounds` counts collected samples.
+The evaluator drains admitted requests on a limit hit before taking its snapshot;
+a timeout can still leave fewer collected samples, with `invalid_reason: timeout`.
+No round counter subtracts a local Butler round, so 79 samples under the default
+80 is not by itself evidence of an off-by-one or a round-limit hit. Results and captured
+request bodies are private temp artifacts under `$TMPDIR/delegation-eval/<timestamp>/`:
+`raw.jsonl`, `results.json`, `summary.md`, and `workspaces/`. The runner prints the
+summary path. They contain only synthetic cases and isolated paths; no headers,
+keys or auth files are copied. Nothing is written into the cassette directory.
+
+The offline App-chat capture measured 18,578 O200k instruction+tool tokens
+for both the history and direct-answer sample cases (88,679 and 88,007 request
+bytes respectively). Cost assumptions: 500 output tokens per first-decision request,
+86 requests for a paired 43-case run. For measured instruction+tool prompt size
+P (reported as `instruction_tool_tokens_o200k_estimate`), input cost is
+`86 * P / 1e6 * input_price`, plus `86 * 500 / 1e6 * output_price`.
+At measured P=18,578 the paired ordinary-input estimates are Luna $0.1813,
+Sonnet $3.6254 and Opus $7.2508. Allowing 20% extra input for case/history/runtime
+context gives about $0.22 for Luna. With no cache hits and all of that input
+charged at Anthropic's default 1h cache-write rate, conservative estimates are
+`86 * (18578 * 1.2 * 4 + 500 * 10) / 1e6 = $8.10` for Sonnet and
+`86 * (18578 * 1.2 * 8 + 500 * 20) / 1e6 = $16.20` for Opus.
+Old-variant and Claude prompt sizes have not been captured on this build Mac;
+these estimates assume comparable prefixes and serializers. Actual cache reuse
+reduces cost; more output or larger context increases it.
+The catalog's per-million input/output prices are Luna $0.10/$0.50, Sonnet 5.5
+$2/$10, Opus 5.5 $4/$20. O200k is an estimate for Claude and excludes dynamic
+case context; actual reported tokens determine results. ChatGPT subscription
+costs are API-equivalent estimates, not subscription charges. Steward costs are
+workload-dependent. The offline Steward prefix+tools measured 14,460 O200k tokens.
+Allowing growing tool history, an illustrative 10-case, 20-round/case run at 30k
+input and 1k output tokens/round costs Luna
+`200 * (30000 * .1 + 1000 * .5) / 1e6 = $0.70`; Opus is $28 at ordinary
+input rates or $52 if every input token incurs a cold 1h cache write. The
+three-case Opus subset is correspondingly $8.40 or $15.60. At the 80-round cap
+these assumptions multiply by four, but growing context can increase the input
+size further: these are forecasts, not dollar caps. No live spend was measured
+on the build Mac.

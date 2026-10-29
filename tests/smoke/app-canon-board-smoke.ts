@@ -1,5 +1,5 @@
 import { verifyDashboardSelection } from "../support/canon-dashboard-selection.ts";
-import { canonInspectorClose, closeCanonInspector, verifyCanonInspector } from "../support/canon-board-inspector.ts";
+import { canonAsideClose, closeCanonAside, verifyCanonAside } from "../support/canon-board-aside.ts";
 // Native stub-backed UI smoke: all planning content is seeded through canon HTTP.
 import { captureBoardEdges } from "../support/canon-board-visuals.ts";
 import { verifyBoardSelector } from "../support/canon-board-selector.ts";
@@ -14,7 +14,7 @@ import { openCanonBoard, seedCanonBoard, verifyCanonFlows } from "../support/can
 
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/canon-board-smoke");
 mkdirSync(shots, { recursive: true });
-const cases = [1440, 1280, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "wallpaper"].map(surface => `${width}-${theme}-${surface}`)));
+const cases = [1440, 1280, 1024, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "wallpaper"].map(surface => `${width}-${theme}-${surface}`)));
 if (await runSmokeCases(cases, "BUTLER_CANON_SMOKE_CASE", import.meta.path, { isolate: true })) process.exit(0);
 const selectedCase = process.env.BUTLER_CANON_SMOKE_CASE;
 const before = process.env.BUTLER_SMOKE_BASELINE === "1";
@@ -68,19 +68,18 @@ try {
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
       if (width !== 390) {
         // Exercise pointer opening from a closed panel, as well as Enter above.
-        await closeCanonInspector(page);
-        await page.locator('[data-test-class~="right-inspector-open"]').waitFor({ state: "hidden" });
+        await closeCanonAside(page);
+        await page.locator('[data-slot="management-page-aside"]').waitFor({ state: "hidden" });
         await card.click();
         await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
       } else {
-        const close = await canonInspectorClose(page).boundingBox();
+        const close = await canonAsideClose(page).boundingBox();
         assert(close && close.y >= 0 && close.y + close.height < 844, "Selected detail opens in the phone viewport");
       }
-      await page.waitForFunction(() => document.activeElement?.matches('[data-test-class~="right-inspector"] h3'));
-      await verifyCanonInspector(page);
-      assert.equal(await board.locator('[data-test-class="canon-epic-detail"]').count(), 0, "Detail uses the app inspector");
-      assert.equal(await page.locator('[data-test-class~="right-inspector"]').getByRole("button", { name: "과제", exact: true }).count(), 1);
-      const detailPanel = page.locator('[data-test-class~="right-inspector"]');
+      await page.waitForFunction(() => document.activeElement?.matches('[data-slot="management-page-aside"] h3'));
+      await verifyCanonAside(page);
+      assert.equal(await board.locator('[data-test-class="canon-epic-detail"]').count(), 0, "Detail is outside the board in the page aside");
+      const detailPanel = page.locator('[data-slot="management-page-aside"]');
       const planControl = await detailPanel.getByRole("combobox", { name: "계획", exact: true }).boundingBox();
       const ordinal = await detailPanel.getByText("· 1번째", { exact: true }).boundingBox();
       const panelBox = await detailPanel.boundingBox();
@@ -95,7 +94,7 @@ try {
       await openCanonBoard(page);
       await card.click();
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
-      await closeCanonInspector(page);
+      await closeCanonAside(page);
       await board.getByRole("button", { name: "새 과제", exact: true }).first().click();
       assert.equal(await page.locator("#canon-create-plan").inputValue(), planId, "New Epic defaults to selected plan");
       await page.getByRole("dialog").waitFor();

@@ -6,9 +6,11 @@
 
 /* Chips and the typing point share one field, wrapping as they grow. */
 .field {
+  --tag-field-min-height: 36px;
+
   display: flex;
   min-width: 0;
-  min-height: 36px;
+  min-height: var(--tag-field-min-height);
   flex-wrap: wrap;
   align-items: center;
   padding: var(--space-xs);
@@ -23,8 +25,13 @@
   box-shadow: var(--focus-ring);
 }
 
+/* Focus scrolls the input clear of a scroller's fades, but the ring is the
+   field's: the input carries the field's inset so the whole ring clears. */
 .input {
   min-width: 6rem;
+  scroll-margin-block: calc(
+    (var(--tag-field-min-height) - var(--tag-height-sm)) / 2
+  );
   height: var(--tag-height-sm);
   flex: 1;
   padding: 0 var(--space-xs);

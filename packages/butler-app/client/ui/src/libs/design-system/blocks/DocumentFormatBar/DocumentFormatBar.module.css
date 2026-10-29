@@ -1,0 +1,28 @@
+/* The floating format bar: a glass pill fixed to the viewport, placed by the
+   component (top/left custom properties); hidden until placed, then it fades
+   and rises in. */
+/* The bar is fixed to the viewport (often portalled to the body), so a
+   modal Dialog around the editor would leave it inert: it takes pointer
+   events back explicitly. */
+.bar {
+  position: fixed;
+  pointer-events: auto;
+  z-index: var(--z-popover);
+  top: var(--format-bar-top);
+  left: var(--format-bar-left);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  border-radius: var(--radius-pill);
+  opacity: 0;
+  translate: 0 var(--motion-distance-sm);
+  transition:
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    translate var(--motion-fast) var(--motion-ease-decelerate);
+}
+
+.bar[data-placed="true"] {
+  opacity: 1;
+  translate: 0 0;
+}

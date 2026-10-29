@@ -23,7 +23,10 @@ mod operators;
 mod output;
 pub use output::CommandOutputDecoder;
 mod path_candidates;
-pub use path_candidates::path_tokens;
+pub use path_candidates::{path_script, path_tokens};
+
+/// Escape character interpreted by the platform command shell.
+pub const SHELL_ESCAPE: char = shell::ESCAPE;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -47,6 +50,9 @@ mod windows;
 use windows as shell;
 #[cfg(windows)]
 use windows::mxc as sandbox;
+
+#[cfg(feature = "test-support")]
+pub use test_support::installation::FixtureInstallation;
 
 /// Native shell fixtures for command lifecycle tests.
 #[cfg(feature = "test-support")]
@@ -155,22 +161,6 @@ pub fn project_write_limits() -> &'static str {
 #[cfg(target_os = "linux")]
 pub fn trampoline() -> Result<(), Box<dyn std::error::Error>> {
     linux::trampoline()
-}
-
-/// Copies the command helper next to a relocated agent (e.g. isolated E2E installs).
-pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result<()> {
-    #[cfg(target_os = "linux")]
-    std::fs::copy(
-        source.join("butler-sandbox"),
-        destination.join("butler-sandbox"),
-    )?;
-    #[cfg(windows)]
-    std::fs::copy(
-        source.join("butler-sandbox.exe"),
-        destination.join("butler-sandbox.exe"),
-    )?;
-    let _ = (source, destination);
-    Ok(())
 }
 
 /// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows

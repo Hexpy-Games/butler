@@ -42,6 +42,20 @@ impl McpClient {
         timeout: Duration,
         signal: &CancellationToken,
     ) -> Result<Value, McpClientError> {
+        let prepared = self.prepared_operation(server, &operation).await?;
+        let resolved = prepared
+            .as_ref()
+            .map(|(s, _)| super::registry::resolve_secrets(s, &self.environment))
+            .transpose()
+            .map_err(|_| {
+                failure(
+                    "plugin_secret_unavailable",
+                    "Plugin credentials are unavailable.",
+                    false,
+                )
+            })?;
+        let server = prepared.as_ref().map(|(s, _)| s).unwrap_or(server);
+        let secrets = resolved.as_ref().unwrap_or(secrets);
         if !server.enabled {
             return Err(failure(
                 "mcp_server_disabled",
@@ -98,6 +112,21 @@ impl McpClient {
         }
     }
 
+    async fn prepared_operation(
+        &self,
+        server: &McpServerConfig,
+        operation: &Operation,
+    ) -> Result<Option<super::overlay::LeasedConfig>, McpClientError> {
+        if let Operation::CallTool { arguments, .. } = operation {
+            if let Some(overlay) = self.overlay.clone().filter(|_| server.plugin.is_some()) {
+                return self
+                    .overlay_call(&server.id, overlay, Some(arguments.clone()))
+                    .await;
+            }
+            return Ok(None);
+        }
+        self.overlay_execution(&server.id).await
+    }
     async fn with_stdio(
         &self,
         server: &McpServerConfig,
@@ -118,7 +147,13 @@ impl McpClient {
         if let Some(cwd) = &server.cwd {
             command.current_dir(cwd);
         }
-        for (key, value) in default_stdio_environment(&self.environment) {
+        for (key, value) in if server.plugin.is_some() {
+            butler_platform::command_sandbox::tool_environment(&self.environment)
+                .into_iter()
+                .collect()
+        } else {
+            default_stdio_environment(&self.environment)
+        } {
             command.env(key, value);
         }
         for (key, value) in &secrets.env {

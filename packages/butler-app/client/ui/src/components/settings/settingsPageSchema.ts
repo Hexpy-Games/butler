@@ -22,11 +22,13 @@ const WORKER_PROFILE_FIELDS = [
  */
 export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSectionSchema[]> = {
   memory: [
-    { id: "instructions", kind: "list", fields: [] },
-    { id: "chat-memory", kind: "form", fields: ["recall-mode", "recall-judge-model", "memory-free-space", "memory-reset-chat"] },
+    { id: "instructions", kind: "form", fields: [] },
+    { id: "noticed-patterns", kind: "form", fields: ["proactive-level", "quiet-hours"] },
+    { id: "chat-memory", kind: "form", fields: ["recall-mode", "recall-judge-model", "free-space", "reset-chat-memory"] },
+    { id: "memory-cleanup", kind: "form", fields: ["consolidation-time", "consolidation-run", "consolidation-model", "consolidation-reasoning"] },
     { id: "memory-model", kind: "form", fields: ["memory-model"] },
-    { id: "profile-memory", kind: "form", fields: ["memory-reset-profile"] },
-    { id: "project-memory", kind: "form", fields: ["memory-project", "memory-reset-project"] },
+    { id: "profile-memory", kind: "form", fields: ["reset-profile"] },
+    { id: "project-memory", kind: "form", fields: ["memory-project", "reset-project-memory"] },
   ],
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
@@ -41,7 +43,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "full-reset", kind: "form", fields: ["full-reset"] },
   ],
   appearance: [
-    { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
+    { id: "theme", kind: "form", fields: ["theme", "text-size", "translucent-sidebar"] },
     { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
     { id: "conversation", kind: "form", fields: ["show-thinking", "conversation-background"] },
     { id: "message-box", kind: "form", fields: ["collapse-message-box", "composer-decoration", "composer-character"] },
@@ -53,13 +55,12 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning", "memory-link"] },
     { id: "agent-import", kind: "list", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
   ],
-  // Memory cleanup and worker profiles show when the Advanced disclosure is open.
+  // Worker profiles show when the Advanced disclosure is open.
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
     { id: "image-models", kind: "form", fields: ["image-model", "image-credential", "image-quality", "image-key-save", "hosted-credential-select", "hosted-credential-label", "hosted-api-key"] },
     { id: "advanced-models", kind: "form", fields: [] },
-    { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },
     { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
   ],
   hooks: [
@@ -97,10 +98,10 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "browser-history", kind: "form", fields: ["browser-history"] },
     { id: "browser-site-data", kind: "form", fields: ["browser-site-data"] },
     { id: "sign-ins", kind: "list", fields: [] },
-    { id: "browser-import", kind: "list", fields: ["browser-import-bookmarks", "browser-import-passwords"] },
     { id: "payment-methods", kind: "list", fields: [] },
     { id: "profiles", kind: "list", fields: [] },
     { id: "purchase-sites", kind: "form", fields: [] },
+    { id: "browser-import", kind: "form", fields: ["browser-import-data"] },
   ],
   // Remote-only controls hide when refused. Authority and keys stay visible.
   security: [
@@ -109,6 +110,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "paired-devices", kind: "list", fields: [], optional: true },
     { id: "grants", kind: "list", fields: [] },
     { id: "saved-keys", kind: "list", fields: [] },
+    { id: "connected-accounts", kind: "list", fields: [], optional: true },
     { id: "security-advanced", kind: "form", fields: ["allowed-hosts"], optional: true },
   ],
   system: [{ id: "system-events", kind: "list", fields: [] }],

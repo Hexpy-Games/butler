@@ -1,11 +1,14 @@
 //! Durable subsession state on the existing BTCC SQLite owner.
 
+mod access;
 mod activity;
 mod assets;
 mod completion;
 mod decode;
 mod directions;
 mod files;
+mod handoff;
+mod instruction_context;
 mod parents;
 mod records;
 mod worker_admission;
@@ -24,7 +27,7 @@ pub use records::*;
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
-use self::decode::{direction_row, list, read, required_packet_string};
+use self::decode::{direction_row, list, read};
 use super::{BtccStorage, StorageError};
 use crate::btcc::StorageCode;
 
@@ -140,31 +143,14 @@ impl SqliteSubsessionRepository {
     }
 
     pub(crate) async fn create(&self, input: SubsessionCreate) -> Result<bool, StorageError> {
-        let encode = |error: serde_json::Error| {
-            StorageError::new(StorageCode::SubsessionPacketInvalid, error.to_string())
-                .with_source(error)
-        };
-        let packet_json = serde_json::to_string(&input.packet).map_err(encode)?;
-        let intent_json = serde_json::to_string(&input.dispatch_intent).map_err(encode)?;
-        self.storage.execute(move |db| {
-            let tx = db.transaction().map_err(StorageError::sqlite)?;
-            let ordinal: i64 = tx.query_row(
-                "SELECT COALESCE(MAX(ordinal),0)+1 FROM btcc_session_relations WHERE parent_session_id=?1",
-                [&input.parent_session_id], |row| row.get(0),
-            ).map_err(StorageError::sqlite)?;
-            let inserted = tx.execute(
-                "INSERT OR IGNORE INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-                params![input.relation_id,input.parent_session_id,input.parent_turn_id,input.child_session_id,input.anchor_message_id,ordinal,input.safe_title,input.created_at],
-            ).map_err(StorageError::sqlite)? == 1;
-            if inserted {
-                tx.execute(
-                    "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
-                    params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
-                ).map_err(StorageError::sqlite)?;
-            }
-            tx.commit().map_err(StorageError::sqlite)?;
-            Ok(inserted)
-        }).await
+        self.storage
+            .execute(move |db| {
+                let tx = db.transaction().map_err(StorageError::sqlite)?;
+                let inserted = handoff::insert(&tx, &input)?;
+                tx.commit().map_err(StorageError::sqlite)?;
+                Ok(inserted)
+            })
+            .await
     }
 
     pub(crate) async fn by_delegation(

@@ -49,3 +49,17 @@ fn initialize_coordinator(data: &std::path::Path) -> Result<(), HarnessError> {
     .unwrap();
     Ok(())
 }
+
+/// Model an already enabled schedule without claiming a completed run.
+pub(super) fn arm_consolidation(data: &std::path::Path, at: &str) -> Result<(), HarnessError> {
+    let armed = chrono::DateTime::parse_from_rfc3339(at)
+        .unwrap()
+        .timestamp_millis();
+    let dir = data.join("state/scheduler");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(
+        dir.join("consolidation-cycle.json"),
+        serde_json::to_vec(&serde_json::json!({"armedAtMs":armed}))?,
+    )?;
+    Ok(())
+}

@@ -82,6 +82,7 @@ fn validate_op(op: &str) -> Result<(), HttpError> {
             | "signin.lookup"
             | "signin.fill"
             | "signin.grant"
+            | "pay.allow_site"
             | "pay.inspect"
             | "pay.lookup"
             | "pay.fill"

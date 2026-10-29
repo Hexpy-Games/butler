@@ -54,7 +54,7 @@
 .segment-active {
   height: 32px;
   border: 0;
-  border-radius: 6px;
+  border-radius: calc(6px / var(--ui-scale));
   color: var(--text-primary);
   font: var(--typo-caption-size)/var(--typo-caption-line-height)
     var(--font-body);

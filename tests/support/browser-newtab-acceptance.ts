@@ -19,7 +19,7 @@ export async function newTabHub(app: Awaited<ReturnType<typeof browserAgentApp>>
     assert.equal(await app.page.expression("getComputedStyle(document.querySelector('[data-slot=browser-pane]')).outlineStyle"), "none");
     assert.equal(await app.page.expression("document.querySelector('[data-slot=page-card]').getAttribute('data-holder')"), "none");
     await newTabShot(app, `${locale}-${theme}-1440-newtab`);
-    await app.click(locale === "ko" ? "탭 닫기" : "Close tab");
+    await closeHoveredTab(app, locale === "ko" ? "탭 닫기" : "Close tab");
     await waitBrowser(async () => {
       const state = await app.call<{ tabs: Array<{ id: string; url: string }> }>("state");
       return state.tabs.length === 1 && state.tabs[0]!.id !== before.tabs[0]!.id && state.tabs[0]!.url === "";
@@ -29,6 +29,29 @@ export async function newTabHub(app: Awaited<ReturnType<typeof browserAgentApp>>
     await newTabShot(app, `${locale}-${theme}-1440-last-tab-closed`);
   }
   await populatedNewTab(app.page, app.gateway, () => newTabShot(app, "en-dark-newtab-populated"));
+}
+
+/**
+ * The close button shows only while its tab is hovered (TabStrip), as a user sees it. Keep the pointer on the tab
+ * until the button shows, then move and click in one sequence: the desktop's own pointer events reach the window
+ * too and can take the hover away in between.
+ */
+async function closeHoveredTab(app: Awaited<ReturnType<typeof browserAgentApp>>, label: string) {
+  const close = `[...document.querySelectorAll('button,[role="button"]')].find(e=>e.getAttribute('aria-label')===${JSON.stringify(label)})`;
+  const point = await app.page.expression<{ x: number; y: number }>(`(() => {
+    const box=${close}.getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2};
+  })()`);
+  await waitBrowser(async () => {
+    await app.page.movePointer(point.x, point.y);
+    return app.page.expression<boolean>(`(() => {
+      const node=${close};
+      for (let parent=node;parent;parent=parent.parentElement) if (parent.getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
+      return node.contains(document.elementFromPoint(${point.x},${point.y}));
+    })()`);
+  }, "close button shown on hover");
+  await app.page.movePointer(point.x, point.y);
+  await app.page.pointerDown(point.x, point.y);
+  await app.page.pointerUp(point.x, point.y);
 }
 
 async function newTabShot(app: Awaited<ReturnType<typeof browserAgentApp>>, name: string) {
@@ -71,6 +94,12 @@ export async function assertNewTabContent(page: ElectronPage, locale: string, po
   await waitBrowser(async () => JSON.stringify(await read()) === JSON.stringify(expected), "new-tab library sections loaded completely");
   assert.deepEqual(await read(), expected, "new tab has bookmark/folder grids, recent scraps and per-section empty states");
   assert.equal(await page.expression("!document.querySelector('[data-slot=native-view-slot]:not([data-hidden=true])')"), true, "new tab stays in the DOM rather than displaying a native document");
+  const sideways = await page.expression<Array<{ scroll: number; client: number }>>(`(() => {
+    const content = document.querySelector('[data-slot=page-card-content]');
+    return [...(content?.querySelectorAll('*') ?? [])].filter(node => ['auto', 'scroll'].includes(getComputedStyle(node).overflowX) && node.scrollWidth > node.clientWidth)
+      .map(node => ({ scroll: node.scrollWidth, client: node.clientWidth }));
+  })()`);
+  assert.deepEqual(sideways, [], "new-tab page fits its card: no scroller inside it overflows sideways");
 }
 
 /** Seed through the real Library API, then restore the empty isolated library. */
@@ -99,6 +128,22 @@ export async function populatedNewTab(page: ElectronPage, gateway: Awaited<Retur
 
 async function reloadNewTab(page: ElectronPage) {
   await page.reload();
-  await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-entry"]')));
-  await page.clickSelector('[data-test-class="browser-entry"]');
+  await clickSettled(page, '[data-test-class="browser-entry"]');
+}
+
+/**
+ * Click `selector` once a user could: enabled, hit-testable at its center and not moved by a finite animation.
+ * The workspace mounts before the saved layout loads, so after a launch or reload the sidebar slides in.
+ */
+export async function clickSettled(page: ElectronPage, selector: string) {
+  await waitBrowser(() => page.expression(`(() => {
+    const node=document.querySelector(${JSON.stringify(selector)});
+    if (!node || node.disabled || node.getAttribute('aria-disabled')==='true') return false;
+    for (let parent=node;parent;parent=parent.parentElement) {
+      if (parent.getAnimations().some(a=>a.playState==='running' && a.timeline instanceof DocumentTimeline && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
+    }
+    const box=node.getBoundingClientRect();
+    return box.width>0 && box.height>0 && node.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));
+  })()`), `${selector} settled`);
+  await page.clickSelector(selector);
 }

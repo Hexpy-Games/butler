@@ -13,6 +13,7 @@ async fn external_content_web_requests_ask_with_exact_targets() -> Result<(), Ha
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("PERM-WEB")?
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
@@ -262,6 +263,67 @@ async fn external_content_scores_individual_path_segments() -> Result<(), Harnes
             carries
         );
     }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn auto_project_read_then_web_search_needs_no_approval() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("PERM-WEB-PROJECT")?
+        .access(Access::Auto)
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
+    let folder = setup.sandbox.home.join("projects");
+    std::fs::create_dir_all(&folder)?;
+    let mut s = setup.start().await?;
+    let chat = crate::project_workspace::bind_project(&mut s, &folder).await?;
+    let readme = folder.join("작업 Project/README.md");
+    let content = "프로젝트 안내: ".repeat(65);
+    std::fs::write(&readme, &content)?;
+    let config_path = s.sandbox.data.join("butler.config.json");
+    let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
+    config["webSearch"] =
+        json!({"provider":"mock", "readerBackend":"disabled", "planning":{"enabled":false}});
+    std::fs::write(config_path, serde_json::to_vec(&config)?)?;
+    let prompt = "Read README then search the web for its content.";
+    script.rounds.lock().unwrap().insert(
+        prompt.into(),
+        vec![
+            call(
+                "readme",
+                "read_file",
+                &json!({"requests":[{"path":"README.md"}]}),
+            ),
+            call("search", "web_search", &json!({"query":content})),
+        ],
+    );
+    let turn = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+    delivered(&s, &chat, &turn).await?;
+    assert_counts(&s, &turn, 0, 0)?;
+    let output = outputs(&s, &chat, &turn, &script, prompt).await?;
+    assert_eq!(output.len(), 2, "{output:?}");
+    assert!(output.iter().any(|r| r.contains(&content)), "{output:?}");
+    assert!(
+        output.iter().all(
+            |r| !r.contains("authority_request") && !r.contains("schedule_permission_required")
+        ),
+        "{output:?}"
+    );
+    assert!(
+        script.requests_for(prompt).last().unwrap()["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["type"] == "function_call_output")
+            .filter_map(
+                |item| serde_json::from_str::<serde_json::Value>(item["output"].as_str()?).ok()
+            )
+            .all(|r| r["output"]["ok"] == true),
+        "{output:?}"
+    );
     s.finish().await?;
     server.abort();
     Ok(())

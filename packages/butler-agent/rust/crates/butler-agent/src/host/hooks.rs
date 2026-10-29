@@ -21,6 +21,7 @@ struct State {
 }
 pub(crate) struct Dispatcher(Arc<Hooks>);
 struct Hooks {
+    plugins: Arc<super::plugins::Plugins>,
     path: PathBuf,
     home: PathBuf,
     environment: HashMap<String, String>,
@@ -32,11 +33,13 @@ struct Hooks {
 }
 impl Dispatcher {
     pub(crate) async fn open(
+        plugins: Arc<super::plugins::Plugins>,
         data: PathBuf,
         environment: &HashMap<String, String>,
         shutdown: CancellationToken,
     ) -> Self {
         let hooks = Arc::new(Hooks {
+            plugins,
             path: data.join(butler_platform::data_paths::HOOKS),
             home: butler_platform::user_dirs::home_dir().unwrap_or_else(|| data.clone()),
             environment: butler_platform::command_sandbox::tool_environment(environment),
@@ -85,10 +88,25 @@ impl Hooks {
 impl HookPort for Dispatcher {
     fn event_enabled(&self, event: HookEvent) -> bool {
         self.0.events.load(Ordering::Acquire) & event.bit() != 0
+            || self
+                .0
+                .plugins
+                .hooks()
+                .iter()
+                .any(|h| h.event == event && h.enabled)
     }
     fn enabled(&self, event: HookEvent, tool: Option<&str>) -> bool {
-        if self.0.events.load(Ordering::Acquire) & event.bit() == 0 {
+        if !self.event_enabled(event) {
             return false;
+        }
+        if self
+            .0
+            .plugins
+            .hooks()
+            .iter()
+            .any(|h| h.event == event && h.matches(tool))
+        {
+            return true;
         }
         self.0
             .state

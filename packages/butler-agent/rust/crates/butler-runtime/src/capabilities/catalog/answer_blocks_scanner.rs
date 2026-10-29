@@ -175,10 +175,14 @@ impl Scanner {
         if path.first().is_none_or(|key| key != "blocks") {
             return;
         }
-        let structural =
-            path.len() == 2 || (path.len() == 3 && matches!(path[2].as_str(), "items" | "rows"));
-        let value =
-            path.len() == 3 || (path.len() == 4 && matches!(path[2].as_str(), "items" | "rows"));
+        let lists = ["items", "rows", "blocks", "tabs"];
+        let structural = path.len() == 2 || (path.len() == 3 && lists.contains(&path[2].as_str()));
+        let nested = path.len() == 6 && path[2] == "tabs" && path[4] == "blocks";
+        let label = path.len() == 5 && path[2] == "tabs" && path[4] == "label";
+        let value = path.len() == 3
+            || (path.len() == 4 && lists.contains(&path[2].as_str()))
+            || nested
+            || label;
         if structural {
             units.push(Unit { path, value: None });
         } else if value {

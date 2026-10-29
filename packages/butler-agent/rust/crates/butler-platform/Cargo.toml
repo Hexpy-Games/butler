@@ -9,6 +9,7 @@ publish.workspace = true
 # The only crate with operating-system specific code (see src/lib.rs). It is a
 # leaf: it depends on no other workspace crate, so every crate can use it.
 [dependencies]
+socket2 = "0.6.5"
 # Quotes paths inside macOS sandbox profiles.
 iana-time-zone.workspace = true
 serde_json.workspace = true
@@ -36,6 +37,7 @@ nix = { workspace = true, features = ["user", "sched", "mount"] }
 rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+zbus = "=5.19.0"
 landlock = "=0.4.7"
 seccompiler = "=0.5.0"
 
@@ -55,7 +57,7 @@ mxc-sdk = { git = "https://github.com/microsoft/mxc", rev = "2366ee9b1e0bed3a0f9
 windows-dpapi = "=0.2.0"
 aes-gcm = { version = "0.10", features = ["zeroize"] }
 dunce.workspace = true
-winsafe = { workspace = true, features = ["advapi", "shell", "user"] }
+winsafe = { workspace = true, features = ["advapi", "shell", "user", "gui"] }
 if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true

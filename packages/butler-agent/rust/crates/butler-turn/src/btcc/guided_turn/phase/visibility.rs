@@ -58,7 +58,6 @@ pub(super) fn legacy_authorized<'a>(
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
     browser::authorize(&mut names, catalog, policy, scope.worker);
-    apply_role(&mut names, policy);
     image_calls(&mut names, policy);
     names.retain(|name| {
         !catalog.project_mutations.contains(name)
@@ -95,11 +94,21 @@ pub(super) fn legacy_authorized<'a>(
                 .map(|tool| tool.name.clone()),
         );
     }
+    apply_role(&mut names, policy);
     catalog
         .tools
         .iter()
         .filter(|tool| names.contains(&tool.name) && (!tool.durable || tracked))
         .collect()
+}
+
+fn authorize_canon(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    if policy.role == PolicyRole::Butler && policy.subsession.is_none() {
+        names.extend(["canon_read".into(), "canon_propose".into()]);
+    } else {
+        names.remove("canon_read");
+        names.remove("canon_propose");
+    }
 }
 
 /// The facts of a policy that shape legacy authorization.
@@ -233,8 +242,10 @@ fn apply_access_mode(
 /// user, so they never show answer blocks: a child's blocks would be accepted
 /// but never reach the conversation.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    authorize_canon(names, policy);
     if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
         names.remove("answer_blocks");
+        names.remove("resolve_ask");
     }
     for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
         if policy.role.as_str() == role {
@@ -246,6 +257,14 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
         }
     }
 }
+
+/// Workspace write tools every non-read-only tier offers.
+const WRITE_TOOLS: [&str; 4] = [
+    "run_command",
+    "read_tool_output_artifact",
+    "write_file",
+    "edit_file",
+];
 
 pub(super) fn legacy_visible<'a>(
     authorized: &[&'a GuidedCatalogTool],
@@ -266,6 +285,7 @@ pub(super) fn legacy_visible<'a>(
         names.insert("project_ledger_create");
     }
     if policy.role == PolicyRole::Butler {
+        names.extend(["canon_read", "canon_propose"]);
         names.extend(STEWARD_PARENT.iter().copied());
     }
     if policy.role == PolicyRole::Steward {
@@ -282,12 +302,7 @@ pub(super) fn legacy_visible<'a>(
     match policy.access_mode {
         AccessMode::ReadOnly => {}
         AccessMode::AskAlways | AccessMode::AskExceptReads | AccessMode::Auto => {
-            names.extend([
-                "run_command",
-                "read_tool_output_artifact",
-                "write_file",
-                "edit_file",
-            ]);
+            names.extend(WRITE_TOOLS);
             names.extend(
                 policy
                     .required_tools
@@ -297,12 +312,7 @@ pub(super) fn legacy_visible<'a>(
             );
         }
         AccessMode::FullAccess => {
-            names.extend([
-                "run_command",
-                "read_tool_output_artifact",
-                "write_file",
-                "edit_file",
-            ]);
+            names.extend(WRITE_TOOLS);
             names.extend(policy.required_tools.iter().map(String::as_str));
             if policy.has_project_id() {
                 names.insert("bind_session_git_worktree");
@@ -327,6 +337,9 @@ pub(super) fn legacy_visible<'a>(
 }
 
 pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool {
+    if matches!(tool.name.as_str(), "canon_read" | "canon_propose") {
+        return true;
+    }
     if phase == GuidedPhase::Execution {
         return true;
     }

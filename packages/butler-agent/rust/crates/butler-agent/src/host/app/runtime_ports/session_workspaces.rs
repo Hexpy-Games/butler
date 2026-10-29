@@ -11,7 +11,7 @@ use butler_gateway::gateway::{
     AppProjectGit, AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot, ApplicationFuture,
     GatewayApplicationError,
 };
-use butler_turn::btcc::SubsessionService;
+use butler_turn::btcc::{Btcc, SubsessionService};
 use butler_turn::conversation::AgentConversationStore;
 use butler_turn::workspace::{
     BindSessionWorktreeInput, BindSessionWorktreeResult, OwnOptional, ProjectWorkspaceInspection,
@@ -25,6 +25,7 @@ pub(crate) struct AppSessionWorkspaces {
     worktrees: SessionWorktrees,
     recovery: SessionWorkspaceRecovery,
     subsessions: Arc<SubsessionService>,
+    btcc: Btcc,
     conversations: Arc<AgentConversationStore>,
 }
 
@@ -35,6 +36,7 @@ impl AppSessionWorkspaces {
             runtime.session_worktrees.clone(),
             runtime.workspace_recovery.clone(),
             runtime.subsessions.clone(),
+            runtime.btcc.clone(),
             runtime.conversations.clone(),
         )
     }
@@ -44,6 +46,7 @@ impl AppSessionWorkspaces {
         worktrees: SessionWorktrees,
         recovery: SessionWorkspaceRecovery,
         subsessions: Arc<SubsessionService>,
+        btcc: Btcc,
         conversations: Arc<AgentConversationStore>,
     ) -> Self {
         Self {
@@ -51,6 +54,7 @@ impl AppSessionWorkspaces {
             worktrees,
             recovery,
             subsessions,
+            btcc,
             conversations,
         }
     }

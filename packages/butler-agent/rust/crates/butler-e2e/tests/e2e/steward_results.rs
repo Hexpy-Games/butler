@@ -50,6 +50,7 @@ fn request_text(request: &Value) -> String {
 async fn start() -> Result<Scenario, HarnessError> {
     let s = Setup::new("STEWARD-RESULT")?
         .cassette("Q-02-CANCEL")
+        .env("TZ", "UTC")
         .replay_only()
         .start()
         .await?;
@@ -172,8 +173,8 @@ async fn a_result_delivered_to_an_idle_parent_is_not_a_bubble() -> Result<(), Ha
     s.finish().await
 }
 
-/// The parent is mid-turn: the result waits in the queue, and the marker must
-/// survive the wait, the dispatch and the queue view.
+/// The parent is mid-turn: S2 holds the result durably outside the user queue.
+/// Its marker survives the hold and dispatch, and the queue view stays hidden.
 #[tokio::test]
 async fn a_result_queued_behind_a_running_turn_keeps_its_marker() -> Result<(), HarnessError> {
     butler_e2e::gate!();

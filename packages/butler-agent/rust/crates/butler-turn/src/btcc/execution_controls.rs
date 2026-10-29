@@ -34,6 +34,8 @@ pub struct ModelFallback {
 /// The subsession result a turn reports.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubsessionResultContext {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_session_id: Option<String>,
     pub relation_id: String,
     pub result_id: String,
     pub safe_title: String,
@@ -43,9 +45,25 @@ pub struct SubsessionResultContext {
 /// scheduler, not "run now") never wait for an approval (D8).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScheduleRunContext {
+    #[serde(default)]
     pub automation_id: String,
+    #[serde(default)]
     pub run_id: String,
     pub unattended: bool,
+    #[serde(default)]
+    pub browser: Option<ScheduleBrowserOptions>,
+    /// Untrusted event origin inherited by delegated turns.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub connector_event: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
+}
+
+/// Per-run browser permissions. Existing site grants still decide where.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScheduleBrowserOptions {
+    pub signin: bool,
+    pub payment: bool,
 }
 
 /// Execution controls after schema and hash verification.
@@ -220,6 +238,7 @@ impl SubsessionResultContext {
             ));
         }
         Ok(Self {
+            child_session_id: self.child_session_id.clone(),
             relation_id: trim(&self.relation_id).into(),
             result_id: trim(&self.result_id).into(),
             safe_title: self

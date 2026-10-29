@@ -75,21 +75,7 @@ pub(super) fn request(
         serde_json::from_str(&record.normalized_input_json).map_err(|source| {
             AuthorityError::policy("authority_request_corrupt").with_source(source)
         })?;
-    let facts = approval::ApprovalFacts {
-        capability: &record.capability,
-        target: &record.normalized_target,
-        input: &input,
-        workspace: &record.workspace_path,
-    };
-    let mut approval = approval::summarize(facts);
-    approval.operation = Some(approval::exact_operation(facts));
-    if record.capability == "create_automation" {
-        approval.schedule = Some(approval::schedule(&input));
-    } else if record.capability == "delete_automation" {
-        approval.schedule = input
-            .get("schedule")
-            .and_then(|value| serde_json::from_value(value.clone()).ok());
-    }
+    let approval = exact_approval(record, &input);
     Ok(AuthorityRequestProjection {
         request_ref: record.request_ref.clone(),
         category: record.category.clone(),
@@ -111,6 +97,46 @@ pub(super) fn request(
         question_state: None,
     })
 }
+/// Fresh approval must show the complete public action, not only its target.
+fn exact_approval(
+    record: &AuthorityRecord,
+    input: &serde_json::Value,
+) -> approval::AuthorityApproval {
+    let facts = approval::ApprovalFacts {
+        capability: &record.capability,
+        target: &record.normalized_target,
+        input,
+        workspace: &record.workspace_path,
+    };
+    let mut approval = approval::summarize(facts);
+    let mut operation = approval::exact_operation(facts);
+    if record.reason == "authority.taintReason" {
+        operation.allow_conversation = Some(false);
+        if let Some(arguments) = input.as_object()
+            && crate::btcc::CapabilityKind::of_call(&record.capability, arguments, false)
+                .persists_beyond_turn()
+        {
+            approval
+                .examples
+                .push(butler_core::public_text::sanitize_public_delta(
+                    &input.to_string(),
+                ));
+            approval.examples_truncated.push(false);
+        }
+    }
+    approval.operation = Some(operation);
+    if record.capability == "create_automation" {
+        approval.schedule = Some(approval::schedule(input));
+    } else if record.capability == "update_automation" {
+        approval.schedule = Some(approval::schedule_update(input));
+    } else if record.capability == "delete_automation" {
+        approval.schedule = input
+            .get("schedule")
+            .and_then(|value| serde_json::from_value(value.clone()).ok());
+    }
+    approval
+}
+
 pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDecisionResult> {
     if record.decision == RequestDecision::Pending {
         return Err(AuthorityError::policy("authority_request_not_decided"));

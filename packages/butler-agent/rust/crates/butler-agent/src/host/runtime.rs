@@ -1,10 +1,12 @@
 //! Native process composition. Domain policies stay behind their existing APIs.
 
 mod boundary;
+mod chat_context;
 mod contracts;
 mod defaults;
 pub(crate) use defaults::ensure_reply_language;
 mod attachments;
+mod delegation_access;
 pub(super) mod environment;
 mod mcp_owner;
 mod memory_bootstrap;
@@ -36,18 +38,17 @@ use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
 use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::context::{
-    ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
-    PromptAssembler, PromptDependencies, ToolOutput,
+    ConversationSessionReference, ConversationTools, PromptAssembler, PromptDependencies,
+    ToolOutput,
 };
 use butler_runtime::operations::MetricFiles;
 use butler_turn::btcc;
 use butler_turn::btcc::{
     BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
     DurableWorkService, GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
-    OperationResultRepository, PortFuture, PrincipalAuthority, ProductionAgentLoop,
-    SessionWorkRepository, SqliteSubsessionRepository, StorageEffectJournal,
-    StorageProgressPublication, ToolJournalRepository, TurnFacadeDependencies,
-    TurnModelExecutionFactory,
+    OperationResultRepository, PortFuture, ProductionAgentLoop, SessionWorkRepository,
+    SqliteSubsessionRepository, StorageEffectJournal, StorageProgressPublication,
+    ToolJournalRepository, TurnFacadeDependencies, TurnModelExecutionFactory,
 };
 use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
@@ -76,7 +77,8 @@ impl AgentRuntime {
         let host_environment = environment::initialize_host();
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
-        let mcp_client = mcp_owner::for_runtime(&paths, &host_environment, writes.clone());
+        let (plugins, mcp_client) =
+            mcp_owner::open(&paths, &host_environment, &writes, &mut startup).await?;
         let web_owner::ProcessWebServices { models, web_access } = web_owner::open(
             &paths,
             environment.model,
@@ -96,7 +98,8 @@ impl AgentRuntime {
         let (image_files, attachment_context) = attachments::owners(&paths.data_root);
         let commands = Commands::new();
         let mutations = WorkspaceMutations::new();
-        let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
+        let (skills, capabilities, catalog) =
+            skills_owner::open(&paths, &files, &mutations, plugins.clone())?;
         startup.phase("skills");
         let stores =
             RuntimeStores::open(&paths.data_root, &collation, stop, timing, &startup).await?;
@@ -159,38 +162,37 @@ impl AgentRuntime {
             butler_memory::work_records::WorkRecordReader::new(&paths.data_root),
             collation.clone(),
         ));
-        let context_budget = Arc::new(ContextBudgetOwner::new(
-            models.configuration.clone(),
-            models.catalog.clone(),
-            environment.context_budget.clone(),
-        ));
-        let tool_output = super::open_tool_output(
-            paths.data_root.clone(),
-            context_budget.clone(),
+        let (context_budget, continuity, tool_output, conversation_context) = chat_context::open(
+            &paths,
+            (&environment.context_budget, &environment.cognition_paths),
+            &models,
+            &stores,
+            profile.clone(),
+            &observer,
             metric_files.clone(),
+        )
+        .await;
+        let daily_cognition = Arc::new(
+            DailyCognitionJobs::open(DailyCognitionOwners {
+                data_root: paths.data_root.clone(),
+                paths: environment.cognition_paths.clone(),
+                coordinator: coordinator.clone(),
+                metrics: metric_files.clone(),
+                consumer: memory_sync.consumer(),
+                capsules: capsule_service,
+                provider: models.provider.clone(),
+                configuration: models.configuration.clone(),
+                profile: profile.clone(),
+                ledger: project_ledger.clone(),
+                date_parser: date_parser.clone(),
+                bindings: stores.bindings.clone(),
+                embedding: embedding.clone(),
+            })
+            .await
+            .map_err(setup)?,
         );
-        let daily_cognition = Arc::new(DailyCognitionJobs::new(DailyCognitionOwners {
-            data_root: paths.data_root.clone(),
-            paths: environment.cognition_paths.clone(),
-            coordinator: coordinator.clone(),
-            metrics: metric_files.clone(),
-            consumer: memory_sync.consumer(),
-            capsules: capsule_service,
-            provider: models.provider.clone(),
-            configuration: models.configuration.clone(),
-            profile: profile.clone(),
-            ledger: project_ledger.clone(),
-            date_parser: date_parser.clone(),
-            bindings: stores.bindings.clone(),
-            embedding: embedding.clone(),
-        }));
-        let context_maintenance = ContextMaintenance::for_cognition(
-            &paths.data_root,
-            &tool_output,
-            &metric_files,
-            &date_parser,
-            &daily_cognition,
-        );
+        let context_maintenance =
+            daily_cognition.context_maintenance(&tool_output, &metric_files, &date_parser);
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
@@ -207,12 +209,6 @@ impl AgentRuntime {
             collation.clone(),
             metric_files.clone(),
             vectors,
-        );
-        let conversation_context = ContextConversation::new(
-            stores.conversations.clone(),
-            models.configuration.clone(),
-            models.catalog.clone(),
-            environment.context_budget,
         );
         let conversation_tools = Arc::new(ConversationTools::new(
             paths.data_root.clone(),
@@ -234,20 +230,15 @@ impl AgentRuntime {
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         let memory_writes =
             memory_bootstrap::rule_owner(&paths, &environment.cognition_paths, &coordinator, stop);
-        let preparation = Arc::new(DefaultTurnPreparation::new(
-            stores.bindings.clone(),
-            stores.conversations.clone(),
+        let preparation = delegation_access::preparation(
+            &stores,
             documents.clone(),
             observer.clone(),
             prompt,
             models.configuration.clone(),
-        ));
-        let authority = Arc::new(PrincipalAuthority::new(
-            stores.btcc.clone(),
-            collation.clone(),
-            now.clone(),
-            Arc::new(|| uuid::Uuid::new_v4().to_string()),
-        ));
+            app_endpoint.clone(),
+        );
+        let authority = mcp_owner::authority(&plugins, &stores, &collation, now.clone());
         let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));
         let (project_work, canon) = work_ports::create(&stores.btcc, &project_ledger, now.clone());
         let work_repository = Arc::new(
@@ -278,6 +269,7 @@ impl AgentRuntime {
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));
         let hooks: Arc<dyn butler_core::hooks::HookPort> = Arc::new(
             crate::host::hooks::Dispatcher::open(
+                plugins.clone(),
                 paths.data_root.clone(),
                 &host_environment,
                 stop.clone(),
@@ -389,6 +381,7 @@ impl AgentRuntime {
         Self::finish_startup(Self {
             data_reset: process.data_reset,
             hooks,
+            plugins,
             memory_writes: Arc::new(memory_writes.rules.clone()),
             memory_management,
             memory_acquisition,
@@ -399,6 +392,7 @@ impl AgentRuntime {
             bindings,
             models,
             context_budget,
+            continuity,
             context_compactions: repositories.context_compactions(),
             collation,
             progress,
@@ -420,6 +414,7 @@ impl AgentRuntime {
             skills: skills.clone(),
             mcp_client,
             context_maintenance,
+            daily_cognition,
             profile,
         })
     }

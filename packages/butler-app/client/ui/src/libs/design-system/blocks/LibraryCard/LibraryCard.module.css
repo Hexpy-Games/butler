@@ -105,13 +105,17 @@
   bottom: 0;
 }
 
-/* The kind tag keeps a document preview's first line and a quote's first words clear. */
+/* The kind tag keeps a document preview's first line, a quote's first words and a block's first row clear. */
 .media[data-tagged] .document {
   padding-top: calc(var(--tag-height-sm) + var(--space-sm));
 }
 
 .media[data-tagged] .quote {
   margin-top: calc(var(--tag-height-sm) + var(--space-sm));
+}
+
+.media[data-tagged] .blockContent {
+  inset-block-start: calc(var(--tag-height-sm) + var(--space-sm));
 }
 
 /* Tags: one line under the meta; "+N" says how many more. */
@@ -131,7 +135,9 @@
   padding: 0 var(--space-xs);
   border: var(--border-hairline) solid
     color-mix(in srgb, var(--accent) 52%, var(--line));
-  border-radius: calc(var(--radius-control) - var(--border-width-strong));
+  border-radius: calc(
+    var(--radius-control) - var(--border-width-strong) / var(--ui-scale)
+  );
   outline: none;
   background: var(--surface-raised);
   box-shadow: var(--focus-ring);
@@ -180,4 +186,39 @@
 
 .layout[data-dragging="true"] {
   opacity: 0.45;
+}
+
+/* A block scrap: the block itself, laid out phone-wide and scaled into the
+   media box from its top start corner, on the card's own surface (not the
+   matte) so it reads as the block it is. The bottom edge fades rather than
+   cutting a row. Inert inside, so the clip never cuts a focus ring. */
+.media[data-kind="block"] {
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--line);
+}
+
+.block {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, var(--text-primary) 78%, transparent);
+}
+
+.blockContent {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: block;
+  width: var(--library-block-width);
+  padding: var(--space-md);
+  box-sizing: border-box;
+  pointer-events: none;
+  transform: scale(var(--library-block-scale));
+  transform-origin: top left;
+}
+
+.blockContent:dir(rtl) {
+  transform-origin: top right;
 }
