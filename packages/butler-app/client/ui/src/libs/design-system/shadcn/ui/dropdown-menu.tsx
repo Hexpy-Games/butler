@@ -11,6 +11,9 @@ import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
 import { CheckIcon, ChevronRightIcon, Minus } from "../../components/Icons";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import styles from "../../components/DropdownMenu/DropdownMenu.module.css";
+import { useComposedRefs } from "../../lib/composeRefs";
+import { DEFAULT_OVERLAY_PRESENTATION, useSheetPresentation, type OverlayPresentation } from "../../lib/presentation";
+import { PresentedSheetBody, PresentedSheetHandle, sheetContentProps } from "../../components/BottomSheet/SheetPresentation";
 import { dsClass } from "../../lib/internal";
 
 function DropdownMenu({
@@ -51,13 +54,35 @@ function DropdownMenuContent({
   align = "start",
   sideOffset = 4,
   theme,
+  presentation = DEFAULT_OVERLAY_PRESENTATION,
+  children,
+  onKeyDown,
   ...props
 }: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>> & {
   ref?: React.Ref<HTMLDivElement>;
   /** App theme for the portalled surface (it renders outside the themed shell). */
   theme?: AdaptiveShellTheme;
+  /** `auto`: a BottomSheet below 768px. `sheet`: always. `popover`: anchored (the app-wide default). */
+  presentation?: OverlayPresentation;
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
+  const surfaceRef = React.useRef<HTMLDivElement | null>(null);
+  const sheetRef = useComposedRefs<HTMLDivElement>(ref, surfaceRef);
+  if (useSheetPresentation(presentation)) {
+    return (
+      <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPrimitive.Content
+          ref={sheetRef}
+          data-slot="dropdown-menu-content"
+          {...props}
+          {...sheetContentProps(cn(theme && adaptiveShellThemeClasses(theme), className), onKeyDown)}
+        >
+          <PresentedSheetHandle surfaceRef={surfaceRef} />
+          <PresentedSheetBody>{children}</PresentedSheetBody>
+        </DropdownMenuPrimitive.Content>
+      </DropdownMenuPrimitive.Portal>
+    );
+  }
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
@@ -69,8 +94,11 @@ function DropdownMenuContent({
         align={align}
         collisionPadding={floatingContentCollisionPadding}
         className={cn(tintedGlassSurfaceClassName, styles.content, theme && adaptiveShellThemeClasses(theme), className)}
+        onKeyDown={onKeyDown}
         {...props}
-      />
+      >
+        {children}
+      </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
   );
 }

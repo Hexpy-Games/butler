@@ -1,6 +1,7 @@
 import type { AnswerBlocksView } from "../../../../shared/answer-blocks-view";
 import { useCallback, useEffect, useState } from "react";
 import { libraryChanged, useLibraryVersion } from "@/app/libraryEvents";
+import { assetSource } from "../images/imageApi";
 import { api, uploadMessageFile } from "@/app/api";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
@@ -13,7 +14,11 @@ export type { LibraryKind } from "@/app/types";
 /** The structured fields of a scrap saved from an answer (a card, a gallery item), kept beside its copy. */
 export interface ScrapFields { title?: string; sub?: string; label?: string; value?: unknown; facts?: string[]; text?: string; source?: string; checked?: string }
 /** A saved item. `group` is its scrap group or bookmark folder id; `tags` are shared across kinds; `autoTitle` is the name it had before a rename. */
-export type LibraryItem = Partial<PickedElement> & { id: string; kind: LibraryKind | "doc"; author?: "user" | "butler"; updatedAt?: string; rev?: number; title: string; url: string; capturedAt: string; file?: ElementFileRef; output?: string; folder?: string; session?: string; snapshot?: ScrapSnapshot; group?: string | null; tags?: string[]; autoTitle?: string; fields?: ScrapFields; block?: AnswerBlocksView; origin?: { document?: string; session: string; message: string; path: string; id?: string }; revisions?: ArtifactRevision[] };
+export type LibraryItem = Partial<PickedElement> & { id: string; asset?: string; image_url?: string; kind: LibraryKind | "doc"; author?: "user" | "butler"; updatedAt?: string; rev?: number; title: string; url: string; capturedAt: string; file?: ElementFileRef; output?: string; folder?: string; session?: string; snapshot?: ScrapSnapshot; group?: string | null; tags?: string[]; autoTitle?: string; fields?: ScrapFields; block?: AnswerBlocksView; origin?: { document?: string; session: string; message: string; path: string; id?: string }; revisions?: ArtifactRevision[] };
+/** Signed library asset URLs keep originals referenced; crops retain their own stored preview. */
+export function libraryImageSource(item: LibraryItem, width?: number): string | undefined {
+  return item.asset && item.image_url ? assetSource({ image_url: item.image_url }, width) : item.crop;
+}
 type Page = { items: LibraryItem[]; next_cursor?: string | null };
 export async function saveLibrary(item: LibraryItem) {
   const saved = await api<LibraryItem>("/library", { method: "POST", body: JSON.stringify(item) }); libraryChanged(); return saved;

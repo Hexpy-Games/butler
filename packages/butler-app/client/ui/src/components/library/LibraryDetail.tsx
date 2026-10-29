@@ -1,4 +1,5 @@
 import { BlockScrap } from "./BlockScrap";
+import { LibraryImage } from "../images/LibraryImage";
 import { useEffect, useRef, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
@@ -8,7 +9,7 @@ import {
   MetaList, PageContainer, Popup, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, TagField, Trash2, Typo,
 } from "@/butler-ds";
 import { openLibraryItem } from "../browser/LibraryItemCard";
-import { deleteLibrary, librarySnapshot, type LibraryItem } from "../browser/libraryStore";
+import { libraryImageSource, deleteLibrary, librarySnapshot, type LibraryItem } from "../browser/libraryStore";
 import { useLibraryGroups, useLibraryTags } from "./libraryApi";
 import { fileItems, hasWebSource, itemMeta, renameItem, safeHost, tagItems } from "./libraryActions";
 import { useLibraryDialogs } from "./libraryDialogs";
@@ -57,7 +58,7 @@ export function LibraryDetail({ view, onAttach }: { view: LibraryView; onAttach:
     <ScrollArea fill dataTestClass="library-detail"><PageContainer width="full" gutter="xl"><Box paddingY="xl">
       <Grid columns={{ compact: "1", base: "1", wide: "main-aside" }} gap="xl">
         {item.block ? <BlockScrap item={item} /> : <ArtifactPreview>
-          {loaded?.html && item.snapshot ? <ArtifactPreviewFrame srcDoc={loaded.html} title={item.title} intrinsicSize={item.snapshot}
+          {item.asset ? <LibraryImage src={libraryImageSource(item)} alt={item.title} preview /> : loaded?.html && item.snapshot ? <ArtifactPreviewFrame srcDoc={loaded.html} title={item.title} intrinsicSize={item.snapshot}
             sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" data-test-class="scrap-frame" />
             : loaded && item.crop ? <ArtifactPreviewImage src={item.crop} alt={item.title} />
               : <Typo.Caption>{loaded ? appCopy.browser.failed : appCopy.artifacts.loading}</Typo.Caption>}

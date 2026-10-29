@@ -130,4 +130,18 @@ export const stories: ShowcaseStory[] = [
   },
   { name: "Radio and checkbox items", render: (context) => <ViewMenu context={context} /> },
   { name: "Checkbox items: all, some (indeterminate), none", render: (context) => <BulkTagMenu context={context} /> },
+  {
+    // presentation="auto": a BottomSheet below 768px, the anchored menu above.
+    name: "Bottom sheet on phones (presentation=\"auto\")",
+    widths: ["375", "app"],
+    render: (context) => (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><IconButton label={text(context).newProject} aria-haspopup="menu"><FolderPlus size="md" /></IconButton></DropdownMenuTrigger>
+        <DropdownMenuContent presentation="auto">
+          <DropdownMenuItem>{text(context).scratch}</DropdownMenuItem>
+          <DropdownMenuItem>{text(context).existing}</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ),
+  },
 ];

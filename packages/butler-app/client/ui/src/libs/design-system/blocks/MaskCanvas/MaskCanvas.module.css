@@ -1,0 +1,135 @@
+/* Fills its container; the frame keeps the picture's ratio inside it. */
+.root {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  container-type: size;
+}
+
+.frame {
+  position: relative;
+  width: min(100cqw, calc(100cqh * (var(--mask-ratio))));
+  aspect-ratio: var(--mask-ratio);
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  /* Strokes are drawn in this colour (read once per stroke). */
+  --mask-paint: var(--accent);
+  user-select: none;
+}
+
+.picture,
+.layer,
+.result,
+.shimmer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.picture {
+  display: block;
+  object-fit: fill;
+}
+
+/* Painted strokes read as a translucent wash over the picture. */
+.layer {
+  opacity: 0.45;
+  touch-action: none;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.frame[data-painting] .layer {
+  cursor: none;
+}
+
+.layer[data-hidden] {
+  opacity: 0;
+}
+
+/* Brush outline following the pointer; sized in screen pixels. */
+.cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--mask-brush);
+  height: var(--mask-brush);
+  margin: calc(var(--mask-brush) / -2) 0 0 calc(var(--mask-brush) / -2);
+  border: 1.5px solid var(--neutral-white);
+  border-radius: 50%;
+  box-shadow: var(--shadow-control);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cursor[data-visible] {
+  opacity: 1;
+}
+
+.frame[data-tool="eraser"] .cursor {
+  border-style: dashed;
+}
+
+/* Generating: a light band sweeps through the painted region only. Reduced
+   motion stops the loop (--motion-loop-count 0), leaving a still wash. */
+.shimmer {
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  mask-image: var(--mask-url);
+  mask-size: 100% 100%;
+  pointer-events: none;
+}
+
+.shimmer::after {
+  position: absolute;
+  inset: 0;
+  width: 60%;
+  background: linear-gradient(
+    110deg,
+    transparent 0,
+    color-mix(in srgb, var(--neutral-white) 55%, transparent) 50%,
+    transparent 100%
+  );
+  animation: mask-shimmer var(--shimmer-duration) var(--motion-ease-linear)
+    var(--motion-loop-count) both;
+  content: "";
+  transform: translateX(-100%);
+}
+
+@keyframes mask-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(170%);
+  }
+}
+
+/* The edited picture fades in inside the painted region only. */
+.result {
+  display: block;
+  animation: mask-reveal var(--motion-deliberate) var(--motion-ease-standard)
+    both;
+  mask-image: var(--mask-url);
+  mask-size: 100% 100%;
+  pointer-events: none;
+}
+
+@keyframes mask-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion: no sweeping band (the loop count also stops it in the
+   app's own reduced scope); the result still fades in. */
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after {
+    animation: none;
+    opacity: 0;
+  }
+}

@@ -13,6 +13,9 @@ import {
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { PillButton } from "../../components/PillButton";
 import styles from "../../components/Select/Select.module.css";
+import { useComposedRefs } from "../../lib/composeRefs";
+import { DEFAULT_OVERLAY_PRESENTATION, useSheetPresentation, type OverlayPresentation } from "../../lib/presentation";
+import { PresentedSheetHandle, presentedSheetBodyClassName, sheetContentProps } from "../../components/BottomSheet/SheetPresentation";
 
 function Select({
   ...props
@@ -127,11 +130,29 @@ function SelectContent({
   children,
   position = "item-aligned",
   align = "center",
+  presentation = DEFAULT_OVERLAY_PRESENTATION,
+  onKeyDown,
   ...props
 }: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>> & {
   ref?: React.Ref<HTMLDivElement>;
+  /** `auto`: a BottomSheet below 768px. `sheet`: always. `popover`: anchored (the app-wide default). */
+  presentation?: OverlayPresentation;
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
+  const surfaceRef = React.useRef<HTMLDivElement | null>(null);
+  const sheetRef = useComposedRefs<HTMLDivElement>(ref, surfaceRef);
+  if (useSheetPresentation(presentation)) {
+    return (
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Content ref={sheetRef} data-slot="select-content" position="popper" {...props} {...sheetContentProps(className, onKeyDown)}>
+          <PresentedSheetHandle surfaceRef={surfaceRef} />
+          <SelectPrimitive.Viewport data-position="popper" className={cn(styles.viewport, presentedSheetBodyClassName)}>
+            {children}
+          </SelectPrimitive.Viewport>
+        </SelectPrimitive.Content>
+      </SelectPrimitive.Portal>
+    );
+  }
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -144,6 +165,7 @@ function SelectContent({
         position={position}
         align={align}
         collisionPadding={floatingContentCollisionPadding}
+        onKeyDown={onKeyDown}
         {...props}
       >
         <SelectScrollUpButton />

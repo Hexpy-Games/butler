@@ -1,6 +1,6 @@
 import { appCopy } from "@/app/copy";
 import { Box, FolderOpen, GroupTile, GroupTileMore, OverflowActionMenu, PencilLine, X, type GroupTilePreview } from "@/butler-ds";
-import type { LibraryItem } from "../browser/libraryStore";
+import { libraryImageSource, type LibraryItem } from "../browser/libraryStore";
 import { useElementDrag } from "../browser/elementDrag";
 import { useCardDrag } from "./libraryCardDrag";
 import { hasWebSource, safeHost } from "./libraryActions";
@@ -10,7 +10,8 @@ import { startGroupDrag } from "./libraryGroupDrag";
 import { openLibrary } from "./libraryNav";
 
 export function preview(item: LibraryItem): GroupTilePreview {
-  if (item.crop) return { kind: "image", src: item.crop };
+  const image = libraryImageSource(item, 200);
+  if (image) return { kind: "image", src: image };
   if (item.kind === "bookmark" && hasWebSource(item)) return { kind: "site", host: item.site ?? safeHost(item.url) };
   if (item.kind === "scrap") return { kind: "quote", text: item.text ?? item.title };
   return { kind: "document" };
