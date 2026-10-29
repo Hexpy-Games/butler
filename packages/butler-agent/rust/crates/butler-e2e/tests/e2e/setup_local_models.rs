@@ -32,8 +32,21 @@ pub(crate) async fn with_local_server(
     id: &str,
     ollama: &FakeServer,
 ) -> Result<Scenario, HarnessError> {
+    with_local_server_env(id, ollama, &[]).await
+}
+
+/// [`with_local_server`] with extra agent environment variables.
+pub(crate) async fn with_local_server_env(
+    id: &str,
+    ollama: &FakeServer,
+    env: &[(&str, &str)],
+) -> Result<Scenario, HarnessError> {
     let closed = format!("http://127.0.0.1:{}", free_port()?);
-    let setup = Setup::new(id)?
+    let setup = env
+        .iter()
+        .fold(Setup::new(id)?, |setup, (key, value)| {
+            setup.env(key, *value)
+        })
         .fixture(Fixture::Empty)
         .env("BUTLER_OLLAMA_BASE_URL", ollama.base_url.clone())
         .env("BUTLER_LM_STUDIO_BASE_URL", closed);

@@ -13,7 +13,7 @@ use butler_turn::btcc::{ModelRoundError, ProviderBodyAdmissionPort, ProviderRequ
 use super::diagnostics;
 use super::provider::{ProviderClock, ProviderRoundPolicy};
 use super::request_admission::PreparedRequestAdmission;
-use super::request_guard::{GuardError, RequestPolicy, run_guarded};
+use super::request_guard::{GuardError, RequestPolicy, TimeoutKind, run_guarded};
 
 #[derive(Clone, Copy)]
 pub(super) enum ResponseMode {
@@ -190,8 +190,9 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                 provider,
                 api,
                 match kind {
-                    super::request_guard::TimeoutKind::Total => "total",
-                    super::request_guard::TimeoutKind::Idle => "idle",
+                    TimeoutKind::FirstResponse => "first_response",
+                    TimeoutKind::Total => "total",
+                    TimeoutKind::Idle => "idle",
                 },
             ))))
         }
@@ -216,12 +217,14 @@ async fn send_attempt(
     mode: ResponseMode,
 ) -> Result<Value, Box<ProviderRequestError>> {
     let timing = timing::Timing::new();
+    progress.await_first_response();
     let response = current
         .send()
         .await
         .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
+    // Headers alone are not the first response: servers may send them
+    // before a long prefill. The first body event starts stall detection.
     timing.mark("headers_received");
-    progress.record_progress();
     plan_limit::read(
         response,
         mode,

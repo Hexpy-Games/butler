@@ -360,15 +360,18 @@ struct LocalInput {
     context_window_tokens: f64,
     max_output_tokens: Option<f64>,
     reasoning_budget_ratio: Option<f64>,
-    #[serde(default, deserialize_with = "image_declaration")]
+    #[serde(default, deserialize_with = "declaration")]
     image_input: Option<Option<bool>>,
+    #[serde(default, deserialize_with = "declaration")]
+    response_timeout_ms: Option<Option<f64>>,
     source: Option<butler_models::models::LocalModelSource>,
 }
 
-fn image_declaration<'de, D: serde::Deserializer<'de>>(
+/// A present field (null clears it); an absent one stays None.
+fn declaration<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
     deserializer: D,
-) -> Result<Option<Option<bool>>, D::Error> {
-    Option::<bool>::deserialize(deserializer).map(Some)
+) -> Result<Option<Option<T>>, D::Error> {
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 fn local_mutation(input: LocalInput) -> Result<LocalModelMutation, GatewayApplicationError> {
@@ -382,6 +385,7 @@ fn local_mutation(input: LocalInput) -> Result<LocalModelMutation, GatewayApplic
         max_output_tokens: input.max_output_tokens,
         reasoning_budget_ratio: input.reasoning_budget_ratio,
         image_input: input.image_input,
+        response_timeout_ms: input.response_timeout_ms,
         source: input
             .source
             .unwrap_or(butler_models::models::LocalModelSource::Discovered),

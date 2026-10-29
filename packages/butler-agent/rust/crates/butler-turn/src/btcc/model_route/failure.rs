@@ -4,7 +4,10 @@ use crate::btcc::{BtccError, RuntimeFailure};
 use super::contracts::{FailureDisposition, ProviderRequestError};
 use crate::btcc::BtccCode;
 
+/// The candidate cannot answer this request: resending it would fail the
+/// same way, so the route moves to its next candidate or surfaces.
 const ADVANCE: &[&str] = &[
+    "provider_first_response_timeout",
     "provider_quota_exhausted",
     "provider_model_not_found",
     "provider_model_retired",
