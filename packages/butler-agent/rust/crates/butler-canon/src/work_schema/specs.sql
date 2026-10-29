@@ -40,3 +40,14 @@ CREATE TABLE IF NOT EXISTS canon_spec_criteria (
   PRIMARY KEY (node_id,revision,criterion_id),
   FOREIGN KEY (node_id,revision) REFERENCES canon_spec_revisions(node_id,revision)
 );
+
+CREATE TABLE IF NOT EXISTS canon_criterion_checks (
+  node_id TEXT NOT NULL REFERENCES canon_spec_nodes(node_id),
+  criterion_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  confirmed_by TEXT NOT NULL CHECK (json_valid(confirmed_by)),
+  at INTEGER NOT NULL,
+  PRIMARY KEY (node_id,criterion_id),
+  FOREIGN KEY (node_id,revision,criterion_id) REFERENCES canon_spec_criteria(node_id,revision,criterion_id)
+);

@@ -13,6 +13,7 @@ export const editCanonTag = (id: string, input: CanonTagEditInput): Promise<Cano
 export const deleteCanonTag = (id: string): Promise<{ id: string }> => api(`/canon/tags/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const getCanon = (projectId: string): Promise<CanonOverview> => api(projectPath(projectId));
 export const getCanonPlan = (id: string): Promise<PlanDetail> => api(planPath(id));
+export const checkCanonCriterion = (nodeId: string, criterionId: string, input: { confirmed: boolean; expected_revision: number }): Promise<unknown> => write(`/canon/specs/${encodeURIComponent(nodeId)}/criteria/${encodeURIComponent(criterionId)}`, "POST", input);
 export const getCanonEpic = (id: string): Promise<EpicDetail> => api(epicPath(id));
 export const getEpicProgress = (epicId: string): Promise<EpicProgressSnapshot> => api(`${epicPath(epicId)}/progress`);
 export const createCanonPlan = (projectId: string, input: PlanInput): Promise<PlanDetail> => write(`${projectPath(projectId)}/plans`, "POST", input);

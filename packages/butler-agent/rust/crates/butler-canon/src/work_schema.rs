@@ -1,5 +1,6 @@
 //! Forward canon migration inside BTCC's single IMMEDIATE transaction.
 use rusqlite::Connection;
+mod criteria;
 mod proposals;
 mod upgrade;
 
@@ -29,6 +30,8 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(include_str!("work_schema/proposals.sql"))?;
     proposals::upgrade(connection)?;
     connection.execute_batch(include_str!("work_schema/mcp.sql"))?;
+    connection.execute_batch(include_str!("work_schema/activity.sql"))?;
+    criteria::upgrade(connection)?;
     let mut stmt = connection.prepare("PRAGMA table_info(canon_epic_work_links)")?;
     let columns = stmt
         .query_map([], |row| row.get::<_, String>(1))?
@@ -52,6 +55,7 @@ fn check_canon(db: &Connection) -> rusqlite::Result<()> {
         "canon_spec_bodies",
         "canon_spec_revisions",
         "canon_spec_criteria",
+        "canon_criterion_checks",
         "canon_audit",
         "canon_events",
         "canon_counters",
