@@ -3,9 +3,11 @@
 
 use std::cmp::Ordering;
 
-/// Every record's name, canonical name and TZif bytes, in archive order;
-/// `None` when the archive is malformed.
-pub(super) fn entries(data: &[u8]) -> Option<Vec<(&[u8], &[u8], &[u8])>> {
+/// One record's name, canonical name and TZif bytes.
+pub(super) type Entry<'a> = (&'a [u8], &'a [u8], &'a [u8]);
+
+/// Every record, in archive order; `None` when the archive is malformed.
+pub(super) fn entries(data: &[u8]) -> Option<Vec<Entry<'_>>> {
     let mut input = data.strip_prefix(b"BTZ2")?;
     let count = take_u32(&mut input)?;
     let mut entries = Vec::new();
