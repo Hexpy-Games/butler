@@ -12,7 +12,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use hmac::{Hmac, Mac};
 use serde_json::{Value, json};
@@ -93,7 +93,7 @@ pub(super) async fn bind_project(s: &mut Scenario, folder: &Path) -> Result<Stri
 
 async fn result(s: &Scenario, chat: &str, prompt: &str) -> Result<Value, HarnessError> {
     let before = s.provider()?.requests().len();
-    let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+    let id = s.send_input(chat, prompt).await?;
     let deadline = Instant::now() + Duration::from_secs(60);
     let request = loop {
         let requests = s.gw.approval_requests(chat).await?;
@@ -157,7 +157,7 @@ async fn approve_write(
     file: &Path,
     expected: &str,
 ) -> Result<(), HarnessError> {
-    let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+    let id = s.send_input(chat, prompt).await?;
     let deadline = Instant::now() + Duration::from_secs(60);
     let request = loop {
         let page = s.gw.approval_requests(chat).await?;
@@ -403,14 +403,12 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
             settings.data()["default_project_workspace_label"],
             folder.file_name().unwrap().to_str().unwrap()
         );
-        let id = accepted_turn_id(
-            &s.gw
-                .say(
-                    "general",
-                    &format!("List my default project folder {index}."),
-                )
-                .await?,
-        )?;
+        let id = s
+            .send_input(
+                "general",
+                &format!("List my default project folder {index}."),
+            )
+            .await?;
         let turn =
             s.gw.wait_turn(
                 "general",
