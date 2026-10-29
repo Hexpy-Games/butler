@@ -166,6 +166,7 @@ mod quota_gating;
 mod reader_tab;
 mod recovery;
 mod reduce_motion;
+mod sandbox_installation;
 mod schedule_calendar;
 mod schedule_chat;
 mod schedule_model;

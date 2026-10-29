@@ -33,6 +33,11 @@ impl Setup {
         Ok(Self::from_sandbox(id, Sandbox::new(id)?))
     }
 
+    /// Allocate private writable binary/resources for an installation-mutating fixture.
+    pub fn mutates_installation(id: &str) -> Result<Self, HarnessError> {
+        Ok(Self::from_sandbox(id, Sandbox::mutates_installation(id)?))
+    }
+
     /// Independent data/provider/home using a caller-owned immutable installation.
     pub fn with_installation(id: &str, installation: &Sandbox) -> Result<Self, HarnessError> {
         Ok(Self::from_sandbox(

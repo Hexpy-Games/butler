@@ -426,7 +426,11 @@ fn diagnostic(script: &stub::Script) -> String {
 
 pub(crate) fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     // Worker profile choices use the configured local gateway endpoint.
-    let setup = Setup::new(id)?;
+    let setup = if std::env::var_os("BUTLER_E2E_FAULT_BIN").is_some() {
+        Setup::mutates_installation(id)?
+    } else {
+        Setup::new(id)?
+    };
     // Holding/interruption fixtures need the debug-only tool hooks. The
     // original navigation/event budgets still apply to this slower binary.
     if let Some(binary) = std::env::var_os("BUTLER_E2E_FAULT_BIN") {

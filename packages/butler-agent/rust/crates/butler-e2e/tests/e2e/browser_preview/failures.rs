@@ -3,7 +3,12 @@ use super::*;
 use std::time::{Duration, Instant};
 
 fn setup(name: &str) -> Result<Setup, HarnessError> {
-    let setup = Setup::new(name)?.env(
+    let setup = if std::env::var_os("BUTLER_E2E_FAULT_BIN").is_some() {
+        Setup::mutates_installation(name)?
+    } else {
+        Setup::new(name)?
+    }
+    .env(
         "PATH",
         std::env::var("PATH").expect("runner PATH is required"),
     );
