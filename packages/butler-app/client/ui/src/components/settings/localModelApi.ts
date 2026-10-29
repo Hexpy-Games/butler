@@ -22,6 +22,7 @@ export function localModelPayload(
   reasoningBudgetRatio?: number,
   apiKey?: string,
   imageInput?: boolean,
+  responseTimeoutMs?: number | null,
 ): LocalModelRegistrationRequest {
   return {
     api_key: apiKey,
@@ -37,7 +38,25 @@ export function localModelPayload(
     reasoning_budget_ratio: reasoningBudgetRatio,
     source: sourceModel ? "discovered" : "manual",
     image_input: imageInput,
+    response_timeout_ms: responseTimeoutMs,
   };
+}
+
+const RESPONSE_TIMEOUT_MAX_SECONDS = 86_400;
+
+/** Milliseconds for a seconds entry: null when empty, NaN when out of range. */
+export function responseTimeoutMs(seconds: string): number | null {
+  const text = seconds.trim();
+  if (!text) return null;
+  const value = Number(text);
+  return Number.isFinite(value) && value >= 1 && value <= RESPONSE_TIMEOUT_MAX_SECONDS
+    ? Math.round(value * 1000)
+    : Number.NaN;
+}
+
+/** A stored limit as the seconds the field shows; empty when unset. */
+export function responseTimeoutSeconds(milliseconds?: number): string {
+  return milliseconds ? String(milliseconds / 1000) : "";
 }
 
 /** The image input declaration to send: only a switch value that differs from where it started. */

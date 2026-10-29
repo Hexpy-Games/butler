@@ -1978,6 +1978,9 @@ export interface AppCopy {
       modelId: string;
       displayName: string;
       maxContext: string;
+      responseTimeout: string;
+      responseTimeoutDescription: string;
+      responseTimeoutError: string;
       imageInput: string;
       registeredLocalModels: string;
       customOpenAiCompatible: string;

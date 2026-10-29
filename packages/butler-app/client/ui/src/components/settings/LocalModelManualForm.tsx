@@ -8,6 +8,13 @@ export interface LocalModelImageInput {
   setChecked: (value: boolean) => void;
 }
 
+/** The response time limit field: seconds as typed. */
+export interface LocalModelResponseTimeout {
+  value: string;
+  setValue: (value: string) => void;
+  invalid: boolean;
+}
+
 interface LocalModelManualFormProps {
   manualModelId: string;
   setManualModelId: (value: string) => void;
@@ -15,6 +22,7 @@ interface LocalModelManualFormProps {
   setManualDisplayName: (value: string) => void;
   manualContext: string;
   setManualContext: (value: string) => void;
+  responseTimeout: LocalModelResponseTimeout;
   imageInput: LocalModelImageInput;
 }
 
@@ -25,6 +33,7 @@ export function LocalModelManualForm({
   setManualDisplayName,
   manualContext,
   setManualContext,
+  responseTimeout,
   imageInput,
 }: LocalModelManualFormProps) {
   useAppLocale();
@@ -66,6 +75,21 @@ export function LocalModelManualForm({
             inputMode="numeric"
             value={manualContext}
             onChange={(event) => setManualContext(event.target.value)}
+          />
+        }
+      />
+      <SettingsField
+        id="local-model-response-timeout"
+        data-test-class="settings-field"
+        label={copy.responseTimeout}
+        description={copy.responseTimeoutDescription}
+        error={responseTimeout.invalid ? copy.responseTimeoutError : undefined}
+        control={
+          <Input
+            id="local-model-response-timeout"
+            inputMode="decimal"
+            value={responseTimeout.value}
+            onChange={(event) => responseTimeout.setValue(event.target.value)}
           />
         }
       />

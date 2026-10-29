@@ -4,7 +4,7 @@ import type {
   LocalModelDiscoveryRequest,
   LocalModelDiscoveryResult,
 } from "@/app/types.ts";
-import { imageInputChange } from "../localModelApi";
+import { imageInputChange, responseTimeoutMs, responseTimeoutSeconds } from "../localModelApi";
 
 const DEFAULT_PLATFORM = "custom" as const;
 type LocalModelPlatform = LocalModelDiscoveryRequest["platform"];
@@ -18,6 +18,7 @@ export function useLocalModelState() {
   const [manualModelId, setManualModelId] = useState("");
   const [manualDisplayName, setManualDisplayName] = useState("");
   const [manualContext, setManualContext] = useState("16384");
+  const [responseTimeout, setResponseTimeout] = useState("");
   const [editingModelRef, setEditingModelRef] = useState("");
   const [busy, setBusy] = useState<"discover" | "register" | "delete" | null>(null);
   const [status, setStatus] = useState("");
@@ -33,12 +34,14 @@ export function useLocalModelState() {
   const selectedModel =
     discovery?.models.find((model) => model.model_ref === selectedModelRef) ?? null;
   const isEditing = editingModelRef.length > 0;
+  const responseTimeoutInvalid = Number.isNaN(responseTimeoutMs(responseTimeout));
   const canDiscover = serverUrl.trim().length > 0 && !busy;
   const canRegister =
     !busy &&
     serverUrl.trim().length > 0 &&
     manualModelId.trim().length > 0 &&
-    Number(manualContext) > 0;
+    Number(manualContext) > 0 &&
+    !responseTimeoutInvalid;
   const imageInput = {
     checked: imageInputChoice ?? imageInputInitial,
     change: imageInputChange(imageInputInitial, imageInputChoice),
@@ -55,6 +58,7 @@ export function useLocalModelState() {
     setManualModelId(model.model_id);
     setManualDisplayName(model.display_name);
     setManualContext(String(model.context_window_tokens));
+    setResponseTimeout(responseTimeoutSeconds(model.response_timeout_ms));
     setImageInputInitial(model.image_input_support === "supported");
     setImageInputChoice(undefined);
     setStatus("");
@@ -94,6 +98,9 @@ export function useLocalModelState() {
     setManualDisplayName,
     manualContext,
     setManualContext,
+    responseTimeout,
+    setResponseTimeout,
+    responseTimeoutInvalid,
     editingModelRef,
     setEditingModelRef,
     busy,
