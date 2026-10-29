@@ -1196,6 +1196,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     queuedPosition: (position, total) => `Queued · ${position} of ${total}`,
     contextDetails: "Show context details",
     usage: {
+      imagesTitle: "Image models", imagesGenerated: "Generated", imagesEdited: "Edited", imagesCost: "Est. cost", imagesTotal: "Total",
       overviewTitle: "Recent usage", historyTitle: "Activity",
       lifetimeTokens: "Lifetime tokens", busiestDay: "Busiest day", longestTask: "Longest task",
       longestStreak: "Longest streak", currentStreak: "Current streak",

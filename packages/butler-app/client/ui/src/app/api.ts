@@ -555,6 +555,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/usage-history") {
     return await callBridge<T>(bridge, "getUsageHistory", { query: url.search });
   }
+  if (method === "GET" && url.pathname === "/usage/images") {
+    return await callBridge<T>(bridge, "getImageUsage", { days: numericSearchParam(url.searchParams, "days") });
+  }
   if (method === "GET" && url.pathname === "/usage-monitor") {
     return await callBridge<T>(bridge, "getUsageMonitor", {
       // Preserve the joint session/range filter for the native bridge as well as HTTP.
