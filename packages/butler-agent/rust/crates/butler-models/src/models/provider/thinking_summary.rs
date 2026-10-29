@@ -46,14 +46,17 @@ pub(super) fn requested(body: &serde_json::Value, provider: &str) -> bool {
         "openai" => body["reasoning"]["summary"] == "auto",
         "google" => body["generationConfig"]["thinkingConfig"]["includeThoughts"] == true,
         "anthropic" => body["thinking"]["display"] == "summarized",
-        _ => false,
+        _ => crate::models::chat_wire_policy(provider)
+            .reasoning_response_field
+            .is_some(),
     }
 }
 
-/// Extract only provider-documented display summaries, never raw reasoning.
+/// Extract display reasoning only from the configured carrier policy.
 pub(super) fn extract(
     response: Option<&serde_json::Value>,
     carrier: super::serialize::Carrier,
+    provider: &str,
 ) -> Option<String> {
     let value = response?;
     let parts = match carrier {
@@ -78,7 +81,15 @@ pub(super) fn extract(
             .filter(|v| v["thought"].as_bool() == Some(true))
             .filter_map(|v| v["text"].as_str())
             .collect(),
-        super::serialize::Carrier::Chat { .. } => return None,
+        super::serialize::Carrier::Chat { .. } => {
+            let field = crate::models::chat_wire_policy(provider).reasoning_response_field?;
+            return value
+                .pointer("/choices/0/message")?
+                .get(field.as_str())?
+                .as_str()
+                .filter(|text| !text.trim().is_empty())
+                .map(str::to_owned);
+        }
     };
     let mut body = String::new();
     for (index, part) in parts.into_iter().enumerate() {

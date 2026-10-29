@@ -303,6 +303,9 @@ pub(crate) fn provider_auth_methods(provider_id: &str) -> Vec<ProviderAuthMethod
 pub fn default_hosted_provider_api_base_url(provider_id: &str) -> Option<&'static str> {
     match provider_id {
         "xai" => Some("https://api.x.ai/v1"),
+        "deepseek" => Some("https://api.deepseek.com"),
+        "upstage" => Some("https://api.upstage.ai/v1"),
+        "motif" => Some("https://api-cbt.morphfactory.io/v1"),
         "qwen" => Some("https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
         "kimi" => Some("https://api.moonshot.ai/v1"),
         "zai" => Some("https://api.z.ai/api/coding/paas/v4"),

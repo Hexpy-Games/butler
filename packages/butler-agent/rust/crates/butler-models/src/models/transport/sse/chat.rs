@@ -23,7 +23,7 @@ pub(in crate::models::transport) async fn hosted_chat(
     progress: RequestProgress,
     observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
 ) -> Result<Value, Box<ProviderRequestError>> {
-    let mut state = ChatState::new();
+    let mut state = ChatState::new(crate::models::chat_wire_policy(provider));
     consume(response, provider, api, Some(HOSTED_FRAME_LIMIT), |frame| {
         progress.record_progress();
         state.frame(frame, observer, provider, api)
@@ -46,6 +46,8 @@ struct ChatState {
     stream_id: String,
     sequence: u64,
     text: String,
+    reasoning: String,
+    policy: crate::models::ChatWirePolicy,
     id: String,
     model: Option<Value>,
     usage: Option<Value>,
@@ -58,13 +60,15 @@ struct ChatState {
 }
 
 impl ChatState {
-    fn new() -> Self {
+    fn new(policy: crate::models::ChatWirePolicy) -> Self {
         Self {
             // One id per response: providers may reuse chunk ids across
             // requests, and the App keys streamed text by stream id.
             stream_id: format!("chat-stream-{}", uuid::Uuid::new_v4().simple()),
             sequence: 0,
             text: String::new(),
+            reasoning: String::new(),
+            policy,
             id: String::new(),
             model: None,
             usage: None,
@@ -137,16 +141,24 @@ impl ChatState {
         if let Some(value) = event.get("model") {
             self.model = Some(value.clone());
         }
-        if let Some(value) = event.get("usage") {
+        if let Some(value) = event.get("usage").filter(|value| value.is_object()) {
             self.usage = Some(value.clone());
         }
         if let Some(delta) = event.pointer("/choices/0/delta") {
             if let Some(value) = delta.get("role").and_then(Value::as_str) {
                 value.clone_into(&mut self.role);
             }
+            if let Some(value) = self
+                .policy
+                .reasoning_response_field
+                .and_then(|field| delta.get(field.as_str()))
+                .and_then(Value::as_str)
+            {
+                self.reasoning.push_str(value);
+                self.emit_reasoning(value, observer);
+            }
             if let Some(value) = delta.get("content").and_then(Value::as_str) {
-                self.text.push_str(value);
-                self.emit_text(value, observer);
+                self.absorb_text(value, observer);
             }
             if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
                 if !merge_tool_calls(&mut self.tool_calls, calls) {
@@ -162,6 +174,39 @@ impl ChatState {
             self.finish_reason = value.clone();
         }
         true
+    }
+
+    fn absorb_text(
+        &mut self,
+        delta: &str,
+        observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+    ) {
+        let leading = self.text.trim().is_empty();
+        self.text.push_str(delta);
+        if self.text.trim().is_empty() {
+            return;
+        }
+        if leading {
+            self.emit_text(&self.text.clone(), observer);
+        } else {
+            self.emit_text(delta, observer);
+        }
+    }
+
+    fn emit_reasoning(
+        &mut self,
+        delta: &str,
+        observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+    ) {
+        let Some(observer) = observer.filter(|_| !delta.is_empty()) else {
+            return;
+        };
+        self.sequence += 1;
+        observer.event(&serde_json::json!({
+            "type":"reasoning_delta", "display":"summary",
+            "streamId":self.stream_id, "sequence":self.sequence,
+            "textDelta":delta, "charCount":delta.encode_utf16().count(),
+        }));
     }
 
     fn emit_text(
@@ -254,6 +299,9 @@ impl ChatState {
                 Value::String(self.text)
             },
         );
+        if let Some(field) = self.policy.reasoning_response_field {
+            assistant.insert(field.as_str().into(), self.reasoning.into());
+        }
         if !self.tool_calls.is_empty() {
             assistant.insert("tool_calls".into(), Value::Array(self.tool_calls));
         }

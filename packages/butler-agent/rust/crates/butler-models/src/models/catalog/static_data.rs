@@ -32,6 +32,7 @@ impl StaticCatalog {
                 "Catalog default routine model is unavailable.",
             ));
         }
+        super::wire_policy::initialize_chat_wire_policies(&catalog.providers);
         Ok(catalog)
     }
 

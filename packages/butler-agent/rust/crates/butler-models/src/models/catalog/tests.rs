@@ -29,6 +29,7 @@ fn setup_providers(catalog: &StaticCatalog) -> BTreeSet<String> {
 #[test]
 fn every_static_model_has_a_tier_and_pricing() {
     image_output::assert_output_catalog();
+    hosted_chat::assert_hosted_chat_catalog_presets_limits_and_wire_policy();
     for model in &catalog().models {
         if model.is_image_output() {
             model.image_output.as_ref().unwrap().validate().unwrap();
@@ -415,3 +416,5 @@ fn pricing_picks_the_prompt_band_day_and_cache_rates() {
             .is_none()
     );
 }
+
+mod hosted_chat;

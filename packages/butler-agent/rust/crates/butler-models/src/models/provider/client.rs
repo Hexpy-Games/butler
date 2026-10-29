@@ -160,8 +160,11 @@ impl ModelProvider {
             prepared.continuation,
         );
         if prepared.summary {
-            result.reasoning_summary =
-                super::thinking_summary::extract(result.raw.as_ref(), prepared.carrier);
+            result.reasoning_summary = super::thinking_summary::extract(
+                result.raw.as_ref(),
+                prepared.carrier,
+                &config.metadata.provider_id,
+            );
         }
         if let Some(binding) = &prepared.thinking_binding {
             super::anthropic_thinking::bind(&mut result, binding);

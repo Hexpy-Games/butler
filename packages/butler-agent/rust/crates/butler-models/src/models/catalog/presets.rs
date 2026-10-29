@@ -55,6 +55,8 @@ pub(crate) struct StaticProviderEntry {
     pub(crate) provider_id: String,
     pub(crate) api_key_billing: ApiKeyBilling,
     pub(crate) presets: ProviderPresets,
+    #[serde(default)]
+    pub(crate) chat_wire_policy: super::ChatWirePolicy,
 }
 
 /// A refreshed model id's tier and version, inferred from the provider's

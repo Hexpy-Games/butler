@@ -352,6 +352,34 @@ fn chat(
             serde_json::json!({"include_usage":true}),
         );
     }
+    chat_reasoning(&mut body, metadata, model, request);
+    if metadata.provider_id == "local" {
+        body.extend(reasoning::local(metadata, request)?);
+    }
+    let policy = crate::models::chat_wire_policy(&metadata.provider_id);
+    policy.apply(
+        &mut body,
+        Some(reasoning::effort(request).unwrap_or("none")),
+    );
+    // Fixed schemas/options precede growing history so appends preserve the
+    // physical request prefix rather than moving the entire tool catalog.
+    body.insert(
+        "messages".into(),
+        Value::Array(if metadata.provider_id == "local" {
+            messages::local_chat_messages(request)
+        } else {
+            messages::chat_messages(request, policy.reasoning_history)
+        }),
+    );
+    Ok(Value::Object(body))
+}
+
+fn chat_reasoning(
+    body: &mut Map<String, Value>,
+    metadata: &ModelProviderMetadata,
+    model: &str,
+    request: &ModelRoundRequest<'_>,
+) {
     if let Some(reasoning) = reasoning::effort(request) {
         match metadata.provider_id.as_str() {
             "xai" | "zai" | "zai-api" => {
@@ -373,20 +401,6 @@ fn chat(
     } else if metadata.provider_id == "kimi" && model != crate::models::KIMI_ADAPTIVE_MODEL {
         body.insert("thinking".into(), serde_json::json!({"type":"disabled"}));
     }
-    if metadata.provider_id == "local" {
-        body.extend(reasoning::local(metadata, request)?);
-    }
-    // Fixed schemas/options precede growing history so appends preserve the
-    // physical request prefix rather than moving the entire tool catalog.
-    body.insert(
-        "messages".into(),
-        Value::Array(if metadata.provider_id == "local" {
-            messages::local_chat_messages(request)
-        } else {
-            messages::chat_messages(request)
-        }),
-    );
-    Ok(Value::Object(body))
 }
 
 fn js_truthy_number(value: f64) -> bool {

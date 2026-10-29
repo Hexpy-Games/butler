@@ -174,6 +174,21 @@ pub(super) fn chat(
     }
     body.insert("messages".into(), Value::Array(messages));
     body.insert("stream".into(), (provider != "local").into());
+    chat_reasoning(&mut body, config, reasoning)?;
+    crate::models::chat_wire_policy(provider)
+        .apply(&mut body, reasoning.map(ReasoningEffort::as_str));
+    if let Some(format) = response_format {
+        body.insert("response_format".into(), format);
+    }
+    Ok(Value::Object(body))
+}
+
+fn chat_reasoning(
+    body: &mut Map<String, Value>,
+    config: &ProviderRequestConfig,
+    reasoning: Option<ReasoningEffort>,
+) -> Result<(), ModelRoundError> {
+    let provider = config.metadata.provider_id.as_str();
     match (provider, reasoning) {
         ("zai" | "zai-api" | "xai" | "opencode-go", Some(reasoning))
             if reasoning != ReasoningEffort::None
@@ -198,13 +213,10 @@ pub(super) fn chat(
                 json!({"type":if reasoning == ReasoningEffort::None {"disabled"} else {"enabled"}}),
             );
         }
-        ("local", value) => local_reasoning(&mut body, config, value)?,
+        ("local", value) => local_reasoning(body, config, value)?,
         _ => {}
     }
-    if let Some(format) = response_format {
-        body.insert("response_format".into(), format);
-    }
-    Ok(Value::Object(body))
+    Ok(())
 }
 
 fn local_reasoning(

@@ -169,12 +169,12 @@ pub fn normalize_registered_hosted_model(
         .or_else(|| input.get("model_ref").filter(|value| !value.is_null()));
     let requested = js_string(raw_requested)?;
     let requested = butler_core::public_text::trim_js_whitespace(&requested);
-    let requested = if requested.contains('/') {
-        requested.to_owned()
-    } else {
-        format!("{provider_id}/{requested}")
-    };
-    let base = catalog.find_static_model_metadata(Some(&requested))?;
+    // A wire model id may itself contain slashes. Resolve it within the
+    // selected provider before accepting an already namespaced catalog ref.
+    let namespaced = format!("{provider_id}/{requested}");
+    let base = catalog
+        .find_static_model_metadata(Some(&namespaced))
+        .or_else(|| catalog.find_static_model_metadata(Some(requested)))?;
     if base.provider_id != provider_id || !base.runtime_supported || base.is_image_output() {
         return None;
     }
@@ -238,6 +238,9 @@ pub(in crate::models) fn hosted_provider(value: &str) -> Option<String> {
             | "anthropic"
             | "google"
             | "xai"
+            | "deepseek"
+            | "upstage"
+            | "motif"
             | "qwen"
             | "kimi"
             | "zai"
