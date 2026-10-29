@@ -1,3204 +1,3204 @@
 {
   "source": "macOS ICU resource zoneinfo64 and /usr/share/zoneinfo POSIX future rules",
-  "version": "2026c",
+  "version": "2026e",
   "actual_icu": "78.1",
   "reported_bun_icu": "74.2",
-  "sha256": "90f5a652d47c75ea500a81e5a3acea895303049b7ad132020b967aeb271e1d89",
+  "sha256": "7eda65ba107cde0aace6d418855634583a7aff3e8f45a13804da6144f6fcb8e5",
   "records": [
     {
       "name": "ACT",
       "canonical": "Australia/Darwin",
-      "sha256": "c1f02667a0ccc207e1c5e446c6e26e1fc9b3de83f61212fe8c6e05b3cdf1bba5"
+      "sha256": "1f3a0333fd2adf4df9277906bceed092f2e0b39183986cc1d7283b935c0b4d2b"
     },
     {
       "name": "AET",
       "canonical": "Australia/Sydney",
-      "sha256": "a25f163e053075cad071e4fadb86aa26717aec4508561fb581a3bb9ece0aed65"
+      "sha256": "79947119cc9ba5c2f2b4fe610c7e68d23779a7210d935c0b0ead4018aba573e9"
     },
     {
       "name": "Africa/Abidjan",
       "canonical": "Africa/Abidjan",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Accra",
       "canonical": "Africa/Accra",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Addis_Ababa",
       "canonical": "Africa/Addis_Ababa",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Africa/Algiers",
       "canonical": "Africa/Algiers",
-      "sha256": "63a836140d0da4bad9f590469d06f65500ce9fe878fb6152329f20c7eb983a42"
+      "sha256": "89580887e8ecdc405157dc6b8485062a9d5f397b2d0bb2dd97231bbecb69b494"
     },
     {
       "name": "Africa/Asmara",
       "canonical": "Africa/Asmera",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Africa/Asmera",
       "canonical": "Africa/Asmera",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Africa/Bamako",
       "canonical": "Africa/Bamako",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Bangui",
       "canonical": "Africa/Bangui",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Banjul",
       "canonical": "Africa/Banjul",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Bissau",
       "canonical": "Africa/Bissau",
-      "sha256": "4c2d1cc04594c12210237d45bb2ae3f7b09d144a4d85c8dd40a6675af30fa4c1"
+      "sha256": "c4d9deb58c66157c40764d779b4fcf8cb26748a100fa4a97912986ca0de2eb12"
     },
     {
       "name": "Africa/Blantyre",
       "canonical": "Africa/Blantyre",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "Africa/Brazzaville",
       "canonical": "Africa/Brazzaville",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Bujumbura",
       "canonical": "Africa/Bujumbura",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "Africa/Cairo",
       "canonical": "Africa/Cairo",
-      "sha256": "d39ffe4acd97cb04fca4744744eacb184ee4698d8a0d4b1b0812746bdf69e27c"
+      "sha256": "28b6828f0925bfbdcfd66c60b11a840b9886a2816934e03189e05434f3d7b520"
     },
     {
       "name": "Africa/Casablanca",
       "canonical": "Africa/Casablanca",
-      "sha256": "0033908eb79556c0930df800e599c7169aee7ecea3adb6ccd7898a4b4ec42784"
+      "sha256": "fa6e32bc82dfb082c58c6ec90b50151205425970f8c99ca97d438f59a6eca7d8"
     },
     {
       "name": "Africa/Ceuta",
       "canonical": "Africa/Ceuta",
-      "sha256": "f41cffb30c0a7acd29ed8e20f02552731839b8248612da08055167c80b1ad00f"
+      "sha256": "6e991a1ec615ccfa99666fb83d8253e9e25daa7a15621c9026a81e9157a6e93a"
     },
     {
       "name": "Africa/Conakry",
       "canonical": "Africa/Conakry",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Dakar",
       "canonical": "Africa/Dakar",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Dar_es_Salaam",
       "canonical": "Africa/Dar_es_Salaam",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Africa/Djibouti",
       "canonical": "Africa/Djibouti",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Africa/Douala",
       "canonical": "Africa/Douala",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/El_Aaiun",
       "canonical": "Africa/El_Aaiun",
-      "sha256": "1f228f3f1ebc6bc5c765fd3e221708d6c5502cf2e7e1ecb7f0050c6368064f27"
+      "sha256": "5d4b54d432224a2fbab41df5ee7f55e3401b1ec73e6b3a4d9b007679373a6cf4"
     },
     {
       "name": "Africa/Freetown",
       "canonical": "Africa/Freetown",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Gaborone",
       "canonical": "Africa/Gaborone",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "Africa/Harare",
       "canonical": "Africa/Harare",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "Africa/Johannesburg",
       "canonical": "Africa/Johannesburg",
-      "sha256": "f3db98d36d497b2878b8fd88ed2f6e7d8b38e5186a5327557120ed65a2b9e199"
+      "sha256": "d07b814f93e3d5ce72730f9a0f1f0fda40f88642b7ffde380baab766479fef17"
     },
     {
       "name": "Africa/Juba",
       "canonical": "Africa/Juba",
-      "sha256": "7e350e0d9f82b644562c2669ca5428d6d91c33a868ee24f31bd5838e928cf836"
+      "sha256": "7c907943ca07152236841e56500a67706e43abfce8d3aaa7efd816a2e2a282f3"
     },
     {
       "name": "Africa/Kampala",
       "canonical": "Africa/Kampala",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Africa/Khartoum",
       "canonical": "Africa/Khartoum",
-      "sha256": "3cc71a55c616d4dd4bd21a3a865d28ac9ebe00551dd234b3290439d08aba4989"
+      "sha256": "cc52b1f1a3c774456876a3ff89c1196f7b5891c4b514f3f971c9de51b0e4e966"
     },
     {
       "name": "Africa/Kigali",
       "canonical": "Africa/Kigali",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "Africa/Kinshasa",
       "canonical": "Africa/Kinshasa",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Lagos",
       "canonical": "Africa/Lagos",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Libreville",
       "canonical": "Africa/Libreville",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Lome",
       "canonical": "Africa/Lome",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Luanda",
       "canonical": "Africa/Luanda",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Lubumbashi",
       "canonical": "Africa/Lubumbashi",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "Africa/Lusaka",
       "canonical": "Africa/Lusaka",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "Africa/Malabo",
       "canonical": "Africa/Malabo",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Maputo",
       "canonical": "Africa/Maputo",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "Africa/Maseru",
       "canonical": "Africa/Maseru",
-      "sha256": "f3db98d36d497b2878b8fd88ed2f6e7d8b38e5186a5327557120ed65a2b9e199"
+      "sha256": "d07b814f93e3d5ce72730f9a0f1f0fda40f88642b7ffde380baab766479fef17"
     },
     {
       "name": "Africa/Mbabane",
       "canonical": "Africa/Mbabane",
-      "sha256": "f3db98d36d497b2878b8fd88ed2f6e7d8b38e5186a5327557120ed65a2b9e199"
+      "sha256": "d07b814f93e3d5ce72730f9a0f1f0fda40f88642b7ffde380baab766479fef17"
     },
     {
       "name": "Africa/Mogadishu",
       "canonical": "Africa/Mogadishu",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Africa/Monrovia",
       "canonical": "Africa/Monrovia",
-      "sha256": "36c1fefb432faa3df746a47d2ddd968e33b45b1521a98fd437a3700cc3d0a6f0"
+      "sha256": "8c59aacf5d1fd06e317d25f18f063e4a914e634db73a2aae2d5d5f61c300796f"
     },
     {
       "name": "Africa/Nairobi",
       "canonical": "Africa/Nairobi",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Africa/Ndjamena",
       "canonical": "Africa/Ndjamena",
-      "sha256": "ebf3f5a52678546d791143b3775795b599c23260ea153dbf72207db4114f668f"
+      "sha256": "005087fc64ab7ffe190905f9620857192d1638759803b62b8f5defcaa16488e4"
     },
     {
       "name": "Africa/Niamey",
       "canonical": "Africa/Niamey",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Nouakchott",
       "canonical": "Africa/Nouakchott",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Ouagadougou",
       "canonical": "Africa/Ouagadougou",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Porto-Novo",
       "canonical": "Africa/Porto-Novo",
-      "sha256": "6bbc70de3fb2b25aa0ac6b1e73d27f99a6f7abc10c54c737052c3cb1f1985179"
+      "sha256": "0455fbb037c57d41e3a158b292087d609fddfde903b71ad6d340a999ceefdcd7"
     },
     {
       "name": "Africa/Sao_Tome",
       "canonical": "Africa/Sao_Tome",
-      "sha256": "4d0c7af6cca3424c7a58b9ce7ee223827dc84999fe21e711ff6be5b5db3d1bb7"
+      "sha256": "d0ca4f40bdfadf20198ba51e0f1607035a03a1394db6d7f5f821da31c9f63e59"
     },
     {
       "name": "Africa/Timbuktu",
       "canonical": "Africa/Bamako",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Africa/Tripoli",
       "canonical": "Africa/Tripoli",
-      "sha256": "b3ca1b46d450fa4c31126b6e268ebfdb2a3d66c4ddaaf2dab1842284e7b4926e"
+      "sha256": "ad8f8ad76db661826371c70df45db7918be62db653c7d510c6fa897a046f730a"
     },
     {
       "name": "Africa/Tunis",
       "canonical": "Africa/Tunis",
-      "sha256": "0c2af2e9edc44c84884a506432855865f6beffa83323fd66e6390708480a3c19"
+      "sha256": "1841f6ae6a3856875a0f297cea279a31618b3e4cb21fde023aca419027a60ce3"
     },
     {
       "name": "Africa/Windhoek",
       "canonical": "Africa/Windhoek",
-      "sha256": "3aea81b33da8b65664921b38dec7016cd69262b0688d700b3ddc540298aeb7fe"
+      "sha256": "e5ef4820b875ce6f65f6b394f2f10aafb59c590f0513b7e21e3017cdbd693d9c"
     },
     {
       "name": "AGT",
       "canonical": "America/Buenos_Aires",
-      "sha256": "cce6002c01231d6acebef9e91bbf857163c7025edf6f1450ead5fb35b946e0fb"
+      "sha256": "c1a427911ba22d6728ec6b5c5137f96f0419911d297b82d41bb404c7c1d25b5c"
     },
     {
       "name": "America/Adak",
       "canonical": "America/Adak",
-      "sha256": "d817be86be6510ffa46251a1326105212700c8836f24e210bffa5f3bbe6d8fb6"
+      "sha256": "f687b86cbb882e5892d380c936b36db4ced90217a24a566584916fba358e104d"
     },
     {
       "name": "America/Anchorage",
       "canonical": "America/Anchorage",
-      "sha256": "8be1db4f926766cae4e5a8d38045a5ee28a59ca9a51a46b538d7659262395b49"
+      "sha256": "82a50d822ae47277b9c421927296c377a92d84fb9580d8d17710ccb470582e42"
     },
     {
       "name": "America/Anguilla",
       "canonical": "America/Anguilla",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Antigua",
       "canonical": "America/Antigua",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Araguaina",
       "canonical": "America/Araguaina",
-      "sha256": "762e4c61b119bf57a1f69280eb7aa3f39c1958698098986a8658b1e35bfdbed4"
+      "sha256": "93d6d80994ea4fdc05c1faae2a4032a2340d9a42b3b5059576e4243311d3e60e"
     },
     {
       "name": "America/Argentina/Buenos_Aires",
       "canonical": "America/Buenos_Aires",
-      "sha256": "cce6002c01231d6acebef9e91bbf857163c7025edf6f1450ead5fb35b946e0fb"
+      "sha256": "c1a427911ba22d6728ec6b5c5137f96f0419911d297b82d41bb404c7c1d25b5c"
     },
     {
       "name": "America/Argentina/Catamarca",
       "canonical": "America/Catamarca",
-      "sha256": "77fa9a8fad65f0c700402c474c5e1b4110d9837c7756a080dd170f147854c952"
+      "sha256": "54a1a23aa6bed112a4a814ceca9c2839979f94dd6b07bb6dd6fca4fe35908004"
     },
     {
       "name": "America/Argentina/ComodRivadavia",
       "canonical": "America/Catamarca",
-      "sha256": "77fa9a8fad65f0c700402c474c5e1b4110d9837c7756a080dd170f147854c952"
+      "sha256": "54a1a23aa6bed112a4a814ceca9c2839979f94dd6b07bb6dd6fca4fe35908004"
     },
     {
       "name": "America/Argentina/Cordoba",
       "canonical": "America/Cordoba",
-      "sha256": "91b236113f165bc4f9786a68f77f9840699d426583d9d30b5817037a0898c724"
+      "sha256": "0385620c498e978a2ebd0b09b4b9e560dd1ab0a25fdc02d067ca4af0a4a8fb83"
     },
     {
       "name": "America/Argentina/Jujuy",
       "canonical": "America/Jujuy",
-      "sha256": "2dfc1bdaa87c9e0f7441e479f446faaa9fa036c5357b3b6aa8bf7e1152b17f79"
+      "sha256": "a58874abbff82fbb1afbbcaa38e8fe4ed3fa39ad0f9df37ee40aad91a7ecf4f2"
     },
     {
       "name": "America/Argentina/La_Rioja",
       "canonical": "America/Argentina/La_Rioja",
-      "sha256": "34dbf1f084f420d25584c76b5faa20c55965ddd504cde9415cd4ec0c95d97a33"
+      "sha256": "4af4db0a63f434941bf622a3bdce73b7a00400169b8a8671245ffc674da4bd42"
     },
     {
       "name": "America/Argentina/Mendoza",
       "canonical": "America/Mendoza",
-      "sha256": "4dfbc189767b9f362616623851649373f03dcf42ab749f50246b80a5bd489bfb"
+      "sha256": "7d88b29618c6c0e896f7f882f2b0a5e7979f4dd06904c35e6299dd25d001cf57"
     },
     {
       "name": "America/Argentina/Rio_Gallegos",
       "canonical": "America/Argentina/Rio_Gallegos",
-      "sha256": "eaa351d590da46c55a3268a676f1793352dad0f6eb06932f0f42853f683b2fe8"
+      "sha256": "cb2f9b31f0f767b7e0d7cbdcef39e51cda478f12fe0c0e3fa6882d2815021699"
     },
     {
       "name": "America/Argentina/Salta",
       "canonical": "America/Argentina/Salta",
-      "sha256": "2b78838e1e2e86b2d3ffe0c6cf55e6069490619587122fab1fcbc164141fe54e"
+      "sha256": "a1a99ceedf3db37b7c437ec7ba8e03328908b0bdda853321f2ee05c606e146a5"
     },
     {
       "name": "America/Argentina/San_Juan",
       "canonical": "America/Argentina/San_Juan",
-      "sha256": "dc03d1e833bcafecd388be58ae263d6039823c1a514a98afd4a14aaa8eb331f1"
+      "sha256": "86c3b2c408145bd5766596d312196d7a8f3e0cfb34716786ecc8579d53162b4c"
     },
     {
       "name": "America/Argentina/San_Luis",
       "canonical": "America/Argentina/San_Luis",
-      "sha256": "4e7c5d9f5563bdbd28527dc3bf59c7656a99e92de3598759ec787b4fe85e993e"
+      "sha256": "fab7efd1f1454982e0f40855db34291e35cc80c44b05465d567197ed50aa0d5e"
     },
     {
       "name": "America/Argentina/Tucuman",
       "canonical": "America/Argentina/Tucuman",
-      "sha256": "cf9d52008ff15b5585f2423f51eb4c3323530cb30a1b1ce892c973b15060388f"
+      "sha256": "8f6a2470b7894e6b789b6dcd0e5da99060072ed805b308546f99b8b59cacaa16"
     },
     {
       "name": "America/Argentina/Ushuaia",
       "canonical": "America/Argentina/Ushuaia",
-      "sha256": "ca343db13f433286d816e7130bae2fca472e98c2f845043d2f59bb3efbe4e0af"
+      "sha256": "60d73555c09ca530a26b06b5595228cbefd7e614c079f0d03e99ee3a8f0374b9"
     },
     {
       "name": "America/Aruba",
       "canonical": "America/Aruba",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Asuncion",
       "canonical": "America/Asuncion",
-      "sha256": "19e69f23a4dc93bd0761918fd9da8f6692be4e3818f901cd307c9dc7d3c138f5"
+      "sha256": "b41c0e88a28444676e0732d3ed6b1cb65c00cecfbe0ca8f93d526632479bcef5"
     },
     {
       "name": "America/Atikokan",
       "canonical": "America/Coral_Harbour",
-      "sha256": "c69210ff6a0235070eff151e7b809f023de734b3d8560cb3f887648ef3b0a182"
+      "sha256": "4a1cf718489c61fbb039424c47e43dd37d676a20a3734bd282e49ff090abe154"
     },
     {
       "name": "America/Atka",
       "canonical": "America/Adak",
-      "sha256": "d817be86be6510ffa46251a1326105212700c8836f24e210bffa5f3bbe6d8fb6"
+      "sha256": "f687b86cbb882e5892d380c936b36db4ced90217a24a566584916fba358e104d"
     },
     {
       "name": "America/Bahia",
       "canonical": "America/Bahia",
-      "sha256": "28406422b4b02a170c155bedaa91d16b3c5b57ee7c3983d9a3577c1dbdf36666"
+      "sha256": "3a784e65b85e380da363dd0ba2fcb49659b4301021c4a1376052171c0d45bbfd"
     },
     {
       "name": "America/Bahia_Banderas",
       "canonical": "America/Bahia_Banderas",
-      "sha256": "b04e312bd2a2982b9c42cf932d4a4a04559be43360e189b66b74da4fcb1dbb08"
+      "sha256": "35b74710f7f69640006eb02d610ec0fbdaa36af2fe794b6ada97ad76952c0c17"
     },
     {
       "name": "America/Barbados",
       "canonical": "America/Barbados",
-      "sha256": "db95fce144d767c7b5e8097ac0af14d2af189e25643d9753db08277f170dbca1"
+      "sha256": "13c2250acbbbc00b366f4e012a18d07aec55c314fa65918c6052ef2f159a91b3"
     },
     {
       "name": "America/Belem",
       "canonical": "America/Belem",
-      "sha256": "6e5f70ed706e829d339989b3cf2ba1652623e902711616b426206a76cffbceec"
+      "sha256": "470a82b8fe64301e26933c8a0f3a486e508aa27e46a5b07b35384e572e084f4e"
     },
     {
       "name": "America/Belize",
       "canonical": "America/Belize",
-      "sha256": "70b6ad2c3c5db545f6cc185b32535f6a4e75e71d185cef3b57300d4885b8ed8b"
+      "sha256": "dc205284289665b51243f724cef027f49c8b19f99290d56a72acb76e26ad542e"
     },
     {
       "name": "America/Blanc-Sablon",
       "canonical": "America/Blanc-Sablon",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Boa_Vista",
       "canonical": "America/Boa_Vista",
-      "sha256": "88c0dca9b1204ddf0380b3a3a566bcbf65360a6e379a8d97e9edbab33c90f075"
+      "sha256": "452f605b60a53da05004b3a7b8024e6e3e0420802e0ec87cd7a3b131ecc29d5c"
     },
     {
       "name": "America/Bogota",
       "canonical": "America/Bogota",
-      "sha256": "0423b2d734ff3a529abdf45e3d2763a0d94f70b663b1c4754a66acb57b3be6d6"
+      "sha256": "c91d21e41cec4520ec20089da1ffff0dcb1e970d3aad4e19b564b026d12adc27"
     },
     {
       "name": "America/Boise",
       "canonical": "America/Boise",
-      "sha256": "e1dce98861d63b0c07d7013ffd780d94dff091d3122f2b289c829bcbe6d67dfe"
+      "sha256": "8c1b9dc8b1501b981abeb696969cda1d13c96c12e781abfd5cba25880ce1274e"
     },
     {
       "name": "America/Buenos_Aires",
       "canonical": "America/Buenos_Aires",
-      "sha256": "cce6002c01231d6acebef9e91bbf857163c7025edf6f1450ead5fb35b946e0fb"
+      "sha256": "c1a427911ba22d6728ec6b5c5137f96f0419911d297b82d41bb404c7c1d25b5c"
     },
     {
       "name": "America/Cambridge_Bay",
       "canonical": "America/Cambridge_Bay",
-      "sha256": "56a76e1f4f6eb68a9f3502d85d8307551acd8dec9d283ec29f779f07015bca62"
+      "sha256": "13127f2399b7c8103d47d18fda06854457887cfce0a4e152818bae922e1e4cef"
     },
     {
       "name": "America/Campo_Grande",
       "canonical": "America/Campo_Grande",
-      "sha256": "dbf26a53949102a8551081f09e9f5e7ebe5b2a814d6a85b78f7a7760c9a5234f"
+      "sha256": "63b03ed2322d1dcd584dc7be8dfc618304382066eea4010ee7c56858b3e3de0d"
     },
     {
       "name": "America/Cancun",
       "canonical": "America/Cancun",
-      "sha256": "b88468ff086dae450fe8c23549bbe5224d4ca008784dd6d08accdfff0bb0a7b3"
+      "sha256": "cc53d3d1f352246c9f16db1ac498a633da38475d2d0052cd67b72fb83ce1387f"
     },
     {
       "name": "America/Caracas",
       "canonical": "America/Caracas",
-      "sha256": "09b6405c253054c21c058c3a53aca4ca48d8aeb60e55e472a6061696dfba165a"
+      "sha256": "acf05e705d1c697b53c833beccb3f98f39b1c12a13def7fff89527e7d739034a"
     },
     {
       "name": "America/Catamarca",
       "canonical": "America/Catamarca",
-      "sha256": "77fa9a8fad65f0c700402c474c5e1b4110d9837c7756a080dd170f147854c952"
+      "sha256": "54a1a23aa6bed112a4a814ceca9c2839979f94dd6b07bb6dd6fca4fe35908004"
     },
     {
       "name": "America/Cayenne",
       "canonical": "America/Cayenne",
-      "sha256": "24d38d12275e86f27c82d5b268f6cdeb80edd268c14fb7ebb658bac5d13f512b"
+      "sha256": "9f398940689859a33be0b337c28224d41d61e41a6b18a22509c1f3927b669864"
     },
     {
       "name": "America/Cayman",
       "canonical": "America/Cayman",
-      "sha256": "c69210ff6a0235070eff151e7b809f023de734b3d8560cb3f887648ef3b0a182"
+      "sha256": "4a1cf718489c61fbb039424c47e43dd37d676a20a3734bd282e49ff090abe154"
     },
     {
       "name": "America/Chicago",
       "canonical": "America/Chicago",
-      "sha256": "e90f9a7b9d77b484848396192d02bf8997c951bed3d76b0370d14adbca887d7e"
+      "sha256": "f4787f23bcdbcc9ffdfda43420a59cca75573046b75826800c39338ab46ca806"
     },
     {
       "name": "America/Chihuahua",
       "canonical": "America/Chihuahua",
-      "sha256": "5ca3b1c1ff7a420e0d083d9c6de318ac5c52e02322c07d183fb915cd02b3ad22"
+      "sha256": "8c72761bd31f8cbb0b4d5c74f8b109673b45e61643148a3b8cbb931a55fb4ac7"
     },
     {
       "name": "America/Ciudad_Juarez",
       "canonical": "America/Ciudad_Juarez",
-      "sha256": "6dff97155cc27185d5e2d98fac8fa5c8bd6ec9ceaf91dfe43c5c83d9bbf61159"
+      "sha256": "d08d05ae6a2f878dc632b110ceaab75cb042add5e4e05acef48275a2ca241955"
     },
     {
       "name": "America/Coral_Harbour",
       "canonical": "America/Coral_Harbour",
-      "sha256": "c69210ff6a0235070eff151e7b809f023de734b3d8560cb3f887648ef3b0a182"
+      "sha256": "4a1cf718489c61fbb039424c47e43dd37d676a20a3734bd282e49ff090abe154"
     },
     {
       "name": "America/Cordoba",
       "canonical": "America/Cordoba",
-      "sha256": "91b236113f165bc4f9786a68f77f9840699d426583d9d30b5817037a0898c724"
+      "sha256": "0385620c498e978a2ebd0b09b4b9e560dd1ab0a25fdc02d067ca4af0a4a8fb83"
     },
     {
       "name": "America/Costa_Rica",
       "canonical": "America/Costa_Rica",
-      "sha256": "479bf241e686dc114850677939ebe6b3c624b5ab32dc08a305ea095cc41f53b3"
+      "sha256": "3b3dbb6d94c3489fbf17420e49dc7cb2ee0e6e6e23fe94664919339426c48d9b"
     },
     {
       "name": "America/Coyhaique",
       "canonical": "America/Coyhaique",
-      "sha256": "eb92b04b0b194927a22e17f08ee8b2ce97eb9d20ac8f2919c85a0be1f4547722"
+      "sha256": "496b1824c7486a83ae776ec4f7c2a9a68fd0b5f457683e8e3c3cae8b6367ab5b"
     },
     {
       "name": "America/Creston",
       "canonical": "America/Creston",
-      "sha256": "70bfbb09e21b05039e7d014c36a36c7e47bd5fdf56e797820ddb7909104002b4"
+      "sha256": "250cca66123a52e2c20c36bd778dd6425e4d21992747ad3e947422a6722f76a6"
     },
     {
       "name": "America/Cuiaba",
       "canonical": "America/Cuiaba",
-      "sha256": "7eda0473c7c449a5cb9fcd1ec2ff961684b0fb81841490bcec14afb72d51ec93"
+      "sha256": "2d4ec2ed6687a9e8cec981efd03bb2239c8f200dc929b55b8acb4e445dd652ec"
     },
     {
       "name": "America/Curacao",
       "canonical": "America/Curacao",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Danmarkshavn",
       "canonical": "America/Danmarkshavn",
-      "sha256": "f77f866ab57265b8f7dd1239fdc00caf58a15621a6c0bdb6c3e446a020d93418"
+      "sha256": "70270ef3df655055e7fa33b742a2f702f04d8d6ee1ddfa38c5b02ec87933d8ce"
     },
     {
       "name": "America/Dawson",
       "canonical": "America/Dawson",
-      "sha256": "85150a9bd6327f01759bc9d4769ca4a59ec120b4a338253039dfd8ad26173dfd"
+      "sha256": "8bdebe6c4ce7220e7c422be6e03bcd1c9bc286bc9fb5ee061b373933074cc29b"
     },
     {
       "name": "America/Dawson_Creek",
       "canonical": "America/Dawson_Creek",
-      "sha256": "9cba643c8172cee1691728f08c920bcbcec9f4a6cb6a23175907363eea08a017"
+      "sha256": "932f4e18f0e9c26113acef8a4678d0dff6e26b48b8dd8d625bb5bf14398c49b5"
     },
     {
       "name": "America/Denver",
       "canonical": "America/Denver",
-      "sha256": "c834451740eacc9317525c5b2feb97a3d73e9633e4db26f40fbac244641e9acf"
+      "sha256": "8220cfcd66fc9f6883ced2402f0681360e3152ed82958555fb0b3d6180fa4631"
     },
     {
       "name": "America/Detroit",
       "canonical": "America/Detroit",
-      "sha256": "14818575d04b5b4905c613eb753e4ad7fdaa894d29113aa4f843f38c3cb91715"
+      "sha256": "9670afb5bc04e362cda1bb159bdc477b48d1fe5f434a99b9cc2de85e0868554e"
     },
     {
       "name": "America/Dominica",
       "canonical": "America/Dominica",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Edmonton",
       "canonical": "America/Edmonton",
-      "sha256": "e0803946ddea9d41577a44011bdf93adc74d96e8b8abcbe561c3aead6a09d757"
+      "sha256": "5d1fa51ae0e991cb702ef4bafd89f0a8339d11842c23bee37f3ed399a7bb3228"
     },
     {
       "name": "America/Eirunepe",
       "canonical": "America/Eirunepe",
-      "sha256": "a91796666830336e5f8931747f2a538fd3774311a712c6a1f391aef65417a025"
+      "sha256": "c163b7675b0d428268c28546a9c3f2b80ab0851f0d0763453ae5441f3ae6dc2f"
     },
     {
       "name": "America/El_Salvador",
       "canonical": "America/El_Salvador",
-      "sha256": "7490176f76e87176f35989531c6772995bbd402ad555fcfa9013b62853d4d4f2"
+      "sha256": "a69ff8a41e562485d2adafc95a8c9a416515d9cf8a352628636c4a78865762cf"
     },
     {
       "name": "America/Ensenada",
       "canonical": "America/Tijuana",
-      "sha256": "ff3cdfc69dab1bea55610fb4591354a90d6e2de62800b01ba4e3130fb48427e7"
+      "sha256": "3e31e3d280deef6d03f39101c45c6df563f6d16fd48009603eab255fd43b26a1"
     },
     {
       "name": "America/Fort_Nelson",
       "canonical": "America/Fort_Nelson",
-      "sha256": "34ed4a7baf0142024d328d740cc0e758f6a6d328324efac656c5f97ba4aa989f"
+      "sha256": "d41a1cb9208c8434094987409c691048f1558f87b1078636df3ac4ec08d2a762"
     },
     {
       "name": "America/Fort_Wayne",
       "canonical": "America/Indianapolis",
-      "sha256": "018f27753945527996f50595c5b609125c2a9719e7ecbe99d671800fa23a3c3b"
+      "sha256": "a1f91f2af5a6a42295cc7abc42aaf42f18ff9bffd099b96d997ef61af7d484be"
     },
     {
       "name": "America/Fortaleza",
       "canonical": "America/Fortaleza",
-      "sha256": "c791675f7a5df43c0dea2f3d7ca84a816667d9856845f7118e22d575e22430d4"
+      "sha256": "f74074d8216d4fec3dd1dbbaa82b81dfdf4d3e67c54f94a40e21839737072a16"
     },
     {
       "name": "America/Glace_Bay",
       "canonical": "America/Glace_Bay",
-      "sha256": "31093636f1a0a7f80d31b619b52980fd69a89c087766ac3a477be1516b549ebc"
+      "sha256": "7096e6147ef13bce59b90616a2cb6e0d4df9b3040241b5535def1fc47d890de7"
     },
     {
       "name": "America/Godthab",
       "canonical": "America/Godthab",
-      "sha256": "3206b1bacc062ed11241884481c9717742d2e4523353c510b85c130269911de0"
+      "sha256": "083117d33962702b5ac7bd4913f64138ecd0db3365b183784cbc331e59d03237"
     },
     {
       "name": "America/Goose_Bay",
       "canonical": "America/Goose_Bay",
-      "sha256": "56ea1b6e636e49094d02ffcbd924b82812c64088e5171ad281f537eb40a73b2f"
+      "sha256": "4af2e2a937915c419dc419176f1c2805d24a09615fcba593596cb246fdbe009e"
     },
     {
       "name": "America/Grand_Turk",
       "canonical": "America/Grand_Turk",
-      "sha256": "1562faee4a1d34c6798195427f7e618a234893e7b733fe8e18b22916e16860ec"
+      "sha256": "c587000ac0acc566ab933ce45423cacd808e3cfd4f49c66352dd29dbf0088f89"
     },
     {
       "name": "America/Grenada",
       "canonical": "America/Grenada",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Guadeloupe",
       "canonical": "America/Guadeloupe",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Guatemala",
       "canonical": "America/Guatemala",
-      "sha256": "1785c228b37f929e4487e8fbe2a9befcb3a61dd18e5e3de64ea7294c02a41e52"
+      "sha256": "7ee24590c07a0ee8285a0ce4c10795071ccc1380868183349bc07b71542d7c2e"
     },
     {
       "name": "America/Guayaquil",
       "canonical": "America/Guayaquil",
-      "sha256": "ab7327986a0e3b4ca488e0e3003f35457a51bf58736e5d3ad936bb7da8ccab04"
+      "sha256": "bbd84dc3eeb38168c54492811717be3a5cdaae4db4f1d6b83d4efec18aa9d55d"
     },
     {
       "name": "America/Guyana",
       "canonical": "America/Guyana",
-      "sha256": "b9621f8896c0ee3949d0d133ce5684784a95a52771c2d6d0a07b44006b687135"
+      "sha256": "48530f411627e4bab7439997d1041e5798ff97ef7f45546f346b88b1f3a7cd42"
     },
     {
       "name": "America/Halifax",
       "canonical": "America/Halifax",
-      "sha256": "6b9b96f25cc424bdab8a7e90fee702a585b0a0476fb4a1062d5498cbf5f2dfbd"
+      "sha256": "b4f2c416fdff0209adfae09a802b2130cb696f4c7f320141396b888cea35e1d4"
     },
     {
       "name": "America/Havana",
       "canonical": "America/Havana",
-      "sha256": "6f72db7baf5b6d331d506972a31270ca83c4addbbb117f93a5f9e0c19ac598d8"
+      "sha256": "2e4fb2e07ef5635900da9527152ee9df0b2986f082b4e2a00c9d31b0456da66d"
     },
     {
       "name": "America/Hermosillo",
       "canonical": "America/Hermosillo",
-      "sha256": "b2f3d4381be223c39d58ac6730845f164bf0df5f8b793a716ad2c61556f492f4"
+      "sha256": "dbbd8bf2cda96a2bb73d3c7c8314a7c11fc388eb1f30c62150d91cf1f8a2ff0a"
     },
     {
       "name": "America/Indiana/Indianapolis",
       "canonical": "America/Indianapolis",
-      "sha256": "018f27753945527996f50595c5b609125c2a9719e7ecbe99d671800fa23a3c3b"
+      "sha256": "a1f91f2af5a6a42295cc7abc42aaf42f18ff9bffd099b96d997ef61af7d484be"
     },
     {
       "name": "America/Indiana/Knox",
       "canonical": "America/Indiana/Knox",
-      "sha256": "47ede632cd521573e83c03fdc30737a8c3cc90336c7ee9b1c10609a5e2c2ead8"
+      "sha256": "71e324c50c8095e943276458e9d27bb00d6c0339d12c9abec0299cd8b35c855d"
     },
     {
       "name": "America/Indiana/Marengo",
       "canonical": "America/Indiana/Marengo",
-      "sha256": "bcdefd81746e683fbfceb4f0ea73e92d846c5e0b3ccdf745e4c00198a23d38f5"
+      "sha256": "669013938d0b70ff883c41dd9c6ec28b39f84e0f6fd81b644315dfef6c061f19"
     },
     {
       "name": "America/Indiana/Petersburg",
       "canonical": "America/Indiana/Petersburg",
-      "sha256": "c788897674823e5b8a0be8f508602d097bf0c31251c2952fbedf41bae20b8640"
+      "sha256": "7dca498e53b9c86a9f3887f01b7d9cd245861b850c341954a0e704f31de511d9"
     },
     {
       "name": "America/Indiana/Tell_City",
       "canonical": "America/Indiana/Tell_City",
-      "sha256": "b4e9793115ef890a021200faa500a01deaacbd0564c667cf2acd0afaf437f6b8"
+      "sha256": "888cc5f97cd8a67386014b2164f7ff1649efe4d9789944db309adb7211b2eaf3"
     },
     {
       "name": "America/Indiana/Vevay",
       "canonical": "America/Indiana/Vevay",
-      "sha256": "f57c82f7fa63c67bcabd0a1ea539b3f40bbd5305b7bf3f8712189b8bc19a292c"
+      "sha256": "3c0a6c386d7674f2be18e5b56e0d09126832c65d4c512794bd173ebbfe93d329"
     },
     {
       "name": "America/Indiana/Vincennes",
       "canonical": "America/Indiana/Vincennes",
-      "sha256": "c72051e9f4a499e232b54461ce3255e559d2f2bf602b0c4e3e734f4fc22bcd94"
+      "sha256": "f0ca30b156ecaef0a83ab209bff1728b3cf367c0506fc24e76d6a739428ace20"
     },
     {
       "name": "America/Indiana/Winamac",
       "canonical": "America/Indiana/Winamac",
-      "sha256": "62260225c0bfbb223efbc777972e2c75012b053a8949aa8a9910bd2c12f9dbeb"
+      "sha256": "d5c9b0ea4d5738c634d893e134a61b787de0c88b7822bc062d8c3a34b35c4c92"
     },
     {
       "name": "America/Indianapolis",
       "canonical": "America/Indianapolis",
-      "sha256": "018f27753945527996f50595c5b609125c2a9719e7ecbe99d671800fa23a3c3b"
+      "sha256": "a1f91f2af5a6a42295cc7abc42aaf42f18ff9bffd099b96d997ef61af7d484be"
     },
     {
       "name": "America/Inuvik",
       "canonical": "America/Inuvik",
-      "sha256": "3a9f8e8fca9fd8ecf3ae4b9a9cec68cd6f18ccb0ce1279633b1a7022ee47f305"
+      "sha256": "5235953301f5280d2adcd6448c69d41f4a2cb535275fb847b58cdf9593bee3e5"
     },
     {
       "name": "America/Iqaluit",
       "canonical": "America/Iqaluit",
-      "sha256": "e498bed1c0ef78f169920b016d5886681bee51458a870fc23ee4d32aed52345b"
+      "sha256": "ef9b72f77f7a6e2593c0fcebb8bbb137f2dbfa7eece81e5f919c6051c03db0e0"
     },
     {
       "name": "America/Jamaica",
       "canonical": "America/Jamaica",
-      "sha256": "551eb23a35e74c17f1f4b807bd824d1f9fdae93cf28cd4038818da07778bd09b"
+      "sha256": "3051ad95227b554ae3751e759e6a8f76104b2b39e8d2a6c744cef56f6d883539"
     },
     {
       "name": "America/Jujuy",
       "canonical": "America/Jujuy",
-      "sha256": "2dfc1bdaa87c9e0f7441e479f446faaa9fa036c5357b3b6aa8bf7e1152b17f79"
+      "sha256": "a58874abbff82fbb1afbbcaa38e8fe4ed3fa39ad0f9df37ee40aad91a7ecf4f2"
     },
     {
       "name": "America/Juneau",
       "canonical": "America/Juneau",
-      "sha256": "776f8a13fcc82455205dbfc72296c781216915c7173a65c48c2d6c78281bb619"
+      "sha256": "8e613d452800b3ec5773bebeccd43f740f2347c0213572a55678ac90c5152900"
     },
     {
       "name": "America/Kentucky/Louisville",
       "canonical": "America/Louisville",
-      "sha256": "50b7cecb11af4d6dfb700cb6406a7c1117f7838a21b678d60c1e89ec39ab7ae0"
+      "sha256": "317f0b754747a2fb4e296ff624e5762f091d46d976aa3b74ec0fb5f250843211"
     },
     {
       "name": "America/Kentucky/Monticello",
       "canonical": "America/Kentucky/Monticello",
-      "sha256": "bb8e75e1ce67f2a048eaf75cd2e6e31bbce27bc3fb8109bffb69e1e5919186d3"
+      "sha256": "13315bf13f2144febb76fe7bdf93a1f7e160065dee96de40b9bdbd7f6d4bbd86"
     },
     {
       "name": "America/Knox_IN",
       "canonical": "America/Indiana/Knox",
-      "sha256": "47ede632cd521573e83c03fdc30737a8c3cc90336c7ee9b1c10609a5e2c2ead8"
+      "sha256": "71e324c50c8095e943276458e9d27bb00d6c0339d12c9abec0299cd8b35c855d"
     },
     {
       "name": "America/Kralendijk",
       "canonical": "America/Kralendijk",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/La_Paz",
       "canonical": "America/La_Paz",
-      "sha256": "ca83351beda1e39c60ada77c0c03b85c1aa249aa1b559ee55ae2565bb1327270"
+      "sha256": "7ee41337f37ae3952e346d97879750feb2e8da5a0f28a816e0cbca96ee43338a"
     },
     {
       "name": "America/Lima",
       "canonical": "America/Lima",
-      "sha256": "1c4de745915f7d08e354d34ef744f7a0a4b44a85cb98de0fd902ff9ad4036bdb"
+      "sha256": "74d8a7327a12b10ba0c38130d6eb322c352963919da7b86b2e907709fefe7f01"
     },
     {
       "name": "America/Los_Angeles",
       "canonical": "America/Los_Angeles",
-      "sha256": "3f3d1eebabc83be4ce23659b950170791b3510c2025d59f6b724166b3bce10be"
+      "sha256": "9b30303d94ef9059d4f43a79482b0c18f0fb13926f99e7294a839c3555936433"
     },
     {
       "name": "America/Louisville",
       "canonical": "America/Louisville",
-      "sha256": "50b7cecb11af4d6dfb700cb6406a7c1117f7838a21b678d60c1e89ec39ab7ae0"
+      "sha256": "317f0b754747a2fb4e296ff624e5762f091d46d976aa3b74ec0fb5f250843211"
     },
     {
       "name": "America/Lower_Princes",
       "canonical": "America/Lower_Princes",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Maceio",
       "canonical": "America/Maceio",
-      "sha256": "018c0eeee48fbf941b95a3d1d06090d3a5fe47c14913d32d8b356d813895b260"
+      "sha256": "07966f793ba4dcefabac02678e0eabe0e459869ef7419ba78fc687cca57ce40e"
     },
     {
       "name": "America/Managua",
       "canonical": "America/Managua",
-      "sha256": "445fac46ae6ae92c0200ec7cb31eb907e501ec3244c74741d1861b3b46461107"
+      "sha256": "99494921dfd3a779c6357df791d3fdee91c83d7d2165cc278044c164d4abc4e4"
     },
     {
       "name": "America/Manaus",
       "canonical": "America/Manaus",
-      "sha256": "8d8d8e9ad6f80a83ae5ab96cf7406c7085fefe7d43c935129a48b940d3b902ec"
+      "sha256": "08353f9bc845d6aca219fc005f9d6de29e7832f0b32a6547c962a989efaa9046"
     },
     {
       "name": "America/Marigot",
       "canonical": "America/Marigot",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Martinique",
       "canonical": "America/Martinique",
-      "sha256": "29815a05a7bf8092b4d3ce370f5f978e1023e88888d7051e4ee21454c6e159bc"
+      "sha256": "4f4bb82e3868366155c080956f53e249ded5ff40be1e4272c68b239fe6b46b37"
     },
     {
       "name": "America/Matamoros",
       "canonical": "America/Matamoros",
-      "sha256": "0933b8bc15b698791102d6db56088ec3fd5ad96f34135c6c49655e12149aeff9"
+      "sha256": "1e7de5ff609613e0c5f4375f1eb03480d1bfbd9abbc5923c8216502dfde03b76"
     },
     {
       "name": "America/Mazatlan",
       "canonical": "America/Mazatlan",
-      "sha256": "23666f409c0eb03d00929b8f3aa0d48dd9c6455eafb3ab313f732d2e430aed72"
+      "sha256": "16cdc27f671de17d9f97153150c2cdd1d7078928db3be0f144de0dce48ede051"
     },
     {
       "name": "America/Mendoza",
       "canonical": "America/Mendoza",
-      "sha256": "4dfbc189767b9f362616623851649373f03dcf42ab749f50246b80a5bd489bfb"
+      "sha256": "7d88b29618c6c0e896f7f882f2b0a5e7979f4dd06904c35e6299dd25d001cf57"
     },
     {
       "name": "America/Menominee",
       "canonical": "America/Menominee",
-      "sha256": "1c1de5f7ba3761b441ac4d2dafc0a60e341caa48ca4d56b13fb74728e5e3a027"
+      "sha256": "35f684f8de94d0655917a9ad9350abea56bdfb38797bd6ebc6921bc31cfab233"
     },
     {
       "name": "America/Merida",
       "canonical": "America/Merida",
-      "sha256": "7c744ad9202d02e48cd7519179d669dbac92efcfa60b0b539e61c45636ad61cb"
+      "sha256": "d3a7978041c2844b647dc4d895be11b9babbd492e828a1765f8fefa345806750"
     },
     {
       "name": "America/Metlakatla",
       "canonical": "America/Metlakatla",
-      "sha256": "493dd14238a94512929c062489cfe1a5332ab6f79ce7bd26a615570515666077"
+      "sha256": "0134ded6be3c06db248dbe1db4752e4ef620a950a712384a8295c5b231f00246"
     },
     {
       "name": "America/Mexico_City",
       "canonical": "America/Mexico_City",
-      "sha256": "4d1b8b914330ab16630a03e669fbb067ae0b03f75362b8ebef6d542bae4886ff"
+      "sha256": "56c2ebc774ceb4a45df1c30f7a990f10710cffe818c2b9c1d4a0e216bca401fe"
     },
     {
       "name": "America/Miquelon",
       "canonical": "America/Miquelon",
-      "sha256": "8a3df695a66d98706d7f1f1dba8ab030c931bac2b9da98a8ed05a56f9ff8426d"
+      "sha256": "dece870ea84011a394cc9698e7b10ca6df7ff42a066bc04482125b0fc0519eb4"
     },
     {
       "name": "America/Moncton",
       "canonical": "America/Moncton",
-      "sha256": "162f0482585fefd69c0f3a3da889a7384d4b71015c799da53e6aebef6fdd4fb9"
+      "sha256": "6ff00dceafe567daf70d53882ba3ee12067477fc3542b9f813ecfceaf4047fc6"
     },
     {
       "name": "America/Monterrey",
       "canonical": "America/Monterrey",
-      "sha256": "43396407e26a4cc8345f86aaac4937a19d7609758e2b67d5e8331f27d42a3697"
+      "sha256": "fd812d917287fa7660be3b3a42a365e05b111d0852b56e330bea5fa06079adda"
     },
     {
       "name": "America/Montevideo",
       "canonical": "America/Montevideo",
-      "sha256": "d304e517036c718d61d8510c88419069d9b24b9913514da0db28b6c81971e934"
+      "sha256": "821ff488996ee652524106f06e302d4ef72a88b926762d0a3d681350c4276d0c"
     },
     {
       "name": "America/Montreal",
       "canonical": "America/Toronto",
-      "sha256": "59c3e0360d911ac11e8a2e9b8ba2ca0706dac4e790c812b9f022136eeebda89f"
+      "sha256": "11809bcaba26cab1f817d7e594991dabc69bc7eb7afcad2096db8d338ad52906"
     },
     {
       "name": "America/Montserrat",
       "canonical": "America/Montserrat",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Nassau",
       "canonical": "America/Nassau",
-      "sha256": "59c3e0360d911ac11e8a2e9b8ba2ca0706dac4e790c812b9f022136eeebda89f"
+      "sha256": "11809bcaba26cab1f817d7e594991dabc69bc7eb7afcad2096db8d338ad52906"
     },
     {
       "name": "America/New_York",
       "canonical": "America/New_York",
-      "sha256": "0ad556b616f90498a24a0a5ea539c365786de08d77ecbc3bd6467998eecc5667"
+      "sha256": "83d59318cde0ca20ddd537ed78b139074b4ac28be04bde0eb2558fe8fd6079cc"
     },
     {
       "name": "America/Nipigon",
       "canonical": "America/Toronto",
-      "sha256": "59c3e0360d911ac11e8a2e9b8ba2ca0706dac4e790c812b9f022136eeebda89f"
+      "sha256": "11809bcaba26cab1f817d7e594991dabc69bc7eb7afcad2096db8d338ad52906"
     },
     {
       "name": "America/Nome",
       "canonical": "America/Nome",
-      "sha256": "78b0ffbb487d3b6ee3102c3171fe5eef6b90f08a91c238b9ed911267efe11387"
+      "sha256": "bb2ea6ab4aae54398234b180ae5e25da94c2051a9e36ba690349ae424eef9e7f"
     },
     {
       "name": "America/Noronha",
       "canonical": "America/Noronha",
-      "sha256": "b6c80a9c981b24c32852976efd71aa50f40d3501dcde50d17a66e03ab23afa0b"
+      "sha256": "80ff7938e347a2b4e3a98b6e5829db9429046953ebcb4bb7e999ea6cf198abe1"
     },
     {
       "name": "America/North_Dakota/Beulah",
       "canonical": "America/North_Dakota/Beulah",
-      "sha256": "ff744f87ede8c9c5b0ab0650a3bcc8fa49b4bd80ef512c38bb99782b126f9c5b"
+      "sha256": "0b9317c32e85a75904ba235a544a68a1f2f6475615203a2ee048c62fd3ca998f"
     },
     {
       "name": "America/North_Dakota/Center",
       "canonical": "America/North_Dakota/Center",
-      "sha256": "a14f7629d87e00685695aec1ea5254b48c8029251f9f2f950b96953e8e1fe2ee"
+      "sha256": "222e6e62ca4ab8cd94a82208f021b336614937f8165fd0695d0e39fdb4c9e0b3"
     },
     {
       "name": "America/North_Dakota/New_Salem",
       "canonical": "America/North_Dakota/New_Salem",
-      "sha256": "a952a765b9921a4d5e668c055f1785f064382cac2e9ad1a5b562afc9c60b04bd"
+      "sha256": "19870963a234e8b117479e8830cd350a7255f0a44691e9a5e3caf943e24ef710"
     },
     {
       "name": "America/Nuuk",
       "canonical": "America/Godthab",
-      "sha256": "3206b1bacc062ed11241884481c9717742d2e4523353c510b85c130269911de0"
+      "sha256": "083117d33962702b5ac7bd4913f64138ecd0db3365b183784cbc331e59d03237"
     },
     {
       "name": "America/Ojinaga",
       "canonical": "America/Ojinaga",
-      "sha256": "98dbe1ec3d31c70b0af5e53a31cb88e5e7a02f6a78c6ede258b5b797cbc28a29"
+      "sha256": "4b4a69ba820bf12348005ba6ab945d38ad29c7344cf83f2da8387b989e66a917"
     },
     {
       "name": "America/Panama",
       "canonical": "America/Panama",
-      "sha256": "c69210ff6a0235070eff151e7b809f023de734b3d8560cb3f887648ef3b0a182"
+      "sha256": "4a1cf718489c61fbb039424c47e43dd37d676a20a3734bd282e49ff090abe154"
     },
     {
       "name": "America/Pangnirtung",
       "canonical": "America/Iqaluit",
-      "sha256": "e498bed1c0ef78f169920b016d5886681bee51458a870fc23ee4d32aed52345b"
+      "sha256": "ef9b72f77f7a6e2593c0fcebb8bbb137f2dbfa7eece81e5f919c6051c03db0e0"
     },
     {
       "name": "America/Paramaribo",
       "canonical": "America/Paramaribo",
-      "sha256": "328b1e3411cdcd956f51c672b6c2a7a239c77d4266d45cc52f30b1a16382c76e"
+      "sha256": "1535b05203c19eb74c1cbe833beeb012ac3e8dfbe4bf16da8dca369d9fecb2ed"
     },
     {
       "name": "America/Phoenix",
       "canonical": "America/Phoenix",
-      "sha256": "70bfbb09e21b05039e7d014c36a36c7e47bd5fdf56e797820ddb7909104002b4"
+      "sha256": "250cca66123a52e2c20c36bd778dd6425e4d21992747ad3e947422a6722f76a6"
     },
     {
       "name": "America/Port-au-Prince",
       "canonical": "America/Port-au-Prince",
-      "sha256": "349c1d9bbcd684e2502c5bf9d2c165fd0d20b827d83a8954c88840d27d522317"
+      "sha256": "595edd5e2843cb30b0c0a180702b2d21f6d1b2d5be98fbec13b4f7779dea50b3"
     },
     {
       "name": "America/Port_of_Spain",
       "canonical": "America/Port_of_Spain",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Porto_Acre",
       "canonical": "America/Rio_Branco",
-      "sha256": "bfb5511ae985a3db4ed45ce3b95e85e372fe1cc2619d3a2259ee57461c50141f"
+      "sha256": "a6966edb2d62598af4b61d8f7d2d5e029ea3e65ed179f0eae949686c3eab5c0a"
     },
     {
       "name": "America/Porto_Velho",
       "canonical": "America/Porto_Velho",
-      "sha256": "e4fa15fec626bee9b4d92c8ca8b8b8bb8de12770c506a5d629fbd4b08e45430e"
+      "sha256": "5e057bd57878f9317b00fdf435b2cc6d282ffe5fa133457165e2396d250f29b1"
     },
     {
       "name": "America/Puerto_Rico",
       "canonical": "America/Puerto_Rico",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Punta_Arenas",
       "canonical": "America/Punta_Arenas",
-      "sha256": "c0bdcf7d59af58001c12da995b243a4b479bfdd472b2bf88d6b60ef68e10c9db"
+      "sha256": "c7e8ccb694d08b327d2dd76fd5a22e12a654b78cdb19e9e6854f70c3d30e20dc"
     },
     {
       "name": "America/Rainy_River",
       "canonical": "America/Winnipeg",
-      "sha256": "c231ac6372a73c81e46fcebbb24a83eef88ccee3789acd50c84ba43b3b183b7f"
+      "sha256": "fa0a5b3c9296613d64a87d327daee1610851f70d6668034eb544ad91490ef20b"
     },
     {
       "name": "America/Rankin_Inlet",
       "canonical": "America/Rankin_Inlet",
-      "sha256": "5a9fdb94e29b1360d738594b5112275b1e4fe85982f979975d32993f95cabadf"
+      "sha256": "5037b87478aabfe6d9818f8ae26012e38ae736af7a51f79e0d44ca224002bf82"
     },
     {
       "name": "America/Recife",
       "canonical": "America/Recife",
-      "sha256": "c2f9c9272fb7a808494ed079494285663a4f6fa357ea71f1d4889aaee4f39a0f"
+      "sha256": "f229762a7583012edfa0c2b56bdf3cded020315e0f9931211c127fada9bb6fdd"
     },
     {
       "name": "America/Regina",
       "canonical": "America/Regina",
-      "sha256": "a97134b26ecfcb133b2dcc823c747760e6a5e73898a55fcd6300b07c68d2ffae"
+      "sha256": "01ffc84e62607127c0e65d2e1d901e09a91f01fd693638d3934074d6e97600e8"
     },
     {
       "name": "America/Resolute",
       "canonical": "America/Resolute",
-      "sha256": "741d092e6e113138c1278cfc5eda65024fe3d4a6d20581d00ebda69ccb12bb1b"
+      "sha256": "a6beefb4787730fc64be000db64844bb77f811c4252756ce122b40322b00da49"
     },
     {
       "name": "America/Rio_Branco",
       "canonical": "America/Rio_Branco",
-      "sha256": "bfb5511ae985a3db4ed45ce3b95e85e372fe1cc2619d3a2259ee57461c50141f"
+      "sha256": "a6966edb2d62598af4b61d8f7d2d5e029ea3e65ed179f0eae949686c3eab5c0a"
     },
     {
       "name": "America/Rosario",
       "canonical": "America/Cordoba",
-      "sha256": "91b236113f165bc4f9786a68f77f9840699d426583d9d30b5817037a0898c724"
+      "sha256": "0385620c498e978a2ebd0b09b4b9e560dd1ab0a25fdc02d067ca4af0a4a8fb83"
     },
     {
       "name": "America/Santa_Isabel",
       "canonical": "America/Tijuana",
-      "sha256": "ff3cdfc69dab1bea55610fb4591354a90d6e2de62800b01ba4e3130fb48427e7"
+      "sha256": "3e31e3d280deef6d03f39101c45c6df563f6d16fd48009603eab255fd43b26a1"
     },
     {
       "name": "America/Santarem",
       "canonical": "America/Santarem",
-      "sha256": "1694c7dee25a8a0381986092036f2103217cc9adc17e8480e6f944f1c224877f"
+      "sha256": "92a2e5f65d706d94c6bd9c7779b76739ebb966db1c87ebc8fc169811d29c9bae"
     },
     {
       "name": "America/Santiago",
       "canonical": "America/Santiago",
-      "sha256": "1276cdbb09e454a194599e9083d539cdbfad57c11797457171cbe3217c7482ad"
+      "sha256": "e2611056b414bd367a2cd957b4e5a32841841f4876eb1a5988054b9aa2ff6cc1"
     },
     {
       "name": "America/Santo_Domingo",
       "canonical": "America/Santo_Domingo",
-      "sha256": "21f6ed674e4a1fdb50c02f8ebb3fd0eb06f8ee6cc4b19744a6805d84d976c2d0"
+      "sha256": "7b57775bca75f286f55b4d0032f446478386be356ebd55cdce0a2305a175d86f"
     },
     {
       "name": "America/Sao_Paulo",
       "canonical": "America/Sao_Paulo",
-      "sha256": "086f8282aa165c7b22a7eebcae036e455b248de64b15883a5cabc43a9f62332e"
+      "sha256": "3426dfe9e378486be9e4af4008d3c0813cda801793c620d293b7d06626f88ceb"
     },
     {
       "name": "America/Scoresbysund",
       "canonical": "America/Scoresbysund",
-      "sha256": "7d40ade87aade19e642008afcf0f4c886027924d8dcbb4ff9b42e950c7e4b0d7"
+      "sha256": "2b2c6e06140e03fae3bc1e6a35b22ad797cbf22f07ef82a9ec4e74d37e852961"
     },
     {
       "name": "America/Shiprock",
       "canonical": "America/Denver",
-      "sha256": "c834451740eacc9317525c5b2feb97a3d73e9633e4db26f40fbac244641e9acf"
+      "sha256": "8220cfcd66fc9f6883ced2402f0681360e3152ed82958555fb0b3d6180fa4631"
     },
     {
       "name": "America/Sitka",
       "canonical": "America/Sitka",
-      "sha256": "7dfd87a07ceea822b16c62add28c7dbbecf2f44139fc7a3404795c8544698ee6"
+      "sha256": "7dd4943b699de2f446046fb6d414dbacbe93bafcfaec23b33bf5e62d4609a8c6"
     },
     {
       "name": "America/St_Barthelemy",
       "canonical": "America/St_Barthelemy",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/St_Johns",
       "canonical": "America/St_Johns",
-      "sha256": "9c5c051e86763a185ae6c583164fa4af0e9240fcfffd96aa819be1350eec008b"
+      "sha256": "92688e2c8002ec15eef46ee83db26746388ebaebafda1a811da80f93bdbf9d7b"
     },
     {
       "name": "America/St_Kitts",
       "canonical": "America/St_Kitts",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/St_Lucia",
       "canonical": "America/St_Lucia",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/St_Thomas",
       "canonical": "America/St_Thomas",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/St_Vincent",
       "canonical": "America/St_Vincent",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Swift_Current",
       "canonical": "America/Swift_Current",
-      "sha256": "2462c1f133c9953025a42dde6da4b20577a960c9058aed0abd6299e39a7484f4"
+      "sha256": "496b3cc2e0c7fbbe67592f545b336528def2bd5625217c0a82b20bd612bd9405"
     },
     {
       "name": "America/Tegucigalpa",
       "canonical": "America/Tegucigalpa",
-      "sha256": "6605f913b8ee051b380e4fa9e8bc74914a529ed7209999fa52c2bbbe01859402"
+      "sha256": "ad48debe8c8c8eb0152fcc2eb79c7285953fe97647d4cb24b1ef33c4b23b2c1d"
     },
     {
       "name": "America/Thule",
       "canonical": "America/Thule",
-      "sha256": "a4f0cc4af694463910bf0b6f9a7600292ddc0281466850b7ed11050437d20fe4"
+      "sha256": "24ebc61ae0bc91c7c4ec8cb27721ba9c2d2cd476f5af2951e2e92643fa53b1d7"
     },
     {
       "name": "America/Thunder_Bay",
       "canonical": "America/Toronto",
-      "sha256": "59c3e0360d911ac11e8a2e9b8ba2ca0706dac4e790c812b9f022136eeebda89f"
+      "sha256": "11809bcaba26cab1f817d7e594991dabc69bc7eb7afcad2096db8d338ad52906"
     },
     {
       "name": "America/Tijuana",
       "canonical": "America/Tijuana",
-      "sha256": "ff3cdfc69dab1bea55610fb4591354a90d6e2de62800b01ba4e3130fb48427e7"
+      "sha256": "3e31e3d280deef6d03f39101c45c6df563f6d16fd48009603eab255fd43b26a1"
     },
     {
       "name": "America/Toronto",
       "canonical": "America/Toronto",
-      "sha256": "59c3e0360d911ac11e8a2e9b8ba2ca0706dac4e790c812b9f022136eeebda89f"
+      "sha256": "11809bcaba26cab1f817d7e594991dabc69bc7eb7afcad2096db8d338ad52906"
     },
     {
       "name": "America/Tortola",
       "canonical": "America/Tortola",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Vancouver",
       "canonical": "America/Vancouver",
-      "sha256": "d696f57ecced228b092f8b13d0f3a26b3437a196533149d27b1ec799efdcad96"
+      "sha256": "1b2cf954d574e539b0adeaccc349fcfc4bff66ea166417a919d17328dccce358"
     },
     {
       "name": "America/Virgin",
       "canonical": "America/St_Thomas",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "America/Whitehorse",
       "canonical": "America/Whitehorse",
-      "sha256": "287b33ad323d536e2b1c3f2c472c3ec51b9056e56c4af676505b42538121b225"
+      "sha256": "00ca23323ba84cb9e957008365fd8489e29fd72a346af6b676038e15e0242d08"
     },
     {
       "name": "America/Winnipeg",
       "canonical": "America/Winnipeg",
-      "sha256": "c231ac6372a73c81e46fcebbb24a83eef88ccee3789acd50c84ba43b3b183b7f"
+      "sha256": "fa0a5b3c9296613d64a87d327daee1610851f70d6668034eb544ad91490ef20b"
     },
     {
       "name": "America/Yakutat",
       "canonical": "America/Yakutat",
-      "sha256": "99e5a7e215ce7d3b22681555b0b2281c2584eb9d67b3c76cadc0487bc82f1f2f"
+      "sha256": "603341306194b689b591328513b87b0fcf94ae3ae59d7eea01357efe33e0deb8"
     },
     {
       "name": "America/Yellowknife",
       "canonical": "America/Edmonton",
-      "sha256": "e0803946ddea9d41577a44011bdf93adc74d96e8b8abcbe561c3aead6a09d757"
+      "sha256": "5d1fa51ae0e991cb702ef4bafd89f0a8339d11842c23bee37f3ed399a7bb3228"
     },
     {
       "name": "Antarctica/Casey",
       "canonical": "Antarctica/Casey",
-      "sha256": "47908addab8ffbff680f2aa796567480c856682d35c2f3d02692b74464f8ac15"
+      "sha256": "c96d33acd93412df819ea2f575e119c9ae31da2e9d70687ac349f2fc5c4ead1c"
     },
     {
       "name": "Antarctica/Davis",
       "canonical": "Antarctica/Davis",
-      "sha256": "8c5231609c7cc22687f378af9d35296fed5873e9e9c765586fe712f6354d6f0a"
+      "sha256": "b75918f37e11b6a9d6f23e651138d32139bf477dbb62a67f26ae39874abc3467"
     },
     {
       "name": "Antarctica/DumontDUrville",
       "canonical": "Antarctica/DumontDUrville",
-      "sha256": "6c007c7a70a3178bfeff2ce574766e63d1ccae9648f1d65ad84d595defd6f73f"
+      "sha256": "20164619973ef5253b05bac62a23270ce0f40dcc1c6d0a0f6925c70b2d84f365"
     },
     {
       "name": "Antarctica/Macquarie",
       "canonical": "Antarctica/Macquarie",
-      "sha256": "29afa60cfd2280751b7c3a51c114d81f0098b81e521d2d90a5f298c84cf299fa"
+      "sha256": "d7fcf4c1ba18f060d1c9fd06807030e03f8f145243e5eb347991eb79fa6086c9"
     },
     {
       "name": "Antarctica/Mawson",
       "canonical": "Antarctica/Mawson",
-      "sha256": "2dcd2bc8a17e278ba5edc70d43d7032ac58d93a6572748ef4b3d4d2dc8bf4987"
+      "sha256": "9a740bf915de339c809d3942a58d06815fd196cb5e0aaa0e5d76df21e65a7fd1"
     },
     {
       "name": "Antarctica/McMurdo",
       "canonical": "Antarctica/McMurdo",
-      "sha256": "7f3218f40a48c9143f2b1191e0ca0bf825fb4dbd0de4b261a97df78d323e1555"
+      "sha256": "157fd3463ecc558c704f904c2e55e3e42f423412d9eca676125e4551c3d33c7b"
     },
     {
       "name": "Antarctica/Palmer",
       "canonical": "Antarctica/Palmer",
-      "sha256": "88cd7f509ee3bc47ce3775e8eee8d61e94a110c687731c73082b1dfdd1a8157f"
+      "sha256": "6bd9b1466afbeb08adaf0068e7b92f131bb5e1c1cd2c700b5556b26960089837"
     },
     {
       "name": "Antarctica/Rothera",
       "canonical": "Antarctica/Rothera",
-      "sha256": "bc916dc9d8e691ad0f2531b29b7f8d7eb0efbc80d0331fc704630152f9115500"
+      "sha256": "e6fa551fa3487371193e4bb97a044872e8723afe994b7f5210e748f782708b03"
     },
     {
       "name": "Antarctica/South_Pole",
       "canonical": "Antarctica/McMurdo",
-      "sha256": "7f3218f40a48c9143f2b1191e0ca0bf825fb4dbd0de4b261a97df78d323e1555"
+      "sha256": "157fd3463ecc558c704f904c2e55e3e42f423412d9eca676125e4551c3d33c7b"
     },
     {
       "name": "Antarctica/Syowa",
       "canonical": "Antarctica/Syowa",
-      "sha256": "54ebe7e246aa6aa5529b90539063e12c817fb22bfd233b51bdf7616a7c61e9f6"
+      "sha256": "90a699be54f3bc6c0aa87e3be238624d80d38fa4583874d34f37e09ed50fa8ac"
     },
     {
       "name": "Antarctica/Troll",
       "canonical": "Antarctica/Troll",
-      "sha256": "c132c0247d15e112042619d1df791a2f2458782d05b77bd75a4529ee4046e309"
+      "sha256": "2b8dfdf2571a8fc03165c6715e980020ded1effb9153096afbe19dbef7c7137f"
     },
     {
       "name": "Antarctica/Vostok",
       "canonical": "Antarctica/Vostok",
-      "sha256": "ba821462e728c9cdbf6bcda7a0aad92f7a2810ac1f901b374b71320ab01047c4"
+      "sha256": "57761b8e7436ad9ea98a64c0d7581f768110766ab357c6a6080ffe26f6df2146"
     },
     {
       "name": "Arctic/Longyearbyen",
       "canonical": "Arctic/Longyearbyen",
-      "sha256": "3dc514695c4f0e9a88b82d0032949e6efbc55008bbedeeded9049d554daa8619"
+      "sha256": "59b1a45905290c0abbbdb499ab2afc6dce4eab5c7953ccd88b531497d8a3504f"
     },
     {
       "name": "ART",
       "canonical": "Africa/Cairo",
-      "sha256": "d39ffe4acd97cb04fca4744744eacb184ee4698d8a0d4b1b0812746bdf69e27c"
+      "sha256": "28b6828f0925bfbdcfd66c60b11a840b9886a2816934e03189e05434f3d7b520"
     },
     {
       "name": "Asia/Aden",
       "canonical": "Asia/Aden",
-      "sha256": "54ebe7e246aa6aa5529b90539063e12c817fb22bfd233b51bdf7616a7c61e9f6"
+      "sha256": "90a699be54f3bc6c0aa87e3be238624d80d38fa4583874d34f37e09ed50fa8ac"
     },
     {
       "name": "Asia/Almaty",
       "canonical": "Asia/Almaty",
-      "sha256": "3962cf5acac9c8c54d8ba7a36c4482aad2e3c3df215424a50fdf7e0c27c51669"
+      "sha256": "1b200979ebb083b0eb60ad25ecedcdcccf925a02f81aac557079fb47f421a051"
     },
     {
       "name": "Asia/Amman",
       "canonical": "Asia/Amman",
-      "sha256": "4a907f971a68f9896c2e08e548e7096cf4c1a2e248ea04e0d1104628c139cbb2"
+      "sha256": "4d019a6a58bab00e229eb7c52c1da9d8e756cc84958e4dfce55deac638cdbf88"
     },
     {
       "name": "Asia/Anadyr",
       "canonical": "Asia/Anadyr",
-      "sha256": "07e503268da0a4fbb91965ae95773e529df1d923dc16940ab3a56899c4923e94"
+      "sha256": "2eca2993271ee74e9b4d7e0d3915c086062da42b354aac8c4ee015ee4a83400f"
     },
     {
       "name": "Asia/Aqtau",
       "canonical": "Asia/Aqtau",
-      "sha256": "31caa69c2c06dc3557dbc510207eaf41ee4d88f67e98d5fe5ea29c1dcf7c8469"
+      "sha256": "d6b7776ec97a72d6784b889f2b1a287a80f58da44cd4a1189fa4b635ac6af27d"
     },
     {
       "name": "Asia/Aqtobe",
       "canonical": "Asia/Aqtobe",
-      "sha256": "61c4611521f8e01c27a866820c72e91720b629369ce7330555f48593cbf06ddb"
+      "sha256": "a8036aebf274b42b02431b0cee1012efb9d35944ded56aa54cb42ea535768cdc"
     },
     {
       "name": "Asia/Ashgabat",
       "canonical": "Asia/Ashgabat",
-      "sha256": "1da55a4b8d8796578e9d707b9171f8265b21de61b23a617c89d856d21b2acadd"
+      "sha256": "750df85d23b30a5e170e332c125f7cee3b166ba08b8d00a1d4dc21dd43ea65f1"
     },
     {
       "name": "Asia/Ashkhabad",
       "canonical": "Asia/Ashgabat",
-      "sha256": "1da55a4b8d8796578e9d707b9171f8265b21de61b23a617c89d856d21b2acadd"
+      "sha256": "750df85d23b30a5e170e332c125f7cee3b166ba08b8d00a1d4dc21dd43ea65f1"
     },
     {
       "name": "Asia/Atyrau",
       "canonical": "Asia/Atyrau",
-      "sha256": "a99ded5e797b0eaa229a619929497a5ba9c599465b357724a0f012295be0fadc"
+      "sha256": "df0a1cfc231a5d5a5418c96447c314d321736e9c15720f7cfa15d61b21fe3339"
     },
     {
       "name": "Asia/Baghdad",
       "canonical": "Asia/Baghdad",
-      "sha256": "2b88f828db8927869dfb4b223f71569e2cdd550bdd30c315bef8a8ab7ccc9764"
+      "sha256": "3c73511a9e3699798eb9665766658439ec9330dc7fba48c3b890693ff2aef6e1"
     },
     {
       "name": "Asia/Bahrain",
       "canonical": "Asia/Bahrain",
-      "sha256": "def50b3fc17d913c8c426e612c530b5c9ba2a8866e9980c8d7d9b1e3cfce3e1f"
+      "sha256": "1be25226f42353f27770745d96a2be47c28f01b353c30ea458252af445881882"
     },
     {
       "name": "Asia/Baku",
       "canonical": "Asia/Baku",
-      "sha256": "b473041d458d012ba50abeaef2917fbd91665497fc15f748b559e0d212c5ff5f"
+      "sha256": "07bfdff4f0de70635e562fa5925bc7fd789671aa0be2b041da4a18f98caf47ff"
     },
     {
       "name": "Asia/Bangkok",
       "canonical": "Asia/Bangkok",
-      "sha256": "95ff3858bab2a59fb4c4504a38422d8b84f2248719458ea04770a8565216f58c"
+      "sha256": "68435215a5d8f69dab5c7ff221337ca7cc8446affbeeedf1c8e326861eaccf93"
     },
     {
       "name": "Asia/Barnaul",
       "canonical": "Asia/Barnaul",
-      "sha256": "73dcc598b0a6539a7956c0660709e9e3c36d364dffa7fa3d4dc251f5f6fe5250"
+      "sha256": "b42aa7061c7ca9f2546bc7136cdd98eb3581274d8750f947703098106a66ebb5"
     },
     {
       "name": "Asia/Beirut",
       "canonical": "Asia/Beirut",
-      "sha256": "2f3e6d41323ae3336640301a019bc6944facaa208fa885d6dcc41b440a5cefba"
+      "sha256": "232222b9c43ab1acb9d2397f05a830f654d72e8013b26709607aecc2b482da94"
     },
     {
       "name": "Asia/Bishkek",
       "canonical": "Asia/Bishkek",
-      "sha256": "d3b3c0cd0ce339616bf209d4abe4625447463b948687e6afdba6ed36bcf5841c"
+      "sha256": "63060ebddef9c7d34994c6b6ad20141061bb3825e7cea59f1533ff83a1fef6c6"
     },
     {
       "name": "Asia/Brunei",
       "canonical": "Asia/Brunei",
-      "sha256": "fac2b5605c0df95f9e9b299d82d440897c844117d8c7a910b76631f3831aa8e8"
+      "sha256": "04ceee86319f18873b521b7ae7e8474aebde28c095fe88ee0522d6fe20dfcb70"
     },
     {
       "name": "Asia/Calcutta",
       "canonical": "Asia/Calcutta",
-      "sha256": "c69c0f05be61f47832b56c821945cb132635e9a537e0b7bfecb30a3f004c4756"
+      "sha256": "1a628bed81bfdf30c4e87c7ac99a987a43d6ecf4c03791e88e9db77716354349"
     },
     {
       "name": "Asia/Chita",
       "canonical": "Asia/Chita",
-      "sha256": "48ae63d3de27cc02c7959b0ff71fa100359173e7161be509c5b38ecb1c054b18"
+      "sha256": "5ea6de5f63ac2a97c73c5d67cf849cf726d8f64a389734db063dee513aae4a88"
     },
     {
       "name": "Asia/Choibalsan",
       "canonical": "Asia/Ulaanbaatar",
-      "sha256": "501290592fd0734355aa08685112370b7d9a6bc42cf824737e5517d5c4a17642"
+      "sha256": "d16a18b842057e37d7be68a1a3bf6e4bed088f18a0be9c0afede6cca756b8d1b"
     },
     {
       "name": "Asia/Chongqing",
       "canonical": "Asia/Shanghai",
-      "sha256": "997d5106bf38f029a76da5f1ab393ed36ee537c20c325e41a9e838eb164a98ba"
+      "sha256": "cb4ac14795a3944761e21e32331f31b7aa1418aea118afebf78a2e863c51a86a"
     },
     {
       "name": "Asia/Chungking",
       "canonical": "Asia/Shanghai",
-      "sha256": "997d5106bf38f029a76da5f1ab393ed36ee537c20c325e41a9e838eb164a98ba"
+      "sha256": "cb4ac14795a3944761e21e32331f31b7aa1418aea118afebf78a2e863c51a86a"
     },
     {
       "name": "Asia/Colombo",
       "canonical": "Asia/Colombo",
-      "sha256": "223a64637e8d62304c8d3d5c72ec18d5a8c0c006b5985f55380f6c5f8f6040c6"
+      "sha256": "764b9e40a67727a720169873d7d2f612d278766b02cc80f0fbe1cc95175fa3e2"
     },
     {
       "name": "Asia/Dacca",
       "canonical": "Asia/Dhaka",
-      "sha256": "dd91f63cbb988352479fb6588533c7772fe6c997147b90c35e78ebcb5594c2d5"
+      "sha256": "8b6f6282d805dc4b2100e1f282a4b8b7a95fa920a85a8cd8cc43b2238ef98dcc"
     },
     {
       "name": "Asia/Damascus",
       "canonical": "Asia/Damascus",
-      "sha256": "d0c2e631ea4d1217e80ae2981af98714fa17ab24f0e49669d6e9d2a2193b3e52"
+      "sha256": "9818d5637ab1a9775927879eee7c3218b9257619d688ec78618defa999a08dd4"
     },
     {
       "name": "Asia/Dhaka",
       "canonical": "Asia/Dhaka",
-      "sha256": "dd91f63cbb988352479fb6588533c7772fe6c997147b90c35e78ebcb5594c2d5"
+      "sha256": "8b6f6282d805dc4b2100e1f282a4b8b7a95fa920a85a8cd8cc43b2238ef98dcc"
     },
     {
       "name": "Asia/Dili",
       "canonical": "Asia/Dili",
-      "sha256": "02d832c4b051f9337186d4eaf99709b5daf9ac9884a702b48e0cd64a827c3d09"
+      "sha256": "fddfd5139232e02bc953da9964827f3acf718cd221c184ee1e77966f776c4d72"
     },
     {
       "name": "Asia/Dubai",
       "canonical": "Asia/Dubai",
-      "sha256": "3eff9491c9c80f0369b3836090495abfbf2b37fecef005e8b0fabf3f1f3eeeb7"
+      "sha256": "0c71e581576450c2a1605cd0c7339a72c53680fa33d3b092784cd7f21fdd2b28"
     },
     {
       "name": "Asia/Dushanbe",
       "canonical": "Asia/Dushanbe",
-      "sha256": "acf51919f9543825647d770f43374f1b91def1bb0c38ab7f2ca73b178382b614"
+      "sha256": "1017142c42afa08ada3cff5aebe07118549a136c38bf42209432317acb4b81e6"
     },
     {
       "name": "Asia/Famagusta",
       "canonical": "Asia/Famagusta",
-      "sha256": "3a9996ec3a37ec3ae362b5c2a9766e54e131a1acdce050276cda0de8ad2a93eb"
+      "sha256": "7762541e7b7946c4947ee7d0630ac107b2f69ebac14bda7191eaa4a149ec3229"
     },
     {
       "name": "Asia/Gaza",
       "canonical": "Asia/Gaza",
-      "sha256": "ad411b89d7ff169f29e6c2ace949894612417d8474eedcc5f4b9e72a2a291f26"
+      "sha256": "907da9a4f8b0dbf176cb1dbf37a0056f71bf051316e3f86b3dd2b2fcbb379069"
     },
     {
       "name": "Asia/Harbin",
       "canonical": "Asia/Shanghai",
-      "sha256": "997d5106bf38f029a76da5f1ab393ed36ee537c20c325e41a9e838eb164a98ba"
+      "sha256": "cb4ac14795a3944761e21e32331f31b7aa1418aea118afebf78a2e863c51a86a"
     },
     {
       "name": "Asia/Hebron",
       "canonical": "Asia/Hebron",
-      "sha256": "642d6f0f785fabe6f66e3a10d17f335daf6b88675d61d0e135c03ac3b61e391b"
+      "sha256": "4667d9d0856623f7036b210f902b9850c21eca2edcc2a61e7f07760d78529e8c"
     },
     {
       "name": "Asia/Ho_Chi_Minh",
       "canonical": "Asia/Saigon",
-      "sha256": "27036a895712814e264cbf11db2b0bbd51d88ed9130ee12b7ed8efb0ce361b2c"
+      "sha256": "e028e255a975a203a0dc25dae2096f58ae730173d1a059adf139065cf0790784"
     },
     {
       "name": "Asia/Hong_Kong",
       "canonical": "Asia/Hong_Kong",
-      "sha256": "4b28d0a4349a239ef4f6c16c46b8d45b59c941efb520109d026223e40a1fba88"
+      "sha256": "fad6010c0d9cfbd7fcf87aeea777a4cf866b94815481b04f3d2458caf4e4af75"
     },
     {
       "name": "Asia/Hovd",
       "canonical": "Asia/Hovd",
-      "sha256": "a859931f4f276c61d788c9a15314b04b86dd8a94a3a9a55c9df187d20709a4c7"
+      "sha256": "f2a88d0740c1031a034ee600be615496b339962bfd95a9fcc23b4b4cdfeba136"
     },
     {
       "name": "Asia/Irkutsk",
       "canonical": "Asia/Irkutsk",
-      "sha256": "10bf06b84bedf0e7a0c511aa8230e7c934acf177bed6ef8adf33ef09cb592e0c"
+      "sha256": "6f415783803119122cddecd90ed74e53750123224593050bd1458944091cf475"
     },
     {
       "name": "Asia/Istanbul",
       "canonical": "Europe/Istanbul",
-      "sha256": "7d7d1a696c109af3424ca969728f2951544e1ddabcdf1d9ec6e1197f6aae3312"
+      "sha256": "57333b0e3225acd0539ec80ef76fa81c12b12779ba8af3b517ded5c5755a08cb"
     },
     {
       "name": "Asia/Jakarta",
       "canonical": "Asia/Jakarta",
-      "sha256": "f863e5d426269de664e4e88312e35ab6e001b37c10e4d614f0d8c74e4f58946c"
+      "sha256": "7cf797e686d85d5e69e0eb45e0afcb7988ccba111ac57b5b9a8ff0317ee50a52"
     },
     {
       "name": "Asia/Jayapura",
       "canonical": "Asia/Jayapura",
-      "sha256": "8b785f58250b185c95f35fcf9a1a729cd479570e68f3e71bb0bde9bff8172a8c"
+      "sha256": "699231a975fbe316490a1a9bef6425ac774f28ed39913037cf9960f8fddb5479"
     },
     {
       "name": "Asia/Jerusalem",
       "canonical": "Asia/Jerusalem",
-      "sha256": "c32c02a1c30fb933f08d92a2fd9d2eeae877b966045879f6f82b83309d28149f"
+      "sha256": "fa828caafa4996ce2ba0b8cab3a2669745d93c5dfa6caef626fcc385cfc6486b"
     },
     {
       "name": "Asia/Kabul",
       "canonical": "Asia/Kabul",
-      "sha256": "868457a761629ecaf8d04e8ad2f1454ae4df8b029aa6c8971e76088c9d204489"
+      "sha256": "14a296301ba6775275bef2c462e25754bf1f0ae4e01a4e9bda3aec099640d9e6"
     },
     {
       "name": "Asia/Kamchatka",
       "canonical": "Asia/Kamchatka",
-      "sha256": "b9d389a1292dad58e0720d603567b9644f0971e2df79bf8ee9e1321296f1a970"
+      "sha256": "350d4db189e6013c5985616e2f96970d90e6fd847ecd54fb6dd00421b10474ac"
     },
     {
       "name": "Asia/Karachi",
       "canonical": "Asia/Karachi",
-      "sha256": "d879230ab417ea220fc1195e1d933c557b91cf1f12ad9106d192a6f3dead13b2"
+      "sha256": "bba1ec93eb3a9756193ea5a2607c4e851ff7e5a5e543ae49a6aca338f4e832da"
     },
     {
       "name": "Asia/Kashgar",
       "canonical": "Asia/Urumqi",
-      "sha256": "4a5fa561fb74c59750327c041a92fefc8bf469159f22c589e15e422e102ef080"
+      "sha256": "36396ba28760ed71add4fe824f658596b0e89592217886bac730c39af1a0cce9"
     },
     {
       "name": "Asia/Kathmandu",
       "canonical": "Asia/Katmandu",
-      "sha256": "a50c9f00887542d4813201d00e1659444df8874919e74d02ab55958a4c44fca9"
+      "sha256": "51f0213d50264838acfab51ab197d9539f7b84000cda4e48abab84d91482c6fa"
     },
     {
       "name": "Asia/Katmandu",
       "canonical": "Asia/Katmandu",
-      "sha256": "a50c9f00887542d4813201d00e1659444df8874919e74d02ab55958a4c44fca9"
+      "sha256": "51f0213d50264838acfab51ab197d9539f7b84000cda4e48abab84d91482c6fa"
     },
     {
       "name": "Asia/Khandyga",
       "canonical": "Asia/Khandyga",
-      "sha256": "ff1e59d34cc22a29008a372a6e541681082de621c24ad7c823290575232e46b5"
+      "sha256": "47ee1f575cc08912d5a1ed372d663fcf5e6dd73e16abbab12d90a965b307c29e"
     },
     {
       "name": "Asia/Kolkata",
       "canonical": "Asia/Calcutta",
-      "sha256": "c69c0f05be61f47832b56c821945cb132635e9a537e0b7bfecb30a3f004c4756"
+      "sha256": "1a628bed81bfdf30c4e87c7ac99a987a43d6ecf4c03791e88e9db77716354349"
     },
     {
       "name": "Asia/Krasnoyarsk",
       "canonical": "Asia/Krasnoyarsk",
-      "sha256": "7c76d82e9196e40182e68cbe01efaa3526688b42c7cebfc582ea502c09a98ede"
+      "sha256": "98da830c868f804e1118a70dcd73ce29d728dae2a5a98b746bfe91750fc991d1"
     },
     {
       "name": "Asia/Kuala_Lumpur",
       "canonical": "Asia/Kuala_Lumpur",
-      "sha256": "31cafaf00967bf4917a037a61038917a88a7a50d73eb9d3f3ebc2d27a4925bbb"
+      "sha256": "ee61625bfd42e2b615048f84b20a113a3bb488550049579a74844bc0aa79fd2f"
     },
     {
       "name": "Asia/Kuching",
       "canonical": "Asia/Kuching",
-      "sha256": "fac2b5605c0df95f9e9b299d82d440897c844117d8c7a910b76631f3831aa8e8"
+      "sha256": "04ceee86319f18873b521b7ae7e8474aebde28c095fe88ee0522d6fe20dfcb70"
     },
     {
       "name": "Asia/Kuwait",
       "canonical": "Asia/Kuwait",
-      "sha256": "54ebe7e246aa6aa5529b90539063e12c817fb22bfd233b51bdf7616a7c61e9f6"
+      "sha256": "90a699be54f3bc6c0aa87e3be238624d80d38fa4583874d34f37e09ed50fa8ac"
     },
     {
       "name": "Asia/Macao",
       "canonical": "Asia/Macau",
-      "sha256": "cd24d47e73c642302c2c81421578c9f2c921d322d11a5e908f3f697dc97eb6a3"
+      "sha256": "a9c5e40f44b113a021aec1f10b4056b852d29dd96f664fe116c47b93cfbf4141"
     },
     {
       "name": "Asia/Macau",
       "canonical": "Asia/Macau",
-      "sha256": "cd24d47e73c642302c2c81421578c9f2c921d322d11a5e908f3f697dc97eb6a3"
+      "sha256": "a9c5e40f44b113a021aec1f10b4056b852d29dd96f664fe116c47b93cfbf4141"
     },
     {
       "name": "Asia/Magadan",
       "canonical": "Asia/Magadan",
-      "sha256": "743149eb85571499801c90a6b383fd815e2ac821aa945e772ad0ebd07ae77d8d"
+      "sha256": "fd3dca2a9f284ff59b8396e4edc02df8e0f3df049d8b05031286d23d37c35c0a"
     },
     {
       "name": "Asia/Makassar",
       "canonical": "Asia/Makassar",
-      "sha256": "a42d5cd9dc7777ea924c40e209b8f330ede93331c4f6f9d2f8c9b56a23e93187"
+      "sha256": "d1d36244698b5582a74b52f87930fd1e076ccd2b869bcc64fb0320b895e5f1dd"
     },
     {
       "name": "Asia/Manila",
       "canonical": "Asia/Manila",
-      "sha256": "cc1c1d71b0f6f018a5ba113e856e90769250b025211dab39c403303c36048dc5"
+      "sha256": "e68a82617c02f796eb1fb598f2d457588d58c6ddc04aaea7c4623abb9c739402"
     },
     {
       "name": "Asia/Muscat",
       "canonical": "Asia/Muscat",
-      "sha256": "3eff9491c9c80f0369b3836090495abfbf2b37fecef005e8b0fabf3f1f3eeeb7"
+      "sha256": "0c71e581576450c2a1605cd0c7339a72c53680fa33d3b092784cd7f21fdd2b28"
     },
     {
       "name": "Asia/Nicosia",
       "canonical": "Asia/Nicosia",
-      "sha256": "5af8708ac972a601bf3a5f593da1d2a48e1518c369fbc5c8b4c1e21044cdd7d8"
+      "sha256": "9b50194184ba3ef1a19844431b24c7b8639b242320b6d8273fe01335be2009f5"
     },
     {
       "name": "Asia/Novokuznetsk",
       "canonical": "Asia/Novokuznetsk",
-      "sha256": "c07bbd925519d34344a161b0f615aba631dd583e4d2526ed9dd95d0150410ec1"
+      "sha256": "955e9506a19df271ef0baaf35d2c86ffbfabd2e2b14530c7c4c385887df55c56"
     },
     {
       "name": "Asia/Novosibirsk",
       "canonical": "Asia/Novosibirsk",
-      "sha256": "4538bc3dbf97e282ccca8072c692ed640af3765f412ece6c898176b69857e123"
+      "sha256": "79982ad7222c437b0e28115743bfd9484782f6daa16d4188064a772182b99b84"
     },
     {
       "name": "Asia/Omsk",
       "canonical": "Asia/Omsk",
-      "sha256": "0b0aea773e02fabaf0cf725c09084b93dd02ee0f85273ced3cfc73da353bee92"
+      "sha256": "cf877681b9ba93323e37837e041c095f2246cbfb154d92a05ba7703f5e8b8276"
     },
     {
       "name": "Asia/Oral",
       "canonical": "Asia/Oral",
-      "sha256": "ca275b408e3ae13ec8bd9dd6ebcf6cfc79fbee24b7707fde5a15188f8d659e23"
+      "sha256": "c44f167a86ec0b0ae3f43f78569d5e370d4c978920d018c6c8f96da2a6f6a7c0"
     },
     {
       "name": "Asia/Phnom_Penh",
       "canonical": "Asia/Phnom_Penh",
-      "sha256": "95ff3858bab2a59fb4c4504a38422d8b84f2248719458ea04770a8565216f58c"
+      "sha256": "68435215a5d8f69dab5c7ff221337ca7cc8446affbeeedf1c8e326861eaccf93"
     },
     {
       "name": "Asia/Pontianak",
       "canonical": "Asia/Pontianak",
-      "sha256": "e5577bf43706ee20b7e1a8ed944e168723ed543f08f487489510a9d01cd08752"
+      "sha256": "094c316197fcd28940b74054b1e136ca867f31acb544bf24864a6e765ca46751"
     },
     {
       "name": "Asia/Pyongyang",
       "canonical": "Asia/Pyongyang",
-      "sha256": "c9269a4ba4f2e15453d65d7c68702a9929bbf6346e75c6700719e0684fc53614"
+      "sha256": "4c039a587b5d5cd950e23749884fb5683fc2ab821ea846791846391a9739d6f5"
     },
     {
       "name": "Asia/Qatar",
       "canonical": "Asia/Qatar",
-      "sha256": "def50b3fc17d913c8c426e612c530b5c9ba2a8866e9980c8d7d9b1e3cfce3e1f"
+      "sha256": "1be25226f42353f27770745d96a2be47c28f01b353c30ea458252af445881882"
     },
     {
       "name": "Asia/Qostanay",
       "canonical": "Asia/Qostanay",
-      "sha256": "275143d59f38fd551979d9914e7be040680ed4c86def74f678fe9f366d77e8fe"
+      "sha256": "45a95002f395ab14a9ae39863e3021106b3ba72bf6f0750ec858498e798af18c"
     },
     {
       "name": "Asia/Qyzylorda",
       "canonical": "Asia/Qyzylorda",
-      "sha256": "a6eae932fd8e56d65f215470643cdd2e44588026e259cff4ad96b3e3d60a408d"
+      "sha256": "c8edefaea5d8b3995da0c65a9ccd0ee7d4abbeb9321b23b228643d0e1040f755"
     },
     {
       "name": "Asia/Rangoon",
       "canonical": "Asia/Rangoon",
-      "sha256": "211dbcbd3cfe024477676bc9015c0a0708dee7cd8fa35965df226edc8fc5a1b8"
+      "sha256": "04c8eb3b8b38154e5ea1dc420085a4222536d701cefe57bbf05d626fb6f1b3f8"
     },
     {
       "name": "Asia/Riyadh",
       "canonical": "Asia/Riyadh",
-      "sha256": "54ebe7e246aa6aa5529b90539063e12c817fb22bfd233b51bdf7616a7c61e9f6"
+      "sha256": "90a699be54f3bc6c0aa87e3be238624d80d38fa4583874d34f37e09ed50fa8ac"
     },
     {
       "name": "Asia/Saigon",
       "canonical": "Asia/Saigon",
-      "sha256": "27036a895712814e264cbf11db2b0bbd51d88ed9130ee12b7ed8efb0ce361b2c"
+      "sha256": "e028e255a975a203a0dc25dae2096f58ae730173d1a059adf139065cf0790784"
     },
     {
       "name": "Asia/Sakhalin",
       "canonical": "Asia/Sakhalin",
-      "sha256": "40cd349f966b0d66526c12978b0b0dae70c6b8080a5e92794578437cd56762d0"
+      "sha256": "88ba3d8553cb94a594ec5724885c992b77846eaf4a62e8a768cff402da54e2af"
     },
     {
       "name": "Asia/Samarkand",
       "canonical": "Asia/Samarkand",
-      "sha256": "0f0070a3f38fc4a7927512687c20225f49922e7cdd27b0563f26f46d963c7906"
+      "sha256": "7dc67e54fb67f3a94dd483b62218a8e1711651109ff844892e4c0681c2c763f3"
     },
     {
       "name": "Asia/Seoul",
       "canonical": "Asia/Seoul",
-      "sha256": "85468e7a9ab41279d4e1b2c39f0759c66a7805a5e3921c06e139b994a8467b6f"
+      "sha256": "9a6d8df80436f375c10fe9101f656231a7b705eb91b15d05d3e9b119109120ed"
     },
     {
       "name": "Asia/Shanghai",
       "canonical": "Asia/Shanghai",
-      "sha256": "997d5106bf38f029a76da5f1ab393ed36ee537c20c325e41a9e838eb164a98ba"
+      "sha256": "cb4ac14795a3944761e21e32331f31b7aa1418aea118afebf78a2e863c51a86a"
     },
     {
       "name": "Asia/Singapore",
       "canonical": "Asia/Singapore",
-      "sha256": "31cafaf00967bf4917a037a61038917a88a7a50d73eb9d3f3ebc2d27a4925bbb"
+      "sha256": "ee61625bfd42e2b615048f84b20a113a3bb488550049579a74844bc0aa79fd2f"
     },
     {
       "name": "Asia/Srednekolymsk",
       "canonical": "Asia/Srednekolymsk",
-      "sha256": "43a66ee545462d2438175095def67e0d758df9218b59b62d91fc97fcf376feca"
+      "sha256": "248d0d7075bb3a79491f81c09474c7e2cdf6a3b684bc40882311b9ce068f66c0"
     },
     {
       "name": "Asia/Taipei",
       "canonical": "Asia/Taipei",
-      "sha256": "812b5a25a697a9b2e0ca1b559422fb44ae67cb585cc4c8e927d45264bfb68a72"
+      "sha256": "24cdad73afabbeedbd3817dda3ae919e5b083ee533145a8fdeec033189ae2a92"
     },
     {
       "name": "Asia/Tashkent",
       "canonical": "Asia/Tashkent",
-      "sha256": "d9f3796bccc725338eb62625daf078d6306fd3ea0d4fb0b950eed98a98259766"
+      "sha256": "170df13844317ab7327b1ec8c08ff26c4d2e7ead5ca0b8d346c98113cc702b55"
     },
     {
       "name": "Asia/Tbilisi",
       "canonical": "Asia/Tbilisi",
-      "sha256": "d6a39a647e5a83165c6c0eee72bf812e15682f18bfa4537e3f8e3207db80fb64"
+      "sha256": "cfaf973f96ace54279626ed5eeb7ac45b518e9573bb9df3a2121feaa7d28ac92"
     },
     {
       "name": "Asia/Tehran",
       "canonical": "Asia/Tehran",
-      "sha256": "de62c319791de65f7a432954ae0c4493a1ca8702bd20bb82bbbe99ec4ef8ef33"
+      "sha256": "d47541b5158680829d08c7572a3aa98f014aea4fc89183ce93898722e9684312"
     },
     {
       "name": "Asia/Tel_Aviv",
       "canonical": "Asia/Jerusalem",
-      "sha256": "c32c02a1c30fb933f08d92a2fd9d2eeae877b966045879f6f82b83309d28149f"
+      "sha256": "fa828caafa4996ce2ba0b8cab3a2669745d93c5dfa6caef626fcc385cfc6486b"
     },
     {
       "name": "Asia/Thimbu",
       "canonical": "Asia/Thimphu",
-      "sha256": "9083bced0d5f94010a493ca7df5fbed73dd37d5a2768299a9149c3492cab814e"
+      "sha256": "093381a6cbf5595ac3fcaf355b36157e630f5592fac6de63bdb8da8627e4b1ec"
     },
     {
       "name": "Asia/Thimphu",
       "canonical": "Asia/Thimphu",
-      "sha256": "9083bced0d5f94010a493ca7df5fbed73dd37d5a2768299a9149c3492cab814e"
+      "sha256": "093381a6cbf5595ac3fcaf355b36157e630f5592fac6de63bdb8da8627e4b1ec"
     },
     {
       "name": "Asia/Tokyo",
       "canonical": "Asia/Tokyo",
-      "sha256": "538b2a759636fd4ccd600721c6ebeb9bbdbbe883dc661f05c2cc46336ced0ce3"
+      "sha256": "e43e615a7730649c152bc2d386399eb61a54e57da0cded925060134c192bd8d8"
     },
     {
       "name": "Asia/Tomsk",
       "canonical": "Asia/Tomsk",
-      "sha256": "269cc67f4d324bb5a16e2a95461389bb6a907a58f860eb9038015f9733885db2"
+      "sha256": "7e1320c1fa9455f905f211a60f69e7e370bec7eb705de80a46aded77791dc6d0"
     },
     {
       "name": "Asia/Ujung_Pandang",
       "canonical": "Asia/Makassar",
-      "sha256": "a42d5cd9dc7777ea924c40e209b8f330ede93331c4f6f9d2f8c9b56a23e93187"
+      "sha256": "d1d36244698b5582a74b52f87930fd1e076ccd2b869bcc64fb0320b895e5f1dd"
     },
     {
       "name": "Asia/Ulaanbaatar",
       "canonical": "Asia/Ulaanbaatar",
-      "sha256": "501290592fd0734355aa08685112370b7d9a6bc42cf824737e5517d5c4a17642"
+      "sha256": "d16a18b842057e37d7be68a1a3bf6e4bed088f18a0be9c0afede6cca756b8d1b"
     },
     {
       "name": "Asia/Ulan_Bator",
       "canonical": "Asia/Ulaanbaatar",
-      "sha256": "501290592fd0734355aa08685112370b7d9a6bc42cf824737e5517d5c4a17642"
+      "sha256": "d16a18b842057e37d7be68a1a3bf6e4bed088f18a0be9c0afede6cca756b8d1b"
     },
     {
       "name": "Asia/Urumqi",
       "canonical": "Asia/Urumqi",
-      "sha256": "4a5fa561fb74c59750327c041a92fefc8bf469159f22c589e15e422e102ef080"
+      "sha256": "36396ba28760ed71add4fe824f658596b0e89592217886bac730c39af1a0cce9"
     },
     {
       "name": "Asia/Ust-Nera",
       "canonical": "Asia/Ust-Nera",
-      "sha256": "1ac648025a79efd840c5b8dfa0fe9a269b1ff14c4b85677769b7fa3970c2e6f2"
+      "sha256": "a53420f6750f49f7796b186bb6a03b07af7d9204b132adfd42bab6f55817a9b6"
     },
     {
       "name": "Asia/Vientiane",
       "canonical": "Asia/Vientiane",
-      "sha256": "95ff3858bab2a59fb4c4504a38422d8b84f2248719458ea04770a8565216f58c"
+      "sha256": "68435215a5d8f69dab5c7ff221337ca7cc8446affbeeedf1c8e326861eaccf93"
     },
     {
       "name": "Asia/Vladivostok",
       "canonical": "Asia/Vladivostok",
-      "sha256": "be34e63db59aff5451d3385e5f2b2202728f696a4dca596352fa987482730f2c"
+      "sha256": "fa92bf58fe8319b2c6a8564112cfbe38bc190659907e5bdb5c579c10e8446829"
     },
     {
       "name": "Asia/Yakutsk",
       "canonical": "Asia/Yakutsk",
-      "sha256": "ba27450c741f1847fc790f083cd7cf575fcc9171146083e371d6a37554b48d85"
+      "sha256": "2b6aefedd8acb8de446877099b975c18caeeba65dded1c016b507a3a37d5b1bc"
     },
     {
       "name": "Asia/Yangon",
       "canonical": "Asia/Rangoon",
-      "sha256": "211dbcbd3cfe024477676bc9015c0a0708dee7cd8fa35965df226edc8fc5a1b8"
+      "sha256": "04c8eb3b8b38154e5ea1dc420085a4222536d701cefe57bbf05d626fb6f1b3f8"
     },
     {
       "name": "Asia/Yekaterinburg",
       "canonical": "Asia/Yekaterinburg",
-      "sha256": "728430d916c6c90d32bbacf1d3e231d734f48c23d625b99cde4076624e4cdbaf"
+      "sha256": "96fa516b55289961fbe5fe248b607fd1c3025e59bc8773f37760e6b57e0da59d"
     },
     {
       "name": "Asia/Yerevan",
       "canonical": "Asia/Yerevan",
-      "sha256": "994e278edd2cdd302db82f497c34dc0fb290790f7423b47f8f6cf13d091ea4c4"
+      "sha256": "a46f5b8c2c863a61e5d22ecb7a65e4aeb8e06bee6536701a27508f875b88a643"
     },
     {
       "name": "AST",
       "canonical": "America/Anchorage",
-      "sha256": "8be1db4f926766cae4e5a8d38045a5ee28a59ca9a51a46b538d7659262395b49"
+      "sha256": "82a50d822ae47277b9c421927296c377a92d84fb9580d8d17710ccb470582e42"
     },
     {
       "name": "Atlantic/Azores",
       "canonical": "Atlantic/Azores",
-      "sha256": "32bbe0616c8bddb66840dd740190c2685434c673ca6e750e6cc510afab930c41"
+      "sha256": "087b71bfbbb91c788723fb7bbf1578b8d10f74f5b9bef0c0be305446637ee212"
     },
     {
       "name": "Atlantic/Bermuda",
       "canonical": "Atlantic/Bermuda",
-      "sha256": "9801e7bbb40cae0ec58ce5e338507c13d017b23b801cf26293f093d2ddb87805"
+      "sha256": "57dc5e1e58c0cc812976e21f2ac20e2ca0ec1c93ab4d50713b785b3139d233c5"
     },
     {
       "name": "Atlantic/Canary",
       "canonical": "Atlantic/Canary",
-      "sha256": "27cd443bf0d99b8e8aabf044bae1b5faee935bac75da05e540dde0a9a7957a36"
+      "sha256": "4a8ccadc7af40c457160870b7ea461536dfbd58144477b136949d4a4f6b1c0ca"
     },
     {
       "name": "Atlantic/Cape_Verde",
       "canonical": "Atlantic/Cape_Verde",
-      "sha256": "50bb1769aae05cabf75082e1b203a8aac357ea43e596802bd7baca4b9a93f1f1"
+      "sha256": "ddf202304e4771e8189c346a46654cd517eba9bbcec3b143cbcd3a5c044c591e"
     },
     {
       "name": "Atlantic/Faeroe",
       "canonical": "Atlantic/Faeroe",
-      "sha256": "6f37e90f2b7f7b37463afe406780d9775439cacee69b92b3ae2a4ffaf3e810f3"
+      "sha256": "aa780e4fee38ae527a6f6454fed99d427d18f363067f7b23e19c4d1f3eb62c8c"
     },
     {
       "name": "Atlantic/Faroe",
       "canonical": "Atlantic/Faeroe",
-      "sha256": "6f37e90f2b7f7b37463afe406780d9775439cacee69b92b3ae2a4ffaf3e810f3"
+      "sha256": "aa780e4fee38ae527a6f6454fed99d427d18f363067f7b23e19c4d1f3eb62c8c"
     },
     {
       "name": "Atlantic/Jan_Mayen",
       "canonical": "Arctic/Longyearbyen",
-      "sha256": "3dc514695c4f0e9a88b82d0032949e6efbc55008bbedeeded9049d554daa8619"
+      "sha256": "59b1a45905290c0abbbdb499ab2afc6dce4eab5c7953ccd88b531497d8a3504f"
     },
     {
       "name": "Atlantic/Madeira",
       "canonical": "Atlantic/Madeira",
-      "sha256": "2a2f6579a7056975300d6bd6d322bf88ebd46e1178a7b0505e2d5c2a0afac5df"
+      "sha256": "2a0a9a134fe6338d688465e5a3eecfdfc1b5984d744c89c8d3954b96463f0b8c"
     },
     {
       "name": "Atlantic/Reykjavik",
       "canonical": "Atlantic/Reykjavik",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Atlantic/South_Georgia",
       "canonical": "Atlantic/South_Georgia",
-      "sha256": "e2b75ea7e74e6e3dcd41a42ea2fba82b1516a922a275db8623d8af930b848fed"
+      "sha256": "b1467b0aca9b87b3f9543416c57ce1b2c6799bb6334b2e7371c0bdf4660c2979"
     },
     {
       "name": "Atlantic/St_Helena",
       "canonical": "Atlantic/St_Helena",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "Atlantic/Stanley",
       "canonical": "Atlantic/Stanley",
-      "sha256": "2dbc048fe01de03707319a777b62da6b65622d5994f34ad927ec3be168b7a9ef"
+      "sha256": "47afbef188ae67837dcbf4c87f9a4a926e9fc42da629caadbdcff1bb715b275c"
     },
     {
       "name": "Australia/ACT",
       "canonical": "Australia/Sydney",
-      "sha256": "a25f163e053075cad071e4fadb86aa26717aec4508561fb581a3bb9ece0aed65"
+      "sha256": "79947119cc9ba5c2f2b4fe610c7e68d23779a7210d935c0b0ead4018aba573e9"
     },
     {
       "name": "Australia/Adelaide",
       "canonical": "Australia/Adelaide",
-      "sha256": "b606c8630dea73447e8f1c2448eee43c6e4bcb0aa8d88d1ace88b4c13120a685"
+      "sha256": "917c0b5a0d7586ab540aa4e44bc615b7ec310983d87716334d740f0966cbd018"
     },
     {
       "name": "Australia/Brisbane",
       "canonical": "Australia/Brisbane",
-      "sha256": "ff4b304f438c2dc2d24835e22bffe96b606e37500cfc3946c5cee82706d14eab"
+      "sha256": "756574c48559358de884afdae7af8985caec6b64552e022e2cded2ae93533ccf"
     },
     {
       "name": "Australia/Broken_Hill",
       "canonical": "Australia/Broken_Hill",
-      "sha256": "ccd4604079d81bda45137c9ef0c330d7b5fe73f3148e06ee6a7f36ea0b96b030"
+      "sha256": "0dac19d10e65b245f721715c88c87eb53c4104749fdd65d7cf7322f0725215ff"
     },
     {
       "name": "Australia/Canberra",
       "canonical": "Australia/Sydney",
-      "sha256": "a25f163e053075cad071e4fadb86aa26717aec4508561fb581a3bb9ece0aed65"
+      "sha256": "79947119cc9ba5c2f2b4fe610c7e68d23779a7210d935c0b0ead4018aba573e9"
     },
     {
       "name": "Australia/Currie",
       "canonical": "Australia/Hobart",
-      "sha256": "456432b21b0606f0c844389b1a78d33ca51d9a879e5a7303ed7df40cd506279f"
+      "sha256": "874f53b98568cfc0d74319284347a648b7444e2efc648c47093f609d60c7934c"
     },
     {
       "name": "Australia/Darwin",
       "canonical": "Australia/Darwin",
-      "sha256": "c1f02667a0ccc207e1c5e446c6e26e1fc9b3de83f61212fe8c6e05b3cdf1bba5"
+      "sha256": "1f3a0333fd2adf4df9277906bceed092f2e0b39183986cc1d7283b935c0b4d2b"
     },
     {
       "name": "Australia/Eucla",
       "canonical": "Australia/Eucla",
-      "sha256": "1ad05470a2d649bdf67fdb2347a7bc713bd3536d0e2ce7a21ae622e19974ee9e"
+      "sha256": "67095226c73d9f964d3d6fe264df9afd4369dbb946cf8babd3c4b25570a162e2"
     },
     {
       "name": "Australia/Hobart",
       "canonical": "Australia/Hobart",
-      "sha256": "456432b21b0606f0c844389b1a78d33ca51d9a879e5a7303ed7df40cd506279f"
+      "sha256": "874f53b98568cfc0d74319284347a648b7444e2efc648c47093f609d60c7934c"
     },
     {
       "name": "Australia/LHI",
       "canonical": "Australia/Lord_Howe",
-      "sha256": "2a34e931d9ec31fd8e580fa574832b98180cadd32e3c157e03d59e2848d130af"
+      "sha256": "e7fca25215c25780e9ef4df2d1a617ba8143bec1ae71d589ce166ac54ff819a0"
     },
     {
       "name": "Australia/Lindeman",
       "canonical": "Australia/Lindeman",
-      "sha256": "28fb07ffb015d61871faec11bd53b021fdbeda396acbab1a4628e257ecb8f0ef"
+      "sha256": "70db4f10b0cc4c147c4b892170b4ed7ba6ba4c456f53d950fbff5a3c15cb8dd6"
     },
     {
       "name": "Australia/Lord_Howe",
       "canonical": "Australia/Lord_Howe",
-      "sha256": "2a34e931d9ec31fd8e580fa574832b98180cadd32e3c157e03d59e2848d130af"
+      "sha256": "e7fca25215c25780e9ef4df2d1a617ba8143bec1ae71d589ce166ac54ff819a0"
     },
     {
       "name": "Australia/Melbourne",
       "canonical": "Australia/Melbourne",
-      "sha256": "3104904b77ec77e023cbd6a39fc3c2b20247a28282945604b3830da0eb655976"
+      "sha256": "f47025de7f5d809119939a2d53ee326241d332119708b0b0feba6dc9df05ad4c"
     },
     {
       "name": "Australia/North",
       "canonical": "Australia/Darwin",
-      "sha256": "c1f02667a0ccc207e1c5e446c6e26e1fc9b3de83f61212fe8c6e05b3cdf1bba5"
+      "sha256": "1f3a0333fd2adf4df9277906bceed092f2e0b39183986cc1d7283b935c0b4d2b"
     },
     {
       "name": "Australia/NSW",
       "canonical": "Australia/Sydney",
-      "sha256": "a25f163e053075cad071e4fadb86aa26717aec4508561fb581a3bb9ece0aed65"
+      "sha256": "79947119cc9ba5c2f2b4fe610c7e68d23779a7210d935c0b0ead4018aba573e9"
     },
     {
       "name": "Australia/Perth",
       "canonical": "Australia/Perth",
-      "sha256": "ca3e4d4a366c2107dc74f07450082afd0c61db6603aeff125e2fba69e70b9ca5"
+      "sha256": "685e38fbf48deb8db454b7e16d6c4c21997e47d24dd3641f9e85062895198388"
     },
     {
       "name": "Australia/Queensland",
       "canonical": "Australia/Brisbane",
-      "sha256": "ff4b304f438c2dc2d24835e22bffe96b606e37500cfc3946c5cee82706d14eab"
+      "sha256": "756574c48559358de884afdae7af8985caec6b64552e022e2cded2ae93533ccf"
     },
     {
       "name": "Australia/South",
       "canonical": "Australia/Adelaide",
-      "sha256": "b606c8630dea73447e8f1c2448eee43c6e4bcb0aa8d88d1ace88b4c13120a685"
+      "sha256": "917c0b5a0d7586ab540aa4e44bc615b7ec310983d87716334d740f0966cbd018"
     },
     {
       "name": "Australia/Sydney",
       "canonical": "Australia/Sydney",
-      "sha256": "a25f163e053075cad071e4fadb86aa26717aec4508561fb581a3bb9ece0aed65"
+      "sha256": "79947119cc9ba5c2f2b4fe610c7e68d23779a7210d935c0b0ead4018aba573e9"
     },
     {
       "name": "Australia/Tasmania",
       "canonical": "Australia/Hobart",
-      "sha256": "456432b21b0606f0c844389b1a78d33ca51d9a879e5a7303ed7df40cd506279f"
+      "sha256": "874f53b98568cfc0d74319284347a648b7444e2efc648c47093f609d60c7934c"
     },
     {
       "name": "Australia/Victoria",
       "canonical": "Australia/Melbourne",
-      "sha256": "3104904b77ec77e023cbd6a39fc3c2b20247a28282945604b3830da0eb655976"
+      "sha256": "f47025de7f5d809119939a2d53ee326241d332119708b0b0feba6dc9df05ad4c"
     },
     {
       "name": "Australia/West",
       "canonical": "Australia/Perth",
-      "sha256": "ca3e4d4a366c2107dc74f07450082afd0c61db6603aeff125e2fba69e70b9ca5"
+      "sha256": "685e38fbf48deb8db454b7e16d6c4c21997e47d24dd3641f9e85062895198388"
     },
     {
       "name": "Australia/Yancowinna",
       "canonical": "Australia/Broken_Hill",
-      "sha256": "ccd4604079d81bda45137c9ef0c330d7b5fe73f3148e06ee6a7f36ea0b96b030"
+      "sha256": "0dac19d10e65b245f721715c88c87eb53c4104749fdd65d7cf7322f0725215ff"
     },
     {
       "name": "BET",
       "canonical": "America/Sao_Paulo",
-      "sha256": "086f8282aa165c7b22a7eebcae036e455b248de64b15883a5cabc43a9f62332e"
+      "sha256": "3426dfe9e378486be9e4af4008d3c0813cda801793c620d293b7d06626f88ceb"
     },
     {
       "name": "Brazil/Acre",
       "canonical": "America/Rio_Branco",
-      "sha256": "bfb5511ae985a3db4ed45ce3b95e85e372fe1cc2619d3a2259ee57461c50141f"
+      "sha256": "a6966edb2d62598af4b61d8f7d2d5e029ea3e65ed179f0eae949686c3eab5c0a"
     },
     {
       "name": "Brazil/DeNoronha",
       "canonical": "America/Noronha",
-      "sha256": "b6c80a9c981b24c32852976efd71aa50f40d3501dcde50d17a66e03ab23afa0b"
+      "sha256": "80ff7938e347a2b4e3a98b6e5829db9429046953ebcb4bb7e999ea6cf198abe1"
     },
     {
       "name": "Brazil/East",
       "canonical": "America/Sao_Paulo",
-      "sha256": "086f8282aa165c7b22a7eebcae036e455b248de64b15883a5cabc43a9f62332e"
+      "sha256": "3426dfe9e378486be9e4af4008d3c0813cda801793c620d293b7d06626f88ceb"
     },
     {
       "name": "Brazil/West",
       "canonical": "America/Manaus",
-      "sha256": "8d8d8e9ad6f80a83ae5ab96cf7406c7085fefe7d43c935129a48b940d3b902ec"
+      "sha256": "08353f9bc845d6aca219fc005f9d6de29e7832f0b32a6547c962a989efaa9046"
     },
     {
       "name": "BST",
       "canonical": "Asia/Dhaka",
-      "sha256": "dd91f63cbb988352479fb6588533c7772fe6c997147b90c35e78ebcb5594c2d5"
+      "sha256": "8b6f6282d805dc4b2100e1f282a4b8b7a95fa920a85a8cd8cc43b2238ef98dcc"
     },
     {
       "name": "Canada/Atlantic",
       "canonical": "America/Halifax",
-      "sha256": "6b9b96f25cc424bdab8a7e90fee702a585b0a0476fb4a1062d5498cbf5f2dfbd"
+      "sha256": "b4f2c416fdff0209adfae09a802b2130cb696f4c7f320141396b888cea35e1d4"
     },
     {
       "name": "Canada/Central",
       "canonical": "America/Winnipeg",
-      "sha256": "c231ac6372a73c81e46fcebbb24a83eef88ccee3789acd50c84ba43b3b183b7f"
+      "sha256": "fa0a5b3c9296613d64a87d327daee1610851f70d6668034eb544ad91490ef20b"
     },
     {
       "name": "Canada/East-Saskatchewan",
       "canonical": "America/Regina",
-      "sha256": "a97134b26ecfcb133b2dcc823c747760e6a5e73898a55fcd6300b07c68d2ffae"
+      "sha256": "01ffc84e62607127c0e65d2e1d901e09a91f01fd693638d3934074d6e97600e8"
     },
     {
       "name": "Canada/Eastern",
       "canonical": "America/Toronto",
-      "sha256": "59c3e0360d911ac11e8a2e9b8ba2ca0706dac4e790c812b9f022136eeebda89f"
+      "sha256": "11809bcaba26cab1f817d7e594991dabc69bc7eb7afcad2096db8d338ad52906"
     },
     {
       "name": "Canada/Mountain",
       "canonical": "America/Edmonton",
-      "sha256": "e0803946ddea9d41577a44011bdf93adc74d96e8b8abcbe561c3aead6a09d757"
+      "sha256": "5d1fa51ae0e991cb702ef4bafd89f0a8339d11842c23bee37f3ed399a7bb3228"
     },
     {
       "name": "Canada/Newfoundland",
       "canonical": "America/St_Johns",
-      "sha256": "9c5c051e86763a185ae6c583164fa4af0e9240fcfffd96aa819be1350eec008b"
+      "sha256": "92688e2c8002ec15eef46ee83db26746388ebaebafda1a811da80f93bdbf9d7b"
     },
     {
       "name": "Canada/Pacific",
       "canonical": "America/Vancouver",
-      "sha256": "d696f57ecced228b092f8b13d0f3a26b3437a196533149d27b1ec799efdcad96"
+      "sha256": "1b2cf954d574e539b0adeaccc349fcfc4bff66ea166417a919d17328dccce358"
     },
     {
       "name": "Canada/Saskatchewan",
       "canonical": "America/Regina",
-      "sha256": "a97134b26ecfcb133b2dcc823c747760e6a5e73898a55fcd6300b07c68d2ffae"
+      "sha256": "01ffc84e62607127c0e65d2e1d901e09a91f01fd693638d3934074d6e97600e8"
     },
     {
       "name": "Canada/Yukon",
       "canonical": "America/Whitehorse",
-      "sha256": "287b33ad323d536e2b1c3f2c472c3ec51b9056e56c4af676505b42538121b225"
+      "sha256": "00ca23323ba84cb9e957008365fd8489e29fd72a346af6b676038e15e0242d08"
     },
     {
       "name": "CAT",
       "canonical": "Africa/Maputo",
-      "sha256": "2abf587dde920fe8f6fffdf6ab0d414dd12a6ebfffc9ebf476fd3afe1cb01cc2"
+      "sha256": "f0a484756b9598a8d0d7e4cc157c599a0cdb66e674f4dada3244f32d2af1bcba"
     },
     {
       "name": "CET",
       "canonical": "Europe/Brussels",
-      "sha256": "6b3727d79c98044d6fee2b162fb86378d256e10f8e84247e73e7e8b2b34009e0"
+      "sha256": "f75e9721d0070b559ae30ca7e4a0ddddc1e5642418458a4429a7ee94d6cafbff"
     },
     {
       "name": "Chile/Continental",
       "canonical": "America/Santiago",
-      "sha256": "1276cdbb09e454a194599e9083d539cdbfad57c11797457171cbe3217c7482ad"
+      "sha256": "e2611056b414bd367a2cd957b4e5a32841841f4876eb1a5988054b9aa2ff6cc1"
     },
     {
       "name": "Chile/EasterIsland",
       "canonical": "Pacific/Easter",
-      "sha256": "83edb1796fddd019816e7cda2855af2a1a9f4c134a4d6fc725572c33562df8dc"
+      "sha256": "092e20e6e84f4e3861aab041074ce20cfce207b5cd56a0858c549bce41b71a6d"
     },
     {
       "name": "CNT",
       "canonical": "America/St_Johns",
-      "sha256": "9c5c051e86763a185ae6c583164fa4af0e9240fcfffd96aa819be1350eec008b"
+      "sha256": "92688e2c8002ec15eef46ee83db26746388ebaebafda1a811da80f93bdbf9d7b"
     },
     {
       "name": "CST",
       "canonical": "America/Chicago",
-      "sha256": "e90f9a7b9d77b484848396192d02bf8997c951bed3d76b0370d14adbca887d7e"
+      "sha256": "f4787f23bcdbcc9ffdfda43420a59cca75573046b75826800c39338ab46ca806"
     },
     {
       "name": "CST6CDT",
-      "canonical": "America/Chicago",
-      "sha256": "e90f9a7b9d77b484848396192d02bf8997c951bed3d76b0370d14adbca887d7e"
+      "canonical": "CST6CDT",
+      "sha256": "69dbbeaf9a27c4432a3a76dfed01b57e2d7a42579dbd5f06089b4f91fc00570c"
     },
     {
       "name": "CTT",
       "canonical": "Asia/Shanghai",
-      "sha256": "997d5106bf38f029a76da5f1ab393ed36ee537c20c325e41a9e838eb164a98ba"
+      "sha256": "cb4ac14795a3944761e21e32331f31b7aa1418aea118afebf78a2e863c51a86a"
     },
     {
       "name": "Cuba",
       "canonical": "America/Havana",
-      "sha256": "6f72db7baf5b6d331d506972a31270ca83c4addbbb117f93a5f9e0c19ac598d8"
+      "sha256": "2e4fb2e07ef5635900da9527152ee9df0b2986f082b4e2a00c9d31b0456da66d"
     },
     {
       "name": "EAT",
       "canonical": "Africa/Nairobi",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "ECT",
       "canonical": "Europe/Paris",
-      "sha256": "125c9e147ae0859b90627d6e2eb01c2514052237292eb04513a8f213f5f2bc2d"
+      "sha256": "d07e73f5f9d70c9f70c67e0ed1b3fd07afc4ec3c51068cd544c40d0a925398ea"
     },
     {
       "name": "EET",
       "canonical": "Europe/Athens",
-      "sha256": "8a4e9ea3b2ca9dc1eb8f137883da0a660c2d5af94d0844a750a90be89b93d79a"
+      "sha256": "8d2e517bb6739dc2d8196380d9d687ea3d026f9670fd3e036521bdbb9ee1ff3f"
     },
     {
       "name": "Egypt",
       "canonical": "Africa/Cairo",
-      "sha256": "d39ffe4acd97cb04fca4744744eacb184ee4698d8a0d4b1b0812746bdf69e27c"
+      "sha256": "28b6828f0925bfbdcfd66c60b11a840b9886a2816934e03189e05434f3d7b520"
     },
     {
       "name": "Eire",
       "canonical": "Europe/Dublin",
-      "sha256": "3830133ed0f0d34bf53bbc3452e92afc055499a7f4c9338a7bf9dbcc84f77865"
+      "sha256": "70071b185bc12754fa363c679eb720ebd92082b53cd305caba855cd474f9a96a"
     },
     {
       "name": "EST",
       "canonical": "America/Panama",
-      "sha256": "c69210ff6a0235070eff151e7b809f023de734b3d8560cb3f887648ef3b0a182"
+      "sha256": "4a1cf718489c61fbb039424c47e43dd37d676a20a3734bd282e49ff090abe154"
     },
     {
       "name": "EST5EDT",
-      "canonical": "America/New_York",
-      "sha256": "0ad556b616f90498a24a0a5ea539c365786de08d77ecbc3bd6467998eecc5667"
+      "canonical": "EST5EDT",
+      "sha256": "dc754fbcc17abb4f0b559d9366d28923ec47a1ed85d2452299033b01f4259c5d"
     },
     {
       "name": "Etc/GMT",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/GMT+0",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/GMT+1",
       "canonical": "Etc/GMT+1",
-      "sha256": "baa560fa760a86aa1f84104c96d5fbc6af7df7df7a8fe1415a297621ed05374a"
+      "sha256": "c774210c8b9a818d805678661171ec24e3582c4e81727f245dbd97e3812c2ac5"
     },
     {
       "name": "Etc/GMT+10",
       "canonical": "Etc/GMT+10",
-      "sha256": "62c7d2729c0b4e77769ae31942e3d44751503f8a51d03a311050da1cebc18af6"
+      "sha256": "1e30cb37246878458f74185d2de503a4ee9e32c62ba61944dae184cd49cb8b14"
     },
     {
       "name": "Etc/GMT+11",
       "canonical": "Etc/GMT+11",
-      "sha256": "47a9eb0a2e651e9635bb02fe2c48e389f6f57510065a82ae8e70faf40ec3ef34"
+      "sha256": "e53466a44d9a11daed498d05653cb0387fb3e3148c584f75cf15b9d10d4e8d48"
     },
     {
       "name": "Etc/GMT+12",
       "canonical": "Etc/GMT+12",
-      "sha256": "99f03d34120665942083f72efd054287e9ddb1d78e37bac9c31883ceb70ca03e"
+      "sha256": "082bf3c6cb1f0ebd0582160ee4a672ddf6b24fb2f831ed993eedd5f58dec5edf"
     },
     {
       "name": "Etc/GMT+2",
       "canonical": "Etc/GMT+2",
-      "sha256": "eda55a79e31742b599671b1f7ca0ea2c840933c0e53189192ffd929e370b9bde"
+      "sha256": "3e02e77523f34773e0ad3e2abc9eb8b015591a9143871049377b6c31cb8b4e2f"
     },
     {
       "name": "Etc/GMT+3",
       "canonical": "Etc/GMT+3",
-      "sha256": "9d1b00cbf4babb5c4c286d58bad0ca03e2e1fdf7bb9891581c37643beea51199"
+      "sha256": "d4dc72a3744a7b595658f51b5c04bb07900500ce6504e76f58a76d2309cf7bb9"
     },
     {
       "name": "Etc/GMT+4",
       "canonical": "Etc/GMT+4",
-      "sha256": "d224ca1d44ed8e57eaf2ade5fdaf00c7f3bb25e117f8884bb735d2ff9f33fa1d"
+      "sha256": "b5945eaaf2d9ba85a1b5ddefa45264ae53539be46868cfaf493589b82237284e"
     },
     {
       "name": "Etc/GMT+5",
       "canonical": "Etc/GMT+5",
-      "sha256": "055a0bde36c236f68134248c8cf19e69a5fcd55c9f268f39aebdbcf3e3dda936"
+      "sha256": "eff6c041306249134c391c8fff6bd1998f661fd52fca137a9b4ad79b7538e594"
     },
     {
       "name": "Etc/GMT+6",
       "canonical": "Etc/GMT+6",
-      "sha256": "42ddaf6417fa10577e1f06da1a014fab81cc94f823b3a0b65f5f2afa14f195ae"
+      "sha256": "fa244fa4000ac047bc0a8c85b9490b337d3611d708ab92b95d23154df1e2a71c"
     },
     {
       "name": "Etc/GMT+7",
       "canonical": "Etc/GMT+7",
-      "sha256": "45595955f29d63735bbd53ef9f545195c0a203972093342e489a98bcaafbda96"
+      "sha256": "82f028275604ae5eb5778aa7d32b0c352e3fd2702649c3615bff7c4f60fe1c80"
     },
     {
       "name": "Etc/GMT+8",
       "canonical": "Etc/GMT+8",
-      "sha256": "1d0a53dc63d75870d5f411d399d5695a8e375102410e199e226564624584ff10"
+      "sha256": "9d15e89265a7ef55cbb9ba6bd5436d169f87aaf7930d923e55df72c6b27fad3c"
     },
     {
       "name": "Etc/GMT+9",
       "canonical": "Etc/GMT+9",
-      "sha256": "7ab909fca536b152d23753cbc2ae41143ff44f09436d2a733037317f28568b0e"
+      "sha256": "1b43b5c602444a4a0d30e9a6a6903e0eaeee8988f2044f2319c84ccf3f0a8c5f"
     },
     {
       "name": "Etc/GMT-0",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/GMT-1",
       "canonical": "Etc/GMT-1",
-      "sha256": "3ec887446b69c598497286d45fd3742d8312b0b8d2f7cfbfe6e1267d3feffeaa"
+      "sha256": "241f013785142ffb7fd3941f9c8a98f8e3e8f2e6088cfcdf375f7609ca587b76"
     },
     {
       "name": "Etc/GMT-10",
       "canonical": "Etc/GMT-10",
-      "sha256": "2e430e3f7d7f8a5d3a2b7e31e09056930f617f0eabf1a0caf2ca2622ade440b4"
+      "sha256": "6ba5e8bdcbd47719f9fe652d76f4580b0fbaede8143d2e8453a59644690ed357"
     },
     {
       "name": "Etc/GMT-11",
       "canonical": "Etc/GMT-11",
-      "sha256": "c17efc08d84926b04caee9685120f292221ce46810785cc9851329fdc58af140"
+      "sha256": "1dbc24edc216bd0a6ee83e5a8543b27c899ced32cd9299ac2dffead34cc5543e"
     },
     {
       "name": "Etc/GMT-12",
       "canonical": "Etc/GMT-12",
-      "sha256": "21b457d07ceb3a05268a08faa2c5c3f5ad516bb8f1767b8be873e36a41789f40"
+      "sha256": "f44d842a95d41e7ac6f9af62cb7876f2a645870657e5305e4ab61ee07f89efd8"
     },
     {
       "name": "Etc/GMT-13",
       "canonical": "Etc/GMT-13",
-      "sha256": "7cb9435a5ce82ba9516639e1d619c17d178f5b565df7eb72062a3c479e715bdb"
+      "sha256": "829c9632b9020d57de42b0a4e2b78865d794a068f33fd3708cdcfa3d8cfb00f9"
     },
     {
       "name": "Etc/GMT-14",
       "canonical": "Etc/GMT-14",
-      "sha256": "d650fc6d7354cf77cd23b15d457a80e21b5f54f6f93701f31cde449d64037bcf"
+      "sha256": "4daec3c496467bd038db551cedad4362c88851dedef18aed7e5f26242fe6d12c"
     },
     {
       "name": "Etc/GMT-2",
       "canonical": "Etc/GMT-2",
-      "sha256": "c0f785ea5340d5d61fb3fd92ef1ccf733b3e7bdc3a0f5e9e75a61aa712f9fa9c"
+      "sha256": "0be5f175f7d41f3409269ca774f975ae7a71b78da161a7eb19046e9f60c2152f"
     },
     {
       "name": "Etc/GMT-3",
       "canonical": "Etc/GMT-3",
-      "sha256": "e172b3b6bf2014cf32519adb2223a4d20036343edb1ffa32ea0b3fde720fef83"
+      "sha256": "4c9045bf31c3a7c84d00897603f3131229d92c6502977b33333e725981a1edad"
     },
     {
       "name": "Etc/GMT-4",
       "canonical": "Etc/GMT-4",
-      "sha256": "2fa98d73a4ee33eddf503831de8db5587a0b8bf928d915b11acb8e639ddb4fd3"
+      "sha256": "8b0437767cdf3db1269a2407531f330b108b1f95eff0c72481034caa4329e413"
     },
     {
       "name": "Etc/GMT-5",
       "canonical": "Etc/GMT-5",
-      "sha256": "caca36f67e9be4d64a6188ba11158ef664d45bf0f83227cce5e4780a75957450"
+      "sha256": "f67a6d57ded7d57889d79e940ce32ba167b0a4b33b0da605a734bbd708c101cb"
     },
     {
       "name": "Etc/GMT-6",
       "canonical": "Etc/GMT-6",
-      "sha256": "1b6948c5dacf0235200268423bb98fa99a258a0a7929a51eba34b6108d176da0"
+      "sha256": "ebe157122c3da69f1351a445e1cdaa0ac00f82867f9bc4e9e56127486a565f43"
     },
     {
       "name": "Etc/GMT-7",
       "canonical": "Etc/GMT-7",
-      "sha256": "f1f01c14dff88501e4855d4faf46a608d8d472e9cc96ed4de8a066716556280e"
+      "sha256": "b7da6535e2eb64d049fb4d03cde1af7739b6cd9c40926bf2f88fdd3a847af857"
     },
     {
       "name": "Etc/GMT-8",
       "canonical": "Etc/GMT-8",
-      "sha256": "6b742760d89c34325d13912ed2815e2127caa1e997ae43774f3212f5a29d0833"
+      "sha256": "b35a3250fcc92c7f02ca8729563008acb2dd6d538d802c44bf2757ba7852d32d"
     },
     {
       "name": "Etc/GMT-9",
       "canonical": "Etc/GMT-9",
-      "sha256": "4a1561ae243a5b0c52bdc81dc6e1d46547d61ced1bcfb2e71cd5220a8886ee55"
+      "sha256": "3cbe95ca5282aba174b1b1d45e3251040501ecf9326dadf5e9912cb7bd6b970f"
     },
     {
       "name": "Etc/GMT0",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/Greenwich",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/UCT",
       "canonical": "Etc/UTC",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/Universal",
       "canonical": "Etc/UTC",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/Unknown",
       "canonical": "Etc/Unknown",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/UTC",
       "canonical": "Etc/UTC",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Etc/Zulu",
       "canonical": "Etc/UTC",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Europe/Amsterdam",
       "canonical": "Europe/Amsterdam",
-      "sha256": "6b3727d79c98044d6fee2b162fb86378d256e10f8e84247e73e7e8b2b34009e0"
+      "sha256": "f75e9721d0070b559ae30ca7e4a0ddddc1e5642418458a4429a7ee94d6cafbff"
     },
     {
       "name": "Europe/Andorra",
       "canonical": "Europe/Andorra",
-      "sha256": "1ef36be8f6904f7dd415f72ba956da82cb2a6ca5f29ca91ec5c2b8cf3d5aedbe"
+      "sha256": "fcb96d3d457fcd914d0807e99322e4bafe2fbc0248ffe7eb74dfff6510fb8b08"
     },
     {
       "name": "Europe/Astrakhan",
       "canonical": "Europe/Astrakhan",
-      "sha256": "8f057c55b11c257cffb7c909cf6bd3c2b0c12e1b4fea1f868063a653517904a0"
+      "sha256": "d96fc1a46c647d06a18a40a67af84d8d26c6a7f4866cbf3c7d5dad9e8f6fa922"
     },
     {
       "name": "Europe/Athens",
       "canonical": "Europe/Athens",
-      "sha256": "8a4e9ea3b2ca9dc1eb8f137883da0a660c2d5af94d0844a750a90be89b93d79a"
+      "sha256": "8d2e517bb6739dc2d8196380d9d687ea3d026f9670fd3e036521bdbb9ee1ff3f"
     },
     {
       "name": "Europe/Belfast",
       "canonical": "Europe/London",
-      "sha256": "d73fee8b1cdb836b8e287a6a3d76e698d7beb2febff5ea1bf44c4438a28b8cc2"
+      "sha256": "b7aad8b97864a14efab7bd4ffc694b07db1dedcc74774106d183481eed1146db"
     },
     {
       "name": "Europe/Belgrade",
       "canonical": "Europe/Belgrade",
-      "sha256": "433ad0e3c9b2b5fbb64fb3d1deb5a49c9946d69faf41ce22c9eef848d300f57e"
+      "sha256": "ea752ae784038a890af141fd1dea35b7f6a535058f778cf518ab9bd605f276e0"
     },
     {
       "name": "Europe/Berlin",
       "canonical": "Europe/Berlin",
-      "sha256": "3dc514695c4f0e9a88b82d0032949e6efbc55008bbedeeded9049d554daa8619"
+      "sha256": "59b1a45905290c0abbbdb499ab2afc6dce4eab5c7953ccd88b531497d8a3504f"
     },
     {
       "name": "Europe/Bratislava",
       "canonical": "Europe/Bratislava",
-      "sha256": "03a96943f99d9c46fe720a2b5402f4d6162ee529522921b6407e0d219288e950"
+      "sha256": "52e335310bc13c9c6ce8786e9b93cb8c0dc04058ecfe4147f0fe93dc96970c18"
     },
     {
       "name": "Europe/Brussels",
       "canonical": "Europe/Brussels",
-      "sha256": "6b3727d79c98044d6fee2b162fb86378d256e10f8e84247e73e7e8b2b34009e0"
+      "sha256": "f75e9721d0070b559ae30ca7e4a0ddddc1e5642418458a4429a7ee94d6cafbff"
     },
     {
       "name": "Europe/Bucharest",
       "canonical": "Europe/Bucharest",
-      "sha256": "27357aa999a866154506a958d36b6dab31ba543378178b77b1b941216809abeb"
+      "sha256": "929d5acd01a7ff456a0965a19e7a29090f7862a4932235be1b451fcbda363f3c"
     },
     {
       "name": "Europe/Budapest",
       "canonical": "Europe/Budapest",
-      "sha256": "1755b324bbde61570db376894222302fc3ee25173b57597a5a6f1964405c3b7a"
+      "sha256": "7d15e44901002fd482f75f018793ae12cb61ec1a09e5a01447b847dffbcce8d8"
     },
     {
       "name": "Europe/Busingen",
       "canonical": "Europe/Busingen",
-      "sha256": "b7a898c3fc1257f8158f29e701a2edeaf92132699ca8d1d5874c44d47d827481"
+      "sha256": "866e0349ea1e82885c9221750e0e323980494e7abd114eb604b02269ce7b2ece"
     },
     {
       "name": "Europe/Chisinau",
       "canonical": "Europe/Chisinau",
-      "sha256": "2484e7b6a151b5d62654c3b49704bf35ad4eb54e3596316232af7b9ea2f70484"
+      "sha256": "09fd8fb3c7080c8d3e075e1279cacea29cd229177a043569fb72fb5d43360c76"
     },
     {
       "name": "Europe/Copenhagen",
       "canonical": "Europe/Copenhagen",
-      "sha256": "3dc514695c4f0e9a88b82d0032949e6efbc55008bbedeeded9049d554daa8619"
+      "sha256": "59b1a45905290c0abbbdb499ab2afc6dce4eab5c7953ccd88b531497d8a3504f"
     },
     {
       "name": "Europe/Dublin",
       "canonical": "Europe/Dublin",
-      "sha256": "3830133ed0f0d34bf53bbc3452e92afc055499a7f4c9338a7bf9dbcc84f77865"
+      "sha256": "70071b185bc12754fa363c679eb720ebd92082b53cd305caba855cd474f9a96a"
     },
     {
       "name": "Europe/Gibraltar",
       "canonical": "Europe/Gibraltar",
-      "sha256": "0de2fe6a32cd3a46134ad214b0e65414afd97ca361d6ced422a638ee2b1d7717"
+      "sha256": "ce4e3e734156c3b8bfefdcc23df6537e1a602f7929728196401de8d550e575d4"
     },
     {
       "name": "Europe/Guernsey",
       "canonical": "Europe/Guernsey",
-      "sha256": "d73fee8b1cdb836b8e287a6a3d76e698d7beb2febff5ea1bf44c4438a28b8cc2"
+      "sha256": "b7aad8b97864a14efab7bd4ffc694b07db1dedcc74774106d183481eed1146db"
     },
     {
       "name": "Europe/Helsinki",
       "canonical": "Europe/Helsinki",
-      "sha256": "6d2d2eaef03994be366d6fffc2f00759b1e7e6eeda6f73843ba82b3b24672f9f"
+      "sha256": "db5d0043eb489fc87937fdd247c7a26a196a8e60a35b6e0e286f77c45d7572e5"
     },
     {
       "name": "Europe/Isle_of_Man",
       "canonical": "Europe/Isle_of_Man",
-      "sha256": "d73fee8b1cdb836b8e287a6a3d76e698d7beb2febff5ea1bf44c4438a28b8cc2"
+      "sha256": "b7aad8b97864a14efab7bd4ffc694b07db1dedcc74774106d183481eed1146db"
     },
     {
       "name": "Europe/Istanbul",
       "canonical": "Europe/Istanbul",
-      "sha256": "7d7d1a696c109af3424ca969728f2951544e1ddabcdf1d9ec6e1197f6aae3312"
+      "sha256": "57333b0e3225acd0539ec80ef76fa81c12b12779ba8af3b517ded5c5755a08cb"
     },
     {
       "name": "Europe/Jersey",
       "canonical": "Europe/Jersey",
-      "sha256": "d73fee8b1cdb836b8e287a6a3d76e698d7beb2febff5ea1bf44c4438a28b8cc2"
+      "sha256": "b7aad8b97864a14efab7bd4ffc694b07db1dedcc74774106d183481eed1146db"
     },
     {
       "name": "Europe/Kaliningrad",
       "canonical": "Europe/Kaliningrad",
-      "sha256": "e550a3fae3fcdbc29f56cb50685031cc724eb948c4d97793d42131802a686c1a"
+      "sha256": "5ba17e935c1494d50380290a1f376078658407480ce1188f28c64371ee09f301"
     },
     {
       "name": "Europe/Kiev",
       "canonical": "Europe/Kiev",
-      "sha256": "8f33e64e3192de8ae05ba16879e3c67659926addd29da076e43a7bbec5606812"
+      "sha256": "cbdf40642b8f445b912a015e18046fc8fc7eede1bdefd0300027aea1ce8967dd"
     },
     {
       "name": "Europe/Kirov",
       "canonical": "Europe/Kirov",
-      "sha256": "4dd92e6eb2d4ef34c7e4df437b12f6158325cd2d38993bc8e6e40807a8176e98"
+      "sha256": "07e7253e64f89ec615461fcec13e94b7d2fe81e2de83b36b832ce953988ba811"
     },
     {
       "name": "Europe/Kyiv",
       "canonical": "Europe/Kiev",
-      "sha256": "8f33e64e3192de8ae05ba16879e3c67659926addd29da076e43a7bbec5606812"
+      "sha256": "cbdf40642b8f445b912a015e18046fc8fc7eede1bdefd0300027aea1ce8967dd"
     },
     {
       "name": "Europe/Lisbon",
       "canonical": "Europe/Lisbon",
-      "sha256": "513759a52264020265d3bb6b8bf3c18e765f32c54bc023360a04745db69190a3"
+      "sha256": "50cbc2bd2f558832139825d009c7edb8f05914138833a22445963c15d7ec5e91"
     },
     {
       "name": "Europe/Ljubljana",
       "canonical": "Europe/Ljubljana",
-      "sha256": "433ad0e3c9b2b5fbb64fb3d1deb5a49c9946d69faf41ce22c9eef848d300f57e"
+      "sha256": "ea752ae784038a890af141fd1dea35b7f6a535058f778cf518ab9bd605f276e0"
     },
     {
       "name": "Europe/London",
       "canonical": "Europe/London",
-      "sha256": "d73fee8b1cdb836b8e287a6a3d76e698d7beb2febff5ea1bf44c4438a28b8cc2"
+      "sha256": "b7aad8b97864a14efab7bd4ffc694b07db1dedcc74774106d183481eed1146db"
     },
     {
       "name": "Europe/Luxembourg",
       "canonical": "Europe/Luxembourg",
-      "sha256": "6b3727d79c98044d6fee2b162fb86378d256e10f8e84247e73e7e8b2b34009e0"
+      "sha256": "f75e9721d0070b559ae30ca7e4a0ddddc1e5642418458a4429a7ee94d6cafbff"
     },
     {
       "name": "Europe/Madrid",
       "canonical": "Europe/Madrid",
-      "sha256": "f1eb4cc7c0a1e82d081d9053ad6b5c2e73ed622bc33f04fa036d9b6809a1e75a"
+      "sha256": "48eedf10a4535b316f9a6cdc2513df9f68b5505ccb3dc1b5bd1a0eae8424c7c0"
     },
     {
       "name": "Europe/Malta",
       "canonical": "Europe/Malta",
-      "sha256": "9fefbab0203e9bb33f5e1fcc8023842b6350a94c39a99f694ad231bf18049774"
+      "sha256": "2e517d6b2c09d075e22f3f29d68ec003b19213088ac0bbd10e091d273841e23a"
     },
     {
       "name": "Europe/Mariehamn",
       "canonical": "Europe/Mariehamn",
-      "sha256": "6d2d2eaef03994be366d6fffc2f00759b1e7e6eeda6f73843ba82b3b24672f9f"
+      "sha256": "db5d0043eb489fc87937fdd247c7a26a196a8e60a35b6e0e286f77c45d7572e5"
     },
     {
       "name": "Europe/Minsk",
       "canonical": "Europe/Minsk",
-      "sha256": "e46434452e999423b7a691831ccac3f1a280920516b36e0fc0c799f6bfee8f84"
+      "sha256": "8494515e6ba49cfa8d7aea6e7ea8c90f788db5ddf9852c040109d338564dd2af"
     },
     {
       "name": "Europe/Monaco",
       "canonical": "Europe/Monaco",
-      "sha256": "125c9e147ae0859b90627d6e2eb01c2514052237292eb04513a8f213f5f2bc2d"
+      "sha256": "d07e73f5f9d70c9f70c67e0ed1b3fd07afc4ec3c51068cd544c40d0a925398ea"
     },
     {
       "name": "Europe/Moscow",
       "canonical": "Europe/Moscow",
-      "sha256": "3ee7039c421250c1ebfee7a3287035ee97213af3b55ce0acc5a9e13a7c607630"
+      "sha256": "154a85ad3259e66a096ecbd2b8f061469c6eccc2f8fc396e17cdd6a1da3cd2a8"
     },
     {
       "name": "Europe/Nicosia",
       "canonical": "Asia/Nicosia",
-      "sha256": "5af8708ac972a601bf3a5f593da1d2a48e1518c369fbc5c8b4c1e21044cdd7d8"
+      "sha256": "9b50194184ba3ef1a19844431b24c7b8639b242320b6d8273fe01335be2009f5"
     },
     {
       "name": "Europe/Oslo",
       "canonical": "Europe/Oslo",
-      "sha256": "3dc514695c4f0e9a88b82d0032949e6efbc55008bbedeeded9049d554daa8619"
+      "sha256": "59b1a45905290c0abbbdb499ab2afc6dce4eab5c7953ccd88b531497d8a3504f"
     },
     {
       "name": "Europe/Paris",
       "canonical": "Europe/Paris",
-      "sha256": "125c9e147ae0859b90627d6e2eb01c2514052237292eb04513a8f213f5f2bc2d"
+      "sha256": "d07e73f5f9d70c9f70c67e0ed1b3fd07afc4ec3c51068cd544c40d0a925398ea"
     },
     {
       "name": "Europe/Podgorica",
       "canonical": "Europe/Podgorica",
-      "sha256": "433ad0e3c9b2b5fbb64fb3d1deb5a49c9946d69faf41ce22c9eef848d300f57e"
+      "sha256": "ea752ae784038a890af141fd1dea35b7f6a535058f778cf518ab9bd605f276e0"
     },
     {
       "name": "Europe/Prague",
       "canonical": "Europe/Prague",
-      "sha256": "03a96943f99d9c46fe720a2b5402f4d6162ee529522921b6407e0d219288e950"
+      "sha256": "52e335310bc13c9c6ce8786e9b93cb8c0dc04058ecfe4147f0fe93dc96970c18"
     },
     {
       "name": "Europe/Riga",
       "canonical": "Europe/Riga",
-      "sha256": "9406864f497b04daa22acb16b36532b7e2d659c5bb2f7ccf1782538ab299089e"
+      "sha256": "0d560a84a4dcdb3aa356159619072bba3507c493ff596b448dae1aa233ac3177"
     },
     {
       "name": "Europe/Rome",
       "canonical": "Europe/Rome",
-      "sha256": "e0af1662c1132d8ba8b4a880aac62a8c2dcc048a8680a278f0e801e6f9e80286"
+      "sha256": "e3ec0182ebbc620d1bb18cc93654c108e6293cda8fb977f4ffc67446597a4958"
     },
     {
       "name": "Europe/Samara",
       "canonical": "Europe/Samara",
-      "sha256": "34765385abcdcd26cd3dba399109afbca65b9e0c8dcaeeac4c1ef9a29a5be5b0"
+      "sha256": "8ea9f6360027637f56e7208fcdf7f3aea4463686d4c32d5330cadd1f216f5b4a"
     },
     {
       "name": "Europe/San_Marino",
       "canonical": "Europe/San_Marino",
-      "sha256": "e0af1662c1132d8ba8b4a880aac62a8c2dcc048a8680a278f0e801e6f9e80286"
+      "sha256": "e3ec0182ebbc620d1bb18cc93654c108e6293cda8fb977f4ffc67446597a4958"
     },
     {
       "name": "Europe/Sarajevo",
       "canonical": "Europe/Sarajevo",
-      "sha256": "433ad0e3c9b2b5fbb64fb3d1deb5a49c9946d69faf41ce22c9eef848d300f57e"
+      "sha256": "ea752ae784038a890af141fd1dea35b7f6a535058f778cf518ab9bd605f276e0"
     },
     {
       "name": "Europe/Saratov",
       "canonical": "Europe/Saratov",
-      "sha256": "e1f26396429ebf8b540582660db08cca5a062a46e3d48337a136a5a680e4004f"
+      "sha256": "bcd7cd5745ea17a4c60451756789aab9f4f194b20ff8adec2eba8537495db30d"
     },
     {
       "name": "Europe/Simferopol",
       "canonical": "Europe/Simferopol",
-      "sha256": "1db252973b2da712264e4d7446c43851117986658f324e67cee9cfb1196485fe"
+      "sha256": "f1348a9e7500d182df95ee6997761e0124f6d722539c2dc67387b45fcb4f327b"
     },
     {
       "name": "Europe/Skopje",
       "canonical": "Europe/Skopje",
-      "sha256": "433ad0e3c9b2b5fbb64fb3d1deb5a49c9946d69faf41ce22c9eef848d300f57e"
+      "sha256": "ea752ae784038a890af141fd1dea35b7f6a535058f778cf518ab9bd605f276e0"
     },
     {
       "name": "Europe/Sofia",
       "canonical": "Europe/Sofia",
-      "sha256": "c4944c24bac8157c2b0be246c3d5cb5777cbf4a5533cae07aa2e1b2fd9a56e65"
+      "sha256": "740f76addf11fd5ac4a8bf6c0b22f56db39f6228754a2eabb3f139e002e69002"
     },
     {
       "name": "Europe/Stockholm",
       "canonical": "Europe/Stockholm",
-      "sha256": "3dc514695c4f0e9a88b82d0032949e6efbc55008bbedeeded9049d554daa8619"
+      "sha256": "59b1a45905290c0abbbdb499ab2afc6dce4eab5c7953ccd88b531497d8a3504f"
     },
     {
       "name": "Europe/Tallinn",
       "canonical": "Europe/Tallinn",
-      "sha256": "b2924ff93297cd14fc9a0013437faa28f64e95f3a6d1247be676dd1c3dfd8390"
+      "sha256": "b2841dd334c3ef4edb6406e3c2be2a6bd0b8a1249d58d9ea76f9da25cc8e9fe4"
     },
     {
       "name": "Europe/Tirane",
       "canonical": "Europe/Tirane",
-      "sha256": "8e0dfb4c5ce5e818bea941c26f8405559b50d19777b66c65452d89a351c54fa1"
+      "sha256": "b5ae1b01a551308c76aa03df958b9b657254384551b1e63fc561c3c46a8a14db"
     },
     {
       "name": "Europe/Tiraspol",
       "canonical": "Europe/Chisinau",
-      "sha256": "2484e7b6a151b5d62654c3b49704bf35ad4eb54e3596316232af7b9ea2f70484"
+      "sha256": "09fd8fb3c7080c8d3e075e1279cacea29cd229177a043569fb72fb5d43360c76"
     },
     {
       "name": "Europe/Ulyanovsk",
       "canonical": "Europe/Ulyanovsk",
-      "sha256": "8ba81c385970b86c119bfcaa884300e0dadb98bb65f0c274de4da6994dbb2bd9"
+      "sha256": "ee6a127d8ffee0ae97cf1ceceb77883019a9e893973de3b9898cd42daa57f929"
     },
     {
       "name": "Europe/Uzhgorod",
       "canonical": "Europe/Kiev",
-      "sha256": "8f33e64e3192de8ae05ba16879e3c67659926addd29da076e43a7bbec5606812"
+      "sha256": "cbdf40642b8f445b912a015e18046fc8fc7eede1bdefd0300027aea1ce8967dd"
     },
     {
       "name": "Europe/Vaduz",
       "canonical": "Europe/Vaduz",
-      "sha256": "b7a898c3fc1257f8158f29e701a2edeaf92132699ca8d1d5874c44d47d827481"
+      "sha256": "866e0349ea1e82885c9221750e0e323980494e7abd114eb604b02269ce7b2ece"
     },
     {
       "name": "Europe/Vatican",
       "canonical": "Europe/Vatican",
-      "sha256": "e0af1662c1132d8ba8b4a880aac62a8c2dcc048a8680a278f0e801e6f9e80286"
+      "sha256": "e3ec0182ebbc620d1bb18cc93654c108e6293cda8fb977f4ffc67446597a4958"
     },
     {
       "name": "Europe/Vienna",
       "canonical": "Europe/Vienna",
-      "sha256": "fb5006860a38c74260533b0264811cd8b4abf1db12a68ba655f82cfceff72e6d"
+      "sha256": "a25a0fd6a287e98cd346623fcb9527d2891188ee75cc9ad624d33af53c2355f9"
     },
     {
       "name": "Europe/Vilnius",
       "canonical": "Europe/Vilnius",
-      "sha256": "30edcb02fd839016c79e5f2118df755b3452c4fc86cb55ed21670fa06ce128d9"
+      "sha256": "5e412fb127543e658e4d0638cb8678cdfecb338d3eb6cf55ec07aca79dac269b"
     },
     {
       "name": "Europe/Volgograd",
       "canonical": "Europe/Volgograd",
-      "sha256": "1ced8d60280e2d8e45d4a9b50b6233572ece8d0c36d0bad7c9004be57b9613e4"
+      "sha256": "3c6da3e97b07edb62ba5762e0f694f2dcf457ca6a205243b40fd909afe045a40"
     },
     {
       "name": "Europe/Warsaw",
       "canonical": "Europe/Warsaw",
-      "sha256": "28699a2db6cddce4f08db45dab26a454b5ebc66676d79baf83b907ada4dc8569"
+      "sha256": "6335e3bddb62ab0730457e897b8b82b5ea2ff0397e5981eb93112c3d1cb25373"
     },
     {
       "name": "Europe/Zagreb",
       "canonical": "Europe/Zagreb",
-      "sha256": "433ad0e3c9b2b5fbb64fb3d1deb5a49c9946d69faf41ce22c9eef848d300f57e"
+      "sha256": "ea752ae784038a890af141fd1dea35b7f6a535058f778cf518ab9bd605f276e0"
     },
     {
       "name": "Europe/Zaporozhye",
       "canonical": "Europe/Kiev",
-      "sha256": "8f33e64e3192de8ae05ba16879e3c67659926addd29da076e43a7bbec5606812"
+      "sha256": "cbdf40642b8f445b912a015e18046fc8fc7eede1bdefd0300027aea1ce8967dd"
     },
     {
       "name": "Europe/Zurich",
       "canonical": "Europe/Zurich",
-      "sha256": "b7a898c3fc1257f8158f29e701a2edeaf92132699ca8d1d5874c44d47d827481"
+      "sha256": "866e0349ea1e82885c9221750e0e323980494e7abd114eb604b02269ce7b2ece"
     },
     {
       "name": "Factory",
       "canonical": "Etc/Unknown",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "GB",
       "canonical": "Europe/London",
-      "sha256": "d73fee8b1cdb836b8e287a6a3d76e698d7beb2febff5ea1bf44c4438a28b8cc2"
+      "sha256": "b7aad8b97864a14efab7bd4ffc694b07db1dedcc74774106d183481eed1146db"
     },
     {
       "name": "GB-Eire",
       "canonical": "Europe/London",
-      "sha256": "d73fee8b1cdb836b8e287a6a3d76e698d7beb2febff5ea1bf44c4438a28b8cc2"
+      "sha256": "b7aad8b97864a14efab7bd4ffc694b07db1dedcc74774106d183481eed1146db"
     },
     {
       "name": "GMT",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "GMT+0",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "GMT-0",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "GMT0",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Greenwich",
       "canonical": "Etc/GMT",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Hongkong",
       "canonical": "Asia/Hong_Kong",
-      "sha256": "4b28d0a4349a239ef4f6c16c46b8d45b59c941efb520109d026223e40a1fba88"
+      "sha256": "fad6010c0d9cfbd7fcf87aeea777a4cf866b94815481b04f3d2458caf4e4af75"
     },
     {
       "name": "HST",
       "canonical": "Pacific/Honolulu",
-      "sha256": "9ae9d43e6cb78a174f72edbb7e52b915856eff725f8a516ccbfb42ba709c8669"
+      "sha256": "02ed58d9f0031a3c2109eaf6231abdb2489417c13aa4cf3d9e011c26e295f3fb"
     },
     {
       "name": "Iceland",
       "canonical": "Atlantic/Reykjavik",
-      "sha256": "d839ac1e08b9667e8d70f45cbf17b278d8c3a811bfb279fb3769c57b6157003c"
+      "sha256": "544a90290c70fa1ed99afd1110d4f0e0d2f9bd53ffe8003a9a7d97a79a2212bd"
     },
     {
       "name": "IET",
       "canonical": "America/Indianapolis",
-      "sha256": "018f27753945527996f50595c5b609125c2a9719e7ecbe99d671800fa23a3c3b"
+      "sha256": "a1f91f2af5a6a42295cc7abc42aaf42f18ff9bffd099b96d997ef61af7d484be"
     },
     {
       "name": "Indian/Antananarivo",
       "canonical": "Indian/Antananarivo",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Indian/Chagos",
       "canonical": "Indian/Chagos",
-      "sha256": "3737de3a886b1055add57bdd180190ba2a3e588ab6143417d75617ce6ad7f87a"
+      "sha256": "ba5cf2389c88edc286089d5bc8b1be3a5223ee96abca0642bb4f91c3f25c1b15"
     },
     {
       "name": "Indian/Christmas",
       "canonical": "Indian/Christmas",
-      "sha256": "95ff3858bab2a59fb4c4504a38422d8b84f2248719458ea04770a8565216f58c"
+      "sha256": "68435215a5d8f69dab5c7ff221337ca7cc8446affbeeedf1c8e326861eaccf93"
     },
     {
       "name": "Indian/Cocos",
       "canonical": "Indian/Cocos",
-      "sha256": "211dbcbd3cfe024477676bc9015c0a0708dee7cd8fa35965df226edc8fc5a1b8"
+      "sha256": "04c8eb3b8b38154e5ea1dc420085a4222536d701cefe57bbf05d626fb6f1b3f8"
     },
     {
       "name": "Indian/Comoro",
       "canonical": "Indian/Comoro",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Indian/Kerguelen",
       "canonical": "Indian/Kerguelen",
-      "sha256": "0b42e61615092cd3c6084d051c58fa2ffacd89dcd547b20bbeee518319b73ba3"
+      "sha256": "c7dbdc73fc000519abf0e8ba907a1759f08613fc88992f59c4d3520aab2ef10b"
     },
     {
       "name": "Indian/Mahe",
       "canonical": "Indian/Mahe",
-      "sha256": "3eff9491c9c80f0369b3836090495abfbf2b37fecef005e8b0fabf3f1f3eeeb7"
+      "sha256": "0c71e581576450c2a1605cd0c7339a72c53680fa33d3b092784cd7f21fdd2b28"
     },
     {
       "name": "Indian/Maldives",
       "canonical": "Indian/Maldives",
-      "sha256": "0b42e61615092cd3c6084d051c58fa2ffacd89dcd547b20bbeee518319b73ba3"
+      "sha256": "c7dbdc73fc000519abf0e8ba907a1759f08613fc88992f59c4d3520aab2ef10b"
     },
     {
       "name": "Indian/Mauritius",
       "canonical": "Indian/Mauritius",
-      "sha256": "f450f66664e785540f45445c392340b99de886849f0d311e8f617ca2eeaa25db"
+      "sha256": "cf80427e5d18b54457cb48fa3381da823c4d03584aa32f48565c5f774a8a592b"
     },
     {
       "name": "Indian/Mayotte",
       "canonical": "Indian/Mayotte",
-      "sha256": "34ad2e763f9430e786b1cd685d5b06f80ae269c21b0a27f496fefc666a160a5c"
+      "sha256": "cb4458c08c45679c1488bb1075436fcbef51d67b2f3738b73b330e66cad7501e"
     },
     {
       "name": "Indian/Reunion",
       "canonical": "Indian/Reunion",
-      "sha256": "3eff9491c9c80f0369b3836090495abfbf2b37fecef005e8b0fabf3f1f3eeeb7"
+      "sha256": "0c71e581576450c2a1605cd0c7339a72c53680fa33d3b092784cd7f21fdd2b28"
     },
     {
       "name": "Iran",
       "canonical": "Asia/Tehran",
-      "sha256": "de62c319791de65f7a432954ae0c4493a1ca8702bd20bb82bbbe99ec4ef8ef33"
+      "sha256": "d47541b5158680829d08c7572a3aa98f014aea4fc89183ce93898722e9684312"
     },
     {
       "name": "Israel",
       "canonical": "Asia/Jerusalem",
-      "sha256": "c32c02a1c30fb933f08d92a2fd9d2eeae877b966045879f6f82b83309d28149f"
+      "sha256": "fa828caafa4996ce2ba0b8cab3a2669745d93c5dfa6caef626fcc385cfc6486b"
     },
     {
       "name": "IST",
       "canonical": "Asia/Calcutta",
-      "sha256": "c69c0f05be61f47832b56c821945cb132635e9a537e0b7bfecb30a3f004c4756"
+      "sha256": "1a628bed81bfdf30c4e87c7ac99a987a43d6ecf4c03791e88e9db77716354349"
     },
     {
       "name": "Jamaica",
       "canonical": "America/Jamaica",
-      "sha256": "551eb23a35e74c17f1f4b807bd824d1f9fdae93cf28cd4038818da07778bd09b"
+      "sha256": "3051ad95227b554ae3751e759e6a8f76104b2b39e8d2a6c744cef56f6d883539"
     },
     {
       "name": "Japan",
       "canonical": "Asia/Tokyo",
-      "sha256": "538b2a759636fd4ccd600721c6ebeb9bbdbbe883dc661f05c2cc46336ced0ce3"
+      "sha256": "e43e615a7730649c152bc2d386399eb61a54e57da0cded925060134c192bd8d8"
     },
     {
       "name": "JST",
       "canonical": "Asia/Tokyo",
-      "sha256": "538b2a759636fd4ccd600721c6ebeb9bbdbbe883dc661f05c2cc46336ced0ce3"
+      "sha256": "e43e615a7730649c152bc2d386399eb61a54e57da0cded925060134c192bd8d8"
     },
     {
       "name": "Kwajalein",
       "canonical": "Pacific/Kwajalein",
-      "sha256": "676b6ac5e9ca21b0e83d0f15c6257c1de5fbdd882d5cadf880f4ffa2c4bb9c7d"
+      "sha256": "4a3afe3f595ea5f855a8445e37f2a29d4515b7b3b15b7e50ab457bb458e5218e"
     },
     {
       "name": "Libya",
       "canonical": "Africa/Tripoli",
-      "sha256": "b3ca1b46d450fa4c31126b6e268ebfdb2a3d66c4ddaaf2dab1842284e7b4926e"
+      "sha256": "ad8f8ad76db661826371c70df45db7918be62db653c7d510c6fa897a046f730a"
     },
     {
       "name": "MET",
       "canonical": "Europe/Brussels",
-      "sha256": "6b3727d79c98044d6fee2b162fb86378d256e10f8e84247e73e7e8b2b34009e0"
+      "sha256": "f75e9721d0070b559ae30ca7e4a0ddddc1e5642418458a4429a7ee94d6cafbff"
     },
     {
       "name": "Mexico/BajaNorte",
       "canonical": "America/Tijuana",
-      "sha256": "ff3cdfc69dab1bea55610fb4591354a90d6e2de62800b01ba4e3130fb48427e7"
+      "sha256": "3e31e3d280deef6d03f39101c45c6df563f6d16fd48009603eab255fd43b26a1"
     },
     {
       "name": "Mexico/BajaSur",
       "canonical": "America/Mazatlan",
-      "sha256": "23666f409c0eb03d00929b8f3aa0d48dd9c6455eafb3ab313f732d2e430aed72"
+      "sha256": "16cdc27f671de17d9f97153150c2cdd1d7078928db3be0f144de0dce48ede051"
     },
     {
       "name": "Mexico/General",
       "canonical": "America/Mexico_City",
-      "sha256": "4d1b8b914330ab16630a03e669fbb067ae0b03f75362b8ebef6d542bae4886ff"
+      "sha256": "56c2ebc774ceb4a45df1c30f7a990f10710cffe818c2b9c1d4a0e216bca401fe"
     },
     {
       "name": "MIT",
       "canonical": "Pacific/Apia",
-      "sha256": "e3002957c52b57d4770a6acfbdca2c925b611b8542065cf794c6880bab8b3efb"
+      "sha256": "5886904468a6c85c274b13a4f88420aeaa697b44ea8b9fabe171f513dda060cc"
     },
     {
       "name": "MST",
       "canonical": "America/Phoenix",
-      "sha256": "70bfbb09e21b05039e7d014c36a36c7e47bd5fdf56e797820ddb7909104002b4"
+      "sha256": "250cca66123a52e2c20c36bd778dd6425e4d21992747ad3e947422a6722f76a6"
     },
     {
       "name": "MST7MDT",
-      "canonical": "America/Denver",
-      "sha256": "c834451740eacc9317525c5b2feb97a3d73e9633e4db26f40fbac244641e9acf"
+      "canonical": "MST7MDT",
+      "sha256": "4ce53736d85500d5376b70e6950c0ff1b2bb0441c770734c5bac02b668fc139d"
     },
     {
       "name": "Navajo",
       "canonical": "America/Denver",
-      "sha256": "c834451740eacc9317525c5b2feb97a3d73e9633e4db26f40fbac244641e9acf"
+      "sha256": "8220cfcd66fc9f6883ced2402f0681360e3152ed82958555fb0b3d6180fa4631"
     },
     {
       "name": "NET",
       "canonical": "Asia/Yerevan",
-      "sha256": "994e278edd2cdd302db82f497c34dc0fb290790f7423b47f8f6cf13d091ea4c4"
+      "sha256": "a46f5b8c2c863a61e5d22ecb7a65e4aeb8e06bee6536701a27508f875b88a643"
     },
     {
       "name": "NST",
       "canonical": "Pacific/Auckland",
-      "sha256": "7f3218f40a48c9143f2b1191e0ca0bf825fb4dbd0de4b261a97df78d323e1555"
+      "sha256": "157fd3463ecc558c704f904c2e55e3e42f423412d9eca676125e4551c3d33c7b"
     },
     {
       "name": "NZ",
       "canonical": "Pacific/Auckland",
-      "sha256": "7f3218f40a48c9143f2b1191e0ca0bf825fb4dbd0de4b261a97df78d323e1555"
+      "sha256": "157fd3463ecc558c704f904c2e55e3e42f423412d9eca676125e4551c3d33c7b"
     },
     {
       "name": "NZ-CHAT",
       "canonical": "Pacific/Chatham",
-      "sha256": "58909bec4e262263a0adb34a1f9e2e79c80ea6b300b561e11f1224a9473a05f7"
+      "sha256": "c75424bc273c7664d002f2b8f29455864895d1f59eb3300d536d2e96d15acae0"
     },
     {
       "name": "Pacific/Apia",
       "canonical": "Pacific/Apia",
-      "sha256": "e3002957c52b57d4770a6acfbdca2c925b611b8542065cf794c6880bab8b3efb"
+      "sha256": "5886904468a6c85c274b13a4f88420aeaa697b44ea8b9fabe171f513dda060cc"
     },
     {
       "name": "Pacific/Auckland",
       "canonical": "Pacific/Auckland",
-      "sha256": "7f3218f40a48c9143f2b1191e0ca0bf825fb4dbd0de4b261a97df78d323e1555"
+      "sha256": "157fd3463ecc558c704f904c2e55e3e42f423412d9eca676125e4551c3d33c7b"
     },
     {
       "name": "Pacific/Bougainville",
       "canonical": "Pacific/Bougainville",
-      "sha256": "85c5c72487ed8958ef2177cab0e254815beb26868e66555b97a079ea6a130dfc"
+      "sha256": "0a59d200ad5053d60c44588751b2ce427592bb6c47aac89ab59d5fb139b59386"
     },
     {
       "name": "Pacific/Chatham",
       "canonical": "Pacific/Chatham",
-      "sha256": "58909bec4e262263a0adb34a1f9e2e79c80ea6b300b561e11f1224a9473a05f7"
+      "sha256": "c75424bc273c7664d002f2b8f29455864895d1f59eb3300d536d2e96d15acae0"
     },
     {
       "name": "Pacific/Chuuk",
       "canonical": "Pacific/Truk",
-      "sha256": "6c007c7a70a3178bfeff2ce574766e63d1ccae9648f1d65ad84d595defd6f73f"
+      "sha256": "20164619973ef5253b05bac62a23270ce0f40dcc1c6d0a0f6925c70b2d84f365"
     },
     {
       "name": "Pacific/Easter",
       "canonical": "Pacific/Easter",
-      "sha256": "83edb1796fddd019816e7cda2855af2a1a9f4c134a4d6fc725572c33562df8dc"
+      "sha256": "092e20e6e84f4e3861aab041074ce20cfce207b5cd56a0858c549bce41b71a6d"
     },
     {
       "name": "Pacific/Efate",
       "canonical": "Pacific/Efate",
-      "sha256": "9e01fca498f801975c246c07ea212f8e217088786a5ad767134cd3513fecc65b"
+      "sha256": "4e3ec2aa08f5e2fa4ea10f0b3ce1ceb097554ed0fe539f68e86789a2e409424c"
     },
     {
       "name": "Pacific/Enderbury",
       "canonical": "Pacific/Enderbury",
-      "sha256": "796c9cc52832caa07034fee323ab056b7cd7695b976b627a8a9d9967bf281494"
+      "sha256": "6f2eb1657ea549a89371075d1d8600e2f6e6e048f004bbb98a90ace08bfed2a2"
     },
     {
       "name": "Pacific/Fakaofo",
       "canonical": "Pacific/Fakaofo",
-      "sha256": "36fd2239760c4023c13327cb366d32d7be6f5d8390f6074c1c3f64c783319c23"
+      "sha256": "07bee93ef5107384860973275709258157ab343a0f295707435f9491e58a8cc1"
     },
     {
       "name": "Pacific/Fiji",
       "canonical": "Pacific/Fiji",
-      "sha256": "6636a432d87f3b9af905c68ffefe94eb7ffc8cd230761bf27d3600ce03d57bd9"
+      "sha256": "701904d4d53418458cd5e39ca65bb1e6e8b703ee5896d4831461c82171da86ff"
     },
     {
       "name": "Pacific/Funafuti",
       "canonical": "Pacific/Funafuti",
-      "sha256": "8453f365b2b95a17d7622eadaaf49fb157931be18e7721afa8737350e3f8c2e4"
+      "sha256": "8760cb524136679cc524269af68043267213c8d0388264632c2c3da767eceaf8"
     },
     {
       "name": "Pacific/Galapagos",
       "canonical": "Pacific/Galapagos",
-      "sha256": "d45c182046e203d59dec0f9936cc5c5ed63522adbeda847aa5820b1059e03313"
+      "sha256": "454641f4113ed3c014f93ba83727ccaa0cbd2877b0da971ea67c2e2b9f302dda"
     },
     {
       "name": "Pacific/Gambier",
       "canonical": "Pacific/Gambier",
-      "sha256": "87c8a0c3804aecf09f4b596151409013daeb47d4f81a53cda936add7c9d7f6f4"
+      "sha256": "1c923a6ef141ba0dec42bb0307aab1c0fc9756686cc39449705153d63147a0a0"
     },
     {
       "name": "Pacific/Guadalcanal",
       "canonical": "Pacific/Guadalcanal",
-      "sha256": "4faecb015868ecdb07a877491d8bc186765ca781d0e0a72458f7066e4e935890"
+      "sha256": "6016c1f0762dd61b0bf55d72bc8eabf6c2ef70783bfea4dc84db6eb94e029bd7"
     },
     {
       "name": "Pacific/Guam",
       "canonical": "Pacific/Guam",
-      "sha256": "bdf7817990b525bf74ae4570fbaed14d31bd27c9fa8e2bc304b2e3d1c0f3cb78"
+      "sha256": "76956890918e7e95b7bd686d55d8f950288b36ccf71ab2d64b927e4a179f97ff"
     },
     {
       "name": "Pacific/Honolulu",
       "canonical": "Pacific/Honolulu",
-      "sha256": "9ae9d43e6cb78a174f72edbb7e52b915856eff725f8a516ccbfb42ba709c8669"
+      "sha256": "02ed58d9f0031a3c2109eaf6231abdb2489417c13aa4cf3d9e011c26e295f3fb"
     },
     {
       "name": "Pacific/Johnston",
       "canonical": "Pacific/Honolulu",
-      "sha256": "9ae9d43e6cb78a174f72edbb7e52b915856eff725f8a516ccbfb42ba709c8669"
+      "sha256": "02ed58d9f0031a3c2109eaf6231abdb2489417c13aa4cf3d9e011c26e295f3fb"
     },
     {
       "name": "Pacific/Kanton",
       "canonical": "Pacific/Enderbury",
-      "sha256": "796c9cc52832caa07034fee323ab056b7cd7695b976b627a8a9d9967bf281494"
+      "sha256": "6f2eb1657ea549a89371075d1d8600e2f6e6e048f004bbb98a90ace08bfed2a2"
     },
     {
       "name": "Pacific/Kiritimati",
       "canonical": "Pacific/Kiritimati",
-      "sha256": "319540659c099a994fcf73f8dd042c6d6a727d70c1c1f2fc04f0a7d03eac91e7"
+      "sha256": "8781fe0b7fac4ac8ace674c196f30bcd11295d5850c3df079ffd80d9f31f65bc"
     },
     {
       "name": "Pacific/Kosrae",
       "canonical": "Pacific/Kosrae",
-      "sha256": "5c01c3c45d9bcf09716469033a3f646389591faefde2c235c6a65e0523e83a6d"
+      "sha256": "a92d0555a4a3bccb9fcfeb41eedaa3a1c09d54d80a076279f5712ab43893bbea"
     },
     {
       "name": "Pacific/Kwajalein",
       "canonical": "Pacific/Kwajalein",
-      "sha256": "676b6ac5e9ca21b0e83d0f15c6257c1de5fbdd882d5cadf880f4ffa2c4bb9c7d"
+      "sha256": "4a3afe3f595ea5f855a8445e37f2a29d4515b7b3b15b7e50ab457bb458e5218e"
     },
     {
       "name": "Pacific/Majuro",
       "canonical": "Pacific/Majuro",
-      "sha256": "8453f365b2b95a17d7622eadaaf49fb157931be18e7721afa8737350e3f8c2e4"
+      "sha256": "8760cb524136679cc524269af68043267213c8d0388264632c2c3da767eceaf8"
     },
     {
       "name": "Pacific/Marquesas",
       "canonical": "Pacific/Marquesas",
-      "sha256": "a61440a47e7d3eda781f25e155d540be815ffe576ea393ee6b82f5930de18567"
+      "sha256": "1d19df05f4951ca174ebb859b07171bd1213b75ecd478351308351470dcd3a70"
     },
     {
       "name": "Pacific/Midway",
       "canonical": "Pacific/Midway",
-      "sha256": "d5a2dad88bd51308ea322e201b5dd1af822d6dbc262ea7802f21f0725513423a"
+      "sha256": "76756abe2d16230bc54a2818ca24238775a22850201f2b63c8837571e4f770e7"
     },
     {
       "name": "Pacific/Nauru",
       "canonical": "Pacific/Nauru",
-      "sha256": "353dbdaef4533f97c288119f136107c545b3708486d3d161f90c9389044baea1"
+      "sha256": "39e0e6d18e54fb99e9d655244dcf53ae5a9d195aa65a7e2f66d636fce4c1329a"
     },
     {
       "name": "Pacific/Niue",
       "canonical": "Pacific/Niue",
-      "sha256": "1a82cc2d8fd4cbe8bb5adbaececcb3c8db2db738a601d7647a9ae5b3d1b68d59"
+      "sha256": "d09d5bfa2911cffdc17ea9ead01da0eb0256ba27a1a624a20370c9baa8ef1304"
     },
     {
       "name": "Pacific/Norfolk",
       "canonical": "Pacific/Norfolk",
-      "sha256": "7ad600d131005ba100f9b287c5ea50477a6807cf5d0c376831445e5a4768f1fd"
+      "sha256": "a1565c11add2bdcffc2a64187ae53111dca545f52028793296e29b5a3133b73a"
     },
     {
       "name": "Pacific/Noumea",
       "canonical": "Pacific/Noumea",
-      "sha256": "7bbe34f4509d183870d31d533041244c2c025aa2b7e420241b31d30ca2589278"
+      "sha256": "c49692b913bb33f65cd4389735cfdf02ccfb7760e2bafee189bb0e41c183e437"
     },
     {
       "name": "Pacific/Pago_Pago",
       "canonical": "Pacific/Pago_Pago",
-      "sha256": "d5a2dad88bd51308ea322e201b5dd1af822d6dbc262ea7802f21f0725513423a"
+      "sha256": "76756abe2d16230bc54a2818ca24238775a22850201f2b63c8837571e4f770e7"
     },
     {
       "name": "Pacific/Palau",
       "canonical": "Pacific/Palau",
-      "sha256": "71d3916c2e0344015968e0e103e611d823397c1b2685a9e7e0acddc7cd68c882"
+      "sha256": "e3187188cae7b216e04bd78bdda152fe6ef89b9856654c3fb7fd914db49b1f83"
     },
     {
       "name": "Pacific/Pitcairn",
       "canonical": "Pacific/Pitcairn",
-      "sha256": "9636538a4a4364bb7856bc146ba6778fa0ca1756e64f026ec390dd0b3b93c5f4"
+      "sha256": "54193ca3622b60b13e15a79edf47681d7dafafbe6bae2bb51483fabce4f0fda7"
     },
     {
       "name": "Pacific/Pohnpei",
       "canonical": "Pacific/Ponape",
-      "sha256": "4faecb015868ecdb07a877491d8bc186765ca781d0e0a72458f7066e4e935890"
+      "sha256": "6016c1f0762dd61b0bf55d72bc8eabf6c2ef70783bfea4dc84db6eb94e029bd7"
     },
     {
       "name": "Pacific/Ponape",
       "canonical": "Pacific/Ponape",
-      "sha256": "4faecb015868ecdb07a877491d8bc186765ca781d0e0a72458f7066e4e935890"
+      "sha256": "6016c1f0762dd61b0bf55d72bc8eabf6c2ef70783bfea4dc84db6eb94e029bd7"
     },
     {
       "name": "Pacific/Port_Moresby",
       "canonical": "Pacific/Port_Moresby",
-      "sha256": "6c007c7a70a3178bfeff2ce574766e63d1ccae9648f1d65ad84d595defd6f73f"
+      "sha256": "20164619973ef5253b05bac62a23270ce0f40dcc1c6d0a0f6925c70b2d84f365"
     },
     {
       "name": "Pacific/Rarotonga",
       "canonical": "Pacific/Rarotonga",
-      "sha256": "0931f0b20f9604f8c28fcda64bd9d3cee1c82b2cb1de93a00db4b35bef540379"
+      "sha256": "f0bcf4b80086192bf253cfe6f84c773f419d47e6cc2fe8dd5a6d4d86e5761398"
     },
     {
       "name": "Pacific/Saipan",
       "canonical": "Pacific/Saipan",
-      "sha256": "bdf7817990b525bf74ae4570fbaed14d31bd27c9fa8e2bc304b2e3d1c0f3cb78"
+      "sha256": "76956890918e7e95b7bd686d55d8f950288b36ccf71ab2d64b927e4a179f97ff"
     },
     {
       "name": "Pacific/Samoa",
       "canonical": "Pacific/Pago_Pago",
-      "sha256": "d5a2dad88bd51308ea322e201b5dd1af822d6dbc262ea7802f21f0725513423a"
+      "sha256": "76756abe2d16230bc54a2818ca24238775a22850201f2b63c8837571e4f770e7"
     },
     {
       "name": "Pacific/Tahiti",
       "canonical": "Pacific/Tahiti",
-      "sha256": "c9cd165ee398db96f19efb97e16218e487bb11433504b7114f1421d03c261eea"
+      "sha256": "8770a8b6d9143e94bd341c85bc65ebc649495e9348935e5642fb12a06df561f0"
     },
     {
       "name": "Pacific/Tarawa",
       "canonical": "Pacific/Tarawa",
-      "sha256": "8453f365b2b95a17d7622eadaaf49fb157931be18e7721afa8737350e3f8c2e4"
+      "sha256": "8760cb524136679cc524269af68043267213c8d0388264632c2c3da767eceaf8"
     },
     {
       "name": "Pacific/Tongatapu",
       "canonical": "Pacific/Tongatapu",
-      "sha256": "ef927b000a1cd493bc32296290fdb543280b5c5645c6b965126d45ae924ce003"
+      "sha256": "f7d49478803320312d96d54a04e879fe616d74a6150abfdd3d9e2f8112c1fa24"
     },
     {
       "name": "Pacific/Truk",
       "canonical": "Pacific/Truk",
-      "sha256": "6c007c7a70a3178bfeff2ce574766e63d1ccae9648f1d65ad84d595defd6f73f"
+      "sha256": "20164619973ef5253b05bac62a23270ce0f40dcc1c6d0a0f6925c70b2d84f365"
     },
     {
       "name": "Pacific/Wake",
       "canonical": "Pacific/Wake",
-      "sha256": "8453f365b2b95a17d7622eadaaf49fb157931be18e7721afa8737350e3f8c2e4"
+      "sha256": "8760cb524136679cc524269af68043267213c8d0388264632c2c3da767eceaf8"
     },
     {
       "name": "Pacific/Wallis",
       "canonical": "Pacific/Wallis",
-      "sha256": "8453f365b2b95a17d7622eadaaf49fb157931be18e7721afa8737350e3f8c2e4"
+      "sha256": "8760cb524136679cc524269af68043267213c8d0388264632c2c3da767eceaf8"
     },
     {
       "name": "Pacific/Yap",
       "canonical": "Pacific/Truk",
-      "sha256": "6c007c7a70a3178bfeff2ce574766e63d1ccae9648f1d65ad84d595defd6f73f"
+      "sha256": "20164619973ef5253b05bac62a23270ce0f40dcc1c6d0a0f6925c70b2d84f365"
     },
     {
       "name": "PLT",
       "canonical": "Asia/Karachi",
-      "sha256": "d879230ab417ea220fc1195e1d933c557b91cf1f12ad9106d192a6f3dead13b2"
+      "sha256": "bba1ec93eb3a9756193ea5a2607c4e851ff7e5a5e543ae49a6aca338f4e832da"
     },
     {
       "name": "PNT",
       "canonical": "America/Phoenix",
-      "sha256": "70bfbb09e21b05039e7d014c36a36c7e47bd5fdf56e797820ddb7909104002b4"
+      "sha256": "250cca66123a52e2c20c36bd778dd6425e4d21992747ad3e947422a6722f76a6"
     },
     {
       "name": "Poland",
       "canonical": "Europe/Warsaw",
-      "sha256": "28699a2db6cddce4f08db45dab26a454b5ebc66676d79baf83b907ada4dc8569"
+      "sha256": "6335e3bddb62ab0730457e897b8b82b5ea2ff0397e5981eb93112c3d1cb25373"
     },
     {
       "name": "Portugal",
       "canonical": "Europe/Lisbon",
-      "sha256": "513759a52264020265d3bb6b8bf3c18e765f32c54bc023360a04745db69190a3"
+      "sha256": "50cbc2bd2f558832139825d009c7edb8f05914138833a22445963c15d7ec5e91"
     },
     {
       "name": "PRC",
       "canonical": "Asia/Shanghai",
-      "sha256": "997d5106bf38f029a76da5f1ab393ed36ee537c20c325e41a9e838eb164a98ba"
+      "sha256": "cb4ac14795a3944761e21e32331f31b7aa1418aea118afebf78a2e863c51a86a"
     },
     {
       "name": "PRT",
       "canonical": "America/Puerto_Rico",
-      "sha256": "027153b60653c1a855852fc907181e9d5871a038251b2d6fa09ab233f16fc1ef"
+      "sha256": "4641f5df88e4b5a9250806b1de78e07de2dfb91b4b421d9d45774308980d7bf2"
     },
     {
       "name": "PST",
       "canonical": "America/Los_Angeles",
-      "sha256": "3f3d1eebabc83be4ce23659b950170791b3510c2025d59f6b724166b3bce10be"
+      "sha256": "9b30303d94ef9059d4f43a79482b0c18f0fb13926f99e7294a839c3555936433"
     },
     {
       "name": "PST8PDT",
-      "canonical": "America/Los_Angeles",
-      "sha256": "3f3d1eebabc83be4ce23659b950170791b3510c2025d59f6b724166b3bce10be"
+      "canonical": "PST8PDT",
+      "sha256": "ed622efa68850b3768a42fb612cf817db72d806d724b10090d1d4a320136ec5c"
     },
     {
       "name": "ROC",
       "canonical": "Asia/Taipei",
-      "sha256": "812b5a25a697a9b2e0ca1b559422fb44ae67cb585cc4c8e927d45264bfb68a72"
+      "sha256": "24cdad73afabbeedbd3817dda3ae919e5b083ee533145a8fdeec033189ae2a92"
     },
     {
       "name": "ROK",
       "canonical": "Asia/Seoul",
-      "sha256": "85468e7a9ab41279d4e1b2c39f0759c66a7805a5e3921c06e139b994a8467b6f"
+      "sha256": "9a6d8df80436f375c10fe9101f656231a7b705eb91b15d05d3e9b119109120ed"
     },
     {
       "name": "Singapore",
       "canonical": "Asia/Singapore",
-      "sha256": "31cafaf00967bf4917a037a61038917a88a7a50d73eb9d3f3ebc2d27a4925bbb"
+      "sha256": "ee61625bfd42e2b615048f84b20a113a3bb488550049579a74844bc0aa79fd2f"
     },
     {
       "name": "SST",
       "canonical": "Pacific/Guadalcanal",
-      "sha256": "4faecb015868ecdb07a877491d8bc186765ca781d0e0a72458f7066e4e935890"
+      "sha256": "6016c1f0762dd61b0bf55d72bc8eabf6c2ef70783bfea4dc84db6eb94e029bd7"
     },
     {
       "name": "SystemV/AST4",
       "canonical": "SystemV/AST4",
-      "sha256": "d224ca1d44ed8e57eaf2ade5fdaf00c7f3bb25e117f8884bb735d2ff9f33fa1d"
+      "sha256": "b5945eaaf2d9ba85a1b5ddefa45264ae53539be46868cfaf493589b82237284e"
     },
     {
       "name": "SystemV/AST4ADT",
       "canonical": "SystemV/AST4ADT",
-      "sha256": "e12f9e81f7e5a529bb360c774c7224f702682896de84337c5d8f8417ff47704c"
+      "sha256": "6a3440d4e4dacc2a1a6192804b3a27a15b289625b038b6c3416694dbdf1fb644"
     },
     {
       "name": "SystemV/CST6",
       "canonical": "SystemV/CST6",
-      "sha256": "42ddaf6417fa10577e1f06da1a014fab81cc94f823b3a0b65f5f2afa14f195ae"
+      "sha256": "fa244fa4000ac047bc0a8c85b9490b337d3611d708ab92b95d23154df1e2a71c"
     },
     {
       "name": "SystemV/CST6CDT",
       "canonical": "SystemV/CST6CDT",
-      "sha256": "34a88fe86f400e9f603f2335acabfca601d86efdefbc8d355b269a8fec673db5"
+      "sha256": "4097905d3620848ae3eecdb25c8e5a3776584caa63dfa08cba1b6ca66a6117d5"
     },
     {
       "name": "SystemV/EST5",
       "canonical": "SystemV/EST5",
-      "sha256": "055a0bde36c236f68134248c8cf19e69a5fcd55c9f268f39aebdbcf3e3dda936"
+      "sha256": "eff6c041306249134c391c8fff6bd1998f661fd52fca137a9b4ad79b7538e594"
     },
     {
       "name": "SystemV/EST5EDT",
       "canonical": "SystemV/EST5EDT",
-      "sha256": "6036873542c33b36e90193f8933d1f0135ec91b60d65c14e7c4f1fff5dca50d6"
+      "sha256": "db1e5a1075391a03e4c95a8d9432c4a1e14eda80651ca0a4f6e70d644bcc9473"
     },
     {
       "name": "SystemV/HST10",
       "canonical": "SystemV/HST10",
-      "sha256": "62c7d2729c0b4e77769ae31942e3d44751503f8a51d03a311050da1cebc18af6"
+      "sha256": "1e30cb37246878458f74185d2de503a4ee9e32c62ba61944dae184cd49cb8b14"
     },
     {
       "name": "SystemV/MST7",
       "canonical": "SystemV/MST7",
-      "sha256": "45595955f29d63735bbd53ef9f545195c0a203972093342e489a98bcaafbda96"
+      "sha256": "82f028275604ae5eb5778aa7d32b0c352e3fd2702649c3615bff7c4f60fe1c80"
     },
     {
       "name": "SystemV/MST7MDT",
       "canonical": "SystemV/MST7MDT",
-      "sha256": "fa1dd42686ebdcdc280f200eefe3a9ced96b55c5b75cfaf65f3c6b8d2c0f9c22"
+      "sha256": "8e94ca0cb58ed01a6633defc75a4a6378aabd142f7ab9aa85ffb7793ae6ba569"
     },
     {
       "name": "SystemV/PST8",
       "canonical": "SystemV/PST8",
-      "sha256": "1d0a53dc63d75870d5f411d399d5695a8e375102410e199e226564624584ff10"
+      "sha256": "9d15e89265a7ef55cbb9ba6bd5436d169f87aaf7930d923e55df72c6b27fad3c"
     },
     {
       "name": "SystemV/PST8PDT",
       "canonical": "SystemV/PST8PDT",
-      "sha256": "d98d049650b15521e6f02bdd09c01cc84c0cba74ecf0ba019bf28a3a2b9f1faf"
+      "sha256": "1caa73e10862772174255d6c81edeffbde3e68ee8ea53b58370e2e3f9138e92c"
     },
     {
       "name": "SystemV/YST9",
       "canonical": "SystemV/YST9",
-      "sha256": "7ab909fca536b152d23753cbc2ae41143ff44f09436d2a733037317f28568b0e"
+      "sha256": "1b43b5c602444a4a0d30e9a6a6903e0eaeee8988f2044f2319c84ccf3f0a8c5f"
     },
     {
       "name": "SystemV/YST9YDT",
       "canonical": "SystemV/YST9YDT",
-      "sha256": "f111f5d5c6ef1617e2cd9611ee143fbfd6b9d48b83928f1f74a9006fdd3332ca"
+      "sha256": "2c050a00f0aa22f2249b17f175cd73973d0e2498f23c0cdb12f8d159f72a208e"
     },
     {
       "name": "Turkey",
       "canonical": "Europe/Istanbul",
-      "sha256": "7d7d1a696c109af3424ca969728f2951544e1ddabcdf1d9ec6e1197f6aae3312"
+      "sha256": "57333b0e3225acd0539ec80ef76fa81c12b12779ba8af3b517ded5c5755a08cb"
     },
     {
       "name": "UCT",
       "canonical": "Etc/UTC",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "Universal",
       "canonical": "Etc/UTC",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "US/Alaska",
       "canonical": "America/Anchorage",
-      "sha256": "8be1db4f926766cae4e5a8d38045a5ee28a59ca9a51a46b538d7659262395b49"
+      "sha256": "82a50d822ae47277b9c421927296c377a92d84fb9580d8d17710ccb470582e42"
     },
     {
       "name": "US/Aleutian",
       "canonical": "America/Adak",
-      "sha256": "d817be86be6510ffa46251a1326105212700c8836f24e210bffa5f3bbe6d8fb6"
+      "sha256": "f687b86cbb882e5892d380c936b36db4ced90217a24a566584916fba358e104d"
     },
     {
       "name": "US/Arizona",
       "canonical": "America/Phoenix",
-      "sha256": "70bfbb09e21b05039e7d014c36a36c7e47bd5fdf56e797820ddb7909104002b4"
+      "sha256": "250cca66123a52e2c20c36bd778dd6425e4d21992747ad3e947422a6722f76a6"
     },
     {
       "name": "US/Central",
       "canonical": "America/Chicago",
-      "sha256": "e90f9a7b9d77b484848396192d02bf8997c951bed3d76b0370d14adbca887d7e"
+      "sha256": "f4787f23bcdbcc9ffdfda43420a59cca75573046b75826800c39338ab46ca806"
     },
     {
       "name": "US/East-Indiana",
       "canonical": "America/Indianapolis",
-      "sha256": "018f27753945527996f50595c5b609125c2a9719e7ecbe99d671800fa23a3c3b"
+      "sha256": "a1f91f2af5a6a42295cc7abc42aaf42f18ff9bffd099b96d997ef61af7d484be"
     },
     {
       "name": "US/Eastern",
       "canonical": "America/New_York",
-      "sha256": "0ad556b616f90498a24a0a5ea539c365786de08d77ecbc3bd6467998eecc5667"
+      "sha256": "83d59318cde0ca20ddd537ed78b139074b4ac28be04bde0eb2558fe8fd6079cc"
     },
     {
       "name": "US/Hawaii",
       "canonical": "Pacific/Honolulu",
-      "sha256": "9ae9d43e6cb78a174f72edbb7e52b915856eff725f8a516ccbfb42ba709c8669"
+      "sha256": "02ed58d9f0031a3c2109eaf6231abdb2489417c13aa4cf3d9e011c26e295f3fb"
     },
     {
       "name": "US/Indiana-Starke",
       "canonical": "America/Indiana/Knox",
-      "sha256": "47ede632cd521573e83c03fdc30737a8c3cc90336c7ee9b1c10609a5e2c2ead8"
+      "sha256": "71e324c50c8095e943276458e9d27bb00d6c0339d12c9abec0299cd8b35c855d"
     },
     {
       "name": "US/Michigan",
       "canonical": "America/Detroit",
-      "sha256": "14818575d04b5b4905c613eb753e4ad7fdaa894d29113aa4f843f38c3cb91715"
+      "sha256": "9670afb5bc04e362cda1bb159bdc477b48d1fe5f434a99b9cc2de85e0868554e"
     },
     {
       "name": "US/Mountain",
       "canonical": "America/Denver",
-      "sha256": "c834451740eacc9317525c5b2feb97a3d73e9633e4db26f40fbac244641e9acf"
+      "sha256": "8220cfcd66fc9f6883ced2402f0681360e3152ed82958555fb0b3d6180fa4631"
     },
     {
       "name": "US/Pacific",
       "canonical": "America/Los_Angeles",
-      "sha256": "3f3d1eebabc83be4ce23659b950170791b3510c2025d59f6b724166b3bce10be"
+      "sha256": "9b30303d94ef9059d4f43a79482b0c18f0fb13926f99e7294a839c3555936433"
     },
     {
       "name": "US/Pacific-New",
       "canonical": "America/Los_Angeles",
-      "sha256": "3f3d1eebabc83be4ce23659b950170791b3510c2025d59f6b724166b3bce10be"
+      "sha256": "9b30303d94ef9059d4f43a79482b0c18f0fb13926f99e7294a839c3555936433"
     },
     {
       "name": "US/Samoa",
       "canonical": "Pacific/Pago_Pago",
-      "sha256": "d5a2dad88bd51308ea322e201b5dd1af822d6dbc262ea7802f21f0725513423a"
+      "sha256": "76756abe2d16230bc54a2818ca24238775a22850201f2b63c8837571e4f770e7"
     },
     {
       "name": "UTC",
       "canonical": "Etc/UTC",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     },
     {
       "name": "VST",
       "canonical": "Asia/Saigon",
-      "sha256": "27036a895712814e264cbf11db2b0bbd51d88ed9130ee12b7ed8efb0ce361b2c"
+      "sha256": "e028e255a975a203a0dc25dae2096f58ae730173d1a059adf139065cf0790784"
     },
     {
       "name": "W-SU",
       "canonical": "Europe/Moscow",
-      "sha256": "3ee7039c421250c1ebfee7a3287035ee97213af3b55ce0acc5a9e13a7c607630"
+      "sha256": "154a85ad3259e66a096ecbd2b8f061469c6eccc2f8fc396e17cdd6a1da3cd2a8"
     },
     {
       "name": "WET",
       "canonical": "Europe/Lisbon",
-      "sha256": "513759a52264020265d3bb6b8bf3c18e765f32c54bc023360a04745db69190a3"
+      "sha256": "50cbc2bd2f558832139825d009c7edb8f05914138833a22445963c15d7ec5e91"
     },
     {
       "name": "Zulu",
       "canonical": "Etc/UTC",
-      "sha256": "d8acd1b924c4d9a4cac9ee0ba01d7a28daf6152f0f49e21f8fa7ccd067142847"
+      "sha256": "7a6d59027e728524419e7783bdfad378a03db06b863c151ce112e56d5ef00dc0"
     }
   ]
 }

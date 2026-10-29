@@ -4,7 +4,6 @@ import { type WallpaperContentRect, PromptSuggestionList } from "@/butler-ds";
 import { appCopy, getAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
-import { reportUiCrash } from "@/app/uiCrashReporting.ts";
 import type { ActiveChatView, NewChatBriefingView } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { ButlerMarkTheme } from "@/butler-ds";
@@ -64,8 +63,18 @@ export function EmptyState({
         if (!cancelled) setBriefing(nextBriefing);
       })
       .catch((error: unknown) => {
-        // The fallback cards keep the view usable; the failure still reaches the diagnostics log.
-        reportUiCrash(error, "conversation");
+        // The fallback cards keep the view usable; the failed request still reaches the App log.
+        const { code, status } = (error ?? {}) as { code?: unknown; status?: unknown };
+        window.butlerApp?.log?.({
+          level: "ERROR",
+          category: "app.ui",
+          event: "ui.error",
+          attrs: {
+            request: "new-chat-briefing",
+            ...(typeof code === "string" ? { code } : {}),
+            ...(typeof status === "number" ? { status } : {}),
+          },
+        });
         if (!cancelled) setBriefing(null);
       });
     return () => {

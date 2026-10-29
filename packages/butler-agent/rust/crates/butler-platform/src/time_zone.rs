@@ -19,7 +19,7 @@ use windows as sys;
 /// The baseline zone archive (`BTZ2`: a count, then per zone its name,
 /// canonical name and TZif bytes, sorted by lower-case name), frozen from ICU
 /// and embedded in the executable.
-pub const BASELINE_ARCHIVE: &[u8] = include_bytes!("../data/source-2026c.btz");
+pub const BASELINE_ARCHIVE: &[u8] = include_bytes!("../data/source-2026e.btz");
 
 /// The compiled (TZif) rules of the IANA zone `name` (such as
 /// `Asia/Seoul`). The caller checks that `name` is a relative path without
@@ -37,13 +37,31 @@ pub fn baseline_zone_rules(name: &str) -> io::Result<Vec<u8>> {
     baseline::lookup(BASELINE_ARCHIVE, name).ok_or_else(|| io::ErrorKind::NotFound.into())
 }
 
-/// Every zone name in [`BASELINE_ARCHIVE`], aliases included.
-pub fn baseline_zone_names() -> io::Result<Vec<String>> {
-    let entries = baseline::entries(BASELINE_ARCHIVE).ok_or(io::ErrorKind::InvalidData)?;
-    Ok(entries
+/// One record of [`BASELINE_ARCHIVE`].
+pub struct BaselineZone {
+    /// IANA or ICU name, aliases included.
+    pub name: &'static str,
+    /// The canonical IANA name `name` resolves to.
+    pub canonical: &'static str,
+    /// The compiled (TZif) rules.
+    pub rules: &'static [u8],
+}
+
+/// Every record of [`BASELINE_ARCHIVE`], sorted by lower-case name.
+pub fn baseline_zones() -> io::Result<Vec<BaselineZone>> {
+    let text =
+        |bytes: &'static [u8]| std::str::from_utf8(bytes).map_err(|_| io::ErrorKind::InvalidData);
+    baseline::entries(BASELINE_ARCHIVE)
+        .ok_or(io::ErrorKind::InvalidData)?
         .into_iter()
-        .map(|(name, _)| String::from_utf8_lossy(name).into_owned())
-        .collect())
+        .map(|(name, canonical, rules)| -> io::Result<BaselineZone> {
+            Ok(BaselineZone {
+                name: text(name)?,
+                canonical: text(canonical)?,
+                rules,
+            })
+        })
+        .collect()
 }
 
 /// Cheap identity of the process-local rules; inspect on a blocking thread.

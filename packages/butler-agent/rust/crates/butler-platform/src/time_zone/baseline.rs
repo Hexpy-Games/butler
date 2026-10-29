@@ -3,9 +3,9 @@
 
 use std::cmp::Ordering;
 
-/// Every record's name and TZif bytes, in archive order; `None` when the
-/// archive is malformed.
-pub(super) fn entries(data: &[u8]) -> Option<Vec<(&[u8], &[u8])>> {
+/// Every record's name, canonical name and TZif bytes, in archive order;
+/// `None` when the archive is malformed.
+pub(super) fn entries(data: &[u8]) -> Option<Vec<(&[u8], &[u8], &[u8])>> {
     let mut input = data.strip_prefix(b"BTZ2")?;
     let count = take_u32(&mut input)?;
     let mut entries = Vec::new();
@@ -14,8 +14,8 @@ pub(super) fn entries(data: &[u8]) -> Option<Vec<(&[u8], &[u8])>> {
         let canonical_len = usize::from(take_u16(&mut input)?);
         let data_len = usize::try_from(take_u32(&mut input)?).ok()?;
         let entry_name = take(&mut input, name_len)?;
-        take(&mut input, canonical_len)?;
-        entries.push((entry_name, take(&mut input, data_len)?));
+        let canonical = take(&mut input, canonical_len)?;
+        entries.push((entry_name, canonical, take(&mut input, data_len)?));
     }
     Some(entries)
 }
@@ -23,9 +23,9 @@ pub(super) fn entries(data: &[u8]) -> Option<Vec<(&[u8], &[u8])>> {
 pub(super) fn lookup(data: &[u8], name: &str) -> Option<Vec<u8>> {
     let entries = entries(data)?;
     let index = entries
-        .binary_search_by(|(entry, _)| compare(entry, name.as_bytes()))
+        .binary_search_by(|(entry, _, _)| compare(entry, name.as_bytes()))
         .ok()?;
-    entries.get(index).map(|(_, bytes)| bytes.to_vec())
+    entries.get(index).map(|(_, _, bytes)| bytes.to_vec())
 }
 
 fn compare(left: &[u8], right: &[u8]) -> Ordering {

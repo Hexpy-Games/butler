@@ -69,6 +69,14 @@ def posix_offset(seconds):
     minutes, seconds = divmod(rest, 60)
     return sign + str(hours) + (f':{minutes:02}' if minutes or seconds else '') + (f':{seconds:02}' if seconds else '')
 
+def numeric(offset):
+    # The numeric designation IANA uses where no abbreviation is established
+    # (+09, +0530, -0330); ICU types carry no abbreviation.
+    sign = '-' if offset < 0 else '+'
+    hours, rest = divmod(abs(offset), 3600)
+    minutes, seconds = divmod(rest, 60)
+    return f'{sign}{hours:02}' + (f'{minutes:02}' if minutes or seconds else '') + (f'{seconds:02}' if seconds else '')
+
 def fixed_footer(offset, isdst, abbreviation):
     """The TZif footer that keeps one local time type after the last transition.
 
@@ -83,7 +91,7 @@ def fixed_footer(offset, isdst, abbreviation):
     # December 31 at 24:00 plus the one-hour difference to standard time.
     return f'{name}{posix_offset(offset - 3600)}{name},0/0,J365/25'.encode()
 
-def write_pack(out, rows):
+def write_pack(out, rows, version):
     rows.sort(key=lambda r: r[0].lower())
     blob = bytearray(b'BTZ2') + struct.pack('<I', len(rows))
     manifest = []
@@ -92,60 +100,23 @@ def write_pack(out, rows):
         a = can.encode()
         blob += struct.pack('<HHI', len(n), len(a), len(data)) + n + a + data
         manifest.append({'name': name, 'canonical': can, 'sha256': hashlib.sha256(data).hexdigest()})
-    (out / 'source-2026c.btz').write_bytes(blob)
-    (out / 'provenance.json').write_text(json.dumps({'source': 'macOS ICU resource zoneinfo64 and /usr/share/zoneinfo POSIX future rules', 'version': '2026c', 'actual_icu': '78.1', 'reported_bun_icu': '74.2', 'sha256': hashlib.sha256(blob).hexdigest(), 'records': manifest}, indent=2) + '\n')
+    (out / f'source-{version}.btz').write_bytes(blob)
+    (out / 'provenance.json').write_text(json.dumps({'source': 'macOS ICU resource zoneinfo64 and /usr/share/zoneinfo POSIX future rules', 'version': version, 'actual_icu': '78.1', 'reported_bun_icu': '74.2', 'sha256': hashlib.sha256(blob).hexdigest(), 'records': manifest}, indent=2) + '\n')
     return blob
 
-def final_type(tzif):
-    """The (offset, isdst, abbreviation) after the last transition of a pack record, and where its footer starts."""
-    def counts(at):
-        return struct.unpack_from('>6I', tzif, at + 20)
-    isut, isstd, leap, times, types, chars = counts(0)
-    at = 44 + times * 5 + types * 6 + chars + leap * 8 + isstd + isut
-    isut, isstd, leap, times, types, chars = counts(at)
-    at += 44 + times * 8
-    index = tzif[at + times - 1] if times else 0
-    at += times
-    offset, isdst, start = struct.unpack_from('>iBB', tzif, at + index * 6)
-    names = tzif[at + types * 6:at + types * 6 + chars]
-    end = at + types * 6 + chars + leap * 12 + isstd + isut
-    return (offset, isdst, names[start:names.index(b'\0', start)].decode()), end
-
-def refooter(pack, out):
-    """Adds the fixed footer to the records of a frozen pack that have none."""
-    data = pack.read_bytes()
-    assert data[:4] == b'BTZ2'
-    at, rows = 8, []
-    for _ in range(struct.unpack_from('<I', data, 4)[0]):
-        n, a, size = struct.unpack_from('<HHI', data, at)
-        at += 8
-        name, can, tzif = data[at:at + n].decode(), data[at + n:at + n + a].decode(), data[at + n + a:at + n + a + size]
-        at += n + a + size
-        final, end = final_type(tzif)
-        if tzif[end:] == b'\n\n':
-            tzif = tzif[:end] + b'\n' + fixed_footer(*final) + b'\n'
-        assert tzif[end:].count(b'\n') == 2 and len(tzif[end:]) > 2, name
-        rows.append((name, can, tzif))
-    assert at == len(data)
-    return write_pack(out, rows)
-
-parser = argparse.ArgumentParser(description='Regenerate frozen ICU 78.1 / TZ2026c prompt data; developer-only macOS utility')
-parser.add_argument('--zoneinfo', type=pathlib.Path)
-parser.add_argument('--refooter', type=pathlib.Path, help='add the fixed footer to a frozen pack without ICU')
+parser = argparse.ArgumentParser(description='Regenerate frozen ICU 78.1 prompt data from the host tzdata; developer-only macOS utility')
+parser.add_argument('--zoneinfo', type=pathlib.Path, required=True)
 parser.add_argument('--output', type=pathlib.Path, required=True)
 args = parser.parse_args()
 out = args.output
 out.mkdir(parents=True, exist_ok=True)
-if args.refooter:
-    blob = refooter(args.refooter, out)
-    print(len(blob), hashlib.sha256(blob).hexdigest())
-    raise SystemExit
-assert args.zoneinfo, '--zoneinfo is required'
 version = (c.c_uint8 * 4)()
 L.u_getVersion(version)
 assert list(version) == [78, 1, 0, 0], 'Review a new ICU baseline before updating generated data'
 z = load(None, b'zoneinfo64')
-assert z['TZVersion'] == '2026c' and (args.zoneinfo / '+VERSION').read_text().strip() == '2026c'
+tz_version = z['TZVersion']
+# ICU rules and the zoneinfo footers must come from one tzdata release.
+assert (args.zoneinfo / '+VERSION').read_text().strip() == tz_version, tz_version
 U = c.POINTER(c.c_uint16)
 L.ucal_getCanonicalTimeZoneID.argtypes = [U, c.c_int32, U, c.c_int32, c.POINTER(c.c_int8), E]
 L.ucal_getCanonicalTimeZoneID.restype = c.c_int32
@@ -217,7 +188,7 @@ for name in z['Names']:
         data = z['Zones'][index]
     can = canonical(name)
     offsets = data['typeOffsets']
-    types = [(offsets[i] + offsets[i + 1], int(offsets[i + 1] != 0), 'LMT') for i in range(0, len(offsets), 2)]
+    types = [(offsets[i] + offsets[i + 1], int(offsets[i + 1] != 0), numeric(offsets[i] + offsets[i + 1])) for i in range(0, len(offsets), 2)]
     times = pairs(data.get('transPre32', [])) + data.get('trans', []) + pairs(data.get('transPost32', []))
     mapping = list(data.get('typeMap', []))
     assert len(times) == len(mapping)
@@ -244,18 +215,21 @@ for name in z['Names']:
             mapping.append(types.index(t))
     else:
         footer = fixed_footer(*types[mapping[-1] if mapping else 0])
-    first = header(0, 1) + struct.pack('>iBB', types[0][0], types[0][1], 0) + b'LMT\x00'
+    initial = types[0][2].encode() + b'\0'
+    first = header(0, 1, len(initial)) + struct.pack('>iBB', types[0][0], types[0][1], 0) + initial
     abbreviations = bytearray()
     type_bytes = bytearray()
     for offset, isdst, abbreviation in types:
-        index = len(abbreviations)
-        abbreviations.extend(abbreviation.encode() + b'\0')
+        label = abbreviation.encode() + b'\0'
+        index = abbreviations.find(label) if label in abbreviations else len(abbreviations)
+        if index == len(abbreviations):
+            abbreviations.extend(label)
         assert index < 256
         type_bytes.extend(struct.pack('>iBB', offset, isdst, index))
     second = header(len(times), len(types), len(abbreviations)) + b''.join(struct.pack('>q', v) for v in times) + bytes(mapping) + type_bytes + abbreviations + b'\n' + footer + b'\n'
     rows.append((name, can, first + second))
 assert not footer_missing, footer_missing
-blob = write_pack(out, rows)
+blob = write_pack(out, rows, tz_version)
 meta = load(None, b'metaZones')['metazoneInfo']
 names = load(b'icudt78l-zone', b'root')['zoneStrings']
 for key, value in load(b'icudt78l-zone', b'en')['zoneStrings'].items():

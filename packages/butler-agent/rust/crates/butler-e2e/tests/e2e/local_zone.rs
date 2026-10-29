@@ -14,67 +14,86 @@ use butler_e2e::e2e::{
 use butler_platform::time_zone;
 use serde_json::json;
 
-/// Past, present and far-future instants, in seconds since the epoch.
-fn instants() -> Vec<i64> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| i64::try_from(elapsed.as_secs()).unwrap())
-        .unwrap();
-    // 1901, 1970, 2001, now, 2027, 2038 (past i32), 2100 and 2200.
-    vec![
-        -2_147_000_000,
-        0,
-        1_000_000_000,
-        now,
-        1_800_000_000,
-        2_200_000_000,
-        4_102_444_800,
-        7_258_118_400,
-    ]
-}
+/// Fixed past, present and far-future instants, in seconds since the epoch:
+/// 1901, 1970, 2001, 2026-10-29, 2027, 2038 (past i32), 2100 and 2200.
+const INSTANTS: [i64; 8] = [
+    -2_147_000_000,
+    0,
+    1_000_000_000,
+    1_793_232_000,
+    1_800_000_000,
+    2_200_000_000,
+    4_102_444_800,
+    7_258_118_400,
+];
 
 /// Every embedded zone, aliases included, has a local time type at every
 /// instant, also after its last transition (zones without DST end their
-/// transitions decades ago). Where the host has its own rules (zoneinfo on
-/// Unix), the UTC offset agrees with them at the present instant.
+/// transitions decades ago), and its final type has a real designation.
 // test-category: pure-logic
 #[test]
 fn every_embedded_zone_resolves_local_time_at_any_instant() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let names = time_zone::baseline_zone_names()?;
-    assert!(names.len() > 600, "{}", names.len());
+    let zones = time_zone::baseline_zones()?;
+    assert!(zones.len() > 600, "{}", zones.len());
     let mut failures = Vec::new();
-    let mut compared = 0;
-    for name in &names {
-        let zone = tz::TimeZone::from_tz_data(&time_zone::baseline_zone_rules(name)?)
+    for entry in &zones {
+        let name = entry.name;
+        let zone = tz::TimeZone::from_tz_data(entry.rules)
             .unwrap_or_else(|error| panic!("{name}: {error}"));
-        for instant in instants() {
-            if let Err(error) = zone.find_local_time_type(instant) {
-                failures.push(format!("{name} at {instant}: {error}"));
+        for instant in INSTANTS {
+            match zone.find_local_time_type(instant) {
+                Err(error) => failures.push(format!("{name} at {instant}: {error}")),
+                Ok(local) if instant == INSTANTS[7] && local.time_zone_designation() == "LMT" => {
+                    failures.push(format!("{name}: final designation LMT"));
+                }
+                Ok(_) => {}
             }
-        }
-        let Some(host) = time_zone::zone_rules(name)
-            .ok()
-            .and_then(|bytes| tz::TimeZone::from_tz_data(&bytes).ok())
-        else {
-            continue;
-        };
-        compared += 1;
-        let now = instants()[3];
-        let offset = |zone: &tz::TimeZone| {
-            zone.find_local_time_type(now)
-                .map(tz::LocalTimeType::ut_offset)
-        };
-        if offset(&zone).ok() != offset(&host).ok() {
-            failures.push(format!(
-                "{name}: embedded {:?}, host {:?}",
-                offset(&zone),
-                offset(&host)
-            ));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    eprintln!("zones={} host-compared={compared}", names.len());
+    Ok(())
+}
+
+/// UTC offsets of the rules Windows reads, pinned from IANA tzdata 2026e
+/// (the archive's release) at 2026-01-15, 2026-07-15, 2027-01-15 and
+/// 2040-07-15 12:00 UTC: zones without DST, with DST in either hemisphere,
+/// half-hour and 45-minute offsets and DST, +13/+14, an alias, and zones
+/// whose rules changed in 2026 (permanent DST, Morocco).
+// test-category: pure-logic
+#[test]
+fn embedded_rules_give_the_expected_offsets() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    const AT: [i64; 4] = [1_768_478_400, 1_784_116_800, 1_800_014_400, 2_225_966_400];
+    let expected: [(&str, [i32; 4]); 17] = [
+        ("UTC", [0, 0, 0, 0]),
+        ("Etc/GMT+5", [-18000, -18000, -18000, -18000]),
+        ("Asia/Seoul", [32400, 32400, 32400, 32400]),
+        ("Asia/Calcutta", [19800, 19800, 19800, 19800]),
+        ("Asia/Kathmandu", [20700, 20700, 20700, 20700]),
+        ("America/New_York", [-18000, -14400, -18000, -14400]),
+        ("Europe/London", [0, 3600, 0, 3600]),
+        ("Australia/Sydney", [39600, 36000, 39600, 36000]),
+        ("Australia/Lord_Howe", [39600, 37800, 39600, 37800]),
+        ("Pacific/Chatham", [49500, 45900, 49500, 45900]),
+        ("Pacific/Tongatapu", [46800, 46800, 46800, 46800]),
+        ("Pacific/Kiritimati", [50400, 50400, 50400, 50400]),
+        ("America/Sao_Paulo", [-10800, -10800, -10800, -10800]),
+        ("Africa/Casablanca", [3600, 3600, 0, 0]),
+        ("America/Vancouver", [-28800, -25200, -25200, -25200]),
+        ("America/Winnipeg", [-21600, -18000, -18000, -18000]),
+        ("America/Inuvik", [-25200, -21600, -21600, -21600]),
+    ];
+    for (name, offsets) in expected {
+        let zone = tz::TimeZone::from_tz_data(&time_zone::baseline_zone_rules(name)?)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        let actual = AT.map(|instant| {
+            zone.find_local_time_type(instant)
+                .map(tz::LocalTimeType::ut_offset)
+                .unwrap_or_else(|error| panic!("{name} at {instant}: {error}"))
+        });
+        assert_eq!(actual, offsets, "{name}");
+    }
     Ok(())
 }
 
