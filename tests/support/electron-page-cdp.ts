@@ -20,7 +20,8 @@ export interface ElectronPage {
   dragPointer(x: number, y: number): Promise<void>;
   pointerUp(x: number, y: number): Promise<void>;
   drag(from: {x:number;y:number}, to: {x:number;y:number}): Promise<void>;
-  waitForFunction(fn: () => unknown): Promise<void>;
+  /** Polls `fn(arg)` in the page; `arg` crosses as JSON. */
+  waitForFunction<T = undefined>(fn: (arg: T) => unknown, arg?: T): Promise<void>;
   reload(): Promise<void>;
   diagnostics(): Promise<unknown>;
   close(): void;
@@ -130,10 +131,11 @@ async function connect(url: string): Promise<ElectronPage> {
     return { errors, page: await expression("({url:location.href,ready:document.readyState,preload:Boolean(window.butlerApp)})").catch(() => null) };
   }
   await send("Page.enable", {});
-  async function waitForFunction(fn: () => unknown) {
+  async function waitForFunction<T>(fn: (arg: T) => unknown, arg?: T) {
     const deadline = Date.now() + 30_000;
+    const call = `(${fn.toString()})(${arg === undefined ? "" : JSON.stringify(arg)})`;
     while (Date.now() < deadline) {
-      if (await expression(`(${fn.toString()})()`).catch(() => false)) return;
+      if (await expression(call).catch(() => false)) return;
       await new Promise(done => setTimeout(done, 200));
     }
     throw new Error(`Electron UI did not become ready: ${fn.toString()}; ${JSON.stringify(await diagnostics())}`);

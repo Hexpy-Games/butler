@@ -46,6 +46,10 @@ jobs:
     with:
       tag: ${{ inputs.tag }}
       from-tag: ${{ inputs.baseline-tag }}
+    # The key lives only in the live-e2e environment. A called workflow still
+    # gets environment secrets only when the caller passes them by name.
+    secrets:
+      BUTLER_E2E_API_KEY: ${{ secrets.BUTLER_E2E_API_KEY }}
   linux:
     needs: validate
     name: Published Agent install (${{ matrix.platform }})
