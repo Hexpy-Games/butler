@@ -22,14 +22,14 @@ e2e-fixtures = [
     "dep:butler-test-support",
 ]
 default = ["prebuilt-ort"]
-prebuilt-ort = ["butler-gateway/prebuilt-ort", "butler-memory/prebuilt-ort"]
-static-ort = ["butler-gateway/static-ort", "butler-memory/static-ort"]
+prebuilt-ort = ["butler-memory/prebuilt-ort"]
+static-ort = ["butler-memory/static-ort"]
 
 [dependencies]
 butler-canon = { path = "../butler-canon" }
 butler-log = { path = "../butler-log" }
 butler-test-support = { path = "../butler-test-support", optional = true }
-butler-gateway = { path = "../butler-gateway", default-features = false }
+butler-gateway = { path = "../butler-gateway" }
 butler-memory = { path = "../butler-memory", default-features = false }
 butler-ledger = { path = "../butler-ledger" }
 butler-runtime = { path = "../butler-runtime" }

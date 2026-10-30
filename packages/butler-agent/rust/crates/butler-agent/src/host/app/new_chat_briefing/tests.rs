@@ -115,7 +115,7 @@ fn generated_view_keeps_its_bytes() {
     let _ = fs::remove_dir_all(&root);
     let text = butler_core::json::pretty(&json!(views));
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/gateway/application/new_chat_briefing/fixtures/generated-view.json");
+        .join("src/host/app/new_chat_briefing/fixtures/generated-view.json");
     if std::env::var_os("BUTLER_BLESS_FORMAT").is_some() {
         fs::write(&path, &text).unwrap();
         return;

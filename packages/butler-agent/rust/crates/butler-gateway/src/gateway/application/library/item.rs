@@ -5,7 +5,7 @@
 //! and the mirrored columns and search terms from the row, group and tag tables.
 use super::super::storage::AppStorageCode;
 use super::AppStorageError;
-use butler_memory::cognition::analyze_search_field;
+use butler_core::search_text::analyze_search_field;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 use unicode_normalization::UnicodeNormalization;

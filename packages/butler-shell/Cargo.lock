@@ -880,6 +880,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "unicode-normalization",
+ "unicode-script",
  "unicode-segmentation",
  "uuid",
 ]

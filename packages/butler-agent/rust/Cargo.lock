@@ -955,6 +955,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "unicode-normalization",
+ "unicode-script",
  "unicode-segmentation",
  "uuid",
 ]
@@ -1018,7 +1019,6 @@ dependencies = [
  "butler-canon",
  "butler-core",
  "butler-log",
- "butler-memory",
  "butler-models",
  "butler-platform",
  "butler-runtime",
@@ -1211,7 +1211,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "unicode-normalization",
- "unicode-script",
  "unicode-segmentation",
  "url",
  "uuid",

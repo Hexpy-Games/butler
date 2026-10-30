@@ -61,6 +61,7 @@ pub(super) async fn dependencies(
             identity_clock.clone(),
         )),
         personalization: personalization(&context, identity_clock.clone()),
+        new_chat_briefing: Arc::new(AppNewChatBriefing),
         monitoring,
         context_read,
         identity_clock,
