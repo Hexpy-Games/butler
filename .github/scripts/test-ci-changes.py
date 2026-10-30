@@ -42,7 +42,7 @@ class Paths(unittest.TestCase):
             'packages/butler-app/scripts/release/package-versions.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package', 'signing'},
             'notes.md': set(),
             '.github/pull_request_template.md': set(),
-            '.github/workflows/windows.yml': {'rust', 'ui', 'package'},
+            '.github/workflows/windows.yml': {'rust', 'ui', 'package', 'workflows'},
             'packages/butler-agent/rust/scripts/check_host_links.py': {'rust', 'package', 'install', 'linux-package', 'signing'},
             'new-build-config.ini': set(changes.GROUPS) - {'workflows', 'shell'},
         }

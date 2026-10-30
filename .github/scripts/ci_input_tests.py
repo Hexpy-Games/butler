@@ -5,10 +5,12 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
+import ci_policy
 import ci_rust_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +18,21 @@ UI = ROOT / 'packages/butler-app/client/ui'
 SPEC = importlib.util.spec_from_file_location('input_changes', ROOT / '.github/scripts/ci-changes.py')
 changes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(changes)
+
+
+def pr_jobs(paths, workflow='rust-quality.yml'):
+    with tempfile.TemporaryDirectory() as temporary:
+        env = dict(GITHUB_EVENT_NAME='pull_request', GITHUB_REF='refs/pull/1/merge',
+                   GITHUB_REPOSITORY='owner/repo', GITHUB_RUN_ID='2',
+                   GITHUB_OUTPUT=str(Path(temporary) / 'output'),
+                   GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
+        with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='head'), \
+             patch.object(changes, 'changed', return_value=paths), \
+             patch.object(changes, 'previous', return_value=iter([])), \
+             patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
+            changes.select({'pull_request': {'number': 1, 'base': {'sha': 'base'}}}, workflow)
+        output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
+    return output, json.loads(output['jobs'])
 
 
 def local_imports(source):
@@ -217,25 +234,57 @@ class DerivedInputs(unittest.TestCase):
             'deploy/linux-app-smoke.sh': False, 'deploy/install.sh': False,
             'README.md': False,
         }.items():
-            with self.subTest(path=path), tempfile.TemporaryDirectory() as temporary:
-                env = dict(GITHUB_EVENT_NAME='pull_request', GITHUB_REF='refs/pull/1/merge',
-                           GITHUB_REPOSITORY='owner/repo', GITHUB_RUN_ID='2',
-                           GITHUB_OUTPUT=str(Path(temporary) / 'output'),
-                           GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
-                with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='head'), \
-                     patch.object(changes, 'changed', return_value=[path]), \
-                     patch.object(changes, 'previous', return_value=iter([])), \
-                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
-                    changes.select({'pull_request': {'number': 1, 'base': {'sha': 'base'}}}, workflow)
-                output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
+            with self.subTest(path=path):
+                output, jobs = pr_jobs([path], workflow)
                 self.assertEqual(output['signing'], str(signing).lower())
                 if path in ('package.json', 'bun.lock', 'bun.lockb'):
                     for group in ('package', 'install', 'linux-package'):
                         self.assertEqual(output[group], 'false')
-                jobs = json.loads(output['jobs'])
                 self.assertEqual(jobs['shellcheck'], output['package'] == 'true' or signing)
                 self.assertFalse(jobs['selftest'])
         for name in ('shellcheck', 'selftest'):
             self.assertEqual(changes.job_groups(workflow)[name], ['package', 'signing'])
             block = re.split(r'\n  [a-z]', source.split(f'  {name}:\n', 1)[1], maxsplit=1)[0]
             self.assertIn(f"fromJSON(needs.changes.outputs.jobs)['{name}']", block)
+
+    # test-category: security
+    def test_ci_policy_change_without_invariant_update_fails_on_the_pr(self):
+        """#1728: a PR changed PR_FAST_JOBS, but the stale Gate expectation first failed on main."""
+        for paths, selected in [
+            (['.github/scripts/ci_policy.py', '.github/scripts/ci_input_tests.py'], True),  # 3f2328e17
+            (['.github/workflows/rust-archive.yml'], True), (['.github/workflows/macos-selftest.yml'], True),
+            (['.github/actions/e2e-stub/action.yml'], True), (['.github/scripts/test-ci-invariants.py'], True),
+            (['packages/butler-agent/rust/scripts/release-standalone-agent.py'], True),
+            (['packages/butler-app/client/ui/src/main.tsx'], False), (['README.md'], False),
+        ]:
+            with self.subTest(paths=paths):
+                output, jobs = pr_jobs(paths)
+                self.assertEqual(output['workflows'], str(selected).lower())
+                self.assertEqual(jobs['ci-invariants'], selected)
+        workflow = (ROOT / '.github/workflows/rust-quality.yml').read_text()
+        block = workflow.split('  ci-invariants:\n', 1)[1].split('\n\n', 1)[0]
+        self.assertIn("fromJSON(needs.changes.outputs.jobs)['ci-invariants']", block)
+        self.assertIn('test-ci-invariants.py --policy', block)
+        self.assertNotIn('continue-on-error', block)
+        self.assertNotIn('github.event_name', block)
+        self.assertIn('ci-invariants', re.search(r'^  gate:\n(?:.*\n)*?    needs: \[(.+)\]', workflow, re.M)[1].split(', '))
+        self.assertEqual(changes.job_groups('rust-quality.yml')['ci-invariants'], ['workflows'])
+        spec = importlib.util.spec_from_file_location('pr_invariants', ROOT / '.github/scripts/test-ci-invariants.py')
+        invariants = importlib.util.module_from_spec(spec)
+        with patch.object(sys, 'argv', ['test-ci-invariants.py', '--policy']):
+            spec.loader.exec_module(invariants)
+        self.assertIn('Gate', invariants.policy_classes())
+        self.assertNotIn('Coverage', invariants.policy_classes())
+
+        def gate(fast_jobs):
+            result = unittest.TestResult()
+            with patch.object(ci_policy, 'PR_FAST_JOBS', fast_jobs):
+                invariants.Gate('test_every_selected_job_must_succeed').run(result)
+            return result
+        # The unchanged policy passes in the ci-invariants job itself; any PR job
+        # change without its expectation fails on the PR, before main.
+        for job in ('shellcheck', 'selftest'):  # Remove (revert #1728) or add a PR job.
+            with self.subTest(job=job):
+                result = gate(ci_policy.PR_FAST_JOBS ^ {job})
+                self.assertEqual(len(result.failures), 1)
+                self.assertIn(repr(job), result.failures[0][1])

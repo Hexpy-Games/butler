@@ -373,7 +373,7 @@ class ApprovedTiers(unittest.TestCase):
 class Precision(unittest.TestCase):
     # test-category: pure-logic
     def test_package_only_inputs_do_not_build_test_archives(self):
-        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
+        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'workflows']
         for values in itertools.product(['false', 'true'], repeat=4):
             outputs = dict.fromkeys(flags, 'false') | dict(zip(flags[:4], values), tier='smoke')
             jobs = changes.rust_jobs(outputs, 'pull_request')

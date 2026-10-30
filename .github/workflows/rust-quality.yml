@@ -55,6 +55,20 @@ jobs:
       - run: python3 .github/scripts/isolated.py shellcheck deploy/macos/*.sh
       - run: python3 .github/scripts/isolated.py deploy/macos/policy-selftest.sh
 
+  # Every invariant class except the compiled-inventory Coverage proof, which
+  # the archive jobs run; lint runs the WindowsSafety class on every PR.
+  ci-invariants:
+    needs: changes
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['ci-invariants']
+    name: ci-invariants
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --policy
+
   selftest:
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['selftest']
@@ -447,7 +461,7 @@ jobs:
     # Full CI runs take 15-45 min (recent main runs 2-44 min incl. queueing); the metadata
     # re-evaluation waits for one, so allow 2x the slowest recent run.
     timeout-minutes: 90
-    needs: [changes, lint, windows-check, shellcheck, selftest, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds, ds-approval]
+    needs: [changes, lint, windows-check, shellcheck, ci-invariants, selftest, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds, ds-approval]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -456,7 +470,7 @@ jobs:
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}
-          groups: '{"workflows": ["lint"], "rust": ["linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-archive", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf", "windows-check"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package", "shellcheck", "selftest"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"], "licenses": ["lint"], "signing": ["shellcheck", "selftest"]}'
+          groups: '{"workflows": ["lint", "ci-invariants"], "rust": ["linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-archive", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf", "windows-check"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package", "shellcheck", "selftest"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"], "licenses": ["lint"], "signing": ["shellcheck", "selftest"]}'
           workflow: rust-quality.yml
       - name: Require main recovery or a permitted bypass
         if: always() && github.event_name == 'pull_request' && github.base_ref == 'main'
