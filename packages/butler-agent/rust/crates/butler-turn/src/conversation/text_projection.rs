@@ -106,19 +106,30 @@ fn message_content_references(value: &Value) -> Option<String> {
     if parts.len() > 1000 || !parts.iter().all(valid_message_part) {
         return None;
     }
-    let refs = parts
-        .iter()
-        .filter(|part| part.get("type").and_then(Value::as_str) == Some("session_ref"))
-        .cloned()
-        .collect::<Vec<_>>();
-    if refs.is_empty() {
-        None
-    } else {
-        Some(format!(
-            "[user session references: {}]",
-            stringify(&Value::Array(refs)).ok()?
-        ))
+    let mut projected = Vec::new();
+    for (kind, label) in [("session_ref", "session"), ("project_ref", "project")] {
+        let refs = parts
+            .iter()
+            .filter(|part| part.get("type").and_then(Value::as_str) == Some(kind))
+            .map(|part| projected_reference(kind, part))
+            .collect::<Vec<_>>();
+        if !refs.is_empty() {
+            projected.push(format!(
+                "[user {label} references: {}]",
+                stringify(&Value::Array(refs)).ok()?
+            ));
+        }
     }
+    (!projected.is_empty()).then(|| projected.join(" "))
+}
+
+/// A project reference is only its id and sent name; anything else it carries is not
+/// shown, so history never presents client text as a server-resolved project field.
+fn projected_reference(kind: &str, part: &Value) -> Value {
+    if kind != "project_ref" {
+        return part.clone();
+    }
+    serde_json::json!({"type": kind, "projectId": part["projectId"], "titleSnapshot": part["titleSnapshot"]})
 }
 
 // Passthrough: conversation part content keyed by part kind; tool/provider payloads.
@@ -136,6 +147,19 @@ fn valid_message_part(value: &Value) -> bool {
                     !butler_core::public_text::trim_js_whitespace(value).is_empty()
                 })
                 && object.get("titleSnapshot").is_some_and(Value::is_string)
+        }
+        Some("project_ref") => {
+            object
+                .get("projectId")
+                .and_then(Value::as_str)
+                .is_some_and(|value| {
+                    !butler_core::public_text::trim_js_whitespace(value).is_empty()
+                        && value.encode_utf16().count() <= 256
+                })
+                && object
+                    .get("titleSnapshot")
+                    .and_then(Value::as_str)
+                    .is_some_and(|value| value.encode_utf16().count() <= 500)
         }
         Some("project_source_ref") => valid_project_ref(object),
         _ => false,

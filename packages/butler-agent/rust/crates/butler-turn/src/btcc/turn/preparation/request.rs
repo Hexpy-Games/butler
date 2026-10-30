@@ -320,6 +320,12 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
                 append_required_tool(fields, tool);
             }
         }
+        if let Some(Value::Array(values)) = app
+            .get("projectReferences")
+            .filter(|value| value.as_array().is_some_and(|v| !v.is_empty()))
+        {
+            fields.insert("projectReferences".into(), Value::Array(values.clone()));
+        }
     }
     if let Some(policy) = request
         .empty_response_policy

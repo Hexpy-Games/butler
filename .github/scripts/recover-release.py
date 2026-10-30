@@ -121,8 +121,6 @@ def publish(root):
     run('python3', 'packages/butler-agent/rust/scripts/release-standalone-agent.py',
         'merge', '--output', str(merged),
         *(str(root / name) for name in required(tag) if name.startswith('agent-')))
-    npm = root / 'npm'
-    run('python3', 'deploy/npm/pack-release.py', tag, str(npm))
     app_manifest = root / 'app-update-manifest.json'
     linux = root / 'linux'
     linux.mkdir(exist_ok=True)
@@ -143,7 +141,7 @@ def publish(root):
         files += [file for file in (root / name).iterdir()
                   if file.is_file() and file.name not in ('agent-release-manifest.json',
                                                          'agent-update-manifest.json', 'app-update-manifest.json')]
-    files += list(merged.iterdir()) + list(npm.iterdir())
+    files += list(merged.iterdir())
     try:
         run('gh', 'release', 'view', tag)
     except subprocess.CalledProcessError:

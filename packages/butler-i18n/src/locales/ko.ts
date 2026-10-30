@@ -1141,6 +1141,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     workspaceLocal: "로컬",
     workspaceWorktree: "워크트리",
     messageComposer: "메시지 입력",
+    mentionList: "대화·프로젝트 참조",
+    mentionProject: "프로젝트",
     placeholder: "버틀러에게 무엇이든 물어보세요",
     placeholderFollowUp: "후속 변경사항 요청",
     attachedFiles: "첨부 파일",
