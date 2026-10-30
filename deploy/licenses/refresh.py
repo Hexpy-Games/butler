@@ -237,7 +237,7 @@ def js_components():
         manifest = json.loads((directory / "package.json").read_text(encoding="utf-8"))
         files = license_files(directory)
         if name == "@hugeicons/core-free-icons" and not files:
-            revision = json.loads(fetch("https://api.github.com/repos/hugeicons/hugeicons/commits/main"))["sha"]
+            revision = "4fd1c2d5572f832eb908d401ca95a18013069abf"
             base = f"https://raw.githubusercontent.com/hugeicons/hugeicons/{revision}"
             files = [(f"{base}/LICENSE.md", fetch(f"{base}/LICENSE.md")),
                      (f"{base}/README.md (free icons MIT declaration)", fetch(f"{base}/README.md"))]
