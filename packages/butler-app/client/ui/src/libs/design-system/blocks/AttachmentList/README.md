@@ -29,8 +29,12 @@ and its name tooltip shows the few-word reason.
 thumbnail (`thumbnail.src`, lazy and async decoded, fading in once loaded), a
 video's first frame (`video.src`, metadata only, muted, never playing in the
 tile) with a play badge and its length, or the file's glyph, `extension`
-label, name and (on `wrap`) size. A picture that fails to load shows the file
-face.
+label, name and (on `wrap`) size. The name takes two lines (one on phone and
+touch), breaking after `_`, `-` and spaces and before the extension, never
+leaving one character alone, and ends in an ellipsis; the type label keeps the
+extension readable and the tooltip shows the whole name. A picture that fails to load shows the file face and calls
+`onMediaError(item)`; a new `thumbnail.src` or `video.src` (a re-signed URL)
+loads again.
 
 - `tileLayout="row"` (composer): 64px tiles in one row that scrolls sideways
   under the shared edge fade, keeping `--focus-ring-room`. A new tile grows

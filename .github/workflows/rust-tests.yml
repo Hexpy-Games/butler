@@ -201,6 +201,7 @@ jobs:
               smoke browser-tab-move-electron
               smoke app-open-in-app-smoke
               smoke app-attachment-viewer-smoke
+              smoke app-attachment-thumbnails-smoke
               smoke first-run-redesign-smoke
               smoke browser-agent-electron
               smoke browser-file-picker-electron
