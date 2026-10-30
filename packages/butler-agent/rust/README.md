@@ -206,8 +206,12 @@ origin through `PUT /hooks` issues a new secret, unless you set one. A hook writ
 into the file signs only if a secret was already saved for that id and origin;
 otherwise it fails without sending anything until `PUT /hooks` sets one with
 `"secrets"`. Saving it unchanged does not issue one. A `secret` field in the file
-is invalid. A save that is interrupted leaves the hooks it was changing unable to
-sign, and the next save issues new secrets.
+is invalid.
+
+A new secret signs only once its save completes with the client still connected.
+A save that fails or is interrupted leaves the existing secret signing for its
+origin. If it had already saved a new origin, the hook refuses to send until the
+next save for that hook and origin issues a new secret.
 
 Redirects are not followed. A 2xx response body is read like
 command stdout: the same decision JSON denies a pre-event, and an empty or

@@ -64,12 +64,14 @@ async fn reload_held(hooks: &Arc<Hooks>) -> Result<(), String> {
     }
     Ok(())
 }
-/// Saves a configuration; the caller holds `saving`.
+/// Saves a configuration; the caller holds `saving`. New keys sign only if the
+/// client is still there to receive them: otherwise they stay undelivered.
 pub(super) async fn save(
     hooks: &Arc<Hooks>,
     revision: u64,
     config: HookConfig,
     secrets: BTreeMap<String, SecretText>,
+    client_left: impl Fn() -> bool,
 ) -> Result<HookSaved, String> {
     reload(hooks).await?;
     let published = {
@@ -92,21 +94,15 @@ pub(super) async fn save(
     }
     // A store may wait on the user, so `mutation` is not held here: session
     // creation and send keep reloading while it does.
-    let prepared = hooks.secrets.prepare(&config, &published, secrets).await?;
-    match commit(hooks, revision, config, bytes).await {
-        Ok(settings) => {
-            hooks.secrets.activate(&prepared).await?;
-            hooks.secrets.forget(&settings.config).await;
-            Ok(HookSaved {
-                settings,
-                generated_secrets: prepared.generated,
-            })
-        }
-        Err(error) => {
-            hooks.secrets.rollback(prepared).await;
-            Err(error)
-        }
+    let staged = hooks.secrets.stage(&config, &published, secrets).await?;
+    let settings = commit(hooks, revision, config, bytes).await?;
+    if !client_left() {
+        hooks.secrets.promote(&staged, &settings.config).await?;
     }
+    Ok(HookSaved {
+        settings,
+        generated_secrets: staged.generated,
+    })
 }
 /// Writes and publishes the configuration unless it changed since `revision`.
 async fn commit(

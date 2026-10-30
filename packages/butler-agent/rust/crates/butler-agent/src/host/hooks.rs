@@ -147,15 +147,16 @@ impl HookPort for Dispatcher {
         let hooks = self.0.clone();
         Box::pin(async move {
             let (answer, answered) = tokio::sync::oneshot::channel();
-            // A disconnected client must not cancel a save halfway. If it left,
-            // the secrets this save issued reached nobody, so they cannot sign.
+            // A disconnected client must not cancel a save halfway. Orphans wait
+            // for the next save when it left: they say what to issue again.
             tokio::spawn(async move {
-                // Held through the withdrawal, so a retry sees its result.
                 let _saving = hooks.saving.lock().await;
-                let saved = registry::save(&hooks, revision, config, secrets).await;
-                if let Err(Ok(saved)) = answer.send(saved) {
-                    let issued = saved.generated_secrets.keys();
-                    hooks.secrets.withdraw(issued).await;
+                let left = || answer.is_closed();
+                let saved = registry::save(&hooks, revision, config, secrets, left).await;
+                let sweep = saved.is_ok() && !answer.is_closed();
+                let _ = answer.send(saved);
+                if sweep {
+                    hooks.secrets.sweep().await;
                 }
             });
             answered

@@ -1,6 +1,8 @@
 //! A full reset deletes every hook secret it wrote, whatever hooks.json says now.
 use super::*;
-use butler_platform::secrets::{SYSTEM_BACKEND, isolated_system_secret_present_for_test};
+use butler_platform::secrets::{
+    SYSTEM_BACKEND, SecretKey, isolated_system_secret_present_for_test,
+};
 use std::fs;
 
 #[tokio::test]
@@ -15,14 +17,16 @@ async fn hook_secrets_are_deleted_even_when_hooks_json_is_unusable() -> Result<(
     let mut config: Value = serde_json::from_slice(&fs::read(&config_path)?).unwrap();
     config["secrets"] = json!({"store":"system"});
     fs::write(&config_path, config.to_string())?;
-    let key = |id: &str| {
-        butler_models::models::scoped_secret_key(
+    let key = |id: &str| -> Result<SecretKey, HarnessError> {
+        let index: Value =
+            serde_json::from_slice(&fs::read(root.join("auth/hook-secrets.json"))?).unwrap();
+        Ok(butler_models::models::scoped_secret_key(
             &root,
             SYSTEM_BACKEND,
             "com.hexpy.butler.hook-secret",
-            id,
+            index["hooks"][id]["key"].as_str().unwrap(),
         )
-        .unwrap()
+        .unwrap())
     };
     let hook = |id: &str| json!({"id":id,"event":"Stop","type":"http","url":"https://hooks.example.com/hook"});
     let current = admin(&s).send(Method::GET, "/hooks", None, &[]).await?;
@@ -34,10 +38,12 @@ async fn hook_secrets_are_deleted_even_when_hooks_json_is_unusable() -> Result<(
         .send(Method::PUT, "/hooks", Some(body), &[])
         .await?;
     assert_eq!(saved.status, 200, "{saved:?}");
-    for id in ["removed-by-hand", "still-listed"] {
+    let keys = [key("removed-by-hand")?, key("still-listed")?];
+    for key in &keys {
         assert!(
-            isolated_system_secret_present_for_test(&s.sandbox.home, &key(id))?,
-            "{id} is in the system store"
+            isolated_system_secret_present_for_test(&s.sandbox.home, key)?,
+            "{} is in the system store",
+            key.account()
         );
     }
 
@@ -54,10 +60,11 @@ async fn hook_secrets_are_deleted_even_when_hooks_json_is_unusable() -> Result<(
     s.agent.terminate().await?;
     s.gw = s.agent.start_again().await?;
     cleaned(&root).await;
-    for id in ["removed-by-hand", "still-listed"] {
+    for key in &keys {
         assert!(
-            !isolated_system_secret_present_for_test(&s.sandbox.home, &key(id))?,
-            "{id} survived the reset"
+            !isolated_system_secret_present_for_test(&s.sandbox.home, key)?,
+            "{} survived the reset",
+            key.account()
         );
     }
     s.finish().await
@@ -108,7 +115,9 @@ async fn hook_secret_left_in_an_unreachable_store_is_still_listed_for_reset()
         index["hooks"]["moved"]["storage"], "fallback_file",
         "{index}"
     );
-    assert_eq!(index["leftovers"][0]["id"], "moved", "{index}");
+    assert_eq!(index["orphans"][0]["id"], "moved", "{index}");
+    assert_eq!(index["orphans"][0]["storage"], "keychain", "{index}");
+    assert!(index["orphans"][0]["origin"].is_null(), "{index}");
 
     // A reset still lists the untracked key for deletion.
     assert_eq!(request(&s, &nonce(&s).await?).await?.status, 202);
@@ -116,11 +125,13 @@ async fn hook_secret_left_in_an_unreachable_store_is_still_listed_for_reset()
         serde_json::from_slice(&fs::read(root.join("state/full-reset.json"))?).unwrap();
     let listed = journal["secret_keys"].as_array().unwrap();
     assert!(
-        listed.iter().any(|key| key["account"] == "moved"
-            && key["service"]
-                .as_str()
-                .unwrap()
-                .starts_with("com.hexpy.butler.hook-secret")),
+        listed
+            .iter()
+            .any(|key| key["account"] == index["orphans"][0]["key"]
+                && key["service"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("com.hexpy.butler.hook-secret")),
         "{journal}"
     );
     s.finish().await

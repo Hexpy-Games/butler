@@ -34,6 +34,17 @@ pub(super) async fn save(
     api(s, Method::PUT, "/hooks", Some(body)).await
 }
 
+/// Waits for the sweep that follows a save to delete `secret` from the store.
+pub(super) async fn store_loses(s: &Scenario, secret: &str) -> Result<(), HarnessError> {
+    let path = s.sandbox.data.join("auth/credential-store.json");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while fs::read_to_string(&path)?.contains(secret) {
+        assert!(Instant::now() < deadline, "the key was not deleted");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    Ok(())
+}
+
 /// Every file under `dir` except the credential store and its lock.
 fn assert_not_on_disk(dir: &Path, secret: &str) {
     let store = dir.join("auth");
@@ -106,7 +117,7 @@ async fn hooks_http_requests_are_signed_and_the_secret_stays_private() -> Result
     assert!(!signature_matches(&seen[1], &generated));
     let store = fs::read_to_string(s.sandbox.data.join("auth/credential-store.json"))?;
     assert!(store.contains(chosen), "kept in the credential store");
-    assert!(!store.contains(&generated), "replaced");
+    store_loses(&s, &generated).await?;
     assert_private(&s, chosen).await?;
     let logs = s.gw.get("/logs?category=http.client&limit=1000").await?;
     assert!(logs.text.contains("hooks.http"), "rows were logged");
@@ -132,8 +143,7 @@ async fn hooks_http_requests_are_signed_and_the_secret_stays_private() -> Result
     // Removing the hook removes its secret.
     let removed = save(&s, json!([]), json!({})).await?;
     assert_eq!(removed.status, 200, "{removed:?}");
-    let store = fs::read_to_string(s.sandbox.data.join("auth/credential-store.json"))?;
-    assert!(!store.contains(chosen), "removed with its hook");
+    store_loses(&s, chosen).await?;
     s.finish().await
 }
 
