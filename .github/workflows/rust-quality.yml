@@ -315,9 +315,8 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['install-arm64']
     uses: ./.github/workflows/install-smoke.yml
     with:
-      # Common package checks and tarball are produced by install-x64.
-      pack: false
-      npm-artifact: butler-npm-x64
+      # install-x64 lints the install scripts.
+      lint: false
       shared-agents: true
       merge-manifests: false
       label: arm64
@@ -328,9 +327,8 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['install-macos']
     uses: ./.github/workflows/install-smoke.yml
     with:
-      # Common package checks and tarball are produced by install-x64.
-      pack: false
-      npm-artifact: butler-npm-x64
+      # install-x64 lints the install scripts.
+      lint: false
       shared-agents: true
       merge-manifests: false
       label: macos

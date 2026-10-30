@@ -33,8 +33,6 @@ To use Butler without the app, for example on a server or a remote computer, run
   <TabPanel value="macos">
     ```bash
     curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.sh | sh -s -- --version <version>
-    # With Node.js
-    npx @hexpygames/butler install
     ```
   </TabPanel>
   <TabPanel value="windows">
@@ -47,8 +45,6 @@ To use Butler without the app, for example on a server or a remote computer, run
   <TabPanel value="linux">
     ```bash
     curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.sh | sh -s -- --version <version>
-    # With Node.js
-    npx @hexpygames/butler install
     ```
   </TabPanel>
 </Tabs>
@@ -64,7 +60,7 @@ The install script works in this order.
 
 It is safe to run the same command again. A version that is already installed is not extracted again, and the data folder is not touched. If Butler is already running, apply the new version with `butler restart`.
 
-Add options after `sh -s --` (with npx, after `install`).
+Add options after `sh -s --`.
 
 ```bash
 curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.sh | sh -s -- --version <version> --no-start
@@ -168,7 +164,7 @@ Run `butler --help` or `butler help schedule` for help in Korean and English. `b
 
 | Command | Purpose |
 | --- | --- |
-| `install --from ARCHIVE\|URL` | Installs a downloaded archive. For a first install, use the npx route above. |
+| `install --from ARCHIVE\|URL` | Installs a downloaded archive. For a first install, use the install script above. |
 | `start`, `stop`, `restart` | Starts, stops or restarts the service. |
 | `remote status`, `remote enable`, `remote disable`, `remote pair`, `remote devices`, `remote hosts add\|remove HOST` | Manage remote access |
 | `status`, `open`, `doctor [--check NAME]`, `doctor --collect-logs` | Check status, open the browser, check the installation |

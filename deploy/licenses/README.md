@@ -75,10 +75,9 @@ beside `index.html` without duplicating the full component inventory.
 | macOS App | `Contents/Resources/bundled-agent/resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz` |
 | Linux/Windows App | `resources/bundled-agent/resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz` |
 | Agent archive | `resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz` |
-| npm wrapper | `THIRD_PARTY_NOTICES.txt.gz` |
 | Browser renderer | `THIRD_PARTY_NOTICES.txt.gz` beside `index.html` |
 
-App resources, Agent archive root and npm root contain a short human-readable
+App resources and the Agent archive root contain a short human-readable
 `THIRD_PARTY_NOTICES.txt` pointer with a `gzip -dc` command. This exposes the full
 plain-text disclosure offline without a second stored copy; the App/browser
 viewer also reads it locally. The Electron app protocol maps the exact notice
@@ -89,6 +88,6 @@ bundled Agent bin, bundled Agent renderer (43,974,297 notice bytes). The reporte
 43,961,730-byte resource-layout delta also included a net -12,567 bytes in other
 resources. The archive copied it twice. The finalizer removes the two redundant
 App copies; Agent packaging adds only its readable pointer. Packaging smoke uses
-the real App finalizer, Agent archive writer and npm pack with isolated fixture
+the real App finalizer and Agent archive writer with isolated fixture
 payloads, validating byte-for-byte completeness and size budgets. It does not
 build an entire Electron release or claim signing/notarization validation.
