@@ -27,6 +27,10 @@ fn read(path: &std::path::Path) -> Result<HookConfig, String> {
 }
 pub(super) async fn reload(hooks: &Arc<Hooks>) -> Result<(), String> {
     let _guard = hooks.mutation.lock().await;
+    reload_held(hooks).await
+}
+/// Reloads a changed file; the caller holds `mutation`.
+async fn reload_held(hooks: &Arc<Hooks>) -> Result<(), String> {
     let previous = hooks.state.read().stamp;
     let path = hooks.path.clone();
     let result = tokio::task::spawn_blocking(move || {
@@ -67,7 +71,7 @@ pub(super) async fn save(
     secrets: BTreeMap<String, SecretText>,
 ) -> Result<HookSaved, String> {
     reload(hooks).await?;
-    let _guard = hooks.mutation.lock().await;
+    let _saving = hooks.saving.lock().await;
     if hooks.state.read().settings.revision != revision {
         return Err("revision_conflict".into());
     }
@@ -82,7 +86,35 @@ pub(super) async fn save(
     if bytes.len() as u64 > CAP {
         return Err("Hook file exceeds 256 KiB".into());
     }
-    let generated_secrets = hooks.secrets.prepare(&config, secrets).await?;
+    // A store may wait on the user, so `mutation` is not held here: session
+    // creation and send keep reloading while it does.
+    let mut prepared = hooks.secrets.prepare(&config, secrets).await?;
+    match commit(hooks, revision, config, bytes).await {
+        Ok(settings) => {
+            hooks.secrets.forget(&settings.config).await;
+            Ok(HookSaved {
+                settings,
+                generated_secrets: std::mem::take(&mut prepared.generated),
+            })
+        }
+        Err(error) => {
+            hooks.secrets.rollback(prepared).await;
+            Err(error)
+        }
+    }
+}
+/// Writes and publishes the configuration unless it changed since `revision`.
+async fn commit(
+    hooks: &Arc<Hooks>,
+    revision: u64,
+    config: HookConfig,
+    bytes: Vec<u8>,
+) -> Result<HookSettings, String> {
+    let _guard = hooks.mutation.lock().await;
+    reload_held(hooks).await?;
+    if hooks.state.read().settings.revision != revision {
+        return Err("revision_conflict".into());
+    }
     let path = hooks.path.clone();
     let saved = tokio::task::spawn_blocking(move || {
         butler_platform::secure_fs::replace_private(
@@ -95,12 +127,6 @@ pub(super) async fn save(
     .await
     .map_err(|e| e.to_string())??;
     hooks.state.write().stamp = saved;
-    let previous = hooks.state.read().settings.config.clone();
     hooks.publish(config);
-    let settings = hooks.state.read().settings.clone();
-    hooks.secrets.forget(&previous, &settings.config).await;
-    Ok(HookSaved {
-        settings,
-        generated_secrets,
-    })
+    Ok(hooks.state.read().settings.clone())
 }

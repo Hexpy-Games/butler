@@ -185,8 +185,10 @@ application/json`) to `url` instead of running a process:
 
 Only `https` URLs without a user name or password are accepted, plus plain
 `http` to a loopback host (`localhost`, `127.0.0.0/8`, `[::1]`); this is checked
-when the configuration loads and again before each request. `command`, `args` and
-`env` are rejected, and plugin hooks stay command-only.
+when the configuration loads and again before each request. Plain `http` never
+goes through a proxy and `localhost` always means this machine; `https` honors the
+environment's proxies. `command`, `args` and `env` are rejected, and plugin hooks
+stay command-only.
 
 Every request is signed. `X-Butler-Timestamp` is the Unix time in seconds and
 `X-Butler-Signature` is `sha256=<hex>`, the HMAC-SHA256 of `<timestamp>.<raw
@@ -197,9 +199,13 @@ Saving a hook through `PUT /hooks` creates a secret when it has none and returns
 it once in `generated_secrets`. Set your own (16 to 1024 characters) with
 `"secrets": {"<hook id>": "<secret>"}` next to `config`. Secrets are kept in the
 same credential store as provider API keys, never in `hooks.json`, and no other
-response, run record, log or error contains them. A hook added by editing the file
-has no secret and fails without sending anything until it is saved once through
-`PUT /hooks`; a `secret` field in the file is invalid.
+response, run record, log or error contains them.
+
+A secret belongs to one URL origin (scheme, host and port). Changing a hook's
+origin through `PUT /hooks` issues a new secret, unless you set one. A hook written
+into the file signs only if a secret was already saved for that id and origin;
+otherwise it fails without sending anything until it is saved once through `PUT
+/hooks`. A `secret` field in the file is invalid.
 
 Redirects are not followed. A 2xx response body is read like
 command stdout: the same decision JSON denies a pre-event, and an empty or

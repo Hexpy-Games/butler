@@ -1,5 +1,7 @@
 //! HTTP hooks: the command envelope POSTed to a local endpoint in the harness.
 use super::*;
+#[path = "http_receiver.rs"]
+mod receiver;
 #[path = "http_signing.rs"]
 mod signing;
 use axum::{

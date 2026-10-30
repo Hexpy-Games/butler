@@ -1,8 +1,15 @@
 //! HTTP transport: the command envelope POSTed as JSON, signed, never redirected.
-use super::{Hooks, execute::Finished};
+use super::{
+    Hooks,
+    execute::Finished,
+    secrets::{Lookup, url_origin},
+};
 use butler_core::hooks::{HookDefinition, HookEnvelope, hook_transport_allowed};
 use butler_log::http::{Client, Phase, Purpose, RedirectPolicy};
-use std::time::Duration;
+use std::{
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    time::Duration,
+};
 use tokio_util::sync::CancellationToken;
 /// Response bodies share the command output cap; overflow is an error.
 const BODY_CAP: usize = 65_536;
@@ -27,6 +34,8 @@ enum Failure {
     Transport,
     #[error("Hook has no signing secret; save the hook to create one")]
     NoSecret,
+    #[error("Hook URL changed origin; save the hook to create a new secret")]
+    OtherOrigin,
     #[error("Hook secret store unavailable")]
     SecretStore,
 }
@@ -77,16 +86,20 @@ async fn post(
     payload: &HookEnvelope,
 ) -> Result<(u16, String), Failure> {
     let url = endpoint(hook.url.as_deref().ok_or(Failure::Request)?)?;
-    let secret = hooks
+    let found = hooks
         .secrets
-        .find(&hook.id)
+        .find(&hook.id, &url_origin(url.as_str()))
         .await
-        .map_err(|_| Failure::SecretStore)?
-        .ok_or(Failure::NoSecret)?;
+        .map_err(|_| Failure::SecretStore)?;
+    let secret = match found {
+        Lookup::Found(secret) => secret,
+        Lookup::Missing => return Err(Failure::NoSecret),
+        Lookup::OtherOrigin => return Err(Failure::OtherOrigin),
+    };
     let body = super::execute::body(hook, payload).map_err(|_| Failure::Request)?;
     let timestamp = chrono::Utc::now().timestamp().to_string();
     let signature = sign(secret.expose(), &timestamp, &body)?;
-    let request = client(hooks)
+    let request = client(hooks, url.scheme() == "http")
         .await?
         .post(url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -138,21 +151,33 @@ fn sign(secret: &str, timestamp: &str, body: &[u8]) -> Result<String, Failure> {
         .map(|digest| format!("sha256={digest}"))
         .ok_or(Failure::Request)
 }
-/// Built on first use only; TLS roots load off the async workers.
-async fn client(hooks: &Hooks) -> Result<Client, Failure> {
-    hooks
-        .http
-        .get_or_try_init(|| async {
-            tokio::task::spawn_blocking(|| {
-                butler_log::http::external(Purpose::new("hooks.http"))
-                    .redirect(RedirectPolicy::none())
-                    .pool_max_idle_per_host(0)
+/// Built on first use only; TLS roots load off the async workers. Plain http is
+/// only ever loopback: it skips every proxy, and `localhost` cannot resolve away.
+async fn client(hooks: &Hooks, plain: bool) -> Result<Client, Failure> {
+    let cell = if plain { &hooks.loopback } else { &hooks.http };
+    cell.get_or_try_init(|| async {
+        tokio::task::spawn_blocking(move || {
+            let builder = butler_log::http::external(Purpose::new("hooks.http"))
+                .redirect(RedirectPolicy::none())
+                .pool_max_idle_per_host(0);
+            if plain {
+                // Port 0 keeps the URL's own port.
+                let loopback = [
+                    SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
+                    SocketAddr::from((Ipv6Addr::LOCALHOST, 0)),
+                ];
+                builder
+                    .no_proxy()
+                    .resolve_to_addrs("localhost", &loopback)
                     .build()
-            })
-            .await
-            .map_err(|_| Failure::Request)?
-            .map_err(|_| Failure::Request)
+            } else {
+                builder.build()
+            }
         })
         .await
-        .cloned()
+        .map_err(|_| Failure::Request)?
+        .map_err(|_| Failure::Request)
+    })
+    .await
+    .cloned()
 }

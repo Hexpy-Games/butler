@@ -164,7 +164,7 @@ impl ProviderSecrets {
     }
 
     /// The store that holds keys saved to `backend`.
-    pub(super) async fn holding(
+    pub async fn holding(
         &self,
         root: &Path,
         backend: SecretBackend,

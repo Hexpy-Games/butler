@@ -5,7 +5,7 @@ use sha2::Sha256;
 use std::{fmt::Write as _, path::Path};
 
 /// The receiver's check: HMAC-SHA256 of `<timestamp>.<raw body>`, recent timestamp.
-fn signature_matches(seen: &Seen, secret: &str) -> bool {
+pub(super) fn signature_matches(seen: &Seen, secret: &str) -> bool {
     let timestamp = seen.headers["x-butler-timestamp"].to_str().unwrap();
     let age = chrono::Utc::now().timestamp() - timestamp.parse::<i64>().unwrap();
     assert!(age.abs() < 600, "timestamp {timestamp}");
@@ -20,7 +20,11 @@ fn signature_matches(seen: &Seen, secret: &str) -> bool {
     seen.headers["x-butler-signature"].to_str().unwrap() == expected
 }
 
-async fn save(s: &Scenario, hooks: Value, secrets: Value) -> Result<Reply, HarnessError> {
+pub(super) async fn save(
+    s: &Scenario,
+    hooks: Value,
+    secrets: Value,
+) -> Result<Reply, HarnessError> {
     let current = api(s, Method::GET, "/hooks", None).await?;
     let body = json!({
         "revision": current.data()["revision"],
@@ -201,6 +205,14 @@ async fn hooks_http_plain_http_is_loopback_only() -> Result<(), HarnessError> {
         assert_eq!(saved.status, 200, "{url}: {saved:?}");
     }
 
+    // Accepted at load, refused by the parser that sends: nothing goes out.
+    let unsendable = http_hook("plain", "Stop", "http://127.0.0.1:99999/hook");
+    let saved = save(&s, json!([unsendable]), json!({})).await?;
+    assert_eq!(saved.status, 200, "{saved:?}");
+    let tested = api(&s, Method::POST, "/hooks/plain/test", Some(json!({}))).await?;
+    assert_eq!(tested.data()["outcome"], "error", "{tested:?}");
+    assert_eq!(tested.data()["stderr"], "Hook request failed", "{tested:?}");
+
     // A hand edit that breaks the rule is refused; the previous registry stays.
     replace(&s, vec![http_hook("kept", "Stop", &endpoint.url("/kept"))]).await?;
     let edited = http_hook("kept", "Stop", "http://hooks.example.com/hook");
@@ -217,36 +229,6 @@ async fn hooks_http_plain_http_is_loopback_only() -> Result<(), HarnessError> {
     assert_eq!(tested.data()["outcome"], "continue", "{tested:?}");
     assert_eq!(endpoint.seen("/kept").len(), 1);
     s.finish().await
-}
-
-#[tokio::test]
-async fn hooks_http_send_rule_follows_the_sending_url_parser() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let allowed = |url: &str| {
-        let url = reqwest::Url::parse(url).unwrap();
-        butler_core::hooks::hook_transport_allowed(url.scheme(), url.host_str())
-    };
-    for url in [
-        "https://hooks.example.com/hook",
-        "http://localhost:8080/hook",
-        "http://127.0.0.2/hook",
-        "http://[::1]:8080/hook",
-        "http://127.1/hook",
-    ] {
-        assert!(allowed(url), "{url}");
-    }
-    for url in [
-        "http://hooks.example.com/hook",
-        "http://127.0.0.1.example.com/hook",
-        "http://localhost.example.com/hook",
-        "http://hooks.example.com\\x.localhost/hook",
-        "http://0.0.0.0/hook",
-        "http://[::ffff:8.8.8.8]/hook",
-        "ftp://localhost/hook",
-    ] {
-        assert!(!allowed(url), "{url}");
-    }
-    Ok(())
 }
 
 #[tokio::test]

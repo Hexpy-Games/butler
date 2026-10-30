@@ -32,8 +32,13 @@ struct Hooks {
     events: AtomicU8,
     state: RwLock<State>,
     mutation: tokio::sync::Mutex<()>,
+    /// One save at a time; held across store calls, which `mutation` never is.
+    saving: tokio::sync::Mutex<()>,
     pool: Arc<tokio::sync::Semaphore>,
+    /// For https URLs: honors the environment's proxies.
     http: tokio::sync::OnceCell<butler_log::http::Client>,
+    /// For plain http, which only ever goes to loopback: never through a proxy.
+    loopback: tokio::sync::OnceCell<butler_log::http::Client>,
     secrets: secrets::HookSecrets,
     shutdown: CancellationToken,
 }
@@ -64,8 +69,10 @@ impl Dispatcher {
                 runs: VecDeque::new(),
             }),
             mutation: tokio::sync::Mutex::new(()),
+            saving: tokio::sync::Mutex::new(()),
             pool: Arc::new(tokio::sync::Semaphore::new(8)),
             http: tokio::sync::OnceCell::new(),
+            loopback: tokio::sync::OnceCell::new(),
             shutdown,
         });
         let _ = registry::reload(&hooks).await;
