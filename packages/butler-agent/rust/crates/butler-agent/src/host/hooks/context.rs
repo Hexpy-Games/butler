@@ -1,5 +1,5 @@
 //! What one handler's output adds to its turn's context.
-use super::{execute::Finished, *};
+use super::*;
 use butler_runtime::context::{BudgetToolOutputInput, OutputModeInput, ShellCommandResult};
 use serde_json::Value;
 
@@ -15,6 +15,16 @@ pub(super) struct Added {
     pub(super) note: Option<String>,
 }
 
+/// A finished handler, as far as its turn's context is concerned.
+pub(super) struct Finished<'a> {
+    pub(super) outcome: &'a str,
+    pub(super) exit_code: Option<i32>,
+    /// Redacted stdout.
+    pub(super) stdout: &'a str,
+    /// Why a stream's read bound ended the process.
+    pub(super) overflow: Option<String>,
+}
+
 /// Observe-only handlers finish after their turn has started, so they add nothing.
 pub(super) fn can_add(hook: &HookDefinition) -> bool {
     hook.event.adds_context() && !hook.asynchronous
@@ -24,8 +34,7 @@ pub(super) async fn added(
     hooks: &Hooks,
     hook: &HookDefinition,
     payload: &HookEnvelope,
-    finished: &Finished,
-    overflow: Option<String>,
+    finished: Finished<'_>,
 ) -> Added {
     // A synthetic test run has no session, so no conversation to add to.
     if !can_add(hook) || payload.session_id.is_none() {
@@ -33,19 +42,18 @@ pub(super) async fn added(
     }
     // Past a read bound the whole output is gone with the process, so the model
     // hears that instead of nothing.
-    if let Some(overflow) = overflow {
+    if let Some(overflow) = finished.overflow {
         let text = format!("[Butler added none of this hook's output: {overflow}.]");
         return Added {
             context: Some(item(hook, text)),
             ..Added::default()
         };
     }
-    if finished.exit_code != Some(0)
-        || !matches!(finished.outcome.as_str(), "continue" | "approval_ignored")
+    if finished.exit_code != Some(0) || !matches!(finished.outcome, "continue" | "approval_ignored")
     {
         return Added::default();
     }
-    let Some(text) = super::decision::added_context(&finished.stdout) else {
+    let Some(text) = super::decision::added_context(finished.stdout) else {
         return Added::default();
     };
     let bytes = Some(text.len() as u64);

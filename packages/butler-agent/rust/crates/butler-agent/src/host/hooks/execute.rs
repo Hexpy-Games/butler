@@ -25,7 +25,6 @@ fn matched(hooks: &Hooks, payload: &HookEnvelope) -> Vec<HookDefinition> {
                 h.id.split_once('/').map(|(plugin, _)| plugin.to_owned()),
                 h.command.clone(),
                 h.args.clone(),
-                h.url.clone(),
                 h.env.clone(),
                 h.timeout_ms,
                 h.fail_closed,
@@ -72,15 +71,6 @@ pub(super) async fn dispatch(
         context,
     })
 }
-/// Transport result before the run record is assembled.
-pub(super) struct Finished {
-    pub(super) outcome: String,
-    pub(super) reason: Option<String>,
-    pub(super) exit_code: Option<i32>,
-    pub(super) http_status: Option<u16>,
-    pub(super) stdout: String,
-    pub(super) stderr: String,
-}
 /// One handler's run and what it means for its event.
 struct Executed {
     run: HookRun,
@@ -94,42 +84,6 @@ async fn execute(
     cancel: CancellationToken,
 ) -> Executed {
     let start = Instant::now();
-    let (finished, overflow) = if hook.kind == "http" {
-        (super::http::run(hooks, hook, payload, cancel).await, None)
-    } else {
-        command(hooks, hook, payload, cancel).await
-    };
-    let added = super::context::added(hooks, hook, payload, &finished, overflow).await;
-    if finished.outcome == "approval_ignored" {
-        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = if hook.id.contains('/') { "plugin" } else { "user" });
-    }
-    let record = HookRun {
-        time: chrono::Utc::now().to_rfc3339(),
-        hook_id: hook.id.clone(),
-        event: hook.event,
-        session_id: payload.session_id.clone(),
-        outcome: finished.outcome,
-        reason: finished.reason.clone().or(added.note),
-        exit_code: finished.exit_code,
-        http_status: finished.http_status,
-        duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
-        context_bytes: added.bytes,
-        stdout: excerpt(&finished.stdout),
-        stderr: excerpt(&finished.stderr),
-    };
-    hooks.record(record.clone());
-    Executed {
-        run: record,
-        deny: finished.reason,
-        context: added.context,
-    }
-}
-async fn command(
-    hooks: &Hooks,
-    hook: &HookDefinition,
-    payload: &HookEnvelope,
-    cancel: CancellationToken,
-) -> (Finished, Option<String>) {
     let prepared = prepare_input(hooks, hook, payload).await;
     let (input, redact) = match prepared {
         Ok((i, r)) => (Ok(i), r),
@@ -146,6 +100,9 @@ async fn command(
         Err(error) => Err(error),
     };
     let (outcome, reason) = super::decision::resolve(hook, &result);
+    if outcome == "approval_ignored" {
+        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = if hook.id.contains('/') { "plugin" } else { "user" });
+    }
     let clean = |text: &str| {
         let mut text = text.to_owned();
         for value in &redact {
@@ -155,26 +112,51 @@ async fn command(
         }
         text
     };
+    let reason = reason.map(|s| clean(&s));
+    let exit_code = result.as_ref().ok().and_then(|o| o.exit_code);
+    let stdout = result
+        .as_ref()
+        .ok()
+        .map(|o| clean(&o.stdout))
+        .unwrap_or_default();
     let overflow = match &result {
         Err(error @ HookProcessError::OutputLimit(_)) => Some(error.to_string()),
         _ => None,
     };
-    let finished = Finished {
+    let added = super::context::added(
+        hooks,
+        hook,
+        payload,
+        super::context::Finished {
+            outcome: &outcome,
+            exit_code,
+            stdout: &stdout,
+            overflow,
+        },
+    )
+    .await;
+    let record = HookRun {
+        time: chrono::Utc::now().to_rfc3339(),
+        hook_id: hook.id.clone(),
+        event: hook.event,
+        session_id: payload.session_id.clone(),
         outcome,
-        reason: reason.map(|s| clean(&s)),
-        exit_code: result.as_ref().ok().and_then(|o| o.exit_code),
-        http_status: None,
-        stdout: result
-            .as_ref()
-            .ok()
-            .map(|o| clean(&o.stdout))
-            .unwrap_or_default(),
+        reason: reason.clone().or(added.note),
+        exit_code,
+        duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
+        context_bytes: added.bytes,
+        stdout: excerpt(&stdout),
         stderr: result
             .as_ref()
-            .map(|o| clean(&o.stderr))
+            .map(|o| excerpt(&clean(&o.stderr)))
             .unwrap_or_else(ToString::to_string),
     };
-    (finished, overflow)
+    hooks.record(record.clone());
+    Executed {
+        run: record,
+        deny: reason,
+        context: added.context,
+    }
 }
 fn environment(
     hooks: &Hooks,
@@ -246,8 +228,11 @@ pub(super) async fn test(
     Ok(Box::pin(execute(hooks, &hook, &payload, cancel)).await.run)
 }
 
-/// The JSON envelope plus hook identity: command stdin and HTTP request body.
-pub(super) fn body(hook: &HookDefinition, payload: &HookEnvelope) -> serde_json::Result<Vec<u8>> {
+fn input(
+    hooks: &Hooks,
+    hook: &HookDefinition,
+    payload: &HookEnvelope,
+) -> Result<HookProcess, HookProcessError> {
     #[derive(serde::Serialize)]
     struct Identity<'a> {
         id: &'a str,
@@ -259,7 +244,7 @@ pub(super) fn body(hook: &HookDefinition, payload: &HookEnvelope) -> serde_json:
         envelope: &'a HookEnvelope,
         hook: Identity<'a>,
     }
-    serde_json::to_vec(&Body {
+    let stdin = serde_json::to_vec(&Body {
         envelope: payload,
         hook: Identity {
             id: &hook.id,
@@ -270,14 +255,7 @@ pub(super) fn body(hook: &HookDefinition, payload: &HookEnvelope) -> serde_json:
             },
         },
     })
-}
-
-fn input(
-    hooks: &Hooks,
-    hook: &HookDefinition,
-    payload: &HookEnvelope,
-) -> Result<HookProcess, HookProcessError> {
-    let stdin = body(hook, payload).map_err(|e| HookProcessError::Process(e.to_string()))?;
+    .map_err(|e| HookProcessError::Process(e.to_string()))?;
     let args = hook.args.as_ref().map(|args| {
         args.iter()
             .map(|arg| {
