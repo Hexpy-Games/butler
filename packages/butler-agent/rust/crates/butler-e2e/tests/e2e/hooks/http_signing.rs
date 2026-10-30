@@ -198,7 +198,7 @@ async fn hooks_http_plain_http_is_loopback_only() -> Result<(), HarnessError> {
     for url in [
         "http://hooks.example.com/hook",
         "HTTP://hooks.example.com/hook",
-        "http://192.168.1.8/hook",
+        "http://192.168.0.20/hook", // privacy-hygiene: allow-private-ip (a LAN host is refused)
         "http://0.0.0.0/hook",
         "http://127.0.0.1.example.com/hook",
         "http://localhost.example.com/hook",
