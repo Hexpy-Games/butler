@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod batch_edits;
 mod boundaries;
 mod bundle;
 mod delete_replay;

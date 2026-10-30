@@ -47,6 +47,11 @@ pub(super) async fn execute(
             })
             .await
             .map_err(error)?,
+        AppCanonOperation::Queue {
+            session_id,
+            action,
+            input,
+        } if action == "edit" => edit(&storage, ctx, session_id, input).await?,
         operation => storage
             .canon_write(move |tx| write(tx, &ctx, operation))
             .await
@@ -67,7 +72,6 @@ fn write(
             input,
         } => match action.as_str() {
             "request" => store::queue::request(tx, ctx, &session_id, &input),
-            "edit" => store::queue::edit(tx, ctx, &session_id, &input),
             "hold" => store::queue::decide_hold(
                 tx,
                 ctx,
@@ -99,4 +103,27 @@ fn field<'a>(input: &'a Value, name: &str) -> store::Result<&'a str> {
     input[name]
         .as_str()
         .ok_or(store::Error::Invalid("missing queue field"))
+}
+
+async fn edit(
+    storage: &BtccStorage,
+    ctx: store::Context,
+    session: String,
+    input: Value,
+) -> Result<Value, GatewayApplicationError> {
+    let editing = session.clone();
+    let context = ctx.clone();
+    storage
+        .canon_write(move |tx| store::queue::edit(tx, &context, &editing, &input))
+        .await
+        .map_err(error)?;
+    // canon_write returns only after COMMIT. No step intent can observe a
+    // partially moved selection, even if the App projects it immediately.
+    storage
+        .canon_write(move |tx| {
+            store::queue::engine::after_edit(tx, &ctx, &session)?;
+            store::queue::view(tx, &session, &store::runtime::ProjectViews::new())
+        })
+        .await
+        .map_err(error)
 }

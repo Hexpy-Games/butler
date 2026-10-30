@@ -2,6 +2,16 @@ use super::*;
 
 /// Called only for sessions named by changed epics or an explicit queue act.
 pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
+    ready_inner(tx, ctx, session, true)
+}
+
+/// Membership already committed and advanced its revision; starting its steps
+/// belongs to that edit revision rather than one revision per selected epic.
+pub fn after_edit(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
+    ready_inner(tx, ctx, session, false)
+}
+
+fn ready_inner(tx: &Transaction<'_>, ctx: &Context, session: &str, advance: bool) -> Result<()> {
     let items = items(tx, session)?;
     for (chain_id, chain) in chains(&items)? {
         let chain_items = items
@@ -65,7 +75,9 @@ pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
                 &json!({"session_id":session,"epic_id":epic,"plan_id":item["plan_id"],"untrusted_content":{"epic_title":item["title"],"plan_title":plan.map(|p|p["title"].clone()).unwrap_or(json!(""))}}),
             )?;
             tx.execute(sql::START, params![session, epic.as_str(), ctx.now, op])?;
-            changed(tx, ctx, session)?;
+            if advance {
+                changed(tx, ctx, session)?;
+            }
         }
     }
     Ok(())

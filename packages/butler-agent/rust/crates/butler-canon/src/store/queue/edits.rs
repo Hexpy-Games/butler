@@ -13,7 +13,11 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
     }
     let items = items(tx, session)?;
     let mut chains = chains(&items)?;
-    let id = EpicId(text(input, "epic_id")?.to_owned());
+    let ids = selection(input, &items)?;
+    let id = ids
+        .first()
+        .ok_or(Error::Invalid("epic_ids must be nonempty"))?
+        .clone();
     let item = items
         .iter()
         .find(|i| i["epic_id"] == id.as_str())
@@ -27,8 +31,10 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
         .collect::<Result<BTreeSet<_>>>()?;
     let target = || text(input, "target_epic_id").map(|s| EpicId(s.to_owned()));
     let next = match text(input, "op")? {
-        "move_to_new_step" => chain.move_to_new_step(&id, index(input, "index")?, &running)?,
-        "join_stack" => chain.join_stack(&id, &target()?, &running)?,
+        "move_to_new_step" => {
+            chain.move_many(&ids, Placement::NewStep(index(input, "index")?), &running)?
+        }
+        "join_stack" => chain.move_many(&ids, Placement::Stack(target()?), &running)?,
         "split_stack" => chain.split_stack(index(item, "step_index")?, &running)?,
         "delete" => {
             let next = chain.delete(&id, &running)?;
@@ -53,7 +59,7 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
             } else {
                 Placement::NewStep(index(input, "index")?)
             };
-            let (next, other) = chain.move_between(other, &id, placement, &running)?;
+            let (next, other) = chain.move_many_between(other, &ids, placement, &running)?;
             save(tx, session, destination, &other)?;
             next
         }
@@ -67,6 +73,61 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
         chains.get(source).ok_or(Error::NotFound)?,
     )?;
     changed(tx, ctx, session)?;
-    engine::ready(tx, ctx, session)?;
     view(tx, session, &runtime::ProjectViews::new())
+}
+
+/// Validate the whole selection before changing any chain or persistent row.
+fn selection(input: &Value, items: &[Value]) -> Result<Vec<EpicId>> {
+    if input.get("epic_id").is_some() && input.get("epic_ids").is_some() {
+        return Err(Error::Invalid("provide exactly one of epic_id or epic_ids"));
+    }
+    let Some(list) = input.get("epic_ids") else {
+        return Ok(vec![EpicId(text(input, "epic_id")?.to_owned())]);
+    };
+    if !matches!(
+        input["op"].as_str(),
+        Some("move_to_new_step" | "join_stack" | "move_between")
+    ) {
+        return Err(Error::Invalid(
+            "epic_ids is supported only for move operations",
+        ));
+    }
+    let list = list
+        .as_array()
+        .filter(|ids| !ids.is_empty())
+        .ok_or(Error::Invalid("epic_ids must be a nonempty array"))?;
+    let mut seen = BTreeSet::new();
+    let mut source = None;
+    let mut result = Vec::with_capacity(list.len());
+    for value in list {
+        let id = value
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .ok_or(Error::Invalid("epic_ids must contain nonempty strings"))?;
+        if !seen.insert(id) {
+            return Err(Error::Invalid("epic_ids contains duplicate epics"));
+        }
+        let item = items
+            .iter()
+            .find(|i| i["epic_id"] == id)
+            .ok_or(Error::Invalid(
+                "every epic_ids member must be queued in this session",
+            ))?;
+        if item["state"] == "done"
+            || matches!(item["canon_status"].as_str(), Some("done" | "cancelled"))
+        {
+            return Err(Error::Invalid(
+                "epic_ids cannot move done or cancelled epics",
+            ));
+        }
+        let chain = text(item, "chain_id")?;
+        if source.is_some_and(|source| source != chain) {
+            return Err(Error::Invalid(
+                "epic_ids must belong to the same source chain",
+            ));
+        }
+        source = Some(chain);
+        result.push(EpicId(id.to_owned()));
+    }
+    Ok(result)
 }
