@@ -160,3 +160,71 @@ async fn project_reference_reaches_the_agent() -> Result<(), HarnessError> {
     assert_eq!(invalid.status, 400, "{}", invalid.text);
     s.finish().await
 }
+
+/// PROJECT-REF-02: a client cannot supply project fields the server resolves, and an
+/// archived project reads as unavailable, like a deleted one.
+#[tokio::test]
+async fn injected_fields_refused_and_archived_unavailable() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("PROJECT-REF-02")?.synthetic(Script {
+        rounds: 0,
+        path_for: Box::new(|_| String::new()),
+        final_text: "done".into(),
+    });
+    let root = setup.sandbox.workspace.clone();
+    let s = setup.start().await?;
+    let id = create_project(&s, &root, "Mention Atlas").await?;
+    const INJECTED: &str = "/injected/.ssh";
+    for extra in [
+        json!({"workspacePath":INJECTED}),
+        json!({"status":"available"}),
+        json!({"title":"Other"}),
+    ] {
+        let mut part = json!({"type":"project_ref","projectId":id,"titleSnapshot":"Mention Atlas"});
+        part.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        let refused =
+            s.gw.post(
+                "/messages",
+                json!({"chat_id":"general","client_message_id":uuid::Uuid::new_v4().to_string(),
+                    "content_parts":{"version":1,"parts":[part]}}),
+            )
+            .await?;
+        assert_eq!(refused.status, 400, "{extra}: {}", refused.text);
+    }
+
+    let first = send(
+        &s,
+        json!([{"type":"project_ref","projectId":id,"titleSnapshot":"Mention Atlas"}]),
+    )
+    .await?;
+    assert!(!first.contains(INJECTED), "{first}");
+    let archived =
+        s.gw.patch(&format!("/projects/{id}"), json!({"archived":true}))
+            .await?;
+    assert_eq!(archived.status, 200, "{}", archived.text);
+    let text = send(
+        &s,
+        json!([{"type":"project_ref","projectId":id,"titleSnapshot":"Mention Atlas"}]),
+    )
+    .await?;
+    let section = text
+        .split_once(HEADER)
+        .map(|(_, tail)| tail)
+        .expect("project references section");
+    let listed: Vec<Value> =
+        serde_json::from_str(section.split_once('\n').unwrap().1.lines().next().unwrap())?;
+    assert_eq!(
+        listed,
+        vec![json!({"projectId":id,"title":"Mention Atlas","status":"unavailable"})],
+        "an archived project gives no folder"
+    );
+    let history = text.split_once(HEADER).unwrap().0;
+    assert!(
+        history.contains("[user project references: ") && !history.contains("workspacePath"),
+        "history shows only the id and sent name: {history}"
+    );
+    assert!(!text.contains(INJECTED), "{text}");
+    s.finish().await
+}

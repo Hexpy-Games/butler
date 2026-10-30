@@ -85,7 +85,10 @@ export interface SuggestionItemRowProps extends DsPrivateStyleProps {
   title: string;
   /** Muted text after the title (where the item lives, or its type); truncates first. */
   meta?: string;
-  /** The typed text; its terms are bold in the title and meta. */
+  /** The meta is a field the query searches (a project name), so its matches are bold too. Leave it
+   * off for a type label ("Project"), which never matches. */
+  matchMeta?: boolean;
+  /** The typed text; its terms are bold in the title (and in the meta with `matchMeta`). */
   query?: string;
   /** Keyboard highlight (aria-selected). */
   active?: boolean;
@@ -96,14 +99,14 @@ export interface SuggestionItemRowProps extends DsPrivateStyleProps {
  * One app item on one line: a type glyph, the title and muted meta, with the typed terms in bold.
  * Same height, highlight and pointer behaviour as SuggestionRow, for app items instead of addresses.
  */
-export function SuggestionItemRow({ id, icon, title, meta, query, active = false, onSelect, className }: SuggestionItemRowProps) {
+export function SuggestionItemRow({ id, icon, title, meta, matchMeta = false, query, active = false, onSelect, className }: SuggestionItemRowProps) {
   return (
     <div id={id} role="option" aria-selected={active} data-active={active || undefined} data-kind="item"
       className={cn(styles.row, className)} onPointerDown={(event) => event.preventDefault()} onClick={onSelect}>
       <IconSlot size="md" tone="secondary" aria-hidden="true">{icon}</IconSlot>
       <span className={styles.text}>
         <span className={styles.title}><Matched text={title} query={query} /></span>
-        {meta ? <span className={styles.address}><Matched text={meta} query={query} /></span> : null}
+        {meta ? <span className={styles.address}><Matched text={meta} query={matchMeta ? query : undefined} /></span> : null}
       </span>
     </div>
   );

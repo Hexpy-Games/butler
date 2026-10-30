@@ -106,11 +106,15 @@ fn valid_content_part(value: &Value) -> bool {
     }
 }
 
-/// A whole project the user referenced (`@` mention): its id and the name shown when sent.
+/// A whole project the user referenced (`@` mention): its id and the name shown when sent,
+/// nothing else. Any other key (a folder, a status) is refused: the server resolves those.
 pub(super) fn valid_project_reference(part: &Map<String, Value>) -> bool {
-    part.get("projectId")
-        .and_then(Value::as_str)
-        .is_some_and(|id| !id.trim().is_empty() && utf16_len(id) <= 256)
+    part.keys()
+        .all(|key| matches!(key.as_str(), "type" | "projectId" | "titleSnapshot"))
+        && part
+            .get("projectId")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.trim().is_empty() && utf16_len(id) <= 256)
         && part
             .get("titleSnapshot")
             .and_then(Value::as_str)

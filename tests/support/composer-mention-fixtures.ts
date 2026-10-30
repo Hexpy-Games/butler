@@ -6,7 +6,9 @@ import type { NavigationView, ProjectSummary, SessionSummary } from "../../packa
 export type MentionLocale = "ko" | "en";
 
 type Titles = {
-  projects: { butler: string; research: string; site: string };
+  projects: { butler: string; research: string; site: string; prototype: string; archived: string };
+  /** The IME case: `@` + one composed syllable matches this conversation, then the prototype project. */
+  prompt: string; imeQuery: string;
   home: string; interview: string; landing: string; composer: string; preview: string; design: string; current: string;
   /** Matches: a title prefix (design, research), a word (composer), inside a word (landing), the project name only (interview). */
   query: string;
@@ -18,13 +20,15 @@ type Titles = {
 
 export const MENTION_TITLES: Record<MentionLocale, Titles> = {
   ko: {
-    projects: { butler: "butler", research: "디자인 리서치", site: "butler-site" },
+    projects: { butler: "butler", research: "디자인 리서치", site: "butler-site", prototype: "프로토타입", archived: "보관된 디자인" },
+    prompt: "프롬프트 실험", imeQuery: "프",
     home: "홈페이지 문구 다듬기", interview: "사용자 인터뷰 정리", landing: "랜딩 페이지 리디자인", composer: "컴포저 디자인 검토",
     preview: "첨부 미리보기 시안", design: "디자인 시스템 정리", current: "오늘 할 일",
     query: "디자인", projectQuery: "리서치", landingQuery: "랜딩", generalTitle: "대화",
   },
   en: {
-    projects: { butler: "butler", research: "Design research", site: "butler-site" },
+    projects: { butler: "butler", research: "Design research", site: "butler-site", prototype: "Prototype kit", archived: "Archived design" },
+    prompt: "Prompt lab", imeQuery: "p",
     home: "Homepage copy polish", interview: "Interview notes", landing: "Landing page redesign", composer: "Composer design review",
     preview: "Attachment preview draft", design: "Design system cleanup", current: "Today's tasks",
     query: "design", projectQuery: "research", landingQuery: "landing", generalTitle: "Chats",
@@ -33,8 +37,8 @@ export const MENTION_TITLES: Record<MentionLocale, Titles> = {
 
 export type MentionSeed = {
   titles: Titles;
-  projects: { butler: string; research: string; site: string };
-  sessions: Record<"home" | "interview" | "landing" | "general" | "composer" | "preview" | "design" | "current", string>;
+  projects: { butler: string; research: string; site: string; prototype: string };
+  sessions: Record<"prompt" | "home" | "interview" | "landing" | "general" | "composer" | "preview" | "design" | "current", string>;
 };
 
 // Distinct activity times even where the gateway stores whole seconds.
@@ -51,8 +55,14 @@ export async function seedMentions(server: NativeAppServerHandle, locale: Mentio
       method: "POST", body: JSON.stringify(projectId ? { kind: "project", project_id: projectId, title } : { kind: "chat", title }),
     })).session.id;
   };
-  const projects = { site: await project(titles.projects.site), research: await project(titles.projects.research), butler: await project(titles.projects.butler) };
+  // Oldest: an archived project that would otherwise match every design query, and the IME case's items.
+  const archived = await project(titles.projects.archived);
+  await server.api(`/projects/${archived}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
+  const prototype = await project(titles.projects.prototype);
+  const prompt = await session(titles.prompt);
+  const projects = { prototype, site: await project(titles.projects.site), research: await project(titles.projects.research), butler: await project(titles.projects.butler) };
   const sessions = {
+    prompt,
     current: await session(titles.current),
     home: await session(titles.home, projects.site),
     interview: await session(titles.interview, projects.research),
@@ -73,7 +83,7 @@ export async function mentionRecency(server: NativeAppServerHandle, generalTitle
   const recency = new Map<string, { title: string; recent: string }>();
   const add = (session: SessionSummary) =>
     recency.set(`s:${session.id}`, { title: session.id === "general" ? generalTitle : session.title, recent: session.last_activity_at || session.updated_at || "" });
-  for (const project of navigation.projects) {
+  for (const project of navigation.projects.filter((item) => !item.archived)) {
     recency.set(`p:${project.id}`, { title: project.display_name, recent: project.last_activity_at });
     for (const session of project.sessions ?? []) add(session);
   }

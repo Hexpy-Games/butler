@@ -98,14 +98,14 @@ pub enum MessageContentPart {
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
+    /// Only the id and the sent name: everything else about the project (its
+    /// folder, its current name) comes from the server record when the turn runs.
     #[serde(rename = "project_ref")]
     ProjectRef {
         #[serde(rename = "projectId")]
         project_id: String,
         #[serde(rename = "titleSnapshot")]
         title_snapshot: String,
-        #[serde(flatten)]
-        extra: Map<String, Value>,
     },
     #[serde(rename = "project_source_ref")]
     ProjectSourceRef {

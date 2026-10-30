@@ -67,7 +67,7 @@ export type MessageContentPart =
   | ProjectReferenceContentPart
   | ProjectSourceContentPart;
 
-/** A whole project the user referenced; the agent gets its current name and folder. */
+/** A whole project the user referenced, only its id and sent name; the gateway resolves the rest. */
 export interface ProjectReferenceContentPart {
   type: "project_ref";
   projectId: string;
@@ -94,7 +94,8 @@ export function isMessageContent(value: unknown): value is MessageContent {
             part.sessionId.trim().length > 0 &&
             typeof part.titleSnapshot === "string"
           : part && typeof part === "object" && part.type === "project_ref"
-            ? typeof part.projectId === "string" &&
+            ? Object.keys(part).every((key) => ["type", "projectId", "titleSnapshot"].includes(key)) &&
+              typeof part.projectId === "string" &&
               part.projectId.trim().length > 0 &&
               part.projectId.length <= 256 &&
               typeof part.titleSnapshot === "string" &&

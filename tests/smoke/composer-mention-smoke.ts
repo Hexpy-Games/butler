@@ -1,13 +1,14 @@
 // The composer `@` mention menu against an isolated native gateway (temp BUTLER_DATA, free
 // port, stub model): bare `@` order, typed ranking with bold matches, no match closes and
-// Backspace reopens, ↑/↓ Enter Tab Esc and click, session and project chips, and the
-// references reaching the sent request and the model prompt.
+// Backspace reopens, ↑/↓ Enter Tab Esc and click, session and project chips, Korean IME
+// (Enter right after a commit, a click mid-composition), and the references reaching the
+// sent request and the model prompt.
 // BUTLER_MENTION_SHOTS=<dir> also captures light/dark, ko/en, 1440/390 crops at 2x.
 import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Browser, Locator, Page, Request } from "playwright";
+import type { Browser, CDPSession, Locator, Page, Request } from "playwright";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { MENTION_TITLES, mentionRecency, seedMentions, type MentionLocale, type MentionSeed } from "../support/composer-mention-fixtures.ts";
@@ -158,6 +159,61 @@ async function insertChips(page: Page, server: NativeAppServerHandle, seed: Ment
   return first;
 }
 
+/** Composes Hangul syllables through Chromium's IME path (as app-composer-ime-smoke does), uncommitted. */
+async function compose(cdp: CDPSession, steps: string[]) {
+  for (const step of steps) {
+    await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Process", code: "KeyA", windowsVirtualKeyCode: 229, nativeVirtualKeyCode: 229 });
+    await cdp.send("Input.imeSetComposition", { text: step, selectionStart: step.length, selectionEnd: step.length });
+  }
+}
+
+const JAMO = /[\u3131-\u318e]/u;
+
+/** `@프`: Enter right after the IME commits, and a click on a row while it still composes. */
+async function ime(page: Page, server: NativeAppServerHandle, seed: MentionSeed) {
+  const { titles } = seed;
+  const editor = editorOf(page);
+  const cdp = await page.context().newCDPSession(page);
+  const calls = server.stubModelCalls.length;
+  const recency = await mentionRecency(server, titles.generalTitle);
+  const recent = (title: string) => [...recency.values()].find((item) => item.title === title)!.recent;
+  const expected = [titles.prompt, titles.projects.prototype].sort((a, b) => (recent(a) < recent(b) ? 1 : -1));
+
+  await clear(page);
+  await page.keyboard.type("@");
+  await compose(cdp, ["ㅍ", titles.imeQuery]);
+  // The commit and Enter go out back to back: Enter lands before the menu can re-render the committed syllable.
+  const enter = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
+  await Promise.all([
+    cdp.send("Input.insertText", { text: titles.imeQuery }),
+    cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...enter, text: "\r" }),
+    cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...enter }),
+  ]);
+  await menuClosed(page);
+  assert.deepEqual(await chips(editor).allTextContents(), [expected[0]], "Enter right after the commit inserts the match for the committed syllable");
+  const afterEnter = (await editor.textContent()) ?? "";
+  assert.equal(afterEnter.trim(), expected[0], `the @word is replaced whole: ${JSON.stringify(afterEnter)}`);
+  assert(!JAMO.test(afterEnter), "no split Hangul");
+  assert.equal(server.stubModelCalls.length, calls, "Enter in the menu does not send");
+
+  await clear(page);
+  await page.keyboard.type("@");
+  await compose(cdp, ["ㅍ", titles.imeQuery]);
+  const shown = await rows(page);
+  assert.deepEqual(shown.map((row) => row.title), expected, "a composing syllable is already the query");
+  const project = shown.find((row) => row.title === titles.projects.prototype)!;
+  assert.deepEqual(project.marks, [titles.imeQuery], "the matched title is bold");
+  assert.deepEqual(project.metaMarks, [], "the Project label is never bold");
+  await page.locator(`${MENU} [role="option"]`).filter({ hasText: titles.projects.prototype }).click();
+  await page.waitForFunction((title) => [...document.querySelectorAll('[data-test-class~="composer-card"] [data-lexical-decorator="true"]')]
+    .some((chip) => chip.textContent === title), titles.projects.prototype, { timeout: 5_000 });
+  const afterClick = (await editor.textContent()) ?? "";
+  assert.deepEqual(await chips(editor).allTextContents(), [titles.projects.prototype], "a click mid-composition inserts the clicked row");
+  assert.equal(afterClick.trim(), titles.projects.prototype, `the @word is replaced whole: ${JSON.stringify(afterClick)}`);
+  assert(!JAMO.test(afterClick), "no split Hangul");
+  await cdp.detach();
+}
+
 async function send(page: Page, server: NativeAppServerHandle, seed: MentionSeed, first: string) {
   const sent = page.waitForRequest((request: Request) => request.method() === "POST" && new URL(request.url()).pathname === "/messages");
   await page.locator('[data-test-class~="composer-send-button"]').click();
@@ -232,6 +288,7 @@ try {
   await typed(page, ko.seed);
   await noMatchThenBackspace(page, ko.seed);
   await keys(page, ko.seed);
+  await ime(page, ko.server, ko.seed);
   const first = await insertChips(page, ko.server, ko.seed);
   await send(page, ko.server, ko.seed, first);
   await page.close();
@@ -243,7 +300,8 @@ try {
   }
   console.log(JSON.stringify({ ok: true, service: "composer-mention-smoke", checks: [
     "bare-at-recent-order", "typed-ranking-bold", "no-match-closes-backspace-reopens", "arrows-escape",
-    "enter-session-chip", "tab-project-chip", "click-inserts", "references-reach-request-and-prompt",
+    "enter-session-chip", "tab-project-chip", "click-inserts", "ime-enter-after-commit", "ime-click-mid-composition",
+    "project-label-not-bold", "archived-project-excluded", "references-reach-request-and-prompt",
   ] }));
 } finally {
   await browser.close();

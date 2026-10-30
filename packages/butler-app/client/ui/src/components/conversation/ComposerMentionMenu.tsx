@@ -10,6 +10,7 @@ import { mentionCandidates, rankMentions, type MentionCandidate } from "./mentio
 import { $createSessionReferenceNode } from "./editor/SessionReferenceNode";
 import { $createProjectReferenceNode } from "./editor/ProjectReferenceNode";
 import { $mentionToken, mentionAnchorRect, replaceMentionToken, sameToken, type MentionToken } from "./editor/mentionToken";
+import { isComposerComposing } from "./editor/composition";
 
 const LIST_ID = "composer-mention-list";
 
@@ -43,14 +44,18 @@ export function ComposerMentionMenu() {
   useEffect(() => { if (!token) setDismissed(false); }, [token]);
   useEffect(() => setActive(0), [token?.query, token?.key, token?.start]);
 
-  const choose = (item: MentionCandidate | undefined) => {
-    if (!token || !item) return;
-    replaceMentionToken(editor, token, () => (item.kind === "project"
-      ? $createProjectReferenceNode(item.id, item.title)
-      : $createSessionReferenceNode(item.id, item.title)));
+  // The chip replaces whatever @word is under the caret once the IME is idle (see replaceMentionToken).
+  const choose = (item: MentionCandidate) => replaceMentionToken(editor, () => (item.kind === "project"
+    ? $createProjectReferenceNode(item.id, item.title)
+    : $createSessionReferenceNode(item.id, item.title)));
+  // A key can arrive before the menu re-renders a just-committed syllable: rank the word the editor holds now.
+  const pick = () => {
+    const now = editor.getEditorState().read(() => $mentionToken());
+    if (!now) return undefined;
+    return now.query === token?.query ? items[active] : rankMentions(candidates, now.query)[0];
   };
-  const latest = useRef({ open, items, active, choose });
-  latest.current = { open, items, active, choose };
+  const latest = useRef({ open, items, pick, choose });
+  latest.current = { open, items, pick, choose };
   const dismiss = useCallback(() => setDismissed(true), []);
   useMentionKeys(latest, setActive, dismiss);
   useComboboxAttributes(open ? `${LIST_ID}-${active}` : null);
@@ -67,7 +72,7 @@ export function ComposerMentionMenu() {
         <SuggestionList id={LIST_ID} label={appCopy.composer.mentionList}>
           {items.map((item, index) => (
             <SuggestionItemRow key={`${item.kind}:${item.id}`} id={`${LIST_ID}-${index}`} icon={mentionIcon(item)} title={item.title}
-              meta={item.kind === "project" ? appCopy.composer.mentionProject : item.projectName} query={token?.query}
+              meta={item.kind === "project" ? appCopy.composer.mentionProject : item.projectName} matchMeta={item.inProject} query={token?.query}
               active={index === active} onSelect={() => choose(item)} />
           ))}
         </SuggestionList>
@@ -93,30 +98,38 @@ function mentionIcon(item: MentionCandidate) {
   return item.inProject ? <Notebook size="md" /> : <MessageSquare size="md" />;
 }
 
-type MentionState = { open: boolean; items: MentionCandidate[]; active: number; choose: (item: MentionCandidate | undefined) => void };
+type MentionState = { open: boolean; items: MentionCandidate[]; pick: () => MentionCandidate | undefined; choose: (item: MentionCandidate) => void };
 
-/** Keys go to the open menu before the composer's own Enter (send) and arrow handling; IME keys never do. */
+/** Keys go to the open menu before the composer's own Enter (send) and arrow handling; keys while the IME composes never do. */
 function useMentionKeys(state: { current: MentionState }, setActive: (update: (index: number) => number) => void, dismiss: () => void) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
-    const handle = <T extends KeyboardEvent | null>(command: LexicalCommand<T>, act: (menu: MentionState) => void) =>
+    /** `act` returns false when the key is not the menu's after all. */
+    const handle = <T extends KeyboardEvent | null>(command: LexicalCommand<T>, act: (menu: MentionState) => boolean) =>
       editor.registerCommand(command, (event: T) => {
         const menu = state.current;
-        if (!menu.open || !event || event.isComposing || event.keyCode === 229) return false;
+        if (!menu.open || !event || event.isComposing || event.keyCode === 229 || isComposerComposing(editor)) return false;
         if (event.key === "Enter" && (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey)) return false;
+        if (!act(menu)) return false;
         event.preventDefault();
         event.stopPropagation();
-        act(menu);
         return true;
       }, COMMAND_PRIORITY_CRITICAL);
-    const move = (step: number) => (menu: MentionState) => setActive(index => (index + step + menu.items.length) % menu.items.length);
-    const choose = (menu: MentionState) => menu.choose(menu.items[menu.active]);
+    const move = (step: number) => (menu: MentionState) => {
+      setActive(index => (index + step + menu.items.length) % menu.items.length);
+      return true;
+    };
+    const choose = (menu: MentionState) => {
+      const item = menu.pick();
+      if (item) menu.choose(item);
+      return Boolean(item);
+    };
     return mergeRegister(
       handle(KEY_ARROW_DOWN_COMMAND, move(1)),
       handle(KEY_ARROW_UP_COMMAND, move(-1)),
       handle(KEY_ENTER_COMMAND, choose),
       handle(KEY_TAB_COMMAND, choose),
-      handle(KEY_ESCAPE_COMMAND, dismiss),
+      handle(KEY_ESCAPE_COMMAND, () => { dismiss(); return true; }),
     );
   }, [dismiss, editor, setActive, state]);
 }

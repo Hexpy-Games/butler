@@ -404,7 +404,7 @@ fn populate_snapshot_assets(
 }
 
 /// Each referenced project once, in first-mention order: its current name and folder, or
-/// `unavailable` with the sent name when it no longer exists. One primary-key read per project.
+/// `unavailable` with the sent name when it was deleted or archived. One primary-key read per project.
 fn project_references(
     db: &Connection,
     content: Option<&crate::gateway::MessageContent>,
@@ -425,7 +425,7 @@ fn project_references(
         }
         let project = db
             .query_row(
-                "SELECT display_name,workspace_path,ledger_project_id FROM projects WHERE id=?1",
+                "SELECT display_name,workspace_path,ledger_project_id FROM projects WHERE id=?1 AND archived=0",
                 [project_id],
                 |row| {
                     Ok(

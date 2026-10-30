@@ -1,3 +1,4 @@
+import { afterComposition } from "./composition";
 import { $addUpdateTag, $getNodeByKey, $getSelection, $insertNodes, $isRangeSelection, $isTextNode, HISTORY_PUSH_TAG, type LexicalEditor, type LexicalNode } from "lexical";
 
 /** The `@` word the caret is in: `@` at the start of a text run or after whitespace, then non-space text. */
@@ -39,17 +40,24 @@ export function mentionAnchorRect(editor: LexicalEditor, token: MentionToken): D
   return range.getBoundingClientRect();
 }
 
-/** Replaces the `@query` text with the reference node and a following space, as one undo step. */
-export function replaceMentionToken(editor: LexicalEditor, token: MentionToken, create: () => LexicalNode): void {
-  editor.update(() => {
-    const node = $getNodeByKey(token.key);
-    if (!$isTextNode(node) || node.getTextContent().slice(token.start, token.end) !== `@${token.query}`) return;
-    const spaced = /^\s/u.test(node.getTextContent().slice(token.end));
-    node.select(token.start, token.end);
-    $insertNodes([create()]);
-    const selection = $getSelection();
-    if (!spaced && $isRangeSelection(selection)) selection.insertText(" ");
-    $addUpdateTag(HISTORY_PUSH_TAG);
+/**
+ * Replaces the `@word` under the caret with the reference node and a following space, as one undo
+ * step. The word is read when the write runs, after any IME composition settles, so a syllable
+ * committed after the menu last rendered is replaced too instead of left behind.
+ */
+export function replaceMentionToken(editor: LexicalEditor, create: () => LexicalNode): void {
+  afterComposition(editor, () => {
+    editor.update(() => {
+      const token = $mentionToken();
+      const node = token && $getNodeByKey(token.key);
+      if (!token || !$isTextNode(node)) return;
+      const spaced = /^\s/u.test(node.getTextContent().slice(token.end));
+      node.select(token.start, token.end);
+      $insertNodes([create()]);
+      const selection = $getSelection();
+      if (!spaced && $isRangeSelection(selection)) selection.insertText(" ");
+      $addUpdateTag(HISTORY_PUSH_TAG);
+    });
+    editor.focus();
   });
-  editor.focus();
 }

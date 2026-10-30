@@ -119,7 +119,7 @@ export const stateMatrix: ShowcaseStateMatrix = {
       const item = copy.items[0]!;
       return (
         <SuggestionList id={`matrix-${locale}-item-${state}`} label={copy.list}>
-          <SuggestionItemRow id={`matrix-${locale}-item-${state}-row`} icon={itemIcon(item.kind)} title={item.title} meta={item.meta}
+          <SuggestionItemRow id={`matrix-${locale}-item-${state}-row`} icon={itemIcon(item.kind)} title={item.title} meta={item.meta} matchMeta
             query={copy.query} active={state === "selected"} onSelect={() => undefined} />
         </SuggestionList>
       );

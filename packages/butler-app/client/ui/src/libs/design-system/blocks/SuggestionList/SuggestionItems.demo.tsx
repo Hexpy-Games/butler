@@ -36,6 +36,7 @@ export function ItemRows({ locale, active, query }: ShowcaseRenderContext & { ac
     <SuggestionList id={`items-${locale}`} label={copy.list}>
       {copy.items.map((item, index) => (
         <SuggestionItemRow key={item.title} id={`item-${locale}-${index}`} icon={itemIcon(item.kind)} title={item.title} meta={item.meta}
+          matchMeta={item.kind === "project-chat"}
           query={query} active={index === active} onSelect={() => undefined} />
       ))}
     </SuggestionList>

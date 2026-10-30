@@ -25,7 +25,7 @@ function MentionSuggestions() {
   // PopoverContent side="top" align="start" density="list" presentation="popover" holding this list.
   return (
     <SuggestionList id="mention-suggestions" label="Reference a chat or project">
-      <SuggestionItemRow id="mention-suggestion-0" icon={<Notebook size="md" />} title="Design system cleanup" meta="butler"
+      <SuggestionItemRow id="mention-suggestion-0" icon={<Notebook size="md" />} title="Design system cleanup" meta="butler" matchMeta
         query="design" active onSelect={() => undefined} />
       <SuggestionItemRow id="mention-suggestion-1" icon={<Briefcase size="md" />} title="Design research" meta="Project"
         query="design" onSelect={() => undefined} />
@@ -61,6 +61,7 @@ export const guidance: ShowcaseGuidance = {
     "The address drops the scheme and trailing slash (docs.example.com/changelog), like AddressField.",
     "bookmarkLabel names the star: Bookmarked / 북마크됨.",
     "SuggestionItemRow meta is where the item lives (its project) or its type (Project / 프로젝트); omit it when there is nothing to add.",
+    "Set matchMeta only when the meta is a field the query searches (a project name); a type label is never bold.",
     "With no matching item, close the list instead of showing an empty row.",
   ],
   accessibility: [

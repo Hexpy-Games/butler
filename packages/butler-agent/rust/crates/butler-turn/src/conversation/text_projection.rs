@@ -111,7 +111,7 @@ fn message_content_references(value: &Value) -> Option<String> {
         let refs = parts
             .iter()
             .filter(|part| part.get("type").and_then(Value::as_str) == Some(kind))
-            .cloned()
+            .map(|part| projected_reference(kind, part))
             .collect::<Vec<_>>();
         if !refs.is_empty() {
             projected.push(format!(
@@ -121,6 +121,15 @@ fn message_content_references(value: &Value) -> Option<String> {
         }
     }
     (!projected.is_empty()).then(|| projected.join(" "))
+}
+
+/// A project reference is only its id and sent name; anything else it carries is not
+/// shown, so history never presents client text as a server-resolved project field.
+fn projected_reference(kind: &str, part: &Value) -> Value {
+    if kind != "project_ref" {
+        return part.clone();
+    }
+    serde_json::json!({"type": kind, "projectId": part["projectId"], "titleSnapshot": part["titleSnapshot"]})
 }
 
 // Passthrough: conversation part content keyed by part kind; tool/provider payloads.

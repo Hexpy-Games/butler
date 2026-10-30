@@ -38,7 +38,7 @@ export function ComposerEditorPlugin() {
     const sessionId = useComposerStore.getState().draftSessionId;
     const knownSession = (id: string) => id === "general" || useButlerStore.getState().navigation.space.nodes.some(node => node.kind === "session" && node.entityId === id);
     const knownReference = (part: MessageContentPart) => part.type === "session_ref" ? knownSession(part.sessionId)
-      : part.type !== "project_ref" || useButlerStore.getState().navigation.projects.some(project => project.id === part.projectId);
+      : part.type !== "project_ref" || useButlerStore.getState().navigation.projects.some(project => project.id === part.projectId && !project.archived);
     function insert(reference: { sessionId: string; titleSnapshot: string }, drop?: DragEvent) {
       if (!knownSession(reference.sessionId)) return;
       editor.update(() => {

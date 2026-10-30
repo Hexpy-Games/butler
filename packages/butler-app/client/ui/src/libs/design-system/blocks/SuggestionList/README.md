@@ -13,7 +13,7 @@ Inside `PopoverContent width="anchor" density="list"`, anchored to the field wit
 Mainstream browsers show suggestions as dense single-line rows with the site icon and the match emphasized; this keeps that clarity and the combobox semantics in one place.
 
 ## How to use this component
-Give the field `listbox={{ id, expanded, activeOptionId }}`, `onInputChange` and `onInputKeyDown`. Render one `SuggestionRow` per result with a stable `id`, `active` for the keyboard highlight, `query` for bold matches and `onSelect`. `SuggestionItemRow` takes `icon` (a DS icon at size md), `title`, optional `meta`, and the same `id`, `active`, `query` and `onSelect`.
+Give the field `listbox={{ id, expanded, activeOptionId }}`, `onInputChange` and `onInputKeyDown`. Render one `SuggestionRow` per result with a stable `id`, `active` for the keyboard highlight, `query` for bold matches and `onSelect`. `SuggestionItemRow` takes `icon` (a DS icon at size md), `title`, optional `meta`, and the same `id`, `active`, `query` and `onSelect`. Matches are bold in the title; pass `matchMeta` only when the meta is itself a searched field (a project name), never for a type label.
 
 ## Who can use this component
 Product containers that own the suggestion data and navigation (AddressSuggestions, ComposerMentionMenu).

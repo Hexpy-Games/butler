@@ -29,10 +29,10 @@ export function $createProjectReferenceNode(projectId: string, titleSnapshot: st
   return $applyNodeReplacement(new ProjectReferenceNode(projectId, titleSnapshot));
 }
 
-/** The project chip; a removed project reads as unavailable. In a sent message it opens the project. */
+/** The project chip; a deleted or archived project reads as unavailable. In a sent message it opens the project. */
 export function ProjectReferenceText({ projectId, titleSnapshot, interactive = false }: { projectId: string; titleSnapshot: string; interactive?: boolean }) {
   useAppLocale();
-  const known = useButlerStore(state => state.navigation.projects.some(project => project.id === projectId));
+  const known = useButlerStore(state => state.navigation.projects.some(project => project.id === projectId && !project.archived));
   const open = useButlerStore(state => state.openProjectDashboard);
   return <InlineReference icon={<Briefcase />} unavailable={!known}
     onClick={interactive && known ? () => open(projectId) : undefined}>{titleSnapshot}</InlineReference>;
