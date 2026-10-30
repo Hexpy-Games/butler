@@ -4,7 +4,9 @@
 // sent messages. A long file name keeps one line with an ellipsis and its whole name in the tooltip. A credential-named
 // file the policy withholds (`.env`, reported to the model in `skipped_files`) shows no "attachment unavailable" tag; a
 // delivered file that is gone keeps it (needs an agent built with `butler-agent/e2e-fixtures`, as the CI smoke binary is,
-// for the `message_attachment` hold point). KO/EN × light/dark × 1440/390 crops at 2× go to BUTLER_SMOKE_SCREENSHOTS.
+// for the `message_attachment` hold point). A tile whose link was revoked before expiry (connection code rotated)
+// re-signs and loads.
+// KO/EN × light/dark × 1440/390 crops at 2× go to BUTLER_SMOKE_SCREENSHOTS.
 // Every check is reported; the run fails at the end on any failed check. BUTLER_SMOKE_BASELINE=1 captures the old
 // build (BUTLER_SMOKE_UI_ROOT, BUTLER_NATIVE_AGENT_EXECUTABLE) and reports its checks without failing.
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -25,7 +27,8 @@ process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE ??= createRequire(resolve("packages
 if (shots) mkdirSync(shots, { recursive: true });
 const failures: string[] = [];
 const TILE = '[data-slot="attachment-tile"]';
-const SENT = '[data-test-class="message-attachment-list"]';
+/** A message's own tiles (the session-info panel lists the same files outside the messages). */
+const SENT = 'article [data-test-class="message-attachment-list"]';
 const COMPOSER = '[data-test-class~="composer-card"]';
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
@@ -155,6 +158,9 @@ async function assertLoaded(app: App, scope: string, count: number) {
 /** Puts files into the composer's file input, as the picker does. */
 async function attach(app: App, files: FixtureFile[]) {
   const payload = files.map((file) => ({ name: file.name, type: file.mimeType, data: file.buffer.toString("base64") }));
+  // Pictures are admitted once the composer knows its model takes images (the stub's catalog entry has loaded).
+  await openComposer(app);
+  await waitBrowser(() => app.page.expression(`document.querySelector('${COMPOSER}')?.textContent.includes("Stub") ?? false`), "composer model loaded");
   const before = await app.page.expression<number>(`document.querySelectorAll('${COMPOSER} ${TILE}').length`);
   await app.page.expression(`(() => { const input = document.querySelector("input[type='file']"); const transfer = new DataTransfer();
     for (const file of ${JSON.stringify(payload)}) transfer.items.add(new File([Uint8Array.from(atob(file.data), (c) => c.charCodeAt(0))], file.name, { type: file.type }));
@@ -175,7 +181,15 @@ async function openSession(app: App, title: string) {
   await app.page.expression(`${row}.focus()`);
   await app.page.press("Enter");
   await waitBrowser(() => app.page.expression(`document.querySelector('[data-test-class="conversation"]')?.textContent.length > 0`), `${title} open`);
-  await sleep(800);
+  // Settled: the message list stops changing (a draft started while the session still loads is reset with it).
+  let last = "";
+  await waitBrowser(async () => {
+    const now = await app.page.expression<string>(`[...document.querySelectorAll('[data-test-class="conversation"] article')].map((row) => row.textContent?.length).join()`);
+    const same = now === last && now !== "";
+    last = now;
+    await sleep(700);
+    return same;
+  }, `${title} settled`);
 }
 
 /** The tile button named `name` (stored names may come back in another Unicode normal form). */
@@ -191,18 +205,25 @@ async function assertLongName(app: App, scope: string, name: string) {
     const r = button.getBoundingClientRect();
     return { wrap: style.whiteSpace, overflow: style.textOverflow, clipped: text.scrollWidth > text.clientWidth, box: [r.x + r.width / 2, r.y + r.height / 2] }; })()`);
   if (!facts || facts.wrap !== "nowrap" || facts.overflow !== "ellipsis" || !facts.clipped) throw new Error(`name layout ${JSON.stringify(facts)} in ${JSON.stringify(await app.page.expression(`[...document.querySelectorAll('${scope} ${TILE} button')].map((button) => [button.getAttribute("aria-label"), button.textContent])`))}`);
+  // Off the tile first, then onto it with two moves, so the tooltip sees a fresh hover.
+  await app.page.movePointer(2, 2);
+  await sleep(300);
+  await app.page.movePointer(facts.box[0]! - 4, facts.box[1]! - 4);
   await app.page.movePointer(facts.box[0]!, facts.box[1]!);
   await waitBrowser(() => app.page.expression(same(`document.querySelector('[data-slot="tooltip-content"]')?.textContent`, name)), "full name tooltip");
   await app.page.movePointer(2, 2);
 }
 
-/** Scrolls the conversation to its first message, whose row mounts then. */
-async function scrollToTop(app: App) {
-  await app.page.expression(`(() => { let node = document.querySelector('[data-test-class="conversation"] article');
-    for (; node; node = node.parentElement) if (node.scrollHeight > node.clientHeight + 100 && /auto|scroll/u.test(getComputedStyle(node).overflowY)) { node.scrollTop = 0; break; } return true; })()`);
-  await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${SENT}'))`), "sent attachments in view");
+/** Scrolls the conversation to an end: the top, until a message's tiles show, or the bottom. */
+async function scroll(app: App, to: "top" | "bottom") {
+  const move = `(() => { let node = document.querySelector('[data-test-class="conversation"] article');
+    for (; node; node = node.parentElement) if (node.scrollHeight > node.clientHeight + 100 && /auto|scroll/u.test(getComputedStyle(node).overflowY)) {
+      node.scrollTop = ${to === "top" ? "0" : "node.scrollHeight"}; break; } return true; })()`;
+  if (to === "bottom") { await app.page.expression(move); await sleep(500); return; }
+  await waitBrowser(async () => { await app.page.expression(move); return app.page.expression(`Boolean(document.querySelector('${SENT}'))`); }, "message attachments in view");
   await sleep(300);
 }
+const scrollToTop = (app: App) => scroll(app, "top");
 
 const lastAnswer = `[...document.querySelectorAll('[data-test-class="conversation"] article')].at(-1)`;
 
@@ -221,6 +242,20 @@ async function seed(app: App, language: Language, fixtures: FixtureFile[], relea
   // Later messages push the attachments above the fold, so their row mounts only when scrolled to.
   for (let index = 0; index < 6; index += 1) await sendWithFiles(server, sessionId, `${index + 1}. ${"본문 줄입니다. Body line. ".repeat(60)}`, []);
   await missDelivered();
+}
+
+/**
+ * A signature revoked before it expires (the connection code rotated): the tile's refused load re-signs the file once
+ * and the new URL loads. Rotation ends the harness's own token, so this runs last.
+ */
+async function revokedLinks(app: App, language: Language) {
+  // Opened at the bottom: the list carries fresh links, and the attachments' row is not mounted yet.
+  await openSession(app, words[language].title);
+  const fetched = Date.now();
+  await app.page.expression("window.butlerApp.rotateConnectionCode().then(() => true)");
+  await scrollToTop(app);
+  if (Date.now() - fetched >= (TTL_SECONDS - 2) * 1000) throw new Error("setup too slow: the links expired before the row mounted");
+  await check(`${language} revoked links: the refused tiles re-sign and load`, () => assertLoaded(app, SENT, 3));
 }
 
 async function language(language: Language, fixtures: FixtureFile[]) {
@@ -275,6 +310,7 @@ async function language(language: Language, fixtures: FixtureFile[]) {
     await check(`${language} sent message: long name truncates with the full name in the tooltip`, () => assertLongName(app, SENT, long.name));
     await capture(longTile(SENT), "long-name-sent", toTop);
     await skippedAndMissing(app, language, copy.conversation.attachmentUnavailable, modelSawSkip, capture);
+    await revokedLinks(app, language);
   } catch (error) {
     writeFileSync(join(evidence, `${language}-failure.png`), await app.page.screenshot());
     throw error;

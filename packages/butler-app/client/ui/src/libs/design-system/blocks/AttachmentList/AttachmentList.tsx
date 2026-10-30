@@ -55,6 +55,11 @@ export interface AttachmentListProps extends DsPrivateStyleProps, WindowDragProp
    * button, and `href` is not used; without it a `href` stays a link.
    */
   onOpen?: (item: AttachmentListItem) => void;
+  /**
+   * Tiles: an item's picture or video failed to load and its tile shows the file face. The container may answer
+   * with a new `thumbnail.src` or `video.src` (a re-signed URL), which the tile loads again.
+   */
+  onMediaError?: (item: AttachmentListItem) => void;
   /** The remove button label: a word ("Remove"; the name is appended) or the whole label for a name. */
   removeLabel?: string | ((name: string) => string);
 }
@@ -70,6 +75,7 @@ export function AttachmentList({
   tileLayout = "wrap",
   tileAlign = "end",
   onOpen,
+  onMediaError,
 }: AttachmentListProps) {
   const removeText = typeof removeLabel === "function" ? removeLabel : (name: string) => `${removeLabel} ${name}`;
   if (items.length === 0) {
@@ -81,7 +87,7 @@ export function AttachmentList({
   }
 
   if (variant === "tiles") {
-    return <AttachmentTiles items={items} layout={tileLayout} align={tileAlign} onOpen={onOpen} onRemove={onRemove} removeLabel={removeText}
+    return <AttachmentTiles items={items} layout={tileLayout} align={tileAlign} onOpen={onOpen} onMediaError={onMediaError} onRemove={onRemove} removeLabel={removeText}
       windowDrag={windowDrag} className={className} />;
   }
 

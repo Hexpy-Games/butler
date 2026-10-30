@@ -4,6 +4,7 @@ import {
   claimMessageFileRetry,
   messageFilePath,
   messageFileSource,
+  rememberedExpiry,
   settleMessageFileLoad,
   signedFileUrlsVersion,
   signedUrlExpiry,
@@ -62,10 +63,14 @@ export function retryMessageFileOnce(
   if (!path || !refreshFileUrls || !claimMessageFileRetry(path)) {
     return Promise.resolve(false);
   }
-  return refreshFileUrls().then(
-    () => true,
-    () => true,
-  );
+  const before = rememberedExpiry(path);
+  const settle = () => {
+    // A refresh that did not re-sign this file (its message is past the pages it read) leaves
+    // the file's one retry to a later refresh that reaches it.
+    if (rememberedExpiry(path) === before) settleMessageFileLoad(path);
+    return true;
+  };
+  return refreshFileUrls().then(settle, settle);
 }
 
 /**

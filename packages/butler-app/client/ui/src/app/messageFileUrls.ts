@@ -103,6 +103,11 @@ export function claimMessageFileRetry(path: string): boolean {
   return true;
 }
 
+/** Unix seconds the freshest remembered refresh of the file expires; undefined when none was seen. */
+export function rememberedExpiry(path: string): number | undefined {
+  return remembered.get(path)?.expires;
+}
+
 /** A successful load re-arms the file's retry for a later expiry. */
 export function settleMessageFileLoad(path: string): void {
   retriedPaths.delete(path);
