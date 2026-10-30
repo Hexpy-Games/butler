@@ -8,6 +8,8 @@
 #[path = "hooks/cancellation.rs"]
 mod cancellation;
 use super::delegate_followup::stub as child_stub;
+#[path = "hooks/http.rs"]
+mod http;
 mod idle;
 #[path = "hooks/limits.rs"]
 mod limits;

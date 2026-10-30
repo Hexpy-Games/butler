@@ -1,4 +1,4 @@
-//! Phase-one configuration; unsupported transports/scopes are rejected.
+//! User configuration for command and HTTP hooks; unsupported scopes are rejected.
 use super::HookEvent;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
@@ -18,7 +18,7 @@ pub struct HookMatcher {
     /// Tool matchers; empty matches every tool.
     pub tools: Vec<String>,
 }
-/// User-authored command, never an approval grant.
+/// User-authored command or HTTP endpoint, never an approval grant.
 #[derive(Clone, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HookDefinition {
@@ -31,13 +31,16 @@ pub struct HookDefinition {
     /// Tool filter, only for tool events.
     #[serde(default, rename = "match")]
     pub matcher: HookMatcher,
-    /// Only command is supported in phase one.
+    /// command or http.
     #[serde(rename = "type")]
     pub kind: String,
     /// Shell command; mutually exclusive with args.
     pub command: Option<String>,
     /// Executable and literal argv; no shell.
     pub args: Option<Vec<String>>,
+    /// http(s) endpoint receiving the envelope as a JSON POST; http hooks only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     /// Literal environment additions.
     #[serde(default)]
     pub env: BTreeMap<String, String>,
@@ -69,13 +72,15 @@ struct HookDefinitionInput {
     /// Tool filter, only for tool events.
     #[serde(default, rename = "match")]
     matcher: HookMatcher,
-    /// Only command is supported in phase one.
+    /// command or http.
     #[serde(rename = "type")]
     kind: String,
     /// Shell command; mutually exclusive with args.
     command: Option<String>,
     /// Executable and literal argv; no shell.
     args: Option<Vec<String>>,
+    /// http(s) endpoint; http hooks only.
+    url: Option<String>,
     /// Literal environment additions.
     #[serde(default)]
     env: BTreeMap<String, String>,
@@ -114,6 +119,45 @@ impl HookDefinition {
                     })
                 }))
     }
+    /// A command needs exactly one of command/args; an http hook only its URL.
+    fn validate_transport(&self) -> Result<(), String> {
+        match self.kind.as_str() {
+            "command" => {
+                let command = self.command.as_ref().is_some_and(|v| !v.trim().is_empty());
+                let args = self
+                    .args
+                    .as_ref()
+                    .is_some_and(|v| v.first().is_some_and(|s| !s.is_empty()));
+                if command == args
+                    || (self.command.is_some() && self.args.is_some())
+                    || self.url.is_some()
+                {
+                    return Err("Choose command or executable args".into());
+                }
+                Ok(())
+            }
+            "http" => {
+                if self.command.is_some() || self.args.is_some() || !self.env.is_empty() {
+                    return Err("HTTP hooks take a URL, not a command or environment".into());
+                }
+                // Credentials in the URL would be shown in Settings and logs.
+                let valid = self.url.as_deref().is_some_and(|url| {
+                    url.len() <= 2048
+                        && url::Url::parse(url).is_ok_and(|url| {
+                            matches!(url.scheme(), "http" | "https")
+                                && url.host_str().is_some_and(|host| !host.is_empty())
+                                && url.username().is_empty()
+                                && url.password().is_none()
+                        })
+                });
+                if !valid {
+                    return Err("HTTP hooks need an http(s) URL without credentials".into());
+                }
+                Ok(())
+            }
+            _ => Err("Only command and http hooks are supported".into()),
+        }
+    }
     /// Name for safe diagnostics.
     pub fn label(&self) -> &str {
         self.name
@@ -140,17 +184,10 @@ impl HookConfig {
             {
                 return Err("Hook ids must be unique letters, numbers, '-' or '_'".into());
             }
-            if hook.kind != "command" || hook.schema_version != 1 {
-                return Err("Only command hooks accepting schema 1 are supported".into());
+            if hook.schema_version != 1 {
+                return Err("Only hooks accepting schema 1 are supported".into());
             }
-            let command = hook.command.as_ref().is_some_and(|v| !v.trim().is_empty());
-            let args = hook
-                .args
-                .as_ref()
-                .is_some_and(|v| v.first().is_some_and(|s| !s.is_empty()));
-            if command == args || (hook.command.is_some() && hook.args.is_some()) {
-                return Err("Choose command or executable args".into());
-            }
+            hook.validate_transport()?;
             let cap = if hook.asynchronous { 600_000 } else { 120_000 };
             if hook.timeout_ms == 0
                 || hook.timeout_ms > cap
@@ -196,6 +233,7 @@ impl<'de> Deserialize<'de> for HookDefinition {
             kind: input.kind,
             command: input.command,
             args: input.args,
+            url: input.url,
             env: input.env,
             timeout_ms: input.timeout_ms.unwrap_or(if input.asynchronous {
                 60_000

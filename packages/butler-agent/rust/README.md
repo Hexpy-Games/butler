@@ -116,12 +116,12 @@ change nothing else. Each is off unless set to `1`.
 | `BUTLER_SHUTDOWN_TRACE` | Shutdown phase begin/end markers (the desktop App sets it) |
 | `BUTLER_MEMORY_SYNC_TRACE` | Memory sync wakes, source revisions and vector scheduling |
 
-## User command hooks
+## User command and HTTP hooks
 
 Settings → Hooks manages `$BUTLER_DATA/hooks.json`. No hooks are installed by
 default. Hooks run with your privileges and receive full prompt and tool content.
-They cannot grant permission or change tool inputs. Project, plugin and HTTP
-hooks are not supported yet.
+They cannot grant permission or change tool inputs. Project and plugin hooks are
+not supported yet.
 
 ```json
 {
@@ -174,6 +174,26 @@ then background handlers use a pool of eight. Identical handlers deduplicate.
 Timeout and cancellation terminate the process tree, allow two seconds of grace,
 then force termination and reap. Each output stream is capped at 64 KiB; overflow
 is an error, never truncated success. Stdin is streamed in full.
+
+`type: "http"` hooks POST the same envelope as JSON (`Content-Type:
+application/json`) to `url` instead of running a process:
+
+```json
+{"id":"audit","event":"PostToolUse","type":"http",
+ "url":"https://hooks.example.com/butler","timeout_ms":5000}
+```
+
+Only `http` and `https` URLs without a user name or password are accepted;
+`command`, `args` and `env` are rejected, and plugin hooks stay command-only.
+Butler adds no credentials or headers of its own, and `http` sends content
+unencrypted. Redirects are not followed. A 2xx response body is read like
+command stdout: the same decision JSON denies a pre-event, and an empty or
+non-JSON body continues. There is no exit-2 equivalent. Non-2xx statuses
+(redirects included), unreachable hosts, timeouts, cancellation and bodies over
+64 KiB or not UTF-8 are failures with the same `failClosed` rule. Runs record the
+response status as `http_status` and up to 4 KiB of the body; errors never
+include the URL, and Butler's HTTP log never captures request or response
+bodies. Timeouts, `async` and limits are the same as for commands.
 
 Windows `command` uses `cmd.exe /d /s /c`. For PowerShell use
 `args: ["pwsh", "-NoProfile", "-File", "C:\\path\\hook.ps1"]`. PowerShell 5
