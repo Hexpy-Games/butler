@@ -1024,6 +1024,9 @@ export interface AppCopy {
     workspaceLocal: string;
     workspaceWorktree: string;
     messageComposer: string;
+    /** The `@` mention list: its accessible name and the muted label on project rows. */
+    mentionList: string;
+    mentionProject: string;
     placeholder: string;
     placeholderFollowUp: string;
     attachedFiles: string;

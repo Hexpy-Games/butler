@@ -95,7 +95,7 @@
   white-space: nowrap;
 }
 
-/* The DS trailing disclosure chevron (DisclosureRow .turn): a line-high slot,
+/* The DS disclosure chevron (DisclosureRow .turn, after the title): a line-high slot,
    --text-tertiary, ChevronRight turning 90° down when open. Kept in every row. */
 .chevron {
   display: inline-grid;

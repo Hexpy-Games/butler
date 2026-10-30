@@ -19,7 +19,6 @@ export function LogCategoryLevels({ overrides, categories, disabled, onChange }:
   const changed = Object.keys(overrides).length;
   return (
     <DisclosureRow
-      affordance="trailing"
       surface="plain"
       title={copy.categories}
       meta={changed > 0 ? copy.categoriesChanged(changed) : undefined}

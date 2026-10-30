@@ -110,6 +110,6 @@ pub(super) fn render(entries: &[Entry]) -> String {
                 .into(),
         );
     }
-    lines.push("설치 / Install: npx @hexpygames/butler install".into());
+    lines.push("설치 / Install: https://butler.hexpy.games/help/getting-started/install/".into());
     lines.join("\n")
 }

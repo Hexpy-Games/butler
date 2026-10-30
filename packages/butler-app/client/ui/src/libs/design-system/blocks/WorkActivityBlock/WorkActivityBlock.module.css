@@ -293,11 +293,12 @@ button.tool:focus-visible,
   gap: var(--space-1);
 }
 
+/* Icon, title, then the chevron right after the title: only the title
+   truncates, so the chevron never leaves its side. */
 .toolDetailButton {
-  display: grid;
+  display: flex;
   width: 100%;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-2);
   align-items: center;
   padding: 0;
@@ -320,6 +321,15 @@ button.toolDetailButton:focus-visible {
 button.toolDetailButton:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+.toolDetailButton > .toolIcon,
+.toolDetailButton > .toolDetailChevron {
+  flex: none;
+}
+
+.toolDetailButton > .toolCopy {
+  flex: 0 1 auto;
 }
 
 .toolDetailText {

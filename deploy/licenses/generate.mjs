@@ -117,8 +117,6 @@ export function validateLicense(component) {
 
 export function generate(catalog = JSON.parse(readFileSync(join(root, "deploy/licenses/catalog.json"), "utf8"))) {
   verifyInputs(catalog);
-  const wrapper = JSON.parse(readFileSync(join(root, "packages/butler-npm/package.json"), "utf8"));
-  if (Object.keys(wrapper.dependencies ?? {}).length) throw new Error("npm wrapper dependencies must be added to bun.lock and inventoried before packaging");
   verifyProductionInventory(catalog);
   const model = catalog.components.find((entry) => entry.id.startsWith("model:Xenova/bge-m3"));
   const assets = readFileSync(join(root, "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs"), "utf8");

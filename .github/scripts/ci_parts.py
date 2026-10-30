@@ -68,3 +68,13 @@ def record(state, jobs):
             results[key] = 'skipped'
             hashes[key] = state['job_inputs'][key.split('/')[0]]
     return dict(part_results=results, part_hashes=hashes)
+
+
+def couple_perf_native(job_reuse):
+    # Perf consumes a fixture produced in its own run. Reuse the pair only
+    # when both jobs passed; a partial pair must execute together.
+    for platform in ('linux', 'linux-arm64', 'macos'):
+        pair = (platform + '-native', platform + '-perf')
+        if not all(name in job_reuse for name in pair):
+            for name in pair:
+                job_reuse.pop(name, None)

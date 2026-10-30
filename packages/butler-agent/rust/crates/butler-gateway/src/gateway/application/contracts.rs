@@ -417,6 +417,8 @@ pub struct ClaimedNativeSnapshot {
     pub attached_files: Vec<AppMessageFileSnapshot>,
     pub queue_attachments: Value,
     pub reference_chats: Vec<AppReferencedChatSnapshot>,
+    /// The projects the message references (`project_ref` parts), resolved when claimed.
+    pub project_references: Value,
 }
 
 #[derive(Clone, Debug)]
