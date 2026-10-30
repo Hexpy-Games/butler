@@ -4,7 +4,7 @@
     "deploy/licenses/disclosure.py": "2b5d724e190d44967c8400d70fd77b36e10efc3d3bb667ebb1fb0984313c3ae8",
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
-    "deploy/licenses/refresh.py": "33d58a1000073258920b2d2db4e9a0bac7376fe65251313f4777e815566d0949",
+    "deploy/licenses/refresh.py": "8bc199053a20b191c078d86ca425f31dd71fb4ded5c172a25e5b9058bb8c3dba",
     "packages/butler-agent/rust/Cargo.lock": "145a582bd94fbf7bd747d93f024027d588a18f0c3964b83e910f9a3cf024c939",
     "packages/butler-agent/rust/Cargo.toml": "5d2d424ec9a5a0efc862cb4193c6c0902d8336747f23b3217091286ce99a7c9d",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",

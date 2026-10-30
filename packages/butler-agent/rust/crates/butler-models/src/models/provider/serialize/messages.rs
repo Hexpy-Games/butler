@@ -52,8 +52,11 @@ pub(super) fn turn_item_ordinal(value: Option<&str>) -> Option<u64> {
         .ok()
         .filter(|value| *value <= 1_000_000)
 }
-pub(super) fn chat_messages(request: &ModelRoundRequest<'_>) -> Vec<Value> {
-    chat_messages_with_instructions(request, request.instructions)
+pub(super) fn chat_messages(
+    request: &ModelRoundRequest<'_>,
+    history: crate::models::ChatReasoningHistory,
+) -> Vec<Value> {
+    chat_messages_with_instructions(request, request.instructions, history)
 }
 
 pub(super) fn local_chat_messages(request: &ModelRoundRequest<'_>) -> Vec<Value> {
@@ -76,12 +79,17 @@ pub(super) fn local_chat_messages(request: &ModelRoundRequest<'_>) -> Vec<Value>
             .join("\n\n"),
         )
     };
-    chat_messages_with_instructions(request, instructions.as_deref())
+    chat_messages_with_instructions(
+        request,
+        instructions.as_deref(),
+        crate::models::ChatReasoningHistory::Omit,
+    )
 }
 
 fn chat_messages_with_instructions(
     request: &ModelRoundRequest<'_>,
     instructions: Option<&str>,
+    history: crate::models::ChatReasoningHistory,
 ) -> Vec<Value> {
     let mut output = Vec::new();
     if let Some(value) = instructions
@@ -102,6 +110,17 @@ fn chat_messages_with_instructions(
                 message.content.as_ref().to_owned().into()
             },
         );
+        if message.role == ModelRoundRole::Assistant
+            && matches!(history, crate::models::ChatReasoningHistory::Echo)
+        {
+            let reasoning = message
+                .provider_data
+                .as_ref()
+                .and_then(|data| data.get("reasoning_content"))
+                .cloned()
+                .unwrap_or_else(|| json!(""));
+            row.insert("reasoning_content".into(), reasoning);
+        }
         if let Some(id) = &message.tool_call_id {
             row.insert("tool_call_id".into(), id.clone().into());
         }

@@ -47,7 +47,8 @@ pub(super) fn decode(response: &Value, model: &str, carrier: Carrier) -> PromptD
                 .or_else(|| response.pointer("/usage/input_tokens")),
             response
                 .pointer("/usage/prompt_tokens_details/cached_tokens")
-                .or_else(|| response.pointer("/usage/input_tokens_details/cached_tokens")),
+                .or_else(|| response.pointer("/usage/input_tokens_details/cached_tokens"))
+                .or_else(|| response.pointer("/usage/prompt_cache_hit_tokens")),
             response.pointer("/usage/total_tokens"),
             response
                 .pointer("/usage/completion_tokens")
@@ -57,7 +58,8 @@ pub(super) fn decode(response: &Value, model: &str, carrier: Carrier) -> PromptD
     let cache_write = response
         .pointer("/usage/prompt_tokens_details/cache_write_tokens")
         .or_else(|| response.pointer("/usage/input_tokens_details/cache_write_tokens"))
-        .or_else(|| response.pointer("/usage/cache_creation_input_tokens"));
+        .or_else(|| response.pointer("/usage/cache_creation_input_tokens"))
+        .or_else(|| response.pointer("/usage/prompt_tokens_details/created_cache_tokens"));
     PromptDecoded {
         stop: super::super::result::stop::classify(response, carrier, text.is_some()),
         text,
@@ -83,7 +85,8 @@ fn responses_usage(response: &Value) -> Option<Usage> {
     let cached = number(
         response
             .pointer("/usage/prompt_tokens_details/cached_tokens")
-            .or_else(|| response.pointer("/usage/input_tokens_details/cached_tokens")),
+            .or_else(|| response.pointer("/usage/input_tokens_details/cached_tokens"))
+            .or_else(|| response.pointer("/usage/prompt_cache_hit_tokens")),
     );
     let total = number(response.pointer("/usage/total_tokens"));
     let cache_write = number(

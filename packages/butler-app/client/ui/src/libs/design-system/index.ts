@@ -100,6 +100,8 @@ export * from "./blocks/MetricCard";
 export * from "./blocks/MetricGrid";
 export * from "./blocks/CardList";
 export * from "./blocks/SortableCardList";
+export * from "./blocks/StepSortableList";
+export * from "./blocks/StackDeck";
 export * from "./blocks/ListRow";
 export * from "./blocks/ChoiceCard";
 export * from "./blocks/CheckCard";

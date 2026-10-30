@@ -83,9 +83,8 @@ pub fn provider_quota_support(provider_id: &str) -> QuotaSupport {
     match provider_id {
         _ if QUOTA_POLLED_PROVIDERS.contains(&provider_id) => QuotaSupport::Polled,
         "opencode-go" => QuotaSupport::NotOffered(QuotaBilling::Subscription),
-        "openai" | "anthropic" | "google" | "xai" | "qwen" | "kimi" | "zai-api" => {
-            QuotaSupport::NotOffered(QuotaBilling::Api)
-        }
+        "openai" | "anthropic" | "google" | "xai" | "deepseek" | "upstage" | "motif" | "qwen"
+        | "kimi" | "zai-api" => QuotaSupport::NotOffered(QuotaBilling::Api),
         _ => QuotaSupport::NotOffered(QuotaBilling::Unknown),
     }
 }

@@ -99,6 +99,7 @@ mod general_clear;
 mod harness_hygiene;
 mod hedge_v2_stub;
 mod hooks;
+mod hosted_providers;
 mod idle_resources;
 mod image_errors;
 mod image_foundation;

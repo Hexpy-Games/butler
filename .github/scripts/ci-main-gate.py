@@ -6,9 +6,15 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 from ci_main_baseline import latest_main_run
 from issue_links import references
+
+POLL_SECONDS = 60
+# Stay below the gate job's timeout-minutes (90) so the step fails closed itself.
+WAIT_SECONDS = 80 * 60
+API_ERRORS = (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError)
 
 
 def command(*args):
@@ -90,28 +96,62 @@ def main_gate(event, repository, event_name):
     return 0
 
 
-def quality_gate(event, repository):
-    """A metadata-only gate must never replace failed/pending quality with green."""
-    pr = event['pull_request']
+def latest_full_run(pr, repository):
     runs = api(f'repos/{repository}/actions/workflows/rust-quality.yml/runs?event=pull_request'
                f'&head_sha={pr["head"]["sha"]}&per_page=100')['workflow_runs']
-    runs = sorted(runs, key=lambda run: run['id'], reverse=True)
-    for run in runs:
-        if (run['head_sha'] != pr['head']['sha']
-                or run.get('display_title') != f'CI #{run["id"]}'
-                or not any(p['number'] == pr['number'] for p in run.get('pull_requests', []))):
-            continue
-        if run['status'] != 'completed':
-            break
-        jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')
-        if jobs['total_count'] != len(jobs['jobs']):
-            break
-        for job in jobs['jobs']:
-            if job['name'] == 'gate' and any(
-                    step['name'] == 'Require every selected check' and step['conclusion'] == 'success'
-                    for step in job.get('steps', [])):
-                return 0
-        break
+    for run in sorted(runs, key=lambda run: run['id'], reverse=True):
+        if (run['head_sha'] == pr['head']['sha']
+                and run.get('display_title') == f'CI #{run["id"]}'
+                and any(p['number'] == pr['number'] for p in run.get('pull_requests', []))):
+            return run
+    return None
+
+
+def full_run_passed(run, repository):
+    jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')
+    if jobs['total_count'] != len(jobs['jobs']):
+        return False
+    return any(job['name'] == 'gate' and any(
+        step['name'] == 'Require every selected check' and step['conclusion'] == 'success'
+        for step in job.get('steps', [])) for job in jobs['jobs'])
+
+
+def poll(call, sleep, clock, deadline):
+    """Retry a transient GitHub API error until the deadline, then re-raise it."""
+    while True:
+        try:
+            return call()
+        except API_ERRORS as error:
+            print(f'::warning::GitHub API error while polling the full CI run: {error!r}', flush=True)
+            if clock() >= deadline:
+                raise
+            sleep(POLL_SECONDS)
+
+
+def quality_gate(event, repository, sleep=time.sleep, clock=time.monotonic, wait_seconds=WAIT_SECONDS):
+    """A metadata-only gate must never replace failed/pending quality with green.
+
+    A full run still in progress is awaited, so this gate finishes after the
+    full run's own gate and reports its result instead of a stale failure.
+    A transient API error is retried until the deadline; the deadline, a run
+    still unfinished at that point, or a persistent error all fail the gate.
+    """
+    pr = event['pull_request']
+    deadline = clock() + wait_seconds
+    try:
+        run = poll(lambda: latest_full_run(pr, repository), sleep, clock, deadline)
+        while run and run['status'] != 'completed':
+            if clock() >= deadline:
+                print('Timed out waiting for the full CI run to finish.')
+                return 1
+            print(f'Waiting for the full CI run to finish: {run["html_url"]}', flush=True)
+            sleep(POLL_SECONDS)
+            run = poll(lambda: latest_full_run(pr, repository), sleep, clock, deadline)
+        if run and poll(lambda: full_run_passed(run, repository), sleep, clock, deadline):
+            return 0
+    except API_ERRORS:
+        print('GitHub API stayed unavailable; quality cannot be confirmed for this SHA.')
+        return 1
     print('Quality checks have not passed for this SHA; complete a full CI run.')
     return 1
 

@@ -1,0 +1,195 @@
+/* Chains of steps: a head, then its follow-up steps indented one level.
+   Drag feedback: an accent Separator where a drop makes a new step, and a
+   NavDropTarget group ring on a step a drop joins (after the dwell). Hit
+   zones are measured when a drag starts, so the inserted line never moves
+   them. */
+.list {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.chain {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-sm);
+}
+
+.steps {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step,
+.gap {
+  min-width: 0;
+}
+
+.step[data-follow],
+.gap[data-follow] {
+  padding-inline-start: var(--space-md);
+}
+
+/* Row: [grip] [number or status glyph] [title ... meta] / [caption] [⋯]. */
+.row {
+  container: step-row / inline-size;
+  display: flex;
+  min-width: 0;
+  gap: var(--space-sm);
+  align-items: flex-start;
+}
+
+/* The leading grip slot (SortableCardItem: handle first, pulled back by
+   --space-xs). As tall as the title line: the button's hit area overhangs
+   it, so the row keeps its height; a pinned row keeps the slot empty. */
+.leadControl {
+  display: flex;
+  width: max(var(--control-height-md), var(--control-hit-target));
+  height: var(--typo-body-line-height);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  margin-inline-start: calc(-1 * var(--space-xs));
+}
+
+.grip {
+  display: flex;
+  width: max(var(--control-height-md), var(--control-hit-target));
+  align-items: center;
+  justify-content: center;
+}
+
+/* The DS IconButton has no grab cursor of its own; SortableCardList sets it
+   the same way. */
+.grip > * {
+  cursor: grab;
+  touch-action: none;
+}
+
+.grip > *:active {
+  cursor: grabbing;
+}
+
+.text {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: var(--space-xs);
+}
+
+/* The title gets the line first. When the title, the 묶음 count (외 N건)
+   and the meta do not fit, the meta wraps to its own line (still at the
+   end), then the count wraps under the title; the title truncates only
+   when it alone is wider than the line. */
+.titleLine {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  column-gap: var(--space-sm);
+  align-items: center;
+}
+
+.titleLine > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.titleLine > :not(:first-child) {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.title {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  column-gap: var(--space-xs);
+  align-items: baseline;
+}
+
+.title > :first-child {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.title > :not(:first-child) {
+  flex: none;
+}
+
+.trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  align-self: center;
+}
+
+/* A row without ⋯ keeps its room, so statuses line up down the list. */
+.menuRoom {
+  width: max(var(--control-height-md), var(--control-hit-target));
+  flex: none;
+}
+
+/* A narrow row (a phone, a narrow pane) gives the title the empty ⋯ room
+   of a row without one (a pinned running row). The grip slot stays, so
+   numbers and titles still line up within a chain. */
+@container step-row (width < 28rem) {
+  .menuRoom {
+    display: none;
+  }
+}
+
+/* A card dragged out of an open 묶음 stays dimmed in place, all but the
+   grip's focus ring (a keyboard move keeps focus there): its glyph fades
+   instead of its button. */
+.row[data-dragging] > :not(.leadControl),
+.row[data-dragging] .grip svg {
+  opacity: 0.5;
+}
+
+/* A lifted step stays in place at half strength, all but the grip's focus
+   ring: the card's surface and border mix with transparent (as half
+   opacity would) and its content, edges and grip glyph fade. */
+.step[data-lifted] [data-slot="card"] {
+  border-color: color-mix(in srgb, var(--line) 50%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 50%, transparent);
+}
+
+.step[data-lifted] .row > :not(.leadControl),
+.step[data-lifted] .grip svg,
+.step[data-lifted] [data-slot="card"] > [aria-hidden="true"] {
+  opacity: 0.5;
+}
+
+/* The lifted copy (DragOverlay): the row itself at its size, on the opaque
+   raised surface, with the drag shadow. */
+.lifted {
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-drag-lift);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lifted {
+    animation: lift-in var(--motion-base) var(--motion-ease-spring) both;
+  }
+}
+
+@keyframes lift-in {
+  from {
+    box-shadow: none;
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
