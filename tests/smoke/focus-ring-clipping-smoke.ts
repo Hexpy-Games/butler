@@ -19,6 +19,8 @@
 //
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
 import { historyFixture } from "../support/usage-insights-fixtures";
+import { auditSessionOrderFocus } from "../support/session-order-focus.ts";
+import { sessionOrderFocusResponse } from "../support/session-order-fixtures.ts";
 import { canonFocusResponse } from "../support/canon-sidebar-fixture.ts";
 import { auditInlinePanes } from "../support/session-pane-focus.ts";
 import assert from "node:assert/strict";
@@ -270,6 +272,7 @@ async function auditCell(page: Page, cell: Cell) {
   // Conversation: answer cards' buttons, the agent tab rail and the composer.
   if (cell.width < 768) await page.keyboard.press("Escape");
   await auditScope(page, cell, "conversation", '[data-test-class~="conversation"]', 160);
+  await auditSessionOrderFocus(page, (screen, scope) => auditScope(page, cell, screen, scope, 40), (screen, steps) => auditArrows(page, cell, screen, steps));
   await page.locator('[data-test-class="message-artifact-list"]').getByText("Focus document", { exact: true }).click();
   await page.getByRole("textbox", { name: copy.documents.title, exact: true }).waitFor();
   await auditScope(page, cell, "document-page", '[data-test-class="editable-document"]', 30);
@@ -435,7 +438,7 @@ try {
     }
     const file = distFile(url.pathname);
     if (file) return route.fulfill({ contentType: types[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
-    const canon = canonFocusResponse(url.pathname);
+    const canon = canonFocusResponse(url.pathname) ?? sessionOrderFocusResponse(url.pathname);
     if (canon !== undefined) return route.fulfill({ json: { ok: true, data: canon } });
     // The gateway: just what the harness reads, offline.
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client",

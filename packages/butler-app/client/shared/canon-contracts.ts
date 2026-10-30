@@ -156,3 +156,8 @@ export interface CanonSidebarOrderInput { group_key: string; work_ids: string[] 
 export interface CanonConversation { session_id: string; work: EpicDetail }
 
 export interface CanonConversationInput { sessionId?: string }
+
+/** Ordered selection for an atomic queue move; supply exactly one form. */
+export type CanonQueueMoveSelection =
+  | { epic_id: string; epic_ids?: never }
+  | { epic_ids: string[]; epic_id?: never };

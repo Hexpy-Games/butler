@@ -11,6 +11,12 @@ export function canonBridgeInput(url: URL, verb: string, body: () => Record<stri
   if (proposal && (verb === "GET" || verb === "POST")) return {
     method: verb === "GET" ? "getCanonProposal" : "resolveCanonProposal", input: { id: decodeURIComponent(proposal[1]!), body: body() },
   };
+  const order = url.pathname.match(/^\/sessions\/([^/]+)\/canon\/queue(?:\/(edits|holds|take)(?:\/([^/]+))?)?$/u);
+  if (order) {
+    const method = verb === "GET" && !order[2] ? "getCanonQueue" : verb === "POST"
+      ? order[2] === "edits" && !order[3] ? "editCanonQueue" : order[3] && order[2] === "holds" ? "decideCanonHold" : order[3] && order[2] === "take" ? "takeCanonHere" : undefined : undefined;
+    return method ? { method, input: { sessionId: decodeURIComponent(order[1]!), epicId: order[3] ? decodeURIComponent(order[3]) : undefined, body: body() } } : null;
+  }
   const project = url.pathname.match(/^\/projects\/([^/]+)\/canon(?:\/(plans|epics|tags|backlog\/order|sidebar|sidebar-order))?$/u);
   if (project) {
     const method = verb === "GET" ? (!project[2] ? "getCanon" : project[2] === "sidebar" ? "getCanonSidebar" : project[2] === "tags" ? "getCanonTags" : undefined) : verb === "POST" ?

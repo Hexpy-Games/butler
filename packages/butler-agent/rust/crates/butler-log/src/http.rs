@@ -54,6 +54,7 @@ pub struct Phase {
     retry: u32,
     routine: bool,
     sensitive: bool,
+    origin_only: bool,
     trace_id: Option<String>,
     turn_id: Option<String>,
     chat_id: Option<String>,
@@ -78,6 +79,20 @@ impl Phase {
     pub fn sensitive(mut self) -> Self {
         self.sensitive = true;
         self
+    }
+    /// Log only the scheme and host: for URLs whose path or query is itself a
+    /// credential (webhooks, for example), whatever shape it has.
+    pub fn origin_only(mut self) -> Self {
+        self.origin_only = true;
+        self
+    }
+    /// A transport error's text; never the URL of an origin-only request.
+    fn error_text(&self, error: &reqwest::Error) -> String {
+        let text = error.to_string();
+        match error.url().filter(|_| self.origin_only) {
+            Some(url) => text.replace(url.as_str(), "[REDACTED]"),
+            None => text,
+        }
     }
     pub fn trace_id(&self) -> Option<&str> {
         self.trace_id.as_deref()

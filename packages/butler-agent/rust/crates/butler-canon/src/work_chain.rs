@@ -100,19 +100,7 @@ impl Chain {
         index: usize,
         running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
-        let mut next = self.clone();
-        next.remove(id)?;
-        if index > next.steps.len() {
-            return Err(ChainError::Unknown);
-        }
-        next.steps.insert(
-            index,
-            Step {
-                index,
-                tasks: vec![id.clone()],
-            },
-        );
-        self.finish(next, running)
+        self.move_many(std::slice::from_ref(id), Placement::NewStep(index), running)
     }
     pub fn join_stack(
         &self,
@@ -120,11 +108,53 @@ impl Chain {
         target: &EpicId,
         running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
+        self.move_many(
+            std::slice::from_ref(id),
+            Placement::Stack(target.clone()),
+            running,
+        )
+    }
+    /// Remove the entire ordered selection before interpreting the destination.
+    pub fn move_many(
+        &self,
+        ids: &[EpicId],
+        placement: Placement,
+        running: &BTreeSet<EpicId>,
+    ) -> Result<Self, ChainError> {
         let mut next = self.clone();
-        next.remove(id)?;
-        let (i, _) = next.locate(target)?;
-        next.steps[i].tasks.push(id.clone());
+        next.remove_many(ids)?;
+        next.place_many(ids, placement)?;
         self.finish(next, running)
+    }
+    fn remove_many(&mut self, ids: &[EpicId]) -> Result<(), ChainError> {
+        if ids.is_empty() || ids.iter().collect::<BTreeSet<_>>().len() != ids.len() {
+            return Err(ChainError::Membership);
+        }
+        for id in ids {
+            self.remove(id)?;
+        }
+        Ok(())
+    }
+    fn place_many(&mut self, ids: &[EpicId], placement: Placement) -> Result<(), ChainError> {
+        match placement {
+            Placement::NewStep(index) => {
+                if index > self.steps.len() {
+                    return Err(ChainError::Unknown);
+                }
+                self.steps.insert(
+                    index,
+                    Step {
+                        index,
+                        tasks: ids.to_vec(),
+                    },
+                );
+            }
+            Placement::Stack(target) => {
+                let (index, _) = self.locate(&target)?;
+                self.steps[index].tasks.extend_from_slice(ids);
+            }
+        }
+        Ok(())
     }
     pub fn split_stack(
         &self,
@@ -181,6 +211,16 @@ impl Chain {
         placement: Placement,
         running: &BTreeSet<EpicId>,
     ) -> Result<(Self, Self), ChainError> {
+        self.move_many_between(target, std::slice::from_ref(id), placement, running)
+    }
+    /// Pins are checked against the final chains, never intermediate membership.
+    pub fn move_many_between(
+        &self,
+        target: &Self,
+        ids: &[EpicId],
+        placement: Placement,
+        running: &BTreeSet<EpicId>,
+    ) -> Result<(Self, Self), ChainError> {
         self.validate()?;
         target.validate()?;
         if self
@@ -191,27 +231,11 @@ impl Chain {
         {
             return Err(ChainError::Membership);
         }
-        let source = self.delete(id, running)?;
+        let mut source = self.clone();
+        source.remove_many(ids)?;
         let mut next = target.clone();
-        match placement {
-            Placement::NewStep(index) => {
-                if index > next.steps.len() {
-                    return Err(ChainError::Unknown);
-                }
-                next.steps.insert(
-                    index,
-                    Step {
-                        index,
-                        tasks: vec![id.clone()],
-                    },
-                );
-            }
-            Placement::Stack(work) => {
-                let (index, _) = next.locate(&work)?;
-                next.steps[index].tasks.push(id.clone());
-            }
-        }
-        Ok((source, target.finish(next, running)?))
+        next.place_many(ids, placement)?;
+        Ok((self.finish(source, running)?, target.finish(next, running)?))
     }
 }
 

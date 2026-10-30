@@ -1,5 +1,10 @@
 //! Which stored messages the owner may see.
 //!
+//! Canon step inputs use the same owner-visible predicate as internal steward
+//! inputs: only the initiated user row is hidden. Its assistant messages retain
+//! their canon_step origin, so the step titles remain available in every layout.
+//! The queue tray applies the same initiated-message identity filter.
+//!
 //! A steward's delegated result reaches the parent chat as model input for a
 //! turn: it is stored as a `user` message so the turn can read it, but it is
 //! shown only through the steward projections, never as a chat bubble.

@@ -41,17 +41,24 @@ impl Attempt {
         row.parent_span_id = row.span_id.take();
         row.span_id = Some(uuid::Uuid::new_v4().simple().to_string()[..16].into());
         let url = crate::redact_url(request.url().as_str());
-        let path = url::Url::parse(&url).ok().map(|url| {
-            let mut path = url.path().to_owned();
-            if let Some(query) = url.query() {
-                path.push('?');
-                path.push_str(query);
-            }
-            path
-        });
+        let path = url::Url::parse(&url)
+            .ok()
+            .filter(|_| !phase.origin_only)
+            .map(|url| {
+                let mut path = url.path().to_owned();
+                if let Some(query) = url.query() {
+                    path.push('?');
+                    path.push_str(query);
+                }
+                path
+            });
+        let port = request
+            .url()
+            .port_or_known_default()
+            .filter(|_| !phase.origin_only);
         let body = request.body().and_then(reqwest::Body::as_bytes);
         row.attrs = json!({
-            "method":request.method().as_str(), "host":request.url().host_str(), "port":request.url().port_or_known_default(),
+            "method":request.method().as_str(), "scheme":request.url().scheme(), "host":request.url().host_str(), "port":port,
             "path":path, "request_headers":headers(request.headers()),
             "request_bytes":body.map(<[u8]>::len), "purpose":purpose.name,
             "phase":phase.name, "retry":phase.retry, "start":row.ts,
@@ -122,7 +129,7 @@ impl Attempt {
     }
     pub(super) fn read_error(&mut self, error: &reqwest::Error) {
         self.row.level = if self.phase.routine { "DEBUG" } else { "ERROR" }.into();
-        self.row.error = Some(json!({"message":error.to_string()}));
+        self.row.error = Some(json!({"message":self.phase.error_text(error)}));
     }
     pub(super) fn complete(&mut self) {
         self.row.attrs["response_complete"] = json!(true);

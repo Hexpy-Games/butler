@@ -43,6 +43,10 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
         blocks={message.work_blocks}
         turnId={message.turn_id}
       />}
+      {message.initiated?.kind === "canon_step" && <Typo.Caption tone="secondary" data-test-class="canon-step-activity">
+        {message.initiated.plan_title ? appCopy.canon.queue.step(message.initiated.plan_title, message.initiated.epic_title ?? "")
+          : appCopy.canon.queue.stepEpic(message.initiated.epic_title ?? "")}
+      </Typo.Caption>}
       <MessageLiveGroup live={liveActivity} kept={kept} bubble={bubble}>
         {bubble ? <>
           {message.initiated?.kind === "approval_needed" ? (
@@ -55,7 +59,6 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
             {!failureNotice && <AnswerBlocks sets={message.answer_blocks} messageId={message.id} replyText={message.text}
               sessionId={message.chat_id} turnId={message.turn_id} />}
             {attachments}
-            <InitiatedPanels origin={message.initiated} />
           </MessageBubbleAttachments>
         </> : <>
           <AnswerReply message={message} failureNotice={failureNotice} stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} />
@@ -115,5 +118,6 @@ function AssistantAttachments({ message, children }: { message: MessageRecord; c
         {appCopy.conversation.attachmentUnavailable}
       </Tag>
     )}
+    <InitiatedPanels origin={message.initiated} />
   </>;
 }

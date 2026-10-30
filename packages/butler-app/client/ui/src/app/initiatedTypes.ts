@@ -1,3 +1,5 @@
+import type { CanonHoldPanel, CanonTakeHerePanel } from "../../../shared/canon-queue-contracts.ts";
+
 /** Open origin kind allows future initiated work and connector messages. */
 export interface InitiatedOrigin {
   kind: string;
@@ -13,7 +15,10 @@ export interface InitiatedOrigin {
   run_id?: string;
   /** Raw authority approval; narrowed by the shared approval normalizer. */
   approval?: unknown;
-  panel?: PatternProposalPanel | SchedulePausePanel;
+  plan_title?: string;
+  epic_title?: string;
+  epic_id?: string;
+  panel?: PatternProposalPanel | SchedulePausePanel | CanonHoldPanel | CanonTakeHerePanel;
 }
 export interface InitiatedSchedule {
   type: "daily" | "weekdays" | "weekly" | "interval" | "once";

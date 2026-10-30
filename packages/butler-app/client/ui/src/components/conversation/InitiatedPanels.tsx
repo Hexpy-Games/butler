@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDecision } from "./useInitiatedDecision.ts";
+import { CanonHold, CanonTakeHere } from "./CanonDecisionPanels.tsx";
 import { api } from "@/app/api";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { initiatedAction } from "@/app/initiatedAction";
 import type { InitiatedOrigin, PatternCandidate, PatternProposalPanel, SchedulePausePanel } from "@/app/initiatedTypes";
-import { notifyStatus } from "@/app/notifications";
 import { useButlerStore } from "@/app/store";
 import { Button, ButtonContainer, Clock3, ComposerDecisionPanel, Clickable, Stack, Typo } from "@/butler-ds";
 import { patternMeta } from "../settings/hooks/usePatterns";
@@ -13,6 +14,8 @@ export function InitiatedPanels({ origin }: { origin?: InitiatedOrigin }) {
   if (panel?.kind === "pattern_proposal") return panel.candidates.map(candidate =>
     <Proposal key={candidate.pattern_id} panel={panel} candidate={candidate} />);
   if (panel?.kind === "schedule_pause") return <Pause panel={panel} />;
+  if (panel?.kind === "canon_hold") return <CanonHold panel={panel} />;
+  if (panel?.kind === "canon_take_here") return <CanonTakeHere panel={panel} />;
   return null;
 }
 
@@ -20,21 +23,6 @@ function openSchedule(id?: string) {
   const store = useButlerStore.getState();
   if (id) store.setView({ kind: "automation-detail", automationId: id });
   else store.openSettings("memory");
-}
-
-function useDecision() {
-  const [busy, setBusy] = useState(false);
-  const inFlight = useRef(false);
-  return { busy, run: async (action: () => Promise<unknown>, refresh?: () => Promise<unknown>) => {
-    if (inFlight.current) return;
-    inFlight.current = true; setBusy(true);
-    try { await action(); }
-    catch (error) {
-      const conflict = (error as { status?: number }).status === 409;
-      if (conflict) await refresh?.().catch(() => undefined);
-      notifyStatus(conflict ? appCopy.conversation.initiated.alreadyHandled : appCopy.conversation.initiated.failed, { tone: "error" });
-    } finally { inFlight.current = false; setBusy(false); }
-  } };
 }
 
 function DecisionActions({ busy, onDecide }: { busy: boolean; onDecide: (accept: boolean) => void }) {
