@@ -35,7 +35,10 @@ impl<'a> SqliteAuthorityReader<'a> {
     pub(crate) fn waiting_source_sessions(&self) -> AuthorityResult<Vec<String>> {
         query::waiting_source_sessions(self.db)
     }
-    pub(crate) fn attention_owners(&self, owners: &[String]) -> AuthorityResult<Vec<String>> {
+    pub(crate) fn attention_owners(
+        &self,
+        owners: &[String],
+    ) -> AuthorityResult<Vec<(String, bool)>> {
         query::attention_owners(self.db, owners)
     }
     pub(crate) fn list_permissions(

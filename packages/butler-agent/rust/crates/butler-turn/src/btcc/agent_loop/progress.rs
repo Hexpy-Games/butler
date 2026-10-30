@@ -123,9 +123,7 @@ pub(super) async fn operation(
     // The transcript row and its output exist only as these events: a failed
     // append fails the caller rather than leaving the row silently incomplete.
     progress.emit(event).await?;
-    if matches!(status, Status::Completed)
-        && let (Some(body), Some((result_id, result_sha256))) = (encoded, result_ref)
-    {
+    if let (Some(body), Some((result_id, result_sha256))) = (encoded, result_ref) {
         emit_output_chunks(progress, call_id, &result_id, &result_sha256, body).await?;
     }
     Ok(())
@@ -391,7 +389,6 @@ impl AgentLoopProgress for AuthorityCancellationEvents {
 }
 
 /// Replace a pending body with the actual failure/cancellation outcome.
-/// Ordinary non-authority failures retain their existing publication path.
 pub(super) async fn authority_terminal(
     progress: &dyn AgentLoopProgress,
     call: &super::contracts::ModelRoundToolCall,
@@ -402,15 +399,7 @@ pub(super) async fn authority_terminal(
     })) else {
         return Ok(());
     };
-    operation(progress, call, status, Some(&output), None).await?;
-    emit_output_chunks(
-        progress,
-        &call.id,
-        &result_identity(&call.id, "terminal", ""),
-        &super::super::identity::digest(output.as_str()),
-        output.as_str(),
-    )
-    .await
+    operation(progress, call, status, Some(&output), None).await
 }
 
 /// Settle unresolved pending rows; completed siblings retain their actual result.

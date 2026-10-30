@@ -80,6 +80,8 @@ pub struct ChatBehavior {
     pub refuse_tools: Option<Value>,
     pub local_capabilities: LocalCapabilities,
     pub refuse_images: Option<Value>,
+    /// When streamed answers' bytes arrive.
+    pub pace: Pace,
 }
 
 impl Default for ChatBehavior {
@@ -96,6 +98,7 @@ impl Default for ChatBehavior {
             refuse_tools: None,
             local_capabilities: LocalCapabilities::default(),
             refuse_images: None,
+            pace: Pace::Steady,
         }
     }
 }
@@ -109,8 +112,10 @@ enum StreamEnd {
 }
 
 mod local_capabilities;
+mod paced;
 mod scripted;
 pub use local_capabilities::{LocalCapabilities, carries_image};
+pub use paced::Pace;
 mod favicons;
 mod mcp;
 
@@ -259,6 +264,9 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         (Kind::LocalModels, &Method::POST, "/v1/chat/completions") => {
             if streams_before > 0 && is_stream_request(&seen) {
                 tokio::time::sleep(state.chat.hold_later_streams).await;
+            }
+            if let Some(paced) = paced::response(&state.chat, &seen, streams_before == 0).await {
+                return paced;
             }
             scripted::response(&state, &seen.body)
                 .unwrap_or_else(|| chat_completion(&state.chat, &seen.body, streams_before == 0))

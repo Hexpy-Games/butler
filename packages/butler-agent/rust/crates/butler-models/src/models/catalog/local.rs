@@ -6,6 +6,16 @@ use super::{ModelProviderMetadata, ReasoningEffort, TokenEstimatorKind};
 
 const LOCAL_SOURCE: &str =
     "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md";
+/// The response time limits a Custom model may set: one second to one day.
+pub const LOCAL_RESPONSE_TIMEOUT_MS: std::ops::RangeInclusive<u64> = 1_000..=86_400_000;
+
+/// A Custom model's response time limit when `value` is a whole number of
+/// milliseconds within [`LOCAL_RESPONSE_TIMEOUT_MS`].
+pub fn local_response_timeout_ms(value: &Value) -> Option<u64> {
+    value
+        .as_u64()
+        .filter(|ms| LOCAL_RESPONSE_TIMEOUT_MS.contains(ms))
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -43,6 +53,9 @@ pub struct LocalModelConfig {
     pub image_input: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_discovery: Option<LocalImageDiscovery>,
+    /// Replaces the global round time limit for this model's rounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_timeout_ms: Option<u64>,
     pub token_estimator: TokenEstimatorKind,
     pub source: LocalModelSource,
     pub source_url: String,
@@ -105,6 +118,9 @@ pub fn normalize_local_model_config(value: &Value, now: &str) -> Option<LocalMod
             .get("image_discovery")
             .and_then(|value| serde_json::from_value::<LocalImageDiscovery>(value.clone()).ok())
             .filter(|result| !result.verified_at.trim().is_empty()),
+        response_timeout_ms: input
+            .get("response_timeout_ms")
+            .and_then(local_response_timeout_ms),
         token_estimator: TokenEstimatorKind::CharacterEstimate,
         source: if input.get("source").and_then(Value::as_str) == Some("manual") {
             LocalModelSource::Manual
@@ -180,6 +196,7 @@ impl From<&LocalModelConfig> for ModelProviderMetadata {
                 .is_none()
                 .then_some(model.reasoning_budget_ratio)
                 .flatten(),
+            response_timeout_ms: model.response_timeout_ms,
             ..super::lookup::blank_metadata()
         };
         super::local_image::apply(model, &mut metadata);

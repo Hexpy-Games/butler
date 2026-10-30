@@ -73,7 +73,8 @@ pub trait AppAuthorityHandoff: Send + Sync + 'static {
     ) -> ApplicationFuture<bool> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn attention_sessions(&self, _sessions: Vec<String>) -> ApplicationFuture<Vec<String>> {
+    /// Owners waiting on a decision, each with whether one ask is its own.
+    fn attention_sessions(&self, _sessions: Vec<String>) -> ApplicationFuture<Vec<(String, bool)>> {
         Box::pin(async { Ok(Vec::new()) })
     }
     fn session_requests(

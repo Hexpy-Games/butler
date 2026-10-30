@@ -25,8 +25,9 @@ pub(in crate::models::transport) async fn hosted_chat(
 ) -> Result<Value, Box<ProviderRequestError>> {
     let mut state = ChatState::new();
     consume(response, provider, api, Some(HOSTED_FRAME_LIMIT), |frame| {
-        progress.record_progress();
-        state.frame(frame, observer, provider, api)
+        let output = state.frame(frame, observer, provider, api)?;
+        progress.record_event(output);
+        Ok(None)
     })
     .await?;
     // Some servers end the stream after the finish reason without `[DONE]`:
@@ -77,16 +78,17 @@ impl ChatState {
         }
     }
 
+    /// Takes one frame in; true when it carried model output.
     fn frame(
         &mut self,
         frame: &str,
         observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
         provider: &str,
         api: &str,
-    ) -> Result<Option<Value>, Box<ProviderRequestError>> {
+    ) -> Result<bool, Box<ProviderRequestError>> {
         if frame == "[DONE]" {
             self.done = true;
-            return Ok(None);
+            return Ok(false);
         }
         let malformed = || {
             Box::new(diagnostics::protocol(
@@ -121,7 +123,7 @@ impl ChatState {
         if !self.absorb(&event, observer) {
             return Err(malformed());
         }
-        Ok(None)
+        Ok(super::output_event::chat(&event))
     }
 
     /// Takes one chunk in; false for a chunk no server sends (a tool call

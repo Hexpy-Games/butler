@@ -14,12 +14,14 @@ mod project_settlement;
 mod projection;
 mod result_delivery;
 mod selection;
+mod subtasks;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
 mod worker_continuation;
 
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};
+pub use subtasks::{OpenSubtask, SubtaskState};
 
 use delegation::accepted_plan;
 use helpers::*;

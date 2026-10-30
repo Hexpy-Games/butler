@@ -19,7 +19,7 @@ import { composerImagePolicy } from "./composerImagePolicy";
 import { runtimeModels } from "@/app/utils.ts";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard, type WallpaperContentRect } from "@/butler-ds";
-import { ComposerNotices } from "./ComposerNotices.tsx";
+import { GitDependencyNotice } from "./GitDependencyNotice";
 import { useComposerDecoration } from "./hooks/useComposerDecoration";
 interface ComposerProps {
   onWallpaperRect?: (rect: WallpaperContentRect) => void;
@@ -136,7 +136,7 @@ export function Composer({ large, onReserveChange, scope, onWallpaperRect }: Com
       large={large}
       expanded={Boolean(scope || decision.plan || decision.authority || decision.question) || presentation.expanded}
       floating
-      notice={<ComposerNotices summary={session.summary} />}
+      notice={<GitDependencyNotice />}
       adjunct={
         composerHasAdjunct(state.workers.length, state.taskRows.length) ? (
           <ComposerAdjunctPanels showWorkers={state.workers.length > 0}

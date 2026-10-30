@@ -25,14 +25,21 @@ pub(super) fn cancelled(provider: &str, api: &str) -> ProviderRequestError {
     )
 }
 
+/// `kind` `first_response`: no response event came within the limit, so the
+/// route does not resend the same request (a person still can).
 pub(super) fn timeout(provider: &str, api: &str, kind: &str) -> ProviderRequestError {
-    let mut failure = error(
-        "provider_round_timeout",
-        "Model provider stopped making forward progress. Butler preserved the current turn checkpoint and will continue after provider recovery.",
-        provider,
-        api,
-        true,
-    );
+    let (code, message) = if kind == "first_response" {
+        (
+            "provider_first_response_timeout",
+            "Model provider sent no response within the response time limit.",
+        )
+    } else {
+        (
+            "provider_round_timeout",
+            "Model provider stopped making forward progress. Butler preserved the current turn checkpoint and will continue after provider recovery.",
+        )
+    };
+    let mut failure = error(code, message, provider, api, true);
     failure.timeout_kind = Some(kind.into());
     failure
 }

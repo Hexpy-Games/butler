@@ -6,6 +6,7 @@ import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { modelDisplayName } from "@/app/utils.ts";
 import {
   localModelPayload,
+  responseTimeoutMs,
   discoverLocalModels,
   registerLocalModel,
   deleteLocalModel,
@@ -24,6 +25,8 @@ interface UseLocalModelOperationsProps {
   manualModelId: string;
   manualDisplayName: string;
   manualContext: string;
+  /** The response time limit field, in seconds. */
+  responseTimeout: string;
   preservedReasoningBudgetRatio?: number;
   /** Sent only when the user changed the image input switch. */
   imageInput?: boolean;
@@ -52,6 +55,7 @@ export function useLocalModelOperations({
   manualModelId,
   manualDisplayName,
   manualContext,
+  responseTimeout,
   preservedReasoningBudgetRatio,
   imageInput,
   editingModelRef,
@@ -113,6 +117,7 @@ export function useLocalModelOperations({
       preservedReasoningBudgetRatio,
       apiKey,
       imageInput,
+      responseTimeoutMs(responseTimeout),
     );
     try {
       const result = await registerLocalModel(isEditing, editingModelRef, payload);
