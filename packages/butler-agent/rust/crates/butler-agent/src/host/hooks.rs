@@ -3,6 +3,7 @@ mod decision;
 mod execute;
 mod http;
 mod project;
+mod project_lines;
 mod registry;
 mod secrets;
 mod trust;
@@ -32,6 +33,8 @@ struct Hooks {
     plugins: Arc<super::plugins::Plugins>,
     path: PathBuf,
     data: PathBuf,
+    /// Which folder each session works in.
+    bindings: butler_turn::workspace::SessionBindingStore,
     /// One read-modify-write of the project hook answers at a time.
     trust_writer: tokio::sync::Mutex<()>,
     /// SessionStart events whose project hooks wait for an answer, by session.
@@ -55,6 +58,7 @@ impl Dispatcher {
     pub(crate) async fn open(
         plugins: Arc<super::plugins::Plugins>,
         data: PathBuf,
+        bindings: butler_turn::workspace::SessionBindingStore,
         environment: &HashMap<String, String>,
         shutdown: CancellationToken,
     ) -> Self {
@@ -62,6 +66,7 @@ impl Dispatcher {
             plugins,
             path: data.join(butler_platform::data_paths::HOOKS),
             data: data.clone(),
+            bindings,
             trust_writer: tokio::sync::Mutex::new(()),
             held_starts: parking_lot::Mutex::new(HashMap::new()),
             secrets: secrets::HookSecrets::new(data.clone()),
@@ -182,7 +187,7 @@ impl HookPort for Dispatcher {
         payload: HookEnvelope,
         cancel: CancellationToken,
     ) -> HookFuture<'_, Option<String>> {
-        Box::pin(execute::dispatch(&self.0, payload, cancel, &[]))
+        Box::pin(execute::dispatch(&self.0, payload, cancel, None))
     }
     fn test(&self, id: String, cancel: CancellationToken) -> HookFuture<'_, HookRun> {
         Box::pin(execute::test(&self.0, id, cancel))
@@ -190,8 +195,12 @@ impl HookPort for Dispatcher {
     fn runs(&self) -> Vec<HookRun> {
         self.0.state.read().runs.iter().cloned().collect()
     }
-    fn review_project(&self, project_dir: String) -> HookFuture<'_, ProjectHookReview> {
-        Box::pin(project::review(&self.0, project_dir))
+    fn review_project(
+        &self,
+        project_dir: String,
+        session_id: Option<String>,
+    ) -> HookFuture<'_, ProjectHookReview> {
+        Box::pin(project::review(&self.0, project_dir, session_id))
     }
     fn decide_project(&self, request: ProjectHookRequest, allowed: bool) -> HookFuture<'_, ()> {
         Box::pin(trust::decide(&self.0, request, allowed))
@@ -207,6 +216,7 @@ impl HookPort for Dispatcher {
     fn release_session_start(
         &self,
         session_id: String,
+        _access_mode: String,
         _cancel: CancellationToken,
     ) -> HookFuture<'_, ()> {
         self.0.held_starts.lock().remove(&session_id);

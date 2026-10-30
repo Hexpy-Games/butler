@@ -113,7 +113,7 @@ impl AppApplication {
         let Ok(Some(project_dir)) = self.project_workspace_path(session.project_id).await else {
             return ProjectHookReview::None;
         };
-        port.review_project(project_dir)
+        port.review_project(project_dir, Some(session.session_hint))
             .await
             .unwrap_or(ProjectHookReview::None)
     }

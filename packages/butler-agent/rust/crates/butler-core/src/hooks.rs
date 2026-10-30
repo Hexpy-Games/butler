@@ -9,7 +9,7 @@ pub use config::{
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
 pub use project::{
     PROJECT_HOOK_FILE, PROJECT_HOOK_ID_PREFIX, PROJECT_HOOKS_CAPABILITY, ProjectHookChange,
-    ProjectHookLine, ProjectHookRequest, ProjectHookReview,
+    ProjectHookLine, ProjectHookRequest, ProjectHookReview, ProjectHooksOff,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, pin::Pin};
@@ -95,8 +95,13 @@ pub trait HookPort: Send + Sync {
     ) -> HookFuture<'_, HookRun>;
     /// Snapshot of the last 200 runs, oldest first.
     fn runs(&self) -> Vec<HookRun>;
-    /// Reads a project's hook file once and compares it with the user's answers.
-    fn review_project(&self, _project_dir: String) -> HookFuture<'_, ProjectHookReview> {
+    /// Reads a project's hook file once and compares it with the user's answers:
+    /// in the folder `session_id` works in, otherwise in `project_dir`.
+    fn review_project(
+        &self,
+        _project_dir: String,
+        _session_id: Option<String>,
+    ) -> HookFuture<'_, ProjectHookReview> {
         Box::pin(async { Ok(ProjectHookReview::None) })
     }
     /// Remembers the user's answer for exactly this content.
@@ -106,10 +111,11 @@ pub trait HookPort: Send + Sync {
     /// Keeps a SessionStart that could not run yet because its hooks wait for an answer.
     fn hold_session_start(&self, _envelope: HookEnvelope) {}
     /// Ends a session's hold. A port holding allowed project hooks runs them for the
-    /// held event; any other port drops it.
+    /// held event, in the session's access mode now; any other port drops it.
     fn release_session_start(
         &self,
         _session_id: String,
+        _access_mode: String,
         _cancel: tokio_util::sync::CancellationToken,
     ) -> HookFuture<'_, ()> {
         Box::pin(async { Ok(()) })

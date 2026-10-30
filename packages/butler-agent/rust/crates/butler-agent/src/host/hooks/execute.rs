@@ -1,10 +1,16 @@
 use super::*;
-use butler_platform::hook_process::{HookProcess, run};
+use butler_platform::hook_process::{HookContainment, HookProcess, HookSandbox, run};
 use futures_util::future::join_all;
 use std::{
     collections::HashSet,
     time::{Duration, Instant},
 };
+/// A review's hooks and the folder they were reviewed in.
+pub(super) struct ProjectScope<'a> {
+    pub(super) hooks: &'a [HookDefinition],
+    pub(super) root: Arc<str>,
+}
+
 fn matched(
     hooks: &Hooks,
     payload: &HookEnvelope,
@@ -42,10 +48,12 @@ pub(super) async fn dispatch(
     hooks: &Arc<Hooks>,
     payload: HookEnvelope,
     cancel: CancellationToken,
-    project: &[HookDefinition],
+    project: Option<ProjectScope<'_>>,
 ) -> Result<Option<String>, String> {
-    let handlers = matched(hooks, &payload, project);
-    Ok(run_handlers(hooks, handlers, payload, cancel).await)
+    let definitions = project.as_ref().map_or(&[][..], |scope| scope.hooks);
+    let handlers = matched(hooks, &payload, definitions);
+    let root = project.map(|scope| scope.root);
+    Ok(run_handlers(hooks, handlers, payload, cancel, root).await)
 }
 
 /// Runs these handlers for the event and returns joined deny reasons in order.
@@ -54,11 +62,12 @@ pub(super) async fn run_handlers(
     handlers: Vec<HookDefinition>,
     payload: HookEnvelope,
     cancel: CancellationToken,
+    root: Option<Arc<str>>,
 ) -> Option<String> {
     let sync = handlers
         .iter()
         .filter(|h| !h.asynchronous)
-        .map(|h| execute(hooks, h, &payload, cancel.clone()));
+        .map(|h| execute(hooks, h, &payload, cancel.clone(), root.as_deref()));
     let reasons: Vec<String> = join_all(sync)
         .await
         .into_iter()
@@ -68,6 +77,7 @@ pub(super) async fn run_handlers(
         let hooks = hooks.clone();
         let payload = payload.clone();
         let cancel = cancel.clone();
+        let root = root.clone();
         tokio::spawn(async move {
             let permit = tokio::select! {
                 permit = hooks.pool.clone().acquire_owned() => permit.ok(),
@@ -77,7 +87,7 @@ pub(super) async fn run_handlers(
             let Some(_permit) = permit else {
                 return;
             };
-            Box::pin(execute(&hooks, &hook, &payload, cancel)).await;
+            Box::pin(execute(&hooks, &hook, &payload, cancel, root.as_deref())).await;
         });
     }
     (!reasons.is_empty()).then(|| reasons.join("\n"))
@@ -96,8 +106,18 @@ async fn execute(
     hook: &HookDefinition,
     payload: &HookEnvelope,
     cancel: CancellationToken,
+    root: Option<&str>,
 ) -> HookRun {
     let start = Instant::now();
+    // A project hook runs where it was reviewed, whichever folder raised the event.
+    let reviewed = root
+        .filter(|_| hook.id.starts_with(PROJECT_HOOK_ID_PREFIX))
+        .map(|root| HookEnvelope {
+            project_dir: Some(root.to_owned()),
+            cwd: root.to_owned(),
+            ..payload.clone()
+        });
+    let payload = reviewed.as_ref().unwrap_or(payload);
     let finished = if hook.kind == "http" {
         super::http::run(hooks, hook, payload, cancel).await
     } else {
@@ -236,7 +256,7 @@ pub(super) async fn test(
             ..HookPayload::default()
         },
     };
-    Ok(Box::pin(execute(hooks, &hook, &payload, cancel)).await)
+    Ok(Box::pin(execute(hooks, &hook, &payload, cancel, None)).await)
 }
 
 fn scope(hook: &HookDefinition) -> &'static str {
@@ -295,7 +315,31 @@ fn input(
         cwd: PathBuf::from(&payload.cwd),
         stdin,
         timeout: Duration::from_millis(hook.timeout_ms),
+        sandbox: sandbox(hooks, hook, payload),
     })
+}
+
+/// A project hook gets the sandbox of the session it runs for, in the folder it was
+/// reviewed in: only full access is exempt, and a mode it cannot name gets the least.
+fn sandbox(hooks: &Hooks, hook: &HookDefinition, payload: &HookEnvelope) -> HookSandbox {
+    if !hook.id.starts_with(PROJECT_HOOK_ID_PREFIX) {
+        return HookSandbox::None;
+    }
+    let mut policy_environment = hooks.environment.clone();
+    policy_environment.insert(
+        "BUTLER_DATA".into(),
+        hooks.data.to_string_lossy().into_owned(),
+    );
+    let containment = HookContainment {
+        policy_environment,
+        root: PathBuf::from(&payload.cwd),
+        data: hooks.data.clone(),
+    };
+    match payload.access_mode.as_deref() {
+        Some("full_access") => HookSandbox::None,
+        Some("auto" | "ask_first" | "ask_except_reads") => HookSandbox::ProjectWrite(containment),
+        _ => HookSandbox::ReadOnly(containment),
+    }
 }
 
 async fn prepare_input(

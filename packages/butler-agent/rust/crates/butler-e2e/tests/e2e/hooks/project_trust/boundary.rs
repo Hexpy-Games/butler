@@ -42,15 +42,49 @@ async fn project_hooks_swap_before_the_answer_runs_only_what_was_approved()
     assert_eq!(project.ran("swapped.jsonl").len(), 1);
     assert_eq!(project.ran("shown.jsonl").len(), 0);
 
-    // What an execution read is what it runs: a swap mid-turn does not reach it.
-    project.write(&[
-        project.observer("guard", "PreToolUse", "swapped.jsonl"),
-        project.observer("late", "Stop", "late.jsonl"),
-    ])?;
-    let turn = s.gw.say_turn(&chat, "Next.").await?;
-    answer(&s, &chat, &card(&s, &chat).await?, "deny").await?;
+    s.finish().await
+}
+
+#[tokio::test]
+async fn project_hooks_a_swap_mid_turn_does_not_reach_the_running_turn() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let (s, project) = start("HOOK-PROJECT-MIDTURN").await?;
+    let chat = project.chat.clone();
+    let approved = [
+        project.observer("post", "PostToolUse", "post.jsonl"),
+        project.observer("stop", "Stop", "stop.jsonl"),
+    ];
+    project.write(&approved)?;
+    let turn = s.gw.say_turn(&chat, "Allow first.").await?;
+    answer(&s, &chat, &card(&s, &chat).await?, "allow").await?;
     delivered(&s, &chat, &turn).await?;
-    assert_eq!(project.ran("late.jsonl").len(), 0);
+
+    // The turn is between its tool and its answer when the file is swapped.
+    let gate = s.provider()?.hold_after_tool("In the middle.");
+    let turn = s.gw.say_turn(&chat, "In the middle.").await?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while project.ran("post.jsonl").len() < 2 {
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    project.write(&[project.observer("stop", "Stop", "swapped.jsonl")])?;
+    gate.release();
+    delivered(&s, &chat, &turn).await?;
+    assert_eq!(
+        project.ran("stop.jsonl").len(),
+        2,
+        "the running turn kept what it read"
+    );
+    assert_eq!(project.ran("swapped.jsonl").len(), 0);
+
+    // The next turn asks about what is there now.
+    let turn = s.gw.say_turn(&chat, "Next.").await?;
+    let asked = card(&s, &chat).await?;
+    assert_eq!(asked["approval"]["project_hooks"]["changed"], true);
+    answer(&s, &chat, &asked, "deny").await?;
+    delivered(&s, &chat, &turn).await?;
+    assert_eq!(project.ran("swapped.jsonl").len(), 0);
     s.finish().await
 }
 
@@ -169,12 +203,25 @@ async fn project_hooks_stopping_a_turn_at_the_card_answers_nothing() -> Result<(
 }
 
 /// One due schedule on the chat, until its run finished.
-async fn scheduled_run(s: &Scenario, chat: &str, title: &str) -> Result<(), HarnessError> {
+pub(super) async fn scheduled_run(
+    s: &Scenario,
+    chat: &str,
+    title: &str,
+) -> Result<(), HarnessError> {
+    scheduled_run_in(s, chat, title, "full_access").await
+}
+
+pub(super) async fn scheduled_run_in(
+    s: &Scenario,
+    chat: &str,
+    title: &str,
+    mode: &str,
+) -> Result<(), HarnessError> {
     let created =
         s.gw.post(
             "/automations",
             json!({"title":title,"prompt_body":"Check evidence.","target_session_id":chat,
-        "schedule_type":"once","run_at":"2000-01-01T00:00:00.000Z","access_mode":"ask_first"}),
+        "schedule_type":"once","run_at":"2000-01-01T00:00:00.000Z","access_mode":mode}),
         )
         .await?;
     assert_eq!(created.status, 201, "{created:?}");
@@ -241,10 +288,32 @@ async fn project_hooks_refused_forms_run_nothing_and_ask_nothing() -> Result<(),
     assert!(accept.is_err(), "a project HTTP hook reached its receiver");
     let runs = api(&s, Method::GET, "/hooks/runs", None).await?;
     assert!(
-        runs.text.contains("Project hooks must be commands"),
+        runs.text.contains("project:.butler/hooks.json"),
         "{}",
         runs.text
     );
+
+    // A parser quotes what it read: bounded and spelled out before anyone sees it.
+    let bait = format!("bogus\u{1b}[2J{}", "x".repeat(2000));
+    fs::write(
+        project.root.join(".butler/hooks.json"),
+        json!({"version":1,"hooks":[],(bait):1}).to_string(),
+    )?;
+    quiet_turn(&s, &chat, "Broken file.").await?;
+    let runs = api(&s, Method::GET, "/hooks/runs", None).await?;
+    let reason = runs
+        .data()
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find_map(|run| {
+            (run["hook_id"] == "project:.butler/hooks.json").then(|| run["reason"].clone())
+        });
+    let reason = reason.unwrap();
+    let reason = reason.as_str().unwrap();
+    assert!(reason.contains("bogus\\u{1b}[2J"), "{reason}");
+    assert!(reason.len() < 700, "{}", reason.len());
 
     // Nothing reached through a link counts as the project's own file.
     if command_sandbox::POSIX_SHELL {

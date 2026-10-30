@@ -5,6 +5,14 @@ use std::path::PathBuf;
 
 #[path = "project_trust/boundary.rs"]
 mod boundary;
+#[path = "project_trust/modes.rs"]
+mod modes;
+#[path = "project_trust/off.rs"]
+mod off;
+#[path = "project_trust/sandbox.rs"]
+mod sandbox;
+#[path = "project_trust/slots.rs"]
+mod slots;
 
 pub(super) struct Project {
     pub(super) root: PathBuf,
@@ -174,13 +182,15 @@ async fn project_hooks_run_nothing_until_allowed() -> Result<(), HarnessError> {
 
     let turn = s.gw.say_turn(&chat, "Check the project.").await?;
     let asked = card(&s, &chat).await?;
-    assert_eq!(asked["approval"]["risk"], "medium");
+    assert_eq!(asked["approval"]["risk"], "high");
     assert_eq!(asked["approval"]["targets"][0]["path"], "작업 Project");
     assert_eq!(asked["approval"]["operation"]["allow_conversation"], false);
     assert_eq!(asked["approval"]["project_hooks"]["changed"], false);
-    assert_eq!(
-        asked["approval"]["project_hooks"]["file"],
-        ".butler/hooks.json"
+    // The full path, so two folders with one name cannot pass for each other.
+    let location = asked["approval"]["project_hooks"]["file"].as_str().unwrap();
+    assert!(
+        location.ends_with("작업 Project/.butler/hooks.json") && Path::new(location).is_absolute(),
+        "{location}"
     );
     let shown = lines(&asked);
     assert_eq!(shown.len(), 5, "{shown:?}");
@@ -280,6 +290,16 @@ async fn project_hooks_changed_content_asks_again_and_marks_lines() -> Result<()
     fs::write(project.root.join(".butler/hooks.json"), same)?;
     quiet_turn(&s, &chat, "Reformatted.").await?;
 
+    // Neither a display name nor a disabled hook changes what runs.
+    let mut named = first.to_vec();
+    named[0]["name"] = json!("A display name");
+    let mut idle = project.observer("idle", "Stop", "idle.jsonl");
+    idle["enabled"] = json!(false);
+    named.push(idle);
+    project.write(&named)?;
+    quiet_turn(&s, &chat, "Renamed.").await?;
+    assert_eq!(project.ran("idle.jsonl").len(), 0);
+
     project.write(&[
         stays,
         project.observer("guard", "PreToolUse", "new.jsonl"),
@@ -355,5 +375,35 @@ async fn project_hooks_denial_is_remembered_and_runs_nothing() -> Result<(), Har
     delivered(&s, &chat, &turn).await?;
     assert_eq!(project.ran("second.jsonl").len(), 1);
     assert_eq!(project.ran("denied.jsonl").len(), 0);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn project_hooks_card_shows_what_affects_running() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, project) = start("HOOK-PROJECT-LINES").await?;
+    let chat = project.chat.clone();
+    let hidden = "a\u{61c}b\u{34f}c\u{115f}d\u{3164}e\u{180e}f\u{fe0f}g\u{e0041}h\u{1d173}i\u{2800}j\u{fff9}k\u{a0}l\u{3000}m  n\to";
+    let mut guard = hook("guard", "PreToolUse", hidden);
+    guard["failClosed"] = json!(true);
+    guard["timeout_ms"] = json!(5000);
+    guard["match"] = json!({"tools":["read_file"]});
+    let background = json!({"id":"background","event":"PostToolUse","type":"command","command":"true","async":true});
+    let plain = project.observer("plain", "Stop", "plain.jsonl");
+    project.write(&[guard, background, plain])?;
+    let turn = s.gw.say_turn(&chat, "Check.").await?;
+    let asked = card(&s, &chat).await?;
+    let shown = lines(&asked);
+    assert_eq!(
+        shown[0]["command"],
+        "a\\u{61c}b\\u{34f}c\\u{115f}d\\u{3164}e\\u{180e}f\\u{fe0f}g\\u{e0041}h\\u{1d173}i\\u{2800}j\\u{fff9}k\\u{a0}l\\u{3000}m \\u{20}n\\to"
+    );
+    assert_eq!(shown[0]["fail_closed"], true);
+    assert_eq!(shown[0]["timeout_ms"], 5000);
+    assert_eq!(shown[1]["asynchronous"], true);
+    assert_eq!(shown[1].get("timeout_ms"), None, "the default is not news");
+    assert_eq!(shown[2].get("fail_closed"), None);
+    answer(&s, &chat, &asked, "deny").await?;
+    delivered(&s, &chat, &turn).await?;
     s.finish().await
 }

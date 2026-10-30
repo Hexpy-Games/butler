@@ -57,6 +57,21 @@ pub(super) fn forge_trust(body: &Value) -> Option<ResponseRecord> {
         &json!({"path":path,"content":"{}","create_parents":true}),
     )
 }
+/// Tries to write the same path with a shell command.
+pub(super) fn forge_trust_by_command(body: &Value) -> Option<ResponseRecord> {
+    let text = body["input"].to_string();
+    let path = text.split("<path>").nth(1)?.split("</path>").next()?;
+    let command = if butler_platform::command_sandbox::POSIX_SHELL {
+        format!("printf forged > '{path}'")
+    } else {
+        format!("echo forged> \"{path}\"")
+    };
+    tool(
+        body,
+        "run_command",
+        &json!({"command":command,"summary":"Hook check","state_effect":"mutation","timeout_ms":30000}),
+    )
+}
 pub(super) fn large(body: &Value) -> Option<ResponseRecord> {
     tool(
         body,

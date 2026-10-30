@@ -206,9 +206,18 @@ export interface ApprovalRequestCopy {
   projectHooks: {
     title: (folder: string | null) => string;
     changedTitle: (folder: string | null) => string;
+    offTitle: (folder: string | null) => string;
+    receives: string;
+    unsandboxed: string;
+    off: { missing: string; disabled: string; refused: string };
     change: { changed: string; added: string; removed: string };
+    failClosed: string;
+    background: string;
+    timeout: (seconds: number) => string;
     deny: string;
     allow: string;
+    stop: string;
+    proceed: string;
   };
   /** Any kind this App does not know yet. */
   generic: string;

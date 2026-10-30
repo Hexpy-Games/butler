@@ -1,26 +1,23 @@
 //! Project-folder hooks. The file is read once for each review; what that read
 //! parsed is what gets hashed, shown on the card and run, and nothing reads the
 //! file again until the next review. A file that is a symlink, or reached through
-//! one, is refused, and so is one with an HTTP hook: those need a signing secret
-//! from the user's own configuration.
-use super::{Dispatcher, Hooks, execute, trust};
+//! one, is refused, and so is one with anything but command hooks.
+use super::{Dispatcher, Hooks, execute, project_lines, trust};
 use butler_core::hooks::*;
 use butler_platform::secure_fs;
 use std::{
     io::{self, Read},
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 use tokio_util::sync::CancellationToken;
 
 const CAP: u64 = 256 * 1024;
-/// A folder name is cut after this many characters on the card.
-const MAX_FOLDER_CHARS: usize = 80;
 
 /// One read of a project's hook file.
 struct ProjectFile {
     request: ProjectHookRequest,
-    /// Every hook, ids prefixed for run records.
+    /// The hooks that would run, ids prefixed for run records.
     hooks: Vec<HookDefinition>,
 }
 
@@ -31,14 +28,12 @@ enum Found {
 }
 
 /// A root's filesystem identity: a replaced folder has another one, even at the
-/// same path with the same files.
-fn folder_identity(root: &Path) -> io::Result<String> {
-    let identity = secure_fs::identity(&std::fs::metadata(root)?);
-    Ok(match (identity.id, identity.changed) {
-        (Some(id), _) => format!("{}:{}", id.device, id.inode),
-        (None, Some(created)) => format!("{}.{}", created.seconds, created.nanoseconds),
-        (None, None) => String::new(),
-    })
+/// same path with the same files. A folder without one cannot be answered for.
+fn folder_identity(root: &Path) -> Result<String, String> {
+    match secure_fs::directory_id(root).map_err(|error| error.to_string())? {
+        Some(id) => Ok(format!("{}:{}", id.device, id.inode)),
+        None => Err("Project folder has no filesystem identity".into()),
+    }
 }
 
 fn read_config(root: &Path) -> Result<Option<HookConfig>, String> {
@@ -69,152 +64,69 @@ fn read_config(root: &Path) -> Result<Option<HookConfig>, String> {
     Ok(Some(config))
 }
 
-/// Control and invisible characters could hide part of a command on the card.
-fn visible(text: &str) -> String {
-    let mut shown = String::with_capacity(text.len());
-    for character in text.chars() {
-        match character {
-            '\n' => shown.push_str("\\n"),
-            '\r' => shown.push_str("\\r"),
-            '\t' => shown.push_str("\\t"),
-            '\u{ad}'
-            | '\u{200b}'..='\u{200f}'
-            | '\u{2028}'..='\u{202e}'
-            | '\u{2060}'..='\u{206f}'
-            | '\u{feff}' => shown.push_str(&format!("\\u{{{:x}}}", u32::from(character))),
-            control if control.is_control() => {
-                shown.push_str(&format!("\\u{{{:x}}}", u32::from(control)));
-            }
-            other => shown.push(other),
-        }
-    }
-    shown
+/// One folder, as the review found it.
+struct Folder {
+    path: String,
+    identity: String,
+    location: String,
+    name: String,
 }
 
-/// Quotes what a reader could otherwise split differently from the real argv.
-fn quoted(argument: &str) -> String {
-    let plain = !argument.is_empty()
-        && argument
-            .chars()
-            .all(|c| c.is_alphanumeric() || "-_./:=@%+,".contains(c));
-    if plain {
-        argument.to_owned()
-    } else {
-        format!("'{}'", argument.replace('\'', "'\\''"))
-    }
-}
-
-/// The exact action: environment additions first, as a shell would read them.
-fn action(hook: &HookDefinition) -> String {
-    let mut parts: Vec<String> = hook
-        .env
-        .iter()
-        .map(|(key, value)| format!("{}={}", quoted(key), quoted(value)))
-        .collect();
-    match (&hook.command, &hook.args) {
-        (Some(command), _) => parts.push(command.clone()),
-        (None, Some(args)) => parts.extend(args.iter().map(|argument| quoted(argument))),
-        (None, None) => {}
-    }
-    visible(&parts.join(" "))
-}
-
-fn line(hook: &HookDefinition) -> Result<ProjectHookLine, String> {
-    let definition = serde_json::to_string(hook).map_err(|error| error.to_string())?;
-    Ok(ProjectHookLine {
-        id: hook.id.clone(),
-        event: hook.event,
-        tools: hook
-            .matcher
-            .tools
-            .iter()
-            .map(|tool| visible(tool))
-            .collect(),
-        command: action(hook),
-        digest: butler_turn::btcc::digest_identity(&definition),
-        change: None,
-    })
-}
-
-fn folder_name(root: &Path) -> String {
-    let name: String = root
-        .file_name()
-        .map(|name| name.to_string_lossy())
-        .unwrap_or_default()
-        .chars()
-        .filter(|character| !character.is_control())
-        .take(MAX_FOLDER_CHARS)
-        .collect();
-    visible(&name)
-}
-
-fn with_changes(
-    mut lines: Vec<ProjectHookLine>,
-    last_allowed: &[ProjectHookLine],
-) -> Vec<ProjectHookLine> {
+/// Hooks the user allowed can no longer run. That is a question only if they had
+/// allowed some here: otherwise there was never anything to lose.
+fn hooks_off(folder: Folder, off: ProjectHooksOff, store: trust::Store) -> Found {
+    let last_allowed = store.last_allowed(&folder.path, &folder.identity);
     if last_allowed.is_empty() {
-        return lines;
+        return Found::Nothing;
     }
-    for line in &mut lines {
-        line.change = match last_allowed.iter().find(|old| old.id == line.id) {
-            None => Some(ProjectHookChange::Added),
-            Some(old) if old.digest != line.digest => Some(ProjectHookChange::Changed),
-            Some(_) => None,
-        };
-    }
-    let removed: Vec<ProjectHookLine> = last_allowed
-        .iter()
-        .filter(|old| !lines.iter().any(|line| line.id == old.id))
-        .map(|old| ProjectHookLine {
-            change: Some(ProjectHookChange::Removed),
-            ..old.clone()
-        })
-        .collect();
-    lines.extend(removed);
-    lines
+    let content_hash = butler_turn::btcc::digest_identity(&format!(
+        "project-hooks-off\0{}\0{}\0{off:?}",
+        folder.path, folder.identity
+    ));
+    let request = ProjectHookRequest {
+        content_hash,
+        folder: folder.name,
+        file: PROJECT_HOOK_FILE.into(),
+        location: folder.location,
+        changed: true,
+        unsandboxed: false,
+        off: Some(off),
+        hooks: project_lines::with_changes(Vec::new(), last_allowed),
+        project_identity: folder.identity,
+        project_path: folder.path,
+    };
+    let file = ProjectFile {
+        request,
+        hooks: Vec::new(),
+    };
+    Found::File(Box::new(file), store)
 }
 
-/// Hashes what was parsed, not the bytes: only a change in what would run asks again.
-fn load(root: &Path, user_hooks: &Path, data: &Path) -> Result<Found, String> {
-    let resolved = match secure_fs::canonicalize(root) {
-        Ok(resolved) => resolved,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Found::Nothing),
-        Err(error) => return Err(error.to_string()),
-    };
-    if secure_fs::canonicalize(resolved.join(PROJECT_HOOK_FILE)).is_ok_and(|file| {
-        secure_fs::canonicalize(user_hooks).is_ok_and(|user_file| user_file == file)
-    }) {
-        return Ok(Found::Nothing); // The user's own file, whose project is its parent folder.
-    }
-    let before = folder_identity(&resolved).map_err(|error| error.to_string())?;
-    let Some(config) = read_config(&resolved)? else {
-        return Ok(Found::Nothing);
-    };
-    if folder_identity(&resolved).map_err(|error| error.to_string())? != before {
-        return Err("Project folder changed while it was read".into());
-    }
-    if !config.hooks.iter().any(|hook| hook.enabled) {
-        return Ok(Found::Nothing);
-    }
-    let parsed = serde_json::to_string(&config).map_err(|error| error.to_string())?;
-    let path = resolved.to_string_lossy().into_owned();
-    let content_hash =
-        butler_turn::btcc::digest_identity(&format!("project-hooks\0{path}\0{before}\0{parsed}"));
-    let lines = config.hooks.iter().filter(|hook| hook.enabled).map(line);
+/// Hashes what would run, not the bytes: only a change in that asks again.
+fn hooks_on(folder: Folder, config: HookConfig, store: trust::Store) -> Result<Found, String> {
+    let enabled = config.hooks.iter().filter(|hook| hook.enabled);
+    let runnable: Vec<HookDefinition> = enabled.map(project_lines::runnable).collect();
+    let parsed = serde_json::to_string(&runnable).map_err(|error| error.to_string())?;
+    let content_hash = butler_turn::btcc::digest_identity(&format!(
+        "project-hooks\0{}\0{}\0{parsed}",
+        folder.path, folder.identity
+    ));
+    let lines = runnable.iter().map(project_lines::line);
     let lines = lines.collect::<Result<Vec<_>, _>>()?;
-    let store = trust::read(data);
-    let last_allowed = store.last_allowed(&path, &before);
+    let last_allowed = store.last_allowed(&folder.path, &folder.identity);
     let request = ProjectHookRequest {
-        project_identity: before,
         content_hash,
-        folder: folder_name(&resolved),
+        folder: folder.name,
         file: PROJECT_HOOK_FILE.into(),
+        location: folder.location,
         changed: !last_allowed.is_empty(),
-        hooks: with_changes(lines, last_allowed),
-        project_path: path,
+        unsandboxed: false,
+        off: None,
+        hooks: project_lines::with_changes(lines, last_allowed),
+        project_identity: folder.identity,
+        project_path: folder.path,
     };
-    let hooks = config
-        .hooks
+    let hooks = runnable
         .into_iter()
         .map(|hook| HookDefinition {
             id: format!("{PROJECT_HOOK_ID_PREFIX}{}", hook.id),
@@ -224,8 +136,47 @@ fn load(root: &Path, user_hooks: &Path, data: &Path) -> Result<Found, String> {
     Ok(Found::File(Box::new(ProjectFile { request, hooks }), store))
 }
 
+/// What a read of the folder means, and the reason if the file had to be refused.
+fn load(root: &Path, user_hooks: &Path, data: &Path) -> Result<(Found, Option<String>), String> {
+    let resolved = match secure_fs::canonicalize(root) {
+        Ok(resolved) => resolved,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok((Found::Nothing, None)),
+        Err(error) => return Err(error.to_string()),
+    };
+    let file = resolved.join(PROJECT_HOOK_FILE);
+    if secure_fs::canonicalize(&file).is_ok_and(|file| {
+        secure_fs::canonicalize(user_hooks).is_ok_and(|user_file| user_file == file)
+    }) {
+        return Ok((Found::Nothing, None)); // The user's own file, in its parent folder.
+    }
+    let identity = folder_identity(&resolved)?;
+    let config = read_config(&resolved);
+    if folder_identity(&resolved)? != identity {
+        return Err("Project folder changed while it was read".into());
+    }
+    let folder = Folder {
+        path: resolved.to_string_lossy().into_owned(),
+        identity,
+        location: project_lines::visible(&file.to_string_lossy()),
+        name: project_lines::folder_name(&resolved),
+    };
+    let store = trust::read(data);
+    Ok(match config {
+        Err(reason) => (
+            hooks_off(folder, ProjectHooksOff::Refused, store),
+            Some(reason),
+        ),
+        Ok(None) => (hooks_off(folder, ProjectHooksOff::Missing, store), None),
+        Ok(Some(config)) if !config.hooks.iter().any(|hook| hook.enabled) => {
+            (hooks_off(folder, ProjectHooksOff::Disabled, store), None)
+        }
+        Ok(Some(config)) => (hooks_on(folder, config, store)?, None),
+    })
+}
+
 /// A refused file runs nothing, and says why in Settings' run log, once per reason.
-fn report_refused(hooks: &Hooks, reason: String) {
+fn report_refused(hooks: &Hooks, reason: &str) {
+    let reason = project_lines::safe_reason(reason);
     let hook_id = format!("{PROJECT_HOOK_ID_PREFIX}{PROJECT_HOOK_FILE}");
     let repeated = hooks
         .state
@@ -254,26 +205,41 @@ fn report_refused(hooks: &Hooks, reason: String) {
     });
 }
 
+/// The folder a session works in, which a turn reviews too: its project's root
+/// until the session moves to a worktree or another folder.
+async fn session_folder(hooks: &Hooks, session_id: &str, project_dir: String) -> String {
+    match hooks.bindings.get_by_session_id(session_id).await {
+        Ok(Some(binding)) if !binding.workspace_path.is_empty() => binding.workspace_path,
+        _ => project_dir,
+    }
+}
+
 pub(super) async fn review(
     hooks: &Arc<Hooks>,
     project_dir: String,
+    session_id: Option<String>,
 ) -> Result<ProjectHookReview, String> {
-    let root = PathBuf::from(project_dir);
+    let root = match session_id {
+        Some(session) => session_folder(hooks, &session, project_dir).await,
+        None => project_dir,
+    };
     let user_hooks = hooks.path.clone();
     let data = hooks.data.clone();
-    let found = tokio::task::spawn_blocking(move || load(&root, &user_hooks, &data))
+    let found = tokio::task::spawn_blocking(move || load(Path::new(&root), &user_hooks, &data))
         .await
         .map_err(|error| error.to_string())?;
-    let (file, store) = match found {
-        Ok(Found::File(file, store)) => (file, store),
-        Ok(Found::Nothing) => return Ok(ProjectHookReview::None),
-        Err(reason) => {
-            report_refused(hooks, reason);
-            return Ok(ProjectHookReview::None);
-        }
+    let (found, refused) = match found {
+        Ok(found) => found,
+        Err(reason) => (Found::Nothing, Some(reason)),
+    };
+    if let Some(reason) = refused {
+        report_refused(hooks, &reason);
+    }
+    let Found::File(file, store) = found else {
+        return Ok(ProjectHookReview::None);
     };
     Ok(match store.answer(&file.request) {
-        Some(true) => ProjectHookReview::Trusted(Arc::new(Scoped::new(hooks, file.hooks))),
+        Some(true) => ProjectHookReview::Trusted(Arc::new(Scoped::new(hooks, *file))),
         Some(false) => ProjectHookReview::Denied,
         None => ProjectHookReview::Undecided(Box::new(file.request)),
     })
@@ -283,13 +249,16 @@ pub(super) async fn review(
 struct Scoped {
     inner: Dispatcher,
     hooks: Vec<HookDefinition>,
+    /// The reviewed folder: its hooks run there, wherever the event came from.
+    root: Arc<str>,
 }
 
 impl Scoped {
-    fn new(hooks: &Arc<Hooks>, definitions: Vec<HookDefinition>) -> Self {
+    fn new(hooks: &Arc<Hooks>, file: ProjectFile) -> Self {
         Self {
             inner: Dispatcher(hooks.clone()),
-            hooks: definitions,
+            hooks: file.hooks,
+            root: file.request.project_path.into(),
         }
     }
 }
@@ -321,7 +290,10 @@ impl HookPort for Scoped {
             &self.inner.0,
             payload,
             cancel,
-            &self.hooks,
+            Some(execute::ProjectScope {
+                hooks: &self.hooks,
+                root: self.root.clone(),
+            }),
         ))
     }
     fn settings(&self) -> HookSettings {
@@ -341,8 +313,12 @@ impl HookPort for Scoped {
     fn runs(&self) -> Vec<HookRun> {
         self.inner.runs()
     }
-    fn review_project(&self, project_dir: String) -> HookFuture<'_, ProjectHookReview> {
-        self.inner.review_project(project_dir)
+    fn review_project(
+        &self,
+        project_dir: String,
+        session_id: Option<String>,
+    ) -> HookFuture<'_, ProjectHookReview> {
+        self.inner.review_project(project_dir, session_id)
     }
     fn decide_project(&self, request: ProjectHookRequest, allowed: bool) -> HookFuture<'_, ()> {
         self.inner.decide_project(request, allowed)
@@ -354,18 +330,21 @@ impl HookPort for Scoped {
     fn release_session_start(
         &self,
         session_id: String,
+        access_mode: String,
         cancel: CancellationToken,
     ) -> HookFuture<'_, ()> {
         Box::pin(async move {
             let held = self.inner.0.held_starts.lock().remove(&session_id);
-            if let Some(envelope) = held {
+            if let Some(mut envelope) = held {
+                envelope.access_mode = Some(access_mode);
                 let handlers = self
                     .hooks
                     .iter()
                     .filter(|hook| hook.event == envelope.hook_event_name && hook.enabled)
                     .cloned()
                     .collect();
-                execute::run_handlers(&self.inner.0, handlers, envelope, cancel).await;
+                let root = Some(self.root.clone());
+                execute::run_handlers(&self.inner.0, handlers, envelope, cancel, root).await;
             }
             Ok(())
         })

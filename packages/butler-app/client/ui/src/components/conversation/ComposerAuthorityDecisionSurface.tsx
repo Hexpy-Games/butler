@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { isAbsolutePath } from "@/app/approvalTargets.ts";
@@ -17,6 +18,17 @@ const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
   restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, project_hooks: Terminal, other: ShieldCheck,
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
+
+const hookCopy = () => appCopy.interfaceTemplates.approvalRequest.projectHooks;
+
+/** Every hook stays in the card's scroll area: what is not on screen would still run. */
+const FULL_DETAIL_KINDS: ReadonlySet<ApprovalActionKind> = new Set(["manage_schedule", "generate_image", "edit_image", "project_hooks"]);
+
+/** A hook line's text, then what the card says about it: its own element in its own tone, which a command's text never has. */
+function hookLine(text: string, decision: ComposerAuthorityDecision) {
+  const tags = decision.hookTags?.get(text);
+  return tags?.length ? <>{text}{tags.map(tag => <Fragment key={tag.label}>{" "}<Typo.Caption tone={tag.tone}>({tag.label})</Typo.Caption></Fragment>)}</> : text;
+}
 
 /** Display only: retain the original path in the DS title and accessible label. */
 function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
@@ -39,9 +51,9 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     eyebrow={appCopy.composer.permission}
     title={decision.title}
     details={decision.details}
-    renderText={(text) => approvalPathText(text, decision)}
-    detailsShowMoreLabel={decision.actionKind === "manage_schedule" || decision.actionKind === "generate_image" || decision.actionKind === "edit_image" ? undefined : appCopy.conversation.messageActions.showMore}
-    detailsShowLessLabel={decision.actionKind === "manage_schedule" || decision.actionKind === "generate_image" || decision.actionKind === "edit_image" ? undefined : appCopy.conversation.messageActions.showLess}
+    renderText={(text) => decision.hookTags ? hookLine(text, decision) : approvalPathText(text, decision)}
+    detailsShowMoreLabel={FULL_DETAIL_KINDS.has(decision.actionKind) ? undefined : appCopy.conversation.messageActions.showMore}
+    detailsShowLessLabel={FULL_DETAIL_KINDS.has(decision.actionKind) ? undefined : appCopy.conversation.messageActions.showLess}
     onOpen={decision.onOpenSource}
     error={decision.error}
     aside={<>
@@ -52,8 +64,8 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     </>}
     data-test-class="composer-authority-decision"
     actions={(complete) => decision.actionKind === "project_hooks" ? <ButtonContainer size="sm" justify="end">
-      <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{appCopy.interfaceTemplates.approvalRequest.projectHooks.deny}</Button>
-      <Button type="button" size="sm" disabled={decision.pending} onClick={() => complete(decision.onAllow)}>{appCopy.interfaceTemplates.approvalRequest.projectHooks.allow}</Button>
+      <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.hooksOff ? decision.onStopTurn ?? decision.onDeny : decision.onDeny)}>{decision.hooksOff ? hookCopy().stop : hookCopy().deny}</Button>
+      <Button type="button" size="sm" disabled={decision.pending} onClick={() => complete(decision.onAllow)}>{decision.hooksOff ? hookCopy().proceed : hookCopy().allow}</Button>
     </ButtonContainer> : <ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{appCopy.interfaceDetails.deny}</Button>
       <SplitButton size="sm" text={decision.allowSite ? appCopy.interfaceDetails.allowInChat : appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}

@@ -277,6 +277,35 @@ pub fn login_shell_contained(
     )
 }
 
+/// `invocation` inside the read-only sandbox, with `root` readable. Hosts without one
+/// refuse it. Never start the invocation unwrapped instead.
+pub(crate) fn read_only_invocation(
+    invocation: Invocation,
+    environment: &HashMap<String, String>,
+    root: &Path,
+) -> Result<Invocation, SandboxError> {
+    sandbox::read_only_contained(invocation, environment, &[], &[root])
+}
+
+/// `invocation` inside the project-write sandbox; see [`project_write_shell`].
+pub(crate) fn project_write_invocation(
+    invocation: Invocation,
+    environment: &HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
+    toolchain_roots: Option<&ToolchainRoots>,
+) -> Result<Invocation, SandboxError> {
+    sandbox::project_write(
+        invocation,
+        environment,
+        root,
+        writable,
+        denied,
+        toolchain_roots,
+    )
+}
+
 /// Account folders supplied by the caller for installed toolchain discovery.
 /// These may differ from the command's redirected profile environment.
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -271,6 +271,7 @@ impl AgentRuntime {
             crate::host::hooks::Dispatcher::open(
                 plugins.clone(),
                 paths.data_root.clone(),
+                stores.bindings.clone(),
                 &host_environment,
                 stop.clone(),
             )

@@ -178,23 +178,34 @@ is an error, never truncated success. Stdin is streamed in full.
 ### Project-folder hooks
 
 A project folder can define command hooks in `.butler/hooks.json`, in the same
-format. They run only after you allow their exact content, on a card that lists each
-hook's event, tools and command (with its environment additions). You are asked once,
-and again only when the content changes; a card about changed content marks what
-changed since you last allowed it. Formatting is not content. Allow and deny both
-apply to that content in that folder, so moving or replacing the folder asks again,
-and a denied file stays silent until it changes.
+format. They run only after you allow their exact content, on a card that lists the
+file's full path and each hook's event, tools, command and environment additions,
+plus any failure rule, background run or time limit that differs from the default.
+You are asked once, and again only when what would run changes; a card about changed
+content marks what changed since you last allowed it. Formatting, display names and
+disabled hooks are not content. Allow and deny both apply to that content in that
+folder, so moving or replacing the folder asks again, and a denied file stays silent
+until it changes.
+
+Project hooks run inside the session's sandbox, whichever event raised them: in
+`auto`, `ask_first` and `ask_except_reads` they may write only inside the project and
+scratch folders, and in `read_only` nowhere. Neither has network access or can read
+credential stores. Only `full_access` is exempt, and its card says so. A host that
+cannot apply the sandbox does not run the hook.
 
 Hooks read for a turn are the hooks that turn runs: changing the file mid-turn has
 no effect until the next turn asks. The commands themselves are not hashed, so an
 allowed hook that runs a script in the project runs the script's current content.
 
-The card appears before the turn's first model round. A scheduled run has nobody to
-answer, so unanswered hooks do not run and the run continues. SessionStart held back
-by a card runs after you allow it; UserPromptSubmit starts with your next message.
-`type: "http"` hooks, a symlink at `.butler/hooks.json` or `.butler`, and an invalid
-file are refused: nothing runs, nothing is asked, and the reason is in the run log.
-Project hooks receive `hook: {id: "project:<id>", scope: "project"}`. Answers are kept
+The card appears before the turn's first model round. If the file you allowed is
+deleted, loses all its enabled hooks or stops being usable, the next turn asks whether
+to continue without them. A scheduled run has nobody to answer, so unanswered hooks
+do not run and the run continues; if hooks you had allowed are affected, the run
+reports it. SessionStart held back by a card runs after you allow it; UserPromptSubmit
+starts with your next message. A symlink at `.butler/hooks.json` or `.butler`, any hook
+that is not a command, and an invalid file are refused: nothing runs, and the reason
+is in the run log. Project hooks receive `hook: {id: "project:<id>", scope: "project"}`,
+with `cwd` and `project_dir` set to the folder they were reviewed in. Answers are kept
 in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write.
 
 `type: "http"` hooks POST the same envelope as JSON (`Content-Type:
