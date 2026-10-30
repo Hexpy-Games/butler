@@ -91,23 +91,20 @@ impl CredentialStoreError {
 
 /// The store new keys go to, and why it is the file although the system
 /// store was chosen.
-pub struct TargetStore {
-    /// The store new keys go to.
-    pub store: SecretStore,
-    /// Why it is the file although the system store was chosen.
-    pub fallback: Option<Arc<CredentialStoreError>>,
+pub(super) struct TargetStore {
+    pub(super) store: SecretStore,
+    pub(super) fallback: Option<Arc<CredentialStoreError>>,
 }
 
 /// The process's view of the credential stores.
-pub struct ProviderSecrets {
+pub(super) struct ProviderSecrets {
     facts: SecretStoreFacts,
     system: Mutex<Option<SecretStore>>,
     system_calls: Arc<Semaphore>,
 }
 
 impl ProviderSecrets {
-    /// The stores for a process with these facts.
-    pub fn new(facts: SecretStoreFacts) -> Self {
+    pub(super) fn new(facts: SecretStoreFacts) -> Self {
         Self {
             facts,
             system: Mutex::new(None),
@@ -139,7 +136,7 @@ impl ProviderSecrets {
     }
 
     /// Where a new key goes (see the module documentation for the fallback).
-    pub async fn target(&self, root: &Path) -> Result<TargetStore, CredentialStoreError> {
+    pub(super) async fn target(&self, root: &Path) -> Result<TargetStore, CredentialStoreError> {
         let (facts, config) = (self.facts, root.join("butler.config.json"));
         let choice = tokio::task::spawn_blocking(move || choose(facts, &read_object_sync(&config)))
             .await
@@ -164,7 +161,7 @@ impl ProviderSecrets {
     }
 
     /// The store that holds keys saved to `backend`.
-    pub async fn holding(
+    pub(super) async fn holding(
         &self,
         root: &Path,
         backend: SecretBackend,
@@ -181,7 +178,7 @@ impl ProviderSecrets {
     }
 
     /// Reads the key stored under `key`.
-    pub async fn get(
+    pub(super) async fn get(
         &self,
         store: &SecretStore,
         key: &SecretKey,
@@ -198,7 +195,7 @@ impl ProviderSecrets {
     }
 
     /// Stores `secret` under `key` and reads it back.
-    pub async fn put(
+    pub(super) async fn put(
         &self,
         store: &SecretStore,
         key: &SecretKey,
@@ -226,7 +223,7 @@ impl ProviderSecrets {
     }
 
     /// Removes the key stored under `key`; false when there was none.
-    pub async fn remove(
+    pub(super) async fn remove(
         &self,
         store: &SecretStore,
         key: &SecretKey,
@@ -276,29 +273,14 @@ pub(super) fn key(
     provider_id: &str,
     credential_id: &str,
 ) -> Result<SecretKey, SecretError> {
-    scoped_key(
-        root,
-        backend,
-        SERVICE,
-        &format!("{provider_id}/{credential_id}"),
-    )
-}
-
-/// The key `account` is stored under in `backend`: the system store's service
-/// also names the data folder, so two folders never share each other's keys.
-pub fn scoped_key(
-    root: &Path,
-    backend: SecretBackend,
-    service: &str,
-    account: &str,
-) -> Result<SecretKey, SecretError> {
+    let account = format!("{provider_id}/{credential_id}");
     if backend.is_system() {
         let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
         let digest = Sha256::digest(root.to_string_lossy().as_bytes());
         let hash = hex(digest.get(..8).unwrap_or_default());
-        SecretKey::new(&format!("{service}.{hash}"), account)
+        SecretKey::new(&format!("{SERVICE}.{hash}"), &account)
     } else {
-        SecretKey::new(service, account)
+        SecretKey::new(SERVICE, &account)
     }
 }
 
@@ -308,19 +290,10 @@ pub fn scoped_key(
 /// file cannot be read or created.
 pub(super) fn fingerprint(root: &Path, provider_id: &str, secret: &str) -> Option<String> {
     let key = fingerprint_key(root)?;
-    hmac_sha256_hex(
-        key.as_bytes(),
-        &[provider_id.as_bytes(), b"\n", secret.as_bytes()],
-    )
-}
-
-/// The lowercase hex HMAC-SHA-256 of the concatenated `parts` under `key`.
-/// `None` only if the key is refused, which HMAC never does.
-pub fn hmac_sha256_hex(key: &[u8], parts: &[&[u8]]) -> Option<String> {
-    let mut mac = Hmac::<Sha256>::new_from_slice(key).ok()?;
-    for part in parts {
-        mac.update(part);
-    }
+    let mut mac = Hmac::<Sha256>::new_from_slice(key.as_bytes()).ok()?;
+    mac.update(provider_id.as_bytes());
+    mac.update(b"\n");
+    mac.update(secret.as_bytes());
     Some(hex(&mac.finalize().into_bytes()))
 }
 

@@ -98,10 +98,9 @@ pub use configuration::chatgpt;
 pub use configuration::{
     CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
-    CredentialStorePolicy, CredentialStoreView, CredentialStores, DeletedCredential, FileOverride,
-    SecretBackend, SecretStoreFacts, SecretStoreMode, StoreReason, TargetStore,
-    credential_file_summary, credential_store_policy, fallback_file, hmac_sha256_hex,
-    reset_secret_keys, scoped_secret_key,
+    CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
+    SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
+    credential_store_policy, fallback_file, reset_secret_keys,
 };
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, ImageModelError, ImageModelSelection,

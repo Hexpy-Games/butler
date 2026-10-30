@@ -116,7 +116,7 @@ change nothing else. Each is off unless set to `1`.
 | `BUTLER_SHUTDOWN_TRACE` | Shutdown phase begin/end markers (the desktop App sets it) |
 | `BUTLER_MEMORY_SYNC_TRACE` | Memory sync wakes, source revisions and vector scheduling |
 
-## User command and HTTP hooks
+## User command hooks
 
 Settings → Hooks manages `$BUTLER_DATA/hooks.json`. No hooks are installed by
 default. Hooks run with your privileges and receive full prompt and tool content.
@@ -174,55 +174,6 @@ then background handlers use a pool of eight. Identical handlers deduplicate.
 Timeout and cancellation terminate the process tree, allow two seconds of grace,
 then force termination and reap. Each output stream is capped at 64 KiB; overflow
 is an error, never truncated success. Stdin is streamed in full.
-
-`type: "http"` hooks POST the same envelope as JSON (`Content-Type:
-application/json`) to `url` instead of running a process:
-
-```json
-{"id":"audit","event":"PostToolUse","type":"http",
- "url":"https://hooks.example.com/butler","timeout_ms":5000}
-```
-
-Only `https` URLs without a user name or password are accepted, plus plain
-`http` to a loopback host (`localhost`, `127.0.0.0/8`, `[::1]`); this is checked
-when the configuration loads and again before each request. Plain `http` never
-goes through a proxy and `localhost` always means this machine; `https` honors the
-environment's proxies. `command`, `args` and `env` are rejected, and plugin hooks
-stay command-only.
-
-Every request is signed. `X-Butler-Timestamp` is the Unix time in seconds and
-`X-Butler-Signature` is `sha256=<hex>`, the HMAC-SHA256 of `<timestamp>.<raw
-body>` under the hook's secret. Receivers should recompute it over the raw bytes,
-compare in constant time and refuse old timestamps.
-
-A `PUT /hooks` that adds a hook or changes its URL creates a secret when it has
-none for that origin, and returns it once in `generated_secrets`. Set your own (16 to 1024 characters) with
-`"secrets": {"<hook id>": "<secret>"}` next to `config`. Secrets are kept in the
-same credential store as provider API keys, never in `hooks.json`, and no other
-response, run record, log or error contains them.
-
-A secret belongs to one URL origin (scheme, host and port). Changing a hook's
-origin through `PUT /hooks` issues a new secret, unless you set one. A hook written
-into the file signs only if a secret was already saved for that id and origin;
-otherwise it fails without sending anything until `PUT /hooks` sets one with
-`"secrets"`. Saving it unchanged does not issue one. A `secret` field in the file
-is invalid.
-
-A new secret signs only once its save completes with the client still connected.
-A save that fails, or whose client disconnects first, changes nothing: the old URL
-and secret keep working, and any other part of that request does not apply. If the
-process stops after saving the configuration but before the secret takes effect,
-the hook refuses to send until the next save issues a new one.
-
-Redirects are not followed. A 2xx response body is read like
-command stdout: the same decision JSON denies a pre-event, and an empty or
-non-JSON body continues. There is no exit-2 equivalent. Non-2xx statuses
-(redirects included), unreachable hosts, timeouts, cancellation and bodies over
-64 KiB or not UTF-8 are failures with the same `failClosed` rule. Runs record the
-response status as `http_status` and up to 4 KiB of the body; errors never
-include the URL, and Butler's HTTP log records only the scheme and host of a hook
-request, never its path, query or bodies. Timeouts, `async` and limits are the
-same as for commands.
 
 Windows `command` uses `cmd.exe /d /s /c`. For PowerShell use
 `args: ["pwsh", "-NoProfile", "-File", "C:\\path\\hook.ps1"]`. PowerShell 5
