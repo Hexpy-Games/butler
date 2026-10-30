@@ -76,7 +76,7 @@ function FileFace({ item, withMeta }: { item: AttachmentListItem; withMeta: bool
           <Typo.Caption className={dsClass(styles.fileType)} weight="semibold" tone="secondary" truncate>{item.extension}</Typo.Caption>
         ) : null}
       </span>
-      <Typo.Caption className={dsClass(styles.fileName)} lineClamp={2} wrap="anywhere">{item.name}</Typo.Caption>
+      <Typo.Caption className={dsClass(styles.fileName)} truncate>{item.name}</Typo.Caption>
       {withMeta && item.meta ? (
         <Typo.Caption className={dsClass(styles.fileMeta)} tone="tertiary" numeric="tabular" truncate>{item.meta}</Typo.Caption>
       ) : null}

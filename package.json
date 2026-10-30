@@ -46,6 +46,7 @@
     "app:composer-model:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/composer-model-fallback-smoke.ts",
     "app:open-in-app:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-open-in-app-smoke.ts",
     "app:attachment-viewer:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-attachment-viewer-smoke.ts",
+    "app:attachment-thumbnails:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-attachment-thumbnails-smoke.ts",
     "app:composer-ime:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-composer-ime-smoke.ts",
     "app:queued-send-now:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-queued-send-now-smoke.ts",
     "app:session-info:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-session-info-smoke.ts",
