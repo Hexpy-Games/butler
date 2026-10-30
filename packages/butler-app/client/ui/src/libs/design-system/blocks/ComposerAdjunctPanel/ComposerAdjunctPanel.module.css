@@ -3,11 +3,14 @@
   min-width: 0;
 }
 
+/* The chevron follows the heading (or the collapsed summary) directly;
+   only the text truncates, and the free space stays after the chevron. */
 .header {
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, max-content) auto;
+  justify-content: start;
   gap: var(--space-2);
   align-items: center;
   border: 0;
@@ -25,15 +28,15 @@
 }
 
 .header[data-has-icon="false"] {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, max-content) auto;
 }
 
 .header[data-has-summary="true"] {
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, max-content) auto;
 }
 
 .header[data-has-icon="false"][data-has-summary="true"] {
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, max-content) auto;
 }
 
 .header:focus-visible {

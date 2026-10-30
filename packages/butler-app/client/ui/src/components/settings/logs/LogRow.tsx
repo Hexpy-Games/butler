@@ -16,7 +16,6 @@ export function LogRow({ record, open, onToggle }: { record: LogRecord; open: bo
     .filter(Boolean).join(" · ");
   return (
     <DisclosureRow
-      affordance="trailing"
       title={logTitle(record)}
       description={description}
       attention={severity === "error" ? "error" : severity === "warn" ? "warning" : undefined}

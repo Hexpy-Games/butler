@@ -3,9 +3,9 @@
 ## What is this component
 Plain text clamped to `collapsedLines` (1–3) that opens in place. Only text
 that really overflows becomes a toggle; text that fits is just text. An
-optional `meta` caption sits above it, and a trailing chevron slot (the
-DisclosureRow trailing chevron) is kept in every row, empty when the text
-fits.
+optional `meta` caption sits above it, and a chevron slot after the text
+(the DisclosureRow disclosure chevron) is kept in every row, empty when the
+text fits.
 
 ## When to use this component
 Use it for lists of user-written text where most entries are short, such as

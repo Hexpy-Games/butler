@@ -92,6 +92,11 @@ a list row). Never put a switch before its label. `lint:ds`
 (`switch-field-layout`) flags a `Switch` beside a label in a `Stack` or
 `Inline` row. Switch's README ("Placement", "Usage") holds the full rule.
 Row actions in a `CardListItem` center on the title's line.
+A disclosure chevron never leads a title: it sits directly right of the
+title text (after any count) and shows only when the row has hidden content
+(`DisclosureRow` README, "Affordance"). `lint:ds`
+(`no-leading-disclosure-chevron`) flags a toggle with `aria-expanded` whose
+first child, or start-icon prop, is a `ChevronRight`/`ChevronDown`.
 
 ## Responsive Contract
 
