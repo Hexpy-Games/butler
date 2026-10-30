@@ -92,14 +92,6 @@ pub trait CycleEventSink: Send + Sync {
     fn record(&self, name: &str, status: &str, dimensions: Value);
 }
 
-/// Consolidation events land in the operations cycle metrics.
-impl CycleEventSink for butler_runtime::operations::CycleMetrics {
-    /// Passthrough: the dimensions go to the cycle metrics unchanged.
-    fn record(&self, name: &str, status: &str, dimensions: Value) {
-        Self::record(self, name, status, &dimensions);
-    }
-}
-
 /// How to run a consolidation cycle.
 pub struct RunCycle {
     /// Run id; a new one when absent.

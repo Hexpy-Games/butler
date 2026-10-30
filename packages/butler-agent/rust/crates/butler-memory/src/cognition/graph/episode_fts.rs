@@ -2,9 +2,9 @@
 pub(super) mod read;
 pub(super) mod reindex;
 mod schema;
-pub(in crate::cognition) mod tokenize;
 use super::{GraphRepository, db_error};
 use crate::cognition::CognitionResult;
+use butler_core::search_text::analyze_search_field;
 pub(super) use read::select;
 use rusqlite::{Connection, OptionalExtension, params};
 pub(super) use schema::install;
@@ -84,7 +84,7 @@ fn project(db: &Connection, id: &str) -> CognitionResult<()> {
     ))?;
     db.execute("INSERT INTO memory_episode_fts_meta(episode_id,revision,project_id,session_id,source_refs_json,content_hash,observed_at) VALUES(?1,?2,?3,?4,?5,?6,(SELECT MAX(observed_at) FROM memory_chunk_sources WHERE episode_id=?1 AND revision=?2))",params![id,revision,project,session,refs,hash]).map_err(db_error)?;
     let rowid = db.last_insert_rowid();
-    db.execute("INSERT INTO memory_episode_fts_v1(rowid,summary,entities,claims,source) VALUES(?1,?2,?3,?4,?5)",params![rowid,tokenize::field(&summary),tokenize::field(&entities),tokenize::field(&claims),tokenize::field(&source)]).map_err(db_error)?;
+    db.execute("INSERT INTO memory_episode_fts_v1(rowid,summary,entities,claims,source) VALUES(?1,?2,?3,?4,?5)",params![rowid,analyze_search_field(&summary),analyze_search_field(&entities),analyze_search_field(&claims),analyze_search_field(&source)]).map_err(db_error)?;
     Ok(())
 }
 

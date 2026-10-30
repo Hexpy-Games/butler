@@ -1,6 +1,6 @@
 //! Script15 prefix/term search and keyset pages; no App event/transcript scans.
 use super::{AppHistoryQuery, AppStorageError};
-use butler_memory::cognition::analyze_search_query;
+use butler_core::search_text::analyze_search_query;
 use rusqlite::{Connection, params, types::Value as Sql};
 use serde_json::{Value, json};
 const SQL: fn(rusqlite::Error) -> AppStorageError = AppStorageError::sqlite;
