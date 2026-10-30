@@ -172,7 +172,7 @@ function devtoolsView(operation: NonNullable<ApprovalSummary["operation"]>, risk
   const mode = operation.browser_mode ?? "signed_out";
   return {
     title: copy.devtools.title(copy.devtools.read[read], site, copy.browserMode[mode]),
-    details: [...(reason === "authority.taintReason" ? [copy.taintReason] : []), copy.devtools.tab(host), ...(selector ? [selector] : []),
+    details: [...(reason === "authority.taintReason" ? [copy.taintReason] : []), copy.devtools.tab(host), ...(selector ? [copy.devtools.selector(selector)] : []),
       ...(mode === "signed_in" ? [copy.devtools.masked[read]] : [])].map(maskActionSecrets),
     risk: risk ?? "high",
     conversationScope: copy.devtools.covers(site),

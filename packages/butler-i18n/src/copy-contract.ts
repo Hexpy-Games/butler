@@ -175,6 +175,7 @@ export interface ApprovalRequestCopy {
     read: Record<"console" | "network" | "dom", string>;
     title: (read: string, site: string, mode: string) => string;
     tab: (host: string) => string;
+    selector: (selector: string) => string;
     masked: Record<"console" | "network" | "dom", string>;
     covers: (site: string) => string;
   };

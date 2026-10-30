@@ -19,8 +19,10 @@ pub fn is_devtools_op(op: &str) -> bool {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DevtoolsPlace {
-    /// A page Butler made, or a local dev server: never asks.
+    /// A page Butler made, or a local dev server the user opened: never asks.
     Local,
+    /// A loopback page that a page navigated the tab to: asks every time, masked.
+    LocalMoved,
     /// A site this tab holds no sign-in for: asks once per site.
     SignedOut,
     /// A tab that uses the owner's sign-ins: asks every time, reads masked.
@@ -31,6 +33,7 @@ impl DevtoolsPlace {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Local => "local",
+            Self::LocalMoved => "local_moved",
             Self::SignedOut => "signed_out",
             Self::SignedIn => "signed_in",
         }
@@ -41,10 +44,13 @@ impl DevtoolsPlace {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DevtoolsStanding {
     pub place: DevtoolsPlace,
-    /// Registrable domain (an IP as is); empty for a local page.
+    /// Registrable domain (an IP as is); empty for a local page, and host and
+    /// port for one a page moved the tab to.
     pub site: String,
     pub host: String,
-    /// Account-bound data is masked: a signed-in profile or observed credentials.
+    /// Whether this looks like the user's sign-in: what the card says.
+    pub signed_in: bool,
+    /// Account-bound data is masked: a sign-in, or a page that moved the tab.
     pub masked: bool,
 }
 
@@ -75,7 +81,9 @@ pub fn devtools_standing(report: &Value) -> Result<DevtoolsStanding, &'static st
     let raw = report["url"].as_str().ok_or("navigation_denied")?;
     let url = url::Url::parse(raw).map_err(|_| "navigation_denied")?;
     let host = url.host_str().unwrap_or("").to_ascii_lowercase();
-    let profile_signed_in = report["profile"] == "signed_in";
+    // A list that overflowed cannot rule a sign-in out, so it reads as one.
+    let unknown = report["credentials_overflow"] == true;
+    let profile_signed_in = report["profile"] == "signed_in" || unknown;
     let seen = || {
         report["credentialed_hosts"]
             .as_array()
@@ -84,12 +92,25 @@ pub fn devtools_standing(report: &Value) -> Result<DevtoolsStanding, &'static st
             .filter_map(Value::as_str)
     };
     if local_url(raw) {
-        let masked = profile_signed_in || seen().any(|one| one == host);
+        let signed_in = profile_signed_in || seen().any(|one| one == host);
+        if report["local_trusted"] != true {
+            let site = url
+                .port()
+                .map_or_else(|| host.clone(), |port| format!("{host}:{port}"));
+            return Ok(DevtoolsStanding {
+                place: DevtoolsPlace::LocalMoved,
+                site,
+                host,
+                signed_in,
+                masked: true,
+            });
+        }
         return Ok(DevtoolsStanding {
             place: DevtoolsPlace::Local,
             site: String::new(),
             host,
-            masked,
+            signed_in,
+            masked: signed_in,
         });
     }
     super::public_url(raw)?;
@@ -107,6 +128,7 @@ pub fn devtools_standing(report: &Value) -> Result<DevtoolsStanding, &'static st
         },
         site,
         host,
+        signed_in,
         masked: signed_in,
     })
 }
@@ -115,14 +137,17 @@ pub fn devtools_standing(report: &Value) -> Result<DevtoolsStanding, &'static st
 pub fn devtools_scope(place: DevtoolsPlace, site: &str) -> String {
     match place {
         DevtoolsPlace::SignedIn => super::signed_in_scope(site),
-        DevtoolsPlace::SignedOut | DevtoolsPlace::Local => format!("browser:signed_out:{site}"),
+        DevtoolsPlace::SignedOut | DevtoolsPlace::Local | DevtoolsPlace::LocalMoved => {
+            format!("browser:signed_out:{site}")
+        }
     }
 }
 
 /// The place reply: enough to decide, nothing read from the page.
 pub fn devtools_place_reply(report: &Value, standing: &DevtoolsStanding) -> Value {
     json!({"status":"ok","tab":report["tab"],"place":standing.place.as_str(),
-        "site":standing.site,"host":standing.host,"masked":standing.masked})
+        "site":standing.site,"host":standing.host,"masked":standing.masked,
+        "mode":if standing.signed_in { "signed_in" } else { "signed_out" }})
 }
 
 fn failed(entry: &Value) -> bool {
@@ -252,7 +277,7 @@ pub fn devtools_read_reply(report: &Value, standing: &DevtoolsStanding) -> Value
         "masked":if masked {
             json!(["cookies","headers","bodies","query_values","field_values"])
         } else {
-            json!(["cookies","credential_headers","bodies","secret_fields"])
+            json!(["cookies","credential_headers","bodies","field_values"])
         },
         "untrusted_content":data})
 }

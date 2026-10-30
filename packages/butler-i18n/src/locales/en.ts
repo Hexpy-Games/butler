@@ -614,6 +614,7 @@ export const enUsCopy: AppCopy = {
         read: { console: "Read console errors", network: "Read network summary", dom: "Read DOM" },
         title: (read, site, mode) => `DevTools: ${read} · ${site} · ${mode}`,
         tab: host => `${host} tab · read-only, no scripts`,
+        selector: selector => `Reads only: ${selector}`,
         masked: { console: "Cookies, headers and bodies stay masked", network: "Cookies, headers and bodies stay masked", dom: "Field values and tokens stay masked" },
         covers: site => `Read DevTools on ${site}`,
       },

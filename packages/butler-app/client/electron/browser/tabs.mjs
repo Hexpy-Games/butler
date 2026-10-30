@@ -15,6 +15,7 @@ import { MAX_TABS, USER_TABS, agentTabFits } from "./capacity.mjs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachNativeWorlds } from "./native-worlds.mjs";
+import { watchArrival } from "./devtools.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
 import { backgroundTab, controlTab, emulation, hearTab, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
@@ -177,6 +178,7 @@ class UserBrowser {
     tab.session = tab.view.webContents.session;
     tab.identityReady = configureWebSession(tab.session);
     attachNativeWorlds(tab);
+    watchArrival(tab);
     this.live.watch(tab);
     tab.afterCapture = image => this.live.changed(tab, image);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),

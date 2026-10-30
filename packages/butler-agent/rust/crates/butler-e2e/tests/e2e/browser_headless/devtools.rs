@@ -10,7 +10,8 @@ use std::time::Duration;
 pub(super) const PAGE: &str = r#"<!doctype html><meta charset="utf-8"><title>DevTools fixture</title>
 <meta name="csrf-token" content="SECRET-META">
 <form action="./save?token=SECRET-QUERY"><input type="password" name="pw" value="SECRET-PASSWORD">
-<input type="hidden" name="nonce" value="SECRET-HIDDEN"><input name="q" value="plain value"></form>
+<input type="hidden" name="nonce" value="SECRET-HIDDEN"><input name="q" value="SECRET-TYPED"><input name="cardNumber" value="SECRET-CARD">
+<input type="radio" name="size" value="plain-radio"></form>
 <h1 onclick="steal('SECRET-HANDLER')">Fixture heading</h1>
 <script>console.error("fixture failed token=SECRET-CONSOLE");fetch("./missing.json?access_token=SECRET-QUERY");</script>"#;
 
@@ -22,6 +23,9 @@ for (let i = 0; i < 260; i++) console.error(`오류 ${i} ${"한".repeat(3000)}`)
 const all = document.querySelector("#all");
 for (let i = 0; i < 9000; i++) { const row = document.createElement("div"); row.className = "row-" + i; row.textContent = "한글 내용 ".repeat(30); all.append(row); }
 fetch("./signed.json", { headers: { Authorization: "Bearer SECRET-HEADER" } }).catch(() => {});
+const ctrl = document.createElement("section"); ctrl.id = "ctrl";
+for (let i = 0; i < 300; i++) { const row = document.createElement("p"); row.textContent = "\u0001".repeat(400); ctrl.append(row); }
+document.body.append(ctrl);
 for (let i = 0; i < 620; i++) fetch(`./gone-${i}.json?${"q".repeat(1500)}=1`).catch(() => {});
 </script>"##;
 
@@ -32,7 +36,28 @@ const SECRETS: &[&str] = &[
     "SECRET-HIDDEN",
     "SECRET-HANDLER",
     "SECRET-CONSOLE",
+    "SECRET-TYPED",
+    "SECRET-CARD",
 ];
+
+/// A page with its own cookie; a login shows in the store whoever wrote it.
+pub(super) const COOKIE_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><title>Cookie fixture</title><p>signed in</p>
+<script>document.cookie = "session=SECRET-COOKIE; path=/";</script>"#;
+
+/// A dev server for what a preview can show: a request left hanging across a
+/// navigation, requests that never finish, and a page leaving http.
+pub(super) const SERVER: &str = r#"
+const port = Number(process.argv[2]);
+const page = body => new Response(`<!doctype html><meta charset="utf-8"><title>t</title>${body}`, { headers: { "content-type": "text/html" } });
+Bun.serve({ hostname: "127.0.0.1", port, idleTimeout: 0, fetch(request) {
+  const path = new URL(request.url).pathname;
+  if (path === "/hang") return new Promise(() => {});
+  if (path === "/") return page(`<script>fetch("/hang?from=OLD_DOCUMENT");setTimeout(() => { location.href = "/next"; }, 300);</script>`);
+  if (path === "/next") return page(`<script>fetch("/own");setTimeout(() => { location.href = "/many"; }, 2500);</script>`);
+  if (path === "/many") return page(`<script>for (let i = 0; i < 3000; i++) fetch("/hang?i=" + i);setTimeout(() => { location.href = "about:blank"; }, 4000);</script>`);
+  return page("<p>ok</p>");
+} });
+"#;
 
 async fn read(admin: &AdminClient, tab: &Value, args: Value) -> Result<Value, HarnessError> {
     let mut args = args;
@@ -128,7 +153,7 @@ async fn a_butler_page_reads_its_console_network_and_dom() -> Result<(), Harness
         html.contains("<input type=\"password\" name=\"pw\" value=\"[masked]\">"),
         "{html}"
     );
-    assert!(html.contains("value=\"plain value\""), "{html}");
+    assert!(html.contains("value=\"plain-radio\""), "{html}");
     assert!(html.contains("Fixture heading"), "{html}");
     assert!(
         html.contains("chars not read]"),
@@ -244,5 +269,137 @@ async fn a_long_page_reads_in_parts_and_says_so() -> Result<(), HarnessError> {
     let html = end["untrusted_content"]["html"].as_str().unwrap();
     assert!(html.contains("마지막 구역"), "{html}");
     assert_eq!(end["untrusted_content"]["complete"], true, "{end}");
+
+    // Control characters grow in JSON: the read still answers, and says it stopped.
+    let ctrl = read(&admin, &tab, json!({"read":"dom","selector":"#ctrl"})).await?;
+    assert_eq!(
+        ctrl["untrusted_content"]["complete"], false,
+        "{}",
+        ctrl["untrusted_content"]["rendered_nodes"]
+    );
+
+    // The credential outlives the tab that showed it, while the context lives.
+    let second = open(&admin, "general", &url).await?;
+    assert_eq!(second["status"], "ok", "{second}");
+    let closed = call(&admin, "general", "tab.close", &tab, json!({})).await?;
+    assert_eq!(closed["status"], "ok", "{closed}");
+    let kept = call(
+        &admin,
+        "general",
+        "tab.devtools_place",
+        &second["tab"],
+        json!({}),
+    )
+    .await?;
+    assert_eq!(kept["masked"], true, "{kept}");
+    s.finish().await
+}
+
+/// A cookie in the store counts, with no traffic to show it, on every tab of
+/// the conversation's browser context.
+#[tokio::test]
+async fn a_cookie_in_the_store_reads_masked() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if !selected() {
+        return Ok(());
+    }
+    let s = setup("HEADLESS-DEVTOOLS-COOKIE")?.start().await?;
+    let admin = admin(&s);
+    let (_, plain) = publish_as(&s, "Publish devtools").await?;
+    let (_, cookie) = publish_as(&s, "Publish devtools cookie").await?;
+    let first = open(&admin, "general", &plain).await?;
+    let place = call(
+        &admin,
+        "general",
+        "tab.devtools_place",
+        &first["tab"],
+        json!({}),
+    )
+    .await?;
+    assert_eq!(place["masked"], false, "{place}");
+    let second = open(&admin, "general", &cookie).await?;
+    assert_eq!(second["status"], "ok", "{second}");
+    let mut seen = Value::Null;
+    for _ in 0..50 {
+        seen = call(
+            &admin,
+            "general",
+            "tab.devtools_place",
+            &first["tab"],
+            json!({}),
+        )
+        .await?;
+        if seen["masked"] == true {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(seen["masked"], true, "{seen}");
+    s.finish().await
+}
+
+/// A preview's own cookie is not a login; a read never carries the last
+/// document's requests; requests that never finish stay bounded; a page that
+/// leaves http can't be reported under its old address.
+#[tokio::test]
+async fn a_preview_reads_only_its_current_document() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if !selected() {
+        return Ok(());
+    }
+    let setup = setup("HEADLESS-DEVTOOLS-PREVIEW")?.env(
+        "PATH",
+        std::env::var("PATH").expect("runner PATH is required"),
+    );
+    let cwd = setup.sandbox.workspace.clone();
+    std::fs::write(cwd.join("server.mjs"), SERVER)?;
+    let s = setup.start().await?;
+    let admin = admin(&s);
+    let (_, url) = publish_as(&s, "Publish devtools").await?;
+    let warm = open(&admin, "warmup", &url).await?;
+    assert_eq!(warm["status"], "ok", "{warm}");
+    call(&admin, "warmup", "tab.close", &warm["tab"], json!({})).await?;
+    let dev = std::net::TcpListener::bind("127.0.0.1:0")?
+        .local_addr()?
+        .port();
+    let args = json!({"agent":"devtools-agent","preview_id":"preview-devtools",
+        "command":format!("bun server.mjs {dev}"),"cwd":cwd,"port":dev});
+    let started = call(&admin, "general", "preview.start", &Value::Null, args).await?;
+    assert_eq!(started["browser"]["status"], "ok", "{started}");
+    let tab = started["browser"]["tab"].clone();
+
+    let next = entries_with(&admin, &tab, "network", "/own").await?;
+    let rows = next["untrusted_content"]["entries"].to_string();
+    assert!(!rows.contains("OLD_DOCUMENT"), "{rows}");
+    let place = call(&admin, "general", "tab.devtools_place", &tab, json!({})).await?;
+    assert_eq!(place["place"], "local", "{place}");
+    assert_eq!(
+        place["masked"], false,
+        "a preview's own cookie is no login: {place}"
+    );
+
+    entries_with(&admin, &tab, "network", "/hang?i=").await?;
+    let mut bounded = Value::Null;
+    for _ in 0..25 {
+        bounded = read(&admin, &tab, json!({"read":"network"})).await?;
+        let total = bounded["untrusted_content"]["total"].as_u64().unwrap();
+        assert!(total <= 1000, "pending stays bounded: {total}");
+        if bounded["untrusted_content"]["dropped_oldest"].as_u64() > Some(0) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let dropped = bounded["untrusted_content"]["dropped_oldest"].as_u64();
+    assert!(dropped > Some(0), "what fell out is counted: {dropped:?}");
+
+    let mut gone = Value::Null;
+    for _ in 0..80 {
+        gone = call(&admin, "general", "tab.devtools_place", &tab, json!({})).await?;
+        if gone["status"] != "ok" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_ne!(gone["status"], "ok", "{gone}");
     s.finish().await
 }

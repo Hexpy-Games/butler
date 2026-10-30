@@ -13,24 +13,25 @@ use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolEx
 use serde_json::{Value, json};
 
 const READS: &[&str] = &["console", "network", "dom"];
-const MAX_SELECTOR: usize = 500;
+const MAX_SELECTOR: usize = 200;
 
 fn place_of(reply: &Value) -> Option<Place> {
     match reply["place"].as_str() {
         Some("local") => Some(Place::Local),
+        Some("local_moved") => Some(Place::LocalMoved),
         Some("signed_out") => Some(Place::SignedOut),
         Some("signed_in") => Some(Place::SignedIn),
         _ => None,
     }
 }
 
-/// Signed-in reads ask on every tier; a signed-out site follows the tier, and
-/// full access means it does not ask.
+/// Signed-in reads and a loopback page a page moved the tab to ask on every
+/// tier; a signed-out site follows the tier, and full access means it does not ask.
 fn asks(mode: &AccessMode, place: Place) -> bool {
     match place {
         Place::Local => false,
         Place::SignedOut => *mode != AccessMode::FullAccess,
-        Place::SignedIn => true,
+        Place::SignedIn | Place::LocalMoved => true,
     }
 }
 
@@ -38,8 +39,8 @@ fn asks(mode: &AccessMode, place: Place) -> bool {
 fn card_input(args: &Value, read: &str, standing: &Value, place: Place) -> Value {
     let selector = args["selector"].as_str().filter(|_| read == "dom");
     let mut input = json!({"devtools":{"read":read,"site":standing["site"],"host":standing["host"],"selector":selector},
-        "tab":args["tab"],"mode":place.as_str()});
-    if place == Place::SignedIn {
+        "tab":args["tab"],"mode":standing["mode"]});
+    if matches!(place, Place::SignedIn | Place::LocalMoved) {
         input["always_confirm"] = json!(true);
     }
     input
@@ -78,7 +79,9 @@ pub(super) async fn execute(
     }
     let signal = invocation.cancellation;
     let tab = &args["tab"];
-    let request = (DEVTOOLS_PLACE_OP, tab, &json!({}));
+    // The browser checks a selector before anyone is asked about it.
+    let check = json!({"selector":args["selector"].as_str().filter(|_| read == "dom")});
+    let request = (DEVTOOLS_PLACE_OP, tab, &check);
     let standing = grant::call(owner, call, occurrence, &client, request, signal).await?;
     let Some(place) = place_of(&standing).filter(|_| standing["status"] == "ok") else {
         if standing["authority_pending"] != true {

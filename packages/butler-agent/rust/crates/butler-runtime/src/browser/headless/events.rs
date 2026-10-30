@@ -120,6 +120,11 @@ fn tab_event(browser: &Browser, session: &str, method: &str, params: &Value) {
         "Runtime.executionContextsCleared" => tab.contexts.retain(|(s, _), _| s != session),
         _ => {}
     }
+    let seen = tab.devtools.take_seen();
+    if !seen.is_empty() {
+        let context = tab.context.clone();
+        state.credentials.entry(context).or_default().add(seen);
+    }
 }
 
 fn detached(browser: &Arc<Browser>, params: &Value) {

@@ -612,6 +612,7 @@ export const koKrCopy: AppCopy = {
         read: { console: "콘솔 오류 읽기", network: "네트워크 요약 읽기", dom: "DOM 읽기" },
         title: (read, site, mode) => `개발자 도구: ${read} · ${site} · ${mode}`,
         tab: host => `${host} 탭 · 읽기 전용, 스크립트 실행 안 함`,
+        selector: selector => `읽을 부분: ${selector}`,
         masked: { console: "쿠키·헤더·본문은 가려서 읽음", network: "쿠키·헤더·본문은 가려서 읽음", dom: "입력값·토큰은 가려서 읽음" },
         covers: site => `${site} 개발자 도구 읽기`,
       },

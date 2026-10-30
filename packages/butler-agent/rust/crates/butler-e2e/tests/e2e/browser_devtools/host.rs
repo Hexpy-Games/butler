@@ -23,6 +23,15 @@ pub(super) const SECRETS: &[&str] = &[
     "SECRET-CODE",
     "SECRET-KEY",
     "eyJSECRET",
+    "SECRET-TEXT",
+    "SECRET-PHRASE",
+    "SECRET-URL",
+    "SECRET-TYPED",
+    "SECRET-FRAMEWORK",
+    "SECRET-EMAIL",
+    "ghp_SECRET",
+    "sk-SECRET",
+    "AKIASECRET",
 ];
 
 #[derive(Clone, Default)]
@@ -62,7 +71,9 @@ fn raw_rows() -> Value {
             "X-CSRF-Token":"SECRET-CSRF","Content-Type":"application/json"}},
         {"method":"GET","url":"https://user:SECRET-AUTH@cdn.example.test/a.js?v=1#id_token=SECRET-AUTH","type":"Script","status":200},
         {"method":"GET","url":"https://app.example.test/r/abcdefghijklmnopqrstuvwx1234?q=coat#top","type":"Document","status":200},
-        {"method":"POST","url":"https://checkout.stripe.com/pay/SECRET-CARD?x=1","type":"Fetch","status":402,"error":"token=SECRET-CONSOLE rejected"}])
+        {"method":"POST","url":"https://checkout.stripe.com/pay/SECRET-CARD?x=1","type":"Fetch","status":402,"error":"token=SECRET-CONSOLE rejected"},
+        {"method":"GET","url":"https://sso.example.test/in?ticket=SECRET-URL&sso=SECRET-URL&magic=SECRET-URL&keep=1","type":"Document","status":200},
+        {"method":"GET","url":"https://matrix.example.test/p?a=1;token=SECRET-URL;b=2","type":"Fetch","status":200}])
 }
 
 fn raw_nodes() -> Value {
@@ -76,6 +87,17 @@ fn raw_nodes() -> Value {
         {"d":1,"t":"a","a":[["href","./save?token=SECRET-AUTH&q=1"]]},
         {"d":1,"t":"a","a":[["href","javascript:send('SECRET-AUTH')"]]},
         {"d":1,"t":"iframe","a":[["srcdoc","<b>SECRET-AUTH</b>"]]},
+        {"d":1,"t":"input","a":[["name","cardNumber"],["value","SECRET-CARD"]]},
+        {"d":1,"t":"input","a":[["name","cvc"],["value","SECRET-CARD"]]},
+        {"d":1,"t":"input","a":[["name","rrn"],["value","SECRET-CARD"]]},
+        {"d":1,"t":"input","a":[["name","passportNumber"],["value","SECRET-CARD"]]},
+        {"d":1,"t":"input","a":[["type","text"],["name","q"],["value","SECRET-TYPED"]]},
+        {"d":1,"t":"input","a":[["type","radio"],["name","size"],["value","plain-radio"]]},
+        {"d":1,"t":"sl-input","a":[["type","password"],["value","SECRET-TYPED"]]},
+        {"d":1,"t":"div","a":[["ng-init","user='SECRET-FRAMEWORK'"]]},
+        {"d":1,"t":"div","a":[["x-data","{ me: 'SECRET-FRAMEWORK' }"]]},
+        {"d":1,"t":"div","a":[["wire:snapshot","SECRET-FRAMEWORK"]]},
+        {"d":1,"t":"my-widget","a":[["config","SECRET-FRAMEWORK"],["title","SECRET-EMAIL@example.test"]]},
         {"d":1,"t":"script","a":[],"hidden_chars":40},
         {"d":1,"t":"button","a":[["onclick","send('SECRET-AUTH')"]]},
         {"d":2,"x":"Sign in"}])
@@ -83,14 +105,18 @@ fn raw_nodes() -> Value {
 
 fn read_reply(tab: &str, page: &Value, read: &str) -> Value {
     let mut reply = json!({"status":"ok","tab":tab,"url":page["url"],"profile":page["profile"],
-        "credentialed_hosts":page["credentialed_hosts"],"read":read,"dropped":0,"from_load":true});
+        "credentialed_hosts":page["credentialed_hosts"],"local_trusted":page["local_trusted"],
+        "read":read,"dropped":0,"from_load":true});
     match read {
         "console" => {
             reply["entries"] = json!([{"level":"error",
                 "text":"Failed: token=SECRET-CONSOLE at https://api.example.test/x?session=SECRET-QUERY",
                 "source":"https://www.example.test/app.js?key=SECRET-AUTH","line":3},
                 {"level":"error","text":"401 Bearer SECRET-AUTH cookie: sid=SECRET-COOKIE; x=2"},
-                {"level":"error","text":"bad eyJSECRETjwt.eyJSECRETjwt2.sig see http://[bad","source":"javascript:send('SECRET-AUTH')","line":1}]);
+                {"level":"error","text":"bad eyJSECRETjwt.eyJSECRETjwt2.sig see http://[bad","source":"javascript:send('SECRET-AUTH')","line":1},
+                {"level":"error","text":"auth=SECRET-TEXT sid=SECRET-TEXT otp: SECRET-TEXT pin=SECRET-TEXT signature=SECRET-TEXT \"jwt\":\"SECRET-TEXT\" accessKey=SECRET-TEXT"},
+                {"level":"error","text":"keys ghp_SECRETabcdefghijkl sk-SECRETabcdefghijkl AKIASECRETABCDEFGH left"},
+                {"level":"error","text":"password: \"my SECRET-PHRASE pass\" then password = my SECRET-PHRASE pass, status: 500"}]);
         }
         "network" => reply["entries"] = raw_rows(),
         "dom" => {
@@ -122,7 +148,7 @@ impl Host {
         for (id, profile, url) in tabs {
             pages.0.lock().unwrap().insert(
                 (*id).to_owned(),
-                json!({"url":url,"profile":profile,"credentialed_hosts":[]}),
+                json!({"url":url,"profile":profile,"credentialed_hosts":[],"local_trusted":true}),
             );
         }
         let frames = Arc::new(Mutex::new(Vec::new()));
@@ -150,8 +176,12 @@ impl Host {
                 }
                 let page = live.page(tab);
                 let reply = match op.as_str() {
+                    "tab.devtools_place" if frame["args"]["selector"] == "[[" => {
+                        json!({"status":"not_dispatched","reason":"invalid_selector"})
+                    }
                     "tab.devtools_place" => json!({"status":"ok","tab":tab,"url":page["url"],
-                        "profile":page["profile"],"credentialed_hosts":page["credentialed_hosts"]}),
+                        "profile":page["profile"],"credentialed_hosts":page["credentialed_hosts"],
+                        "local_trusted":page["local_trusted"]}),
                     "tab.devtools" => {
                         read_reply(tab, &page, frame["args"]["read"].as_str().unwrap_or(""))
                     }
@@ -216,6 +246,13 @@ impl Host {
             page["url"] = json!(url);
         }
         self.publish().await
+    }
+
+    /// A page moved the tab here: it did not arrive by the user's own navigation.
+    pub(crate) fn arrived_by_page(&self, tab: &str) {
+        if let Some(page) = self.pages.0.lock().unwrap().get_mut(tab) {
+            page["local_trusted"] = json!(false);
+        }
     }
 
     /// The next read finds the tab on `url`, as if it moved after the place check.

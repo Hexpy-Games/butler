@@ -224,6 +224,7 @@ pub(crate) async fn forget(browser: &Browser, tab: &Tab) {
         let left = !state.tabs.values().any(|t| t.context == tab.context);
         if left {
             state.contexts.retain(|_, id| *id != tab.context);
+            state.credentials.remove(&tab.context);
         }
         left
     };

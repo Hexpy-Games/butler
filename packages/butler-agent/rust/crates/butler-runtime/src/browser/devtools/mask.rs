@@ -9,6 +9,7 @@ pub(crate) const MASK: &str = "[masked]";
 const TEXT_LIMIT: usize = 2000;
 const SIGNED_IN_TEXT_LIMIT: usize = 500;
 const URL_LIMIT: usize = 2000;
+const NAMED_DEPTH: usize = 4;
 
 static SET_COOKIE: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"(?i)\b(set-cookie|cookie)\s*[:=][^\n]*").ok());
@@ -17,8 +18,20 @@ static BEARER: LazyLock<Option<Regex>> =
 static JWT: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?").ok()
 });
+/// `key: value`, `key=value`, `"key":"value"`: a quoted value runs to its closing quote.
 static NAMED: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r#"(?i)([\w.-]*(?:token|secret|passw(?:or)?d|pwd|session|csrf|xsrf|api[-_]?key|authorization|credential)[\w.-]*)(["']?\s*[:=]\s*["']?)([^\s"'&;,]+)"#).ok()
+    Regex::new(
+        r#"(["']?)([A-Za-z_][\w.\-]{0,80})(["']?\s*[:=]\s*)("[^"\n]*"?|'[^'\n]*'?|[^\s"'&;,]+)"#,
+    )
+    .ok()
+});
+/// An unquoted secret phrase has no end but its clause.
+static PHRASE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r#"(?i)([\w.-]*(?:passw(?:or)?d|passphrase|pwd|secret)[\w.-]*)(\s*[:=]\s*)([^"'\s][^\n,;&]*)"#).ok()
+});
+/// Keys that say what they are, whatever surrounds them.
+static RAW_KEY: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"\b(?:gh[pousr]_[A-Za-z0-9]{10,}|github_pat_\w{10,}|sk-[A-Za-z0-9_-]{10,}|[sr]k_(?:live|test)_\w{8,}|xox[abeoprs]-[\w-]{8,}|(?:AKIA|ASIA)[A-Z0-9]{12,}|AIza[\w-]{20,}|glpat-[\w-]{10,}|npm_[A-Za-z0-9]{20,})").ok()
 });
 static URLS: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r#"https?://[^\s"'<>)\]]+"#).ok());
@@ -54,6 +67,7 @@ pub(crate) fn credential_name(name: &str) -> bool {
         "passphrase",
         "cookie",
         "session",
+        "sessid",
         "csrf",
         "xsrf",
         "credential",
@@ -68,39 +82,69 @@ pub(crate) fn credential_name(name: &str) -> bool {
     strong.iter().any(|needle| lower.contains(needle))
         || lower.contains("auth") && !lower.contains("author")
         || lower.contains("authorization")
-        || words(name)
-            .iter()
-            .any(|word| matches!(word.as_str(), "key" | "sig" | "sid" | "otp" | "pin"))
+        || words(name).iter().any(|word| {
+            matches!(
+                word.as_str(),
+                "key" | "sig" | "sid" | "sess" | "otp" | "pin"
+            )
+        })
+}
+
+/// Butler's own preview cookie, which selects a dev server and is no login.
+const OWN_COOKIE: &str = "butler_preview";
+
+/// Whether a cookie says someone may be signed in. A false positive only costs
+/// an extra card, so anything HttpOnly counts. Mirrored in the App's `devtools.mjs`.
+pub(crate) fn login_cookie(name: &str, http_only: bool) -> bool {
+    let lower = name.to_ascii_lowercase();
+    name != OWN_COOKIE
+        && (http_only
+            || credential_name(name)
+            || ["sess", "login", "remember"]
+                .iter()
+                .any(|needle| lower.contains(needle)))
 }
 
 /// Query and fragment parameters that also carry one-time secrets in URLs.
 fn secret_parameter(name: &str) -> bool {
-    credential_name(name)
-        || matches!(
-            name.to_ascii_lowercase().as_str(),
-            "code" | "state" | "nonce"
-        )
+    let decoded: String = url::form_urlencoded::parse(name.as_bytes())
+        .map(|(key, _)| key.into_owned())
+        .collect();
+    let lower = decoded.to_ascii_lowercase();
+    credential_name(&decoded)
+        || matches!(lower.as_str(), "code" | "state" | "nonce")
+        || ["ticket", "sso", "magic", "saml", "assertion", "relaystate"]
+            .iter()
+            .any(|needle| lower.contains(needle))
 }
 
+fn parameter(pair: &str, masked: bool) -> String {
+    let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+    if value.is_empty() && !pair.contains('=') {
+        return if masked {
+            MASK.to_owned()
+        } else {
+            pair.to_owned()
+        };
+    }
+    if masked || secret_parameter(name) {
+        format!("{name}={MASK}")
+    } else {
+        pair.to_owned()
+    }
+}
+
+/// Parameters split on `&` and on `;`, the older separator servers still honour.
 fn parameters(raw: &str, masked: bool) -> String {
-    raw.split('&')
-        .map(|pair| {
-            let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
-            if value.is_empty() && !pair.contains('=') {
-                return if masked {
-                    MASK.to_owned()
-                } else {
-                    pair.to_owned()
-                };
-            }
-            if masked || secret_parameter(name) {
-                format!("{name}={MASK}")
-            } else {
-                pair.to_owned()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("&")
+    let mut out = String::new();
+    let mut start = 0;
+    for (index, separator) in raw.match_indices(['&', ';']) {
+        out.push_str(&parameter(&raw[start..index], masked));
+        out.push_str(separator);
+        start = index + separator.len();
+    }
+    out.push_str(&parameter(&raw[start..], masked));
+    out
 }
 
 fn token_like(segment: &str) -> bool {
@@ -189,14 +233,34 @@ fn replaced(
     }
 }
 
+/// Masks every `key: value` whose key names a credential. A value under another
+/// key is looked into in turn, so a nested pair cannot hide; past a few levels
+/// the rest is not shown.
+fn named(text: &str, depth: usize) -> String {
+    replaced(&NAMED, text, |c| {
+        let value = &c[4];
+        if credential_name(&c[2]) {
+            format!("{}{}{}{MASK}", &c[1], &c[2], &c[3])
+        } else if !value.contains([':', '=']) {
+            c[0].to_owned()
+        } else if depth >= NAMED_DEPTH {
+            format!("{}{}{}{MASK}", &c[1], &c[2], &c[3])
+        } else {
+            format!("{}{}{}{}", &c[1], &c[2], &c[3], named(value, depth + 1))
+        }
+    })
+}
+
 /// Page text with anything shaped like a credential removed, bounded and
 /// saying how much it left out.
 pub(crate) fn mask_text(text: &str, masked: bool) -> String {
     let text = replaced(&SET_COOKIE, text, |c| format!("{}: {MASK}", &c[1]));
     let text = replaced(&BEARER, &text, |c| format!("{} {MASK}", &c[1]));
     let text = replaced(&JWT, &text, |_| MASK.to_owned());
-    let text = replaced(&NAMED, &text, |c| format!("{}{}{MASK}", &c[1], &c[2]));
+    let text = replaced(&RAW_KEY, &text, |_| MASK.to_owned());
     let text = replaced(&URLS, &text, |c| mask_url(&c[0], masked));
+    let text = replaced(&PHRASE, &text, |c| format!("{}{}{MASK}", &c[1], &c[2]));
+    let text = named(&text, 0);
     capped(
         text,
         if masked {

@@ -287,6 +287,16 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
                 json!({"path":"devtools-site","title":"DevTools fixture"}),
             ),
         ],
+        "Publish devtools cookie" => vec![
+            (
+                "write_file",
+                json!({"path":"devtools-cookie/index.html","content":super::devtools::COOKIE_PAGE,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"devtools-cookie","title":"Cookie fixture"}),
+            ),
+        ],
         "Publish devtools long" => vec![
             (
                 "write_file",
@@ -362,6 +372,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
             "Publish broken",
             "Publish devtools",
             "Publish devtools long",
+            "Publish devtools cookie",
             "Publish fixture",
             "Publish shop",
             "Publish parallel",

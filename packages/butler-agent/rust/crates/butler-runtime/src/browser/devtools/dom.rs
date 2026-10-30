@@ -17,7 +17,52 @@ const URL_ATTRIBUTES: &[&str] = &[
     "background",
 ];
 const SECRET_AUTOCOMPLETE: &[&str] = &["current-password", "new-password", "one-time-code"];
-const VALUE_TAGS: &[&str] = &["input", "textarea", "option", "button", "param", "data"];
+/// Inputs whose value the page wrote, not the person typing.
+const SHOWN_INPUT_TYPES: &[&str] = &["button", "submit", "reset", "radio", "checkbox"];
+/// Other tags whose `value` is the page's own. Any other tag may be a custom field.
+const SHOWN_VALUE_TAGS: &[&str] = &[
+    "option", "button", "li", "meter", "progress", "param", "data",
+];
+/// What a masked read may show as written: page structure, no page data. Any
+/// other attribute keeps its name and loses its value.
+const MASKED_READ_ATTRIBUTES: &[&str] = &[
+    "id",
+    "class",
+    "type",
+    "name",
+    "role",
+    "for",
+    "lang",
+    "dir",
+    "hidden",
+    "disabled",
+    "readonly",
+    "required",
+    "checked",
+    "selected",
+    "multiple",
+    "rel",
+    "target",
+    "method",
+    "enctype",
+    "width",
+    "height",
+    "tabindex",
+    "colspan",
+    "rowspan",
+    "aria-hidden",
+    "aria-expanded",
+    "aria-disabled",
+    "aria-selected",
+    "aria-checked",
+    "aria-current",
+    "aria-invalid",
+    "aria-required",
+    "aria-haspopup",
+    "aria-controls",
+    "aria-labelledby",
+    "aria-describedby",
+];
 
 fn attribute<'a>(node: &'a Value, name: &str) -> &'a str {
     node["a"]
@@ -33,18 +78,25 @@ fn attribute<'a>(node: &'a Value, name: &str) -> &'a str {
         .unwrap_or("")
 }
 
-/// A field whose value is a secret whatever the tab: passwords, hidden inputs,
-/// one-time codes, card fields and anything named like a credential.
-fn secret_field(node: &Value) -> bool {
-    let kind = attribute(node, "type").to_ascii_lowercase();
+/// Whether a `value` is the page's own rather than something typed or filled
+/// (a controlled field copies what is typed into this attribute). Everything
+/// not known to be the page's own stays masked, on every tab.
+fn value_shown(node: &Value, tag: &str) -> bool {
+    let shown_kind = match tag {
+        "input" => SHOWN_INPUT_TYPES
+            .iter()
+            .any(|kind| attribute(node, "type").eq_ignore_ascii_case(kind)),
+        _ => SHOWN_VALUE_TAGS.contains(&tag),
+    };
     let autocomplete = attribute(node, "autocomplete").to_ascii_lowercase();
-    matches!(kind.as_str(), "password" | "hidden")
-        || SECRET_AUTOCOMPLETE
+    shown_kind
+        && !attribute(node, "type").eq_ignore_ascii_case("password")
+        && !SECRET_AUTOCOMPLETE
             .iter()
             .any(|name| autocomplete.contains(name))
-        || autocomplete.contains("cc-")
-        || credential_name(attribute(node, "name"))
-        || credential_name(attribute(node, "id"))
+        && !autocomplete.contains("cc-")
+        && !credential_name(attribute(node, "name"))
+        && !credential_name(attribute(node, "id"))
 }
 
 fn capped_attribute(value: &str) -> String {
@@ -56,11 +108,10 @@ fn capped_attribute(value: &str) -> String {
     format!("{kept}…[+{} chars]", total - ATTRIBUTE_LIMIT)
 }
 
-fn meta_secret(node: &Value, masked: bool) -> bool {
-    masked
-        || ["name", "property", "http-equiv"]
-            .iter()
-            .any(|key| credential_name(attribute(node, key)))
+fn meta_secret(node: &Value) -> bool {
+    ["name", "property", "http-equiv"]
+        .iter()
+        .any(|key| credential_name(attribute(node, key)))
 }
 
 /// One attribute as shown, or `None` when it is never shown.
@@ -76,13 +127,13 @@ fn shown_attribute(node: &Value, name: &str, value: &str, masked: bool) -> Optio
     if URL_ATTRIBUTES.contains(&lower.as_str()) {
         return Some(capped_attribute(&mask_url(value, masked)));
     }
-    if lower == "value" && VALUE_TAGS.contains(&tag) && (masked || secret_field(node)) {
+    if masked && !MASKED_READ_ATTRIBUTES.contains(&lower.as_str()) {
         return Some(MASK.to_owned());
     }
-    if credential_name(&lower) || tag == "meta" && lower == "content" && meta_secret(node, masked) {
+    if lower == "value" && !value_shown(node, tag) {
         return Some(MASK.to_owned());
     }
-    if masked && lower.starts_with("data-") {
+    if credential_name(&lower) || tag == "meta" && lower == "content" && meta_secret(node) {
         return Some(MASK.to_owned());
     }
     Some(capped_attribute(&mask_text(value, masked)))

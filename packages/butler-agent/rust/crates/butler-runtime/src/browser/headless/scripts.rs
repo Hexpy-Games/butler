@@ -30,6 +30,7 @@ pub(crate) struct Scripts {
     point_hit: String,
     focus_target: String,
     devtools_dom: String,
+    devtools_selector: String,
 }
 
 /// An ES module as plain declarations: imports dropped, `export` removed.
@@ -72,6 +73,7 @@ static SCRIPTS: LazyLock<Option<Scripts>> = LazyLock::new(|| {
         point_hit: function(POINT, "pointHit")?,
         focus_target: function(FOCUS, "focusTarget")?,
         devtools_dom: function(DEVTOOLS_DOM, "devtoolsDom")?,
+        devtools_selector: function(DEVTOOLS_DOM, "devtoolsSelectorValid")?,
     })
 });
 
@@ -110,6 +112,9 @@ impl Scripts {
     }
     pub(crate) fn devtools_dom(&self, input: &Value) -> String {
         format!("({})({input})", self.devtools_dom)
+    }
+    pub(crate) fn devtools_selector(&self, input: &Value) -> String {
+        format!("({})({input})", self.devtools_selector)
     }
     pub(crate) fn focus(&self, input: &Value) -> String {
         format!("({})({input})", self.focus_target)

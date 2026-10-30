@@ -119,9 +119,11 @@ fn newest_read(s: &Scenario) -> Value {
 }
 
 fn assert_no_secrets(text: &str) {
-    for secret in SECRETS {
-        assert!(!text.contains(secret), "{secret} leaked:\n{text}");
-    }
+    let leaked: Vec<&&str> = SECRETS
+        .iter()
+        .filter(|secret| text.contains(**secret))
+        .collect();
+    assert!(leaked.is_empty(), "leaked: {leaked:?}");
 }
 
 #[tokio::test]

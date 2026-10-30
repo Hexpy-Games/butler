@@ -23,13 +23,15 @@ const cases = {
   "signed-out": { mode: "signed_out", read: "console", risk: "low", conversation: true },
   "signed-in": { mode: "signed_in", read: "network", risk: "medium", conversation: false },
   "signed-in-dom": { mode: "signed_in", read: "dom", risk: "medium", conversation: false },
+  "signed-in-dom-selector": { mode: "signed_in", read: "dom", risk: "medium", conversation: false, selector: "form#login" },
 } as const;
 type Name = keyof typeof cases;
+type Case = { mode: "signed_in" | "signed_out"; read: "console" | "network" | "dom"; risk: "low" | "medium"; conversation: boolean; selector?: string };
 
 function sessionView(name: Name): SessionView {
-  const item = cases[name];
+  const item: Case = cases[name];
   const approval = { action_kind: "web_request", targets: [{ kind: "other", path: "example.com" }], count: 1, examples: [], risk: item.risk,
-    operation: { tool: "browser_devtools", access: "read_only", targets: ["example.com", "shop.example.com"], allow_conversation: item.conversation, browser_mode: item.mode, devtools_read: item.read } };
+    operation: { tool: "browser_devtools", access: "read_only", targets: ["example.com", "shop.example.com", ...(item.selector ? [item.selector] : [])], allow_conversation: item.conversation, browser_mode: item.mode, devtools_read: item.read } };
   const turn = { ...HARNESS_SS03_OBSERVER_VIEW.latest_turn!, id: "devtools-turn", turn_id: "devtools-turn", state: "waiting_for_form" };
   return { ...structuredClone(HARNESS_SS03_OBSERVER_VIEW), session_id: "butler-client", kind: "chat", relation: undefined,
     status: "active", active_turn: turn, latest_turn: turn, workers: [], steward_children: [],
@@ -84,7 +86,7 @@ try {
     const request = copy.interfaceTemplates.approvalRequest;
     const details = copy.interfaceDetails;
     for (const name of Object.keys(cases) as Name[]) {
-      const item = cases[name];
+      const item: Case = cases[name];
       fixture = { messages: sessionView(name).messages, sessionView: sessionView(name), background: "wallpaper",
         settings: { onboarding: { consent_version: 2, accepted_at: "2026-10-01T00:00:00Z", completed_at: "2026-10-01T00:00:00Z" } } };
       await page.setViewportSize({ width, height: 900 });
@@ -95,6 +97,7 @@ try {
       const mode = request.browserMode[item.mode];
       assert(text.includes(request.devtools.title(request.devtools.read[item.read], "example.com", mode)), `${name} ${locale}: exact read, site and sign-in state\n${text}`);
       assert(text.includes(request.devtools.tab("shop.example.com")), `${name} ${locale}: the tab's host\n${text}`);
+      if (item.selector) assert(text.includes(request.devtools.selector(item.selector)), `${name} ${locale}: a labelled selector\n${text}`);
       assert.equal(text.includes(request.devtools.masked[item.read]), item.mode === "signed_in", `${name} ${locale}: masking line\n${text}`);
       assert(text.includes(copy.interfaceTemplates.approvalRequest.risk[item.risk]), `${name} ${locale}: risk\n${text}`);
       assert(!text.includes(request.webRequestDesc), `${name} ${locale}: not a web request sentence\n${text}`);
