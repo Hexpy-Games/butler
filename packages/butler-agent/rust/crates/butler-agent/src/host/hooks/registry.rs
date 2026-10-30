@@ -27,10 +27,6 @@ fn read(path: &std::path::Path) -> Result<HookConfig, String> {
 }
 pub(super) async fn reload(hooks: &Arc<Hooks>) -> Result<(), String> {
     let _guard = hooks.mutation.lock().await;
-    reload_held(hooks).await
-}
-/// Reloads a changed file; the caller holds `mutation`.
-async fn reload_held(hooks: &Arc<Hooks>) -> Result<(), String> {
     let previous = hooks.state.read().stamp;
     let path = hooks.path.clone();
     let result = tokio::task::spawn_blocking(move || {
@@ -64,61 +60,20 @@ async fn reload_held(hooks: &Arc<Hooks>) -> Result<(), String> {
     }
     Ok(())
 }
-/// Saves a configuration; the caller holds `saving`. A client that has left
-/// changes nothing: no answer means no change. New keys sign only if the client
-/// is still there at the end to receive them, otherwise they stay undelivered.
 pub(super) async fn save(
     hooks: &Arc<Hooks>,
     revision: u64,
     config: HookConfig,
-    secrets: BTreeMap<String, SecretText>,
-    client_left: impl Fn() -> bool,
-) -> Result<HookSaved, String> {
+) -> Result<HookSettings, String> {
     reload(hooks).await?;
-    let published = {
-        let state = hooks.state.read();
-        if state.settings.revision != revision {
-            return Err("revision_conflict".into());
-        }
-        state.settings.config.clone()
-    };
-    config.validate()?;
-    for (id, secret) in &secrets {
-        check_hook_secret(secret.expose())?;
-        if !config.hooks.iter().any(|h| h.kind == "http" && &h.id == id) {
-            return Err("Hook secrets apply to HTTP hooks in this configuration".into());
-        }
+    let _guard = hooks.mutation.lock().await;
+    if hooks.state.read().settings.revision != revision {
+        return Err("revision_conflict".into());
     }
+    config.validate()?;
     let bytes = serde_json::to_vec_pretty(&config).map_err(|e| e.to_string())?;
     if bytes.len() as u64 > CAP {
         return Err("Hook file exceeds 256 KiB".into());
-    }
-    // A store may wait on the user, so `mutation` is not held here: session
-    // creation and send keep reloading while it does.
-    let staged = hooks.secrets.stage(&config, &published, secrets).await?;
-    if client_left() {
-        return Err("client_left".into());
-    }
-    let settings = commit(hooks, revision, config, bytes).await?;
-    if !client_left() {
-        hooks.secrets.promote(&staged, &settings.config).await?;
-    }
-    Ok(HookSaved {
-        settings,
-        generated_secrets: staged.generated,
-    })
-}
-/// Writes and publishes the configuration unless it changed since `revision`.
-async fn commit(
-    hooks: &Arc<Hooks>,
-    revision: u64,
-    config: HookConfig,
-    bytes: Vec<u8>,
-) -> Result<HookSettings, String> {
-    let _guard = hooks.mutation.lock().await;
-    reload_held(hooks).await?;
-    if hooks.state.read().settings.revision != revision {
-        return Err("revision_conflict".into());
     }
     let path = hooks.path.clone();
     let saved = tokio::task::spawn_blocking(move || {
