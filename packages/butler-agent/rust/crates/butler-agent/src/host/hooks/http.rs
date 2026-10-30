@@ -32,9 +32,9 @@ enum Failure {
     Request,
     #[error("HTTP hooks need https:// unless the host is loopback")]
     Transport,
-    #[error("Hook has no signing secret; save the hook to create one")]
+    #[error("Hook has no signing secret; set one through the hooks API")]
     NoSecret,
-    #[error("Hook URL changed origin; save the hook to create a new secret")]
+    #[error("Hook URL changed origin; set a new secret through the hooks API")]
     OtherOrigin,
     #[error("Hook secret store unavailable")]
     SecretStore,

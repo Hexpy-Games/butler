@@ -64,17 +64,24 @@ async fn reload_held(hooks: &Arc<Hooks>) -> Result<(), String> {
     }
     Ok(())
 }
+/// Saves a configuration; the caller holds `saving`. A client that has left
+/// changes nothing: no answer means no change. New keys sign only if the client
+/// is still there at the end to receive them, otherwise they stay undelivered.
 pub(super) async fn save(
     hooks: &Arc<Hooks>,
     revision: u64,
     config: HookConfig,
     secrets: BTreeMap<String, SecretText>,
+    client_left: impl Fn() -> bool,
 ) -> Result<HookSaved, String> {
     reload(hooks).await?;
-    let _saving = hooks.saving.lock().await;
-    if hooks.state.read().settings.revision != revision {
-        return Err("revision_conflict".into());
-    }
+    let published = {
+        let state = hooks.state.read();
+        if state.settings.revision != revision {
+            return Err("revision_conflict".into());
+        }
+        state.settings.config.clone()
+    };
     config.validate()?;
     for (id, secret) in &secrets {
         check_hook_secret(secret.expose())?;
@@ -88,20 +95,18 @@ pub(super) async fn save(
     }
     // A store may wait on the user, so `mutation` is not held here: session
     // creation and send keep reloading while it does.
-    let mut prepared = hooks.secrets.prepare(&config, secrets).await?;
-    match commit(hooks, revision, config, bytes).await {
-        Ok(settings) => {
-            hooks.secrets.forget(&settings.config).await;
-            Ok(HookSaved {
-                settings,
-                generated_secrets: std::mem::take(&mut prepared.generated),
-            })
-        }
-        Err(error) => {
-            hooks.secrets.rollback(prepared).await;
-            Err(error)
-        }
+    let staged = hooks.secrets.stage(&config, &published, secrets).await?;
+    if client_left() {
+        return Err("client_left".into());
     }
+    let settings = commit(hooks, revision, config, bytes).await?;
+    if !client_left() {
+        hooks.secrets.promote(&staged, &settings.config).await?;
+    }
+    Ok(HookSaved {
+        settings,
+        generated_secrets: staged.generated,
+    })
 }
 /// Writes and publishes the configuration unless it changed since `revision`.
 async fn commit(
