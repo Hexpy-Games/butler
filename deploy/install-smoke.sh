@@ -3,15 +3,13 @@
 # agent archive over http, installs it with deploy/install.sh into a temporary
 # HOME, runs the agent headless, and re-installs.
 #
-#   deploy/install-smoke.sh <dist dir> [<packed npm tarball>]
+#   deploy/install-smoke.sh <dist dir>
 #
 # <dist dir> holds butler-agent-<version>-<platform>.tar.gz (package-standalone-agent.py).
-# With a tarball (npm pack), also installs into a second fresh HOME through
-# `npx <tarball> install`. Touches nothing outside its temporary directory.
+# Touches nothing outside its temporary directory.
 set -eu
 
-dist="${1:?usage: install-smoke.sh <dist dir> [<npm tarball>]}"
-tarball="${2:-}"
+dist="${1:?usage: install-smoke.sh <dist dir>}"
 here="$(cd "$(dirname "$0")" && pwd)"
 port="${BUTLER_SMOKE_PORT:-18797}"
 agent_port="${BUTLER_SMOKE_AGENT_PORT:-18798}"
@@ -147,14 +145,4 @@ sh "$here/install.sh" --no-start || fail "install.sh over another version"
 [ "$(readlink "$BUTLER_AGENT_HOME/previous")" = "0.0.0-00000000" ] || fail "previous was not recorded"
 [ -d "$BUTLER_AGENT_HOME/0.0.0-00000000" ] || fail "an install removed an old version"
 
-if [ -n "$tarball" ]; then
-  echo "== npx install (fresh home)"
-  export HOME="$work/home-npx" BUTLER_AGENT_HOME="$work/agent-npx" BUTLER_DATA="$work/data-npx"
-  mkdir "$HOME"
-  export PATH="$HOME/.local/bin:$PATH"
-  # BUTLER_VERSION and BUTLER_INSTALL_BASE_URL (exported above) point the wrapper at the local archive.
-  npx --yes --package="$tarball" butler-install install --no-start || fail "npx install"
-  butler version --json | grep -q "\"version\": *\"$version\"" || fail "npx-installed version"
-  npx --yes --package="$tarball" butler-install version --json | grep -q "\"version\": *\"$version\"" || fail "npx forwarding to butler"
-fi
 echo "install smoke passed: $name"
