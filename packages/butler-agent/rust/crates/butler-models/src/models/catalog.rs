@@ -28,8 +28,8 @@ pub use defaults::{
 };
 pub use facts::{ImageLimitField, ImageLimitSources, ModelTier};
 pub use local::{
-    LocalImageDiscovery, LocalModelConfig, LocalModelPlatform, LocalModelSource,
-    normalize_local_model_config,
+    LOCAL_RESPONSE_TIMEOUT_MS, LocalImageDiscovery, LocalModelConfig, LocalModelPlatform,
+    LocalModelSource, local_response_timeout_ms, normalize_local_model_config,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use lookup::model_identity_key;
@@ -138,6 +138,8 @@ pub struct ModelProviderMetadata {
     pub source: Option<LocalModelSource>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_reasoning_budget_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_timeout_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registered: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]

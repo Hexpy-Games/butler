@@ -1979,6 +1979,9 @@ export interface AppCopy {
       modelId: string;
       displayName: string;
       maxContext: string;
+      responseTimeout: string;
+      responseTimeoutDescription: (defaultSeconds: number | undefined) => string;
+      responseTimeoutError: (range: { min: number; max: number } | undefined) => string;
       imageInput: string;
       registeredLocalModels: string;
       customOpenAiCompatible: string;

@@ -75,6 +75,7 @@ async fn concurrent_distinct_registrations_share_the_full_file_write_sequence() 
         context_window_tokens: 4_096.0,
         max_output_tokens: None,
         image_input: None,
+        response_timeout_ms: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
@@ -87,6 +88,7 @@ async fn concurrent_distinct_registrations_share_the_full_file_write_sequence() 
         context_window_tokens: 8_192.0,
         max_output_tokens: None,
         image_input: None,
+        response_timeout_ms: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
@@ -135,6 +137,7 @@ async fn local_and_hosted_mutations_preserve_config_and_exact_image_route_eviden
         context_window_tokens: 8_192.0,
         max_output_tokens: Some(2_048.0),
         image_input: None,
+        response_timeout_ms: None,
         reasoning_budget_ratio: Some(0.25),
         source: LocalModelSource::Manual,
     };
@@ -208,6 +211,7 @@ async fn update_local_returns_previous_ref_and_owned_temp_files_are_cleaned() {
         context_window_tokens: 4_096.0,
         max_output_tokens: None,
         image_input: None,
+        response_timeout_ms: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
@@ -248,6 +252,7 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
         context_window_tokens: 8_192.0,
         max_output_tokens: None,
         image_input: None,
+        response_timeout_ms: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
@@ -323,6 +328,7 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
         context_window_tokens: 8_192.0,
         max_output_tokens: None,
         image_input: None,
+        response_timeout_ms: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };

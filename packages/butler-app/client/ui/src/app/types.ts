@@ -111,6 +111,8 @@ export interface AppModelSummary {
   server_url?: string;
   source?: "discovered" | "manual";
   local_reasoning_budget_ratio?: number;
+  /** A Custom model's own response time limit, in milliseconds. */
+  response_timeout_ms?: number;
   registered?: boolean;
   enabled?: boolean;
   auth_type?: ProviderAuthMethod;
@@ -208,6 +210,14 @@ export interface ModelCatalogView {
   registered_models?: AppModelSummary[];
   provider_credentials?: ProviderCredentialView[];
   worker_model_presets: WorkerModelPreset[];
+  /** A Custom model's response time limit: allowed range and the default an empty one uses. */
+  response_timeout?: ResponseTimeoutLimits;
+}
+
+export interface ResponseTimeoutLimits {
+  default_ms: number;
+  min_ms: number;
+  max_ms: number;
 }
 
 export interface LocalModelDiscoveryRequest {
@@ -236,6 +246,8 @@ export interface LocalModelRegistrationRequest extends LocalModelDiscoveryReques
   source?: "discovered" | "manual";
   /** The user's image input declaration; absent keeps the stored one. */
   image_input?: boolean;
+  /** Milliseconds; null clears it, absent keeps the stored one. */
+  response_timeout_ms?: number | null;
 }
 
 export interface LocalModelRegistrationResult {
