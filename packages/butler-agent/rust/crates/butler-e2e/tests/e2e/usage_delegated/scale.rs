@@ -16,6 +16,8 @@ const ROWS: u64 = 300_000;
 const CYCLE: u64 = 5;
 const OWN_ROWS: u64 = 3;
 const SPAN_MS: i64 = 28 * 24 * 3_600_000;
+/// Rows are spread evenly over the span, oldest first.
+const ROW_SPACING_MS: i64 = SPAN_MS / 300_000;
 const SELECTED: u64 = 123;
 /// A warm answer in a debug build; the cold read indexes the whole log once.
 const WARM: Duration = Duration::from_millis(300);
@@ -37,7 +39,7 @@ struct Row {
 
 fn row(index: u64, start: i64) -> Row {
     let step = (index / CHATS) % CYCLE;
-    let offset = i64::try_from(index).expect("row index fits i64") * (SPAN_MS / ROWS as i64);
+    let offset = i64::try_from(index).expect("row index fits i64") * ROW_SPACING_MS;
     Row {
         chat: index % CHATS,
         subtask: (step >= OWN_ROWS).then(|| step - OWN_ROWS),
@@ -83,7 +85,7 @@ fn seed(data: &Path, start: i64) -> Result<(), HarnessError> {
 /// The selected chat's own and subtask buckets for rows in `[since, until)`.
 fn expected(start: i64, since: f64, until: f64) -> (Bucket, Bucket) {
     let (mut own, mut subtasks) = ([0; 7], [0; 7]);
-    for index in (SELECTED..ROWS).step_by(CHATS as usize) {
+    for index in (SELECTED..ROWS).step_by(usize::try_from(CHATS).expect("chat count fits usize")) {
         let row = row(index, start);
         if (row.ts as f64) < since || (row.ts as f64) >= until {
             continue;
