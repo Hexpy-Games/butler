@@ -343,13 +343,14 @@ Use `MessageAvatarBlock` for assistant, user, and system avatar shells. Pass pro
 
 Use `ActivityFeed` for small chronological or status rows in conversation, worker, and dashboard surfaces.
 
-Use `DisclosureRow` for expandable tool calls, progress details, and audit entries. Keep expansion state in the caller.
+Use `DisclosureRow` for expandable tool calls, progress details, and audit entries. Keep expansion state in the caller. Its chevron sits directly right of the title (after any count) and shows only when the row has hidden content (children, a count, or `reveals`).
 
 Wrong turns:
 
 - Do not use `ComposerControl` for destructive or page-level actions. Use `Button`.
 - Do not put upload logic or `window.butlerApp` inside `AttachmentList`; map attachment props in a product container.
 - Do not use `DisclosureRow` for sidebar hierarchy. Use `CollapsibleNavGroup`.
+- Never put a disclosure chevron before a title (a chevron column pushes every row's content right); `lint:ds` `no-leading-disclosure-chevron` flags it.
 
 Tags: composer, attachment, message, activity, disclosure
 

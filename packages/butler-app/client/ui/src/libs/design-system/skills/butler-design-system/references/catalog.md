@@ -355,6 +355,7 @@
 | Any set of results that each have a source page and a key value | `ItemCard` |  |
 | Any short list of free labels with completion | `TagField` |  |
 | Any visible text in product UI | `Typo` |  |
+| App items suggested from typed text with no search field, such as the composer @ menu (SuggestionItemRow) | `SuggestionList` |  |
 | Art on a card (a decoration module such as butler.cherry-blossom): its transparent canvas leaves the glass visible | `Wallpaper` |  |
 | Artifacts attached to an assistant message | `ArtifactList` |  |
 | Artifacts in the inspector | `DocumentTile` | `ArtifactList` |
@@ -490,7 +491,7 @@
 | Loading failed | `Notice` | `Skeleton` |
 | Loading has no known shape or is inside a control | `Spinner` | `Skeleton` |
 | Loading that ends in a success check in the same slot | `LoadingIndicator` | `ProgressRing` |
-| Log lists: affordance="trailing" puts the chevron after the meta and starts the title at the row inset | `DisclosureRow` |  |
+| Log lists: the chevron follows the title, and the level Tag and time end the first line as meta | `DisclosureRow` |  |
 | Long answers where the reader needs one part at a time | `BlockTabs` |  |
 | Long text beside a trailing action that must not move | `ExpandableText` |  |
 | Main and aside columns on a page | `Grid` |  |
@@ -627,6 +628,7 @@
 | Separate rows of a list that is not a card list | `Separator` |  |
 | Settings navigation lists | `SettingsNav` | `SidebarShell` |
 | Settings pages | `SettingsShell` | `SplitBrowser` |
+| Settings pages: reveals marks a row that opens sibling sections instead of children | `DisclosureRow` |  |
 | Several actions for one item behind a More button | `DropdownMenu` |  |
 | Several items that share one place in an order (tasks that run together in one step) | `StackDeck` |  |
 | Several lines of text | `Textarea` | `Input` |
@@ -1930,10 +1932,11 @@ The picked-elements toolbar over the page: a count, what to do with the picks, a
 
 `import { SuggestionList } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/SuggestionList`
 
-The listbox under a combobox field: one-line rows with favicon, title, muted address, bold matches and a bookmark star.
+The listbox under a combobox field: one-line rows with favicon, title, muted address, bold matches and a bookmark star; SuggestionItemRow is the same row for app items (type glyph, title, muted meta).
 
 - Use for: Address suggestions under AddressField (history and bookmarks)
 - Use for: Any field that suggests pages or sites as you type
+- Use for: App items suggested from typed text with no search field, such as the composer @ menu (SuggestionItemRow)
 - Not for: Choosing one value from a fixed set → `Select`
 - Not for: A searchable picker with filters and groups → `FilteredSelectPopover`
 - Not for: Navigation rows in a sidebar → `NavRow`
@@ -2282,14 +2285,15 @@ The conversation column: scroll container, readable message width, composer rese
 
 `import { DisclosureRow } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/DisclosureRow`
 
-A row with title, description and meta that expands details below it with the reveal motion; the open cue is a leading chevron, a trailing chevron, or the row itself.
+A row with title, description and meta that expands details below it with the reveal motion; the open cue is a chevron directly after the title that turns down when open, or the row itself. A chevron never leads the title.
 
 - Use for: Tool calls, changed files, source details and log entries that expand
-- Use for: Log lists: affordance="trailing" puts the chevron after the meta and starts the title at the row inset
+- Use for: Log lists: the chevron follows the title, and the level Tag and time end the first line as meta
+- Use for: Settings pages: reveals marks a row that opens sibling sections instead of children
 - Use for: Trace steps: affordance="none" with a count of child steps, an attention dot on problem rows and a SpanBar in `bar`
 - Not for: A sidebar folder → `CollapsibleNavGroup`
 - Not for: Expanding arbitrary content without a row → `Collapsible`
-- Tokens: `--selection`, `--motion-base`, `--motion-fast`, `--motion-ease-standard`, `--icon-size-md`, `--trace-error`, `--trace-wait`, `--focus-ring-width`, `--focus-ring-color`, `--space-lg`
+- Tokens: `--selection`, `--motion-base`, `--motion-fast`, `--motion-ease-standard`, `--icon-size-md`, `--trace-error`, `--trace-wait`, `--focus-ring-width`, `--focus-ring-color`, `--space-lg`, `--space-sm`
 
 ### EmptyLine
 
