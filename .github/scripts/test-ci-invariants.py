@@ -2,6 +2,8 @@
 """Exercise artifact trust and complete compiled shard coverage.
 
 Optional argument: directory containing e2e-list.json, perf-list.json, shards/.
+--policy runs every class that needs no compiled inventory (the PR ci-invariants job);
+--windows-safety runs only WindowsSafety (lint, every PR).
 """
 import contextlib
 import importlib.util
@@ -27,8 +29,10 @@ cache_spec = importlib.util.spec_from_file_location('cargo_cache', ROOT / 'cargo
 cargo_cache = importlib.util.module_from_spec(cache_spec)
 cache_spec.loader.exec_module(cargo_cache)
 WINDOWS_ONLY = '--windows-safety' in sys.argv
-if WINDOWS_ONLY:
-    sys.argv.remove('--windows-safety')
+POLICY_ONLY = '--policy' in sys.argv
+for flag in ('--windows-safety', '--policy'):
+    if flag in sys.argv:
+        sys.argv.remove(flag)
 INVENTORY = Path(sys.argv.pop()) if len(sys.argv) > 1 else None
 spec = importlib.util.spec_from_file_location('windows_tests', ROOT / 'test-windows-ci-safety.py')
 windows_tests = importlib.util.module_from_spec(spec)
@@ -164,11 +168,11 @@ class ArtifactTrust(unittest.TestCase):
 class Gate(unittest.TestCase):
     # test-category: pure-logic
     def test_every_selected_job_must_succeed(self):
-        jobs = ['lint', 'windows-check', 'shellcheck', 'selftest',
+        jobs = ['lint', 'windows-check', 'shellcheck', 'ci-invariants', 'selftest',
                 'linux-clippy', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
                 'macos-package', 'macos-updates', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
                 'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
-        outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
+        outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'workflows'], 'true')
         from ci_policy import rust_jobs
         integration_only = ['linux-perf-archive', 'linux-perf', 'macos-native', 'macos-perf-archive', 'macos-perf', 'macos-package', 'macos-updates', 'install-macos', 'install-merge', 'linux-arm64-tests', 'linux-arm64-perf', 'linux-arm64-perf-archive']
         for event, platform in [('pull_request', False), ('pull_request', True), ('push', False)]:
@@ -477,5 +481,12 @@ class Coverage(unittest.TestCase):
               f'perf {list(map(len, perf_selections))}.')
 
 
+def policy_classes():
+    # Coverage needs the archive inventory; lint runs WindowsSafety on every PR.
+    return [name for name, value in globals().items() if isinstance(value, type)
+            and issubclass(value, unittest.TestCase) and name not in ('Coverage', 'WindowsSafety')]
+
+
 if __name__ == '__main__':
-    unittest.main(argv=[sys.argv[0], 'WindowsSafety'] if WINDOWS_ONLY else None)
+    unittest.main(argv=[sys.argv[0], 'WindowsSafety'] if WINDOWS_ONLY else
+                  [sys.argv[0], *policy_classes()] if POLICY_ONLY else None)

@@ -3,8 +3,11 @@
 
 # On PRs linux-archive owns both compilation and workspace smoke results.
 # shellcheck is a hosted Linux lint, so packaging script findings fail the PR.
-PR_FAST_JOBS = frozenset(('lint', 'windows-check', 'shellcheck', 'linux-clippy', 'linux-archive',
-                          'ui', 'site', 'ds'))
+# ci-invariants proves CI policy before merge; the archive step runs only on main/release.
+PR_FAST_JOBS = frozenset(('lint', 'windows-check', 'shellcheck', 'ci-invariants', 'linux-clippy',
+                          'linux-archive', 'ui', 'site', 'ds'))
+# Repository files outside .github that the CI policy tests load.
+CI_TEST_INPUTS = ('packages/butler-agent/rust/scripts/*-standalone-agent.py',)
 
 def rust_jobs(outputs, event):
     rust = outputs['rust'] == 'true'
@@ -18,6 +21,7 @@ def rust_jobs(outputs, event):
     # ARM64 Clippy/doctests live on main push and release, never on PRs.
     selected = {
         'windows-check': rust, 'shellcheck': package or signing, 'selftest': package or signing,
+        'ci-invariants': outputs['workflows'] == 'true',
         'linux-clippy': rust, 'linux-archive': rust,
         'linux-tests': rust and event != 'pull_request', 'linux-perf-archive': rust and integration, 'linux-perf': rust and integration, 'linux-native': linux_package or install,
         'macos-archive': macos, 'macos-native': integration and (rust or package or install),
