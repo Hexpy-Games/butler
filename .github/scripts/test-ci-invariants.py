@@ -182,7 +182,7 @@ class Gate(unittest.TestCase):
                 disabled.update(('linux-tests', 'linux-arm64-archive', 'macos-archive', 'macos-tests',
                                  'linux-native', 'linux-arm64-native', 'linux-package-x64',
                                  'linux-package-arm64', 'install-x64', 'install-arm64',
-                                 'shellcheck', 'selftest'))
+                                 'selftest'))
             self.assertEqual({name for name, enabled in selected.items() if not enabled}, disabled)
             results = {job: {'result': 'skipped' if job in disabled else 'success'} for job in jobs}
             results['changes'] = dict(result='success', outputs=outputs)
