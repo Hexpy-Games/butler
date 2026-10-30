@@ -17,8 +17,8 @@ export function StepOrderSection({ order }: { order: ReturnType<typeof useSessio
     const epic = item.epic;
     const status = epic.hold_reason && epic.state === "running" ? "failed" : epic.state;
     const previous = chains.find(chain => chain.id === place.chainId)?.steps[place.stepIndex - 1];
-    const after = previous && (previous.length > 1
-      ? stackCaption(copy.afterStack(previous[0]!.label, previous.length - 1)) : copy.after(previous[0]!.label));
+    const after = previous && <AfterCaption {...(previous.length > 1
+      ? copy.afterStack(previous[0]!.label, previous.length - 1) : copy.after(previous[0]!.label))} />;
     const progress = epic.progress;
     const activity = progress.actions.find(action => action.status === "active")?.description;
     const caption = activity || (progress.counts.total > 0 ? appCopy.canon.done(progress.counts.completed, progress.counts.total) : undefined)
@@ -43,8 +43,12 @@ function OrderMarker({ status, number }: { status: string; number: number }) {
   if (status === "failed") return <Typo.Text tone="danger"><CircleAlert size="md" /></Typo.Text>;
   return <Typo.Label tone="tertiary" numeric="tabular">{number}</Typo.Label>;
 }
-/** Only the quoted name truncates: a count outside the quote keeps its room. */
-function stackCaption({ lead, tail }: { lead: string; tail?: string }) {
-  if (!tail) return lead;
-  return <Stack as="span" align="row" gap="xs"><Typo.Text truncate>{lead}</Typo.Text><Typo.Text wrap="nowrap">{tail}</Typo.Text></Stack>;
+/** Only the quoted name truncates: the waiting word and a count outside the quote keep their room. */
+function AfterCaption({ word, name, tail }: ReturnType<typeof appCopy.canon.order.after>) {
+  return (
+    <Stack as="span" align="row" gap="xs">
+      <Typo.Text wrap="nowrap">{word}</Typo.Text><Typo.Text truncate>{name}</Typo.Text>
+      {tail ? <Typo.Text wrap="nowrap">{tail}</Typo.Text> : null}
+    </Stack>
+  );
 }

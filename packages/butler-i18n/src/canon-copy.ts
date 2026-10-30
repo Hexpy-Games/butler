@@ -1,11 +1,12 @@
+/** `word` and `tail` (a count outside the quote) never truncate. */
+export interface CanonAfterCaption { word: string; name: string; tail?: string }
 export interface CanonOrderCopy {
   chain: Record<"user_message" | "schedule" | "detach", string>;
   /** Status words; a waiting step, or one held under a blocked step, shows none (its caption says what it waits for). */
   status: Record<"running" | "failed" | "done", string>;
-  /** Waiting word first, so truncation only cuts the quoted name. */
-  after: (title: string) => string;
-  /** `lead` (waiting word, then the quoted name) may truncate; `tail`, a count outside the quote, never does. */
-  afterStack: (title: string, count: number) => { lead: string; tail?: string };
+  /** What a step waits for, word first. Only `name` (the quoted title) may truncate. */
+  after: (title: string) => CanonAfterCaption;
+  afterStack: (title: string, count: number) => CanonAfterCaption;
   heldBy: string; join: string; newStep: string;
   more: (count: number) => string; menu: (title: string) => string;
   startNow: string; unstack: string; remove: string; failed: string; changed: string;
