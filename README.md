@@ -100,8 +100,6 @@ On Apple silicon macOS:
 
 ```sh
 curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/install.sh | sh -s -- --version 0.1.0-preview.12
-# Or, with Node.js:
-npx @hexpygames/butler install
 ```
 
 #### Windows
@@ -118,8 +116,6 @@ On Linux x64 / arm64 with glibc:
 
 ```sh
 curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/install.sh | sh -s -- --version 0.1.0-preview.12
-# Or, with Node.js:
-npx @hexpygames/butler install
 ```
 
 Use `butler open` to open the App in your browser. For another computer on a trusted network, enable access and generate a pairing code in **Settings → Security**, or use `butler remote enable` and `butler remote pair` on the host. Open the displayed address on the other computer and enter the 8-digit one-time pairing code. Remote access is off by default. [Remote access](https://butler.hexpy.games/en/help/advanced/remote-access/)

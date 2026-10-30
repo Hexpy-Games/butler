@@ -65,7 +65,6 @@ $env:HOME = "$root/home/미리 보기 %USERPROFILE% !"
 $env:USERPROFILE = $env:HOME
 $env:LOCALAPPDATA = "$root/local/미리 보기 %USERPROFILE% !"
 $env:APPDATA = "$root/roaming"
-$env:npm_config_cache = Join-Path $env:RUNNER_TEMP 'npm-cache'
 $env:BUTLER_DATA = "$root/data/미리 보기 %USERPROFILE% !"
 $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'
 $env:BUTLER_APP_SERVER_PORT = '0'
@@ -98,27 +97,6 @@ try {
     $current = (Get-Content "$env:LOCALAPPDATA/Butler/agent/current" -Raw).Trim()
     Assert-InstalledBinding "$env:LOCALAPPDATA/Butler/agent/$current"
     Assert-CommandBinding $launcher
-    # Exercise the packed npm entry point as well as the PowerShell one-liner path.
-    Push-Location packages/butler-npm
-    try {
-        $ErrorActionPreference = 'Continue'
-        npm.cmd pack --pack-destination $root | Out-Null
-        $ErrorActionPreference = 'Stop'
-        if ($LASTEXITCODE -ne 0) { throw 'npm pack failed' }
-    } finally { Pop-Location }
-    $package = (Get-ChildItem "$root/hexpygames-butler-*.tgz").FullName
-    $ErrorActionPreference = 'Continue'
-    tar -xzf $package -C $root
-    $ErrorActionPreference = 'Stop'
-    if ($LASTEXITCODE -ne 0) { throw 'npm package extraction failed' }
-    $ErrorActionPreference = 'Continue'
-    node "$root/package/bin/butler-install.js" install --no-start
-    $ErrorActionPreference = 'Stop'
-    if ($LASTEXITCODE -ne 0) { throw 'npm Windows install failed' }
-    $ErrorActionPreference = 'Continue'
-    node "$root/package/bin/butler-install.js" --version
-    $ErrorActionPreference = 'Stop'
-    if ($LASTEXITCODE -ne 0) { throw 'npm installed-command forwarding failed' }
     $ErrorActionPreference = 'Continue'
     & $launcher --version
     $ErrorActionPreference = 'Stop'
