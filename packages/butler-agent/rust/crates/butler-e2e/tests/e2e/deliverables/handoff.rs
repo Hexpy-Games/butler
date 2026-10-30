@@ -143,6 +143,57 @@ async fn materialize_missing_handoff_preserves_other_attachments() -> Result<(),
     Ok(())
 }
 
+/// A delivered file the reader refuses (its copy swapped for a link) is not
+/// attached, and the answer still reports the attachment as unavailable.
+#[tokio::test]
+async fn materialize_refused_handoff_reports_unavailable() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("DELIVERABLE-REFUSED-HANDOFF")?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
+    let release = setup.sandbox.root.join("attach-release");
+    let setup = setup
+        .env("BUTLER_E2E_HOLD_POINT", "message_attachment")
+        .env("BUTLER_E2E_HOLD_RELEASE", release.to_str().unwrap());
+    *script.prompt.lock().unwrap() = "Deliver the file.".into();
+    *script.steps.lock().unwrap() = [
+        call(
+            "deliver_files",
+            json!({"files":[{"path":"report.pdf","title":"Report"}]}),
+        ),
+        done(),
+    ]
+    .into();
+    std::fs::write(setup.sandbox.data.join("report.pdf"), "%PDF-1.4 delivered")?;
+    let elsewhere = setup.sandbox.root.join("elsewhere.pdf");
+    std::fs::write(&elsewhere, "%PDF-1.4 elsewhere")?;
+    let s = setup.start().await?;
+    let accepted = s.gw.say("general", "Deliver the file.").await?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
+    wait_for(|| release.with_extension("held").exists()).await;
+    let staged = copies(&s.sandbox.data)?;
+    assert_eq!(staged.len(), 1);
+    std::fs::remove_file(&staged[0])?;
+    butler_platform::secure_fs::symlink(&elsewhere, &staged[0])?;
+    std::fs::write(&release, "release")?;
+    s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
+        .await?;
+    let message = last(&s).await?;
+    assert_eq!(message["text"], "Done.", "{message}");
+    assert!(message.get("attachments").is_none(), "{message}");
+    assert!(
+        message["limitation_codes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("message_file_unavailable")),
+        "{message}"
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 #[tokio::test]
 async fn deleted_turn_handoff_is_reclaimed_without_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();

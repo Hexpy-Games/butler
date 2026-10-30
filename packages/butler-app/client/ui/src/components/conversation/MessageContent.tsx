@@ -67,7 +67,7 @@ function MessageContentComponent({
         visibleSystemMessageText(message)
       )}
       {message.role !== "assistant" && (
-        <MessageAttachments attachments={message.attachments ?? []} sessionId={sessionId} />
+        <MessageAttachments attachments={message.attachments ?? []} sessionId={sessionId} refreshFileUrls={refreshFileUrls} />
       )}
       {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}
       {message.role === "assistant" && !running && onCopyAssistantMessage && (

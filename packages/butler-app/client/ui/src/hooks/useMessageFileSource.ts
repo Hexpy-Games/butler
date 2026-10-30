@@ -4,6 +4,7 @@ import {
   claimMessageFileRetry,
   messageFilePath,
   messageFileSource,
+  rememberedExpiry,
   settleMessageFileLoad,
   signedFileUrlsVersion,
   signedUrlExpiry,
@@ -62,10 +63,14 @@ export function retryMessageFileOnce(
   if (!path || !refreshFileUrls || !claimMessageFileRetry(path)) {
     return Promise.resolve(false);
   }
-  return refreshFileUrls().then(
-    () => true,
-    () => true,
-  );
+  const before = rememberedExpiry(path);
+  const settle = () => {
+    // A refresh that did not re-sign this file (its message is past the pages it read) leaves
+    // the file's one retry to a later refresh that reaches it.
+    if (rememberedExpiry(path) === before) settleMessageFileLoad(path);
+    return true;
+  };
+  return refreshFileUrls().then(settle, settle);
 }
 
 /**
@@ -86,4 +91,23 @@ export function useFreshFrameSource(
       void retryMessageFileOnce(path, refreshFileUrls);
     }
   }, [enabled, expiresAt, path, refreshFileUrls]);
+}
+
+/**
+ * Tiles load their files from short-lived signed URLs (ten minutes), so a tile first shown later (a
+ * message that scrolls in, a reopened panel) would load an expired one. Re-renders on every fresher
+ * signature and, like a frame, refreshes the owning list once for an expired or unsigned URL.
+ */
+export function useFreshFileSources(links: readonly MessageFileLink[], refreshFileUrls?: RefreshFileUrls): void {
+  useSyncExternalStore(subscribeSignedFileUrls, signedFileUrlsVersion, signedFileUrlsVersion);
+  const sources = links.map((link) => [messageFilePath(link.url), messageFileSource(link)].join(" ")).join("\n");
+  useEffect(() => {
+    for (const line of sources.split("\n")) {
+      const [path, source] = line.split(" ");
+      if (!path || !source) continue;
+      const expiresAt = signedUrlExpiry(source);
+      if (expiresAt !== undefined && expiresAt * 1000 > Date.now()) settleMessageFileLoad(path);
+      else void retryMessageFileOnce(path, refreshFileUrls);
+    }
+  }, [sources, refreshFileUrls]);
 }

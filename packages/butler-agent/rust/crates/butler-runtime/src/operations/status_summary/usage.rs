@@ -190,8 +190,9 @@ impl UsageMonitor {
         drop(projection_guard);
         let cost = buckets.cost_value();
         let (mut model_value, mut provider_buckets) = buckets.views();
-        if let Some(by_role) = by_role {
+        if let Some((by_role, subtasks)) = by_role {
             model_value["byRole"] = by_role;
+            model_value["subtasks"] = subtasks;
         }
         plan::include_provider(&mut provider_buckets, sources);
         let web_search = availability::read_web_search(data_root, since_ts, now, self);

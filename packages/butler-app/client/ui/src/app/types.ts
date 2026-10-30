@@ -1440,6 +1440,8 @@ export interface UsageMonitorView {
     bySection: Record<string, UsageSectionBucketView>;
     /** Session views only: the chat's calls by role ("main" = the chat itself; any other role is delegated work), included in the totals above. */
     byRole?: Record<string, UsageTokenBucketView>;
+    /** Session views only: every role other than "main" summed per token type; zero when nothing was delegated. The chat's own part is the totals above minus this. */
+    subtasks?: UsageTokenBucketView;
   };
   webSearch: {
     requestCount: number;
