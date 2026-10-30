@@ -48,19 +48,22 @@ export function beginCanonQueueEdit(id: string, view: CanonQueueView) {
 }
 function refresh(id: string, reader: Reader) {
   reader.dirty = true;
-  if (reader.queued || reader.snapshot.busy) return;
+  if (reader.queued || reader.controller || reader.snapshot.busy) return;
   reader.queued = true;
   queueMicrotask(() => {
     reader.queued = false;
     if (readers.get(id) !== reader || reader.snapshot.busy) return;
     reader.dirty = false;
-    reader.controller?.abort();
     const controller = new AbortController();
     reader.controller = controller;
     const revision = ++reader.revision;
     void getCanonQueue(id, controller.signal).then(view => {
       if (!controller.signal.aborted && reader.revision === revision && view.session_id === id) publish(reader, { view, busy: false });
-    }).catch(() => { /* An unavailable projection has no fabricated section. */ });
+    }).catch(() => { /* An unavailable projection has no fabricated section. */ }).finally(() => {
+      if (reader.controller !== controller) return;
+      reader.controller = undefined;
+      if (readers.get(id) === reader && reader.dirty) refresh(id, reader);
+    });
   });
 }
 export function publishCanonQueueEvent(event: TimelineEvent) {

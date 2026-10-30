@@ -1,6 +1,6 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Blocks, CircleAlert, ICON_SIZE, LoadingIndicator, OverflowActionMenu, Play, StepSortableList, Trash2, Typo, type StepSortableRowContext } from "@/butler-ds";
-import { orderChains, type OrderItem } from "./canonOrderModel.ts";
+import { acceptsOrderEdit, orderChains, type OrderItem } from "./canonOrderModel.ts";
 import type { useSessionCanonQueue } from "./useSessionCanonQueue.ts";
 
 export function StepOrderSection({ order }: { order: ReturnType<typeof useSessionCanonQueue> }) {
@@ -33,7 +33,7 @@ export function StepOrderSection({ order }: { order: ReturnType<typeof useSessio
       ]} />,
     };
   };
-  return <StepSortableList chains={chains} renderItem={renderItem} disabled={order.busy}
+  return <StepSortableList chains={chains} canDrop={edit => acceptsOrderEdit(view, edit)} renderItem={renderItem} disabled={order.busy}
     onEdit={edit => { void order.edit(edit); }} labels={copy.drag} deckLabels={copy.deck} />;
 }
 function OrderMarker({ status, number }: { status: string; number: number }) {

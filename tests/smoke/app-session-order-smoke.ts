@@ -2,6 +2,7 @@
 // Stub-only native gateway smoke; four light/dark × desktop/phone cells.
 // BUTLER_SMOKE_BASELINE=1 captures the same screens before the UI change.
 import assert from "node:assert/strict";
+import { assertNoCanonInstructions, assertStepActivity, completedPrefixDrop } from "../support/session-order-regressions.ts";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -39,6 +40,7 @@ try {
   await host.api("/settings", { method: "PATCH", body: JSON.stringify({ language: lang, appearance_theme: theme, reduce_motion: false, chats_intro_seen: true,
     wallpaper: { source: { kind: "none" } } }) });
   await singleStep();
+  if (!baseline) await completedPrefixDrop(host, open, info, keyboardEdit, shot);
   const plain = await orderChat(host, "진행 순서 확인");
   await scenario(plain, "plain");
   await scenario("general", "bubble");
@@ -81,10 +83,11 @@ async function singleStep() {
   const { epics } = await seedOrderPlan(host, 1);
   await requestOrder(host, id, { op: "start_now", epic_id: epics[0]!.id });
   await waitOrder(host, id, view => view.counts.running === 1);
+  if (!baseline) await assertStepActivity(page);
   await info(page);
   if (!baseline) { await section(page).waitFor(); assert.equal(await section(page).locator("[data-step-items]").count(), 1); }
   await shot(page, "single-start-now");
-  assert.equal(await page.getByText(/canon:/u).count(), 0);
+  await assertNoCanonInstructions(page);
   await page.unrouteAll({ behavior: "wait" });
   await page.close();
 }
@@ -95,6 +98,7 @@ async function scenario(id: string, layout: string) {
   await waitOrder(host, id, view => view.counts.running === 1 && view.counts.waiting === 4);
   await page.getByText("확인하고 있습니다.", { exact: true }).first().waitFor();
   assert.equal(await page.locator('[data-test-class="assistant-bubble"]').count() > 0, layout === "bubble", "both reply layouts are exercised");
+  if (!baseline) await assertStepActivity(page);
   await info(page);
   if (!baseline) {
     await section(page).waitFor();
@@ -112,7 +116,7 @@ async function scenario(id: string, layout: string) {
   const hold = page.locator('[data-test-class="canon-hold"]');
   if (!baseline) await hold.waitFor();
   await shot(page, `${layout}-hold`);
-  assert.equal(await page.getByText(/canon:/u).count(), 0, "internal step instructions never render");
+  await assertNoCanonInstructions(page);
   if (!baseline) {
     const decision = layout === "plain" ? "delete" : "continue";
     const response = page.waitForResponse(reply => reply.url().includes("/canon/queue/holds/") && reply.request().method() === "POST");
@@ -141,7 +145,7 @@ async function scenario(id: string, layout: string) {
     assert(orderItems(result).some(item => item.epic_id === other.epics[1]!.id));
     assert(!orderItems(await readOrder(host, source)).some(item => item.epic_id === other.epics[1]!.id));
   }
-  assert.equal(await page.getByText(/canon:/u).count(), 0);
+  await assertNoCanonInstructions(page);
   await page.unrouteAll({ behavior: "wait" });
   await page.close();
 }
@@ -161,7 +165,10 @@ async function keyboardEdit(page: Page, id: string, item: string, keys: string[]
 }
 async function assertOrder(page: Page, id: string, view: CanonQueueView) {
   const expected = view.chains.filter(chain => chain.steps.some(step => step.items.some(item => item.state !== "done")))
-    .flatMap(chain => chain.steps.map(step => step.items.map(item => item.epic_id).join(" ")));
+    .flatMap(chain => {
+      const first = chain.steps.findIndex(step => step.items.some(item => item.state !== "done"));
+      return chain.steps.slice(first).map(step => step.items.map(item => item.epic_id).join(" "));
+    });
   await page.waitForFunction(values => {
     const actual = [...document.querySelectorAll('[data-session-section="order"] [data-step-items]')].map(node => node.getAttribute("data-step-items"));
     return JSON.stringify(actual) === JSON.stringify(values);

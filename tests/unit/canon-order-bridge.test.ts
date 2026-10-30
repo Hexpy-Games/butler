@@ -90,3 +90,27 @@ test("completion from an unmounted reader cannot overwrite its replacement", asy
     expect(canonQueueSnapshot("session").view?.graph_revision).toBe(8);
   } finally { replacement(); }
 });
+
+// test-category: race
+test("progress during a fetch has one trailing read and preserves the final complete state", async () => {
+  let reads = 0;
+  let active = 0;
+  let maximum = 0;
+  const pending: Array<(revision: number) => void> = [];
+  bridge({ getCanonQueue: () => {
+    reads++; maximum = Math.max(maximum, ++active);
+    return new Promise(done => pending.push(revision => { active--; done({ ok: true, data: view(revision) }); }));
+  } });
+  const off = observeCanonQueue("session", () => {});
+  try {
+    await flush(); pending.shift()!(1); await flush();
+    event("canon.progress_changed", { epic_id: "epic" }); await flush();
+    for (let i = 0; i < 20; i++) { event("canon.progress_changed", { epic_id: "epic" }); await flush(); }
+    expect(reads).toBe(2); expect(maximum).toBe(1);
+    pending.shift()!(2); await flush();
+    expect(reads).toBe(3); expect(maximum).toBe(1);
+    pending.shift()!(3); await flush();
+    expect(canonQueueSnapshot("session")).toEqual({ view: view(3), busy: false });
+    expect(reads).toBe(3);
+  } finally { off(); for (const finish of pending) finish(3); await flush(); }
+});

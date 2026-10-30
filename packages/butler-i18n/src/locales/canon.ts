@@ -23,7 +23,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
       deck: { expand: (count, front) => `${front} 외 ${count - 1}건, 펼치기`, fold: item => `${item}, 접기` },
     },
     queue: {
-      stepEpic: epic => `과제 ‘${epic}’를 처리합니다.`,
+      stepEpic: epic => `과제 ‘${epic}’을(를) 처리합니다.`,
       removed: "삭제했습니다", continued: "계속 진행합니다", taken: "여기서 진행합니다",
       step: (plan, epic) => `계획 ‘${plan}’의 과제 ‘${epic}’를 처리합니다.`,
       hold: epic => `‘${epic}’가 막혀 다음 과제를 멈췄습니다.`,
