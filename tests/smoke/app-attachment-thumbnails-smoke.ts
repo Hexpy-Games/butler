@@ -1,7 +1,8 @@
 // Attachment tiles in the real Electron App (app://butler), stub model only. Signed message-file URLs get a short
 // gateway lifetime (BUTLER_APP_SIGNED_URL_TTL_SECONDS, the product's own knob), so a sent message that scrolls in after
 // it must load fresh ones: pictures decode (naturalWidth > 0) and videos reach their first frame, in the composer and in
-// sent messages. A long file name keeps one line with an ellipsis and its whole name in the tooltip. A credential-named
+// sent messages. A long file name takes two lines, breaking at its own boundaries (`_`, `-`, the extension) with no line
+// of a single character, ends in an ellipsis and shows its whole name in the tooltip. A credential-named
 // file the policy withholds (`.env`, reported to the model in `skipped_files`) shows no "attachment unavailable" tag; a
 // delivered file that is gone keeps it (needs an agent built with `butler-agent/e2e-fixtures`, as the CI smoke binary is,
 // for the `message_attachment` hold point). A tile whose link was revoked before expiry (connection code rotated)
@@ -197,14 +198,28 @@ const tileButton = (scope: string, name: string) => `[...document.querySelectorA
   .find((button) => button.getAttribute("aria-label")?.normalize("NFC") === ${JSON.stringify(name.normalize("NFC"))})`;
 const same = (expression: string, name: string) => `(${expression})?.normalize("NFC") === ${JSON.stringify(name.normalize("NFC"))}`;
 
-/** The long name's tile: one line ending in an ellipsis, and the whole name in its tooltip. */
+/**
+ * The long name's tile: two visible lines (the clamp), the first ending at a name boundary (`_`, `-`, a space, or before
+ * the extension), no line of a single character, the rest clipped behind the ellipsis, and the whole name in its tooltip.
+ */
 async function assertLongName(app: App, scope: string, name: string) {
-  const facts = await app.page.expression<{ wrap: string; overflow: string; clipped: boolean; box: number[] } | null>(`(() => {
-    const button = ${tileButton(scope, name)}; const text = [...(button?.querySelectorAll('*') ?? [])].find((node) => node.children.length === 0 && ${same("node.textContent", name)});
-    if (!text) return null; const style = getComputedStyle(text);
+  const facts = await app.page.expression<{ clamp: string; lines: string[]; clipped: boolean; box: number[] } | null>(`(() => {
+    const button = ${tileButton(scope, name)};
+    const text = [...(button?.querySelectorAll('[data-line-clamp],[data-truncate]') ?? [])].find((node) => ${same("node.textContent", name)});
+    if (!text) return null; const box = text.getBoundingClientRect(); const range = document.createRange(); const lines = new Map();
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT); let node;
+    while ((node = walker.nextNode())) for (let i = 0; i < node.data.length; i++) {
+      range.setStart(node, i); range.setEnd(node, i + 1); const r = range.getClientRects()[0];
+      if (!r || r.bottom > box.bottom + 1) continue; const top = Math.round(r.top); lines.set(top, (lines.get(top) ?? "") + node.data[i]); }
     const r = button.getBoundingClientRect();
-    return { wrap: style.whiteSpace, overflow: style.textOverflow, clipped: text.scrollWidth > text.clientWidth, box: [r.x + r.width / 2, r.y + r.height / 2] }; })()`);
-  if (!facts || facts.wrap !== "nowrap" || facts.overflow !== "ellipsis" || !facts.clipped) throw new Error(`name layout ${JSON.stringify(facts)} in ${JSON.stringify(await app.page.expression(`[...document.querySelectorAll('${scope} ${TILE} button')].map((button) => [button.getAttribute("aria-label"), button.textContent])`))}`);
+    return { clamp: getComputedStyle(text).webkitLineClamp, lines: [...lines.values()], clipped: text.scrollHeight > text.clientHeight + 1,
+      box: [r.x + r.width / 2, r.y + r.height / 2] }; })()`);
+  const [first, second] = facts?.lines ?? [];
+  const boundary = Boolean(first && second && (/[_\- ]$/u.test(first) || second.startsWith(".")));
+  const orphan = facts?.lines.some((line) => [...line].length < 2) ?? true;
+  if (!facts || facts.clamp !== "2" || facts.lines.length !== 2 || !boundary || orphan || !facts.clipped) {
+    throw new Error(`name layout ${JSON.stringify(facts)}`);
+  }
   // Off the tile first, then onto it with two moves, so the tooltip sees a fresh hover.
   await app.page.movePointer(2, 2);
   await sleep(300);
