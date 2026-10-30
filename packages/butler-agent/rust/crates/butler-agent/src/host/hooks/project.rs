@@ -100,7 +100,7 @@ fn hooks_off(folder: Folder, off: ProjectHooksOff, store: trust::Store) -> Found
 }
 
 /// Hashes what would run, not the bytes: only a change in that asks again.
-fn hooks_on(folder: Folder, config: HookConfig, store: trust::Store) -> Result<Found, String> {
+fn hooks_on(folder: Folder, config: &HookConfig, store: trust::Store) -> Result<Found, String> {
     let enabled = config.hooks.iter().filter(|hook| hook.enabled);
     let runnable: Vec<HookDefinition> = enabled.map(project_lines::runnable).collect();
     let parsed = serde_json::to_string(&runnable).map_err(|error| error.to_string())?;
@@ -167,7 +167,7 @@ fn load(root: &Path, user_hooks: &Path, data: &Path) -> Result<(Found, Option<St
         Ok(Some(config)) if !config.hooks.iter().any(|hook| hook.enabled) => {
             (hooks_off(folder, ProjectHooksOff::Disabled, store), None)
         }
-        Ok(Some(config)) => (hooks_on(folder, config, store)?, None),
+        Ok(Some(config)) => (hooks_on(folder, &config, store)?, None),
     })
 }
 

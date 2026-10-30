@@ -10,7 +10,10 @@ pub use denial::{
     execution_timeout_exit, isolation_failure, isolation_failure_exit, sandbox_denial,
 };
 mod credentials;
-pub mod hook_containment;
+mod hook_containment;
+pub use hook_containment::{
+    ContainedHook, HookContainment, HookSandbox, contain_hook, hook_invocation,
+};
 pub mod mxc_policy;
 mod project_secrets;
 pub use credentials::secret_name;

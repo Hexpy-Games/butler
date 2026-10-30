@@ -31,7 +31,7 @@ pub struct HookContainment {
 }
 
 /// A prepared invocation and what must be finished once its process is gone.
-pub struct Contained {
+pub struct ContainedHook {
     /// The program to start, wrapped in its sandbox.
     pub invocation: Invocation,
     /// Scratch environment the process gets instead of the host's folders.
@@ -52,7 +52,7 @@ fn io_failure(error: std::io::Error) -> SandboxError {
 }
 
 /// The hook as a program and arguments, before any sandbox wraps it.
-pub fn base(
+pub fn hook_invocation(
     command: Option<&str>,
     args: Option<&[String]>,
     environment: &HashMap<String, String>,
@@ -103,14 +103,17 @@ fn scratch(data: &Path) -> Result<(PathBuf, PathBuf), SandboxError> {
 }
 
 /// Wraps `invocation` in the sandbox; call off async workers.
-pub fn contain(invocation: Invocation, sandbox: &HookSandbox) -> Result<Contained, SandboxError> {
+pub fn contain_hook(
+    invocation: Invocation,
+    sandbox: &HookSandbox,
+) -> Result<ContainedHook, SandboxError> {
     match sandbox {
-        HookSandbox::None => Ok(Contained {
+        HookSandbox::None => Ok(ContainedHook {
             invocation,
             scratch: Vec::new(),
             project_write: None,
         }),
-        HookSandbox::ReadOnly(containment) => Ok(Contained {
+        HookSandbox::ReadOnly(containment) => Ok(ContainedHook {
             invocation: command_sandbox::read_only_invocation(
                 invocation,
                 &containment.policy_environment,
@@ -126,7 +129,7 @@ pub fn contain(invocation: Invocation, sandbox: &HookSandbox) -> Result<Containe
 fn project_write(
     invocation: Invocation,
     containment: &HookContainment,
-) -> Result<Contained, SandboxError> {
+) -> Result<ContainedHook, SandboxError> {
     let HookContainment {
         policy_environment,
         root,
@@ -157,7 +160,7 @@ fn project_write(
     )?;
     let temporary = temporary.to_string_lossy().into_owned();
     let cache = cache.to_string_lossy().into_owned();
-    Ok(Contained {
+    Ok(ContainedHook {
         invocation,
         scratch: vec![
             ("TMPDIR", temporary.clone()),
@@ -175,7 +178,7 @@ fn project_write(
     })
 }
 
-impl Contained {
+impl ContainedHook {
     /// Finishes containment once the process is gone, on every exit path: secrets a
     /// run left behind are swept, and its preparation released. Call off async workers.
     pub fn finish(self) {

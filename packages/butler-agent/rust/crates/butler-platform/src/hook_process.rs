@@ -1,10 +1,10 @@
 //! Bounded lifecycle command processes: under the user's privileges for the user's
 //! own hooks, inside the session's sandbox for a project folder's.
 use crate::{
-    command_sandbox::{self, CommandOutputDecoder, ShellAccess, hook_containment as sandbox},
+    command_sandbox::{self, CommandOutputDecoder, ContainedHook, ShellAccess},
     process_control::{self, GroupSignal},
 };
-pub use command_sandbox::hook_containment::{HookContainment, HookSandbox};
+pub use command_sandbox::{HookContainment, HookSandbox};
 use std::{collections::HashMap, path::PathBuf, process::Stdio, time::Duration};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
@@ -100,14 +100,14 @@ fn configure(
 /// A hook that cannot be contained fails here and never starts.
 fn prepare_contained(
     input: &HookProcess,
-) -> Result<(std::process::Command, sandbox::Contained), HookProcessError> {
-    let base = sandbox::base(
+) -> Result<(std::process::Command, ContainedHook), HookProcessError> {
+    let base = command_sandbox::hook_invocation(
         input.command.as_deref(),
         input.args.as_deref(),
         &input.environment,
     )
     .map_err(error)?;
-    let contained = sandbox::contain(base, &input.sandbox).map_err(error)?;
+    let contained = command_sandbox::contain_hook(base, &input.sandbox).map_err(error)?;
     let mut command = std::process::Command::new(&contained.invocation.program);
     configure(&mut command, input)?;
     command.envs(contained.scratch.iter().map(|(key, value)| (*key, value)));

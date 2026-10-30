@@ -107,7 +107,7 @@ impl GuidedTurnFactoryAdapter {
             ProjectHookReview::Undecided(mut request) => {
                 let changed = request.changed;
                 request.unsandboxed = *access_mode == butler_turn::btcc::AccessMode::FullAccess;
-                let facts = card_facts(*request, project_dir, semantic, turn, tools)?;
+                let facts = card_facts(&request, project_dir, semantic, turn, tools)?;
                 let card = if !self.unattended(turn).await? {
                     self.admit_card(facts).await?
                 } else if changed {
@@ -188,7 +188,7 @@ impl GuidedTurnFactoryAdapter {
 /// One card per turn and content: slots ignore the session, so another turn or chat
 /// on the same folder must not share this one.
 fn card_facts(
-    request: ProjectHookRequest,
+    request: &ProjectHookRequest,
     project_dir: &str,
     semantic: &SemanticTurn,
     turn: &butler_turn::btcc::TurnRecord,
@@ -200,7 +200,7 @@ fn card_facts(
     );
     let target = request.file.clone();
     let normalized_input =
-        serde_json::to_value(&request).map_err(|_| error("project_hooks_card_invalid"))?;
+        serde_json::to_value(request).map_err(|_| error("project_hooks_card_invalid"))?;
     Ok(AuthorityAdmissionInput {
         public_action_title: None,
         owner_session_id: tools.authority_owner().to_owned(),
