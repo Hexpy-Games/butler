@@ -117,7 +117,7 @@ and package signature checks still apply. `signing.notarized` is release metadat
 not an updater acceptance condition. The ZIP contains the same signed, stapled
 App as the DMG.
 The Agent updater likewise checks archive integrity, not notarization. CLI installs
-via curl or npx do not use the App's Gatekeeper open flow.
+via the install script do not use the App's Gatekeeper open flow.
 
 Entitlements (`deploy/macos/electron.entitlements.plist`) apply only to
 `Butler.app` and the Electron helper apps: `allow-jit` (V8
@@ -158,5 +158,3 @@ Release recovery keeps credential tools in the job-private `BUTLER_SIGN_HOME` th
 created their temporary keychain; Butler package/gate/smoke commands retain fresh
 HOME and data directories. The release records a paired old/current Developer ID
 probe before claiming that profile binding caused a repair (#498).
-
-The npm tarball and SHA-256 are release assets; packing never publishes to npm.

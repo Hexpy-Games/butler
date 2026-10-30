@@ -1,7 +1,7 @@
 //! `butler install --from ARCHIVE [--sha256 HEX]`: put an Agent archive in
 //! the Agent home, make it the active version and point the launchers at it.
 //!
-//! This is the contract `install.sh` and the npm wrapper call on the binary
+//! This is the contract `install.sh` and `install.ps1` call on the binary
 //! they extracted (see `docs/install-lifecycle.md`).
 
 use std::path::PathBuf;
