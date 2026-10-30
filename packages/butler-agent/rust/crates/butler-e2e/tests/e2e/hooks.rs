@@ -15,6 +15,8 @@ mod idle;
 mod limits;
 #[path = "hooks/progress.rs"]
 mod progress;
+#[path = "hooks/project_trust.rs"]
+mod project_trust;
 #[path = "hooks/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{

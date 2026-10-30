@@ -120,8 +120,8 @@ change nothing else. Each is off unless set to `1`.
 
 Settings → Hooks manages `$BUTLER_DATA/hooks.json`. No hooks are installed by
 default. Hooks run with your privileges and receive full prompt and tool content.
-They cannot grant permission or change tool inputs. Project and plugin hooks are
-not supported yet.
+They cannot grant permission or change tool inputs. Plugin hooks are not supported
+yet.
 
 ```json
 {
@@ -174,6 +174,28 @@ then background handlers use a pool of eight. Identical handlers deduplicate.
 Timeout and cancellation terminate the process tree, allow two seconds of grace,
 then force termination and reap. Each output stream is capped at 64 KiB; overflow
 is an error, never truncated success. Stdin is streamed in full.
+
+### Project-folder hooks
+
+A project folder can define command hooks in `.butler/hooks.json`, in the same
+format. They run only after you allow their exact content, on a card that lists each
+hook's event, tools and command (with its environment additions). You are asked once,
+and again only when the content changes; a card about changed content marks what
+changed since you last allowed it. Formatting is not content. Allow and deny both
+apply to that content in that folder, so moving or replacing the folder asks again,
+and a denied file stays silent until it changes.
+
+Hooks read for a turn are the hooks that turn runs: changing the file mid-turn has
+no effect until the next turn asks. The commands themselves are not hashed, so an
+allowed hook that runs a script in the project runs the script's current content.
+
+The card appears before the turn's first model round. A scheduled run has nobody to
+answer, so unanswered hooks do not run and the run continues. SessionStart held back
+by a card runs after you allow it; UserPromptSubmit starts with your next message.
+`type: "http"` hooks, a symlink at `.butler/hooks.json` or `.butler`, and an invalid
+file are refused: nothing runs, nothing is asked, and the reason is in the run log.
+Project hooks receive `hook: {id: "project:<id>", scope: "project"}`. Answers are kept
+in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write.
 
 `type: "http"` hooks POST the same envelope as JSON (`Content-Type:
 application/json`) to `url` instead of running a process:

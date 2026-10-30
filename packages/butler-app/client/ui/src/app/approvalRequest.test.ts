@@ -18,7 +18,7 @@ type TransportTarget = { kind: string; path: string };
 
 /** A request's `approval` as #277 sends it, narrowed the way the store does. */
 function summary(actionKind: string, fields: { targets?: TransportTarget[]; count?: number; examples?: string[];
-  risk?: string; examples_truncated?: boolean[] } = {}): ApprovalSummary {
+  risk?: string; examples_truncated?: boolean[]; project_hooks?: unknown } = {}): ApprovalSummary {
   const { targets = [], count = 1, examples = [], ...rest } = fields;
   return normalizeApprovalSummary({ action_kind: actionKind, targets, count, examples,
     ...rest, risk: "risk" in fields ? rest.risk : "medium" })!;
@@ -49,6 +49,8 @@ test("each action kind reads as one question in English and Korean", () => {
     [summary("update_project", { targets: [{ kind: "project", path: "ledger:work" }], risk: "low" }),
       "Update the project records?", "프로젝트 기록을 업데이트할까요?"],
     [summary("start_conversation", { risk: "low" }), "Start a new conversation?", "새 대화를 시작할까요?"],
+    [summary("project_hooks", { targets: [{ kind: "folder", path: "butler" }] }), "Run hooks from the butler folder?", "butler 폴더의 훅을 실행할까요?"],
+    [summary("project_hooks", { targets: [{ kind: "folder", path: "butler" }], project_hooks: { file: ".butler/hooks.json", changed: true, hooks: [] } }), "Run the changed hooks in butler?", "butler의 바뀐 훅을 실행할까요?"],
     [summary("restart_service", { targets: [{ kind: "service", path: "butler" }] }), "Restart Butler?", "버틀러를 다시 시작할까요?"],
     [summary("create_worktree", { targets: [folder("garden")], risk: "low" }),
       "Create a worktree for this conversation?", "이 대화용 워크트리를 만들까요?"],
@@ -58,6 +60,20 @@ test("each action kind reads as one question in English and Korean", () => {
     expect(approvalRequestView(card(approval), en).title).toBe(english);
     expect(approvalRequestView(card(approval), ko).title).toBe(korean);
   }
+});
+
+// test-category: pure-logic
+test("a project hook card lists every hook exactly, with what changed", () => {
+  const hooks = [
+    { event: "SessionStart", tools: [], command: "./setup.sh" },
+    { event: "PreToolUse", tools: ["run_command"], command: "./guard.sh --strict", change: "changed" },
+    { event: "PostToolUse", tools: ["write_file", "edit_file"], command: "bunx prettier", change: "added" },
+    { event: "Stop", tools: [], command: "bun run lint", change: "removed" },
+  ];
+  const approval = summary("project_hooks", { targets: [folder("butler")], count: 4, project_hooks: { file: ".butler/hooks.json", changed: true, hooks } });
+  expect(approvalRequestView(card(approval), ko).details).toEqual([".butler/hooks.json", "SessionStart · ./setup.sh",
+    "PreToolUse (run_command) · ./guard.sh --strict (변경)", "PostToolUse (write_file, edit_file) · bunx prettier (추가)", "Stop · bun run lint (삭제)"]);
+  expect(approvalRequestView(card(approval), en).details.at(-1)).toBe("Stop · bun run lint (removed)");
 });
 
 // test-category: pure-logic

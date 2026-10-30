@@ -1,11 +1,16 @@
 //! User-authored lifecycle command and HTTP hooks and their ports.
 mod config;
 mod event;
+mod project;
 use butler_platform::secrets::SecretText;
 pub use config::{
     HookConfig, HookDefinition, HookMatcher, check_hook_secret, hook_transport_allowed,
 };
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
+pub use project::{
+    PROJECT_HOOK_FILE, PROJECT_HOOK_ID_PREFIX, PROJECT_HOOKS_CAPABILITY, ProjectHookChange,
+    ProjectHookLine, ProjectHookRequest, ProjectHookReview,
+};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, pin::Pin};
 /// Asynchronous hook operation; errors are safe for Settings display.
@@ -90,4 +95,23 @@ pub trait HookPort: Send + Sync {
     ) -> HookFuture<'_, HookRun>;
     /// Snapshot of the last 200 runs, oldest first.
     fn runs(&self) -> Vec<HookRun>;
+    /// Reads a project's hook file once and compares it with the user's answers.
+    fn review_project(&self, _project_dir: String) -> HookFuture<'_, ProjectHookReview> {
+        Box::pin(async { Ok(ProjectHookReview::None) })
+    }
+    /// Remembers the user's answer for exactly this content.
+    fn decide_project(&self, _request: ProjectHookRequest, _allowed: bool) -> HookFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+    /// Keeps a SessionStart that could not run yet because its hooks wait for an answer.
+    fn hold_session_start(&self, _envelope: HookEnvelope) {}
+    /// Ends a session's hold. A port holding allowed project hooks runs them for the
+    /// held event; any other port drops it.
+    fn release_session_start(
+        &self,
+        _session_id: String,
+        _cancel: tokio_util::sync::CancellationToken,
+    ) -> HookFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
 }

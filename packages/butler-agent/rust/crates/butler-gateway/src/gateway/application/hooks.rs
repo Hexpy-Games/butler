@@ -1,7 +1,9 @@
 //! Admission lifecycle hooks, always outside the storage transaction.
 use super::*;
 use crate::gateway::MessageSendRequest;
-use butler_core::hooks::{HookAttachment, HookEnvelope, HookEvent, HookPayload};
+use butler_core::hooks::{
+    HookAttachment, HookEnvelope, HookEvent, HookPayload, HookPort, ProjectHookReview,
+};
 impl AppApplication {
     pub(super) async fn session_start_hook(
         &self,
@@ -12,7 +14,11 @@ impl AppApplication {
             return Ok(());
         };
         let _ = port.reload().await;
-        if !port.enabled(HookEvent::SessionStart, None) {
+        let review = self.project_review(&id, port).await;
+        let hold = matches!(&review, ProjectHookReview::Undecided(request)
+            if request.listens(HookEvent::SessionStart));
+        let port = scoped(port, review);
+        if !hold && !port.enabled(HookEvent::SessionStart, None) {
             return Ok(());
         }
         let payload = HookPayload {
@@ -27,6 +33,12 @@ impl AppApplication {
                 payload,
             )
             .await?;
+        if hold {
+            port.hold_session_start(envelope.clone());
+            if !port.enabled(HookEvent::SessionStart, None) {
+                return Ok(());
+            }
+        }
         let _ = port
             .dispatch(envelope, self.dependencies.service_shutdown.child_token())
             .await;
@@ -43,6 +55,7 @@ impl AppApplication {
             return Ok(());
         };
         let _ = port.reload().await;
+        let port = scoped(port, self.project_review(chat, port).await);
         if !port.enabled(HookEvent::UserPromptSubmit, None) {
             return Ok(());
         }
@@ -86,6 +99,25 @@ impl AppApplication {
         }
         Ok(())
     }
+    /// What the session's project folder holds right now. A failed lookup means
+    /// its hooks do not run, and does not stop the send that asked.
+    async fn project_review(&self, chat: &str, port: &Arc<dyn HookPort>) -> ProjectHookReview {
+        let id = chat.to_owned();
+        let session = self
+            .storage
+            .read(move |db| sessions::read_summary(db, &id))
+            .await;
+        let Ok(session) = session else {
+            return ProjectHookReview::None;
+        };
+        let Ok(Some(project_dir)) = self.project_workspace_path(session.project_id).await else {
+            return ProjectHookReview::None;
+        };
+        port.review_project(project_dir)
+            .await
+            .unwrap_or(ProjectHookReview::None)
+    }
+
     async fn hook_envelope(
         &self,
         chat: &str,
@@ -128,5 +160,15 @@ impl AppApplication {
             access_mode: Some(access_mode),
             payload,
         })
+    }
+}
+
+/// The port to dispatch with: it holds project hooks only if their content was allowed.
+fn scoped(port: &Arc<dyn HookPort>, review: ProjectHookReview) -> Arc<dyn HookPort> {
+    match review {
+        ProjectHookReview::Trusted(project) => project,
+        ProjectHookReview::None | ProjectHookReview::Denied | ProjectHookReview::Undecided(_) => {
+            port.clone()
+        }
     }
 }

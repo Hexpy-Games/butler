@@ -164,6 +164,16 @@ fn check_allow_scope(
 ) -> AuthorityResult<()> {
     let normalized: serde_json::Value = serde_json::from_str(&current.normalized_input_json)
         .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+    // A project hook card answers for one exact content: no scope, no alternative.
+    if current.capability == butler_core::hooks::PROJECT_HOOKS_CAPABILITY
+        && (input
+            .allow_scope
+            .as_deref()
+            .is_some_and(|scope| scope != "once")
+            || !matches!(input.action.as_str(), "allow" | "deny"))
+    {
+        return Err(AuthorityError::policy("project_hooks_scope_invalid"));
+    }
     if input.allow_scope.as_deref() == Some("site")
         && !matches!(
             normalized

@@ -277,6 +277,10 @@ pub(crate) fn resolve_workspace_mutation_guard(
         out.reason = Some("program_directory_read_only");
         return Ok(out);
     }
+    if butler_credential_store(&resolved.absolute, input.butler_data) {
+        out.reason = Some("sensitive_path_blocked");
+        return Ok(out);
+    }
     if !admit_contained(
         &mut out,
         &resolved,
@@ -325,6 +329,19 @@ pub(crate) fn resolve_workspace_mutation_guard(
         Err(_) => out.reason = Some("not_found"),
     }
     Ok(out)
+}
+
+/// Butler's own credential stores, and the user's answers kept with them. No file
+/// tool writes there in any access mode: only the user's decisions reach them.
+fn butler_credential_store(target: &Path, data: Option<&Path>) -> bool {
+    let Some(data) = data else {
+        return false;
+    };
+    let target = realpath_or_nearest(target);
+    let data = realpath_or_nearest(data);
+    butler_platform::data_paths::CREDENTIAL_ROOTS
+        .iter()
+        .any(|root| butler_platform::secure_fs::path_is_within(&target, &data.join(root)))
 }
 
 /// Why an existing write target is refused: installation, symlink escape,

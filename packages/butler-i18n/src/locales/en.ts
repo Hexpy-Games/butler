@@ -641,6 +641,13 @@ export const enUsCopy: AppCopy = {
       manageSchedule: { create: "Create a schedule?", delete: "Delete a schedule?", run: "Run due schedules?", change: "Change a schedule?" },
       updateProject: "Update the project records?",
       startConversation: "Start a new conversation?",
+      projectHooks: {
+        title: (folder) => folder ? `Run hooks from the ${folder} folder?` : "Run hooks from this folder?",
+        changedTitle: (folder) => `Run the changed hooks in ${folder ?? "this folder"}?`,
+        change: { changed: "changed", added: "added", removed: "removed" },
+        deny: "Deny",
+        allow: "Allow",
+      },
       restartService: "Restart Butler?",
       createWorktree: "Create a worktree for this conversation?",
       switchFolder: "Move the working folder?",

@@ -25,6 +25,38 @@ fn command_args() -> Value {
     };
     json!({"command":command,"summary":"Hook check","state_effect":"read_only","timeout_ms":30000})
 }
+/// Reads a project file, then answers.
+pub(super) fn read_input(body: &Value) -> Option<ResponseRecord> {
+    tool(
+        body,
+        "read_file",
+        &json!({"requests":[{"path":"hook-input.txt","max_bytes":1024}],"max_total_bytes":1024}),
+    )
+}
+/// Rewrites the project's hook file through the file tool.
+pub(super) fn edit_project_hooks(body: &Value) -> Option<ResponseRecord> {
+    let command = if butler_platform::command_sandbox::POSIX_SHELL {
+        "printf ran > model-hook-ran"
+    } else {
+        "echo ran> model-hook-ran"
+    };
+    let hooks = json!({"version":1,"hooks":[{"id":"written","event":"Stop","type":"command","command":command}]});
+    tool(
+        body,
+        "write_file",
+        &json!({"path":".butler/hooks.json","content":hooks.to_string(),"create_parents":true}),
+    )
+}
+/// Tries to write the path the user's prompt names, `<path>…</path>`.
+pub(super) fn forge_trust(body: &Value) -> Option<ResponseRecord> {
+    let text = body["input"].to_string();
+    let path = text.split("<path>").nth(1)?.split("</path>").next()?;
+    tool(
+        body,
+        "write_file",
+        &json!({"path":path,"content":"{}","create_parents":true}),
+    )
+}
 pub(super) fn large(body: &Value) -> Option<ResponseRecord> {
     tool(
         body,

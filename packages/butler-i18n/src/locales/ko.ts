@@ -640,6 +640,13 @@ export const koKrCopy: AppCopy = {
       startConversation: "새 대화를 시작할까요?",
       restartService: "버틀러를 다시 시작할까요?",
       createWorktree: "이 대화용 워크트리를 만들까요?",
+      projectHooks: {
+        title: (folder) => `${folder ?? "이"} 폴더의 훅을 실행할까요?`,
+        changedTitle: (folder) => folder ? `${folder}의 바뀐 훅을 실행할까요?` : "이 폴더의 바뀐 훅을 실행할까요?",
+        change: { changed: "변경", added: "추가", removed: "삭제" },
+        deny: "거부",
+        allow: "허용",
+      },
       switchFolder: "작업 폴더를 옮길까요?",
       generic: "이 작업을 허용할까요?",
       more: count => `외 ${count}개`,

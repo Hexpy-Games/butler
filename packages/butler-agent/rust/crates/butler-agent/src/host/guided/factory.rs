@@ -243,7 +243,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         != butler_turn::btcc::AccessMode::ReadOnly
                         && policy.tracking_mode == "ledger"
                         && policy.project_id.is_some(),
-                    owner_session_id: authority_owner,
+                    owner_session_id: authority_owner.clone(),
                     source_session_id: start.turn.session_id.clone(),
                     model_ref: format!("{}/{}", semantic.model.provider, semantic.model.model),
                     reasoning_effort: reasoning_text(&semantic.model.reasoning_effort)?,
@@ -276,7 +276,9 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 },
             )?);
             let journal = self.journal(&start.turn.turn_id, activity.clone());
-            let hooks = self.hook_binding(start.turn, &phase).await?;
+            let hooks = self
+                .hook_binding(&start, &phase, &semantic, &authority_owner)
+                .await?;
             let text = Arc::new(
                 prompt_state::state(
                     self,

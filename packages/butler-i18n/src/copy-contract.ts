@@ -203,6 +203,13 @@ export interface ApprovalRequestCopy {
   restartService: string;
   createWorktree: string;
   switchFolder: string;
+  projectHooks: {
+    title: (folder: string | null) => string;
+    changedTitle: (folder: string | null) => string;
+    change: { changed: string; added: string; removed: string };
+    deny: string;
+    allow: string;
+  };
   /** Any kind this App does not know yet. */
   generic: string;
   /** The line after the examples. */

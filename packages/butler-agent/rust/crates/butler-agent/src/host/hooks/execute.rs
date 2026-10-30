@@ -5,7 +5,11 @@ use std::{
     collections::HashSet,
     time::{Duration, Instant},
 };
-fn matched(hooks: &Hooks, payload: &HookEnvelope) -> Vec<HookDefinition> {
+fn matched(
+    hooks: &Hooks,
+    payload: &HookEnvelope,
+    project: &[HookDefinition],
+) -> Vec<HookDefinition> {
     let mut seen = HashSet::new();
     hooks
         .state
@@ -15,6 +19,7 @@ fn matched(hooks: &Hooks, payload: &HookEnvelope) -> Vec<HookDefinition> {
         .hooks
         .iter()
         .chain(hooks.plugins.hooks().iter())
+        .chain(project)
         .filter(|h| {
             h.event == payload.hook_event_name && h.matches(payload.payload.tool_name.as_deref())
         })
@@ -37,8 +42,19 @@ pub(super) async fn dispatch(
     hooks: &Arc<Hooks>,
     payload: HookEnvelope,
     cancel: CancellationToken,
+    project: &[HookDefinition],
 ) -> Result<Option<String>, String> {
-    let handlers = matched(hooks, &payload);
+    let handlers = matched(hooks, &payload, project);
+    Ok(run_handlers(hooks, handlers, payload, cancel).await)
+}
+
+/// Runs these handlers for the event and returns joined deny reasons in order.
+pub(super) async fn run_handlers(
+    hooks: &Arc<Hooks>,
+    handlers: Vec<HookDefinition>,
+    payload: HookEnvelope,
+    cancel: CancellationToken,
+) -> Option<String> {
     let sync = handlers
         .iter()
         .filter(|h| !h.asynchronous)
@@ -64,7 +80,7 @@ pub(super) async fn dispatch(
             Box::pin(execute(&hooks, &hook, &payload, cancel)).await;
         });
     }
-    Ok((!reasons.is_empty()).then(|| reasons.join("\n")))
+    (!reasons.is_empty()).then(|| reasons.join("\n"))
 }
 /// Transport result before the run record is assembled.
 pub(super) struct Finished {
@@ -88,7 +104,7 @@ async fn execute(
         command(hooks, hook, payload, cancel).await
     };
     if finished.outcome == "approval_ignored" {
-        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = if hook.id.contains('/') { "plugin" } else { "user" });
+        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
     }
     let record = HookRun {
         time: chrono::Utc::now().to_rfc3339(),
@@ -223,6 +239,16 @@ pub(super) async fn test(
     Ok(Box::pin(execute(hooks, &hook, &payload, cancel)).await)
 }
 
+fn scope(hook: &HookDefinition) -> &'static str {
+    if hook.id.contains('/') {
+        "plugin"
+    } else if hook.id.starts_with(PROJECT_HOOK_ID_PREFIX) {
+        "project"
+    } else {
+        "user"
+    }
+}
+
 /// The JSON envelope plus hook identity: command stdin and HTTP request body.
 pub(super) fn body(hook: &HookDefinition, payload: &HookEnvelope) -> serde_json::Result<Vec<u8>> {
     #[derive(serde::Serialize)]
@@ -240,11 +266,7 @@ pub(super) fn body(hook: &HookDefinition, payload: &HookEnvelope) -> serde_json:
         envelope: payload,
         hook: Identity {
             id: &hook.id,
-            scope: if hook.id.contains('/') {
-                "plugin"
-            } else {
-                "user"
-            },
+            scope: scope(hook),
         },
     })
 }
