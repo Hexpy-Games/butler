@@ -63,9 +63,9 @@ export function OpenSourceLicenses() {
               {filtered?.map((notice) => (
                 <DisclosureRow key={notice.title} title={notice.title} meta={notice.license}
                   open={expanded === notice.title} onToggle={() => setExpanded(expanded === notice.title ? null : notice.title)}>
-                  {expanded === notice.title ? <Typo.Code as="pre" wrap="pre">
+                  <Typo.Code as="pre" wrap="pre">
                     {notice.text}
-                  </Typo.Code> : null}
+                  </Typo.Code>
                 </DisclosureRow>
               ))}
               {notices && filtered?.length === 0 ? <Typo.Body>{ko ? "검색 결과 없음" : "No results"}</Typo.Body> : null}

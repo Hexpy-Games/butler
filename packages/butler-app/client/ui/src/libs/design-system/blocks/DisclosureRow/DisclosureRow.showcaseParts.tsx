@@ -36,13 +36,13 @@ const LOGS: readonly LogRecord[] = [
     facts: [[["Result", "결과"], "OK"]] },
 ];
 
-/** A log list: trailing chevrons that turn down when a record opens; the title starts at the row inset. */
+/** A log list: chevrons right after the title turn down when a record opens; the title starts at the row inset. */
 export function LogList({ locale }: { locale: Locale }) {
   const [open, setOpen] = useState<string | null>("log_9e52");
   return (
     <Stack gap="none">
       {LOGS.map((record) => (
-        <DisclosureRow key={record.id} affordance="trailing" title={pick(locale, record.title)}
+        <DisclosureRow key={record.id} title={pick(locale, record.title)}
           description={pick(locale, record.description)} open={open === record.id} controlsId={`log-${record.id}`}
           onToggle={() => setOpen((current) => (current === record.id ? null : record.id))}
           meta={(

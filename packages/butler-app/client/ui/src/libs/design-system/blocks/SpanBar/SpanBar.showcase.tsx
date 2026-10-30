@@ -121,7 +121,7 @@ export const stories: ShowcaseStory[] = [
     render: (context) => <PlainIndentTrace locale={context.locale} />,
   },
   {
-    name: "Row indent (leading chevrons)",
+    name: "Row indent (chevron after the title)",
     render: (context) => <RowIndentTrace locale={context.locale} />,
   },
 ];

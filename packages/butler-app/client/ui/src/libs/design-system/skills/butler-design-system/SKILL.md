@@ -171,7 +171,7 @@ function ProjectSessionRowContainer({ sessionId }: { sessionId: string }) {
 | Command | What it enforces |
 | --- | --- |
 | `bun run typecheck` | The first gate: DS component types have no public `className`/`style`; `UNSAFE_style` accepts geometry only. |
-| `bun run lint:ds` | Product-code ratchet (per-file baselines only shrink): `no-classname-on-ds`, `no-inline-style`, `no-raw-interactive`, `no-raw-typography`, `unsafe-style-allowlist` (`baseline/unsafe-style.json`), `no-new-css-module`, `token-only-values`, `no-ds-internal-selector`, `no-ds-custom-prop-override`; warning `no-raw-length-custom-prop`. |
+| `bun run lint:ds` | Product-code ratchet (per-file baselines only shrink): `no-classname-on-ds`, `no-inline-style`, `no-raw-interactive`, `no-raw-typography`, `unsafe-style-allowlist` (`baseline/unsafe-style.json`), `no-new-css-module`, `token-only-values`, `no-ds-internal-selector`, `no-ds-custom-prop-override`, `no-leading-disclosure-chevron`; warning `no-raw-length-custom-prop`. |
 | `eslint` (`no-restricted-imports`) | `lib/internal` (`dsClass`, `dsStyle`) is importable only inside `libs/design-system`. |
 | `packages/butler-app/scripts/codemods/ds-unsafe-style.ts` | Dry run fails on any `className`/`style` left on a DS component; `--write` renames geometry-only `style` to `UNSAFE_style`. |
 | `bun run lint:motion` | `motion-outside-ds`, `keyword-easing` (tokens, not `ease`/`linear`), `transition-property` (compositor and paint properties only), `waapi-outside-helper`. |
