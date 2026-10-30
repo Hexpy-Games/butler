@@ -57,12 +57,12 @@ pub(super) fn run(
     let mut unavailable = false;
     let mut staging = Staging(None);
     for candidate in &request.candidates {
-        // A file the reader policy refuses is reported like a missing deliverable.
+        // Only a gone deliverable is unavailable; a policy-withheld file is left out by design.
         let (path, file) = match paths.first_readable(candidate, &seen) {
             Ok(found) => found,
             Err(refused) => {
                 unavailable |=
-                    refused || candidate.deliverable && !paths.already_seen(candidate, &seen);
+                    !refused && candidate.deliverable && !paths.already_seen(candidate, &seen);
                 continue;
             }
         };

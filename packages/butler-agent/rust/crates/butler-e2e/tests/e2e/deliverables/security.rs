@@ -251,7 +251,8 @@ async fn materialize_keeps_project_root_when_a_parent_directory_is_swapped()
 }
 
 /// A credential-named write stays a changed file but is never offered for
-/// download; publishing it reports the refusal instead of failing.
+/// download; publishing it reports the refusal to the model instead of failing,
+/// and the answer shows no "attachment unavailable" tag for it.
 #[tokio::test]
 async fn credential_named_write_is_reported_and_never_published() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -281,11 +282,11 @@ async fn credential_named_write_is_reported_and_never_published() -> Result<(), 
     assert_eq!(changed.len(), 1, "{message}");
     assert!(message.get("artifacts").is_none(), "{message}");
     assert!(message.get("attachments").is_none(), "{message}");
+    // Withheld by policy, not missing: the answer carries no unavailable tag.
     assert!(
-        message["limitation_codes"]
+        !message["limitation_codes"]
             .as_array()
-            .unwrap()
-            .contains(&json!("message_file_unavailable")),
+            .is_some_and(|codes| codes.contains(&json!("message_file_unavailable"))),
         "{message}"
     );
     let published = script
