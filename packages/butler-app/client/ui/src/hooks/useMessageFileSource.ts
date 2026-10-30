@@ -87,3 +87,22 @@ export function useFreshFrameSource(
     }
   }, [enabled, expiresAt, path, refreshFileUrls]);
 }
+
+/**
+ * Tiles load their files from short-lived signed URLs (ten minutes), so a tile first shown later (a
+ * message that scrolls in, a reopened panel) would load an expired one. Re-renders on every fresher
+ * signature and, like a frame, refreshes the owning list once for an expired or unsigned URL.
+ */
+export function useFreshFileSources(links: readonly MessageFileLink[], refreshFileUrls?: RefreshFileUrls): void {
+  useSyncExternalStore(subscribeSignedFileUrls, signedFileUrlsVersion, signedFileUrlsVersion);
+  const sources = links.map((link) => [messageFilePath(link.url), messageFileSource(link)].join(" ")).join("\n");
+  useEffect(() => {
+    for (const line of sources.split("\n")) {
+      const [path, source] = line.split(" ");
+      if (!path || !source) continue;
+      const expiresAt = signedUrlExpiry(source);
+      if (expiresAt !== undefined && expiresAt * 1000 > Date.now()) settleMessageFileLoad(path);
+      else void retryMessageFileOnce(path, refreshFileUrls);
+    }
+  }, [sources, refreshFileUrls]);
+}
