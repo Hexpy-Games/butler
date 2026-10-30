@@ -1,17 +1,12 @@
-//! User hook configuration and real synthetic tests; never model tools.
+//! User command configuration and real synthetic tests; never model tools.
 use super::*;
 use butler_core::hooks::HookConfig;
-use butler_platform::secrets::SecretText;
 use serde::Deserialize;
-use std::collections::BTreeMap;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Save {
     revision: u64,
     config: HookConfig,
-    /// Hook id to its signing secret; write-only, never in a response.
-    #[serde(default)]
-    secrets: BTreeMap<String, String>,
 }
 pub(super) async fn route(
     state: Arc<HttpState>,
@@ -33,13 +28,8 @@ pub(super) async fn route(
             let bytes = read_body_with_limit(request.into_body(), 256 * 1024).await?;
             let input: Save =
                 serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-            let secrets = input
-                .secrets
-                .into_iter()
-                .map(|(id, secret)| (id, SecretText::new(secret)))
-                .collect();
             serde_json::to_value(
-                port.save(input.revision, input.config, secrets)
+                port.save(input.revision, input.config)
                     .await
                     .map_err(|e| failure(&e))?,
             )
@@ -73,8 +63,6 @@ pub(super) async fn route(
 fn failure(error: &str) -> HttpError {
     let (status, code) = if error == "revision_conflict" {
         (409, "hook_revision_conflict")
-    } else if error == "Hook secret store unavailable" {
-        (503, "hook_secret_store_unavailable")
     } else {
         (400, "hook_invalid")
     };

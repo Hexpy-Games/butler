@@ -1,15 +1,11 @@
 //! Process-owned user hook registry; no workers, watchers or idle timers.
 mod decision;
 mod execute;
-mod http;
 mod registry;
-mod secrets;
 use butler_core::hooks::*;
-use butler_platform::secrets::SecretText;
 use parking_lot::RwLock;
-pub(crate) use secrets::reset_keys as reset_secret_keys;
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{HashMap, VecDeque},
     path::PathBuf,
     sync::{
         Arc,
@@ -32,14 +28,7 @@ struct Hooks {
     events: AtomicU8,
     state: RwLock<State>,
     mutation: tokio::sync::Mutex<()>,
-    /// One save at a time; held across store calls, which `mutation` never is.
-    saving: tokio::sync::Mutex<()>,
     pool: Arc<tokio::sync::Semaphore>,
-    /// For https URLs: honors the environment's proxies.
-    http: tokio::sync::OnceCell<butler_log::http::Client>,
-    /// For plain http, which only ever goes to loopback: never through a proxy.
-    loopback: tokio::sync::OnceCell<butler_log::http::Client>,
-    secrets: secrets::HookSecrets,
     shutdown: CancellationToken,
 }
 impl Dispatcher {
@@ -52,7 +41,6 @@ impl Dispatcher {
         let hooks = Arc::new(Hooks {
             plugins,
             path: data.join(butler_platform::data_paths::HOOKS),
-            secrets: secrets::HookSecrets::new(data.clone()),
             home: butler_platform::user_dirs::home_dir().unwrap_or_else(|| data.clone()),
             environment: butler_platform::command_sandbox::tool_environment(environment),
             events: AtomicU8::new(0),
@@ -69,10 +57,7 @@ impl Dispatcher {
                 runs: VecDeque::new(),
             }),
             mutation: tokio::sync::Mutex::new(()),
-            saving: tokio::sync::Mutex::new(()),
             pool: Arc::new(tokio::sync::Semaphore::new(8)),
-            http: tokio::sync::OnceCell::new(),
-            loopback: tokio::sync::OnceCell::new(),
             shutdown,
         });
         let _ = registry::reload(&hooks).await;
@@ -138,32 +123,8 @@ impl HookPort for Dispatcher {
     fn settings(&self) -> HookSettings {
         self.0.state.read().settings.clone()
     }
-    fn save(
-        &self,
-        revision: u64,
-        config: HookConfig,
-        secrets: BTreeMap<String, SecretText>,
-    ) -> HookFuture<'_, HookSaved> {
-        let hooks = self.0.clone();
-        Box::pin(async move {
-            let (answer, answered) = tokio::sync::oneshot::channel();
-            // A disconnected client must not cancel a save halfway. If it left,
-            // the save stops short of committing, and its orphans wait for the
-            // next successful save.
-            tokio::spawn(async move {
-                let _saving = hooks.saving.lock().await;
-                let left = || answer.is_closed();
-                let saved = registry::save(&hooks, revision, config, secrets, left).await;
-                let sweep = saved.is_ok() && !answer.is_closed();
-                let _ = answer.send(saved);
-                if sweep {
-                    hooks.secrets.sweep().await;
-                }
-            });
-            answered
-                .await
-                .map_err(|_| secrets::STORE_FAILED.to_owned())?
-        })
+    fn save(&self, revision: u64, config: HookConfig) -> HookFuture<'_, HookSettings> {
+        Box::pin(registry::save(&self.0, revision, config))
     }
     fn dispatch(
         &self,
