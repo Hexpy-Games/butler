@@ -21,12 +21,13 @@ pub fn analyze_recall_query(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    /// Pure-logic table: the bundled full case-fold table parses and the
-    /// Script15 analysis keeps its frozen tokens.
+    /// Pure-logic table: the bundled full case-fold table parses, case folding
+    /// is exact and full, and the Script15 analysis keeps its frozen tokens.
     // test-category: pure-logic
     #[test]
     fn case_fold_table_and_frozen_analysis() {
         super::unicode::tests::bundled_case_fold_table_parses();
+        assert_eq!(super::case_fold("Straße İΣς"), "strasse i̇σσ");
         super::tokenize::assert_frozen_analysis();
     }
 }

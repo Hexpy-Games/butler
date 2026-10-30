@@ -8,7 +8,7 @@ crates/butler-agent	40	27
 crates/butler-core	8	2
 crates/butler-gateway	43	24
 crates/butler-ledger	5	1
-crates/butler-memory	108	95
+crates/butler-memory	107	95
 crates/butler-models	61	35
 crates/butler-platform	20	11
 crates/butler-runtime	75	54

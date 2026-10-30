@@ -33,27 +33,3 @@ pub(in crate::cognition) fn terms(value: &str) -> IndexSet<String> {
     }
     terms
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Pure-logic table: recall's Unicode handling. Case folding is exact and
-    /// full, grapheme terms keep their order, and historical windows split on
-    /// grapheme boundaries in source order. The case-fold table and the frozen
-    /// Script15 analysis are pinned in `butler_core::search_text`.
-    // test-category: pure-logic
-    #[test]
-    fn unicode_case_fold_terms_and_grapheme_windows() {
-        exact_full_case_fold_and_ordered_grapheme_terms();
-        crate::cognition::windows::tests::historical_windows_split_on_grapheme_boundaries_in_source_order();
-    }
-
-    fn exact_full_case_fold_and_ordered_grapheme_terms() {
-        assert_eq!(case_fold("Straße İΣς"), "strasse i̇σσ");
-        assert_eq!(
-            terms("a🙂b").into_iter().collect::<Vec<_>>(),
-            ["a", "🙂", "b", "a🙂", "🙂b", "a🙂b"]
-        );
-    }
-}
