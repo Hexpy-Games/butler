@@ -174,4 +174,5 @@ async fn batch_move_never_starts_an_intermediate_step() -> Result<(), HarnessErr
     Ok(())
 }
 
+mod atomic;
 mod validation;

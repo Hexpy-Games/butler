@@ -83,9 +83,7 @@ fn remove_request(
     let mut input = input.clone();
     input["op"] = json!("delete");
     input["expected_graph_revision"] = json!(revision(tx, session)?);
-    edit(tx, ctx, session, &input)?;
-    engine::ready(tx, ctx, session)?;
-    view(tx, session, &runtime::ProjectViews::new())
+    edit(tx, ctx, session, &input)
 }
 
 fn attach(

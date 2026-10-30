@@ -72,6 +72,7 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
         source,
         chains.get(source).ok_or(Error::NotFound)?,
     )?;
+    engine::after_edit(tx, ctx, session)?;
     changed(tx, ctx, session)?;
     view(tx, session, &runtime::ProjectViews::new())
 }

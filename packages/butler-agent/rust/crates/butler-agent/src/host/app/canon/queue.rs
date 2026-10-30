@@ -111,19 +111,8 @@ async fn edit(
     session: String,
     input: Value,
 ) -> Result<Value, GatewayApplicationError> {
-    let editing = session.clone();
-    let context = ctx.clone();
     storage
-        .canon_write(move |tx| store::queue::edit(tx, &context, &editing, &input))
-        .await
-        .map_err(error)?;
-    // canon_write returns only after COMMIT. No step intent can observe a
-    // partially moved selection, even if the App projects it immediately.
-    storage
-        .canon_write(move |tx| {
-            store::queue::engine::after_edit(tx, &ctx, &session)?;
-            store::queue::view(tx, &session, &store::runtime::ProjectViews::new())
-        })
+        .canon_write(move |tx| store::queue::edit(tx, &ctx, &session, &input))
         .await
         .map_err(error)
 }
