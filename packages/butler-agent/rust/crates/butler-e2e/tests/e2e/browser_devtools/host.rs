@@ -54,7 +54,7 @@ fn snapshot(id: &str, page: &Value) -> Value {
 }
 
 fn raw_rows() -> Value {
-    json!([{"method":"POST","url":"https://api.example.test/v1/save?q=SECRET-QUERY&access_token=SECRET-AUTH",
+    json!([{"method":"POST","url":"https://api.example.test/v1/save?q=plain-query&access_token=SECRET-AUTH",
         "type":"XHR","status":500,"mime":"application/json","bytes":120,"ms":40,
         "cookies":"sid=SECRET-COOKIE","request_headers":{"Cookie":"sid=SECRET-COOKIE","Authorization":"Bearer SECRET-AUTH"},
         "request_body":"password=SECRET-BODY-REQUEST","response_body":"SECRET-BODY-RESPONSE",
