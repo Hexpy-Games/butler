@@ -956,7 +956,6 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "unicode-segmentation",
- "url",
  "uuid",
 ]
 

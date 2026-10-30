@@ -100,6 +100,19 @@ struct HookDefinitionInput {
     #[serde(default = "one")]
     schema_version: u32,
 }
+/// http(s) with a host and no user info, which Settings and logs would show;
+/// anything else malformed fails at request time like an unreachable host.
+fn http_url(url: &str) -> bool {
+    let rest = ["https://", "http://"].iter().find_map(|scheme| {
+        url.get(..scheme.len())
+            .filter(|prefix| prefix.eq_ignore_ascii_case(scheme))
+            .and_then(|_| url.get(scheme.len()..))
+    });
+    let authority = rest.and_then(|rest| rest.split(['/', '?', '#']).next());
+    url.len() <= 2048
+        && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+        && authority.is_some_and(|a| !a.is_empty() && !a.starts_with(':') && !a.contains('@'))
+}
 fn yes() -> bool {
     true
 }
@@ -140,17 +153,7 @@ impl HookDefinition {
                 if self.command.is_some() || self.args.is_some() || !self.env.is_empty() {
                     return Err("HTTP hooks take a URL, not a command or environment".into());
                 }
-                // Credentials in the URL would be shown in Settings and logs.
-                let valid = self.url.as_deref().is_some_and(|url| {
-                    url.len() <= 2048
-                        && url::Url::parse(url).is_ok_and(|url| {
-                            matches!(url.scheme(), "http" | "https")
-                                && url.host_str().is_some_and(|host| !host.is_empty())
-                                && url.username().is_empty()
-                                && url.password().is_none()
-                        })
-                });
-                if !valid {
+                if !self.url.as_deref().is_some_and(http_url) {
                     return Err("HTTP hooks need an http(s) URL without credentials".into());
                 }
                 Ok(())

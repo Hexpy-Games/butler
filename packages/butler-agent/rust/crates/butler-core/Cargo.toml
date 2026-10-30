@@ -25,7 +25,6 @@ tokio-util.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
 unicode-segmentation.workspace = true
-url.workspace = true
 
 [dev-dependencies]
 butler-test-support = { path = "../butler-test-support" }
