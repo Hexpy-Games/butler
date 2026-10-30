@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { SpecNode } from "@/app/canonApi.ts";
 import { appCopy } from "@/app/copy.ts";
-import { DisclosureRow, Section, Stack, Typo } from "@/butler-ds";
+import type { ReactNode } from "react";
+import { Box, DisclosureRow, Section, Stack, Typo } from "@/butler-ds";
 import { CriteriaProgress } from "./CriteriaProgress.tsx";
 import { CriterionRow } from "./CriterionRow.tsx";
 import type { CriteriaCount } from "@/app/canonApi.ts";
@@ -20,15 +21,19 @@ function SpecNodeRow({ node, onRefresh }: { node: SpecNode; onRefresh: () => Pro
     group.push(criterion); parts.set(criterion.part_id, group);
   }
   return <DisclosureRow title={node.concern_id} surface="plain" open={open} onToggle={() => setOpen(!open)}>
-    {hasChildren ? <Stack gap="sm">
+    {hasChildren ? <TreeChildren>
       {[...parts].map(([part, criteria]) => <SpecPart key={part} part={part} criteria={criteria} node={node} onRefresh={onRefresh} />)}
       {node.children.map(child => <SpecNodeRow key={child.node_id} node={child} onRefresh={onRefresh} />)}
-    </Stack> : undefined}
+    </TreeChildren> : undefined}
   </DisclosureRow>;
 }
 function SpecPart({ part, criteria, node, onRefresh }: { part: string; criteria: SpecNode["criteria"]; node: SpecNode; onRefresh: () => Promise<void> }) {
   const [open, setOpen] = useState(true);
   return <DisclosureRow title={part} surface="plain" open={open} onToggle={() => setOpen(!open)}>
-    <Stack gap="sm">{criteria.map(criterion => <CriterionRow key={criterion.criterion_id} node={node} criterion={criterion} onRefresh={onRefresh} />)}</Stack>
+    <TreeChildren>{criteria.map(criterion => <CriterionRow key={criterion.criterion_id} node={node} criterion={criterion} onRefresh={onRefresh} />)}</TreeChildren>
   </DisclosureRow>;
+}
+/** One tree level: children start one --space-md step right of their parent's title, the same step as 진행 순서 follow steps. */
+function TreeChildren({ children }: { children: ReactNode }) {
+  return <Box paddingStart="md"><Stack gap="sm">{children}</Stack></Box>;
 }
