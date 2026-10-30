@@ -5,6 +5,7 @@ import { Typo } from "../../components/Typo";
 import { dsClass } from "../../lib/internal";
 import type { AttachmentListItem } from "./AttachmentList";
 import { AttachmentStatusIcon } from "./attachmentStatus";
+import { breakableName } from "./fileNameBreaks";
 import styles from "./AttachmentTiles.module.css";
 
 /** A video's length as m:ss, from the metadata the first frame already loads; none while unknown. */
@@ -76,7 +77,7 @@ function FileFace({ item, withMeta }: { item: AttachmentListItem; withMeta: bool
           <Typo.Caption className={dsClass(styles.fileType)} weight="semibold" tone="secondary" truncate>{item.extension}</Typo.Caption>
         ) : null}
       </span>
-      <Typo.Caption className={dsClass(styles.fileName)} truncate>{item.name}</Typo.Caption>
+      <Typo.Caption className={dsClass(styles.fileName)} lineClamp={2} wrap="anywhere">{breakableName(item.name)}</Typo.Caption>
       {withMeta && item.meta ? (
         <Typo.Caption className={dsClass(styles.fileMeta)} tone="tertiary" numeric="tabular" truncate>{item.meta}</Typo.Caption>
       ) : null}

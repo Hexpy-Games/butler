@@ -262,6 +262,19 @@ a.face:active {
   }
 }
 
+/* A name part too long for one line wraps before its last characters, never leaving one alone. */
+.nameTail {
+  white-space: nowrap;
+}
+
+/* Phone and touch type is larger: each face keeps one name line. */
+@media (width <= 640px), (pointer: coarse) {
+  .fileName[data-line-clamp] {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
+}
+
 /* Where the ✕ always shows (touch) it sits over the 64px face's corner. */
 @media (hover: none) {
   .remove[data-slot="tinted-glass"] {
