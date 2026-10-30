@@ -1,4 +1,5 @@
 //! Process-owned user hook registry; no workers, watchers or idle timers.
+mod context;
 mod decision;
 mod execute;
 mod http;
@@ -40,6 +41,8 @@ struct Hooks {
     /// For plain http, which only ever goes to loopback: never through a proxy.
     loopback: tokio::sync::OnceCell<butler_log::http::Client>,
     secrets: secrets::HookSecrets,
+    /// Budgets output too large for one turn's context.
+    output: butler_runtime::context::ToolOutput,
     shutdown: CancellationToken,
 }
 impl Dispatcher {
@@ -47,6 +50,7 @@ impl Dispatcher {
         plugins: Arc<super::plugins::Plugins>,
         data: PathBuf,
         environment: &HashMap<String, String>,
+        output: butler_runtime::context::ToolOutput,
         shutdown: CancellationToken,
     ) -> Self {
         let hooks = Arc::new(Hooks {
@@ -73,6 +77,7 @@ impl Dispatcher {
             pool: Arc::new(tokio::sync::Semaphore::new(8)),
             http: tokio::sync::OnceCell::new(),
             loopback: tokio::sync::OnceCell::new(),
+            output,
             shutdown,
         });
         let _ = registry::reload(&hooks).await;
@@ -169,7 +174,7 @@ impl HookPort for Dispatcher {
         &self,
         payload: HookEnvelope,
         cancel: CancellationToken,
-    ) -> HookFuture<'_, Option<String>> {
+    ) -> HookFuture<'_, HookDispatched> {
         Box::pin(execute::dispatch(&self.0, payload, cancel))
     }
     fn test(&self, id: String, cancel: CancellationToken) -> HookFuture<'_, HookRun> {

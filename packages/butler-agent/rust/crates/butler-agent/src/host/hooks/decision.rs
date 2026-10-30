@@ -14,6 +14,8 @@ struct Specific {
     decision: Option<String>,
     #[serde(rename = "permissionDecisionReason")]
     reason: Option<String>,
+    #[serde(rename = "additionalContext")]
+    context: Option<String>,
 }
 pub(super) fn resolve(
     hook: &HookDefinition,
@@ -73,6 +75,18 @@ pub(super) fn decide(hook: &HookDefinition, raw: &str) -> (String, Option<String
         None | Some("continue") => ("continue".into(), None),
         Some(_) => failure(hook, "error", "Invalid hook decision"),
     }
+}
+/// Text a successful handler's stdout adds: `additionalContext` of a decision,
+/// otherwise the whole of a non-JSON stdout. Invalid JSON never gets here: it
+/// already failed as a decision.
+pub(super) fn added_context(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    let text = match serde_json::from_str::<Decision>(raw) {
+        Ok(decision) => decision.specific?.context?,
+        Err(_) => raw.to_owned(),
+    };
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_owned())
 }
 fn deny(hook: &HookDefinition, reason: String) -> (String, Option<String>) {
     if reason.len() > 16 * 1024 {

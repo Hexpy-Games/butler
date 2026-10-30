@@ -30,6 +30,7 @@ fn summary_input_keeps_the_full_previous_summary_and_terminal_status() -> Result
             number: 7,
             status: "complete".into(),
             user: "A fact".into(),
+            hook_context: String::new(),
             answer: "An answer".into(),
             tools: vec!["read_file".into()],
         },
@@ -37,6 +38,7 @@ fn summary_input_keeps_the_full_previous_summary_and_terminal_status() -> Result
             number: 8,
             status: "cancelled".into(),
             user: "A correction".into(),
+            hook_context: String::new(),
             answer: String::new(),
             tools: vec![],
         },
@@ -54,6 +56,7 @@ fn summary_input_keeps_the_full_previous_summary_and_terminal_status() -> Result
             number: 1,
             status: status.into(),
             user: "Request".into(),
+            hook_context: String::new(),
             answer: "Unestablished answer".into(),
             tools: vec![],
         };

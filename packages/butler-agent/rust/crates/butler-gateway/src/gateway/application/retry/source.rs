@@ -22,6 +22,7 @@ pub(super) struct RetrySnapshot {
     pub attachments_json: String,
     pub content_parts_json: Option<String>,
     pub project_source_refs_json: String,
+    pub hook_context_json: Option<String>,
     pub input_identity_digest: String,
 }
 
@@ -47,6 +48,7 @@ pub(super) fn reservation(
         attachments_json: snapshot.attachments_json.clone(),
         content_parts_json: snapshot.content_parts_json.clone(),
         project_source_refs_json: snapshot.project_source_refs_json.clone(),
+        hook_context_json: snapshot.hook_context_json.clone(),
         created_at: now.to_owned(),
     }
 }
@@ -116,7 +118,7 @@ pub(super) fn retry_snapshot(
         .query_row(
             "SELECT text,input_identity_digest,control_resolution_json,controls_json,\
              attachments_json,content_parts_json,project_source_refs_json,\
-             dispatched_message_id,state FROM session_queued_messages \
+             dispatched_message_id,state,hook_context_json FROM session_queued_messages \
              WHERE chat_id=?1 AND turn_id=?2 ORDER BY rowid DESC LIMIT 1",
             params![turn.0, turn_id],
             |row| {
@@ -130,6 +132,7 @@ pub(super) fn retry_snapshot(
                     row.get::<_, String>(6)?,
                     row.get::<_, Option<String>>(7)?,
                     row.get::<_, String>(8)?,
+                    row.get::<_, Option<String>>(9)?,
                 ))
             },
         )
@@ -170,6 +173,7 @@ pub(super) fn retry_snapshot(
         attachments_json: queue.4,
         content_parts_json: queue.5,
         project_source_refs_json: queue.6,
+        hook_context_json: queue.9,
         input_identity_digest,
     })
 }

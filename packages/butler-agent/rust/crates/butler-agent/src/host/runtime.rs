@@ -272,6 +272,7 @@ impl AgentRuntime {
                 plugins.clone(),
                 paths.data_root.clone(),
                 &host_environment,
+                tool_output.clone(),
                 stop.clone(),
             )
             .await,

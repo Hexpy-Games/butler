@@ -1,10 +1,12 @@
 //! User-authored lifecycle command and HTTP hooks and their ports.
 mod config;
+mod context;
 mod event;
 use butler_platform::secrets::SecretText;
 pub use config::{
     HookConfig, HookDefinition, HookMatcher, check_hook_secret, hook_transport_allowed,
 };
+pub use context::{HookContext, HookDispatched, render_hook_context};
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, pin::Pin};
@@ -53,6 +55,9 @@ pub struct HookRun {
     pub http_status: Option<u16>,
     /// Elapsed milliseconds.
     pub duration_ms: u64,
+    /// Bytes of output this run added to its turn's context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_bytes: Option<u64>,
     /// At most 4 KiB of stdout (HTTP response body) for diagnostics.
     pub stdout: String,
     /// At most 4 KiB of stderr (HTTP failure) for diagnostics.
@@ -66,12 +71,12 @@ pub trait HookPort: Send + Sync {
     fn event_enabled(&self, event: HookEvent) -> bool;
     /// Stat at admission boundaries; only changed files are read.
     fn reload(&self) -> HookFuture<'_, ()>;
-    /// Run matching handlers and return joined deny reasons in config order.
+    /// Run matching handlers and return their decisions in config order.
     fn dispatch(
         &self,
         payload: HookEnvelope,
         cancel: tokio_util::sync::CancellationToken,
-    ) -> HookFuture<'_, Option<String>>;
+    ) -> HookFuture<'_, HookDispatched>;
     /// Read registry and reload diagnostics.
     fn settings(&self) -> HookSettings;
     /// Atomically save a revision-checked user configuration. `secrets` sets

@@ -7,6 +7,12 @@
 )]
 #[path = "hooks/cancellation.rs"]
 mod cancellation;
+#[path = "hooks/context.rs"]
+mod context;
+#[path = "hooks/context_resume.rs"]
+mod context_resume;
+#[path = "hooks/context_size.rs"]
+mod context_size;
 use super::delegate_followup::stub as child_stub;
 #[path = "hooks/http.rs"]
 mod http;

@@ -76,6 +76,45 @@ impl ConversationAdmissionTurn {
         }
     }
 
+    /// A message of its own, so history never reads it as the user's words.
+    pub(super) async fn admit_hook_context(&self) -> ConversationResult<()> {
+        let Some(text) = self.input.envelope.hook_context.clone() else {
+            return Ok(());
+        };
+        let reference = format!("{}:hook-context", self.input.envelope.event_id);
+        let store = &self.input.store;
+        if store
+            .read_message_by_source_ref(&self.turn.session_id, &reference)
+            .await?
+            .is_some()
+        {
+            return Ok(());
+        }
+        let origin = &self.input.origin;
+        store
+            .append_hook_context_message(AppendMessageInput {
+                session_id: self.turn.session_id.clone(),
+                turn_id: Some(self.turn.id.clone()),
+                text,
+                message_id: None,
+                role: ConversationRole::Developer,
+                status: None,
+                visibility: Some(ConversationVisibility::Model),
+                provenance: None,
+                source_gateway: Some(self.input.envelope.transport.clone()),
+                source_ref: Some(reference),
+                origin_kind: Some(ConversationOriginKind::InternalControl),
+                origin_ref: origin.reference.clone(),
+                origin_reason: Some("hook_context".into()),
+                origin_version: Some(origin.version.clone()),
+                origin_evidence: Some(origin.evidence.clone()),
+                now: None,
+                parts: None,
+            })
+            .await?;
+        Ok(())
+    }
+
     async fn append_message(
         &self,
         role: ConversationRole,

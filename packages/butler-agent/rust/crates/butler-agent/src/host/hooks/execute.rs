@@ -1,5 +1,7 @@
 use super::*;
-use butler_platform::hook_process::{HookProcess, run};
+use butler_platform::hook_process::{
+    CONTEXT_OUTPUT_LIMIT, HookProcess, HookProcessError, OUTPUT_LIMIT, run,
+};
 use futures_util::future::join_all;
 use std::{
     collections::HashSet,
@@ -37,17 +39,18 @@ pub(super) async fn dispatch(
     hooks: &Arc<Hooks>,
     payload: HookEnvelope,
     cancel: CancellationToken,
-) -> Result<Option<String>, String> {
+) -> Result<HookDispatched, String> {
     let handlers = matched(hooks, &payload);
     let sync = handlers
         .iter()
         .filter(|h| !h.asynchronous)
         .map(|h| execute(hooks, h, &payload, cancel.clone()));
-    let reasons: Vec<String> = join_all(sync)
-        .await
-        .into_iter()
-        .filter_map(|r| r.reason)
-        .collect();
+    let mut reasons = Vec::new();
+    let mut context = Vec::new();
+    for done in join_all(sync).await {
+        reasons.extend(done.deny);
+        context.extend(done.context);
+    }
     for hook in handlers.into_iter().filter(|h| h.asynchronous) {
         let hooks = hooks.clone();
         let payload = payload.clone();
@@ -64,7 +67,10 @@ pub(super) async fn dispatch(
             Box::pin(execute(&hooks, &hook, &payload, cancel)).await;
         });
     }
-    Ok((!reasons.is_empty()).then(|| reasons.join("\n")))
+    Ok(HookDispatched {
+        deny: (!reasons.is_empty()).then(|| reasons.join("\n")),
+        context,
+    })
 }
 /// Transport result before the run record is assembled.
 pub(super) struct Finished {
@@ -75,18 +81,25 @@ pub(super) struct Finished {
     pub(super) stdout: String,
     pub(super) stderr: String,
 }
+/// One handler's run and what it means for its event.
+struct Executed {
+    run: HookRun,
+    deny: Option<String>,
+    context: Option<HookContext>,
+}
 async fn execute(
     hooks: &Hooks,
     hook: &HookDefinition,
     payload: &HookEnvelope,
     cancel: CancellationToken,
-) -> HookRun {
+) -> Executed {
     let start = Instant::now();
-    let finished = if hook.kind == "http" {
-        super::http::run(hooks, hook, payload, cancel).await
+    let (finished, overflow) = if hook.kind == "http" {
+        (super::http::run(hooks, hook, payload, cancel).await, None)
     } else {
         command(hooks, hook, payload, cancel).await
     };
+    let added = super::context::added(hooks, hook, payload, &finished, overflow).await;
     if finished.outcome == "approval_ignored" {
         tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = if hook.id.contains('/') { "plugin" } else { "user" });
     }
@@ -96,22 +109,27 @@ async fn execute(
         event: hook.event,
         session_id: payload.session_id.clone(),
         outcome: finished.outcome,
-        reason: finished.reason,
+        reason: finished.reason.clone().or(added.note),
         exit_code: finished.exit_code,
         http_status: finished.http_status,
         duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
+        context_bytes: added.bytes,
         stdout: excerpt(&finished.stdout),
         stderr: excerpt(&finished.stderr),
     };
     hooks.record(record.clone());
-    record
+    Executed {
+        run: record,
+        deny: finished.reason,
+        context: added.context,
+    }
 }
 async fn command(
     hooks: &Hooks,
     hook: &HookDefinition,
     payload: &HookEnvelope,
     cancel: CancellationToken,
-) -> Finished {
+) -> (Finished, Option<String>) {
     let prepared = prepare_input(hooks, hook, payload).await;
     let (input, redact) = match prepared {
         Ok((i, r)) => (Ok(i), r),
@@ -137,7 +155,11 @@ async fn command(
         }
         text
     };
-    Finished {
+    let overflow = match &result {
+        Err(error @ HookProcessError::OutputLimit(_)) => Some(error.to_string()),
+        _ => None,
+    };
+    let finished = Finished {
         outcome,
         reason: reason.map(|s| clean(&s)),
         exit_code: result.as_ref().ok().and_then(|o| o.exit_code),
@@ -151,7 +173,8 @@ async fn command(
             .as_ref()
             .map(|o| clean(&o.stderr))
             .unwrap_or_else(ToString::to_string),
-    }
+    };
+    (finished, overflow)
 }
 fn environment(
     hooks: &Hooks,
@@ -220,7 +243,7 @@ pub(super) async fn test(
             ..HookPayload::default()
         },
     };
-    Ok(Box::pin(execute(hooks, &hook, &payload, cancel)).await)
+    Ok(Box::pin(execute(hooks, &hook, &payload, cancel)).await.run)
 }
 
 /// The JSON envelope plus hook identity: command stdin and HTTP request body.
@@ -253,9 +276,8 @@ fn input(
     hooks: &Hooks,
     hook: &HookDefinition,
     payload: &HookEnvelope,
-) -> Result<HookProcess, butler_platform::hook_process::HookProcessError> {
-    let stdin = body(hook, payload)
-        .map_err(|e| butler_platform::hook_process::HookProcessError::Process(e.to_string()))?;
+) -> Result<HookProcess, HookProcessError> {
+    let stdin = body(hook, payload).map_err(|e| HookProcessError::Process(e.to_string()))?;
     let args = hook.args.as_ref().map(|args| {
         args.iter()
             .map(|arg| {
@@ -273,6 +295,11 @@ fn input(
         cwd: PathBuf::from(&payload.cwd),
         stdin,
         timeout: Duration::from_millis(hook.timeout_ms),
+        stdout_limit: if super::context::can_add(hook) {
+            CONTEXT_OUTPUT_LIMIT
+        } else {
+            OUTPUT_LIMIT
+        },
     })
 }
 
@@ -280,7 +307,7 @@ async fn prepare_input(
     hooks: &Hooks,
     hook: &HookDefinition,
     payload: &HookEnvelope,
-) -> Result<(HookProcess, Vec<String>), butler_platform::hook_process::HookProcessError> {
+) -> Result<(HookProcess, Vec<String>), HookProcessError> {
     if !hook.id.contains('/') {
         return input(hooks, hook, payload).map(|i| (i, Vec::new()));
     }
@@ -291,10 +318,8 @@ async fn prepare_input(
         Ok::<_, butler_core::plugins::PluginError>((hook, cwd, redact))
     })
     .await
-    .map_err(|_| {
-        butler_platform::hook_process::HookProcessError::Process("plugin_task_failed".into())
-    })?
-    .map_err(|e| butler_platform::hook_process::HookProcessError::Process(e.code.into()))?;
+    .map_err(|_| HookProcessError::Process("plugin_task_failed".into()))?
+    .map_err(|e| HookProcessError::Process(e.code.into()))?;
     let mut payload = payload.clone();
     payload.cwd = cwd.to_string_lossy().into_owned();
     Ok((input(hooks, &hook, &payload)?, redact))

@@ -75,6 +75,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
     ("session_queued_messages", "client_message_id", "TEXT"),
     ("session_queued_messages", "input_identity_digest", "TEXT"),
     ("session_queued_messages", "control_resolution_json", "TEXT"),
+    ("session_queued_messages", "hook_context_json", "TEXT"),
     ("session_queued_messages", "trace_context_json", "TEXT"),
     ("session_queued_messages", "claim_id", "TEXT"),
     ("session_queued_messages", "claim_owner", "TEXT"),

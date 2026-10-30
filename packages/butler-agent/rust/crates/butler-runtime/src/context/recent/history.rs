@@ -220,6 +220,14 @@ fn render_excerpted_at(
     if tool_messages > 0 {
         lines.push(format!("tool: [{tool_messages} recorded tool messages]"));
     }
+    let hook_messages = turn
+        .messages
+        .iter()
+        .filter(|message| message.role == butler_turn::conversation::ConversationRole::Developer)
+        .count();
+    if hook_messages > 0 {
+        lines.push(format!("developer: [{hook_messages} hook context omitted]"));
+    }
     Ok(lines.join("\n"))
 }
 

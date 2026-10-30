@@ -110,7 +110,8 @@ impl AppApplication {
             return self.queue_page(chat_id).await;
         }
 
-        self.prompt_hook(&chat_id, &client_id, &request, &inspected)
+        let hook_context_json = self
+            .prompt_hook(&chat_id, &client_id, &request, &inspected)
             .await?;
         let mut prepared = inspected.prepared;
         prepared.project_sources = self
@@ -132,6 +133,7 @@ impl AppApplication {
                 request.content_parts.as_ref(),
             )?,
             project_source_refs_json: json_string(&prepared.project_sources)?,
+            hook_context_json,
             created_at: created_at.clone(),
         };
         let expected = request.expected_project_id.clone();

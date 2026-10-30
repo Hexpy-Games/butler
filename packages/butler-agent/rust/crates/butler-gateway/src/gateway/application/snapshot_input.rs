@@ -18,17 +18,19 @@ impl AppApplication {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
         let facts = self.dependencies.settings_facts.snapshot()?;
-        let (snapshot, conversation_access, default_project_folder, document_edits, language) =
+        let (snapshot, conversation_access, default_project_folder, document_edits, language, hook) =
             self.storage
                 .execute(move |db| {
                     let (snapshot, access, folder, edits) =
                         claimed_input(db, &queued_id, &claim_id)?;
+                    let hook = super::hooks::claimed_context(db, &snapshot.chat_id, &queued_id)?;
                     Ok((
                         snapshot,
                         access,
                         folder,
                         edits,
                         settings::ui_language(db, &facts)?.as_str().to_owned(),
+                        hook,
                     ))
                 })
                 .await
@@ -71,6 +73,9 @@ impl AppApplication {
         );
         turn.app_turn_context["language"] = language.into();
         turn.app_turn_context["documentEdits"] = json!(document_edits);
+        if let Some(hook) = hook {
+            turn.app_turn_context["hookContext"] = hook.into();
+        }
         self.with_canon_epics(turn).await
     }
 

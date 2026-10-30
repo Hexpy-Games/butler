@@ -32,7 +32,7 @@ pub(super) fn large(body: &Value) -> Option<ResponseRecord> {
         &json!({"requests":[{"path":"large-a.txt","max_bytes":1_048_576},{"path":"large-b.txt","max_bytes":1_048_576}],"max_total_bytes":4_194_304}),
     )
 }
-fn tool(body: &Value, name: &str, arguments: &Value) -> Option<ResponseRecord> {
+pub(super) fn tool(body: &Value, name: &str, arguments: &Value) -> Option<ResponseRecord> {
     let has_result = body["input"]
         .as_array()
         .into_iter()
@@ -119,7 +119,7 @@ fn work_id(value: &Value) -> Option<String> {
     }
     None
 }
-fn response(item: &Value) -> ResponseRecord {
+pub(super) fn response(item: &Value) -> ResponseRecord {
     let mut events = vec![
         json!({"type":"response.created","response":{"id":"resp_hooks","status":"in_progress","output":[]}}),
         json!({"type":"response.output_item.added","output_index":0,"item":item}),

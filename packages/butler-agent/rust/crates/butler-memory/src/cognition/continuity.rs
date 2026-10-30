@@ -115,9 +115,14 @@ pub fn prompt(previous: &str, turns: &[ContinuityTurn]) -> String {
             &turn.answer
         };
         text.push_str(&format!(
-            "\n[turn {}, {}]\nuser: {}\n{label}: {answer}",
+            "\n[turn {}, {}]\nuser: {}",
             turn.number, turn.status, turn.user
         ));
+        if !turn.hook_context.is_empty() {
+            text.push('\n');
+            text.push_str(&turn.hook_context);
+        }
+        text.push_str(&format!("\n{label}: {answer}"));
         if !turn.tools.is_empty() {
             text.push_str(&format!("\ntools used: {}", turn.tools.join(", ")));
         }
