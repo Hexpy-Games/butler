@@ -210,6 +210,7 @@ async fn canonical_writer_turn_prepares_ordered_windows_hydration_and_prior_cont
     assert_eq!(plan.rows[0].byte_start, 0.0);
     assert_eq!(plan.rows[0].byte_end, 8_192.0);
     assert_eq!(plan.rows[1].byte_start, 8_192.0);
+    crate::cognition::windows::tests::historical_windows_split_on_grapheme_boundaries_in_source_order();
     assert_eq!(plan.rows[1].byte_end, 8_196.0);
     assert_source_golden(&plan, "turn");
     let current = reader.read_message("cm_request").unwrap().unwrap();

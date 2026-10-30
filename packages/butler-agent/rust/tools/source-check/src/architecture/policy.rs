@@ -14,8 +14,9 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-test-support: isolated source fakes consume only public platform APIs.
         "import_sources" => &[],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
-        "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
-        | "tool_protocol" | "tool_catalog" | "wall_clock" => &[],
+        // Script15 search analysis is shared by Cognition and App search.
+        "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "search_text"
+        | "segmentation" | "tool_protocol" | "tool_catalog" | "wall_clock" => &[],
         "json" => &["public_text"],
         // Typed hook envelopes preserve complete tool JSON.
         "hooks" => &["json"],
@@ -35,6 +36,9 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-turn: BTCC owns the turn and reads the transcript and workspace.
         "btcc" => &["conversation", "workspace"],
         "conversation" | "workspace" => &[],
+        // Ports that Context assembly requires of Profile and Cognition; their
+        // failures relay as BTCC errors.
+        "context_ports" => &["btcc"],
         // butler-models
         "models" | "mcp_client" => &[],
         // butler-runtime: capability adapters consume the skills facade; catalog

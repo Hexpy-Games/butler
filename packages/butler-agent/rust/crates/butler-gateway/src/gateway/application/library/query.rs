@@ -1,7 +1,7 @@
 //! Filtered, sorted keyset pages over indexed Library columns.
 use super::AppStorageError;
 use super::item::{self, sql};
-use butler_memory::cognition::analyze_search_query;
+use butler_core::search_text::analyze_search_query;
 use rusqlite::Connection;
 use rusqlite::types::Value as Sql;
 use serde_json::{Value, json};

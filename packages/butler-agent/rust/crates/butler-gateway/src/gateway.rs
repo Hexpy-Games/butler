@@ -63,8 +63,8 @@ pub use application::{
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
     AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact, AppBranchCanonicalAnswer,
     AppBranchConversationReader, AppBranchSourceLocation, AppBranchSummarizer, AppBranchSummary,
-    AppBranchSummaryInput, AppCancellation, AppCanonConflict, AppCanonDelegate, AppCanonEvent,
-    AppCanonPort, AppCanonRequest, AppCanonResource, AppCanonTagExists, AppChatKind,
+    AppBranchSummaryInput, AppBriefingProject, AppCancellation, AppCanonConflict, AppCanonDelegate,
+    AppCanonEvent, AppCanonPort, AppCanonRequest, AppCanonResource, AppCanonTagExists, AppChatKind,
     AppChatSummary, AppContextBudgetFacts, AppContextConfigurationFacts, AppContextReadFacts,
     AppContextReadPort, AppContextReadQuery, AppContextUsage, AppCreateProjectRequest,
     AppCreateProjectResult, AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult,
@@ -73,16 +73,17 @@ pub use application::{
     AppLibraryCommand, AppLibraryQuery, AppListCursor, AppListPage, AppMemoryCommand,
     AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
     AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
-    AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress, AppPersonalizationCommand,
-    AppPersonalizationEvent, AppPersonalizationPort, AppPersonalizationResult,
-    AppPlanDecisionAction, AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture,
-    AppPlanDecisionLedgerPort, AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult,
-    AppPlanDecisionStatus, AppProjectActionResult, AppProjectDashboardActionProgress,
-    AppProjectDashboardBriefingPort, AppProjectDashboardBriefingPrompt,
-    AppProjectDashboardBriefingRequest, AppProjectDashboardCheckpoint,
-    AppProjectDashboardDisposition, AppProjectDashboardLedgerError, AppProjectDashboardLedgerEvent,
-    AppProjectDashboardLedgerFuture, AppProjectDashboardLedgerHistory,
-    AppProjectDashboardLedgerPort, AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
+    AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress, AppNewChatBriefingPort,
+    AppNewChatBriefingRequest, AppPersonalizationCommand, AppPersonalizationEvent,
+    AppPersonalizationPort, AppPersonalizationResult, AppPlanDecisionAction,
+    AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort,
+    AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus,
+    AppProjectActionResult, AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
+    AppProjectDashboardBriefingPrompt, AppProjectDashboardBriefingRequest,
+    AppProjectDashboardCheckpoint, AppProjectDashboardDisposition, AppProjectDashboardLedgerError,
+    AppProjectDashboardLedgerEvent, AppProjectDashboardLedgerFuture,
+    AppProjectDashboardLedgerHistory, AppProjectDashboardLedgerPort,
+    AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
     AppProjectDashboardManagedWork, AppProjectDashboardPageQuery, AppProjectDashboardPinRef,
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
@@ -123,7 +124,9 @@ pub(crate) use application::{
 };
 pub use application::{SMART_GROUP_INSTRUCTIONS, app_session_hint, normalize_committed_turn_event};
 #[cfg(test)]
-pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
+pub(crate) use application::{
+    TestNewChatBriefing, TestProjectDashboardBriefing, TestProjectDashboardLedger,
+};
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use auth::LocalAuthConfig;

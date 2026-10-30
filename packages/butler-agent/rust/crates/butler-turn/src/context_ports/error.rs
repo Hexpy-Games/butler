@@ -120,7 +120,7 @@ impl ContextError {
 
     /// A port implementation's failure that has no underlying error.
     #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn relayed(code: &'static str, message: impl Into<String>) -> Self {
+    pub fn relayed(code: &'static str, message: impl Into<String>) -> Self {
         Self::Port {
             code,
             message: message.into(),
@@ -168,7 +168,7 @@ impl PartialEq for ContextError {
 
 impl Eq for ContextError {}
 
-impl From<ContextError> for butler_turn::btcc::BtccError {
+impl From<ContextError> for crate::btcc::BtccError {
     fn from(error: ContextError) -> Self {
         Self::relay(error.code(), error.message(), error)
     }

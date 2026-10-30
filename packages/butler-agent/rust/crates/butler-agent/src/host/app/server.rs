@@ -23,6 +23,7 @@ use butler_turn::btcc::BtccError;
 
 use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
+use crate::host::app::new_chat_briefing::AppNewChatBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
 use crate::host::app::runtime_ports::{
     AppMemoryManagement, AppRuntimeInfo, AppSessionTitleGeneratorAdapter,

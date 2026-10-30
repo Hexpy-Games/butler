@@ -86,7 +86,6 @@ impl From<UpdateCode> for UpdateError {
 #[cfg(test)]
 mod tests {
     use super::UpdateCode;
-    use crate::context::ContextCode;
     use crate::web_access::WebAccessCode;
 
     fn spelled<T: Copy>(all: &[T], as_str: fn(T) -> &'static str) -> Vec<&'static str> {
@@ -102,11 +101,6 @@ mod tests {
                 "update",
                 spelled(UpdateCode::ALL, UpdateCode::as_str),
                 include_str!("wire_codes.txt"),
-            ),
-            (
-                "context",
-                spelled(ContextCode::ALL, ContextCode::as_str),
-                include_str!("../../context/wire_codes.txt"),
             ),
             (
                 "web access",

@@ -1,15 +1,12 @@
-use std::future::Future;
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::context::{ContextResult, PromptClock};
+use crate::context::PromptClock;
 use butler_turn::btcc::ContextSection;
+pub use butler_turn::context_ports::{ContextFuture, ProfilePromptPort, PromptProjectionInput};
 use butler_turn::workspace::StoredSessionBinding;
-
-pub type ContextFuture<'a, T> = Pin<Box<dyn Future<Output = ContextResult<T>> + Send + 'a>>;
 
 #[derive(Clone, Debug, Default)]
 pub struct PromptEnvironment {
@@ -32,31 +29,10 @@ pub enum ProjectCapsuleStatus {
     Missing,
 }
 
-pub struct PromptProjectionInput<'a> {
-    pub session_id: &'a str,
-    pub project_id: Option<&'a str>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScopedFeedbackProjection {
     pub scope_kind: String,
     pub content: String,
-}
-
-pub trait ProfilePromptPort: Send + Sync {
-    fn naming_profile<'a>(
-        &'a self,
-        input: &'a PromptProjectionInput<'a>,
-    ) -> ContextFuture<'a, Option<String>>;
-    fn runtime_profile<'a>(
-        &'a self,
-        input: &'a PromptProjectionInput<'a>,
-    ) -> ContextFuture<'a, Option<String>>;
-    fn first_chat_onboarding<'a>(
-        &'a self,
-        input: &'a PromptProjectionInput<'a>,
-        locale: &'a str,
-    ) -> ContextFuture<'a, Option<String>>;
 }
 
 /// A complete active rule from the memory owner, selected for this binding.

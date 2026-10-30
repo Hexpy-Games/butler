@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use crate::cognition::{CognitionPathEnvironment, MemorySourceReference};
-use butler_runtime::context::{
+use butler_turn::context_ports::{
     ContextError, ContextResult, MemorySourceCandidate, MemorySourceReferencePort,
     ResolvedMemorySource,
 };
