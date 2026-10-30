@@ -1,3 +1,4 @@
+import { StepOrderSection } from "./StepOrderSection.tsx";
 import { BrowserSection } from "./BrowserSection.tsx";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
@@ -16,7 +17,7 @@ import { useSessionSectionsModel } from "./useSessionSectionsModel.ts";
 /** The same ordered sections on the flat margin and on floating glass. */
 export function SessionSections({ layout }: { layout: AsideLayout }) {
   useAppLocale();
-  const { ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting } = useSessionSectionsModel();
+  const { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting } = useSessionSectionsModel();
   const sections = new Set(ids);
   const setView = useButlerStore(state => state.setView);
   const [contextOpen, setContextOpen] = useState(false);
@@ -27,6 +28,9 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
     </SessionSection>}
     {sections.has("subtasks") && <SessionSection id="subtasks" layout={layout} title={c.subtasks} count={subtasks.length}>
       <SubtaskRows parentId={sessionId} subtasks={subtasks} />
+    </SessionSection>}
+    {sections.has("order") && <SessionSection id="order" layout={layout} title={c.order} count={notDone}>
+      <StepOrderSection order={order} />
     </SessionSection>}
     {/* The model filters it, so a hidden browser section leaves no floating separator. */}
     {sections.has("browser") && <BrowserSection key="browser" layout={layout} session={sessionId} tabs={browserTabs} />}

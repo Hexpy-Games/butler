@@ -1,3 +1,10 @@
+//! POST /sessions/{id}/canon/queue/edits uses one expected_graph_revision CAS.
+//! Move operations accept exactly one of epic_id or ordered, nonempty epic_ids.
+//! All selected epics must be unfinished and queued in the same source chain.
+//! move_to_new_step inserts one stack at index after removing the selection;
+//! join_stack appends to target_epic_id; move_between places that stack at index
+//! in target_chain_id or appends it beside target_epic_id. A successful edit
+//! advances the revision once. A stale revision returns 409 with graph_revision.
 use super::*;
 use crate::gateway::GatewayApplicationError;
 

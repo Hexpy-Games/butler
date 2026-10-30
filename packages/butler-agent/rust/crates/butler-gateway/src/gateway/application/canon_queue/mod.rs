@@ -106,6 +106,23 @@ async fn validate(
         )
         .await?;
     }
+    for id in args["epic_ids"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        canon::execute(
+            app,
+            AppCanonRequest {
+                resource: AppCanonResource::Epic,
+                id: id.to_owned(),
+                input: None,
+                delegate: None,
+            },
+        )
+        .await?;
+    }
     Ok(())
 }
 pub(super) async fn apply(

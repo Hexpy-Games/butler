@@ -2,7 +2,17 @@ use super::*;
 
 /// Called only for sessions named by changed epics or an explicit queue act.
 pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
+    ready_inner(tx, ctx, session, true)
+}
+
+/// Run after saving membership, before the edit advances and publishes its revision.
+pub(super) fn after_edit(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
+    ready_inner(tx, ctx, session, false)
+}
+
+fn ready_inner(tx: &Transaction<'_>, ctx: &Context, session: &str, advance: bool) -> Result<()> {
     let items = items(tx, session)?;
+    let mut started = false;
     for (chain_id, chain) in chains(&items)? {
         let chain_items = items
             .iter()
@@ -51,7 +61,7 @@ pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
             let op = format!(
                 "canon-step:{session}:{}:{}",
                 epic.as_str(),
-                revision(tx, session)?
+                revision(tx, session)? + i64::from(!advance)
             );
             let plan = item["plan_id"]
                 .as_str()
@@ -65,8 +75,11 @@ pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
                 &json!({"session_id":session,"epic_id":epic,"plan_id":item["plan_id"],"untrusted_content":{"epic_title":item["title"],"plan_title":plan.map(|p|p["title"].clone()).unwrap_or(json!(""))}}),
             )?;
             tx.execute(sql::START, params![session, epic.as_str(), ctx.now, op])?;
-            changed(tx, ctx, session)?;
+            started = true;
         }
+    }
+    if advance && started {
+        changed(tx, ctx, session)?;
     }
     Ok(())
 }

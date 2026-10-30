@@ -8,6 +8,7 @@ use std::sync::{
 use tokio::sync::Semaphore;
 
 pub(crate) struct Script {
+    pub(crate) requests: Mutex<Vec<Value>>,
     pub epics: Mutex<Vec<String>>,
     pub path: Mutex<String>,
     pub codes: Mutex<Vec<String>>,
@@ -60,6 +61,7 @@ pub(super) async fn start(
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/codex", listener.local_addr()?);
     let script = Arc::new(Script {
+        requests: Mutex::new(Vec::new()),
         epics: Mutex::new(Vec::new()),
         path: Mutex::new(String::new()),
         codes: Mutex::new(Vec::new()),
@@ -90,6 +92,7 @@ pub(super) async fn start(
     Ok((url, script, server))
 }
 async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> impl IntoResponse {
+    script.requests.lock().unwrap().push(body.clone());
     let outputs: Vec<Value> = body["input"]
         .as_array()
         .into_iter()

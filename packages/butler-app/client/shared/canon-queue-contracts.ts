@@ -1,4 +1,4 @@
-import type { CanonStatus, EpicProgressSnapshot } from "./canon-contracts";
+import type { CanonStatus, EpicProgressSnapshot, CanonQueueMoveSelection } from "./canon-contracts";
 
 export type CanonQueueOrigin = "user_message" | "schedule" | "detach";
 export interface CanonQueueItem {
@@ -17,14 +17,15 @@ export interface CanonQueueView {
   counts: { running: number; failed: number; held: number; waiting: number };
   chains: Array<{ chain_id: string; origin: CanonQueueOrigin; steps: Array<{ index: number; items: CanonQueueItem[] }> }>;
 }
-export interface CanonQueueEdit {
+export type CanonQueueEdit = {
   expected_graph_revision: number;
-  op: "move_to_new_step" | "join_stack" | "split_stack" | "start_now" | "delete" | "move_between";
-  epic_id: string;
   target_epic_id?: string;
   index?: number;
   target_chain_id?: string;
-}
+} & (
+  | ({ op: "move_to_new_step" | "join_stack" | "move_between" } & CanonQueueMoveSelection)
+  | { op: "split_stack" | "start_now" | "delete"; epic_id: string; epic_ids?: never }
+);
 export interface CanonQueueChanged { session_id: string; graph_revision: number }
 export interface CanonQueueConflict { graph_revision: number }
 export type CanonHoldDecision = "delete" | "continue";

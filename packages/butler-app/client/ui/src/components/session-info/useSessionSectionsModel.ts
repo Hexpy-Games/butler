@@ -3,6 +3,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { useSessionViewLoad } from "@/app/sessionViewLoad.ts";
 import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
+import { useSessionCanonQueue } from "./useSessionCanonQueue.ts";
 import { usePendingAsks } from "./usePendingAsks.ts";
 import { canOpenHandoffTab } from "../browser/browserHandoff.ts";
 import { useConversationAgentTabs } from "../browser/useConversationAgentTabs.ts";
@@ -16,6 +17,8 @@ export function useSessionSectionsModel() {
   const queue = useButlerStore(state => state.sessionQueue);
   const epic = useActiveCanonEpic();
   const asks = usePendingAsks(sessionId);
+  const order = useSessionCanonQueue(sessionId);
+  const notDone = order.view?.chains.reduce((count, chain) => count + chain.steps.reduce((sum, step) => sum + step.items.filter(item => item.state !== "done").length, 0), 0) ?? 0;
   const browserTabs = useConversationAgentTabs(sessionId);
   const branch = summary?.branch_info;
   const folder = branch?.workspace_path || branch?.workspace_label;
@@ -33,6 +36,7 @@ export function useSessionSectionsModel() {
   if (!summaryPending) {
     if (asks && asks.open_count > 0) ids.push("asks");
     if (subtasks.length > 0) ids.push("subtasks");
+    if (notDone > 0) ids.push("order");
     if (browserTabs.length > 0 && canOpenHandoffTab()) ids.push("browser");
     if (folder || branch?.branch_name) ids.push("environment");
     if (epic) ids.push("task");
@@ -42,7 +46,7 @@ export function useSessionSectionsModel() {
     if (schedules.length > 0) ids.push("schedules");
     if (running.length > 0 || waiting.length > 0) ids.push("queue");
   }
-  return { ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting };
+  return { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting };
 }
 
 export function useSessionInfoHasContent() {
