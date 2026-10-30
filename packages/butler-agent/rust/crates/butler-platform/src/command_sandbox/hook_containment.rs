@@ -32,6 +32,7 @@ pub struct HookContainment {
 
 /// A prepared invocation and what must be finished once its process is gone.
 pub struct Contained {
+    /// The program to start, wrapped in its sandbox.
     pub invocation: Invocation,
     /// Scratch environment the process gets instead of the host's folders.
     pub scratch: Vec<(&'static str, String)>,

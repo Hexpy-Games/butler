@@ -39,7 +39,7 @@ src/host/memory_jobs/briefing.rs	<BriefingSource as BriefingInputSource>::snapsh
 src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	107
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	153
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	89
-src/host/runtime.rs	AgentRuntime::open	359
+src/host/runtime.rs	AgentRuntime::open	358
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
 src/host/service/ingress/bind/policy.rs	upsert_app_binding	210
