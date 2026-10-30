@@ -33,15 +33,32 @@ function responseBody(id: string) {
     usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } };
 }
 
-/** A local OpenAI Responses endpoint; nothing leaves the machine. */
+/** A local OpenAI Responses endpoint that counts what reaches it. */
 function startResponsesStub() {
-  return Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+  let requests = 0;
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+    if (new URL(request.url).pathname.endsWith("/responses")) requests += 1;
     const body = await request.json().catch(() => ({})) as { stream?: boolean };
     const response = responseBody(crypto.randomUUID());
     return body.stream
       ? new Response(`event: response.completed\ndata: ${JSON.stringify({ type: "response.completed", response })}\n\n`, { headers: { "content-type": "text/event-stream" } })
       : Response.json(response);
   } });
+  return { port: server.port, requests: () => requests, stop: () => server.stop(true) };
+}
+
+/**
+ * The gateway's proxy: a loopback port that refuses every connection and keeps its first
+ * line, so a call meant for the internet fails here and names its destination.
+ */
+export function startEgressTrap() {
+  const attempts: string[] = [];
+  const listener = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: {
+    data(socket, chunk) { attempts.push(chunk.toString().split("\r\n", 1)[0]!); socket.end(); },
+  } });
+  const url = `http://127.0.0.1:${listener.port}`;
+  return { attempts, stop: () => listener.stop(true),
+    env: { HTTPS_PROXY: url, HTTP_PROXY: url, NO_PROXY: "127.0.0.1" } };
 }
 
 function appendRows(server: NativeAppServerHandle, root: string, rows: SeedRow[]) {
@@ -69,17 +86,25 @@ async function chatWithContext(server: NativeAppServerHandle, title: string): Pr
   throw new Error(`The seeded turn of "${title}" did not finish:\n${server.diagnostics()}`);
 }
 
-export type UsageSubtaskFixture = { server: NativeAppServerHandle; splitChat: string; soloChat: string; stop(): Promise<void> };
+export type UsageSubtaskFixture = {
+  server: NativeAppServerHandle; splitChat: string; soloChat: string; seededTurns: number;
+  /** Calls that reached the local Responses stub. */
+  stubRequests(): number;
+  /** First lines of the calls the gateway tried to send through its proxy, to any non-loopback host. */
+  egressAttempts: string[];
+  stop(): Promise<void>;
+};
 
 /** Two chats with context. The stub turn adds a few tokens and calls of its own, far below what the shares show. */
 export async function startUsageSubtaskFixture(uiRoot = "packages/butler-app/client/ui/dist"): Promise<UsageSubtaskFixture> {
   const stub = startResponsesStub();
+  const trap = startEgressTrap();
   const server = await createNativeAppServer({ uiRoot: resolve(uiRoot),
     config: { system: { defaultModel: USAGE_MODEL } },
     // OPENAI_BASE_URL alone routes every OpenAI call; a registered model's api_base_url does not apply to this provider.
-    env: { OPENAI_BASE_URL: `http://127.0.0.1:${stub.port}/v1`,
+    env: { ...trap.env, OPENAI_BASE_URL: `http://127.0.0.1:${stub.port}/v1`,
       BUTLER_SECRET_STORE: "file", BUTLER_PLATFORM_SYSTEM_SECRETS: "0", BUTLER_PROVIDER_QUOTA_POLLING: "0" } });
-  const stop = async () => { await server.stop(); await stub.stop(true); };
+  const stop = async () => { await server.stop(); stub.stop(); trap.stop(); };
   try {
     // The path a user takes: a saved key and a registered model, so the catalog says it is API-key billed.
     const { credential } = await server.api<{ credential: { id: string } }>("/credentials", { method: "POST",
@@ -92,7 +117,7 @@ export async function startUsageSubtaskFixture(uiRoot = "packages/butler-app/cli
     const solo = `butler/app-${soloChat}`;
     appendRows(server, split, SPLIT_ROWS(split));
     appendRows(server, solo, SOLO_ROWS(solo));
-    return { server, splitChat, soloChat, stop };
+    return { server, splitChat, soloChat, seededTurns: 2, stubRequests: stub.requests, egressAttempts: trap.attempts, stop };
   } catch (error) {
     await stop();
     throw error;
