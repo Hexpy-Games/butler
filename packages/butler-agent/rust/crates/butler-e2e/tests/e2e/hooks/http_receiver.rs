@@ -73,7 +73,8 @@ async fn hooks_http_plain_http_never_goes_through_a_proxy() -> Result<(), Harnes
     let port = endpoint.base.rsplit(':').next().unwrap();
     let hooks = [
         http_hook("address", "Stop", &endpoint.url("/address")),
-        // An uppercase name reaches the same pinned loopback address.
+        // An uppercase name reaches a loopback listener through the proxy-free
+        // client. This cannot show the pin beating a resolver mapping.
         http_hook("name", "Stop", &format!("http://LOCALHOST:{port}/name")),
     ];
     let saved = save(&s, json!(hooks), json!({})).await?;
@@ -167,7 +168,7 @@ async fn hooks_http_failed_save_keeps_the_secret_that_signs() -> Result<(), Harn
     let replacement = "a-secret-from-a-save-that-failed";
     let added = http_hook("added", "Stop", &endpoint.url("/added"));
     let failed = save(&s, json!([hook, added]), json!({"kept": replacement})).await?;
-    assert_ne!(failed.status, 200, "{failed:?}");
+    assert_eq!(failed.error_code(), Some("hook_invalid"), "{failed:?}");
     assert!(
         failed.data().get("generated_secrets").is_none(),
         "{failed:?}"
@@ -188,5 +189,117 @@ async fn hooks_http_failed_save_keeps_the_secret_that_signs() -> Result<(), Harn
     assert!(signature_matches(&received[0], &generated(&saved, "added")));
     assert_eq!(test_hook(&s, "kept").await?["outcome"], "continue");
     assert!(signature_matches(&endpoint.seen("/kept")[0], first));
+    s.finish().await
+}
+
+/// Holds the file store's change lock, as a store waiting on someone would.
+fn hold_store(s: &Scenario) -> Result<butler_platform::secrets::ChangeLock, HarnessError> {
+    let lock = s.sandbox.data.join("auth/credential-store.json.lock");
+    Ok(butler_platform::secrets::ChangeLock::acquire(
+        &lock,
+        Duration::from_secs(5),
+    )?)
+}
+
+#[tokio::test]
+async fn hooks_http_disconnected_save_finishes_and_its_secret_never_signs()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let endpoint = Endpoint::start().await?;
+    let s = setup("HOOK-HTTP-DISCONNECT")?.start().await?;
+    let seeded = http_hook("seed", "Stop", &endpoint.url("/seed"));
+    let saved = save(&s, json!([seeded]), json!({})).await?;
+    assert_eq!(saved.status, 200, "{saved:?}");
+    let before = saved.data()["revision"].as_u64().unwrap();
+
+    // The client gives up while the store is busy, before any response.
+    let lost = http_hook("lost", "Stop", &endpoint.url("/lost"));
+    let held = hold_store(&s)?;
+    let abandoned = tokio::time::timeout(
+        Duration::from_millis(500),
+        save(&s, json!([seeded, lost]), json!({})),
+    )
+    .await;
+    assert!(abandoned.is_err(), "the save should still be waiting");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    // What a process exit would leave at this point: an entry that cannot sign.
+    let index_path = s.sandbox.data.join("auth/hook-secrets.json");
+    let index: Value = serde_json::from_slice(&fs::read(&index_path)?).unwrap();
+    assert!(index["hooks"]["lost"]["origin"].is_null(), "{index}");
+    drop(held);
+
+    // The save still completes as a whole.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let settings = loop {
+        let settings = api(&s, Method::GET, "/hooks", None).await?;
+        if settings.data()["revision"].as_u64().unwrap() > before {
+            break settings;
+        }
+        assert!(Instant::now() < deadline, "the save did not finish");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(settings.data()["config"]["hooks"][1]["id"], "lost");
+
+    // Nobody received its secret, so it does not sign; a retry issues a new one.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let tested = test_hook(&s, "lost").await?;
+        if tested["outcome"] == "error" {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the undelivered secret signs");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let delivered_before = endpoint.seen("/lost").len();
+    let retried = save(&s, json!([seeded, lost]), json!({})).await?;
+    assert_eq!(retried.status, 200, "{retried:?}");
+    let secret = generated(&retried, "lost");
+    assert_eq!(test_hook(&s, "lost").await?["outcome"], "continue");
+    let received = endpoint.seen("/lost");
+    assert!(signature_matches(&received[delivered_before], &secret));
+    s.finish().await
+}
+
+#[tokio::test]
+async fn hooks_http_store_refusal_leaves_a_working_hook_working() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let endpoint = Endpoint::start().await?;
+    let s = setup("HOOK-HTTP-REFUSAL")?.start().await?;
+    let hook = http_hook("kept", "Stop", &endpoint.url("/kept"));
+    let first = "the-secret-that-the-receiver-holds";
+    let saved = save(&s, json!([hook]), json!({"kept": first})).await?;
+    assert_eq!(saved.status, 200, "{saved:?}");
+    let index_path = s.sandbox.data.join("auth/hook-secrets.json");
+    let index_before = fs::read(&index_path)?;
+    let replacement = "a-secret-the-store-never-took";
+
+    // The store refuses the write: its change lock stays busy past the wait.
+    let held = hold_store(&s)?;
+    let refused = save(&s, json!([hook]), json!({"kept": replacement})).await?;
+    drop(held);
+    assert_eq!(
+        refused.error_code(),
+        Some("hook_secret_store_unavailable"),
+        "{refused:?}"
+    );
+    assert_eq!(fs::read(&index_path)?, index_before, "index restored");
+    assert_eq!(test_hook(&s, "kept").await?["outcome"], "continue");
+    assert!(signature_matches(&endpoint.seen("/kept")[0], first));
+
+    // The store cannot be read: nothing changes, and nothing is deleted.
+    let store_path = s.sandbox.data.join("auth/credential-store.json");
+    let store_before = fs::read(&store_path)?;
+    fs::write(&store_path, b"not json")?;
+    let refused = save(&s, json!([hook]), json!({"kept": replacement})).await?;
+    assert_eq!(
+        refused.error_code(),
+        Some("hook_secret_store_unavailable"),
+        "{refused:?}"
+    );
+    assert_eq!(fs::read(&index_path)?, index_before, "index untouched");
+    assert_eq!(fs::read(&store_path)?, b"not json", "store untouched");
+    fs::write(&store_path, &store_before)?;
+    assert_eq!(test_hook(&s, "kept").await?["outcome"], "continue");
+    assert!(signature_matches(&endpoint.seen("/kept")[1], first));
     s.finish().await
 }

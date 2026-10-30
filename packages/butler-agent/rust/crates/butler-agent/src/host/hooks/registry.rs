@@ -64,6 +64,7 @@ async fn reload_held(hooks: &Arc<Hooks>) -> Result<(), String> {
     }
     Ok(())
 }
+/// Saves a configuration; the caller holds `saving`.
 pub(super) async fn save(
     hooks: &Arc<Hooks>,
     revision: u64,
@@ -71,10 +72,13 @@ pub(super) async fn save(
     secrets: BTreeMap<String, SecretText>,
 ) -> Result<HookSaved, String> {
     reload(hooks).await?;
-    let _saving = hooks.saving.lock().await;
-    if hooks.state.read().settings.revision != revision {
-        return Err("revision_conflict".into());
-    }
+    let published = {
+        let state = hooks.state.read();
+        if state.settings.revision != revision {
+            return Err("revision_conflict".into());
+        }
+        state.settings.config.clone()
+    };
     config.validate()?;
     for (id, secret) in &secrets {
         check_hook_secret(secret.expose())?;
@@ -88,13 +92,14 @@ pub(super) async fn save(
     }
     // A store may wait on the user, so `mutation` is not held here: session
     // creation and send keep reloading while it does.
-    let mut prepared = hooks.secrets.prepare(&config, secrets).await?;
+    let prepared = hooks.secrets.prepare(&config, &published, secrets).await?;
     match commit(hooks, revision, config, bytes).await {
         Ok(settings) => {
+            hooks.secrets.activate(&prepared).await?;
             hooks.secrets.forget(&settings.config).await;
             Ok(HookSaved {
                 settings,
-                generated_secrets: std::mem::take(&mut prepared.generated),
+                generated_secrets: prepared.generated,
             })
         }
         Err(error) => {

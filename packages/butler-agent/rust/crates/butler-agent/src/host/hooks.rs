@@ -144,7 +144,24 @@ impl HookPort for Dispatcher {
         config: HookConfig,
         secrets: BTreeMap<String, SecretText>,
     ) -> HookFuture<'_, HookSaved> {
-        Box::pin(registry::save(&self.0, revision, config, secrets))
+        let hooks = self.0.clone();
+        Box::pin(async move {
+            let (answer, answered) = tokio::sync::oneshot::channel();
+            // A disconnected client must not cancel a save halfway. If it left,
+            // the secrets this save issued reached nobody, so they cannot sign.
+            tokio::spawn(async move {
+                // Held through the withdrawal, so a retry sees its result.
+                let _saving = hooks.saving.lock().await;
+                let saved = registry::save(&hooks, revision, config, secrets).await;
+                if let Err(Ok(saved)) = answer.send(saved) {
+                    let issued = saved.generated_secrets.keys();
+                    hooks.secrets.withdraw(issued).await;
+                }
+            });
+            answered
+                .await
+                .map_err(|_| secrets::STORE_FAILED.to_owned())?
+        })
     }
     fn dispatch(
         &self,

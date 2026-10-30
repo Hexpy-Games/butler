@@ -162,14 +162,21 @@ async fn hooks_http_hand_edited_hook_is_never_sent_unsigned() -> Result<(), Harn
     assert_eq!(tested.data()["outcome"], "error", "{tested:?}");
     assert!(endpoint.seen("/manual").is_empty());
 
-    // Saving it once creates the secret the receiver needs.
-    let saved = save(&s, json!([hook]), json!({})).await?;
-    let generated = saved.data()["generated_secrets"]["manual"]
-        .as_str()
-        .unwrap();
+    // Saving the list unchanged, as Settings does, does not activate the edit.
+    let unchanged = save(&s, json!([hook]), json!({})).await?;
+    assert_eq!(unchanged.status, 200, "{unchanged:?}");
+    assert!(unchanged.data().get("generated_secrets").is_none());
+    let tested = api(&s, Method::POST, "/hooks/manual/test", Some(json!({}))).await?;
+    assert_eq!(tested.data()["outcome"], "error", "{tested:?}");
+    assert!(endpoint.seen("/manual").is_empty());
+
+    // Setting a secret adopts it, and that secret signs.
+    let chosen = "secret-the-receiver-was-given";
+    let adopted = save(&s, json!([hook]), json!({"manual": chosen})).await?;
+    assert_eq!(adopted.status, 200, "{adopted:?}");
     let tested = api(&s, Method::POST, "/hooks/manual/test", Some(json!({}))).await?;
     assert_eq!(tested.data()["outcome"], "continue", "{tested:?}");
-    assert!(signature_matches(&endpoint.seen("/manual")[0], generated));
+    assert!(signature_matches(&endpoint.seen("/manual")[0], chosen));
     s.finish().await
 }
 
