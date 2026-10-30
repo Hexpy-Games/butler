@@ -231,6 +231,18 @@ async function editFlows(page: Page, id: string, items: string[]) {
     assert(boxes[0]!.left < boxes[1]!.left, "the waiting word comes first");
     assert(!boxes[0]!.cut, `the waiting word is never truncated: ${JSON.stringify(boxes)}`);
     assert(boxes[1]!.width > 0, `what it waits for keeps visible room: ${JSON.stringify(boxes)}`);
+    // A truncated caption shows its full text on hover, without taking a tab stop or keyboard focus.
+    const cut = after.getByText(name, { exact: true });
+    assert(await cut.evaluate(node => node.scrollWidth > node.clientWidth), "this caption is truncated in this layout");
+    const focusBefore = await page.evaluate(() => document.activeElement?.getAttribute("data-step-grip") ?? document.activeElement?.tagName);
+    await cut.hover();
+    const hoverText = page.getByRole("tooltip").filter({ hasText: word });
+    await hoverText.waitFor();
+    assert.equal(await hoverText.textContent(), `${word} ${name}`);
+    assert.equal(await cut.evaluate(node => node.closest("[tabindex]")?.closest("[data-step-item]") ?? null), null, "the caption is not a tab stop");
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-step-grip") ?? document.activeElement?.tagName), focusBefore, "hover leaves keyboard focus alone");
+    await page.mouse.move(0, 0);
+    await hoverText.waitFor({ state: "hidden" });
   }
   await shot(page, "stack");
   const moved = await keyboardEdit(page, id, third!, ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown"], true);
@@ -251,6 +263,8 @@ async function editFlows(page: Page, id: string, items: string[]) {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down(); await page.mouse.move(box.x + box.width / 2, box.y - 30, { steps: 6 });
   await section(page).locator('[data-dragging="pointer"]').waitFor();
+  await page.waitForTimeout(800); // Longer than the tooltip delay: a drag crossing rows opens no caption text.
+  assert.equal(await page.getByRole("tooltip").filter({ hasText: c.after("").word }).count(), 0, "no caption text opens mid-drag");
   await shot(page, "drag-mid-gesture");
   await page.keyboard.press("Escape"); await page.mouse.up();
   await section(page).getByRole("button", { name: c.menu("발표 자료"), exact: true }).click();

@@ -93,7 +93,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     order: {
       chain: { user_message: "Requested", schedule: "Schedule", detach: "Started now" },
       status: { running: "Running", failed: "Blocked", done: "Done" },
-      after: title => ({ word: "After:", name: `‘${title}’` }), heldBy: "Earlier epic is blocked", join: "Run together", newStep: "New step",
+      after: title => ({ word: "After:", name: `‘${title}’` }), heldBy: "Blocked earlier", join: "Run together", newStep: "New step",
       afterStack: (title, count) => ({ word: "After:", name: `‘${title}’ +${count} more` }),
       more: count => `+${count} more`, menu: title => `${title} menu`,
       startNow: "Start now", unstack: "Unstack", remove: "Delete",
