@@ -1,6 +1,7 @@
 export interface CanonOrderCopy {
   chain: Record<"user_message" | "schedule" | "detach", string>;
-  status: Record<"waiting" | "running" | "held" | "failed" | "done", string>;
+  /** Status words; a waiting step shows none (its caption already says what it waits for). */
+  status: Record<"running" | "held" | "failed" | "done", string>;
   after: (title: string) => string; afterStack: (title: string, count: number) => string;
   heldBy: string; join: string; newStep: string;
   more: (count: number) => string; menu: (title: string) => string;

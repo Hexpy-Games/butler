@@ -3,7 +3,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
     order: {
       chain: { user_message: "요청한 과제", schedule: "예약 작업", detach: "바로 시작한 과제" },
-      status: { waiting: "대기", running: "진행 중", held: "멈춤", failed: "막힘", done: "완료" },
+      status: { running: "진행 중", held: "멈춤", failed: "막힘", done: "완료" },
       after: title => `‘${title}’ 끝나면`, heldBy: "앞 과제가 막힘", join: "함께 진행", newStep: "새 단계로",
       afterStack: (title, count) => `‘${title} 외 ${count}건’ 끝나면`,
       more: count => `외 ${count}건`, menu: title => `‘${title}’ 메뉴`,
@@ -92,7 +92,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "en-US": {
     order: {
       chain: { user_message: "Requested", schedule: "Schedule", detach: "Started now" },
-      status: { waiting: "Waiting", running: "Running", held: "Paused", failed: "Blocked", done: "Done" },
+      status: { running: "Running", held: "Paused", failed: "Blocked", done: "Done" },
       after: title => `After ‘${title}’`, heldBy: "Earlier epic is blocked", join: "Run together", newStep: "New step",
       afterStack: (title, count) => `After ‘${title}’ +${count} more`,
       more: count => `+${count} more`, menu: title => `${title} menu`,

@@ -108,6 +108,11 @@ async function scenario(id: string, layout: string) {
     assert.equal(await section(page).locator("[data-step-items]").count(), 5);
     assert.equal(await grip(page, epics[0]!.id).count(), 0, "running is pinned");
     assert.equal(await section(page).locator('[data-step-items]').first().locator('[data-slot="card"]').getAttribute("data-activity"), "running");
+    // A waiting step shows no status word; its caption already says what it waits for.
+    const waitingRow = (await section(page).locator(`[data-step-item="${epics[1]!.id}"]`).innerText()).trim();
+    for (const word of ["대기", "Waiting", ...(["ko-KR", "en-US"] as const).flatMap(locale => Object.values(getAppCopy(locale).canon.order.status))]) {
+      assert(!waitingRow.includes(word), `waiting row shows no status word: ${waitingRow}`);
+    }
   }
   await shot(page, `${layout}-running-plan`);
   if (layout === "plain") await editFlows(page, id, epics.map(epic => epic.id));

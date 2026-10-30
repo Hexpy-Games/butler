@@ -24,7 +24,7 @@ export function StepOrderSection({ order }: { order: ReturnType<typeof useSessio
       || (epic.held_by_epic_id ? copy.heldBy : after);
     return {
       marker: <OrderMarker status={status} number={place.stepNumber} />,
-      title: item.label, meta: copy.status[status],
+      title: item.label, meta: status === "waiting" ? undefined : copy.status[status],
       more: place.count > 1 && !place.expanded ? copy.more(place.count - 1) : undefined,
       caption: place.lifted && place.outcome ? (place.outcome === "join" ? copy.join : copy.newStep) : caption,
       trailing: item.pinned || order.busy ? undefined : <OverflowActionMenu label={copy.menu(item.label)} items={[
