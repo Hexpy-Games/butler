@@ -16,7 +16,7 @@ use butler_e2e::e2e::cassette::Cassette;
 use butler_e2e::e2e::events::{LiveEvents, event_turn_id};
 use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
 use butler_e2e::e2e::provider::Pacing;
-use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use serde_json::{Value, json};
 
 const NUMBERS: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
@@ -120,7 +120,7 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
         )
         .await?;
     assert_eq!(reply.status, 202, "{}", reply.text);
-    let turn_id = accepted_turn_id(reply.data())?;
+    let turn_id = s.gw.accepted_turn(reply.data()).await?;
     assert!(reply.data()["accepted"]["id"].is_string());
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(60))
@@ -331,7 +331,7 @@ async fn turn_03_stop_mid_stream() -> Result<(), HarnessError> {
     });
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let accepted = s.gw.say("general", NUMBERS).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(20);
     while s.provider()?.served() == 0 {
         assert!(Instant::now() < deadline, "provider never called");
@@ -407,7 +407,7 @@ async fn turn_03_stop_keeps_partial_text_marked_stopped() -> Result<(), HarnessE
         min_ms: 250,
     });
     let accepted = s.gw.say("general", NUMBERS).await?;
-    let turn_id = accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     while s.provider()?.served() == 0 {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
@@ -449,7 +449,7 @@ async fn turn_07_parallel_sessions_stay_isolated() -> Result<(), HarnessError> {
         );
         tasks.push(tokio::spawn(async move {
             let accepted = gw.say(&session, &prompt).await?;
-            let turn_id = accepted_turn_id(&accepted)?;
+            let turn_id = gw.accepted_turn(&accepted).await?;
             gw.wait_terminal(&session, &turn_id, Duration::from_secs(120))
                 .await
                 .map(|turn| (turn_id, turn))

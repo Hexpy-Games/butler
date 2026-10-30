@@ -31,7 +31,7 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
             .await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
     let (host, actions) = host::start(&s).await?;
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say("general", stub::TASK).await?)?;
+    let id = s.gw.say_turn("general", stub::TASK).await?;
     let turn =
         s.gw.wait_turn(
             "general",

@@ -5,7 +5,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
     HarnessError,
     provider::Script,
-    scenario::{Scenario, Setup, accepted_turn_id},
+    scenario::{Scenario, Setup},
 };
 use hmac::{Hmac, Mac};
 use serde_json::{Value, json};
@@ -272,7 +272,7 @@ async fn in_flight_edit_waits_for_next_turn() -> Result<(), HarnessError> {
         .await?;
     let chat = project(&s, &root).await?;
     let gate = s.provider()?.hold_next_reply("Read notes and reply done.");
-    let id = accepted_turn_id(&s.gw.say(&chat, "Read notes and reply done.").await?)?;
+    let id = s.gw.say_turn(&chat, "Read notes and reply done.").await?;
     let deadline = Instant::now() + Duration::from_secs(60);
     while turn_requests(&s)?.is_empty() {
         assert!(Instant::now() < deadline, "no admitted request");

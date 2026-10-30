@@ -2,6 +2,7 @@
 mod canon_sidebar;
 mod progress;
 mod proposals;
+mod queue;
 mod requests;
 use butler_canon::{store, work_queries::Query};
 use butler_gateway::gateway::{
@@ -76,6 +77,9 @@ impl AppCanonPort for AppCanon {
                 .await
                 .map_err(error)
         })
+    }
+    fn wake_replay(&self) {
+        self.storage.notify_changes();
     }
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
         Some(self.storage.subscribe_changes())
@@ -158,7 +162,9 @@ fn error(error: StorageError) -> GatewayApplicationError {
             .as_deref()
             .and_then(|s| s.downcast_ref::<store::Error>())
             .and_then(|e| match e {
-                store::Error::Conflict { current } => current["revision"].as_i64(),
+                store::Error::Conflict { current } => current["revision"]
+                    .as_i64()
+                    .or_else(|| current["graph_revision"].as_i64()),
                 _ => None,
             })
             .map(|revision| {

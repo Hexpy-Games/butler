@@ -47,7 +47,7 @@ async fn install(force_l: bool) -> Result<(), HarnessError> {
             "summary":"Install archive", "state_effect":"mutation"}),
         )],
     );
-    let id = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+    let id = s.gw.say_turn(&chat, prompt).await?;
     super::super::access_tiers::delivered(&s, &chat, &id).await?;
     super::super::access_tiers::assert_counts(&s, &id, 0, 0)?;
     let outputs = super::super::access_tiers::outputs(&s, &chat, &id, &script, prompt).await?;

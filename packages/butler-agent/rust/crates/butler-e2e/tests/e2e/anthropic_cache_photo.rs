@@ -25,7 +25,7 @@ async fn anthropic_large_photo_attachment_reaches_the_provider() -> Result<(), H
         "model":"anthropic/claude-sonnet-5", "client_message_id":uuid::Uuid::new_v4().to_string(),
     })).await?;
     assert_eq!(accepted.status, 202, "{}", accepted.text);
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(accepted.data())?;
+    let id = s.gw.accepted_turn(accepted.data()).await?;
     let turn =
         s.gw.wait_terminal("general", &id, std::time::Duration::from_secs(60))
             .await?;

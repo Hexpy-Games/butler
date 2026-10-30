@@ -1,0 +1,196 @@
+name: Experimental gpui shell
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: shell-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: shell.yml
+
+  shell:
+    needs: changes
+    if: (github.event_name != 'push' || github.ref == 'refs/heads/main') && needs.changes.outputs.shell == 'true'
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: win-x64
+            binary: butler-shell.exe
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+            binary: butler-shell
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+            binary: butler-shell
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/butler-shell
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/shell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        # gpui-ce df3e255 .github/workflows/ci.yml, plus Vulkan/Wayland headers.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-dev \
+            libx11-xcb-dev libxcb1-dev libwayland-dev wayland-protocols \
+            libfontconfig-dev libvulkan-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-xinput-dev libegl1-mesa-dev libgles2-mesa-dev libglib2.0-dev
+      - name: Install workspace toolchain
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
+          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
+      - name: Use bundled Windows linker
+        if: runner.os == 'Windows'
+        # Rust 1.99 ships rust-lld with MSVC support; no extra installation.
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          sysroot = Path(subprocess.check_output(['rustc', '--print', 'sysroot'], text=True).strip())
+          linker = sysroot / 'lib/rustlib/x86_64-pc-windows-msvc/bin/rust-lld.exe'
+          subprocess.run([str(linker), '-flavor', 'link', '--version'], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER={linker}\n')
+          PY
+      - uses: Swatinem/rust-cache@v2.9.3
+        with:
+          workspaces: |
+            packages/butler-shell -> ../../target/shell
+            packages/butler-agent/rust -> ../../../target/source-check
+          key: shell-${{ matrix.platform }}-${{ hashFiles('packages/butler-shell/Cargo.lock', 'packages/butler-shell/rust-toolchain.toml') }}
+          cache-on-failure: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Formatting
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
+      - name: Clippy
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --locked --workspace --all-targets --profile test -- -D warnings
+      - name: Workspace tests
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --workspace --profile test
+      - name: Source rules
+        working-directory: packages/butler-agent/rust
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/source-check
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- ../../butler-shell
+
+  package:
+    needs: changes
+    # Build unsigned experimental artifacts in parallel with platform checks.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.shell == 'true')
+    # Cold check/test each took 4-7 min; optimized gpui compilation needs its
+    # own budget. Allow 30 min for cold release + notices/upload/cache saving;
+    # this is an initial allowance, not a measured release completion time.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: win-x64
+            binary: butler-shell.exe
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+            binary: butler-shell
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+            binary: butler-shell
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/butler-shell
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/shell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        # gpui-ce df3e255 .github/workflows/ci.yml, plus Vulkan/Wayland headers.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-dev \
+            libx11-xcb-dev libxcb1-dev libwayland-dev wayland-protocols \
+            libfontconfig-dev libvulkan-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-xinput-dev libegl1-mesa-dev libgles2-mesa-dev libglib2.0-dev
+      - name: Install workspace toolchain
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2.9.3
+        with:
+          workspaces: |
+            packages/butler-shell -> ../../target/shell
+          prefix-key: shell-release
+          key: shell-release-${{ matrix.platform }}-${{ hashFiles('packages/butler-shell/Cargo.lock', 'packages/butler-shell/rust-toolchain.toml') }}
+      - name: Release binary
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --bin butler-shell
+      - name: Package experimental binary and licenses
+        id: package
+        env:
+          SHELL_TARGET: ${{ matrix.target }}
+          SHELL_PLATFORM: ${{ matrix.platform }}
+          SHELL_BINARY: ${{ matrix.binary }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/deploy/licenses/cargo-notices.py" \
+            --root . --target "$SHELL_TARGET" --output "$RUNNER_TEMP/shell-package"
+          python3 - <<'PY'
+          import os, shutil, zipfile
+          from pathlib import Path
+          stage = Path(os.environ['RUNNER_TEMP']) / 'shell-package'
+          shutil.copy2(Path(os.environ['CARGO_TARGET_DIR']) / 'release' / os.environ['SHELL_BINARY'], stage)
+          shutil.copy2(Path(os.environ['GITHUB_WORKSPACE']) / 'LICENSE', stage / 'LICENSE')
+          name = f"butler-shell-experimental-{os.environ['SHELL_PLATFORM']}-{os.environ['GITHUB_SHA'][:7]}"
+          archive = Path(os.environ['RUNNER_TEMP']) / (name + '.zip')
+          with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as output:
+              for file in sorted(stage.rglob('*')):
+                  if file.is_file():
+                      output.write(file, file.relative_to(stage))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'name={name}\npath={archive.as_posix()}\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14

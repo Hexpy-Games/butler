@@ -120,6 +120,7 @@ mod lifecycle_intent;
 mod linux_sandbox;
 mod live;
 mod live_config;
+mod local_zone;
 mod long_paths;
 mod mail;
 mod mcp;
@@ -304,6 +305,7 @@ mod work_model_schema;
 mod worker_cap;
 
 mod canon_link;
+mod canon_plan_run;
 mod canon_registration;
 mod one_call_delegation;
 
@@ -313,3 +315,4 @@ mod chats_work;
 
 mod canon_criteria;
 mod canon_mcp;
+mod shell_client;

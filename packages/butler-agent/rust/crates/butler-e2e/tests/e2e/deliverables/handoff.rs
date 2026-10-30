@@ -32,7 +32,7 @@ async fn restart(crash: bool) -> Result<(), HarnessError> {
     std::fs::write(setup.sandbox.data.join("report.md"), "Durable delivery")?;
     let mut s = setup.start().await?;
     let accepted = s.gw.say("general", "Deliver the file.").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     wait_for(|| release.with_extension("held").exists()).await;
     let data = &s.sandbox.data;
     assert_empty(&data.join(READER_STAGING))?;
@@ -87,7 +87,7 @@ async fn materialize_missing_handoff_preserves_other_attachments() -> Result<(),
     std::fs::write(setup.sandbox.data.join("report.md"), "Available original")?;
     let mut s = setup.start().await?;
     let accepted = s.gw.say("general", "Deliver the file.").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     wait_for(|| release.with_extension("held").exists()).await;
     let staged = copies(&s.sandbox.data)?;
     assert_eq!(staged.len(), 2);

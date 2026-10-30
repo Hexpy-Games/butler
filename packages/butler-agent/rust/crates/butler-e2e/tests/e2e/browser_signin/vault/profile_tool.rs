@@ -1,9 +1,7 @@
 //! The general profile tool asks for the exact site and profile, and never returns values.
 use super::super::tool::waiting_card;
 use super::{Cleanup, admin, attach, snapshot, tab, vault_scenario};
-use butler_e2e::e2e::{
-    HarnessError, cassette::Cassette, gateway::turn_state, scenario::accepted_turn_id,
-};
+use butler_e2e::e2e::{HarnessError, cassette::Cassette, gateway::turn_state};
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -45,7 +43,7 @@ async fn autofill_tool_asks_by_profile_id_and_keeps_values_out_of_the_model()
         }
     }))).await?;
     snapshot(&admin, json!([tab("t1", "agent", ORIGIN)])).await?;
-    let turn = accepted_turn_id(&s.gw.say("general", ASK).await?)?;
+    let turn = s.gw.say_turn("general", ASK).await?;
     let card = waiting_card(&s, &turn).await?;
     let operation = &card["approval"]["operation"];
     assert_eq!(operation["tool"], "browser_autofill_fill");

@@ -10,7 +10,7 @@ use butler_e2e::e2e::{
     cassette::Cassette,
     faults::{Fault, Transform},
     gateway::turn_state,
-    scenario::{Scenario, Setup, accepted_turn_id},
+    scenario::{Scenario, Setup},
     stop_intent::{StopOnDrop, instance_record},
 };
 use butler_platform::instance;
@@ -84,7 +84,7 @@ async fn active_and_queued(s: &Scenario) -> Result<String, HarnessError> {
     // their durable recovery state while storage is deliberately locked.
     s.provider()?
         .inject(Fault::once(0, Transform::StallAfter(6)))?;
-    let id = accepted_turn_id(&s.gw.say("general", "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.").await?)?;
+    let id = s.gw.say_turn("general", "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.").await?;
     let served_deadline = Instant::now() + Duration::from_secs(10);
     while s.provider()?.served() == 0 {
         assert!(

@@ -6,6 +6,9 @@ use serde_json::{Value, json};
 
 use super::{HarnessError, harness_error};
 
+mod admission;
+pub use admission::immediate_turn_id;
+
 fn timing_route(path: &str) -> &'static str {
     match path.split('?').next().unwrap_or("") {
         "/health" => "health",

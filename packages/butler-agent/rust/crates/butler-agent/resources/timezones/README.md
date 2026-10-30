@@ -1,11 +1,12 @@
 # Frozen prompt time zone data
 
-The pack freezes the actual macOS ICU 78.1 / TZ 2026c data used by the
-Bun 1.3.11 source fixture. Bun reports ICU 74.2 in its version metadata;
+The pack freezes macOS ICU 78.1 resources with the host's TZ 2026e rules
+(ICU `zoneinfo64` and `/usr/share/zoneinfo` from the same tzdata release); the
+Bun 1.3.11 source fixture was recorded on ICU 78.1 / TZ 2026c. Bun reports ICU 74.2 in its version metadata;
 that ABI-facing value does not identify the installed resource version.
 The developer exporter checks `u_getVersion` and `zoneinfo64.TZVersion`.
 
-`source-2026c.btz` (kept in `crates/butler-platform/data`, which embeds it for `butler_platform::time_zone`) has 639 ICU names and aliases in 398640 bytes. It stores
+`source-2026e.btz` (kept in `crates/butler-platform/data`, which embeds it for `butler_platform::time_zone`) has 639 ICU names and aliases in 404693 bytes. It stores
 ICU historical transitions and source-compatible annual rules as TZif v3.
 `names-icu78.json` freezes English/root specific and metazone names with
 historical metazone intervals. `provenance.json` contains per-record and
@@ -20,14 +21,19 @@ JavaScript invocation, system zone-file read, or data download.
 ## Regeneration
 
 The packed static source data can be rebuilt on the explicitly selected macOS
-ICU 78.1 / TZ 2026c source host:
+ICU 78.1 source host; the exporter writes `source-<tzdata version>.btz` and
+asserts that ICU and the zoneinfo directory carry the same tzdata release:
 
 ```sh
 python3 generate.py --zoneinfo /usr/share/zoneinfo --output /tmp/butler-timezones
 ```
 
 The developer-only Python exporter reads system ICU resources and uses the
-selected zoneinfo POSIX footer only where ICU declares a final annual rule.
+selected zoneinfo POSIX footer where ICU declares a final annual rule. Every
+other zone gets a footer that keeps its final ICU type, offset and DST flag
+(permanent DST as an all-year rule). ICU types carry no abbreviation, so they
+use the numeric designation IANA uses for such zones (`+09`, `+0530`). A TZif without a footer leaves every time
+after its last transition undefined, so tz-rs finds no local time type there.
 ICU historical DST flags and permanent final types are retained. Missing
 SystemV files use the exact asserted ICU SystemV rule. The checked-in Bun
 date/timezone goldens remain the compatibility evidence consumed by Rust tests;

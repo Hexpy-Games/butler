@@ -167,7 +167,7 @@ async fn home_command_directory_keeps_exact_approval() -> Result<(), HarnessErro
         .start()
         .await?;
     let accepted = s.gw.say("general", provider::PROMPT).await?;
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let id = s.gw.accepted_turn(&accepted).await?;
     assert!(!marker.exists(), "No write before approval");
     super::file_paths::approve(&s, &id, &case, &script).await?;
     let turn =

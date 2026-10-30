@@ -64,7 +64,7 @@ async fn editor_authorizes_once_and_composites_for_both_providers() -> Result<()
             ],
         );
         let sent=f.s.gw.post("/messages",json!({"chat_id":"general","text":"Edit this picture","image_edit":{"image":image,"mask":mask},"client_message_id":uuid::Uuid::new_v4().to_string()})).await?;
-        let turn = accepted_turn_id(sent.data())?;
+        let turn = f.s.gw.accepted_turn(sent.data()).await?;
         let waiting =
             f.s.gw
                 .wait_turn(
@@ -183,7 +183,7 @@ async fn attached_images_import_losslessly_as_original_parents() -> Result<(), H
         )],
     );
     let sent = f.s.gw.post("/messages", json!({"chat_id":"general","text":"Edit uploaded picture","attachments":[{"file_id":file}],"client_message_id":uuid::Uuid::new_v4().to_string()})).await?;
-    let turn = accepted_turn_id(sent.data())?;
+    let turn = f.s.gw.accepted_turn(sent.data()).await?;
     delivered(&f.s, "general", &turn).await?;
     let output = f.output("attached");
     assert_eq!(output["status"], "ok", "{output}");

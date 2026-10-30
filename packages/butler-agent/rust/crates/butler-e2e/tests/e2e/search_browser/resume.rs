@@ -11,7 +11,7 @@ use axum::{
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
     security::AdminClient,
 };
 use futures_util::StreamExt;
@@ -77,7 +77,7 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
     std::fs::write(path, serde_json::to_vec(&config)?)?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let served = tokio::spawn(host::Host::attach(admin).await?.serve());
-    let turn = accepted_turn_id(&s.gw.say("general", PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", PROMPT).await?;
 
     // Two outside-file reads suspend the turn; only the unseen URL asks then.
     let mut seen = HashSet::new();

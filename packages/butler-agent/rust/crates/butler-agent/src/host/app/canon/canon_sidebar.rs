@@ -11,6 +11,15 @@ pub(super) fn execute(
             now: chrono::Utc::now().timestamp_millis(),
             actor: json!({"person": APP_PERSON_ID, "via":"app"}),
         };
+        if matches!(
+            operation,
+            AppCanonOperation::Queue { .. }
+                | AppCanonOperation::StepTurnEnded { .. }
+                | AppCanonOperation::SessionDeleted { .. }
+                | AppCanonOperation::BoundSessions
+        ) {
+            return super::queue::execute(storage, ledger, operation, ctx).await;
+        }
         let result = match operation {
             AppCanonOperation::Link {
                 work_id,
@@ -28,6 +37,10 @@ pub(super) fn execute(
                 })
                 .await
                 .map_err(error),
+            AppCanonOperation::PendingQueue { after } => storage
+                .canon_read(move |db| Ok(json!(store::queue::pending(db, after)?)))
+                .await
+                .map_err(error),
             AppCanonOperation::Pending { after } => storage
                 .canon_read(move |db| Ok(json!(store::pending_intents(db, &after, 128)?)))
                 .await
@@ -38,6 +51,7 @@ pub(super) fn execute(
                 })
                 .await
                 .map_err(error),
+            _ => Err(GatewayApplicationError::internal()),
         }?;
         progress::enrich(&storage, &ledger, result).await
     })

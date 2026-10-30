@@ -1,25 +1,71 @@
 use super::{git_support::*, *};
 
+// PG-10: each kind of capability growth is its own scenario (one fresh Agent each).
 #[tokio::test]
-async fn pg10_each_growth_requires_review_removals_narrow_and_rollback_refuses()
+async fn pg10_executable_growth_requires_review_removal_narrows_and_rollback_refuses()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    for kind in [
-        "executable",
-        "network",
-        "files",
-        "mcp_server",
-        "secret",
-        "hook",
-        "hook_script",
-        "connector",
-        "connector_server",
-        "connector_action",
-        "connector_organize",
-    ] {
-        growth(kind).await?;
-    }
-    Ok(())
+    growth("executable").await
+}
+#[tokio::test]
+async fn pg10_network_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("network").await
+}
+#[tokio::test]
+async fn pg10_files_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("files").await
+}
+#[tokio::test]
+async fn pg10_mcp_server_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("mcp_server").await
+}
+#[tokio::test]
+async fn pg10_secret_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("secret").await
+}
+#[tokio::test]
+async fn pg10_hook_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("hook").await
+}
+#[tokio::test]
+async fn pg10_hook_script_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("hook_script").await
+}
+#[tokio::test]
+async fn pg10_connector_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("connector").await
+}
+#[tokio::test]
+async fn pg10_connector_server_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("connector_server").await
+}
+#[tokio::test]
+async fn pg10_connector_action_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("connector_action").await
+}
+#[tokio::test]
+async fn pg10_connector_organize_growth_requires_review_removal_narrows_and_rollback_refuses()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    growth("connector_organize").await
 }
 async fn growth(kind: &str) -> Result<(), HarnessError> {
     let setup = git_setup(&format!("PG10-{kind}"))?;

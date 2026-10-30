@@ -1,10 +1,6 @@
 //! Concurrent observations retain every approval and resume the same model round.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
-use butler_e2e::e2e::{
-    HarnessError,
-    gateway::turn_state,
-    scenario::{Access, accepted_turn_id},
-};
+use butler_e2e::e2e::{HarnessError, gateway::turn_state, scenario::Access};
 use serde_json::json;
 use std::time::Duration;
 
@@ -25,11 +21,9 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
             std::fs::create_dir_all(&directory)?;
             std::fs::write(directory.join(format!("found-{i}.txt")), "fixture")?;
         }
-        let id = accepted_turn_id(
-            &s.gw
-                .say("general", "Calculate the total and report the result.")
-                .await?,
-        )?;
+        let id =
+            s.gw.say_turn("general", "Calculate the total and report the result.")
+                .await?;
         let paused =
             s.gw.wait_turn(
                 "general",
@@ -370,11 +364,9 @@ async fn cancelling_suspended_parallel_batch_settles_every_request_and_row()
             std::fs::create_dir_all(&root)?;
             std::fs::write(root.join(format!("found-{i}.txt")), "fixture")?;
         }
-        let id = accepted_turn_id(
-            &s.gw
-                .say("general", "Calculate the total and report the result.")
-                .await?,
-        )?;
+        let id =
+            s.gw.say_turn("general", "Calculate the total and report the result.")
+                .await?;
         let paused =
             s.gw.wait_turn(
                 "general",

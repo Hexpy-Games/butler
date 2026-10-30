@@ -1,0 +1,79 @@
+# The experimental gpui desktop shell (실험). A separate workspace from
+# packages/butler-agent/rust: it pins gpui to the Butler fork of gpui-ce (tag
+# butler-lens-2) and adapts the UI-independent agent client.
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+publish = false
+
+# Test inherits dev. Keep shell source lines in backtraces without emitting
+# variable/type debug info; dependency internals need a local debug override.
+[profile.dev]
+debug = "line-tables-only"
+
+# gpui and its dependency graph dominate cold test codegen and debug linking.
+# Keep assertions and all tests, but omit dependency debug info in this workspace.
+[profile.dev.package."*"]
+debug = 0
+
+[workspace.dependencies]
+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0ca21f5eed86555f622767db68049164125172f6", package = "gpui-ce" }
+gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0ca21f5eed86555f622767db68049164125172f6", package = "gpui_ce_platform" }
+gpui_wgpu = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0ca21f5eed86555f622767db68049164125172f6", package = "gpui_ce_wgpu" }
+anyhow = "1"
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+sys-locale = "0.3"
+unicode-segmentation = "1.12"
+
+# The agent workspace's lints (packages/butler-agent/rust/Cargo.toml), without the allowances
+# that only apply there.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+# No panics in production code. Tests may unwrap/expect/panic (clippy.toml).
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+await_holding_lock = "deny"
+# Markdown parsing and layout index slices they have just bounded.
+indexing_slicing = "allow"
+
+# Pedantic lints that are allowed, with the reason each one is noise here:
+# Function length is bounded by source-check (80 lines) and module structure.
+too_many_lines = "allow"
+# `.map(f).unwrap_or(d)` reads left to right; `map_or(d, f)` inverts it.
+map_unwrap_or = "allow"
+# Pixel geometry and counts converted to f32 stay far below 2^24.
+cast_precision_loss = "allow"
+# `match` with an explicit else arm is as clear as `if let` .. `else`.
+single_match_else = "allow"
+# Colour components, ratios and pixel positions are compared exactly by design.
+float_cmp = "allow"
+# Local helper items next to their only use read better than hoisted ones.
+items_after_statements = "allow"
+# Pairs like `left`/`right`, `before`/`after` are deliberate.
+similar_names = "allow"
+# Internal crate: `#[must_use]`/`# Errors` docs on every fn add noise, not safety.
+must_use_candidate = "allow"
+return_self_not_must_use = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Backticks in prose docs are cosmetic.
+doc_markdown = "allow"
+# `Default::default()` in struct literals avoids repeating long type names.
+default_trait_access = "allow"
