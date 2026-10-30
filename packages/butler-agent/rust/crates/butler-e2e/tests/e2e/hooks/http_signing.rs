@@ -34,6 +34,17 @@ pub(super) async fn save(
     api(s, Method::PUT, "/hooks", Some(body)).await
 }
 
+/// Waits for the sweep that follows a save to delete `secret` from the store.
+pub(super) async fn store_loses(s: &Scenario, secret: &str) -> Result<(), HarnessError> {
+    let path = s.sandbox.data.join("auth/credential-store.json");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while fs::read_to_string(&path)?.contains(secret) {
+        assert!(Instant::now() < deadline, "the key was not deleted");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    Ok(())
+}
+
 /// Every file under `dir` except the credential store and its lock.
 fn assert_not_on_disk(dir: &Path, secret: &str) {
     let store = dir.join("auth");
@@ -106,7 +117,7 @@ async fn hooks_http_requests_are_signed_and_the_secret_stays_private() -> Result
     assert!(!signature_matches(&seen[1], &generated));
     let store = fs::read_to_string(s.sandbox.data.join("auth/credential-store.json"))?;
     assert!(store.contains(chosen), "kept in the credential store");
-    assert!(!store.contains(&generated), "replaced");
+    store_loses(&s, &generated).await?;
     assert_private(&s, chosen).await?;
     let logs = s.gw.get("/logs?category=http.client&limit=1000").await?;
     assert!(logs.text.contains("hooks.http"), "rows were logged");
@@ -132,8 +143,7 @@ async fn hooks_http_requests_are_signed_and_the_secret_stays_private() -> Result
     // Removing the hook removes its secret.
     let removed = save(&s, json!([]), json!({})).await?;
     assert_eq!(removed.status, 200, "{removed:?}");
-    let store = fs::read_to_string(s.sandbox.data.join("auth/credential-store.json"))?;
-    assert!(!store.contains(chosen), "removed with its hook");
+    store_loses(&s, chosen).await?;
     s.finish().await
 }
 
@@ -162,14 +172,21 @@ async fn hooks_http_hand_edited_hook_is_never_sent_unsigned() -> Result<(), Harn
     assert_eq!(tested.data()["outcome"], "error", "{tested:?}");
     assert!(endpoint.seen("/manual").is_empty());
 
-    // Saving it once creates the secret the receiver needs.
-    let saved = save(&s, json!([hook]), json!({})).await?;
-    let generated = saved.data()["generated_secrets"]["manual"]
-        .as_str()
-        .unwrap();
+    // Saving the list unchanged, as Settings does, does not activate the edit.
+    let unchanged = save(&s, json!([hook]), json!({})).await?;
+    assert_eq!(unchanged.status, 200, "{unchanged:?}");
+    assert!(unchanged.data().get("generated_secrets").is_none());
+    let tested = api(&s, Method::POST, "/hooks/manual/test", Some(json!({}))).await?;
+    assert_eq!(tested.data()["outcome"], "error", "{tested:?}");
+    assert!(endpoint.seen("/manual").is_empty());
+
+    // Setting a secret adopts it, and that secret signs.
+    let chosen = "secret-the-receiver-was-given";
+    let adopted = save(&s, json!([hook]), json!({"manual": chosen})).await?;
+    assert_eq!(adopted.status, 200, "{adopted:?}");
     let tested = api(&s, Method::POST, "/hooks/manual/test", Some(json!({}))).await?;
     assert_eq!(tested.data()["outcome"], "continue", "{tested:?}");
-    assert!(signature_matches(&endpoint.seen("/manual")[0], generated));
+    assert!(signature_matches(&endpoint.seen("/manual")[0], chosen));
     s.finish().await
 }
 
@@ -181,7 +198,7 @@ async fn hooks_http_plain_http_is_loopback_only() -> Result<(), HarnessError> {
     for url in [
         "http://hooks.example.com/hook",
         "HTTP://hooks.example.com/hook",
-        "http://192.168.1.8/hook",
+        "http://192.168.0.20/hook", // privacy-hygiene: allow-private-ip (a LAN host is refused)
         "http://0.0.0.0/hook",
         "http://127.0.0.1.example.com/hook",
         "http://localhost.example.com/hook",

@@ -195,8 +195,8 @@ Every request is signed. `X-Butler-Timestamp` is the Unix time in seconds and
 body>` under the hook's secret. Receivers should recompute it over the raw bytes,
 compare in constant time and refuse old timestamps.
 
-Saving a hook through `PUT /hooks` creates a secret when it has none and returns
-it once in `generated_secrets`. Set your own (16 to 1024 characters) with
+A `PUT /hooks` that adds a hook or changes its URL creates a secret when it has
+none for that origin, and returns it once in `generated_secrets`. Set your own (16 to 1024 characters) with
 `"secrets": {"<hook id>": "<secret>"}` next to `config`. Secrets are kept in the
 same credential store as provider API keys, never in `hooks.json`, and no other
 response, run record, log or error contains them.
@@ -204,8 +204,15 @@ response, run record, log or error contains them.
 A secret belongs to one URL origin (scheme, host and port). Changing a hook's
 origin through `PUT /hooks` issues a new secret, unless you set one. A hook written
 into the file signs only if a secret was already saved for that id and origin;
-otherwise it fails without sending anything until it is saved once through `PUT
-/hooks`. A `secret` field in the file is invalid.
+otherwise it fails without sending anything until `PUT /hooks` sets one with
+`"secrets"`. Saving it unchanged does not issue one. A `secret` field in the file
+is invalid.
+
+A new secret signs only once its save completes with the client still connected.
+A save that fails, or whose client disconnects first, changes nothing: the old URL
+and secret keep working, and any other part of that request does not apply. If the
+process stops after saving the configuration but before the secret takes effect,
+the hook refuses to send until the next save issues a new one.
 
 Redirects are not followed. A 2xx response body is read like
 command stdout: the same decision JSON denies a pre-event, and an empty or
