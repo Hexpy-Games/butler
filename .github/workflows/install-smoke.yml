@@ -2,8 +2,8 @@ name: Install smoke
 
 # The CLI install path end to end, without a published release: build the
 # standalone Agent archive on each native runner, serve it locally, install it
-# with deploy/install.sh, run the agent headless (version, start, authenticated /health, stop) and install
-# again. Nothing is published.
+# with deploy/install.sh, run the agent headless (version, start, authenticated
+# /health, stop) and install again. Nothing is published.
 
 on:
   workflow_call:
