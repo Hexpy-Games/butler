@@ -58,6 +58,12 @@ fn message(
         ("provider_response_refused", false) => Some("Model refused the response."),
         ("provider_safety_error", true) => Some("안전 필터에 걸렸습니다."),
         ("provider_safety_error", false) => Some("Provider safety filter."),
+        ("provider_first_response_timeout", true) => {
+            Some("모델이 응답 대기 시간 안에 답하지 않았습니다.")
+        }
+        ("provider_first_response_timeout", false) => {
+            Some("The model didn't respond within its response timeout.")
+        }
         _ => None,
     };
     if let Some(short) = short.filter(|_| !work_completed) {
@@ -101,7 +107,10 @@ fn cause(failure: &RuntimeFailure, korean: bool) -> &'static str {
         ("provider_quota_exhausted", true) => "모델 제공자의 사용량 한도가 소진되어",
         ("provider_auth_error", true) => "모델 제공자 인증에 실패해",
         ("provider_network_error" | "provider_stream_interrupted", true) => "모델과의 연결이 끊겨",
-        ("provider_round_timeout" | "provider_timeout", true) => "모델의 응답을 받지 못해",
+        (
+            "provider_round_timeout" | "provider_timeout" | "provider_first_response_timeout",
+            true,
+        ) => "모델의 응답을 받지 못해",
         ("provider_empty_response", true) => "모델이 답변을 반환하지 않아",
         ("provider_request_rejected" | "provider_bad_request", true) => {
             "모델 제공자가 요청을 거부해"
@@ -128,7 +137,10 @@ fn cause(failure: &RuntimeFailure, korean: bool) -> &'static str {
         ("provider_network_error" | "provider_stream_interrupted", false) => {
             "An interrupted model connection"
         }
-        ("provider_round_timeout" | "provider_timeout", false) => "A model response timeout",
+        (
+            "provider_round_timeout" | "provider_timeout" | "provider_first_response_timeout",
+            false,
+        ) => "A model response timeout",
         ("provider_empty_response", false) => "An empty model response",
         ("provider_request_rejected" | "provider_bad_request", false) => {
             "The model provider's request rejection"

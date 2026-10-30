@@ -169,6 +169,7 @@ pub(super) fn blank_metadata() -> ModelProviderMetadata {
         server_url: None,
         source: None,
         local_reasoning_budget_ratio: None,
+        response_timeout_ms: None,
         registered: None,
         enabled: None,
         auth_type: None,

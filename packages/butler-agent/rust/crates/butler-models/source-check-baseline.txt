@@ -7,4 +7,4 @@ src/models/configuration/provider.rs	ModelConfiguration::resolve_request	95
 src/models/provider/prompt/serialize.rs	responses	92
 src/models/provider/serialize/stable.rs	identity	138
 src/models/request_admission.rs	PreparedRequestAdmission::admit_with_snapshot	121
-src/models/transport.rs	execute	119
+src/models/transport.rs	execute	112

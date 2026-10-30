@@ -10,12 +10,13 @@ import { AutomationTargetsPanel } from "../inspector/AutomationTargetsPanel.tsx"
 import { MessageAttachments } from "../conversation/MessageAttachments.tsx";
 import { SessionSection, SessionSectionList } from "./SessionSection.tsx";
 import { PendingAskRows } from "./PendingAskRows.tsx";
+import { SubtaskRows } from "./SubtaskRows.tsx";
 import { useSessionSectionsModel } from "./useSessionSectionsModel.ts";
 
 /** The same ordered sections on the flat margin and on floating glass. */
 export function SessionSections({ layout }: { layout: AsideLayout }) {
   useAppLocale();
-  const { ids, sessionId, summary, epic, asks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting } = useSessionSectionsModel();
+  const { ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting } = useSessionSectionsModel();
   const sections = new Set(ids);
   const setView = useButlerStore(state => state.setView);
   const [contextOpen, setContextOpen] = useState(false);
@@ -23,6 +24,9 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
   return <SessionSectionList layout={layout}>
     {sections.has("asks") && asks && <SessionSection id="asks" layout={layout} title={c.asks} count={asks.open_count}>
       <PendingAskRows asks={asks.asks} />
+    </SessionSection>}
+    {sections.has("subtasks") && <SessionSection id="subtasks" layout={layout} title={c.subtasks} count={subtasks.length}>
+      <SubtaskRows parentId={sessionId} subtasks={subtasks} />
     </SessionSection>}
     {/* The model filters it, so a hidden browser section leaves no floating separator. */}
     {sections.has("browser") && <BrowserSection key="browser" layout={layout} session={sessionId} tabs={browserTabs} />}

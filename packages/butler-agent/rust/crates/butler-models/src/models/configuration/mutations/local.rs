@@ -187,6 +187,8 @@ fn normalize_local_input(
         "max_output_tokens":input.max_output_tokens,
         "reasoning_budget_ratio":input.reasoning_budget_ratio,
         "image_input":input.image_input.unwrap_or_else(|| previous.and_then(|model| model.image_input)),
+        "response_timeout_ms":input.response_timeout_ms
+            .unwrap_or_else(|| previous.and_then(|model| model.response_timeout_ms)),
         "source":input.source,
         "created_at":previous.map(|value| &value.created_at),
         "updated_at":now

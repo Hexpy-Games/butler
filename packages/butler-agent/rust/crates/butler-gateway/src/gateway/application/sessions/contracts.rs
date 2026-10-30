@@ -164,6 +164,13 @@ pub struct AppSessionSummary {
     pub active_turn_state: Option<String>,
     pub running_delegated_work: bool,
     pub attention_required: bool,
+    /// Where the attention comes from: `self`, `subtask` (only open subtasks
+    /// wait, each shown on its own row) or `both`. Absent without attention.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attention_source: Option<&'static str>,
+    /// Unfinished delegated subtasks, in start order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub subtasks: Vec<butler_turn::btcc::OpenSubtask>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_status_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -26,7 +26,8 @@ try {
   await page.locator('[contenteditable="true"]').fill("Delegate a three step progress check.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   const card = page.locator('[data-test-class~="steward-parent-progress-card"]');
-  const pill = page.locator('[data-test-class="steward-progress-capsule"]');
+  // 세션 정보 lists the unfinished subtask; it replaced the composer capsule.
+  const pill = page.locator('[data-test-class="subtask-row"]');
   const dialog = page.locator('[data-test-class="steward-observer-dialog"]');
   try { await card.getByText(/1\/3/).waitFor(); } catch (error) {
     console.error(JSON.stringify({ body: await page.locator("body").innerText(), calls: server.stubModelCalls.length }));
@@ -37,9 +38,13 @@ try {
   assert(activityLabel !== null && activityLabel.trim().length > 0, "delegated activity label is present");
   assert(!/tool\s*usage|tool\s*use|use tool|working|work in progress|도구 사용|작업 중|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/iu.test(activityLabel),
     `delegated activity names the current work without a generic label or internal id: ${activityLabel}`);
-  const parent = await server.api<{ active_turn: unknown; steward_children: unknown[] }>("/session-view?session_id=general");
+  const parent = await server.api<{ active_turn: unknown; steward_children: unknown[]; subtasks: { state: string }[] }>("/session-view?session_id=general");
   assert.equal(parent.active_turn, null, "parent has ended while child runs");
   assert.equal(parent.steward_children.length, 1);
+  assert.deepEqual(parent.subtasks.map(subtask => subtask.state), ["working"], "the open child is one working subtask");
+  const navigation = await server.api<{ chats: { id: string; subtasks?: unknown[] }[] }>("/navigation");
+  assert.equal(navigation.chats.find(chat => chat.id === "general")?.subtasks?.length, 1, "the navigation row carries the subtask");
+  await page.locator('[data-test-class="session-info-toggle"]').click();
   await pill.click();
   await dialog.waitFor();
   const url = page.url();
@@ -49,7 +54,7 @@ try {
     await stub.whenHeld();
     stub.advance();
     try { await page.waitForFunction(({ progress, checkpoint }) => {
-      const selectors = ['[data-test-class~="steward-parent-progress-card"]', '[data-test-class="steward-progress-capsule"]'];
+      const selectors = ['[data-test-class~="steward-parent-progress-card"]', '[data-test-class="subtask-row"]'];
       return selectors.every(selector => document.querySelector(selector)?.textContent?.includes(progress)) &&
         document.querySelector('[data-test-class="steward-observer-dialog"]')?.textContent?.includes(checkpoint);
     }, { progress, checkpoint }); } catch (error) {
@@ -60,7 +65,7 @@ try {
   }
   assert.equal(navigations, 0, "no reload or navigation");
   assert.equal(page.url(), url);
-  console.log(JSON.stringify({ ok: true, browser: browser.name, realSSE: true, parentEnded: true, surfaces: ["card", "progress", "pill", "modal"], navigations }));
+  console.log(JSON.stringify({ ok: true, browser: browser.name, realSSE: true, parentEnded: true, surfaces: ["card", "progress", "session-info-subtask", "modal"], navigations }));
 } finally {
   stub.release();
   await browser.close();

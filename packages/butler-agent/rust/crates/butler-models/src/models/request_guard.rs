@@ -1,5 +1,9 @@
 //! One physical request owns its operation, cancellation and inline deadlines.
 //! No task, listener registry or per-Turn map survives this future.
+//!
+//! Until an attempt's first output event (text, reasoning or a tool call)
+//! arrives only the total limit applies: a slow prefill sends no output and
+//! is not a stall. After it, the idle limit detects a stream that stops.
 
 use parking_lot::Mutex;
 use std::future::Future;
@@ -18,8 +22,21 @@ pub(super) struct RequestPolicy {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TimeoutKind {
+    /// The total limit passed before the attempt's first output event.
+    FirstResponse,
     Total,
     Idle,
+}
+
+impl TimeoutKind {
+    /// The `timeout_kind` a provider error reports.
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::FirstResponse => "first_response",
+            Self::Total => "total",
+            Self::Idle => "idle",
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -59,16 +76,30 @@ impl RequestProgress {
         if state.disposed || self.shared.cancellation.is_cancelled() || state.started.is_some() {
             return;
         }
-        let now = Instant::now();
-        state.started = Some(now);
-        state.progress = Some(now);
+        state.started = Some(Instant::now());
         drop(state);
         self.shared.changed.notify_one();
     }
 
-    pub(super) fn record_progress(&self) {
+    /// A new physical attempt waits for its own first output event.
+    pub(super) fn await_first_response(&self) {
         let mut state = self.shared.deadlines.lock();
-        if state.disposed || self.shared.cancellation.is_cancelled() {
+        if state.disposed {
+            return;
+        }
+        state.progress = None;
+        drop(state);
+        self.shared.changed.notify_one();
+    }
+
+    /// One response event: `output` (model output) arms stall detection for
+    /// this attempt; after that, every event resets the idle limit.
+    pub(super) fn record_event(&self, output: bool) {
+        let mut state = self.shared.deadlines.lock();
+        if state.disposed
+            || self.shared.cancellation.is_cancelled()
+            || (!output && state.progress.is_none())
+        {
             return;
         }
         let now = Instant::now();
@@ -83,12 +114,13 @@ impl RequestProgress {
             let next = {
                 let state = self.shared.deadlines.lock();
                 state.started.map(|start| {
-                    let total = (start + self.shared.policy.total, TimeoutKind::Total);
+                    let total = start + self.shared.policy.total;
                     match (state.progress, self.shared.policy.idle) {
-                        (Some(progress), Some(idle)) if progress + idle < total.0 => {
+                        (None, _) => (total, TimeoutKind::FirstResponse),
+                        (Some(progress), Some(idle)) if progress + idle < total => {
                             (progress + idle, TimeoutKind::Idle)
                         }
-                        _ => total,
+                        (Some(_), _) => (total, TimeoutKind::Total),
                     }
                 })
             };

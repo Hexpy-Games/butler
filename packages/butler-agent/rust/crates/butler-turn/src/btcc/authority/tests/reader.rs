@@ -73,7 +73,7 @@ pub(super) async fn committed_reads(
                     .attention_owners(vec!["session".into()])
                     .await
                     .unwrap(),
-                Vec::<String>::new()
+                Vec::<(String, bool)>::new()
             );
         }
     })

@@ -171,6 +171,9 @@ fn local_registration(value: &Value) -> bool {
             && input
                 .get("image_input")
                 .is_none_or(|value| value.is_null() || value.is_boolean())
+            && input.get("response_timeout_ms").is_none_or(|value| {
+                value.is_null() || butler_models::models::local_response_timeout_ms(value).is_some()
+            })
             && !input.contains_key("image_discovery")
             && optional_string(input.get("display_name"))
             && optional_api_key(input.get("api_key"))

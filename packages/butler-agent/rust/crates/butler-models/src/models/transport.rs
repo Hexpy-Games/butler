@@ -185,16 +185,9 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
         Err(GuardError::Cancelled) => Err(ModelRoundError::Provider(Box::new(
             diagnostics::cancelled(provider, api),
         ))),
-        Err(GuardError::Timeout(kind)) => {
-            Err(ModelRoundError::Provider(Box::new(diagnostics::timeout(
-                provider,
-                api,
-                match kind {
-                    super::request_guard::TimeoutKind::Total => "total",
-                    super::request_guard::TimeoutKind::Idle => "idle",
-                },
-            ))))
-        }
+        Err(GuardError::Timeout(kind)) => Err(ModelRoundError::Provider(Box::new(
+            diagnostics::timeout(provider, api, kind.label()),
+        ))),
     }
 }
 
@@ -216,12 +209,14 @@ async fn send_attempt(
     mode: ResponseMode,
 ) -> Result<Value, Box<ProviderRequestError>> {
     let timing = timing::Timing::new();
+    progress.await_first_response();
     let response = current
         .send()
         .await
         .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
+    // Headers alone are not the first response: servers may send them
+    // before a long prefill. The first output event starts stall detection.
     timing.mark("headers_received");
-    progress.record_progress();
     plan_limit::read(
         response,
         mode,
