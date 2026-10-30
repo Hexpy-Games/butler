@@ -205,3 +205,36 @@ async fn onboarding_entry_precedes_generated_cards_until_profile_completion()
     assert_eq!(fallback.data()["suggestions"].as_array().unwrap().len(), 4);
     s.finish().await
 }
+
+/// The project fallback briefing names the project exactly as its owner did,
+/// whatever its case.
+#[tokio::test]
+async fn project_fallback_briefing_keeps_the_display_name_as_given() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BRIEFING-PROJECT-NAME")?
+        .fixture(Fixture::Ready)
+        .start()
+        .await?;
+    for name in ["orchard notes", "Harbor-Lights"] {
+        let created =
+            s.gw.post("/projects", json!({"source":"scratch","display_name":name}))
+                .await?;
+        assert_eq!(created.status, 201, "{}", created.text);
+        let id = created.data()["project"]["id"].as_str().unwrap().to_owned();
+        let briefing =
+            s.gw.get(&format!(
+                "/new-chat-briefing?date=2026-09-26&project_id={id}"
+            ))
+            .await?;
+        assert_eq!(briefing.status, 200, "{}", briefing.text);
+        let view = briefing.data();
+        assert_eq!(view["source"]["content_origin"], "heuristic_fallback");
+        assert_eq!(view["source"]["project_name"], name);
+        assert_eq!(view["title"], format!("What should we continue in {name}?"));
+        assert_eq!(
+            view["description"],
+            format!("A few {name} starting points are ready.")
+        );
+    }
+    s.finish().await
+}
