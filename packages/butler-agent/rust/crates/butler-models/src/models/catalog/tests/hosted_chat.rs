@@ -6,8 +6,8 @@ pub(super) fn assert_hosted_chat_catalog_presets_limits_and_wire_policy() {
         (
             "deepseek",
             "deepseek-flash",
-            1_000_000.0,
-            384_000.0,
+            1_048_576.0,
+            393_216.0,
             ReasoningEffort::High,
         ),
         (

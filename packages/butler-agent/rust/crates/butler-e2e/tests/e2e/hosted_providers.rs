@@ -47,6 +47,7 @@ async fn register(
     provider: &str,
     model: &str,
     effort: &str,
+    created: bool,
 ) -> Result<(), HarnessError> {
     let verified =
         s.gw.post(
@@ -61,7 +62,13 @@ async fn register(
             json!({"provider_id":provider,"api_key":"e2e-placeholder"}),
         )
         .await?;
-    assert_eq!(saved.status, 201, "{}", saved.text);
+    assert_eq!(
+        saved.status,
+        if created { 201 } else { 200 },
+        "{}",
+        saved.text
+    );
+    assert_eq!(saved.data()["created"], created);
     let credential_id = saved.data()["credential"]["id"]
         .as_str()
         .unwrap()
@@ -87,6 +94,7 @@ async fn register(
 async fn settings_keys_select_and_route_each_hosted_provider() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, _server) = start().await?;
+    let mut connected = std::collections::BTreeSet::new();
     for (provider, model, effort) in [
         ("deepseek", "deepseek-flash", "high"),
         ("deepseek", "deepseek-v4-pro", "none"),
@@ -94,7 +102,7 @@ async fn settings_keys_select_and_route_each_hosted_provider() -> Result<(), Har
         ("upstage", "solar-mini4", "none"),
         ("motif", "motif/motif-3", "none"),
     ] {
-        register(&s, provider, model, effort).await?;
+        register(&s, provider, model, effort, connected.insert(provider)).await?;
     }
     s.finish().await
 }

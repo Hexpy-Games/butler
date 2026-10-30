@@ -63,9 +63,16 @@ async fn chat(State(wire): State<Wire>, Json(body): Json<Value>) -> impl IntoRes
         body["model"].as_str().unwrap()
     };
     let mut text = String::from(": keep-alive\n\n");
-    for (i, delta) in deltas.iter().enumerate() {
+    for (i, original) in deltas.iter().enumerate() {
+        let mut delta = original.clone();
+        if wire.field == "reasoning_content" {
+            let object = delta.as_object_mut().unwrap();
+            object.entry("content").or_insert(Value::Null);
+            object.entry("reasoning_content").or_insert(Value::Null);
+        }
         let mut chunk =
             json!({"model":reported,"choices":[{"index":0,"delta":delta,"finish_reason":null}]});
+        chunk["usage"] = Value::Null;
         if wire.cumulative {
             chunk["usage"] =
                 json!({"prompt_tokens":240,"completion_tokens":i+1,"total_tokens":241+i});
@@ -73,10 +80,13 @@ async fn chat(State(wire): State<Wire>, Json(body): Json<Value>) -> impl IntoRes
         text.push_str(&format!("data: {chunk}\n\n"));
     }
     let mut usage = if wire.field == "reasoning_content" {
-        json!({"prompt_tokens":240,"completion_tokens":80,"total_tokens":320,"prompt_cache_hit_tokens":40,"completion_tokens_details":{"reasoning_tokens":66}})
+        json!({"prompt_tokens":240,"completion_tokens":80,"total_tokens":320,"prompt_cache_hit_tokens":40,"prompt_cache_miss_tokens":200,"completion_tokens_details":{"reasoning_tokens":66}})
     } else {
         json!({"prompt_tokens":240,"completion_tokens":80,"total_tokens":320,"prompt_tokens_details":{"cached_tokens":40},"completion_tokens_details":{"reasoning_tokens":66}})
     };
+    if wire.field == "reasoning_content" && followup {
+        usage["prompt_tokens_details"] = json!({"cached_tokens":40});
+    }
     if wire.cumulative {
         usage["prompt_tokens_details"]["created_cache_tokens"] = 128.into();
         usage
