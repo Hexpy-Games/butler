@@ -148,7 +148,7 @@ impl AppAuthorityHandoff for AuthorityHandoff {
         })
     }
 
-    fn attention_sessions(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<String>> {
+    fn attention_sessions(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<(String, bool)>> {
         let authority = self.authority.clone();
         Box::pin(async move {
             authority

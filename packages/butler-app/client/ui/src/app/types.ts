@@ -794,6 +794,10 @@ export interface SessionSummary {
   active_turn_state?: string;
   running_delegated_work?: boolean;
   attention_required?: boolean;
+  /** Where the attention comes from; `subtask` when only open subtasks wait. */
+  attention_source?: "self" | "subtask" | "both";
+  /** Unfinished delegated subtasks, in start order. */
+  subtasks?: SubtaskView[];
   pinned: boolean;
   archived: boolean;
   last_message_preview?: string;
@@ -1187,6 +1191,19 @@ export interface StewardResultView {
   created_at: string;
 }
 
+export type SubtaskState = "working" | "paused" | "needs_approval";
+
+/** One unfinished delegated subtask (a steward child) of a conversation. */
+export interface SubtaskView {
+  session_id: string;
+  relation_id: string;
+  title: string;
+  state: SubtaskState;
+  plan_completed?: number;
+  plan_total?: number;
+  started_at: string;
+}
+
 export interface StewardSessionSummaryView {
   relation: SessionRelationView;
   session_id: string;
@@ -1239,6 +1256,7 @@ export interface SessionView {
   parent_session_id?: string;
   relation?: SessionRelationView;
   steward_children?: StewardSessionSummaryView[];
+  subtasks?: SubtaskView[];
   generated_at: string;
   updated_at: string;
 }
@@ -1720,6 +1738,7 @@ export interface SessionSummaryView {
   worker_activity?: WorkerActivitySummary[];
   work_streams?: WorkStreamSummary[];
   steward_children?: StewardSessionSummaryView[];
+  subtasks?: SubtaskView[];
 }
 
 export interface TimelineEvent {

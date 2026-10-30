@@ -6,10 +6,10 @@ import { useSessionUnread } from "@/app/space/unread";
 import type { SessionSummary } from "@/app/types";
 
 /** The row's one trailing mark at rest: attention, then working, then unread. */
-export function SpaceActivity({ session, running = false }: { session?: SessionSummary; running?: boolean }) {
+export function SpaceActivity({ session, running = false, nested = false }: { session?: SessionSummary; running?: boolean; nested?: boolean }) {
   useAppLocale();
   const unread = useSessionUnread(session);
-  const activity = running ? "working" : spaceActivity(session);
+  const activity = running ? "working" : spaceActivity(session, nested);
   if (!activity) return <UnreadDot label={appCopy.space.unread} present={unread} />;
   return (
     <IconSlot

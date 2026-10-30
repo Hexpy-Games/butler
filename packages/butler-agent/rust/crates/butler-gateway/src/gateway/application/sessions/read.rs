@@ -315,6 +315,8 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         active_turn_state: row.state,
         running_delegated_work: false,
         attention_required: false,
+        attention_source: None,
+        subtasks: Vec::new(),
         safe_status_label: label.map(str::to_owned),
         safe_status_label_key: None,
         safe_status_label_parameters: parameters,

@@ -20,6 +20,23 @@ activity status, a disclosure chevron) at rest and swaps in row actions (a row
 menu) on row hover, keyboard focus or while `open`; phones keep the rest
 content and open row menus with a long press.
 
+`NavRowChildren` nests rows under the NavRow just before it (a chat's
+subtasks). It draws a 1px guide line, `--line`, centred on the parent's icon
+column at `--sidebar-row-padding-inline` + `--sidebar-icon-size` / 2, so the
+line follows the density (compact, comfortable, touch, and comfortable on
+phones). Give the children `reserveIcon` so their labels start where the
+parent's label starts; give their trailing slot the parent's shape (a
+`NavRowSwap`, or an IconButton the width of the row menu) so their marks sit on
+the parent's status column. Inside a `SidebarShell` it follows the shell's
+density; standalone, pass the same `density` as the parent row.
+
+```tsx
+<NavRow icon={<Notebook />} label="Find the sign-in error" onClick={open} actions={rowMenu} />
+<NavRowChildren>
+  <NavRow reserveIcon label="Review the token refresh logic" onClick={openChild} actions={childSlot} />
+</NavRowChildren>
+```
+
 ## What is this block
 
 NavRow is a Butler design-system block for building navigation rows with icon, label, optional badge, and inline actions.
