@@ -68,8 +68,11 @@ async function openChat(page: Page, title: string) {
 
 async function openPopover(page: Page, id: string, total: string) {
   const preview = page.locator('[data-slot="composer-compact-preview"]');
-  if (await preview.isVisible()) await preview.click();
-  await Promise.all([usageResponse(page, id), page.locator('[data-test-class="context-donut-button"]').click()]);
+  // Listen first: on a narrow window the expanding composer puts the donut under the pointer, and hover opens and fetches.
+  await Promise.all([usageResponse(page, id), (async () => {
+    if (await preview.isVisible()) await preview.click();
+    await page.locator('[data-test-class="context-donut-button"]').click();
+  })()]);
   const popover = page.locator('[data-test-class="context-popover"]');
   await popover.locator('[data-slot="usage-bars"][data-state="ready"]').waitFor();
   await readoutShows(popover, total);
