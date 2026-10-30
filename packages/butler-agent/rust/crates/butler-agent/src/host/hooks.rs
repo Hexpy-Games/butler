@@ -1,6 +1,7 @@
 //! Process-owned user hook registry; no workers, watchers or idle timers.
 mod decision;
 mod execute;
+mod http;
 mod registry;
 use butler_core::hooks::*;
 use parking_lot::RwLock;
@@ -29,6 +30,7 @@ struct Hooks {
     state: RwLock<State>,
     mutation: tokio::sync::Mutex<()>,
     pool: Arc<tokio::sync::Semaphore>,
+    http: tokio::sync::OnceCell<butler_log::http::Client>,
     shutdown: CancellationToken,
 }
 impl Dispatcher {
@@ -58,6 +60,7 @@ impl Dispatcher {
             }),
             mutation: tokio::sync::Mutex::new(()),
             pool: Arc::new(tokio::sync::Semaphore::new(8)),
+            http: tokio::sync::OnceCell::new(),
             shutdown,
         });
         let _ = registry::reload(&hooks).await;

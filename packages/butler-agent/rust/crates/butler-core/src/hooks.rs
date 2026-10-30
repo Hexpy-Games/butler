@@ -1,4 +1,4 @@
-//! User-authored lifecycle command hooks and their process ports.
+//! User-authored lifecycle command and HTTP hooks and their ports.
 mod config;
 mod event;
 pub use config::{HookConfig, HookDefinition, HookMatcher};
@@ -34,11 +34,14 @@ pub struct HookRun {
     pub reason: Option<String>,
     /// Process exit code, absent on signal or spawn failure.
     pub exit_code: Option<i32>,
+    /// HTTP hook response status, absent for commands or without a response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http_status: Option<u16>,
     /// Elapsed milliseconds.
     pub duration_ms: u64,
-    /// At most 4 KiB of stdout for diagnostics.
+    /// At most 4 KiB of stdout (HTTP response body) for diagnostics.
     pub stdout: String,
-    /// At most 4 KiB of stderr for diagnostics.
+    /// At most 4 KiB of stderr (HTTP failure) for diagnostics.
     pub stderr: String,
 }
 /// Process-owned dispatcher, shared by gateway and turn execution.
