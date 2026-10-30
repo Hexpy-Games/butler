@@ -75,12 +75,23 @@ struct Seed {
     project: String,
     chat: String,
 }
+const SEEDED_CHATS: [&str; 7] = [
+    "chat_canon",
+    "chat_queue",
+    "chat_blocks",
+    "chat_docs",
+    "chat_images",
+    "chat_login",
+    "chat_crates",
+];
 async fn seeded(id: &str, extra: &str) -> Result<Seed, HarnessError> {
     let mut s = Setup::new(id)?.start().await?;
     let project = project(&s).await?;
+    // Every 과제 the seed links to a conversation gets a real one: startup removes links to
+    // sessions that no longer exist.
     let mut chats = Vec::new();
     let mut hints = Vec::new();
-    for _ in 0..2 {
+    for _ in SEEDED_CHATS {
         let c = data(s.gw.post("/sessions", json!({"kind":"chat"})).await?, 201);
         chats.push(c["session"]["id"].as_str().unwrap().to_owned());
         hints.push(c["session"]["session_hint"].as_str().unwrap().to_owned());
@@ -88,10 +99,11 @@ async fn seeded(id: &str, extra: &str) -> Result<Seed, HarnessError> {
     s.agent.terminate().await?;
     // Static preview-14 data is seeded while stopped, before the measured start.
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let seed = include_str!("../../fixtures/work-model-p14/seed.sql")
-        .replace("'butler'", &format!("'{project}'"))
-        .replace("'chat_canon'", &format!("'{}'", hints[0]))
-        .replace("'chat_queue'", &format!("'{}'", hints[1]));
+    let seed = SEEDED_CHATS.iter().zip(&hints).fold(
+        include_str!("../../fixtures/work-model-p14/seed.sql")
+            .replace("'butler'", &format!("'{project}'")),
+        |seed, (name, hint)| seed.replace(&format!("'{name}'"), &format!("'{hint}'")),
+    );
     db.execute_batch("PRAGMA foreign_keys=ON")?;
     db.execute_batch(include_str!(
         "../../fixtures/work-model-p14/merged-schema.sql"
