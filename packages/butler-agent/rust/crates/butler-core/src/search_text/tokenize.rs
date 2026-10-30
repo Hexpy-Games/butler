@@ -86,7 +86,7 @@ fn ascii_tokens(text: &str) -> Vec<String> {
 }
 
 fn unicode_tokens(text: &str, query: bool, mut weak: Option<&mut Vec<String>>) -> Vec<String> {
-    let normalized = crate::cognition::lexical::case_fold(&text.nfkc().collect::<String>());
+    let normalized = super::unicode::case_fold(&text.nfkc().collect::<String>());
     let single = normalized.chars().filter(|c| grams(c.script())).count() == 1;
     let mut tokens = Vec::new();
     for (mut run, kind) in runs(&normalized) {
@@ -153,12 +153,12 @@ fn grams(kind: Script) -> bool {
     )
 }
 
-pub(in crate::cognition) fn field(text: &str) -> String {
+pub(super) fn field(text: &str) -> String {
     tokens(text, false, None).join(" ")
 }
 
 /// The OR-joined FTS5 terms of a query (App search).
-pub(in crate::cognition) fn query(text: &str) -> String {
+pub(super) fn query(text: &str) -> String {
     tokens(text, true, None)
         .into_iter()
         .collect::<BTreeSet<_>>()
@@ -172,7 +172,7 @@ pub(in crate::cognition) fn query(text: &str) -> String {
 /// tokens, one-character words of character-indexed scripts, are too common to
 /// match alone: all of them together match, and beside a strong token each one
 /// adds rank.
-pub(in crate::cognition) fn recall_query(text: &str) -> String {
+pub(super) fn recall_query(text: &str) -> String {
     let mut weak = Vec::new();
     let strong = tokens(text, true, Some(&mut weak))
         .into_iter()
@@ -207,7 +207,7 @@ pub(in crate::cognition) fn recall_query(text: &str) -> String {
 }
 
 #[cfg(test)]
-pub(in crate::cognition) fn assert_frozen_analysis() {
+pub(super) fn assert_frozen_analysis() {
     assert_ascii_analysis();
     assert_eq!(field("CAFÉ café STRAßE forêt"), "cafe strasse foret");
     assert_eq!(field("ΆΛΦΑ ЙЁ"), "αλφα ие");

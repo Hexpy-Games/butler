@@ -7,13 +7,12 @@
 
 use std::sync::OnceLock;
 
-use indexmap::IndexSet;
 use unicode_normalization::UnicodeNormalization;
-use unicode_segmentation::UnicodeSegmentation;
 
 static TABLE: OnceLock<Vec<(u32, &'static str)>> = OnceLock::new();
 
-pub(in crate::cognition) fn case_fold(value: &str) -> String {
+/// Full (C+F) Unicode 15.1 case fold, NFC-normalized.
+pub fn case_fold(value: &str) -> String {
     let table = table();
     let mut folded = String::with_capacity(value.len());
     for character in value.chars() {
@@ -27,18 +26,6 @@ pub(in crate::cognition) fn case_fold(value: &str) -> String {
         }
     }
     folded.nfc().collect()
-}
-
-pub(in crate::cognition) fn terms(value: &str) -> IndexSet<String> {
-    let graphemes = UnicodeSegmentation::graphemes(value, true).collect::<Vec<_>>();
-    let mut terms = IndexSet::new();
-    terms.extend(graphemes.iter().map(|value| (*value).to_owned()));
-    for size in [2, 3] {
-        for items in graphemes.windows(size) {
-            terms.insert(items.concat());
-        }
-    }
-    terms
 }
 
 #[expect(

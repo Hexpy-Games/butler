@@ -1,98 +1,81 @@
-//! Public New Chat Briefing projection over Cognition artifacts and App state.
+//! New Chat Briefing projection over Cognition artifacts and App state.
 
 use chrono::DateTime;
 use serde_json::{Value, json};
 
-use super::AppApplication;
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::{
+    AppNewChatBriefingPort, AppNewChatBriefingRequest, ApplicationFuture, GatewayApplicationError,
+};
 use butler_memory::cognition::{BriefingScope, NewChatBriefing};
 use butler_memory::{cognition, profile};
 use butler_platform::instance::SystemTimeZone;
 
-impl AppApplication {
-    #[expect(
-        clippy::match_same_arms,
-        reason = "explicit arms document the known values beside the default"
-    )]
-    pub(super) async fn new_chat_briefing_view(
-        &self,
-        date: Option<String>,
-        project_id: Option<String>,
-    ) -> Result<Value, GatewayApplicationError> {
-        let locale = self.briefing_language().await?;
-        let project = if let Some(id) = project_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|id| !id.is_empty())
-        {
-            Some(
-                self.list_projects(false)
-                    .await?
-                    .projects
-                    .into_iter()
-                    .find(|project| project.id == id)
-                    .ok_or_else(|| GatewayApplicationError::Public {
-                        status: 404,
-                        code: "project_not_found".into(),
-                        message: "Project not found.".into(),
-                        source: None,
-                    })?,
-            )
-        } else {
-            None
-        };
-        let data_root = self.butler_data.clone();
-        let now = self.dependencies.identity_clock.now_iso();
-        tokio::task::spawn_blocking(move || {
-            // The onboarding card shows no time of day, so it does not wait
-            // on the local time.
-            if project.is_none() && !profile::first_chat_onboarding_complete(&data_root, &now) {
-                return Ok(fallback("onboarding", &locale, &now, "", None, None, None));
-            }
-            let epoch_ms = DateTime::parse_from_rfc3339(&now)
+/// The New Chat Briefing view over the request's data root.
+pub(crate) struct AppNewChatBriefing;
+
+impl AppNewChatBriefingPort for AppNewChatBriefing {
+    fn view(&self, request: AppNewChatBriefingRequest) -> ApplicationFuture<Value> {
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || view(request))
+                .await
                 .map_err(GatewayApplicationError::internal_from)?
-                .timestamp_millis();
-            let minute = local_minute(epoch_ms)?;
-            let hour = minute / 60;
-            let moment = format_moment(hour, minute % 60, &locale);
-            let bucket = match hour {
-                0..=5 => "night",
-                6..=11 => "morning",
-                12..=17 => "afternoon",
-                18..=21 => "evening",
-                _ => "night",
-            };
-            let scope = if project.is_some() {
-                BriefingScope::Project
-            } else {
-                BriefingScope::General
-            };
-            let project_id = project.as_ref().map(|project| project.id.as_str());
-            if let Some(artifact) = cognition::read_new_chat_briefing(
-                &data_root,
-                date.as_deref(),
-                scope,
-                project_id,
-                &locale,
-            ) {
-                return Ok(generated_view(&artifact, &moment, bucket));
-            }
-            let run_id = cognition::latest_completed_briefing_run_id(&data_root, date.as_deref());
-            Ok(fallback(
-                scope.as_str(),
-                &locale,
-                &now,
-                &moment,
-                project.as_ref().map(|project| project.id.as_str()),
-                project
-                    .as_ref()
-                    .map(|project| project.display_name.as_str()),
-                run_id.as_ref(),
-            ))
         })
-        .await
-        .map_err(GatewayApplicationError::internal_from)?
     }
+}
+
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
+fn view(request: AppNewChatBriefingRequest) -> Result<Value, GatewayApplicationError> {
+    let AppNewChatBriefingRequest {
+        data_root,
+        date,
+        project,
+        locale,
+        now,
+    } = request;
+    // The onboarding card shows no time of day, so it does not wait
+    // on the local time.
+    if project.is_none() && !profile::first_chat_onboarding_complete(&data_root, &now) {
+        return Ok(fallback("onboarding", &locale, &now, "", None, None, None));
+    }
+    let epoch_ms = DateTime::parse_from_rfc3339(&now)
+        .map_err(GatewayApplicationError::internal_from)?
+        .timestamp_millis();
+    let minute = local_minute(epoch_ms)?;
+    let hour = minute / 60;
+    let moment = format_moment(hour, minute % 60, &locale);
+    let bucket = match hour {
+        0..=5 => "night",
+        6..=11 => "morning",
+        12..=17 => "afternoon",
+        18..=21 => "evening",
+        _ => "night",
+    };
+    let scope = if project.is_some() {
+        BriefingScope::Project
+    } else {
+        BriefingScope::General
+    };
+    let project_id = project.as_ref().map(|project| project.id.as_str());
+    if let Some(artifact) =
+        cognition::read_new_chat_briefing(&data_root, date.as_deref(), scope, project_id, &locale)
+    {
+        return Ok(generated_view(&artifact, &moment, bucket));
+    }
+    let run_id = cognition::latest_completed_briefing_run_id(&data_root, date.as_deref());
+    Ok(fallback(
+        scope.as_str(),
+        &locale,
+        &now,
+        &moment,
+        project.as_ref().map(|project| project.id.as_str()),
+        project
+            .as_ref()
+            .map(|project| project.display_name.as_str()),
+        run_id.as_ref(),
+    ))
 }
 
 fn local_minute(epoch_ms: i64) -> Result<u16, GatewayApplicationError> {
