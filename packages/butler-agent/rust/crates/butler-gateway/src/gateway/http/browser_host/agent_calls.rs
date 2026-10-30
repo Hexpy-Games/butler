@@ -46,7 +46,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
-    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"],"payment_skip":frame["args"]["payment_skip"]},"tab":frame["tab"],"turn_id":frame["turn_id"],"schedule_browser":frame["schedule_browser"]});
+    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"],"payment_skip":frame["args"]["payment_skip"],"expect":frame["args"]["expect"]},"tab":frame["tab"],"turn_id":frame["turn_id"],"schedule_browser":frame["schedule_browser"]});
     if let Some(refused) = dispatch_reserved(&state, frame, count, deadline, &id, sender).await? {
         return Ok(refused);
     }
@@ -196,10 +196,9 @@ fn dispatch(
                 .tabs
                 .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
                 .map_err(|_| error(403, "not_your_tab"))?;
-            if tab["url"]
-                .as_str()
-                .is_some_and(|url| !permitted_url(state, &session, url))
-            {
+            if tab["url"].as_str().is_some_and(|url| {
+                !permitted_url(state, &session, url) && !super::devtools::local_read(&op, url)
+            }) {
                 return response(
                     count,
                     json!({"status":"not_dispatched","reason":"navigation_denied"}),
@@ -242,6 +241,8 @@ fn page_op(op: &str) -> bool {
             | "tab.zoom"
             | "tab.screenshot"
             | "tab.image_collect"
+            | "tab.devtools_place"
+            | "tab.devtools"
             | "tab.prepare"
             | "tab.act"
             | "tab.dialog"
@@ -463,6 +464,10 @@ async fn finish_result(
     sent: &Value,
     result: &mut Value,
 ) -> Result<(), HttpError> {
+    if butler_runtime::browser::devtools::is_op(op) {
+        super::devtools::finish(op, &sent["args"], result);
+        return Ok(());
+    }
     enforce_result_policy(state, session, op, result);
     if op == "tab.wait" {
         result["site"] = json!(super::hand_back::tab_site(state, &sent["tab"]));

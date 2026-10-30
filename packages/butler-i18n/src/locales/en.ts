@@ -610,6 +610,13 @@ export const enUsCopy: AppCopy = {
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
       browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
+      devtools: {
+        read: { console: "Read console errors", network: "Read network summary", dom: "Read DOM" },
+        title: (read, site, mode) => `DevTools: ${read} · ${site} · ${mode}`,
+        tab: host => `${host} tab · read-only, no scripts`,
+        masked: { console: "Cookies, headers and bodies stay masked", network: "Cookies, headers and bodies stay masked", dom: "Field values and tokens stay masked" },
+        covers: site => `Read DevTools on ${site}`,
+      },
       signInStep: reason => ({ mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form" } as Record<string, string>)[reason] ?? "Check sign-in form",
       waitHandoff: reason => ({ sign_in: "Sign-in needed", secure_field: "Your input needed", secure_keypad: "Security keypad needs you", captcha: "CAPTCHA needs you" } as Record<string, string>)[reason] ?? "Needs you in the tab",
       payStep: reason => ({ secure_keypad: "Security keypad", app_auth: "Card app approval", otp: "Verification code", three_ds: "Card issuer check", captcha: "CAPTCHA" } as Record<string, string>)[reason] ?? "Check the payment page",

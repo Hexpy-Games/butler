@@ -3,6 +3,7 @@ import { agentPopupAllowed } from "./popup-policy.mjs";
 import { isIP } from "node:net";
 import { webUrl } from "./policy.mjs";
 import { signedInPlace } from "./signed-in.mjs";
+import { noteRequestFinished, noteRequestSent, noteRequestStarted } from "./devtools.mjs";
 
 export function privateAddress(address) {
   const v = address.toLowerCase().replace(/^::ffff:/u, "");
@@ -29,25 +30,32 @@ async function publicUrl(raw, profile, policy) {
     return answer.endpoints.length > 0 && answer.endpoints.every(endpoint => !privateAddress(endpoint.address));
   } catch { return false; }
 }
-export function installNavigationGuard(tab, onViolation) {
-  const contents = tab.view.webContents;
-  // Installed once per profile. Frame requests only; my tabs remain outside this policy.
-  const profile = contents.session;
+/** Installed once per profile: the listeners a tab's request tracking and guard share. */
+function profileRouter(profile) {
   const router = routers.get(profile) ?? new Map();
   if (!routers.has(profile)) {
     routers.set(profile, router);
     // In-flight page requests (fetch/XHR) let observe-after-act wait for results.
     const finished = detail => {
       networkLog("browser.completed", detail.url, { status: detail.statusCode, error: detail.error });
-      router.get(detail.webContentsId)?.tab.pendingRequests?.delete(detail.id);
+      const entry = router.get(detail.webContentsId);
+      if (!entry) return;
+      entry.tab.pendingRequests?.delete(detail.id);
+      noteRequestFinished(entry.tab, detail);
     };
     profile.webRequest.onCompleted(finished);
     profile.webRequest.onErrorOccurred(finished);
+    profile.webRequest.onSendHeaders(detail => {
+      const entry = router.get(detail.webContentsId);
+      if (entry) noteRequestSent(entry.tab, detail);
+    });
     profile.webRequest.onBeforeRequest((detail, done) => {
       networkLog("browser.request", detail.url, { method: detail.method, type: detail.resourceType });
       const entry = router.get(detail.webContentsId);
+      if (entry) noteRequestStarted(entry.tab, detail);
       if (entry && detail.resourceType === "xhr") (entry.tab.pendingRequests ??= new Map()).set(detail.id, Date.now());
-      if (!entry || !["mainFrame", "subFrame"].includes(detail.resourceType)) { done({}); return; }
+      // A tab that only tracks requests has no guard: my tabs remain outside this policy.
+      if (!entry?.onViolation || !["mainFrame", "subFrame"].includes(detail.resourceType)) { done({}); return; }
       // While the user holds a pop-up (a card company's 3-D Secure page, say) they browse freely.
       if (detail.resourceType === "mainFrame" && entry.tab.opener && entry.tab.holder !== "user" && !agentPopupAllowed(entry.tab.policy, entry.tab.popupParentUrl, detail.url)) {
         done({ cancel: true }); entry.onViolation(detail.url); return;
@@ -59,6 +67,19 @@ export function installNavigationGuard(tab, onViolation) {
       });
     });
   }
+  return router;
+}
+/** Request rows for a tab with no guard yet; a later guard takes over its entry. */
+export function trackRequests(tab) {
+  const contents = tab.view.webContents;
+  const router = profileRouter(contents.session);
+  if (router.has(contents.id)) return;
+  router.set(contents.id, { tab });
+  contents.once("destroyed", () => router.delete(contents.id));
+}
+export function installNavigationGuard(tab, onViolation) {
+  const contents = tab.view.webContents;
+  const router = profileRouter(contents.session);
   router.set(contents.id, { tab, onViolation });
   contents.once("destroyed", () => router.delete(contents.id));
   contents.on("will-frame-navigate", event => {

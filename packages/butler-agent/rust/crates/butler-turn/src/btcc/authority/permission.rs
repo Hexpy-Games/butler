@@ -126,7 +126,9 @@ fn permission_scope_key(
         collation,
         ..
     } = facts;
-    let scope = if capability == "browser_act" && input["always_confirm"] != true {
+    let scope = if matches!(capability, "browser_act" | "browser_devtools")
+        && input["always_confirm"] != true
+    {
         json!({"kind":"browser_site","capability":capability,"target":target})
     } else if file_edit {
         json!({"kind":"file_operation","capability":capability,"target":target,"input":input})

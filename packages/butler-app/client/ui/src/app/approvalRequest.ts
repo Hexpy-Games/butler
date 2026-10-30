@@ -113,6 +113,7 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
     ...(typeof value.browser_tab === "string" ? { browser_tab: value.browser_tab } : {}),
     ...(browser_steps ? { browser_steps } : {}),
     ...(typeof value.sign_in_step === "string" ? { sign_in_step: value.sign_in_step } : {}),
+    ...(value.devtools_read === "console" || value.devtools_read === "network" || value.devtools_read === "dom" ? { devtools_read: value.devtools_read } : {}),
     ...(typeof value.wait_reason === "string" ? { wait_reason: value.wait_reason } : {}),
     ...((value.browser_mode === "signed_out" || value.browser_mode === "signed_in") ? { browser_mode: value.browser_mode } : {}),
     ...(value.allow_site === "signed_in" || value.allow_site === "payment" ? { allow_site: value.allow_site } : {}),
@@ -141,6 +142,7 @@ export function approvalRequestView(
       ...(scope ? { conversationScope: scope.description } : {}),
     };
   }
+  if (approval.operation?.devtools_read) return devtoolsView(approval.operation, approval.risk, card.reason, copy);
   const actionKind = knownActionKind(approval);
   const workspace = workspaceLabel(approval);
   const operation = approval.operation;
@@ -160,6 +162,21 @@ export function approvalRequestView(
       : COMMAND_KINDS.has(actionKind) ? copy.covers.command(workspace)
         : copy.covers.other,
     actionKind,
+  };
+}
+
+/** A DevTools read: which read, on which site, with or without the user's sign-in. */
+function devtoolsView(operation: NonNullable<ApprovalSummary["operation"]>, risk: ApprovalRisk | undefined, reason: string, copy: ApprovalRequestCopy): ApprovalRequestView {
+  const read = operation.devtools_read ?? "console";
+  const [site = "", host = site, selector] = operation.targets;
+  const mode = operation.browser_mode ?? "signed_out";
+  return {
+    title: copy.devtools.title(copy.devtools.read[read], site, copy.browserMode[mode]),
+    details: [...(reason === "authority.taintReason" ? [copy.taintReason] : []), copy.devtools.tab(host), ...(selector ? [selector] : []),
+      ...(mode === "signed_in" ? [copy.devtools.masked[read]] : [])].map(maskActionSecrets),
+    risk: risk ?? "high",
+    conversationScope: copy.devtools.covers(site),
+    actionKind: "web_request",
   };
 }
 

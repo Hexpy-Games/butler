@@ -33,6 +33,7 @@ mod browser_agent;
 mod browser_approval;
 mod browser_batch;
 mod browser_delegation;
+mod browser_devtools;
 mod browser_downloads;
 mod browser_headless;
 mod browser_history;

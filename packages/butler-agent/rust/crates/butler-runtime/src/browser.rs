@@ -8,6 +8,7 @@ pub use image_assets::{
 };
 pub mod app_host;
 pub mod capacity;
+pub mod devtools;
 pub mod egress;
 pub mod headless;
 pub mod reader;

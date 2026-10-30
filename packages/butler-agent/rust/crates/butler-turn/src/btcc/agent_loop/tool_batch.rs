@@ -142,9 +142,8 @@ fn browser_tab(call: &ModelRoundToolCall) -> Option<Option<String>> {
     };
     match name {
         "browser_open" => Some(None),
-        "browser_observe" | "browser_act" | "browser_screenshot" | "browser_close" => {
-            Some(Some(arguments.get("tab")?.as_str()?.to_owned()))
-        }
+        "browser_observe" | "browser_act" | "browser_screenshot" | "browser_devtools"
+        | "browser_close" => Some(Some(arguments.get("tab")?.as_str()?.to_owned())),
         _ => None,
     }
 }
