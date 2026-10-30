@@ -123,7 +123,10 @@ async fn hooks_context_claim_cannot_open_a_read_only_session() -> Result<(), Har
         .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     assert_eq!(s.gw.settings().await?["wallpaper"], before);
-    assert!(s.gw.approval_requests("general").await?.is_empty());
+    assert_eq!(
+        s.gw.approval_requests("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     for prompt in prompts(&s)? {
         assert_eq!(prompt.matches(CLAIM).count(), 1);
         assert_eq!(access(&prompt), "- access: read_only");
@@ -144,7 +147,11 @@ async fn hooks_context_retry_and_restart_keep_one_copy() -> Result<(), HarnessEr
     )?;
     let mut s = setup.start().await?;
     let ask = "Interrupted ask.";
-    let held = s.provider()?.hold_next_reply(ask);
+    // The session title request quotes the ask too; hold both so the turn's is held.
+    let held = [
+        s.provider()?.hold_next_reply(ask),
+        s.provider()?.hold_next_reply(ask),
+    ];
     let accepted = s.gw.say("general", ask).await?;
     let id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -153,7 +160,7 @@ async fn hooks_context_retry_and_restart_keep_one_copy() -> Result<(), HarnessEr
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     s.crash_and_restart().await?;
-    held.release();
+    drop(held);
     let failed =
         s.gw.wait_terminal("general", &id, Duration::from_secs(60))
             .await?;
@@ -308,7 +315,7 @@ async fn hooks_context_keeps_the_stable_prefix_and_appends_history() -> Result<(
                 .any(|section| section["id"] == "hook-context")
         })
         .collect();
-    assert!(!sections.is_empty());
+    assert_ne!(sections.len(), 0);
     for row in &sections {
         let place = |id: &str| row.iter().position(|section| section["id"] == id).unwrap();
         assert!(place("current-turn-heading") < place("hook-context"));
