@@ -18,7 +18,6 @@ butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }
 butler-models = { path = "../butler-models" }
-butler-runtime = { path = "../butler-runtime" }
 arrow-array.workspace = true
 arrow-schema.workspace = true
 base64.workspace = true
@@ -44,7 +43,6 @@ tokio.workspace = true
 tokio-util.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
-unicode-script.workspace = true
 unicode-segmentation.workspace = true
 url.workspace = true
 

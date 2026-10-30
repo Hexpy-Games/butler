@@ -415,6 +415,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
         runtime_info: Arc::new(RuntimeInfo),
         model_catalog: Arc::new(ModelCatalog),
         personalization: Arc::new(Personalization),
+        new_chat_briefing: Arc::new(crate::gateway::TestNewChatBriefing),
         memory_management: Arc::new(Personalization),
         monitoring: Arc::new(UnprovidedMonitoring),
         project_dashboard_ledger: Arc::new(crate::gateway::TestProjectDashboardLedger),

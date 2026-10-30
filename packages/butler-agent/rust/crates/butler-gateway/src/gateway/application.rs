@@ -57,7 +57,7 @@ mod message_projection;
 mod message_visibility;
 mod model_catalog;
 mod monitoring;
-mod new_chat_briefing;
+mod new_chat_briefing_view;
 mod operation_output;
 mod panic_isolation;
 mod personalization;

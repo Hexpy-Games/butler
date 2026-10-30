@@ -2,10 +2,11 @@
 //!
 //! Nothing here knows about sessions, memory or providers: JSON and JSONL
 //! codecs with ECMAScript semantics ([`json`], [`json_lines`]), JS date and
-//! locale mirrors ([`js_date`], [`locale`]), text segmentation and public-text
-//! sanitizing, the agent configuration file ([`configuration`]), the model-facing
-//! tool protocol and [`tool_protocol::ToolName`], and the `wire_codes!` macro
-//! every domain uses to declare its closed set of wire error codes.
+//! locale mirrors ([`js_date`], [`locale`]), text segmentation, search analysis
+//! ([`search_text`]) and public-text sanitizing, the agent configuration file
+//! ([`configuration`]), the model-facing tool protocol and
+//! [`tool_protocol::ToolName`], and the `wire_codes!` macro every domain uses to
+//! declare its closed set of wire error codes.
 
 // Production code reads slices, strings and JSON with checked accessors.
 #![deny(clippy::indexing_slicing)]
@@ -69,6 +70,7 @@ pub mod json;
 pub mod json_lines;
 pub mod locale;
 pub mod public_text;
+pub mod search_text;
 pub mod segmentation;
 pub mod tool_catalog;
 pub mod tool_protocol;

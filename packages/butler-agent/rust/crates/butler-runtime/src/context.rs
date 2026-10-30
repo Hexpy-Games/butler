@@ -6,9 +6,7 @@ mod compaction;
 mod conversation;
 mod conversation_session_reference;
 mod conversation_tools;
-mod error;
 mod image;
-mod memory_source;
 mod pdf;
 mod prompt;
 mod recent;
@@ -23,6 +21,10 @@ pub(crate) use tool_output::tests::reader_cases::reader_enforces_scan_limit_and_
 
 pub use attachment::AttachmentContext;
 pub use budget::*;
+pub use butler_turn::context_ports::{
+    ContextCode, ContextError, ContextResult, MemorySourceCandidate, MemorySourceReferencePort,
+    ResolvedMemorySource,
+};
 pub use butler_turn::conversation::text_for_message;
 pub use compaction::{
     CompactionMetricEvent, ContextCompactionMetricSink, compact_transcript,
@@ -31,14 +33,12 @@ pub use compaction::{
 pub use conversation::*;
 pub use conversation_session_reference::ConversationSessionReference;
 pub use conversation_tools::ConversationTools;
-pub use error::{ContextCode, ContextError};
 pub use image::{
     ImageCapabilityEvidence, ImageCarrierTuple, ImageSanitizerInput, ImageSanitizerLimits,
     ImageSourceRecord, VisualAttachmentManifest, VisualImageAdmissionResult,
     admit_visual_image_request, assert_visual_carrier_matches_catalog,
     image_admission_for_catalog_entry, sanitize_image, verify_visual_manifest_source,
 };
-pub use memory_source::{MemorySourceCandidate, MemorySourceReferencePort, ResolvedMemorySource};
 pub use pdf::{PdfTextError, extract_pdf_text, pdf_sidecar_text};
 pub use prompt::*;
 pub(crate) use recent::{RecentConversationInput, include_recent_context};
@@ -58,8 +58,6 @@ pub use tool_output::{
     PruneMetricObserver, PruneToolOutputInput, PruneToolOutputResult, ReadToolEvidenceInput,
     ReadToolOutputInput, ShellCommandResult, ToolOutput, ToolOutputIdentity,
 };
-
-pub type ContextResult<T> = Result<T, ContextError>;
 
 #[cfg(test)]
 mod tests;

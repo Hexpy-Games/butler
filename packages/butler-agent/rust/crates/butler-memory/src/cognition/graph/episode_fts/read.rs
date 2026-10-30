@@ -1,9 +1,7 @@
 //! Scope and current revision precede ordered selection; canonical rejection refills.
-use super::{
-    super::{db_error, recall::scope},
-    tokenize,
-};
+use super::super::{db_error, recall::scope};
 use crate::cognition::{CognitionResult, recall::RecallRequest};
+use butler_core::search_text::analyze_recall_query;
 use rusqlite::{Connection, OptionalExtension, params_from_iter, types::Value};
 
 pub(in crate::cognition::graph) fn ready(db: &Connection) -> CognitionResult<bool> {
@@ -33,7 +31,7 @@ pub(in crate::cognition::graph) fn select(
     if !ready(db)? {
         return Ok((Vec::new(), true));
     }
-    let expression = tokenize::recall_query(&input.cue);
+    let expression = analyze_recall_query(&input.cue);
     if expression.is_empty() {
         return Ok((Vec::new(), false));
     }
