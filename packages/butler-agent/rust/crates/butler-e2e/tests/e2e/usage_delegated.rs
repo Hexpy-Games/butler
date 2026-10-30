@@ -11,8 +11,6 @@ pub(crate) mod fixtures;
 mod inheritance;
 #[path = "usage_delegated/recovery.rs"]
 mod recovery;
-#[path = "usage_delegated/scale.rs"]
-mod scale;
 #[path = "usage_delegated/split.rs"]
 mod split;
 #[path = "usage_delegated/stub.rs"]
