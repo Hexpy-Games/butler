@@ -2,8 +2,8 @@
   "inputs": {
     "bun.lock": "9a844e55f653d9f34b56e9b3adb5e01d814382b7fd20c965631b42aafebd0a78",
     "deploy/licenses/disclosure.py": "2b5d724e190d44967c8400d70fd77b36e10efc3d3bb667ebb1fb0984313c3ae8",
-    "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
-    "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
+    "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
+    "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
     "deploy/licenses/refresh.py": "33d58a1000073258920b2d2db4e9a0bac7376fe65251313f4777e815566d0949",
     "packages/butler-agent/rust/Cargo.lock": "145a582bd94fbf7bd747d93f024027d588a18f0c3964b83e910f9a3cf024c939",
     "packages/butler-agent/rust/Cargo.toml": "5d2d424ec9a5a0efc862cb4193c6c0902d8336747f23b3217091286ce99a7c9d",
@@ -34,7 +34,6 @@
     "packages/butler-app/client/ui/package.json": "8739df6bdb3dd0b3925c98fd070483d82de06619861dce3806eac6df3f15952f",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
-    "packages/butler-npm/package.json": "5436bca586a3f28ad67b715bc34fd2d66a4dfac9577d7415442b88f1f085fdb4",
     "third_party/notify-windows-ledger/Cargo.toml": "d3badd5e47fb7b50cb83af425266e1dd89f14cd324d6598d7cb2d6d66a01baac",
     "third_party/notify-windows-ledger/LICENSE": "29f359024dacaa3361dcddf5a9316e8458028ff062b63105a61e04a16566f968"
   },
