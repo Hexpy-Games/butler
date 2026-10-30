@@ -176,6 +176,7 @@ jobs:
               smoke sidebar-drag-scroll
               smoke sidebar-add-menu-smoke
               smoke settings-bugs-smoke
+              smoke app-usage-subtask-share-smoke
               smoke app-delegated-work-smoke
               smoke answer-blocks-ui
               smoke block-scraps-ui
