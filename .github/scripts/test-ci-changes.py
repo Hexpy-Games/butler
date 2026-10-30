@@ -278,7 +278,7 @@ class Trust(unittest.TestCase):
         hosted, native = dict(none, **{'hosted-build': True, 'hosted': True}), dict(none, stub=True, hosted=True)
         for event_name, ref, event, paths, expected in [
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh'], none),
             ('pull_request', 'refs/pull/12/merge', pr, [rust], hosted),
             ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], hosted),
@@ -373,7 +373,7 @@ class Trust(unittest.TestCase):
                 self.assertEqual(actual.returncode == 0, result == ('success' if selected else 'skipped'))
 
     # test-category: pure-logic
-    def test_reused_x64_install_restores_shared_npm_tarball(self):
+    def test_reused_x64_install_restores_its_agent_archive(self):
         workflow = 'rust-quality.yml'
         inputs = changes.integration_inputs(workflow, dict.fromkeys(changes.GROUPS, 'hash'),
                                             '0.1.0-preview.11')
@@ -383,8 +383,7 @@ class Trust(unittest.TestCase):
         artifacts = [dict(name=artifact, run=run) for name, run in reused.items()
                      for artifact in changes.producer_artifacts(workflow, name)]
         self.assertEqual(reused, {'install-x64': 7})
-        self.assertEqual(artifacts, [dict(name='agent-linux-x64', run=7),
-                                     dict(name='butler-npm-x64', run=7)])
+        self.assertEqual(artifacts, [dict(name='agent-linux-x64', run=7)])
 
 
 

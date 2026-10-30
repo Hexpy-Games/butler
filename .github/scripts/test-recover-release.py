@@ -165,7 +165,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(len(uploads), 2)
             self.assertTrue(all(args[-1] == '--clobber' for args in uploads))
             self.assertFalse(any(args[:3] == ('gh', 'release', 'create') for args in calls))
-            self.assertEqual(len(list((root / 'npm').glob('*.tgz'))), 1)
+            self.assertFalse(any(name.endswith('.tgz') for name in assets))
 
 
 if __name__ == '__main__':
