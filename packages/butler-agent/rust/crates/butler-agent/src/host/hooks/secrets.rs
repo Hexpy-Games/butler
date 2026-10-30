@@ -16,7 +16,8 @@ const SERVICE: &str = "com.hexpy.butler.hook-secret";
 pub(super) const STORE_FAILED: &str = "Hook secret store unavailable";
 pub(super) struct HookSecrets {
     root: PathBuf,
-    stores: CredentialStores,
+    /// Opened on the first HTTP hook; nothing happens without one.
+    stores: tokio::sync::OnceCell<CredentialStores>,
 }
 fn key(root: &Path, backend: SecretBackend, id: &str) -> Result<SecretKey, String> {
     scoped_secret_key(root, backend, SERVICE, id).map_err(|_| STORE_FAILED.to_owned())
@@ -28,18 +29,32 @@ fn is_http(hook: &HookDefinition) -> bool {
     hook.kind == "http"
 }
 impl HookSecrets {
-    pub(super) fn new(root: PathBuf, facts: SecretStoreFacts) -> Self {
+    pub(super) fn new(root: PathBuf) -> Self {
         Self {
             root,
-            stores: CredentialStores::new(facts),
+            stores: tokio::sync::OnceCell::new(),
         }
+    }
+    /// The stores, with the host facts read off the async workers.
+    async fn stores(&self) -> Result<&CredentialStores, String> {
+        self.stores
+            .get_or_try_init(|| async {
+                let root = self.root.clone();
+                tokio::task::spawn_blocking(move || {
+                    CredentialStores::new(SecretStoreFacts::for_data_root(&root))
+                })
+                .await
+                .map_err(|_| STORE_FAILED.to_owned())
+            })
+            .await
     }
     /// The hook's secret. One left in the file by a build that used it moves to
     /// the system store once the policy selects that store.
     pub(super) async fn find(&self, id: &str) -> Result<Option<SecretText>, String> {
-        let target = self.stores.target(&self.root).await.map_err(failed)?.store;
+        let stores = self.stores().await?;
+        let target = stores.target(&self.root).await.map_err(failed)?.store;
         let held = key(&self.root, target.backend(), id)?;
-        if let Some(secret) = self.stores.get(&target, &held).await.map_err(failed)? {
+        if let Some(secret) = stores.get(&target, &held).await.map_err(failed)? {
             return Ok(Some(secret));
         }
         if !target.backend().is_system() {
@@ -47,23 +62,21 @@ impl HookSecrets {
         }
         let file = fallback_file(&self.root);
         let old = key(&self.root, file.backend(), id)?;
-        let Some(secret) = self.stores.get(&file, &old).await.map_err(failed)? else {
+        let Some(secret) = stores.get(&file, &old).await.map_err(failed)? else {
             return Ok(None);
         };
-        self.stores
+        stores
             .put(&target, &held, secret.expose())
             .await
             .map_err(failed)?;
-        self.stores.remove(&file, &old).await.map_err(failed)?;
+        stores.remove(&file, &old).await.map_err(failed)?;
         Ok(Some(secret))
     }
     async fn put(&self, id: &str, secret: &str) -> Result<(), String> {
-        let target = self.stores.target(&self.root).await.map_err(failed)?.store;
+        let stores = self.stores().await?;
+        let target = stores.target(&self.root).await.map_err(failed)?.store;
         let held = key(&self.root, target.backend(), id)?;
-        self.stores
-            .put(&target, &held, secret)
-            .await
-            .map_err(failed)
+        stores.put(&target, &held, secret).await.map_err(failed)
     }
     /// Stores the given secrets and creates the missing ones, before the
     /// configuration naming them is saved. Returns the created ones.
@@ -104,13 +117,14 @@ impl HookSecrets {
         }
     }
     async fn remove(&self, id: &str) -> Result<(), String> {
-        let target = self.stores.target(&self.root).await.map_err(failed)?.store;
+        let stores = self.stores().await?;
+        let target = stores.target(&self.root).await.map_err(failed)?.store;
         let held = key(&self.root, target.backend(), id)?;
-        self.stores.remove(&target, &held).await.map_err(failed)?;
+        stores.remove(&target, &held).await.map_err(failed)?;
         if target.backend().is_system() {
             let file = fallback_file(&self.root);
             let old = key(&self.root, file.backend(), id)?;
-            self.stores.remove(&file, &old).await.map_err(failed)?;
+            stores.remove(&file, &old).await.map_err(failed)?;
         }
         Ok(())
     }

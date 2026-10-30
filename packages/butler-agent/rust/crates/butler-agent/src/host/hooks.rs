@@ -42,13 +42,12 @@ impl Dispatcher {
         plugins: Arc<super::plugins::Plugins>,
         data: PathBuf,
         environment: &HashMap<String, String>,
-        secret_store: butler_models::models::SecretStoreFacts,
         shutdown: CancellationToken,
     ) -> Self {
         let hooks = Arc::new(Hooks {
             plugins,
             path: data.join(butler_platform::data_paths::HOOKS),
-            secrets: secrets::HookSecrets::new(data.clone(), secret_store),
+            secrets: secrets::HookSecrets::new(data.clone()),
             home: butler_platform::user_dirs::home_dir().unwrap_or_else(|| data.clone()),
             environment: butler_platform::command_sandbox::tool_environment(environment),
             events: AtomicU8::new(0),

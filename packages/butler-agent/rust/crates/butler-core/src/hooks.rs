@@ -2,7 +2,9 @@
 mod config;
 mod event;
 use butler_platform::secrets::SecretText;
-pub use config::{HookConfig, HookDefinition, HookMatcher, check_hook_secret, loopback_host};
+pub use config::{
+    HookConfig, HookDefinition, HookMatcher, check_hook_secret, hook_transport_allowed,
+};
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, future::Future, pin::Pin};

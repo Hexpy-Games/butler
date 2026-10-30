@@ -308,10 +308,19 @@ pub fn scoped_key(
 /// file cannot be read or created.
 pub(super) fn fingerprint(root: &Path, provider_id: &str, secret: &str) -> Option<String> {
     let key = fingerprint_key(root)?;
-    let mut mac = Hmac::<Sha256>::new_from_slice(key.as_bytes()).ok()?;
-    mac.update(provider_id.as_bytes());
-    mac.update(b"\n");
-    mac.update(secret.as_bytes());
+    hmac_sha256_hex(
+        key.as_bytes(),
+        &[provider_id.as_bytes(), b"\n", secret.as_bytes()],
+    )
+}
+
+/// The lowercase hex HMAC-SHA-256 of the concatenated `parts` under `key`.
+/// `None` only if the key is refused, which HMAC never does.
+pub fn hmac_sha256_hex(key: &[u8], parts: &[&[u8]]) -> Option<String> {
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).ok()?;
+    for part in parts {
+        mac.update(part);
+    }
     Some(hex(&mac.finalize().into_bytes()))
 }
 

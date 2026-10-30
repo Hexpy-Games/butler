@@ -141,14 +141,24 @@ fn check_http_url(url: &str) -> Result<(), &'static str> {
     if host.is_empty() || authority.contains('@') {
         return Err(INVALID);
     }
-    if plain && !loopback_host(host) {
+    let scheme = if plain { "http" } else { "https" };
+    if !hook_transport_allowed(scheme, Some(host)) {
         return Err("HTTP hooks need https:// unless the host is loopback");
     }
     Ok(())
 }
+/// The transport rule, for a URL parser's scheme and host: https anywhere,
+/// plain http only to a loopback host.
+pub fn hook_transport_allowed(scheme: &str, host: Option<&str>) -> bool {
+    match scheme {
+        "https" => host.is_some(),
+        "http" => host.is_some_and(loopback_host),
+        _ => false,
+    }
+}
 /// `localhost` or a loopback IP address (an IPv6 one in brackets). Names that
 /// only resemble these, such as `127.0.0.1.example.com`, are not loopback.
-pub fn loopback_host(host: &str) -> bool {
+fn loopback_host(host: &str) -> bool {
     if host.eq_ignore_ascii_case("localhost") {
         return true;
     }

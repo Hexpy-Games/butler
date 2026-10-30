@@ -52,7 +52,7 @@ pub use mcp::McpModelTarget;
 pub use mutations::{HostedModelMutation, LocalModelMutation, ProviderCredentialMutation};
 pub use secret_store::{
     CredentialStoreError, ProviderSecrets as CredentialStores, TargetStore, fallback_file,
-    scoped_key as scoped_secret_key,
+    hmac_sha256_hex, scoped_key as scoped_secret_key,
 };
 pub use settings::SettingsError;
 pub use setup::{ProviderKeySaveError, SavedProviderKey};

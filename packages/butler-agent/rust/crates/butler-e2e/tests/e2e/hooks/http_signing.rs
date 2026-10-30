@@ -220,6 +220,36 @@ async fn hooks_http_plain_http_is_loopback_only() -> Result<(), HarnessError> {
 }
 
 #[tokio::test]
+async fn hooks_http_send_rule_follows_the_sending_url_parser() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let allowed = |url: &str| {
+        let url = reqwest::Url::parse(url).unwrap();
+        butler_core::hooks::hook_transport_allowed(url.scheme(), url.host_str())
+    };
+    for url in [
+        "https://hooks.example.com/hook",
+        "http://localhost:8080/hook",
+        "http://127.0.0.2/hook",
+        "http://[::1]:8080/hook",
+        "http://127.1/hook",
+    ] {
+        assert!(allowed(url), "{url}");
+    }
+    for url in [
+        "http://hooks.example.com/hook",
+        "http://127.0.0.1.example.com/hook",
+        "http://localhost.example.com/hook",
+        "http://hooks.example.com\\x.localhost/hook",
+        "http://0.0.0.0/hook",
+        "http://[::ffff:8.8.8.8]/hook",
+        "ftp://localhost/hook",
+    ] {
+        assert!(!allowed(url), "{url}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn hooks_http_logs_record_only_scheme_and_host() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let endpoint = Endpoint::start().await?;

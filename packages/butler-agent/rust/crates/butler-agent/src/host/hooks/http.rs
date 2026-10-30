@@ -1,10 +1,8 @@
 //! HTTP transport: the command envelope POSTed as JSON, signed, never redirected.
 use super::{Hooks, execute::Finished};
-use butler_core::hooks::{HookDefinition, HookEnvelope, loopback_host};
+use butler_core::hooks::{HookDefinition, HookEnvelope, hook_transport_allowed};
 use butler_log::http::{Client, Phase, Purpose, RedirectPolicy};
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
-use std::{fmt::Write as _, time::Duration};
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 /// Response bodies share the command output cap; overflow is an error.
 const BODY_CAP: usize = 65_536;
@@ -127,26 +125,18 @@ fn endpoint(url: &str) -> Result<reqwest::Url, Failure> {
     if !url.username().is_empty() || url.password().is_some() {
         return Err(Failure::Request);
     }
-    match url.scheme() {
-        "https" => Ok(url),
-        "http" if url.host_str().is_some_and(loopback_host) => Ok(url),
-        _ => Err(Failure::Transport),
+    if hook_transport_allowed(url.scheme(), url.host_str()) {
+        Ok(url)
+    } else {
+        Err(Failure::Transport)
     }
 }
 /// `sha256=<hex>`: HMAC-SHA256 of `<timestamp>.<raw body>`.
 fn sign(secret: &str, timestamp: &str, body: &[u8]) -> Result<String, Failure> {
-    let mut mac =
-        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).map_err(|_| Failure::Request)?;
-    mac.update(timestamp.as_bytes());
-    mac.update(b".");
-    mac.update(body);
-    let digest = mac.finalize().into_bytes();
-    Ok(digest
-        .iter()
-        .fold(String::from("sha256="), |mut text, byte| {
-            let _ = write!(text, "{byte:02x}");
-            text
-        }))
+    let parts = [timestamp.as_bytes(), b".", body];
+    butler_models::models::hmac_sha256_hex(secret.as_bytes(), &parts)
+        .map(|digest| format!("sha256={digest}"))
+        .ok_or(Failure::Request)
 }
 /// Built on first use only; TLS roots load off the async workers.
 async fn client(hooks: &Hooks) -> Result<Client, Failure> {
@@ -165,37 +155,4 @@ async fn client(hooks: &Hooks) -> Result<Client, Failure> {
         })
         .await
         .cloned()
-}
-#[cfg(test)]
-mod tests {
-    use super::endpoint;
-    /// Security boundary: hand-edited configuration cannot send a payload over
-    /// plain http to a host the sending URL parser does not call loopback.
-    // test-category: security
-    #[test]
-    fn send_time_transport_rule_uses_the_sending_parser() {
-        for allowed in [
-            "https://hooks.example.com/hook",
-            "http://localhost:8080/hook",
-            "http://127.0.0.1/hook",
-            "http://127.0.0.2/hook",
-            "http://[::1]:8080/hook",
-            "http://127.1/hook",
-        ] {
-            assert!(endpoint(allowed).is_ok(), "{allowed}");
-        }
-        for refused in [
-            "http://hooks.example.com/hook",
-            "http://127.0.0.1.example.com/hook",
-            "http://localhost.example.com/hook",
-            "http://hooks.example.com\\x.localhost/hook",
-            "http://0.0.0.0/hook",
-            "http://[::ffff:8.8.8.8]/hook",
-            "ftp://localhost/hook",
-            "http://user:secret@localhost/hook",
-            "not a url",
-        ] {
-            assert!(endpoint(refused).is_err(), "{refused}");
-        }
-    }
 }
