@@ -1136,6 +1136,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     workspaceLocal: "Local",
     workspaceWorktree: "Worktree",
     messageComposer: "Message composer",
+    mentionList: "Reference a chat or project",
+    mentionProject: "Project",
     placeholder: "Ask Butler anything",
     placeholderFollowUp: "Ask for follow-up changes",
     attachedFiles: "Attached files",

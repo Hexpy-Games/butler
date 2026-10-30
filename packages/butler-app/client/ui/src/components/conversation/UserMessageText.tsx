@@ -4,6 +4,7 @@ import { Button, FileText, InlineReference, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageContent } from "@/app/messageContent";
 import { SessionReferenceText } from "./SessionReferenceText";
+import { ProjectReferenceText } from "./editor/ProjectReferenceNode";
 
 const COLLAPSED_LINES = 5 as const;
 
@@ -38,7 +39,8 @@ export function UserMessageText({ text, contentParts }: { text: string; contentP
         data-test-class="user-message-text"
       >
         {contentParts ? contentParts.parts.map((part, index) => part.type === "text" ? part.text : part.type === "session_ref" ?
-          <SessionReferenceText key={index} sessionId={part.sessionId} title={part.titleSnapshot} /> :
+          <SessionReferenceText key={index} sessionId={part.sessionId} title={part.titleSnapshot} /> : part.type === "project_ref" ?
+          <ProjectReferenceText key={index} projectId={part.projectId} titleSnapshot={part.titleSnapshot} interactive /> :
           <InlineReference key={index} icon={<FileText />}>{part.titleSnapshot}</InlineReference>) : text}
       </Typo.Text>
       {overflowing && (
