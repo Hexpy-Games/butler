@@ -7,23 +7,57 @@ use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::scenario::Setup;
 use serde_json::json;
 
+/// A short, canonical directory removed on drop (also when the test fails).
+struct ShortRoot {
+    path: std::path::PathBuf,
+}
+
+impl ShortRoot {
+    fn create() -> Result<Self, HarnessError> {
+        // The system temp dir can be long (macOS `/var/folders/..`); use the
+        // shorter of it and `/tmp` when that exists. The product resolves
+        // symlinks (`/tmp` is one on macOS), so compare canonical paths.
+        let parent = [std::env::temp_dir(), std::path::PathBuf::from("/tmp")]
+            .into_iter()
+            .filter_map(|dir| dir.canonicalize().ok())
+            .min_by_key(|dir| dir.as_os_str().len())
+            .ok_or_else(|| HarnessError::from(std::io::Error::other("no temp dir")))?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.subsec_nanos());
+        let path = parent.join(format!("blp-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(&path)?;
+        Ok(Self {
+            path: path.canonicalize()?,
+        })
+    }
+}
+
+impl Drop for ShortRoot {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 #[tokio::test]
 async fn chat_and_config_survive_restart_under_long_data_path() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut setup = Setup::new("LONG-PATH")?.cassette("TURN-01").replay_only();
+    // The data path is rooted at a short directory this test creates, so its
+    // length is the intended one whatever the sandbox root's length is.
     // Components stay below NTFS's 255-character limit; the complete path
     // exceeds 280 characters, without an extended-path prefix in BUTLER_DATA.
-    let mut data = setup.sandbox.root.clone();
+    let short_root = ShortRoot::create()?;
+    let mut data = short_root.path.clone();
     for _ in 0..5 {
         data = data.join("long-data-directory-component-012345678901234567890123456789");
     }
     // Reproduce the macOS CI failure: the old coordinator staging basename
     // made a 415-byte data path exceed SQLite's 512-byte Unix VFS budget.
     let bytes = data.as_os_str().as_encoded_bytes().len();
-    if bytes < 415 {
-        data = data.join("d".repeat(415 - bytes - 1));
-    }
-    assert!(data.as_os_str().as_encoded_bytes().len() >= 415);
+    assert!(bytes < 415, "short root too long: {bytes} bytes");
+    data = data.join("d".repeat(415 - bytes - 1));
+    assert_eq!(data.as_os_str().as_encoded_bytes().len(), 415);
     std::fs::create_dir_all(&data)?;
     setup.sandbox.data = data;
     setup
