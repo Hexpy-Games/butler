@@ -5,7 +5,7 @@ use regex::{Captures, Regex};
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
 
-pub const MASK: &str = "[masked]";
+pub(crate) const MASK: &str = "[masked]";
 const TEXT_LIMIT: usize = 2000;
 const SIGNED_IN_TEXT_LIMIT: usize = 500;
 const URL_LIMIT: usize = 2000;
@@ -44,7 +44,7 @@ fn words(name: &str) -> Vec<String> {
 }
 
 /// Whether a header, field, attribute or parameter name carries a credential.
-pub fn credential_name(name: &str) -> bool {
+pub(crate) fn credential_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     let strong = [
         "token",
@@ -151,7 +151,7 @@ fn location(url: &url::Url, masked: bool) -> String {
 /// A URL with its credentials removed: userinfo always, credential parameters
 /// always; on a signed-in tab every query value and token-like path segment.
 /// A relative one keeps its form; what cannot be read as a URL is not shown.
-pub fn mask_url(raw: &str, masked: bool) -> String {
+pub(crate) fn mask_url(raw: &str, masked: bool) -> String {
     let url = match url::Url::parse(raw) {
         Ok(url) => url,
         Err(url::ParseError::RelativeUrlWithoutBase) => {
@@ -191,7 +191,7 @@ fn replaced(
 
 /// Page text with anything shaped like a credential removed, bounded and
 /// saying how much it left out.
-pub fn mask_text(text: &str, masked: bool) -> String {
+pub(crate) fn mask_text(text: &str, masked: bool) -> String {
     let text = replaced(&SET_COOKIE, text, |c| format!("{}: {MASK}", &c[1]));
     let text = replaced(&BEARER, &text, |c| format!("{} {MASK}", &c[1]));
     let text = replaced(&JWT, &text, |_| MASK.to_owned());
@@ -209,7 +209,7 @@ pub fn mask_text(text: &str, masked: bool) -> String {
 
 /// Headers as the model may see them: credential values never; on a signed-in
 /// tab no header at all.
-pub fn mask_headers(headers: &Value, masked: bool) -> Option<Value> {
+pub(crate) fn mask_headers(headers: &Value, masked: bool) -> Option<Value> {
     if masked {
         return None;
     }
@@ -226,76 +226,4 @@ pub fn mask_headers(headers: &Value, masked: bool) -> Option<Value> {
         })
         .collect();
     (!shown.is_empty()).then_some(Value::Object(shown))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // test-category: security
-    #[test]
-    fn credential_parameters_never_survive_a_url() {
-        let plain = mask_url(
-            "https://user:pw@shop.example.com/a?q=coat&access_token=abc#id_token=xyz",
-            false,
-        );
-        assert_eq!(
-            plain,
-            "https://shop.example.com/a?q=coat&access_token=[masked]#id_token=[masked]"
-        );
-        let signed_in = mask_url(
-            "https://shop.example.com/r/abcdefghijklmnopqrstuvwx1234?q=coat#top",
-            true,
-        );
-        assert_eq!(
-            signed_in,
-            "https://shop.example.com/r/[masked]?q=[masked]#[masked]"
-        );
-    }
-
-    // test-category: security
-    #[test]
-    fn urls_that_do_not_parse_never_show_their_text() {
-        assert_eq!(
-            mask_url("./save?token=abc&q=1", false),
-            "/save?token=[masked]&q=1"
-        );
-        assert_eq!(mask_url("http://", false), MASK);
-        assert_eq!(mask_text("see http://[bad", false), "see [masked]");
-        assert_eq!(
-            mask_url("javascript:steal(1)", false),
-            "javascript:[19 chars]"
-        );
-    }
-
-    // test-category: security
-    #[test]
-    fn text_keeps_the_message_and_drops_the_credential() {
-        let masked = mask_text(
-            "401 Bearer abcdefghijkl cookie: sid=1; x=2\ntoken=abc at https://a.example/x?key=9",
-            false,
-        );
-        assert_eq!(
-            masked,
-            "401 Bearer [masked] cookie: [masked]\ntoken=[masked] at https://a.example/x?key=[masked]"
-        );
-    }
-
-    // test-category: security
-    #[test]
-    fn names_match_words_not_fragments() {
-        for name in [
-            "Set-Cookie",
-            "Authorization",
-            "X-CSRF-Token",
-            "apiKey",
-            "x-amz-security-token",
-            "session_id",
-        ] {
-            assert!(credential_name(name), "{name}");
-        }
-        for name in ["author", "keyboard", "content-type", "monkey"] {
-            assert!(!credential_name(name), "{name}");
-        }
-    }
 }

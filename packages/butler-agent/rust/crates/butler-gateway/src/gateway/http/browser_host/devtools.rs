@@ -1,13 +1,16 @@
 //! DevTools replies at the gateway: the host's report of the page at read time
 //! decides where the tab stands, a read off what was allowed returns nothing,
 //! and masking happens here before anything goes further.
-use butler_runtime::browser::devtools::{self, PLACE_OP};
+use butler_runtime::browser::{
+    DEVTOOLS_PLACE_OP, devtools_place_reply, devtools_read_reply, devtools_standing,
+    is_devtools_op, local_url,
+};
 use serde_json::{Map, Value, json};
 
 /// A DevTools op on a loopback page: the one reach those ops have that page
 /// reads do not. The model cannot navigate there; the tab is already on it.
 pub(super) fn local_read(op: &str, url: &str) -> bool {
-    devtools::is_op(op) && devtools::local_url(url)
+    is_devtools_op(op) && local_url(url)
 }
 
 /// What a refusal may carry: never anything the host read from the page.
@@ -33,12 +36,12 @@ fn reply(op: &str, args: &Value, report: &Value) -> Value {
     if report["status"] != "ok" {
         return refusal(report);
     }
-    let standing = match devtools::standing(report) {
+    let standing = match devtools_standing(report) {
         Ok(standing) => standing,
         Err(reason) => return json!({"status":"not_dispatched","reason":reason}),
     };
-    if op == PLACE_OP {
-        return devtools::place_reply(report, &standing);
+    if op == DEVTOOLS_PLACE_OP {
+        return devtools_place_reply(report, &standing);
     }
     let expected = &args["expect"];
     if expected["place"] != standing.place.as_str() || expected["site"] != standing.site.as_str() {
@@ -46,5 +49,5 @@ fn reply(op: &str, args: &Value, report: &Value) -> Value {
             "place":standing.place.as_str(),"site":standing.site,
             "recovery":"The tab is no longer where this read was allowed. Call browser_devtools again; it asks about the tab's current page."});
     }
-    devtools::read_reply(report, &standing)
+    devtools_read_reply(report, &standing)
 }

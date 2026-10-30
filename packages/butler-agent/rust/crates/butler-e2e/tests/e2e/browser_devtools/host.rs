@@ -19,6 +19,10 @@ pub(super) const SECRETS: &[&str] = &[
     "SECRET-PASSWORD",
     "SECRET-CSRF",
     "SECRET-CONSOLE",
+    "SECRET-CARD",
+    "SECRET-CODE",
+    "SECRET-KEY",
+    "eyJSECRET",
 ];
 
 #[derive(Clone, Default)]
@@ -55,7 +59,10 @@ fn raw_rows() -> Value {
         "cookies":"sid=SECRET-COOKIE","request_headers":{"Cookie":"sid=SECRET-COOKIE","Authorization":"Bearer SECRET-AUTH"},
         "request_body":"password=SECRET-BODY-REQUEST","response_body":"SECRET-BODY-RESPONSE",
         "response_headers":{"Set-Cookie":"sid=SECRET-SET-COOKIE; HttpOnly","Authorization":"Bearer SECRET-AUTH",
-            "X-CSRF-Token":"SECRET-CSRF","Content-Type":"application/json"}}])
+            "X-CSRF-Token":"SECRET-CSRF","Content-Type":"application/json"}},
+        {"method":"GET","url":"https://user:SECRET-AUTH@cdn.example.test/a.js?v=1#id_token=SECRET-AUTH","type":"Script","status":200},
+        {"method":"GET","url":"https://app.example.test/r/abcdefghijklmnopqrstuvwx1234?q=coat#top","type":"Document","status":200},
+        {"method":"POST","url":"https://checkout.stripe.com/pay/SECRET-CARD?x=1","type":"Fetch","status":402,"error":"token=SECRET-CONSOLE rejected"}])
 }
 
 fn raw_nodes() -> Value {
@@ -63,6 +70,12 @@ fn raw_nodes() -> Value {
         {"d":1,"t":"input","a":[["type","password"],["name","pw"],["value","SECRET-PASSWORD"]]},
         {"d":1,"t":"input","a":[["type","hidden"],["name","csrf"],["value","SECRET-CSRF"]]},
         {"d":1,"t":"meta","a":[["name","csrf-token"],["content","SECRET-CSRF"]]},
+        {"d":1,"t":"input","a":[["autocomplete","one-time-code"],["value","SECRET-CODE"]]},
+        {"d":1,"t":"input","a":[["type","text"],["name","nick"],["value","plain-nick"]]},
+        {"d":1,"t":"div","a":[["data-api-key","SECRET-KEY"],["data-user","plain-user"],["class","card"]]},
+        {"d":1,"t":"a","a":[["href","./save?token=SECRET-AUTH&q=1"]]},
+        {"d":1,"t":"a","a":[["href","javascript:send('SECRET-AUTH')"]]},
+        {"d":1,"t":"iframe","a":[["srcdoc","<b>SECRET-AUTH</b>"]]},
         {"d":1,"t":"script","a":[],"hidden_chars":40},
         {"d":1,"t":"button","a":[["onclick","send('SECRET-AUTH')"]]},
         {"d":2,"x":"Sign in"}])
@@ -75,7 +88,9 @@ fn read_reply(tab: &str, page: &Value, read: &str) -> Value {
         "console" => {
             reply["entries"] = json!([{"level":"error",
                 "text":"Failed: token=SECRET-CONSOLE at https://api.example.test/x?session=SECRET-QUERY",
-                "source":"https://www.example.test/app.js?key=SECRET-AUTH","line":3}]);
+                "source":"https://www.example.test/app.js?key=SECRET-AUTH","line":3},
+                {"level":"error","text":"401 Bearer SECRET-AUTH cookie: sid=SECRET-COOKIE; x=2"},
+                {"level":"error","text":"bad eyJSECRETjwt.eyJSECRETjwt2.sig see http://[bad","source":"javascript:send('SECRET-AUTH')","line":1}]);
         }
         "network" => reply["entries"] = raw_rows(),
         "dom" => {

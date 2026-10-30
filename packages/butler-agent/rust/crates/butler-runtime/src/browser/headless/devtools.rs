@@ -2,7 +2,7 @@
 //! from page events the tab already receives, bounded, and cleared when the
 //! main frame commits a new document. Nothing is kept of cookies or bodies.
 use super::{page::Page, scripts::scripts};
-use crate::browser::devtools::{mask::credential_name, page_of};
+use crate::browser::devtools::{DEVTOOLS_PLACE_OP, mask::credential_name, page_of};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -234,14 +234,27 @@ impl Devtools {
     }
 }
 
-/// Where the tab is now, from the live tab state.
-pub(crate) fn place(page: &Page) -> Value {
-    page.shared
-        .with_tab(&page.tab, |tab| {
-            json!({"status":"ok","tab":tab.id,"url":tab.url,"profile":"signed_out",
-            "credentialed_hosts":tab.devtools.hosts()})
-        })
-        .unwrap_or_else(|| json!({"status":"not_dispatched","reason":"not_your_tab"}))
+/// Where the tab is now, from the live tab state. A sign-in shows in every
+/// tab of the same browser context.
+fn place(page: &Page) -> Value {
+    let state = page.shared.lock();
+    let Some(tab) = state.tabs.get(&page.tab) else {
+        return json!({"status":"not_dispatched","reason":"not_your_tab"});
+    };
+    let hosts: Vec<&String> = state
+        .tabs
+        .values()
+        .filter(|other| other.context == tab.context)
+        .flat_map(|other| other.devtools.hosts())
+        .collect();
+    json!({"status":"ok","tab":tab.id,"url":tab.url,"profile":"signed_out","credentialed_hosts":hosts})
+}
+
+pub(crate) async fn call(page: &Page, op: &str, args: &Value) -> Result<Value, String> {
+    if op == DEVTOOLS_PLACE_OP {
+        return Ok(place(page));
+    }
+    read(page, args).await
 }
 
 async fn document(page: &Page, args: &Value) -> Result<Value, String> {
@@ -254,7 +267,7 @@ async fn document(page: &Page, args: &Value) -> Result<Value, String> {
 
 /// One read. A tab that committed another page meanwhile answers that, so a
 /// read is never reported against the page it did not come from.
-pub(crate) async fn read(page: &Page, args: &Value) -> Result<Value, String> {
+async fn read(page: &Page, args: &Value) -> Result<Value, String> {
     let read = args["read"].as_str().unwrap_or("");
     let before = place(page);
     let mut result = match read {
@@ -283,64 +296,4 @@ pub(crate) async fn read(page: &Page, args: &Value) -> Result<Value, String> {
     }
     result["read"] = json!(read);
     Ok(result)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // test-category: security
-    #[test]
-    fn capture_keeps_no_credentials_and_ends_with_the_document() {
-        let mut tools = Devtools::default();
-        tools.event(
-            "Network.requestWillBeSent",
-            &json!({"requestId":"1","loaderId":"a","timestamp":1.0,"type":"XHR",
-            "request":{"url":"https://api.example.com/login","method":"POST"}}),
-            "https://www.example.com/",
-            true,
-        );
-        tools.event(
-            "Network.responseReceivedExtraInfo",
-            &json!({"requestId":"1",
-            "headers":{"Set-Cookie":"sid=1; HttpOnly"}}),
-            "https://www.example.com/",
-            true,
-        );
-        tools.event(
-            "Network.responseReceived",
-            &json!({"requestId":"1","response":{"status":500,"mimeType":"text/plain",
-            "headers":{"set-cookie":"sid=1","content-type":"text/plain"}}}),
-            "https://www.example.com/",
-            true,
-        );
-        tools.event(
-            "Network.loadingFinished",
-            &json!({"requestId":"1","timestamp":1.25,"encodedDataLength":9}),
-            "https://www.example.com/",
-            true,
-        );
-        let rows = tools.read_network(&json!({}));
-        assert_eq!(rows["entries"][0]["ms"], 250);
-        assert_eq!(rows["entries"][0]["bytes"], 9);
-        assert!(!rows.to_string().contains("sid=1"), "{rows}");
-        let hosts = tools.hosts();
-        assert!(hosts.iter().any(|host| *host == "api.example.com"));
-        assert!(hosts.iter().any(|host| *host == "www.example.com"));
-
-        tools.event(
-            "Runtime.exceptionThrown",
-            &json!({"exceptionDetails":{"text":"boom"}}),
-            "https://www.example.com/",
-            true,
-        );
-        tools.event(
-            "Page.frameNavigated",
-            &json!({"frame":{"id":"f","loaderId":"b"}}),
-            "https://other.example/",
-            true,
-        );
-        assert_eq!(tools.read_network(&json!({}))["entries"], json!([]));
-        assert_eq!(tools.read_console(&json!({}))["entries"], json!([]));
-    }
 }

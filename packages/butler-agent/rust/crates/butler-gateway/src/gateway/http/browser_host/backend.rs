@@ -186,7 +186,7 @@ pub(super) async fn headless_call(
             result.unwrap_or_else(|_| json!({"status":"unknown","reason":"timeout"}))
         }
     };
-    if butler_runtime::browser::devtools::is_op(op) {
+    if butler_runtime::browser::is_devtools_op(op) {
         super::devtools::finish(op, &frame_args, &mut result);
         return response(count, result);
     }

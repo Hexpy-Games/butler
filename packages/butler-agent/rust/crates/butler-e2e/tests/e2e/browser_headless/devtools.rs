@@ -21,6 +21,7 @@ pub(super) const LONG_PAGE: &str = r##"<!doctype html><meta charset="utf-8"><tit
 for (let i = 0; i < 260; i++) console.error(`오류 ${i} ${"한".repeat(3000)}`);
 const all = document.querySelector("#all");
 for (let i = 0; i < 9000; i++) { const row = document.createElement("div"); row.className = "row-" + i; row.textContent = "한글 내용 ".repeat(30); all.append(row); }
+fetch("./signed.json", { headers: { Authorization: "Bearer SECRET-HEADER" } }).catch(() => {});
 for (let i = 0; i < 620; i++) fetch(`./gone-${i}.json?${"q".repeat(1500)}=1`).catch(() => {});
 </script>"##;
 
@@ -119,7 +120,7 @@ async fn a_butler_page_reads_its_console_network_and_dom() -> Result<(), Harness
         .unwrap()
         .clone();
     assert!(failed.iter().all(|row| row["status"].as_u64() >= Some(400)));
-    assert!(!failed.is_empty());
+    assert_ne!(failed.len(), 0);
 
     let dom = read(&admin, &tab, json!({"read":"dom"})).await?;
     let html = dom["untrusted_content"]["html"].as_str().unwrap();
@@ -194,6 +195,18 @@ async fn a_long_page_reads_in_parts_and_says_so() -> Result<(), HarnessError> {
     let opened = open(&admin, "general", &url).await?;
     assert_eq!(opened["status"], "ok", "{opened}");
     let tab = opened["tab"].clone();
+
+    // Its own traffic carried a credential: it reads masked from here on, without a card.
+    let mut masked = Value::Null;
+    for _ in 0..50 {
+        masked = call(&admin, "general", "tab.devtools_place", &tab, json!({})).await?;
+        if masked["masked"] == true {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(masked["masked"], true, "{masked}");
+    assert_eq!(masked["place"], "local", "{masked}");
 
     let console = entries_with(&admin, &tab, "console", "오류 259").await?;
     let data = &console["untrusted_content"];

@@ -117,14 +117,14 @@ fn line(node: &Value, masked: bool) -> String {
     out
 }
 
-pub struct Rendered {
-    pub html: String,
-    pub rendered_nodes: usize,
-    pub omitted_nodes: usize,
+pub(crate) struct Rendered {
+    pub(crate) html: String,
+    pub(crate) rendered_nodes: usize,
+    pub(crate) omitted_nodes: usize,
 }
 
 /// Renders within the output budget; what it leaves out is counted, never silent.
-pub fn render(nodes: &[Value], masked: bool) -> Rendered {
+pub(crate) fn render(nodes: &[Value], masked: bool) -> Rendered {
     let mut html = String::new();
     let mut rendered_nodes = 0;
     for node in nodes {
@@ -139,62 +139,5 @@ pub fn render(nodes: &[Value], masked: bool) -> Rendered {
         html,
         rendered_nodes,
         omitted_nodes: nodes.len() - rendered_nodes,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn rendered(node: &Value, masked: bool) -> String {
-        render(std::slice::from_ref(node), masked).html
-    }
-
-    // test-category: security
-    #[test]
-    fn secret_fields_stay_masked_on_every_tab() {
-        for field in [
-            json!({"t":"input","a":[["type","password"],["value","hunter2"]]}),
-            json!({"t":"input","a":[["type","hidden"],["name","x"],["value","hunter2"]]}),
-            json!({"t":"input","a":[["name","csrf_token"],["value","hunter2"]]}),
-            json!({"t":"input","a":[["autocomplete","one-time-code"],["value","hunter2"]]}),
-            json!({"t":"meta","a":[["name","csrf-token"],["content","hunter2"]]}),
-            json!({"t":"div","a":[["data-api-key","hunter2"]]}),
-        ] {
-            let html = rendered(&field, false);
-            assert!(!html.contains("hunter2"), "{html}");
-            assert!(html.contains(MASK), "{html}");
-        }
-    }
-
-    // test-category: security
-    #[test]
-    fn a_signed_in_tab_masks_field_values_and_data_attributes() {
-        let input = json!({"t":"input","a":[["type","text"],["name","nick"],["value","yeon"]]});
-        assert!(!rendered(&input, true).contains("yeon"));
-        assert!(rendered(&input, false).contains("yeon"));
-        let data = json!({"t":"div","a":[["data-user","yeon"],["class","card"]]});
-        let html = rendered(&data, true);
-        assert!(
-            !html.contains("yeon") && html.contains("class=\"card\""),
-            "{html}"
-        );
-    }
-
-    // test-category: security
-    #[test]
-    fn inline_handlers_are_dropped_and_truncation_is_counted() {
-        let html = rendered(
-            &json!({"t":"a","a":[["onclick","steal()"],["href","https://a.example/?token=1"]]}),
-            false,
-        );
-        assert_eq!(html, "<a href=\"https://a.example/?token=[masked]\">\n");
-        let nodes: Vec<Value> = (0..4000)
-            .map(|_| json!({"t":"div","a":[["class","x".repeat(50)]]}))
-            .collect();
-        let result = render(&nodes, false);
-        assert!(result.omitted_nodes > 0);
-        assert_eq!(result.rendered_nodes + result.omitted_nodes, 4000);
     }
 }

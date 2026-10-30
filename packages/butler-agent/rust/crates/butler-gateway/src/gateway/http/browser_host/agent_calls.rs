@@ -464,7 +464,7 @@ async fn finish_result(
     sent: &Value,
     result: &mut Value,
 ) -> Result<(), HttpError> {
-    if butler_runtime::browser::devtools::is_op(op) {
+    if butler_runtime::browser::is_devtools_op(op) {
         super::devtools::finish(op, &sent["args"], result);
         return Ok(());
     }

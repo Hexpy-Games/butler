@@ -379,7 +379,6 @@ impl Headless {
                 return json!({"status":"ok"});
             }
             "tab.close" => return dialogs::request_close(&browser, &page).await,
-            "tab.devtools_place" => return devtools::place(&page),
             // No signed-in headless: nothing here can fill or grant a sign-in.
             _ if op.starts_with("signin.") => return refused("signed_in_unavailable"),
             // Saved cards and autofill details fill only in the App browser.
@@ -406,7 +405,7 @@ impl Headless {
         let outcome = match op {
             "tab.observe" => observe::observe(&page, args).await,
             "tab.read" => render::read_tab(&page).await,
-            "tab.devtools" => devtools::read(&page, args).await,
+            "tab.devtools_place" | "tab.devtools" => devtools::call(&page, op, args).await,
             "tab.image_collect" => collect::collect(&page, args).await,
             "tab.screenshot" => capture::screenshot(&page, args).await,
             "tab.zoom" => capture::zoom(&page, args).await,

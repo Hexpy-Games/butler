@@ -6,7 +6,9 @@
 use super::super::{GuidedTools, dispatch::encoded};
 use super::{authority, client, encode_page_data, grant, settle};
 use butler_core::json::JsonDocument;
-use butler_runtime::browser::devtools::{PLACE_OP, Place, READ_OP, scope};
+use butler_runtime::browser::{
+    DEVTOOLS_PLACE_OP, DEVTOOLS_READ_OP, DevtoolsPlace as Place, devtools_scope,
+};
 use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
 
@@ -76,7 +78,7 @@ pub(super) async fn execute(
     }
     let signal = invocation.cancellation;
     let tab = &args["tab"];
-    let request = (PLACE_OP, tab, &json!({}));
+    let request = (DEVTOOLS_PLACE_OP, tab, &json!({}));
     let standing = grant::call(owner, call, occurrence, &client, request, signal).await?;
     let Some(place) = place_of(&standing).filter(|_| standing["status"] == "ok") else {
         if standing["authority_pending"] != true {
@@ -91,7 +93,15 @@ pub(super) async fn execute(
         }
         let input = card_input(&args, read, &standing, place);
         let site = standing["site"].as_str().unwrap_or("");
-        match authority::gate(owner, call, occurrence, &input, &scope(place, site)).await? {
+        match authority::gate(
+            owner,
+            call,
+            occurrence,
+            &input,
+            &devtools_scope(place, site),
+        )
+        .await?
+        {
             authority::Gate::Pending(pending) => return encoded(&pending),
             authority::Gate::Allowed(reference, _) => approval = reference,
         }
@@ -100,7 +110,7 @@ pub(super) async fn execute(
         authority::refuse_resume(owner, call, occurrence).await?;
     }
     let args = read_args(&args, read, &standing);
-    let result = client.call(READ_OP, tab, &args, signal).await;
+    let result = client.call(DEVTOOLS_READ_OP, tab, &args, signal).await;
     let status = if result["status"] == "ok" {
         "ok"
     } else {
