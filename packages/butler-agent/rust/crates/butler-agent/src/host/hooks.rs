@@ -144,7 +144,26 @@ impl HookPort for Dispatcher {
         config: HookConfig,
         secrets: BTreeMap<String, SecretText>,
     ) -> HookFuture<'_, HookSaved> {
-        Box::pin(registry::save(&self.0, revision, config, secrets))
+        let hooks = self.0.clone();
+        Box::pin(async move {
+            let (answer, answered) = tokio::sync::oneshot::channel();
+            // A disconnected client must not cancel a save halfway. If it left,
+            // the save stops short of committing, and its orphans wait for the
+            // next successful save.
+            tokio::spawn(async move {
+                let _saving = hooks.saving.lock().await;
+                let left = || answer.is_closed();
+                let saved = registry::save(&hooks, revision, config, secrets, left).await;
+                let sweep = saved.is_ok() && !answer.is_closed();
+                let _ = answer.send(saved);
+                if sweep {
+                    hooks.secrets.sweep().await;
+                }
+            });
+            answered
+                .await
+                .map_err(|_| secrets::STORE_FAILED.to_owned())?
+        })
     }
     fn dispatch(
         &self,
