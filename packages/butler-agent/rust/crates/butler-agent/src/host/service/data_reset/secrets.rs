@@ -15,6 +15,9 @@ pub(crate) fn snapshot(root: &Path, db: &Path) -> io::Result<(Vec<SecretId>, Vec
         .into_iter()
         .map(|(service, account)| SecretId { service, account })
         .collect::<Vec<_>>();
+    for (service, account) in crate::host::hooks::reset_secret_keys(root) {
+        keys.push(SecretId { service, account });
+    }
     let db =
         sqlite::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(io::Error::other)?;
     for (service, account) in butler_gateway::gateway::reset_browser_secret_keys(root, &db)? {

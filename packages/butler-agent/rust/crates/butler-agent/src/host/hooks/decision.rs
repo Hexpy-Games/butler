@@ -43,7 +43,11 @@ pub(super) fn resolve(
             &format!("Hook '{}' exited with {:?}", hook.label(), out.exit_code),
         );
     }
-    let raw = out.stdout.trim();
+    decide(hook, &out.stdout)
+}
+/// Decision JSON shared by command stdout and HTTP response bodies.
+pub(super) fn decide(hook: &HookDefinition, raw: &str) -> (String, Option<String>) {
+    let raw = raw.trim();
     let decision = match serde_json::from_str::<Decision>(raw) {
         Ok(decision) => decision,
         Err(_) if !raw.starts_with('{') && !raw.starts_with('[') => {
@@ -84,7 +88,11 @@ fn deny(hook: &HookDefinition, reason: String) -> (String, Option<String>) {
     };
     ("deny".into(), Some(format!("{}: {reason}", hook.label())))
 }
-fn failure(hook: &HookDefinition, outcome: &str, reason: &str) -> (String, Option<String>) {
+pub(super) fn failure(
+    hook: &HookDefinition,
+    outcome: &str,
+    reason: &str,
+) -> (String, Option<String>) {
     let blocked = hook.fail_closed && hook.event.blocks();
     (
         outcome.into(),
