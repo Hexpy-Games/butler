@@ -44,7 +44,17 @@ struct Hooks {
     shutdown: CancellationToken,
 }
 impl Dispatcher {
-    pub(crate) async fn open(
+    pub(crate) async fn port(
+        plugins: Arc<super::plugins::Plugins>,
+        data: PathBuf,
+        bindings: butler_turn::workspace::SessionBindingStore,
+        environment: &HashMap<String, String>,
+        shutdown: CancellationToken,
+    ) -> Arc<dyn HookPort> {
+        Arc::new(Self::open(plugins, data, bindings, environment, shutdown).await)
+    }
+
+    async fn open(
         plugins: Arc<super::plugins::Plugins>,
         data: PathBuf,
         bindings: butler_turn::workspace::SessionBindingStore,

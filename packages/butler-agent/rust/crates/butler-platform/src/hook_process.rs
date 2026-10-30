@@ -133,7 +133,7 @@ pub async fn run(
     })
     .await
     .map_err(error)??;
-    let result = supervise(command, payload, timeout, cancel).await;
+    let result = Box::pin(supervise(command, payload, timeout, cancel)).await;
     if let Some(contained) = contained {
         let _ = tokio::task::spawn_blocking(move || contained.finish()).await;
     }

@@ -275,6 +275,7 @@ fn sync_failure_and_link_fallback() {
     }
     let root = std::env::temp_dir().join(format!("workspace-sync-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
+    let root = butler_platform::secure_fs::canonicalize(&root).unwrap();
     let target = root.join("new.txt");
     let prepare = || {
         let before = io::observe(
