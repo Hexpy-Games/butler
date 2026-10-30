@@ -219,17 +219,18 @@ async function editFlows(page: Page, id: string, items: string[]) {
   assert.equal(joined.op, "join_stack"); assert.equal(joined.target_epic_id, third);
   const stack = [third!, second!];
   if (!baseline) {
-    // The caption after a 묶음 leads with the waiting word; only the quoted name may truncate.
+    // The caption after a 묶음 leads with the waiting word, which never truncates.
     const after = section(page).locator(`[data-step-item="${items[3]}"]`);
-    const { word, name, tail } = c.afterStack("발표 자료", 1);
-    assert.equal([word, name, tail].filter(Boolean).join(" "), lang === "ko" ? "끝나면: ‘발표 자료 외 1건’" : "After: ‘발표 자료’ +1 more");
-    const parts = [word, name, ...(tail ? [tail] : [])].map(text => after.getByText(text, { exact: true }));
-    const boxes = await Promise.all(parts.map(async part => {
+    const { word, name } = c.afterStack("발표 자료", 1);
+    assert.equal(`${word} ${name}`, lang === "ko" ? "끝나면: ‘발표 자료 외 1건’" : "After: ‘발표 자료’ +1 more");
+    const boxes = await Promise.all([word, name].map(async text => {
+      const part = after.getByText(text, { exact: true });
       await part.waitFor();
-      return part.evaluate(node => ({ left: node.getBoundingClientRect().left, cut: node.scrollWidth > node.clientWidth }));
+      return part.evaluate(node => ({ left: node.getBoundingClientRect().left, width: node.getBoundingClientRect().width, cut: node.scrollWidth > node.clientWidth }));
     }));
-    assert(boxes.every((box, index) => index === 0 || box.left > boxes[index - 1]!.left), "the waiting word comes first");
-    assert(!boxes[0]!.cut && !(tail && boxes[2]!.cut), `the waiting word and the count are never truncated: ${JSON.stringify(boxes)}`);
+    assert(boxes[0]!.left < boxes[1]!.left, "the waiting word comes first");
+    assert(!boxes[0]!.cut, `the waiting word is never truncated: ${JSON.stringify(boxes)}`);
+    assert(boxes[1]!.width > 0, `what it waits for keeps visible room: ${JSON.stringify(boxes)}`);
   }
   await shot(page, "stack");
   const moved = await keyboardEdit(page, id, third!, ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown"], true);

@@ -43,12 +43,7 @@ function OrderMarker({ status, number }: { status: string; number: number }) {
   if (status === "failed") return <Typo.Text tone="danger"><CircleAlert size="md" /></Typo.Text>;
   return <Typo.Label tone="tertiary" numeric="tabular">{number}</Typo.Label>;
 }
-/** Only the quoted name truncates: the waiting word and a count outside the quote keep their room. */
-function AfterCaption({ word, name, tail }: ReturnType<typeof appCopy.canon.order.after>) {
-  return (
-    <Stack as="span" align="row" gap="xs">
-      <Typo.Text wrap="nowrap">{word}</Typo.Text><Typo.Text truncate>{name}</Typo.Text>
-      {tail ? <Typo.Text wrap="nowrap">{tail}</Typo.Text> : null}
-    </Stack>
-  );
+/** The waiting word keeps its room; what it waits for truncates. */
+function AfterCaption({ word, name }: ReturnType<typeof appCopy.canon.order.after>) {
+  return <Stack as="span" align="row" gap="xs"><Typo.Text wrap="nowrap">{word}</Typo.Text><Typo.Text truncate>{name}</Typo.Text></Stack>;
 }
