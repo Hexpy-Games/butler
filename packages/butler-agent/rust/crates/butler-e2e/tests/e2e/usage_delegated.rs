@@ -15,6 +15,8 @@ mod recovery;
 mod split;
 #[path = "usage_delegated/stub.rs"]
 mod stub;
+#[path = "usage_delegated/subtasks.rs"]
+mod subtasks;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::Value;
 use std::{
@@ -140,8 +142,10 @@ async fn deleg_use_02_no_double_count_or_child_rows() -> Result<(), HarnessError
     assert_eq!(child.data()["model"], {
         let mut model = global.data()["model"].clone();
         model["byRole"] = child.data()["model"]["byRole"].clone();
+        model["subtasks"] = child.data()["model"]["subtasks"].clone();
         model
     });
+    assert_eq!(child.data()["model"]["subtasks"]["promptTokens"], 400.0);
     assert_eq!(child.data()["timeline"]["slots"][0][5], 400.0);
     let slot = &child.data()["timeline"]["slots"][0];
     assert_eq!(slot[2].as_f64().unwrap() + slot[4].as_f64().unwrap(), 520.0);
