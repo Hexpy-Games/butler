@@ -83,7 +83,7 @@ export function onLocalPage(tab) {
   const url = liveUrl(tab);
   if (!url) return false;
   const host = new URL(url).hostname.toLowerCase().replace(/\.$/u, "");
-  return host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || /^127\./u.test(host);
+  return host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || /^127(\.\d{1,3}){3}$/u.test(host);
 }
 
 async function document(tab, args) {
