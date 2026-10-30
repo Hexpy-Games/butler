@@ -12,7 +12,9 @@ import { ComposerCardEditor, ComposerCardEditable, ComposerCardPlaceholder } fro
 import { useComposerStore } from "./composerStore";
 import { SessionReferenceNode } from "./editor/SessionReferenceNode";
 import { ProjectSourceNode } from "./editor/ProjectSourceNode";
+import { ProjectReferenceNode } from "./editor/ProjectReferenceNode";
 import { ComposerEditorPlugin } from "./editor/ComposerEditorPlugin";
+import { ComposerMentionMenu } from "./ComposerMentionMenu";
 import { isComposerComposing, subscribeComposing } from "./editor/composition";
 
 export const COMPOSER_MAX_AUTO_ROWS = 8;
@@ -41,7 +43,7 @@ export const ComposerTextArea = memo(function ComposerTextArea({ placeholder }: 
   return (
     <LexicalComposer key={sessionId} initialConfig={{
       namespace: "butler-composer",
-      nodes: [SessionReferenceNode, ProjectSourceNode],
+      nodes: [SessionReferenceNode, ProjectReferenceNode, ProjectSourceNode],
       onError: error => { throw error; },
     }}>
       <ComposerCardEditor>
@@ -60,6 +62,7 @@ export const ComposerTextArea = memo(function ComposerTextArea({ placeholder }: 
       </ComposerCardEditor>
       <HistoryPlugin />
       <ComposerEditorPlugin />
+      <ComposerMentionMenu />
     </LexicalComposer>
   );
 });

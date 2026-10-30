@@ -219,3 +219,29 @@ describe("butler-ds/switch-field-layout", () => {
     ],
   });
 });
+
+describe("butler-ds/no-leading-disclosure-chevron", () => {
+  const ds = 'import { Clickable, ChevronDown, ChevronRight, Typo } from "@/butler-ds";';
+  tester.run("no-leading-disclosure-chevron", rules["no-leading-disclosure-chevron"], {
+    valid: [
+      `${ds} const a = <Clickable aria-expanded={open}><Typo.Body>Title</Typo.Body><ChevronRight /></Clickable>;`,
+      `${ds} const a = <Clickable aria-expanded={open}><span><Typo.Body>Title</Typo.Body>{open ? <ChevronDown /> : <ChevronRight />}</span></Clickable>;`,
+      `${ds} const a = <Clickable aria-expanded={open} icon={<Wrench />}><Typo.Body>Title</Typo.Body></Clickable>;`,
+      `${ds} const a = <Clickable><ChevronRight /><Typo.Body>Next</Typo.Body></Clickable>;`,
+    ],
+    invalid: [
+      {
+        code: `${ds} const a = <Clickable aria-expanded={open}>{open ? <ChevronDown /> : <ChevronRight />}<Typo.Body>Title</Typo.Body></Clickable>;`,
+        errors: [{ messageId: "leadingChild" }],
+      },
+      {
+        code: `${ds} const a = <button aria-expanded={open}>\n  <span>{open ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}</span>\n  <span>Title</span>\n</button>;`,
+        errors: [{ messageId: "leadingChild" }],
+      },
+      {
+        code: `${ds} const a = <Button aria-expanded={open} icon={<ChevronRight />}>Details</Button>;`,
+        errors: [{ messageId: "startIconProp", data: { prop: "icon" } }],
+      },
+    ],
+  });
+});

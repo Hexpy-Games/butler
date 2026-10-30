@@ -61,6 +61,7 @@ pub(super) fn content_text(content: &MessageContent) -> String {
         .map(|part| match part {
             MessageContentPart::Text { text, .. } => text.clone(),
             MessageContentPart::SessionRef { title_snapshot, .. }
+            | MessageContentPart::ProjectRef { title_snapshot, .. }
             | MessageContentPart::ProjectSourceRef { title_snapshot, .. } => {
                 format!("@{title_snapshot}")
             }

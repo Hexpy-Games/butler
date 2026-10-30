@@ -2,7 +2,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Clickable } from "../../components/Clickable";
 import { Collapsible } from "../../components/Collapsible";
-import { ChevronDown, ChevronRight } from "../../components/Icons";
+import { ChevronRight } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
 import { useReducedMotion } from "../../lib/useReducedMotion";
 import { cn } from "../../lib/utils";
@@ -11,11 +11,11 @@ import { dsClass, dsStyle } from "../../lib/internal";
 import { DisclosureRowIndentReset, useDisclosureRowIndent } from "./DisclosureRowIndent";
 
 /**
- * leading (default): a chevron column before the title. trailing: a chevron
- * after the meta that turns down when open (log lists). none: no chevron,
- * the row itself is the cue (trace steps).
+ * trailing (default): a chevron directly after the title (and its count)
+ * that turns down when open. none: no chevron, the row itself is the cue
+ * (trace steps). A disclosure chevron never leads the title.
  */
-export type DisclosureRowAffordance = "leading" | "trailing" | "none";
+export type DisclosureRowAffordance = "trailing" | "none";
 
 /** A problem row: a dot before the title in the trace error or wait color. */
 export type DisclosureRowAttention = "error" | "warning";
@@ -26,11 +26,7 @@ export interface DisclosureRowProps extends Omit<DsBaseProps<HTMLAttributes<HTML
   meta?: ReactNode;
   icon?: ReactNode;
   surface?: "selection" | "plain";
-  /**
-   * Where the open/closed cue sits. With trailing or none, a row with
-   * nothing to reveal (no children, no count) is static: not a button, no
-   * hover fill, not focusable, same alignment.
-   */
+  /** Whether the title carries the open/closed chevron. */
   affordance?: DisclosureRowAffordance;
   /**
    * A muted count after the title: the direct child rows the caller shows
@@ -38,6 +34,13 @@ export interface DisclosureRowProps extends Omit<DsBaseProps<HTMLAttributes<HTML
    * trailing or no-chevron row interactive even without children.
    */
   count?: number;
+  /**
+   * The row toggles content outside it (sibling sections, a region the
+   * caller renders below). Without it, only children or a count above 0
+   * make the row a disclosure; a row with nothing to reveal is static: no
+   * chevron, not a button, no hover fill, not focusable, same alignment.
+   */
+  reveals?: boolean;
   /** Problem rows only; the meta or title must still say what happened. */
   attention?: DisclosureRowAttention;
   /** A full-width line under the description (a SpanBar); it never indents with the text. */
@@ -54,8 +57,9 @@ export function DisclosureRow({
   meta,
   icon,
   surface = "selection",
-  affordance = "leading",
+  affordance = "trailing",
   count,
+  reveals = false,
   attention,
   bar,
   controlsId,
@@ -68,27 +72,19 @@ export function DisclosureRow({
 }: DisclosureRowProps) {
   const indent = useDisclosureRowIndent();
   const reduced = useReducedMotion();
-  const leading = affordance === "leading";
-  // Content: the panel (children) or child rows the caller shows on toggle (count).
-  const interactive = leading || Boolean(children) || (count ?? 0) > 0;
-  const shape = leading ? undefined : affordance;
+  const interactive = reveals || Boolean(children) || (count ?? 0) > 0;
+  const chevron = affordance === "trailing" && interactive ? (
+    <span className={styles.turn} aria-hidden="true" data-open={open ? "true" : undefined}
+      data-reduced={reduced ? "true" : undefined}>
+      <ChevronRight size="sm" />
+    </span>
+  ) : null;
   const triggerClass = cn(styles.trigger, !icon && styles.noIcon);
   const line = (
     <>
-      {leading ? (
-        <span className={styles.chevron} aria-hidden="true">
-          {open ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
-        </span>
-      ) : null}
       {icon ? <span className={styles.icon} data-slot="disclosure-row-icon">{icon}</span> : null}
-      <RowTitle title={title} count={count} attention={attention} />
+      <RowTitle title={title} count={count} attention={attention} chevron={chevron} />
       {meta ? <Typo.Caption className={dsClass(styles.meta)} data-slot="disclosure-row-meta">{meta}</Typo.Caption> : null}
-      {affordance === "trailing" && interactive ? (
-        <span className={styles.turn} aria-hidden="true" data-open={open ? "true" : undefined}
-          data-reduced={reduced ? "true" : undefined}>
-          <ChevronRight size="sm" />
-        </span>
-      ) : null}
       {description || indent?.cue ? (
         <Typo.Caption className={dsClass(styles.description)}>
           {description}{description && indent?.cue ? " · " : null}{indent?.cue}
@@ -102,18 +98,18 @@ export function DisclosureRow({
       className={cn(
         styles.root,
         open && interactive && styles.open,
-        icon && styles.withIcon,
         surface === "plain" && styles.plain,
         className,
       )}
       data-surface={surface}
-      data-affordance={shape}
+      data-affordance={affordance}
       data-indent={indent ? "true" : undefined}
       style={indent ? dsStyle({ ...style, "--disclosure-indent-level": indent.level }) : style}
       {...props}
     >
       {interactive ? (
-        <Clickable aria-controls={controlsId} className={dsClass(triggerClass)} aria-expanded={open} stretch onClick={onToggle}>
+        <Clickable aria-controls={controlsId} className={dsClass(triggerClass)} aria-expanded={open} stretch
+          bleed={surface === "plain" ? "inline" : undefined} onClick={onToggle}>
           {line}
         </Clickable>
       ) : (
@@ -121,7 +117,7 @@ export function DisclosureRow({
       )}
       {children ? (
         <Collapsible open={open}>
-          <div className={styles.panel} data-affordance={shape} data-icon={icon ? "true" : undefined}>
+          <div className={styles.panel} data-icon={icon ? "true" : undefined}>
             <DisclosureRowIndentReset>{children}</DisclosureRowIndentReset>
           </div>
         </Collapsible>
@@ -130,11 +126,8 @@ export function DisclosureRow({
   );
 }
 
-/** The title, with a problem dot before it and a muted count after it when given. */
-function RowTitle({ title, count, attention }: Pick<DisclosureRowProps, "title" | "count" | "attention">) {
-  if (count === undefined && !attention) {
-    return <Typo.Body className={dsClass(styles.title)} data-slot="disclosure-row-title">{title}</Typo.Body>;
-  }
+/** The title line: a problem dot before the title, a muted count and the chevron after it. */
+function RowTitle({ title, count, attention, chevron }: Pick<DisclosureRowProps, "title" | "count" | "attention"> & { chevron: ReactNode }) {
   return (
     <span className={styles.titleLine}>
       {attention ? <span className={styles.dot} data-tone={attention} aria-hidden="true" /> : null}
@@ -142,6 +135,7 @@ function RowTitle({ title, count, attention }: Pick<DisclosureRowProps, "title" 
       {count !== undefined ? (
         <Typo.Caption tone="tertiary" numeric="tabular" className={dsClass(styles.count)}>{`(${count})`}</Typo.Caption>
       ) : null}
+      {chevron}
     </span>
   );
 }

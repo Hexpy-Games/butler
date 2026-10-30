@@ -85,7 +85,7 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
-    name: "Log list (trailing chevron)",
+    name: "Log list (chevron after the title)",
     states: ["expanded", "chevron turn"],
     widths: ["375", "app"],
     render: (context) => <LogList locale={context.locale} />,
@@ -100,16 +100,19 @@ export const stories: ShowcaseStory[] = [
 
 /**
  * Every surface and content shape in every interaction state. The title line
- * must sit centred in the hover/open fill, and plain rows keep the chevron on
- * the content edge with the fill bleeding past it (see README "Geometry").
+ * must sit centred in the hover/open fill, the chevron directly after the
+ * title, and plain rows keep the title on the content edge with the fill
+ * bleeding past it (see README "Geometry").
  */
 const MATRIX_VARIANTS = [
   "selection",
   "selection + description",
+  "selection + meta + description",
+  "reveals, no children",
   "plain",
   "plain + icon + meta",
   "plain + long meta",
-  "trailing",
+  "plain, static",
   "none + count + dot",
   "none, static",
 ] as const;
@@ -135,10 +138,14 @@ export const stateMatrix: ShowcaseStateMatrix = {
         </DisclosureRow>;
       case "plain + long meta":
         return <DisclosureRow {...shared} title={copy.log} meta={copy.logMeta}><Typo.Caption>{copy.evidence}</Typo.Caption></DisclosureRow>;
-      case "trailing":
-        return <DisclosureRow {...shared} affordance="trailing" title={copy.log} meta={copy.counts} description={copy.files}>
+      case "selection + meta + description":
+        return <DisclosureRow {...shared} title={copy.log} meta={copy.counts} description={copy.files}>
           <Typo.Caption>{copy.result}</Typo.Caption>
         </DisclosureRow>;
+      case "reveals, no children":
+        return <DisclosureRow {...shared} reveals title={copy.longFiles} />;
+      case "plain, static":
+        return <DisclosureRow {...shared} title={copy.details} meta={copy.counts} />;
       case "none + count + dot":
         return <DisclosureRow {...shared} affordance="none" attention="error" count={2} title={copy.search} meta={copy.counts}
           description={copy.files}><Typo.Caption>{copy.result}</Typo.Caption></DisclosureRow>;

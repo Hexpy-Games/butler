@@ -17,9 +17,9 @@ export interface SpanAxisProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   /** Tick label, e.g. ms → "2초". Default: "412ms" / "2s". */
   format?: (value: number) => string;
   /**
-   * disclosure: starts where a DisclosureRow's description column starts (leading chevron).
-   * row: spans the row inside its inset, as the `bar` of a DisclosureRow with a trailing or no
-   * chevron does (text-indent SpanRows); maxDepth does not apply.
+   * disclosure: starts where a DisclosureRow's description starts (row-indent SpanRows).
+   * row: spans the row inside its inset, as the `bar` of a DisclosureRow does (text-indent
+   * SpanRows); maxDepth does not apply.
    */
   inset?: "none" | "disclosure" | "row";
   /** Row-indent traces: the deepest level, as passed to every SpanRow, so the axis moves with the bars. */

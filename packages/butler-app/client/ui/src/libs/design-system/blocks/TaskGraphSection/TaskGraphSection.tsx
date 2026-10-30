@@ -39,7 +39,7 @@ export function TaskGraphSection({ graphId, title, status, meta, open, onToggle,
     <Stack gap="none" data-test-class="task-graph-group" data-graph-id={graphId} data-open={isOpen ? "true" : "false"}>
       {collapsible ? (
         <InspectorInset>
-          <DisclosureRow title={title} meta={meta} icon={<TaskGraphStatusIcon status={status} />} open={isOpen} controlsId={regionId} onToggle={onToggle} />
+          <DisclosureRow title={title} meta={meta} icon={<TaskGraphStatusIcon status={status} />} open={isOpen} reveals controlsId={regionId} onToggle={onToggle} />
         </InspectorInset>
       ) : null}
       {isOpen ? (

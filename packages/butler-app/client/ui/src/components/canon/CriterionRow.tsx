@@ -18,7 +18,7 @@ export function CriterionRow({ node, criterion, onRefresh }: {
     } catch (error) { await canonWriteFailure(error, onRefresh); }
     finally { pending.current = false; setBusy(false); }
   };
-  return <Box padding="xs" data-test-class="canon-criterion" data-criterion-id={criterion.criterion_id}>
+  return <Box paddingY="xs" data-test-class="canon-criterion" data-criterion-id={criterion.criterion_id}>
     <Stack gap="xs">
       <Stack align="row" cross="center" justify="between">
         <Typo.Code>{criterion.criterion_id}</Typo.Code>
