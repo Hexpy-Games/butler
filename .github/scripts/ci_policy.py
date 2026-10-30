@@ -2,7 +2,8 @@
 
 
 # On PRs linux-archive owns both compilation and workspace smoke results.
-PR_FAST_JOBS = frozenset(('lint', 'windows-check', 'linux-clippy', 'linux-archive',
+# shellcheck is a hosted Linux lint, so packaging script findings fail the PR.
+PR_FAST_JOBS = frozenset(('lint', 'windows-check', 'shellcheck', 'linux-clippy', 'linux-archive',
                           'ui', 'site', 'ds'))
 
 def rust_jobs(outputs, event):

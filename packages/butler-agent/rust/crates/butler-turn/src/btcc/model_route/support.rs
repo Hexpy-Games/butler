@@ -195,13 +195,10 @@ pub(super) fn identity(
     effective: &str,
     result: &ModelRoundResult,
 ) -> ModelIdentity {
-    let reported = result.provider_identity.as_ref().map(|v| {
-        if v.reported_model.contains('/') {
-            v.reported_model.clone()
-        } else {
-            format!("{}/{}", v.provider, v.reported_model)
-        }
-    });
+    let reported = result
+        .provider_identity
+        .as_ref()
+        .map(|v| format!("{}/{}", v.provider, v.reported_model));
     ModelIdentity {
         requested_model_ref: request.model.into(),
         effective_model_ref: effective.into(),

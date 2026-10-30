@@ -20,7 +20,7 @@ pub(super) enum ResponseMode {
     Json {
         tolerate_invalid: bool,
     },
-    HostedChatSse,
+    HostedChatSse(super::ChatWirePolicy),
     ChatGptPlanSse,
     ResponsesSse,
     AnthropicSse,
@@ -256,9 +256,10 @@ async fn hosted_chat(
     api: &str,
     progress: super::request_guard::RequestProgress,
     observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+    policy: super::ChatWirePolicy,
 ) -> Result<Value, Box<ProviderRequestError>> {
     if is_sse(&response) {
-        sse::hosted_chat(response, provider, api, progress, observer).await
+        sse::hosted_chat(response, provider, api, progress, observer, policy).await
     } else {
         json(response, provider, api, true).await
     }
@@ -291,8 +292,8 @@ impl Reading<'_> {
             ResponseMode::Json { tolerate_invalid } => {
                 json(response, provider, api, tolerate_invalid).await
             }
-            ResponseMode::HostedChatSse => {
-                hosted_chat(response, provider, api, progress, stream_observer).await
+            ResponseMode::HostedChatSse(policy) => {
+                hosted_chat(response, provider, api, progress, stream_observer, policy).await
             }
             ResponseMode::ResponsesSse
             | ResponseMode::AnthropicSse

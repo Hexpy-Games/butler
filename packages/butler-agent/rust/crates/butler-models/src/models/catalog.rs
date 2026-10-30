@@ -99,6 +99,8 @@ pub enum TokenEstimatorKind {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ModelProviderMetadata {
+    #[serde(default)]
+    pub chat_wire_policy: ChatWirePolicy,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_modalities: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -394,7 +396,7 @@ impl ModelCatalogSnapshot {
         let lookup = &self.lookup_models;
         let runs = |model_ref: &str, effort: ReasoningEffort| {
             lookup::find_model_metadata(Some(model_ref), lookup).is_some_and(|model| {
-                model.runtime_supported && model.reasoning_efforts.contains(&effort)
+                model.runtime_supported && model.supports_preset_effort(effort)
             })
         };
         Some(upgrade_routine_preset(

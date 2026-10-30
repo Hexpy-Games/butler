@@ -74,7 +74,7 @@ pub fn resolve_browsing_model(
     ] {
         if let Some(preset) = preset
             && let Some(model) = registered.iter().filter(usable).find(|model| {
-                model.model_ref == preset.model && model.reasoning_efforts.contains(&preset.effort)
+                model.model_ref == preset.model && model.supports_preset_effort(preset.effort)
             })
         {
             return BrowsingResolution {

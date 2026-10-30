@@ -15,6 +15,7 @@ pub struct ModelPreset {
     /// Namespaced model ref, e.g. `openai/gpt-6.1-sol`.
     pub model: String,
     /// Reasoning effort the preset runs at.
+    #[serde(default = "no_effort")]
     pub effort: ReasoningEffort,
 }
 
@@ -55,6 +56,8 @@ pub(crate) struct StaticProviderEntry {
     pub(crate) provider_id: String,
     pub(crate) api_key_billing: ApiKeyBilling,
     pub(crate) presets: ProviderPresets,
+    #[serde(default)]
+    pub(crate) chat_wire_policy: super::ChatWirePolicy,
 }
 
 /// A refreshed model id's tier and version, inferred from the provider's
@@ -178,4 +181,19 @@ pub fn upgrade_routine_preset(
             effort: static_preset.effort,
         },
     )
+}
+
+fn no_effort() -> ReasoningEffort {
+    ReasoningEffort::None
+}
+
+impl super::ModelProviderMetadata {
+    /// Models without effort controls run presets with no effort.
+    pub fn supports_preset_effort(&self, effort: ReasoningEffort) -> bool {
+        if self.reasoning_efforts.is_empty() {
+            effort == ReasoningEffort::None
+        } else {
+            self.reasoning_efforts.contains(&effort)
+        }
+    }
 }

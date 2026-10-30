@@ -312,7 +312,7 @@ pub(super) fn hydrate_final_payload(value: &str) -> StorageResult<FinalPayload> 
 fn model_ref(value: &str) -> bool {
     value.encode_utf16().count() <= 256
         && !value.chars().any(char::is_whitespace)
-        && value.split('/').count() == 2
+        && value.contains('/')
         && value.split('/').all(|part| !part.is_empty())
 }
 

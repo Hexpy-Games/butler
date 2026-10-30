@@ -185,7 +185,7 @@ fn assert_search_planning_presets() {
             .unwrap();
         assert_eq!(model.provider_id, provider.provider_id);
         assert!(model.runtime_supported);
-        assert!(model.reasoning_efforts.contains(&selected.effort));
+        assert!(model.supports_preset_effort(selected.effort));
         let has_light_model = provider
             .models
             .iter()

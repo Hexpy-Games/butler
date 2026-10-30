@@ -444,6 +444,9 @@ jobs:
   gate:
     name: ${{ github.event_name == 'workflow_dispatch' && 'dispatch gate' || 'gate' }}
     if: always()
+    # Full CI runs take 15-45 min (recent main runs 2-44 min incl. queueing); the metadata
+    # re-evaluation waits for one, so allow 2x the slowest recent run.
+    timeout-minutes: 90
     needs: [changes, lint, windows-check, shellcheck, selftest, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds, ds-approval]
     runs-on: ubuntu-latest
     steps:

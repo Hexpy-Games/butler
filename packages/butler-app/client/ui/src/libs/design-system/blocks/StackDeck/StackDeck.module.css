@@ -1,0 +1,172 @@
+/* A 묶음 deck. Collapsed, the front is a row Card at the full row width.
+   The Card itself is not a button: one transparent toggle covers it (the
+   stretched-link pattern) and the content sits above it, so the content's
+   own controls (grip, ⋯) are the toggle's siblings and later tab stops. The
+   hover fill is the Card's own, and the toggle's focus ring is drawn on the
+   Card. One edge per extra card (up to three) shows past its right side, at
+   the same top and height: the right end of a card behind, no fill, the
+   card's border token and corner. Each edge continues from the corner of the
+   shape in front of it (the first from the card grown by the focus-ring
+   room, which is also the running halo's spread), so the card's fills never
+   reach an edge and the halo leaves every edge in view. The edges sit inside
+   the toggle, so a click on one opens the deck. */
+.deck {
+  --stack-deck-peek-step: var(--space-xs);
+  /* Stacking layers of an open column (cards past the eighth share one). */
+  --stack-deck-layers: 8;
+
+  min-width: 0;
+}
+
+.front {
+  position: relative;
+  isolation: isolate;
+}
+
+/* The card holds its toggle. */
+.card {
+  position: relative;
+}
+
+/* The toggle covers the card's border box. It is positioned without a
+   z-index, so the edges inside it (z-index -1) still sit behind the card. */
+.toggle {
+  position: absolute;
+  inset: calc(-1 * var(--border-hairline));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  appearance: none;
+  background: none;
+  color: inherit;
+  cursor: inherit;
+  font: inherit;
+  outline: none;
+}
+
+/* The Card draws its toggle's ring, outside any content clip. */
+.card:has(> .toggle:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+/* The content sits above the toggle; only its own controls take the
+   pointer, so a tap anywhere else on the card reaches the toggle. */
+.content {
+  position: relative;
+}
+
+button.toggle ~ .content {
+  pointer-events: none;
+}
+
+button.toggle
+  ~ .content
+  :is(
+    a[href],
+    button,
+    input,
+    select,
+    textarea,
+    [role="button"],
+    [tabindex]:not([tabindex="-1"])
+  ) {
+  pointer-events: auto;
+}
+
+.peek[data-i="1"],
+.item[data-i="1"] {
+  --stack-deck-i: 1;
+}
+
+.peek[data-i="2"],
+.item[data-i="2"] {
+  --stack-deck-i: 2;
+}
+
+.peek[data-i="3"],
+.item[data-i="3"] {
+  --stack-deck-i: 3;
+}
+
+.item[data-i="0"] {
+  --stack-deck-i: 0;
+}
+
+.item[data-i="4"] {
+  --stack-deck-i: 4;
+}
+
+.item[data-i="5"] {
+  --stack-deck-i: 5;
+}
+
+.item[data-i="6"] {
+  --stack-deck-i: 6;
+}
+
+.item[data-i="7"] {
+  --stack-deck-i: 7;
+}
+
+.peek {
+  /* Edge k starts where the shape in front of it starts its corner. */
+  --stack-deck-peek-offset: calc(
+    100% + var(--focus-ring-room) + var(--stack-deck-peek-step) *
+      (var(--stack-deck-i) - 1) - var(--radius-control)
+  );
+
+  position: absolute;
+  z-index: -1;
+  box-sizing: border-box;
+  width: calc(var(--radius-control) + var(--stack-deck-peek-step));
+  inset-block: 0;
+  inset-inline-start: var(--stack-deck-peek-offset);
+  border: var(--border-hairline) solid var(--line);
+  border-inline-start: 0;
+  border-start-end-radius: var(--radius-control);
+  border-end-end-radius: var(--radius-control);
+  transition: border-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* The edges answer the pointer with the card (they are part of its toggle). */
+.front:hover .peek {
+  border-color: var(--line-strong);
+}
+
+/* A running stack: its cards behind are running too. */
+.front[data-running] .peek {
+  border-color: var(--worker-active);
+}
+
+/* Open: the cards in one column at the full row width, in order. The gap
+   is wider than the focus-ring room, so no card covers another's ring or
+   running halo, and nothing here clips. Each card stacks under the one
+   before it, so while the cards slide (StackDeckColumn) they pass behind
+   the front card. */
+.column {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+  isolation: isolate;
+}
+
+.item {
+  position: relative;
+  z-index: calc(var(--stack-deck-layers) - var(--stack-deck-i));
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A joined card's edge slides out from behind the deck to the right. */
+  .peek[data-entering] {
+    animation: peek-in var(--motion-slow) var(--motion-ease-emphasized) both;
+  }
+}
+
+@keyframes peek-in {
+  from {
+    opacity: 0;
+    translate: calc(-2 * var(--stack-deck-peek-step)) 0;
+  }
+}
