@@ -650,8 +650,7 @@ export const koKrCopy: AppCopy = {
         other: "같은 작업",
       },
     },
-    skillTitle: name => `${name}과 어떤 스킬을 만들어볼까요?`, reportPreparing: title => `${title} 작업에 대한 보고 준비 중`,
-    progressDetails: (title, activity, progress) => `${title}, ${activity}${progress ? `, 진행도 ${progress}` : ""}, 진행 상세 보기`,
+    skillTitle: name => `${name}과 어떤 스킬을 만들어볼까요?`,
     viewActivity: title => `${title}, 활동 보기`, more: (title, count) => `${title} 외 ${count}개`, deleteItem: title => `"${title}" 항목을 삭제할까요?`,
     projectConversation: title => `프로젝트 대화 · ${title}`, remaining: value => `${value} 남음`, resets: value => `재설정 ${value}`, expires: value => `만료 ${value}`,
     defaultSource: title => `${title} 기본 출처`, valueSource: title => `${title} 값 출처`, deleteRow: title => `${title} 행 삭제`,
@@ -676,7 +675,6 @@ export const koKrCopy: AppCopy = {
     userSkills: "사용자 추가 스킬",
     projectSkills: "프로젝트 스킬",
     noSkills: "등록된 스킬이 없습니다.",
-    activeWork: "진행 중인 작업",
     grantScopeTag: "이 대화",
     grantCommandScope: "이 대화 · 동일한 명령·작업 위치",
     grantTargetScope: "이 대화 · 동일한 대상·입력",
@@ -2314,6 +2312,13 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       modelId: "모델 ID",
       displayName: "표시 이름",
       maxContext: "최대 컨텍스트",
+      responseTimeout: "응답 대기 시간",
+      responseTimeoutDescription: (defaultSeconds) =>
+        defaultSeconds === undefined
+          ? "초 단위. 비우면 기본값을 씁니다."
+          : `초 단위. 비우면 기본값(${defaultSeconds}초)을 씁니다.`,
+      responseTimeoutError: (range) =>
+        range ? `${range.min}~${range.max}초로 입력하세요.` : "0보다 큰 초를 입력하세요.",
       imageInput: "이미지 입력",
       registeredLocalModels: "등록된 사용자 지정 모델",
       customOpenAiCompatible: "사용자 지정 OpenAI 호환",

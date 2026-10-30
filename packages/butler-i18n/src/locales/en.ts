@@ -653,8 +653,7 @@ export const enUsCopy: AppCopy = {
         other: "This same action",
       },
     },
-    skillTitle: name => `What skill shall we build with ${name}?`, reportPreparing: title => `Preparing report for ${title}`,
-    progressDetails: (title, activity, progress) => `${title}, ${activity}${progress ? `, progress ${progress}` : ""}, view progress details`,
+    skillTitle: name => `What skill shall we build with ${name}?`,
     viewActivity: title => `${title}, view activity`, more: (title, count) => `${title} and ${count} more`, deleteItem: title => `Delete "${title}"?`,
     projectConversation: title => `Project conversation · ${title}`, remaining: value => `${value} remaining`, resets: value => `Resets ${value}`, expires: value => `Expires ${value}`,
     defaultSource: title => `${title} default source`, valueSource: title => `${title} value source`, deleteRow: title => `Delete ${title} row`,
@@ -679,7 +678,6 @@ export const enUsCopy: AppCopy = {
     userSkills: "User skills",
     projectSkills: "Project skills",
     noSkills: "No skills registered.",
-    activeWork: "Active work",
     grantScopeTag: "This conversation",
     grantCommandScope: "This conversation · same command and working folder",
     grantTargetScope: "This conversation · same target and input",
@@ -2310,6 +2308,13 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       modelId: "Model ID",
       displayName: "Display name",
       maxContext: "Max context",
+      responseTimeout: "Response timeout",
+      responseTimeoutDescription: (defaultSeconds) =>
+        defaultSeconds === undefined
+          ? "In seconds. Leave empty to use the default."
+          : `In seconds. Leave empty to use the default (${defaultSeconds}s).`,
+      responseTimeoutError: (range) =>
+        range ? `Enter ${range.min} to ${range.max} seconds.` : "Enter seconds above 0.",
       imageInput: "Image input",
       registeredLocalModels: "Registered Custom models",
       customOpenAiCompatible: "Custom OpenAI-compatible",

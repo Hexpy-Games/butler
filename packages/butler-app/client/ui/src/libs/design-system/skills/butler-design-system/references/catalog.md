@@ -611,6 +611,7 @@
 | Rows inside a panel | `ListRow` | `CardList` |
 | Rows of data in panels and lists (automations, artifacts, models) | `ListRow` |  |
 | Rows of the sidebar tree | `NavDropTarget` | `StepSortableList` |
+| Rows that belong to the row above (a chat's subtasks): NavRowChildren | `NavRow` |  |
 | Rows that open to show detail under them | `Collapsible` | `StackDeck` |
 | Rows that should not wrap, or need grow/truncate | `Stack` | `Inline` |
 | Rows with custom content | `NavRow` | `SettingsNav` |
@@ -2020,10 +2021,11 @@ The navigation row: icon and label on the left, badge or actions on the right, f
 
 - Use for: Rows in the sidebar, settings navigation and other navigation lists
 - Use for: A row with hover-revealed actions
+- Use for: Rows that belong to the row above (a chat's subtasks): NavRowChildren
 - Not for: A data row that is not navigation → `ListRow`
 - Not for: A folder that expands → `CollapsibleNavGroup`
 - Not for: A generic clickable surface → `Clickable`
-- Tokens: `--sidebar-row-height`, `--selection-strong`, `--selection`, `--mac-sidebar-hover-bg`, `--mac-sidebar-selected-bg`, `--windows-sidebar-hover-bg`, `--windows-sidebar-selected-bg`, `--sidebar-action-size`, `--motion-fast`
+- Tokens: `--sidebar-row-height`, `--selection-strong`, `--selection`, `--mac-sidebar-hover-bg`, `--mac-sidebar-selected-bg`, `--windows-sidebar-hover-bg`, `--windows-sidebar-selected-bg`, `--sidebar-action-size`, `--motion-fast`, `--sidebar-row-padding-inline`, `--sidebar-icon-size`, `--line`
 
 ### NavSection
 

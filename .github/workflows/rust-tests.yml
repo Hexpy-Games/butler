@@ -194,6 +194,7 @@ jobs:
               smoke app-canon-sidebar-smoke
               smoke hook-prompt-smoke
               smoke app-live-delegation-smoke
+              smoke app-session-subtasks-smoke
               smoke app-canon-tags-smoke
               ;;
             browser-tabs)

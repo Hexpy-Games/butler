@@ -45,6 +45,7 @@ export function LocalModelSettings({
     setManualDisplayName,
     manualContext,
     setManualContext,
+    responseTimeout,
     editingModelRef,
     busy,
     setBusy,
@@ -73,6 +74,7 @@ export function LocalModelSettings({
     modelId: manualModelId,
     displayName: manualDisplayName,
     context: manualContext,
+    responseTimeout: responseTimeout.value,
     imageInputChanged: imageInput.change !== undefined,
   });
 
@@ -83,6 +85,7 @@ export function LocalModelSettings({
     manualModelId,
     manualDisplayName,
     manualContext,
+    responseTimeout: responseTimeout.value,
     preservedReasoningBudgetRatio: initialEditModel?.local_reasoning_budget_ratio,
     imageInput: imageInput.change,
     editingModelRef,
@@ -130,6 +133,7 @@ export function LocalModelSettings({
         setManualDisplayName={setManualDisplayName}
         manualContext={manualContext}
         setManualContext={setManualContext}
+        responseTimeout={responseTimeout}
         imageInput={imageInput}
         status={status}
         hasUnsavedChanges={hasUnsavedChanges}

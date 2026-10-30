@@ -28,6 +28,14 @@ pub trait AppSubsessionPort: Send + Sync {
         Box::pin(async { Ok(Vec::new()) })
     }
 
+    /// Unfinished delegated subtasks of the requested visible parent sessions.
+    fn open_subtasks(
+        &self,
+        _parents: Vec<String>,
+    ) -> ApplicationFuture<Vec<butler_turn::btcc::OpenSubtask>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
     fn user_work_present(&self) -> ApplicationFuture<bool> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
