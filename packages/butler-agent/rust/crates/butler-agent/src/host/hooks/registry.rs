@@ -64,17 +64,25 @@ pub(super) async fn save(
     hooks: &Arc<Hooks>,
     revision: u64,
     config: HookConfig,
-) -> Result<HookSettings, String> {
+    secrets: BTreeMap<String, SecretText>,
+) -> Result<HookSaved, String> {
     reload(hooks).await?;
     let _guard = hooks.mutation.lock().await;
     if hooks.state.read().settings.revision != revision {
         return Err("revision_conflict".into());
     }
     config.validate()?;
+    for (id, secret) in &secrets {
+        check_hook_secret(secret.expose())?;
+        if !config.hooks.iter().any(|h| h.kind == "http" && &h.id == id) {
+            return Err("Hook secrets apply to HTTP hooks in this configuration".into());
+        }
+    }
     let bytes = serde_json::to_vec_pretty(&config).map_err(|e| e.to_string())?;
     if bytes.len() as u64 > CAP {
         return Err("Hook file exceeds 256 KiB".into());
     }
+    let generated_secrets = hooks.secrets.prepare(&config, secrets).await?;
     let path = hooks.path.clone();
     let saved = tokio::task::spawn_blocking(move || {
         butler_platform::secure_fs::replace_private(
@@ -87,6 +95,12 @@ pub(super) async fn save(
     .await
     .map_err(|e| e.to_string())??;
     hooks.state.write().stamp = saved;
+    let previous = hooks.state.read().settings.config.clone();
     hooks.publish(config);
-    Ok(hooks.state.read().settings.clone())
+    let settings = hooks.state.read().settings.clone();
+    hooks.secrets.forget(&previous, &settings.config).await;
+    Ok(HookSaved {
+        settings,
+        generated_secrets,
+    })
 }

@@ -1076,6 +1076,7 @@ dependencies = [
  "bytes",
  "chrono",
  "futures-util",
+ "hmac 0.12.1",
  "image",
  "indexmap 2.14.2",
  "lancedb",

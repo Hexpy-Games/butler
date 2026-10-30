@@ -75,6 +75,7 @@ impl AgentRuntime {
         let (collation, writes) = (process.collation, process.writes);
         let mut startup = startup_trace::Trace::new();
         let host_environment = environment::initialize_host();
+        let secret_store = environment.model.secret_store;
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
         let (plugins, mcp_client) =
@@ -272,6 +273,7 @@ impl AgentRuntime {
                 plugins.clone(),
                 paths.data_root.clone(),
                 &host_environment,
+                secret_store,
                 stop.clone(),
             )
             .await,

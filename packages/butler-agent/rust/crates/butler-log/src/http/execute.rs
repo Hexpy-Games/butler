@@ -70,7 +70,7 @@ async fn attempt(
                 row.event = "http.retry".into();
                 crate::emit(row);
             }
-            attempt.row.error = Some(serde_json::json!({"message":error.to_string()}));
+            attempt.row.error = Some(serde_json::json!({"message":phase.error_text(&error)}));
             return Err(error.into());
         }
     };

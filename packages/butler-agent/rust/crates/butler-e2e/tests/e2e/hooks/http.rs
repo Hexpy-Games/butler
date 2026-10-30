@@ -1,5 +1,7 @@
 //! HTTP hooks: the command envelope POSTed to a local endpoint in the harness.
 use super::*;
+#[path = "http_signing.rs"]
+mod signing;
 use axum::{
     body::Bytes,
     http::{HeaderMap, StatusCode, Uri, header},
@@ -14,6 +16,7 @@ struct Seen {
     path: String,
     headers: HeaderMap,
     body: Value,
+    raw: Vec<u8>,
 }
 
 /// Local hook receiver; each path selects one response shape.
@@ -38,6 +41,7 @@ impl Endpoint {
                         path: uri.path().into(),
                         headers,
                         body: serde_json::from_slice(&body).unwrap_or(Value::Null),
+                        raw: body.to_vec(),
                     });
                     respond(uri.path()).await
                 }
@@ -127,8 +131,8 @@ async fn hooks_http_posts_the_command_envelope_for_each_event() -> Result<(), Ha
             .iter()
             .map(|e| http_hook(&format!("http-{e}"), e, &endpoint.url("/observe"))),
     );
-    configure(&setup, &hooks)?;
     let s = setup.start().await?;
+    replace(&s, hooks).await?;
     let created =
         s.gw.post("/sessions", json!({"kind":"chat","title":"Hooks"}))
             .await?;
@@ -186,8 +190,8 @@ async fn hooks_http_deny_response_blocks_tool_and_prompt() -> Result<(), Harness
         .access(Access::AskAlways);
     let mut guard = http_hook("guard", "PreToolUse", &endpoint.url("/guard"));
     guard["match"] = json!({"tools":["run_command"]});
-    configure(&setup, &[guard])?;
     let s = setup.start().await?;
+    replace(&s, vec![guard]).await?;
     s.provider()?.set_chat_responder(stub::command);
     let (turn_id, turn) = s.turn("general", "Run the hook test command.").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
@@ -304,31 +308,5 @@ async fn hooks_http_accepts_only_http_urls_and_tests_endpoint() -> Result<(), Ha
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0].body["hook_event_name"], "Stop");
     assert!(seen[0].body["session_id"].is_null());
-    s.finish().await
-}
-
-#[tokio::test]
-async fn hooks_http_secret_in_url_path_stays_out_of_logs() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let endpoint = Endpoint::start().await?;
-    let s = setup("HOOK-HTTP-LOG-SECRET")?.start().await?;
-    super::super::outbound_http::logging(&s, "detailed").await?;
-    // Webhook receivers commonly carry their own secret in the URL path.
-    let secret = "aB7xQ2mN9rT4vK8zP1cD6fH3jL5sW0yE";
-    let path = format!("/services/{secret}");
-    let url = endpoint.url(&path);
-    replace(&s, vec![http_hook("notify", "UserPromptSubmit", &url)]).await?;
-    let (_, turn) = s.turn("general", "Notify.").await?;
-    assert_eq!(turn["state"], "delivered", "{turn}");
-    assert_eq!(endpoint.seen(&path).len(), 1);
-    let logs = s.gw.get("/logs?category=http.client&limit=1000").await?;
-    let hook_rows = logs.data()["rows"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|row| row["event"] == "http.request" && row["attrs"]["purpose"] == "hooks.http")
-        .count();
-    assert_eq!(hook_rows, 1, "{}", logs.text);
-    assert!(!logs.text.contains(secret), "{}", logs.text);
     s.finish().await
 }

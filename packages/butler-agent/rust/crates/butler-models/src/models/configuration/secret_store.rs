@@ -91,20 +91,23 @@ impl CredentialStoreError {
 
 /// The store new keys go to, and why it is the file although the system
 /// store was chosen.
-pub(super) struct TargetStore {
-    pub(super) store: SecretStore,
-    pub(super) fallback: Option<Arc<CredentialStoreError>>,
+pub struct TargetStore {
+    /// The store new keys go to.
+    pub store: SecretStore,
+    /// Why it is the file although the system store was chosen.
+    pub fallback: Option<Arc<CredentialStoreError>>,
 }
 
 /// The process's view of the credential stores.
-pub(super) struct ProviderSecrets {
+pub struct ProviderSecrets {
     facts: SecretStoreFacts,
     system: Mutex<Option<SecretStore>>,
     system_calls: Arc<Semaphore>,
 }
 
 impl ProviderSecrets {
-    pub(super) fn new(facts: SecretStoreFacts) -> Self {
+    /// The stores for a process with these facts.
+    pub fn new(facts: SecretStoreFacts) -> Self {
         Self {
             facts,
             system: Mutex::new(None),
@@ -136,8 +139,11 @@ impl ProviderSecrets {
     }
 
     /// Where a new key goes (see the module documentation for the fallback).
-    pub(super) async fn target(&self, root: &Path) -> Result<TargetStore, CredentialStoreError> {
-        let choice = self.choice(root);
+    pub async fn target(&self, root: &Path) -> Result<TargetStore, CredentialStoreError> {
+        let (facts, config) = (self.facts, root.join("butler.config.json"));
+        let choice = tokio::task::spawn_blocking(move || choose(facts, &read_object_sync(&config)))
+            .await
+            .map_err(CredentialStoreError::Interrupted)?;
         if choice.mode == SecretStoreMode::File {
             return Ok(TargetStore {
                 store: fallback_file(root),
@@ -175,7 +181,7 @@ impl ProviderSecrets {
     }
 
     /// Reads the key stored under `key`.
-    pub(super) async fn get(
+    pub async fn get(
         &self,
         store: &SecretStore,
         key: &SecretKey,
@@ -192,7 +198,7 @@ impl ProviderSecrets {
     }
 
     /// Stores `secret` under `key` and reads it back.
-    pub(super) async fn put(
+    pub async fn put(
         &self,
         store: &SecretStore,
         key: &SecretKey,
@@ -220,7 +226,7 @@ impl ProviderSecrets {
     }
 
     /// Removes the key stored under `key`; false when there was none.
-    pub(super) async fn remove(
+    pub async fn remove(
         &self,
         store: &SecretStore,
         key: &SecretKey,
@@ -270,14 +276,29 @@ pub(super) fn key(
     provider_id: &str,
     credential_id: &str,
 ) -> Result<SecretKey, SecretError> {
-    let account = format!("{provider_id}/{credential_id}");
+    scoped_key(
+        root,
+        backend,
+        SERVICE,
+        &format!("{provider_id}/{credential_id}"),
+    )
+}
+
+/// The key `account` is stored under in `backend`: the system store's service
+/// also names the data folder, so two folders never share each other's keys.
+pub fn scoped_key(
+    root: &Path,
+    backend: SecretBackend,
+    service: &str,
+    account: &str,
+) -> Result<SecretKey, SecretError> {
     if backend.is_system() {
         let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
         let digest = Sha256::digest(root.to_string_lossy().as_bytes());
         let hash = hex(digest.get(..8).unwrap_or_default());
-        SecretKey::new(&format!("{SERVICE}.{hash}"), &account)
+        SecretKey::new(&format!("{service}.{hash}"), account)
     } else {
-        SecretKey::new(SERVICE, &account)
+        SecretKey::new(service, account)
     }
 }
 

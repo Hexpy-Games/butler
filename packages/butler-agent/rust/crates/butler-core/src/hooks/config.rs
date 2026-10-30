@@ -100,18 +100,74 @@ struct HookDefinitionInput {
     #[serde(default = "one")]
     schema_version: u32,
 }
+/// The rest of `url` after a case-insensitive `scheme`.
+fn after_scheme<'a>(url: &'a str, scheme: &str) -> Option<&'a str> {
+    url.get(..scheme.len())
+        .filter(|prefix| prefix.eq_ignore_ascii_case(scheme))
+        .and_then(|_| url.get(scheme.len()..))
+}
+/// The host of an authority: brackets kept, port removed; empty when malformed.
+fn authority_host(authority: &str) -> &str {
+    if authority.starts_with('[') {
+        return authority.split_once(']').map_or("", |(_, rest)| {
+            if rest.is_empty() || rest.starts_with(':') {
+                &authority[..authority.len() - rest.len()]
+            } else {
+                ""
+            }
+        });
+    }
+    authority
+        .rsplit_once(':')
+        .map_or(authority, |(host, _)| host)
+}
 /// http(s) with a host and no user info, which Settings and logs would show;
-/// anything else malformed fails at request time like an unreachable host.
-fn http_url(url: &str) -> bool {
-    let rest = ["https://", "http://"].iter().find_map(|scheme| {
-        url.get(..scheme.len())
-            .filter(|prefix| prefix.eq_ignore_ascii_case(scheme))
-            .and_then(|_| url.get(scheme.len()..))
-    });
-    let authority = rest.and_then(|rest| rest.split(['/', '?', '#']).next());
-    url.len() <= 2048
-        && !url.chars().any(|c| c.is_whitespace() || c.is_control())
-        && authority.is_some_and(|a| !a.is_empty() && !a.starts_with(':') && !a.contains('@'))
+/// plain http only to a loopback host, so payloads never cross a network in
+/// clear text. Anything else malformed fails at request time like an
+/// unreachable host.
+fn check_http_url(url: &str) -> Result<(), &'static str> {
+    const INVALID: &str = "HTTP hooks need an http(s) URL without credentials";
+    if url.len() > 2048 || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(INVALID);
+    }
+    let (plain, rest) = match (after_scheme(url, "https://"), after_scheme(url, "http://")) {
+        (Some(rest), _) => (false, rest),
+        (_, Some(rest)) => (true, rest),
+        _ => return Err(INVALID),
+    };
+    // A backslash ends the authority in the URL parser that sends the request.
+    let authority = rest.split(['/', '\\', '?', '#']).next().unwrap_or_default();
+    let host = authority_host(authority);
+    if host.is_empty() || authority.contains('@') {
+        return Err(INVALID);
+    }
+    if plain && !loopback_host(host) {
+        return Err("HTTP hooks need https:// unless the host is loopback");
+    }
+    Ok(())
+}
+/// `localhost` or a loopback IP address (an IPv6 one in brackets). Names that
+/// only resemble these, such as `127.0.0.1.example.com`, are not loopback.
+pub fn loopback_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    let address = host
+        .strip_prefix('[')
+        .and_then(|host| host.strip_suffix(']'))
+        .unwrap_or(host);
+    address
+        .parse::<std::net::IpAddr>()
+        .is_ok_and(|address| address.to_canonical().is_loopback())
+}
+/// A signing secret: long enough to resist guessing and to be redacted from
+/// logs. The error never repeats the value.
+pub fn check_hook_secret(secret: &str) -> Result<(), &'static str> {
+    if (16..=1024).contains(&secret.len()) && !secret.chars().any(char::is_control) {
+        Ok(())
+    } else {
+        Err("Hook secrets need 16 to 1024 characters without control characters")
+    }
 }
 fn yes() -> bool {
     true
@@ -153,10 +209,7 @@ impl HookDefinition {
                 if self.command.is_some() || self.args.is_some() || !self.env.is_empty() {
                     return Err("HTTP hooks take a URL, not a command or environment".into());
                 }
-                if !self.url.as_deref().is_some_and(http_url) {
-                    return Err("HTTP hooks need an http(s) URL without credentials".into());
-                }
-                Ok(())
+                check_http_url(self.url.as_deref().unwrap_or_default()).map_err(str::to_owned)
             }
             _ => Err("Only command and http hooks are supported".into()),
         }

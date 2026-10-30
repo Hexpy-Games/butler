@@ -1,10 +1,11 @@
 //! User-authored lifecycle command and HTTP hooks and their ports.
 mod config;
 mod event;
-pub use config::{HookConfig, HookDefinition, HookMatcher};
+use butler_platform::secrets::SecretText;
+pub use config::{HookConfig, HookDefinition, HookMatcher, check_hook_secret, loopback_host};
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
 use serde::{Deserialize, Serialize};
-use std::{future::Future, pin::Pin};
+use std::{collections::BTreeMap, future::Future, pin::Pin};
 /// Asynchronous hook operation; errors are safe for Settings display.
 pub type HookFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
 /// Current user registry with optimistic concurrency and reload diagnostics.
@@ -16,6 +17,17 @@ pub struct HookSettings {
     pub config: HookConfig,
     /// Last invalid file error; the previous registry stays active.
     pub error: Option<String>,
+}
+/// A saved configuration. `generated_secrets` holds the signing secrets this
+/// save created, once: no other response ever carries a secret.
+#[derive(Serialize)]
+pub struct HookSaved {
+    /// The new registry.
+    #[serde(flatten)]
+    pub settings: HookSettings,
+    /// Hook id to its new signing secret.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub generated_secrets: BTreeMap<String, String>,
 }
 /// One bounded in-memory run record.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -60,8 +72,14 @@ pub trait HookPort: Send + Sync {
     ) -> HookFuture<'_, Option<String>>;
     /// Read registry and reload diagnostics.
     fn settings(&self) -> HookSettings;
-    /// Atomically save a revision-checked user configuration.
-    fn save(&self, revision: u64, config: HookConfig) -> HookFuture<'_, HookSettings>;
+    /// Atomically save a revision-checked user configuration. `secrets` sets
+    /// HTTP hooks' signing secrets; one without a stored secret gets a new one.
+    fn save(
+        &self,
+        revision: u64,
+        config: HookConfig,
+        secrets: BTreeMap<String, SecretText>,
+    ) -> HookFuture<'_, HookSaved>;
     /// Run a real handler against a synthetic payload, without a session.
     fn test(
         &self,

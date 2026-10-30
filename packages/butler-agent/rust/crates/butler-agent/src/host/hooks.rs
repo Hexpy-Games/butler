@@ -3,10 +3,13 @@ mod decision;
 mod execute;
 mod http;
 mod registry;
+mod secrets;
 use butler_core::hooks::*;
+use butler_platform::secrets::SecretText;
 use parking_lot::RwLock;
+pub(crate) use secrets::reset_keys as reset_secret_keys;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     path::PathBuf,
     sync::{
         Arc,
@@ -31,6 +34,7 @@ struct Hooks {
     mutation: tokio::sync::Mutex<()>,
     pool: Arc<tokio::sync::Semaphore>,
     http: tokio::sync::OnceCell<butler_log::http::Client>,
+    secrets: secrets::HookSecrets,
     shutdown: CancellationToken,
 }
 impl Dispatcher {
@@ -38,11 +42,13 @@ impl Dispatcher {
         plugins: Arc<super::plugins::Plugins>,
         data: PathBuf,
         environment: &HashMap<String, String>,
+        secret_store: butler_models::models::SecretStoreFacts,
         shutdown: CancellationToken,
     ) -> Self {
         let hooks = Arc::new(Hooks {
             plugins,
             path: data.join(butler_platform::data_paths::HOOKS),
+            secrets: secrets::HookSecrets::new(data.clone(), secret_store),
             home: butler_platform::user_dirs::home_dir().unwrap_or_else(|| data.clone()),
             environment: butler_platform::command_sandbox::tool_environment(environment),
             events: AtomicU8::new(0),
@@ -126,8 +132,13 @@ impl HookPort for Dispatcher {
     fn settings(&self) -> HookSettings {
         self.0.state.read().settings.clone()
     }
-    fn save(&self, revision: u64, config: HookConfig) -> HookFuture<'_, HookSettings> {
-        Box::pin(registry::save(&self.0, revision, config))
+    fn save(
+        &self,
+        revision: u64,
+        config: HookConfig,
+        secrets: BTreeMap<String, SecretText>,
+    ) -> HookFuture<'_, HookSaved> {
+        Box::pin(registry::save(&self.0, revision, config, secrets))
     }
     fn dispatch(
         &self,
