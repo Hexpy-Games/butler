@@ -190,6 +190,7 @@ fn claimed_snapshot(
                     attached_files: Vec::new(),
                     queue_attachments: parse_value(&attachments_json, 15)?,
                     reference_chats: Vec::new(),
+                    project_references: Value::Array(Vec::new()),
                 })
             },
         )
@@ -229,6 +230,10 @@ fn rebuilt_turn(
         context.insert("contentParts".into(), json!(parts));
     }
     context.insert("sessionReferences".into(), assets.session_references);
+    context.insert(
+        "projectReferences".into(),
+        snapshot.project_references.clone(),
+    );
     context.insert(
         "session".into(),
         json!({"id":snapshot.chat_id,"kind":if snapshot.session_kind=="project"{"project"}else{"chat"},
@@ -394,5 +399,47 @@ fn populate_snapshot_assets(
             }
         }
     }
+    snapshot.project_references = project_references(db, snapshot.content_parts.as_ref())?;
     Ok(())
+}
+
+/// Each referenced project once, in first-mention order: its current name and folder, or
+/// `unavailable` with the sent name when it no longer exists. One primary-key read per project.
+fn project_references(
+    db: &Connection,
+    content: Option<&crate::gateway::MessageContent>,
+) -> Result<Value, AppStorageError> {
+    let mut seen = HashSet::new();
+    let mut resolved = Vec::new();
+    for part in content.into_iter().flat_map(|content| &content.parts) {
+        let MessageContentPart::ProjectRef {
+            project_id,
+            title_snapshot,
+            ..
+        } = part
+        else {
+            continue;
+        };
+        if !seen.insert(project_id) {
+            continue;
+        }
+        let project = db
+            .query_row(
+                "SELECT display_name,workspace_path,ledger_project_id FROM projects WHERE id=?1",
+                [project_id],
+                |row| {
+                    Ok(
+                        json!({"projectId":project_id,"title":row.get::<_, String>(0)?,
+                        "status":"available","workspacePath":row.get::<_, String>(1)?,
+                        "ledgerProjectId":row.get::<_, Option<String>>(2)?}),
+                    )
+                },
+            )
+            .optional()
+            .map_err(AppStorageError::sqlite)?;
+        resolved.push(project.unwrap_or_else(
+            || json!({"projectId":project_id,"title":title_snapshot,"status":"unavailable"}),
+        ));
+    }
+    Ok(Value::Array(resolved))
 }

@@ -4,12 +4,13 @@ import { Popover, PopoverAnchor, PopoverContent } from "../../components/Popover
 import { Stack } from "../../components/Stack";
 import { AddressField } from "../AddressField";
 import { ICONS } from "../TabStrip/TabStrip.demo";
-import { SuggestionList, SuggestionRow, type SuggestionKind } from "./SuggestionList";
+import { ITEMS, ItemRows, itemIcon } from "./SuggestionItems.demo";
+import { SuggestionItemRow, SuggestionList, SuggestionRow, type SuggestionKind } from "./SuggestionList";
 
 export const meta: ShowcaseMeta = {
   title: "SuggestionList",
   category: "Browser",
-  tags: ["browser", "address", "suggestions", "autocomplete", "combobox", "listbox", "history", "bookmark", "favicon"],
+  tags: ["browser", "address", "suggestions", "autocomplete", "combobox", "listbox", "history", "bookmark", "favicon", "mention", "reference", "composer"],
   status: "beta",
 };
 
@@ -101,12 +102,28 @@ export const stories: ShowcaseStory[] = [
     render: (context) => <Rows {...context} active={1} query={COPY[context.locale].query} />,
   },
   { name: "No query (recent pages)", render: (context) => <Rows {...context} active={-1} query="" /> },
+  {
+    name: "App items: the composer @ menu, matches in bold",
+    widths: ["320", "375", "app"],
+    render: (context) => <ItemRows {...context} active={0} query={ITEMS[context.locale].query} />,
+  },
+  { name: "App items: bare @ (recent first)", render: (context) => <ItemRows {...context} active={0} query="" /> },
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "selected"],
-  variants: ["history", "bookmark"],
+  variants: ["history", "bookmark", "item"],
   render: ({ locale, state, variant }) => {
+    if (variant === "item") {
+      const copy = ITEMS[locale];
+      const item = copy.items[0]!;
+      return (
+        <SuggestionList id={`matrix-${locale}-item-${state}`} label={copy.list}>
+          <SuggestionItemRow id={`matrix-${locale}-item-${state}-row`} icon={itemIcon(item.kind)} title={item.title} meta={item.meta}
+            query={copy.query} active={state === "selected"} onSelect={() => undefined} />
+        </SuggestionList>
+      );
+    }
     const copy = COPY[locale];
     const item = copy.items[variant === "bookmark" ? 0 : 1]!;
     return (

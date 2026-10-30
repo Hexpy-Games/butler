@@ -355,6 +355,7 @@
 | Any set of results that each have a source page and a key value | `ItemCard` |  |
 | Any short list of free labels with completion | `TagField` |  |
 | Any visible text in product UI | `Typo` |  |
+| App items suggested from typed text with no search field, such as the composer @ menu (SuggestionItemRow) | `SuggestionList` |  |
 | Art on a card (a decoration module such as butler.cherry-blossom): its transparent canvas leaves the glass visible | `Wallpaper` |  |
 | Artifacts attached to an assistant message | `ArtifactList` |  |
 | Artifacts in the inspector | `DocumentTile` | `ArtifactList` |
@@ -1930,10 +1931,11 @@ The picked-elements toolbar over the page: a count, what to do with the picks, a
 
 `import { SuggestionList } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/SuggestionList`
 
-The listbox under a combobox field: one-line rows with favicon, title, muted address, bold matches and a bookmark star.
+The listbox under a combobox field: one-line rows with favicon, title, muted address, bold matches and a bookmark star; SuggestionItemRow is the same row for app items (type glyph, title, muted meta).
 
 - Use for: Address suggestions under AddressField (history and bookmarks)
 - Use for: Any field that suggests pages or sites as you type
+- Use for: App items suggested from typed text with no search field, such as the composer @ menu (SuggestionItemRow)
 - Not for: Choosing one value from a fixed set → `Select`
 - Not for: A searchable picker with filters and groups → `FilteredSelectPopover`
 - Not for: Navigation rows in a sidebar → `NavRow`

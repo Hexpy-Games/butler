@@ -64,7 +64,15 @@ export interface ProjectSourceContentPart {
 export type MessageContentPart =
   | { type: "text"; text: string }
   | { type: "session_ref"; sessionId: string; titleSnapshot: string }
+  | ProjectReferenceContentPart
   | ProjectSourceContentPart;
+
+/** A whole project the user referenced; the agent gets its current name and folder. */
+export interface ProjectReferenceContentPart {
+  type: "project_ref";
+  projectId: string;
+  titleSnapshot: string;
+}
 
 export interface MessageContent {
   version: 1;
@@ -85,7 +93,13 @@ export function isMessageContent(value: unknown): value is MessageContent {
           ? typeof part.sessionId === "string" &&
             part.sessionId.trim().length > 0 &&
             typeof part.titleSnapshot === "string"
-          : isProjectSourceContentPart(part),
+          : part && typeof part === "object" && part.type === "project_ref"
+            ? typeof part.projectId === "string" &&
+              part.projectId.trim().length > 0 &&
+              part.projectId.length <= 256 &&
+              typeof part.titleSnapshot === "string" &&
+              part.titleSnapshot.length <= 500
+            : isProjectSourceContentPart(part),
     )
   );
 }

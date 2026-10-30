@@ -6,6 +6,7 @@ import { useButlerStore } from "@/app/store";
 import { SESSION_REFERENCE_MIME } from "@/app/space/drag";
 import { $createSessionReferenceNode } from "./SessionReferenceNode";
 import { $readComposerContent } from "./serialization";
+import type { MessageContentPart } from "@/app/messageContent";
 import { registerComposerClipboard } from "./clipboard";
 import { $selectDropPoint } from "./drop-selection";
 import { registerComposerFocus } from "./composerFocus";
@@ -36,6 +37,8 @@ export function ComposerEditorPlugin() {
   useEffect(() => {
     const sessionId = useComposerStore.getState().draftSessionId;
     const knownSession = (id: string) => id === "general" || useButlerStore.getState().navigation.space.nodes.some(node => node.kind === "session" && node.entityId === id);
+    const knownReference = (part: MessageContentPart) => part.type === "session_ref" ? knownSession(part.sessionId)
+      : part.type !== "project_ref" || useButlerStore.getState().navigation.projects.some(project => project.id === part.projectId);
     function insert(reference: { sessionId: string; titleSnapshot: string }, drop?: DragEvent) {
       if (!knownSession(reference.sessionId)) return;
       editor.update(() => {
@@ -65,7 +68,7 @@ export function ComposerEditorPlugin() {
           if (dirtyElements.size || dirtyLeaves.size) saveDraftFromEditor(editor, sessionId, $readComposerContent());
         });
       }),
-      registerComposerClipboard(editor, knownSession, (files) => useComposerStore.getState().addFiles(files)),
+      registerComposerClipboard(editor, knownReference, (files) => useComposerStore.getState().addFiles(files)),
       editor.registerCommand(DRAGOVER_COMMAND, event => {
         if (!event.dataTransfer?.types.includes(SESSION_REFERENCE_MIME)) return false;
         event.preventDefault(); event.dataTransfer.dropEffect = "copy"; return true;

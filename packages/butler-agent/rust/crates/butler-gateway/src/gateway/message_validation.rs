@@ -100,9 +100,21 @@ fn valid_content_part(value: &Value) -> bool {
                 .is_some_and(|id| !id.trim().is_empty())
                 && part.get("titleSnapshot").is_some_and(Value::is_string)
         }
+        Some("project_ref") => valid_project_reference(part),
         Some("project_source_ref") => valid_project_source(part),
         _ => false,
     }
+}
+
+/// A whole project the user referenced (`@` mention): its id and the name shown when sent.
+pub(super) fn valid_project_reference(part: &Map<String, Value>) -> bool {
+    part.get("projectId")
+        .and_then(Value::as_str)
+        .is_some_and(|id| !id.trim().is_empty() && utf16_len(id) <= 256)
+        && part
+            .get("titleSnapshot")
+            .and_then(Value::as_str)
+            .is_some_and(|text| utf16_len(text) <= 500)
 }
 
 fn valid_project_source(part: &Map<String, Value>) -> bool {
@@ -172,6 +184,7 @@ fn message_content_text(content: &MessageContent) -> String {
         .map(|part| match part {
             MessageContentPart::Text { text, .. } => text.as_str(),
             MessageContentPart::SessionRef { title_snapshot, .. }
+            | MessageContentPart::ProjectRef { title_snapshot, .. }
             | MessageContentPart::ProjectSourceRef { title_snapshot, .. } => {
                 title_snapshot.as_str()
             }

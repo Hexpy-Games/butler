@@ -106,19 +106,21 @@ fn message_content_references(value: &Value) -> Option<String> {
     if parts.len() > 1000 || !parts.iter().all(valid_message_part) {
         return None;
     }
-    let refs = parts
-        .iter()
-        .filter(|part| part.get("type").and_then(Value::as_str) == Some("session_ref"))
-        .cloned()
-        .collect::<Vec<_>>();
-    if refs.is_empty() {
-        None
-    } else {
-        Some(format!(
-            "[user session references: {}]",
-            stringify(&Value::Array(refs)).ok()?
-        ))
+    let mut projected = Vec::new();
+    for (kind, label) in [("session_ref", "session"), ("project_ref", "project")] {
+        let refs = parts
+            .iter()
+            .filter(|part| part.get("type").and_then(Value::as_str) == Some(kind))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !refs.is_empty() {
+            projected.push(format!(
+                "[user {label} references: {}]",
+                stringify(&Value::Array(refs)).ok()?
+            ));
+        }
     }
+    (!projected.is_empty()).then(|| projected.join(" "))
 }
 
 // Passthrough: conversation part content keyed by part kind; tool/provider payloads.
@@ -136,6 +138,19 @@ fn valid_message_part(value: &Value) -> bool {
                     !butler_core::public_text::trim_js_whitespace(value).is_empty()
                 })
                 && object.get("titleSnapshot").is_some_and(Value::is_string)
+        }
+        Some("project_ref") => {
+            object
+                .get("projectId")
+                .and_then(Value::as_str)
+                .is_some_and(|value| {
+                    !butler_core::public_text::trim_js_whitespace(value).is_empty()
+                        && value.encode_utf16().count() <= 256
+                })
+                && object
+                    .get("titleSnapshot")
+                    .and_then(Value::as_str)
+                    .is_some_and(|value| value.encode_utf16().count() <= 500)
         }
         Some("project_source_ref") => valid_project_ref(object),
         _ => false,

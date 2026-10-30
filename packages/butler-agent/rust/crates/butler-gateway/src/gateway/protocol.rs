@@ -98,6 +98,15 @@ pub enum MessageContentPart {
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
+    #[serde(rename = "project_ref")]
+    ProjectRef {
+        #[serde(rename = "projectId")]
+        project_id: String,
+        #[serde(rename = "titleSnapshot")]
+        title_snapshot: String,
+        #[serde(flatten)]
+        extra: Map<String, Value>,
+    },
     #[serde(rename = "project_source_ref")]
     ProjectSourceRef {
         #[serde(rename = "projectId")]
