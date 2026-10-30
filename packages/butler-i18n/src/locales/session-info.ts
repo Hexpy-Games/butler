@@ -2,7 +2,7 @@ export const SESSION_INFO_COPY = {
   "ko-KR": {
     title: "세션 정보", waitingLabel: "세션 정보 · 답을 기다리는 요청 있음",
     approval: "승인", question: "질문", deferred: "나중에 답하기로 함", work: "작업",
-    asks: "답을 기다리는 요청", subtasks: "하위 작업", subtaskPaused: "멈춤", subtaskNeedsApproval: "허용 대기",
+    asks: "답을 기다리는 요청", subtasks: "하위 작업", order: "진행 순서", subtaskPaused: "멈춤", subtaskNeedsApproval: "허용 대기",
     subtaskStep: (step: number, total: number) => `${total}단계 중 ${step}단계`,
     subtaskStatus: (state: string, step?: string) => (step ? `${state}, ${step}` : state),
     subtaskRow: (title: string, status: string) => `${title}, ${status}`,
@@ -18,7 +18,7 @@ export const SESSION_INFO_COPY = {
   "en-US": {
     title: "Session info", waitingLabel: "Session info · Requests awaiting an answer",
     approval: "Approval", question: "Question", deferred: "Deferred", work: "Tasks",
-    asks: "Awaiting your answer", subtasks: "Subtasks", subtaskPaused: "Paused", subtaskNeedsApproval: "Needs approval",
+    asks: "Awaiting your answer", subtasks: "Subtasks", order: "Run order", subtaskPaused: "Paused", subtaskNeedsApproval: "Needs approval",
     subtaskStep: (step: number, total: number) => `Step ${step} of ${total}`,
     subtaskStatus: (state: string, step?: string) => (step ? `${state}, ${step}` : state),
     subtaskRow: (title: string, status: string) => `${title}, ${status}`,

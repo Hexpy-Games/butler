@@ -49,6 +49,7 @@
     "app:composer-ime:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-composer-ime-smoke.ts",
     "app:queued-send-now:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-queued-send-now-smoke.ts",
     "app:session-info:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-session-info-smoke.ts",
+    "app:session-order:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-session-order-smoke.ts",
     "app:session-subtasks:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-session-subtasks-smoke.ts",
     "app:noticed-patterns:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-noticed-patterns-smoke.ts",
     "app:chats-results:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-chats-results-smoke.ts",
