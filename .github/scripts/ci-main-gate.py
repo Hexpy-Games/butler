@@ -6,9 +6,12 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 from ci_main_baseline import latest_main_run
 from issue_links import references
+
+POLL_SECONDS = 60
 
 
 def command(*args):
@@ -90,28 +93,40 @@ def main_gate(event, repository, event_name):
     return 0
 
 
-def quality_gate(event, repository):
-    """A metadata-only gate must never replace failed/pending quality with green."""
-    pr = event['pull_request']
+def latest_full_run(pr, repository):
     runs = api(f'repos/{repository}/actions/workflows/rust-quality.yml/runs?event=pull_request'
                f'&head_sha={pr["head"]["sha"]}&per_page=100')['workflow_runs']
-    runs = sorted(runs, key=lambda run: run['id'], reverse=True)
-    for run in runs:
-        if (run['head_sha'] != pr['head']['sha']
-                or run.get('display_title') != f'CI #{run["id"]}'
-                or not any(p['number'] == pr['number'] for p in run.get('pull_requests', []))):
-            continue
-        if run['status'] != 'completed':
-            break
-        jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')
-        if jobs['total_count'] != len(jobs['jobs']):
-            break
-        for job in jobs['jobs']:
-            if job['name'] == 'gate' and any(
-                    step['name'] == 'Require every selected check' and step['conclusion'] == 'success'
-                    for step in job.get('steps', [])):
-                return 0
-        break
+    for run in sorted(runs, key=lambda run: run['id'], reverse=True):
+        if (run['head_sha'] == pr['head']['sha']
+                and run.get('display_title') == f'CI #{run["id"]}'
+                and any(p['number'] == pr['number'] for p in run.get('pull_requests', []))):
+            return run
+    return None
+
+
+def full_run_passed(run, repository):
+    jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')
+    if jobs['total_count'] != len(jobs['jobs']):
+        return False
+    return any(job['name'] == 'gate' and any(
+        step['name'] == 'Require every selected check' and step['conclusion'] == 'success'
+        for step in job.get('steps', [])) for job in jobs['jobs'])
+
+
+def quality_gate(event, repository, sleep=time.sleep):
+    """A metadata-only gate must never replace failed/pending quality with green.
+
+    A full run still in progress is awaited, so this gate finishes after the
+    full run's own gate and reports its result instead of a stale failure.
+    """
+    pr = event['pull_request']
+    run = latest_full_run(pr, repository)
+    while run and run['status'] != 'completed':
+        print(f'Waiting for the full CI run to finish: {run["html_url"]}', flush=True)
+        sleep(POLL_SECONDS)
+        run = latest_full_run(pr, repository)
+    if run and full_run_passed(run, repository):
+        return 0
     print('Quality checks have not passed for this SHA; complete a full CI run.')
     return 1
 
