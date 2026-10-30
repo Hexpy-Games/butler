@@ -1,5 +1,5 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Blocks, CircleAlert, ICON_SIZE, LoadingIndicator, OverflowActionMenu, Play, StepSortableList, Trash2, Typo, type StepSortableRowContext } from "@/butler-ds";
+import { Blocks, CircleAlert, ICON_SIZE, LoadingIndicator, OverflowActionMenu, Play, Stack, StepSortableList, Trash2, Typo, type StepSortableRowContext } from "@/butler-ds";
 import { acceptsOrderEdit, orderChains, type OrderItem } from "./canonOrderModel.ts";
 import type { useSessionCanonQueue } from "./useSessionCanonQueue.ts";
 
@@ -17,14 +17,15 @@ export function StepOrderSection({ order }: { order: ReturnType<typeof useSessio
     const epic = item.epic;
     const status = epic.hold_reason && epic.state === "running" ? "failed" : epic.state;
     const previous = chains.find(chain => chain.id === place.chainId)?.steps[place.stepIndex - 1];
-    const after = previous && (previous.length > 1 ? copy.afterStack(previous[0]!.label, previous.length - 1) : copy.after(previous[0]!.label));
+    const after = previous && (previous.length > 1
+      ? stackCaption(copy.afterStack(previous[0]!.label, previous.length - 1)) : copy.after(previous[0]!.label));
     const progress = epic.progress;
     const activity = progress.actions.find(action => action.status === "active")?.description;
     const caption = activity || (progress.counts.total > 0 ? appCopy.canon.done(progress.counts.completed, progress.counts.total) : undefined)
       || (epic.held_by_epic_id ? copy.heldBy : after);
     return {
       marker: <OrderMarker status={status} number={place.stepNumber} />,
-      title: item.label, meta: status === "waiting" ? undefined : copy.status[status],
+      title: item.label, meta: status === "waiting" || status === "held" ? undefined : copy.status[status],
       more: place.count > 1 && !place.expanded ? copy.more(place.count - 1) : undefined,
       caption: place.lifted && place.outcome ? (place.outcome === "join" ? copy.join : copy.newStep) : caption,
       trailing: item.pinned || order.busy ? undefined : <OverflowActionMenu label={copy.menu(item.label)} items={[
@@ -41,4 +42,9 @@ function OrderMarker({ status, number }: { status: string; number: number }) {
   if (status === "running" || status === "done") return <LoadingIndicator state={status === "done" ? "done" : "loading"} size={ICON_SIZE.md} />;
   if (status === "failed") return <Typo.Text tone="danger"><CircleAlert size="md" /></Typo.Text>;
   return <Typo.Label tone="tertiary" numeric="tabular">{number}</Typo.Label>;
+}
+/** Only the quoted name truncates: a count outside the quote keeps its room. */
+function stackCaption({ lead, tail }: { lead: string; tail?: string }) {
+  if (!tail) return lead;
+  return <Stack as="span" align="row" gap="xs"><Typo.Text truncate>{lead}</Typo.Text><Typo.Text wrap="nowrap">{tail}</Typo.Text></Stack>;
 }

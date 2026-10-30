@@ -165,6 +165,15 @@ async function heldOrder(page: Page, id: string, layout: string) {
   await row.getByText(c.status.failed, { exact: true }).waitFor();
   await shot(page, `${layout}-held-order`);
   if (!baseline) {
+    // Steps held under the blocked head show no status word; their caption says why they wait.
+    const held = chain.steps.flatMap(step => step.items).filter(item => item.state === "held");
+    assert(held.length > 0, "the blocked head holds later steps");
+    for (const item of held) {
+      const text = (await section(page).locator(`[data-step-item="${item.epic_id}"]`).innerText()).replace(c.heldBy, "").trim();
+      for (const word of ["멈춤", "Paused", ...(["ko-KR", "en-US"] as const).flatMap(locale => Object.values(getAppCopy(locale).canon.order.status))]) {
+        assert(!text.includes(word), `held row shows no status word: ${text}`);
+      }
+    }
     assert.equal(await row.locator('xpath=ancestor::*[@data-slot="card"][1]').getAttribute("data-activity"), null, "a blocked head has no running glow");
     assert.equal(await row.locator("svg").count(), 1, "the blocked alert marker remains");
     assert.equal(await grip(page, head.epic_id).count(), 0, "the blocked head stays pinned");
@@ -210,8 +219,14 @@ async function editFlows(page: Page, id: string, items: string[]) {
   assert.equal(joined.op, "join_stack"); assert.equal(joined.target_epic_id, third);
   const stack = [third!, second!];
   if (!baseline) {
+    // The caption after a 묶음 leads with the waiting word; only the quoted name may truncate.
     const after = section(page).locator(`[data-step-item="${items[3]}"]`);
-    await after.getByText(lang === "ko" ? "‘발표 자료 외 1건’ 끝나면" : "After ‘발표 자료’ +1 more", { exact: true }).waitFor();
+    const { lead, tail } = c.afterStack("발표 자료", 1);
+    assert.equal(lead, lang === "ko" ? "끝나면: ‘발표 자료 외 1건’" : "After: ‘발표 자료’");
+    const caption = after.getByText(lead, { exact: true });
+    await caption.waitFor();
+    assert((await caption.textContent())!.startsWith(lang === "ko" ? "끝나면" : "After"), "the waiting word comes first");
+    if (tail) await after.getByText(tail, { exact: true }).waitFor();
   }
   await shot(page, "stack");
   const moved = await keyboardEdit(page, id, third!, ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown"], true);

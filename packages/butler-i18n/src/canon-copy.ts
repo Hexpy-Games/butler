@@ -1,8 +1,11 @@
 export interface CanonOrderCopy {
   chain: Record<"user_message" | "schedule" | "detach", string>;
-  /** Status words; a waiting step shows none (its caption already says what it waits for). */
-  status: Record<"running" | "held" | "failed" | "done", string>;
-  after: (title: string) => string; afterStack: (title: string, count: number) => string;
+  /** Status words; a waiting step, or one held under a blocked step, shows none (its caption says what it waits for). */
+  status: Record<"running" | "failed" | "done", string>;
+  /** Waiting word first, so truncation only cuts the quoted name. */
+  after: (title: string) => string;
+  /** `lead` (waiting word, then the quoted name) may truncate; `tail`, a count outside the quote, never does. */
+  afterStack: (title: string, count: number) => { lead: string; tail?: string };
   heldBy: string; join: string; newStep: string;
   more: (count: number) => string; menu: (title: string) => string;
   startNow: string; unstack: string; remove: string; failed: string; changed: string;

@@ -3,9 +3,9 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
     order: {
       chain: { user_message: "요청한 과제", schedule: "예약 작업", detach: "바로 시작한 과제" },
-      status: { running: "진행 중", held: "멈춤", failed: "막힘", done: "완료" },
-      after: title => `‘${title}’ 끝나면`, heldBy: "앞 과제가 막힘", join: "함께 진행", newStep: "새 단계로",
-      afterStack: (title, count) => `‘${title} 외 ${count}건’ 끝나면`,
+      status: { running: "진행 중", failed: "막힘", done: "완료" },
+      after: title => `끝나면: ‘${title}’`, heldBy: "앞 과제가 막힘", join: "함께 진행", newStep: "새 단계로",
+      afterStack: (title, count) => ({ lead: `끝나면: ‘${title} 외 ${count}건’` }),
       more: count => `외 ${count}건`, menu: title => `‘${title}’ 메뉴`,
       startNow: "지금 시작", unstack: "묶음 풀기", remove: "삭제",
       failed: "순서를 바꾸지 못했습니다", changed: "순서가 바뀌어 다시 불러왔습니다",
@@ -92,9 +92,9 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "en-US": {
     order: {
       chain: { user_message: "Requested", schedule: "Schedule", detach: "Started now" },
-      status: { running: "Running", held: "Paused", failed: "Blocked", done: "Done" },
-      after: title => `After ‘${title}’`, heldBy: "Earlier epic is blocked", join: "Run together", newStep: "New step",
-      afterStack: (title, count) => `After ‘${title}’ +${count} more`,
+      status: { running: "Running", failed: "Blocked", done: "Done" },
+      after: title => `After: ‘${title}’`, heldBy: "Earlier epic is blocked", join: "Run together", newStep: "New step",
+      afterStack: (title, count) => ({ lead: `After: ‘${title}’`, tail: `+${count} more` }),
       more: count => `+${count} more`, menu: title => `${title} menu`,
       startNow: "Start now", unstack: "Unstack", remove: "Delete",
       failed: "Couldn't change the order", changed: "Order changed; reloaded",
