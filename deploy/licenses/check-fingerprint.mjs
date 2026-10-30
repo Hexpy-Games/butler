@@ -54,7 +54,7 @@ try {
     stale(file);
     put(file, original);
   }
-  for (const file of ["deploy/licenses/generate.mjs", "packages/butler-npm/package.json",
+  for (const file of ["deploy/licenses/generate.mjs", "packages/butler-app/client/electron/package.json",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt"]) {
     const original = readFileSync(join(temporary, file), "utf8");
     put(file, file.endsWith("package.json") ? original.replace('"name":', '"changed": true, "name":') : `${original}\n`);
