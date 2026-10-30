@@ -2,6 +2,8 @@
 //! them off or breaking it asks at the next turn, and a schedule reports it.
 use super::*;
 
+type SwitchOff<'a> = &'a dyn Fn() -> Result<(), HarnessError>;
+
 fn off(card: &Value) -> &Value {
     assert_eq!(card["approval"]["action_kind"], "project_hooks", "{card}");
     &card["approval"]["project_hooks"]["off"]
@@ -27,14 +29,16 @@ async fn project_hooks_going_away_asks_before_the_turn_goes_on() -> Result<(), H
     let mut disabled = guard.clone();
     disabled["enabled"] = json!(false);
     let web = json!({"id":"web","event":"Stop","type":"http","url":"http://127.0.0.1:9/h"});
-    let ways: [(&str, &dyn Fn() -> Result<(), HarnessError>); 4] = [
+    let ways: [(&str, SwitchOff<'_>); 4] = [
         ("missing", &|| Ok(fs::remove_file(&hook_file)?)),
-        ("disabled", &|| project.write(&[disabled.clone()])),
-        ("refused", &|| project.write(&[web.clone()])),
+        ("disabled", &|| {
+            project.write(std::slice::from_ref(&disabled))
+        }),
+        ("refused", &|| project.write(std::slice::from_ref(&web))),
         ("refused", &|| Ok(fs::write(&hook_file, "{broken")?)),
     ];
     for (kind, switch_off) in ways {
-        allowed(&s, &project, &[guard.clone()]).await?;
+        allowed(&s, &project, std::slice::from_ref(&guard)).await?;
         let runs = project.ran("guard.jsonl").len();
         switch_off()?;
         let turn = s.gw.say_turn(&chat, "After it went away.").await?;
@@ -61,7 +65,7 @@ async fn project_hooks_stopping_at_the_off_card_asks_again() -> Result<(), Harne
     let (s, project) = start("HOOK-PROJECT-OFF-STOP").await?;
     let chat = project.chat.clone();
     let guard = project.observer("guard", "PreToolUse", "guard.jsonl");
-    allowed(&s, &project, &[guard.clone()]).await?;
+    allowed(&s, &project, std::slice::from_ref(&guard)).await?;
     fs::remove_file(project.root.join(".butler/hooks.json"))?;
     let turn = s.gw.say_turn(&chat, "Go on.").await?;
     assert_eq!(off(&card(&s, &chat).await?), "missing");
@@ -81,7 +85,7 @@ async fn project_hooks_stopping_at_the_off_card_asks_again() -> Result<(), Harne
     s.finish().await
 }
 
-async fn reports(s: &Scenario) -> Result<i64, HarnessError> {
+fn reports(s: &Scenario) -> Result<i64, HarnessError> {
     let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
     Ok(db.query_row(
         "SELECT count(*) FROM app_initiated_messages WHERE kind='approval_needed'",
@@ -98,7 +102,7 @@ async fn project_hooks_a_schedule_reports_what_it_could_not_ask() -> Result<(), 
     // Never allowed: nothing is lost, so the run says nothing.
     project.write(&[project.observer("guard", "Stop", "first.jsonl")])?;
     boundary::scheduled_run(&s, &chat, "Never answered").await?;
-    assert_eq!(reports(&s).await?, 0);
+    assert_eq!(reports(&s)?, 0);
     assert_eq!(project.ran("first.jsonl").len(), 0);
 
     allowed(
@@ -110,12 +114,12 @@ async fn project_hooks_a_schedule_reports_what_it_could_not_ask() -> Result<(), 
     fs::remove_file(project.root.join(".butler/hooks.json"))?;
     boundary::scheduled_run(&s, &chat, "Gone").await?;
     assert_eq!(s.gw.approval_requests(&chat).await?, Vec::<Value>::new());
-    assert_eq!(reports(&s).await?, 1, "{}", s.agent.logs());
+    assert_eq!(reports(&s)?, 1, "{}", s.agent.logs());
     let ran = project.ran("first.jsonl").len();
 
     project.write(&[project.observer("guard", "Stop", "changed.jsonl")])?;
     boundary::scheduled_run(&s, &chat, "Changed").await?;
-    assert_eq!(reports(&s).await?, 2, "{}", s.agent.logs());
+    assert_eq!(reports(&s)?, 2, "{}", s.agent.logs());
     assert_eq!(project.ran("changed.jsonl").len(), 0);
     assert_eq!(project.ran("first.jsonl").len(), ran);
     s.finish().await

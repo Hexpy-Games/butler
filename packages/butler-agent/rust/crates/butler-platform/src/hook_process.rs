@@ -1,11 +1,10 @@
 //! Bounded lifecycle command processes: under the user's privileges for the user's
 //! own hooks, inside the session's sandbox for a project folder's.
-mod sandbox;
 use crate::{
-    command_sandbox::{self, CommandOutputDecoder, ShellAccess},
+    command_sandbox::{self, CommandOutputDecoder, ShellAccess, hook_containment as sandbox},
     process_control::{self, GroupSignal},
 };
-pub use sandbox::{HookContainment, HookSandbox};
+pub use command_sandbox::hook_containment::{HookContainment, HookSandbox};
 use std::{collections::HashMap, path::PathBuf, process::Stdio, time::Duration};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;

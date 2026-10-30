@@ -102,10 +102,7 @@ fn scratch(data: &Path) -> Result<(PathBuf, PathBuf), SandboxError> {
 }
 
 /// Wraps `invocation` in the sandbox; call off async workers.
-pub fn contain(
-    invocation: Invocation,
-    sandbox: &HookSandbox,
-) -> Result<Contained, SandboxError> {
+pub fn contain(invocation: Invocation, sandbox: &HookSandbox) -> Result<Contained, SandboxError> {
     match sandbox {
         HookSandbox::None => Ok(Contained {
             invocation,
