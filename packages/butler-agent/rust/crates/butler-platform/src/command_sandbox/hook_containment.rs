@@ -31,10 +31,10 @@ pub struct HookContainment {
 }
 
 /// A prepared invocation and what must be finished once its process is gone.
-pub(super) struct Contained {
-    pub(super) invocation: Invocation,
+pub struct Contained {
+    pub invocation: Invocation,
     /// Scratch environment the process gets instead of the host's folders.
-    pub(super) scratch: Vec<(&'static str, String)>,
+    pub scratch: Vec<(&'static str, String)>,
     project_write: Option<ProjectWrite>,
 }
 
@@ -51,7 +51,7 @@ fn io_failure(error: std::io::Error) -> SandboxError {
 }
 
 /// The hook as a program and arguments, before any sandbox wraps it.
-pub(super) fn base(
+pub fn base(
     command: Option<&str>,
     args: Option<&[String]>,
     environment: &HashMap<String, String>,
@@ -102,7 +102,7 @@ fn scratch(data: &Path) -> Result<(PathBuf, PathBuf), SandboxError> {
 }
 
 /// Wraps `invocation` in the sandbox; call off async workers.
-pub(super) fn contain(
+pub fn contain(
     invocation: Invocation,
     sandbox: &HookSandbox,
 ) -> Result<Contained, SandboxError> {
@@ -180,7 +180,7 @@ fn project_write(
 impl Contained {
     /// Finishes containment once the process is gone, on every exit path: secrets a
     /// run left behind are swept, and its preparation released. Call off async workers.
-    pub(super) fn finish(self) {
+    pub fn finish(self) {
         if let Some(run) = self.project_write {
             let inventory = crate::secure_fs::SecretInventory::for_environment(
                 &run.data,
