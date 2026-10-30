@@ -11,7 +11,7 @@ export async function openLink(browser, value, source) {
   const url = webUrl(value);
   if (!url || !browser) return false;
   await browser.open();
-  const id = browser.create({ owner: source?.owner ?? "mine", url, ...(source ? { profile: source.profile, partition: source.partition, policy: source.policy } : {}) });
+  const id = browser.create({ owner: source?.owner ?? "mine", url, ...(source ? { profile: source.profile, partition: source.partition, policy: source.policy, pageOpened: true } : {}) });
   browser.focusRequest = id;
   browser.publish();
   return true;

@@ -11,7 +11,8 @@ pub mod capacity;
 mod devtools;
 pub use devtools::{
     DEVTOOLS_PLACE_OP, DEVTOOLS_READ_OP, DevtoolsPlace, DevtoolsStanding, devtools_place_reply,
-    devtools_read_reply, devtools_scope, devtools_standing, is_devtools_op, local_url,
+    devtools_read_reply, devtools_scope, devtools_selector_allowed, devtools_standing,
+    is_devtools_op, local_url,
 };
 pub mod egress;
 pub mod headless;

@@ -71,7 +71,9 @@ fn raw_rows() -> Value {
         {"method":"GET","url":"https://app.example.test/r/abcdefghijklmnopqrstuvwx1234?q=coat#top","type":"Document","status":200},
         {"method":"POST","url":"https://checkout.stripe.com/pay/SECRET-CARD?x=1","type":"Fetch","status":402,"error":"token=SECRET-CONSOLE rejected"},
         {"method":"GET","url":"https://sso.example.test/in?ticket=SECRET-URL&sso=SECRET-URL&magic=SECRET-URL&keep=1","type":"Document","status":200},
-        {"method":"GET","url":"https://matrix.example.test/p?a=1;token=SECRET-URL;b=2","type":"Fetch","status":200}])
+        {"method":"GET","url":"https://matrix.example.test/p?a=1;token=SECRET-URL;b=2","type":"Fetch","status":200},
+        {"method":"GET","url":"https://a.example.test/in?next=https%3A%2F%2Fy.test%3Ftoken%3DSECRET-URL&go=https%3A%2F%2Fy.test%2Fhome","type":"Document","status":200},
+        {"method":"GET","url":"https://a.example.test/in?pass=SECRET-URL&pw=SECRET-URL&passcode=SECRET-URL&hmac=SECRET-URL&lasso=keep","type":"Document","status":200}])
 }
 
 fn raw_nodes() -> Value {
@@ -114,7 +116,11 @@ fn read_reply(tab: &str, page: &Value, read: &str) -> Value {
                 {"level":"error","text":"bad eyJSECRETjwt.eyJSECRETjwt2.sig see http://[bad","source":"javascript:send('SECRET-AUTH')","line":1},
                 {"level":"error","text":"auth=SECRET-TEXT sid=SECRET-TEXT otp: SECRET-TEXT pin=SECRET-TEXT signature=SECRET-TEXT \"jwt\":\"SECRET-TEXT\" accessKey=SECRET-TEXT"},
                 {"level":"error","text":"keys ghp_SECRETabcdefghijkl sk-SECRETabcdefghijkl AKIASECRETABCDEFGH left"},
-                {"level":"error","text":"password: \"my SECRET-PHRASE pass\" then password = my SECRET-PHRASE pass, status: 500"}]);
+                {"level":"error","text":"password: \"my SECRET-PHRASE pass\" then password = my SECRET-PHRASE pass, status: 500"},
+                {"level":"error","text":"{\\\"token\\\":\\\"SECRET-TEXT\\\"} \"refresh\":\"SECRET-TEXT\" pw=SECRET-TEXT passcode: SECRET-TEXT"},
+                {"level":"error","text":"오류: 비밀번호: SECRET-TEXT 토큰=SECRET-TEXT"},
+                {"level":"error","text":"TokenExpiredError: jwt expired"},
+                {"level":"error","text":"AuthError: login failed"}]);
         }
         "network" => reply["entries"] = raw_rows(),
         "dom" => {

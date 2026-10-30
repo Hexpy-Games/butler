@@ -10,6 +10,7 @@
 mod assets;
 mod backend;
 mod devtools;
+mod devtools_login;
 mod downloads;
 mod guard;
 mod hidden;

@@ -4,7 +4,7 @@
 use super::{page::Page, scripts::scripts};
 use crate::browser::devtools::{
     DEVTOOLS_PLACE_OP, local_url,
-    mask::{credential_name, login_cookie},
+    names::{credential_header, credential_name, login_cookie, password_field},
     page_of,
 };
 use serde_json::{Value, json};
@@ -27,8 +27,10 @@ pub(crate) struct Devtools {
     pending: HashMap<String, Value>,
     dropped_console: u64,
     dropped_network: u64,
-    /// Hosts whose traffic sent an `Authorization`, until the state takes them.
+    /// Hosts whose traffic sent a credential header, until the state takes them.
     seen: HashSet<String>,
+    /// The main frame's last commit: what a read that runs no page script reports.
+    committed_url: Option<String>,
     /// A commit away from loopback: a local page after it was not simply opened.
     left_local: bool,
 }
@@ -87,7 +89,7 @@ impl Devtools {
 
     /// The request's own host comes from its headers, which cannot name the
     /// wrong hop of a redirect; the page it ran on counts too.
-    fn note_authorization(&mut self, headers: &Value, page_url: &str) {
+    fn note_credential(&mut self, headers: &Value, page_url: &str) {
         let named = header(headers, ":authority")
             .or_else(|| header(headers, "host"))
             .and_then(|host| host_of(&format!("http://{host}")));
@@ -124,13 +126,20 @@ impl Devtools {
     }
 
     /// Applies one page event. `main` says it came from the tab's own session.
-    pub(crate) fn event(&mut self, method: &str, params: &Value, page_url: &str, main: bool) {
+    pub(crate) fn event(
+        &mut self,
+        method: &str,
+        params: &Value,
+        page_url: &str,
+        (main, main_frame): (bool, &str),
+    ) {
         let id = params["requestId"].as_str().unwrap_or("");
         match method {
             "Network.requestWillBeSent" => self.request(id, params),
             "Network.requestWillBeSentExtraInfo" => {
-                if header(&params["headers"], "authorization").is_some() {
-                    self.note_authorization(&params["headers"], page_url);
+                let sent = params["headers"].as_object();
+                if sent.is_some_and(|sent| sent.keys().any(|name| credential_header(name))) {
+                    self.note_credential(&params["headers"], page_url);
                 }
             }
             "Network.responseReceived" => self.response(id, params),
@@ -171,6 +180,9 @@ impl Devtools {
             }
             "Page.frameNavigated" if main && params["frame"]["parentId"].is_null() => {
                 self.committed(&params["frame"]);
+            }
+            "Page.navigatedWithinDocument" if main && params["frameId"] == main_frame => {
+                self.committed_url = params["url"].as_str().map(str::to_owned);
             }
             _ => {}
         }
@@ -237,6 +249,7 @@ impl Devtools {
     fn committed(&mut self, frame: &Value) {
         let loader = &frame["loaderId"];
         let url = frame["url"].as_str().unwrap_or("");
+        self.committed_url = Some(url.to_owned());
         if url.starts_with("http") && !local_url(url) {
             self.left_local = true;
         }
@@ -263,9 +276,14 @@ impl Devtools {
     }
 }
 
-/// The address the page itself reports, not the last one a target event named.
-/// While a document commits there is no page to ask for a moment.
-async fn live_url(page: &Page) -> Result<String, String> {
+/// Whether an error means the page went from under a call, as a commit does.
+fn page_gone(error: &str) -> bool {
+    error == "frame_unavailable" || error == "tab_closed" || error.contains("context")
+}
+
+/// The address the page itself reports. While a document commits there is no
+/// page to ask for a moment.
+async fn page_url(page: &Page) -> Result<String, String> {
     let mut failure = String::new();
     for _ in 0..LIVE_URL_TRIES {
         let asked = async {
@@ -275,11 +293,28 @@ async fn live_url(page: &Page) -> Result<String, String> {
         };
         match asked.await {
             Ok(href) => return Ok(href.as_str().unwrap_or("").to_owned()),
-            Err(error) => failure = error,
+            Err(error) if page_gone(&error) => failure = error,
+            Err(error) => return Err(error),
         }
         tokio::time::sleep(LIVE_URL_WAIT).await;
     }
     Err(failure)
+}
+
+/// The tab's address. Only a DOM read asks the page; the console and network
+/// must still answer when its script has hung, from what the tab last committed.
+async fn current_url(page: &Page, ask_page: bool) -> Result<String, String> {
+    if ask_page {
+        return page_url(page).await;
+    }
+    page.shared
+        .with_tab(&page.tab, |tab| {
+            tab.devtools
+                .committed_url
+                .clone()
+                .unwrap_or_else(|| tab.url.clone())
+        })
+        .ok_or_else(|| "tab_closed".to_owned())
 }
 
 /// Every host with a cookie that looks like a sign-in, from the context's store.
@@ -298,6 +333,10 @@ async fn cookie_hosts(page: &Page, context: &str) -> Result<HashSet<String>, Str
             login_cookie(
                 cookie["name"].as_str().unwrap_or(""),
                 cookie["httpOnly"] == true,
+                cookie["domain"]
+                    .as_str()
+                    .unwrap_or("")
+                    .trim_start_matches('.'),
             )
         })
         .filter_map(|cookie| cookie["domain"].as_str())
@@ -307,8 +346,8 @@ async fn cookie_hosts(page: &Page, context: &str) -> Result<HashSet<String>, Str
 
 /// Where the tab is now: the page's own address, and at this moment what its
 /// browser context shows of a sign-in.
-async fn place(page: &Page) -> Result<Value, String> {
-    let url = live_url(page).await?;
+async fn place(page: &Page, ask_page: bool) -> Result<Value, String> {
+    let url = current_url(page, ask_page).await?;
     let (id, context, mut hosts, mut overflow, left_local) = {
         let state = page.shared.lock();
         let Some(tab) = state.tabs.get(&page.tab) else {
@@ -338,6 +377,24 @@ async fn place(page: &Page) -> Result<Value, String> {
     )
 }
 
+/// A password going into a field by Butler's own hand is a sign-in in progress,
+/// whatever the site keeps afterwards.
+pub(crate) fn note_password_entry(page: &Page, hit: &Value) {
+    if !password_field(hit["name"].as_str().unwrap_or("")) {
+        return;
+    }
+    let mut state = page.shared.lock();
+    let Some(tab) = state.tabs.get(&page.tab) else {
+        return;
+    };
+    let (context, host) = (tab.context.clone(), host_of(&tab.url));
+    state
+        .credentials
+        .entry(context)
+        .or_default()
+        .add(host.into_iter().collect());
+}
+
 async fn selector_valid(page: &Page, selector: &str) -> Result<bool, String> {
     let context = page.world(&page.session, &page.target).await?;
     let script = scripts()
@@ -353,9 +410,9 @@ pub(crate) async fn call(page: &Page, op: &str, args: &Value) -> Result<Value, S
     } else {
         read(page, args).await
     };
-    // A page that went away mid-call is one that moved; the browser going is not.
+    // A page that went away mid-call is one that moved; anything else is an error.
     match reply {
-        Err(error) if error != "browser_closed" => Ok(moved()),
+        Err(error) if page_gone(&error) => Ok(moved()),
         reply => reply,
     }
 }
@@ -371,7 +428,7 @@ async fn checked_place(page: &Page, args: &Value) -> Result<Value, String> {
     {
         return Ok(json!({"status":"not_dispatched","reason":"invalid_selector"}));
     }
-    place(page).await
+    place(page, args["read"] == "dom").await
 }
 
 async fn document(page: &Page, args: &Value) -> Result<Value, String> {
@@ -387,7 +444,8 @@ async fn document(page: &Page, args: &Value) -> Result<Value, String> {
 /// is taken after the read: a sign-in that appeared meanwhile counts.
 async fn read(page: &Page, args: &Value) -> Result<Value, String> {
     let read = args["read"].as_str().unwrap_or("");
-    let before = live_url(page).await?;
+    let ask_page = read == "dom";
+    let before = current_url(page, ask_page).await?;
     let mut result = match read {
         "console" => page
             .shared
@@ -403,7 +461,7 @@ async fn read(page: &Page, args: &Value) -> Result<Value, String> {
     if result["invalid_selector"] == true {
         return Ok(json!({"status":"not_dispatched","reason":"invalid_selector"}));
     }
-    let after = place(page).await?;
+    let after = place(page, ask_page).await?;
     let moved_during = result["href"].as_str().is_some_and(|href| href != before);
     if moved_during || after["url"] != before.as_str() {
         return Ok(moved());

@@ -1,6 +1,7 @@
 //! The walked document as indented tags, with every field value and attribute
 //! decided here rather than in the page script.
-use super::mask::{MASK, credential_name, mask_text, mask_url};
+use super::mask::{MASK, mask_text, mask_url};
+use super::names::credential_name;
 use serde_json::Value;
 
 const OUTPUT_LIMIT: usize = 60_000;
@@ -63,6 +64,47 @@ const MASKED_READ_ATTRIBUTES: &[&str] = &[
     "aria-labelledby",
     "aria-describedby",
 ];
+
+/// Whether a selector may be run: matching `[value^="a"]` would reveal a masked
+/// value one character at a time, so an attribute value may only be compared
+/// where a masked read already shows it. An escape could spell any name.
+pub fn selector_allowed(selector: &str) -> bool {
+    if selector.contains('\\') {
+        return false;
+    }
+    let mut rest = selector;
+    while let Some(open) = rest.find('[') {
+        rest = &rest[open + 1..];
+        let mut quote = None;
+        let mut end = rest.len();
+        for (index, ch) in rest.char_indices() {
+            match (quote, ch) {
+                (None, '"' | '\'') => quote = Some(ch),
+                (Some(open_quote), _) if ch == open_quote => quote = None,
+                (None, ']') => {
+                    end = index;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let inside = &rest[..end];
+        if let Some((name, _)) = inside.split_once('=') {
+            let name = name.trim_end_matches(['~', '|', '^', '$', '*']);
+            let name = name
+                .rsplit('|')
+                .next()
+                .unwrap_or(name)
+                .trim()
+                .to_ascii_lowercase();
+            if !MASKED_READ_ATTRIBUTES.contains(&name.as_str()) {
+                return false;
+            }
+        }
+        rest = rest.get(end + 1..).unwrap_or("");
+    }
+    true
+}
 
 fn attribute<'a>(node: &'a Value, name: &str) -> &'a str {
     node["a"]

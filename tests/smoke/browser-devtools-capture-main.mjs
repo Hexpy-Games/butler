@@ -19,7 +19,7 @@ const page = body => `<!doctype html><meta charset="utf-8"><title>t</title>${bod
 
 async function main() {
   app.dock?.hide();
-  const { watchDevtools, watchArrival, noteUserHold, devtoolsCall } = await import(`${process.env.DEVTOOLS_BROWSER_DIR}/devtools.mjs`);
+  const { watchDevtools, watchArrival, noteUserHold, notePasswordEntry, devtoolsCall } = await import(`${process.env.DEVTOOLS_BROWSER_DIR}/devtools.mjs`);
   let local = "";
   const server = createServer((req, res) => {
     const path = new URL(req.url, "http://x").pathname;
@@ -30,6 +30,7 @@ async function main() {
     if (path === "/login-plain") { res.writeHead(200, { "Set-Cookie": "PHPSESSID=D; Path=/" }); return res.end(page("ok")); }
     if (path === "/to-local") { res.writeHead(302, { Location: `${local}/containers` }); return res.end(); }
     if (path === "/hang") return undefined;
+    if (path === "/no-content") { res.writeHead(204); return res.end(); }
     if (path === "/with-fetch") return res.end(page("<script>fetch('/sub')</script>"));
     if (path === "/fields") return res.end(page(`<input name="cardNumber" value="4242"><p>${"\u0001".repeat(400)}</p>`.repeat(300)));
     res.writeHead(200); return res.end(page("<p>page</p>"));
@@ -69,8 +70,14 @@ async function main() {
     "cookie set by script": win => js(win, "document.cookie='session=E; path=/';0"),
     "cookie already in the partition": async (win, tab) => { await tab.session.cookies.set({ url: remote, name: "sid", value: "F", httpOnly: true }); },
     "Authorization header": win => js(win, "fetch('/x',{headers:{Authorization:'Bearer abc'}}).then(r=>r.text())"),
+    "X-Auth-Token header": win => js(win, "fetch('/x',{headers:{'X-Auth-Token':'abc'}}).then(r=>r.text())"),
+    "cookie named myKey": win => js(win, "document.cookie='myKey=1; path=/';0"),
+    "cookie named wordpress_logged_in_x": win => js(win, "document.cookie='wordpress_logged_in_x=1; path=/';0"),
+    "a preview cookie's name on a remote site": async (win, tab) => { await tab.session.cookies.set({ url: remote, name: "butler_preview", value: "H", httpOnly: true }); },
+    "a password filled by Butler": async (_win, tab) => { notePasswordEntry(tab, { name: "비밀번호" }); },
     "no login: analytics cookie": win => js(win, "document.cookie='_ga=G; path=/';0"),
-    "no login: Butler's preview cookie": async (win, tab) => { await tab.session.cookies.set({ url: remote, name: "butler_preview", value: "H", httpOnly: true }); },
+    "no login: CSRF header": win => js(win, "fetch('/x',{headers:{'X-CSRF-Token':'abc'}}).then(r=>r.text())"),
+    "no login: a search field filled by Butler": async (_win, tab) => { notePasswordEntry(tab, { name: "Search" }); },
   };
   out.logins = {};
   for (const [name, drive] of Object.entries(logins)) {
@@ -114,6 +121,13 @@ async function main() {
     "reload after a page moved it": async win => { await win.loadURL(remote); const done = navigated(win); void js(win, `location=${JSON.stringify(`${local}/containers`)};0`).catch(() => {}); await done; await win.webContents.reload(); await navigated(win); },
     "link on a local page": async win => { const done = navigated(win); void js(win, "location='/next';0").catch(() => {}); await done; },
     "remote redirect to loopback": async win => { await win.loadURL(`${remote}/to-local`); },
+    "page moved it to another local origin": async win => { const done = navigated(win); void js(win, `location=${JSON.stringify(`http://127.0.0.1:${port}/next`)};0`).catch(() => {}); await done; },
+    "user typed it after a 204 a page started": async win => {
+      await win.loadURL(remote);
+      void js(win, "location='/no-content';0").catch(() => {});
+      await settle(300);
+      await win.loadURL(`${local}/typed`);
+    },
     "user typed it after a page moved it": async win => { await win.loadURL(remote); const done = navigated(win); void js(win, `location=${JSON.stringify(`${local}/containers`)};0`).catch(() => {}); await done; await win.loadURL(`${local}/typed`); },
   };
   out.arrivals = {};
@@ -129,6 +143,46 @@ async function main() {
     const { win, tab } = await makeTab(local, { opener: "parent" });
     out.arrivals["opened as a pop-up"] = { url: (await place(tab)).url, trusted: (await place(tab)).local_trusted };
     await close(win);
+  }
+
+  // Butler's preview cookie is no login on a loopback host.
+  {
+    const { win, tab } = await makeTab(local);
+    await tab.session.cookies.set({ url: local, name: "butler_preview", value: "H", httpOnly: true });
+    out.ownCookie = (await place(tab)).credentialed_hosts;
+    await close(win);
+  }
+
+  // A page in the real browser opening loopback in a new tab, with and without a gesture.
+  {
+    const { createUserBrowser } = await import(`${process.env.DEVTOOLS_BROWSER_DIR}/tabs.mjs`);
+    const shell = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
+    await shell.loadURL(`${remote}/shell`);
+    const browser = createUserBrowser(app, () => shell, async () => "en");
+    const owner = "conversation:capture";
+    const link = `const a=document.createElement('a');a.href=${JSON.stringify(`${local}/admin`)};a.target='_blank';document.body.append(a);a.click();0`;
+    const form = `const f=document.createElement('form');f.action=${JSON.stringify(`${local}/admin`)};f.target='_blank';document.body.append(f);f.submit();0`;
+    const opener = `window.open(${JSON.stringify(`${local}/admin`)});0`;
+    out.realBrowser = {};
+    for (const [name, code, gesture] of [["target=_blank link, no gesture", link, false], ["target=_blank form, no gesture", form, false], ["window.open, gesture", opener, true]]) {
+      const sourceId = browser.create({ owner, url: remote, profile: "signed_out" }, true);
+      const source = browser.tabs.get(sourceId);
+      await settle(500);
+      const before = new Set(browser.tabs.keys());
+      await source.view.webContents.executeJavaScript(code, gesture).catch(() => {});
+      await settle(900);
+      const opened = [...browser.tabs.values()].filter(tab => !before.has(tab.id));
+      out.realBrowser[name] = [];
+      for (const tab of opened) out.realBrowser[name].push((await devtoolsCall(tab, "tab.devtools_place", {})).local_trusted);
+      for (const tab of opened) browser.close(tab.id);
+      browser.close(sourceId);
+      await settle(200);
+    }
+    const typedId = browser.create({ owner, url: `${local}/typed`, profile: "signed_out" }, true);
+    await settle(500);
+    out.realBrowser["opened in the pane"] = [(await devtoolsCall(browser.tabs.get(typedId), "tab.devtools_place", {})).local_trusted];
+    browser.close(typedId);
+    await settle(200);
   }
 
   // What crosses a navigation, and whether the new document's own requests stay.

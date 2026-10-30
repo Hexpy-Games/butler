@@ -1,6 +1,7 @@
 //! Masking applied before DevTools data leaves the browser host's reply: names
 //! that carry credentials on every tab, and everything account-bound on a
 //! signed-in one.
+use super::names::{credential_name, secret_parameter};
 use regex::{Captures, Regex};
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
@@ -9,7 +10,6 @@ pub(crate) const MASK: &str = "[masked]";
 const TEXT_LIMIT: usize = 2000;
 const SIGNED_IN_TEXT_LIMIT: usize = 500;
 const URL_LIMIT: usize = 2000;
-const NAMED_DEPTH: usize = 4;
 
 static SET_COOKIE: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"(?i)\b(set-cookie|cookie)\s*[:=][^\n]*").ok());
@@ -18,16 +18,14 @@ static BEARER: LazyLock<Option<Regex>> =
 static JWT: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?").ok()
 });
-/// `key: value`, `key=value`, `"key":"value"`: a quoted value runs to its closing quote.
+/// `key: value`, `key=value`, `"key":"value"`, also with escaped quotes: a quoted
+/// value runs to its closing quote.
 static NAMED: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(
-        r#"(["']?)([A-Za-z_][\w.\-]{0,80})(["']?\s*[:=]\s*)("[^"\n]*"?|'[^'\n]*'?|[^\s"'&;,]+)"#,
-    )
-    .ok()
+    Regex::new(r#"(\\?["']?)([\p{L}_][\w.\-]{0,80})(\\?["']?\s*[:=：]\s*)(\\"(?:[^"\\\n]|\\[^"\n])*(?:\\")?|"[^"\n]*"?|'[^'\n]*'?|[^\s"'&;,\\]+)"#).ok()
 });
 /// An unquoted secret phrase has no end but its clause.
 static PHRASE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r#"(?i)([\w.-]*(?:passw(?:or)?d|passphrase|pwd|secret)[\w.-]*)(\s*[:=]\s*)([^"'\s][^\n,;&]*)"#).ok()
+    Regex::new(r#"(?i)([\w.-]*(?:passw(?:or)?d|passphrase|passcode|pwd|secret|비밀번호|암호|パスワード|密码|密碼)[\w.-]*)(\s*[:=：]\s*)([^"'\\\s][^\n,;&]*)"#).ok()
 });
 /// Keys that say what they are, whatever surrounds them.
 static RAW_KEY: LazyLock<Option<Regex>> = LazyLock::new(|| {
@@ -36,86 +34,17 @@ static RAW_KEY: LazyLock<Option<Regex>> = LazyLock::new(|| {
 static URLS: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r#"https?://[^\s"'<>)\]]+"#).ok());
 
-fn words(name: &str) -> Vec<String> {
-    let mut words = vec![String::new()];
-    let mut previous_lower = false;
-    for ch in name.chars() {
-        if !ch.is_alphanumeric() {
-            words.push(String::new());
-            previous_lower = false;
-            continue;
-        }
-        if ch.is_uppercase() && previous_lower {
-            words.push(String::new());
-        }
-        previous_lower = ch.is_lowercase();
-        if let Some(word) = words.last_mut() {
-            word.extend(ch.to_lowercase());
-        }
-    }
-    words
-}
-
-/// Whether a header, field, attribute or parameter name carries a credential.
-pub(crate) fn credential_name(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    let strong = [
-        "token",
-        "secret",
-        "passw",
-        "pwd",
-        "passphrase",
-        "cookie",
-        "session",
-        "sessid",
-        "csrf",
-        "xsrf",
-        "credential",
-        "apikey",
-        "api-key",
-        "api_key",
-        "accesskey",
-        "signature",
-        "jwt",
-        "bearer",
-    ];
-    strong.iter().any(|needle| lower.contains(needle))
-        || lower.contains("auth") && !lower.contains("author")
-        || lower.contains("authorization")
-        || words(name).iter().any(|word| {
-            matches!(
-                word.as_str(),
-                "key" | "sig" | "sid" | "sess" | "otp" | "pin"
-            )
-        })
-}
-
-/// Butler's own preview cookie, which selects a dev server and is no login.
-const OWN_COOKIE: &str = "butler_preview";
-
-/// Whether a cookie says someone may be signed in. A false positive only costs
-/// an extra card, so anything HttpOnly counts. Mirrored in the App's `devtools.mjs`.
-pub(crate) fn login_cookie(name: &str, http_only: bool) -> bool {
-    let lower = name.to_ascii_lowercase();
-    name != OWN_COOKIE
-        && (http_only
-            || credential_name(name)
-            || ["sess", "login", "remember"]
-                .iter()
-                .any(|needle| lower.contains(needle)))
-}
-
-/// Query and fragment parameters that also carry one-time secrets in URLs.
-fn secret_parameter(name: &str) -> bool {
-    let decoded: String = url::form_urlencoded::parse(name.as_bytes())
-        .map(|(key, _)| key.into_owned())
-        .collect();
-    let lower = decoded.to_ascii_lowercase();
-    credential_name(&decoded)
-        || matches!(lower.as_str(), "code" | "state" | "nonce")
-        || ["ticket", "sso", "magic", "saml", "assertion", "relaystate"]
+/// Whether a parameter's value, read once decoded, holds a credential: a return
+/// URL that carries a token, say. Checked flat, so nesting can't deepen the work.
+fn secret_value(value: &str) -> bool {
+    let decoded: String = url::form_urlencoded::parse(format!("v={value}").as_bytes())
+        .next()
+        .map(|(_, decoded)| decoded.into_owned())
+        .unwrap_or_default();
+    named(&decoded) != decoded
+        || [&BEARER, &JWT, &RAW_KEY]
             .iter()
-            .any(|needle| lower.contains(needle))
+            .any(|regex| regex.as_ref().is_none_or(|regex| regex.is_match(&decoded)))
 }
 
 fn parameter(pair: &str, masked: bool) -> String {
@@ -127,7 +56,7 @@ fn parameter(pair: &str, masked: bool) -> String {
             pair.to_owned()
         };
     }
-    if masked || secret_parameter(name) {
+    if masked || secret_parameter(name) || secret_value(value) {
         format!("{name}={MASK}")
     } else {
         pair.to_owned()
@@ -233,22 +162,31 @@ fn replaced(
     }
 }
 
-/// Masks every `key: value` whose key names a credential. A value under another
-/// key is looked into in turn, so a nested pair cannot hide; past a few levels
-/// the rest is not shown.
-fn named(text: &str, depth: usize) -> String {
-    replaced(&NAMED, text, |c| {
-        let value = &c[4];
-        if credential_name(&c[2]) {
-            format!("{}{}{}{MASK}", &c[1], &c[2], &c[3])
-        } else if !value.contains([':', '=']) {
-            c[0].to_owned()
-        } else if depth >= NAMED_DEPTH {
-            format!("{}{}{}{MASK}", &c[1], &c[2], &c[3])
+/// Masks every `key: value` whose key names a credential. Under any other key
+/// the scan carries on inside the value, so a nested pair cannot hide. An error
+/// class's name is not a key, whatever words it holds.
+fn named(text: &str) -> String {
+    let Some(regex) = NAMED.as_ref() else {
+        return MASK.to_owned();
+    };
+    let mut out = String::new();
+    let mut at = 0;
+    while let Some(found) = regex.captures_at(text, at) {
+        let (Some(whole), Some(key), Some(value)) = (found.get(0), found.get(2), found.get(4))
+        else {
+            break;
+        };
+        out.push_str(&text[at..value.start()]);
+        let error_name = key.as_str().ends_with("Error") || key.as_str().ends_with("Exception");
+        if credential_name(key.as_str()) && !error_name {
+            out.push_str(MASK);
+            at = whole.end();
         } else {
-            format!("{}{}{}{}", &c[1], &c[2], &c[3], named(value, depth + 1))
+            at = value.start();
         }
-    })
+    }
+    out.push_str(&text[at..]);
+    out
 }
 
 /// Page text with anything shaped like a credential removed, bounded and
@@ -260,7 +198,7 @@ pub(crate) fn mask_text(text: &str, masked: bool) -> String {
     let text = replaced(&RAW_KEY, &text, |_| MASK.to_owned());
     let text = replaced(&URLS, &text, |c| mask_url(&c[0], masked));
     let text = replaced(&PHRASE, &text, |c| format!("{}{}{MASK}", &c[1], &c[2]));
-    let text = named(&text, 0);
+    let text = named(&text);
     capped(
         text,
         if masked {

@@ -71,6 +71,8 @@ async fn secrets_stay_masked_whatever_shape_they_come_in() -> Result<(), Harness
         lines.contains("status: 500"),
         "ordinary facts stay: {lines}"
     );
+    assert!(lines.contains("TokenExpiredError: jwt expired"), "{lines}");
+    assert!(lines.contains("AuthError: login failed"), "{lines}");
     assert!(lines.contains(" left"), "{lines}");
     assert!(lines.contains("Bearer [masked]"), "{lines}");
     assert!(lines.contains("cookie: [masked]"), "{lines}");
@@ -105,6 +107,16 @@ async fn secrets_stay_masked_whatever_shape_they_come_in() -> Result<(), Harness
     assert_eq!(
         row(5),
         "https://matrix.example.test/p?a=1;token=[masked];b=2",
+        "{rows}"
+    );
+    assert_eq!(
+        row(6),
+        "https://a.example.test/in?next=[masked]&go=https%3A%2F%2Fy.test%2Fhome",
+        "{rows}"
+    );
+    assert_eq!(
+        row(7),
+        "https://a.example.test/in?pass=[masked]&pw=[masked]&passcode=[masked]&hmac=[masked]&lasso=keep",
         "{rows}"
     );
     let headers = &rows[0]["response_headers"];
@@ -212,8 +224,22 @@ async fn selectors_are_checked_first_and_schedules_keep_their_switch() -> Result
     let s = Setup::new("BROWSER-DEVTOOLS-SELECTOR")?
         .access(Access::AskExceptReads)
         .stub_cassette(cassette(&[
-            turn("Bad selector", vec![dom("[["), dom(&long)]),
-            turn("Good selector", vec![dom("form#login")]),
+            turn(
+                "Bad selector",
+                vec![
+                    dom("[["),
+                    dom(&long),
+                    dom(r#"input[name=csrf][value^="abc"]"#),
+                    dom("[VALUE*=a]"),
+                    dom(r"[v\61lue^=a]"),
+                    dom("form:has([data-token$=a])"),
+                    dom("[*|value=a]"),
+                ],
+            ),
+            turn(
+                "Good selector",
+                vec![dom(r#"form#login input[type="text"][name=q]:not([value])"#)],
+            ),
         ])?)
         .start()
         .await?;
@@ -232,12 +258,18 @@ async fn selectors_are_checked_first_and_schedules_keep_their_switch() -> Result
         .iter()
         .filter(|value| value["reason"] == "invalid_selector")
         .count();
-    assert_eq!(refused, 2);
+    assert_eq!(refused, 7);
+    let asked = host.frames_text();
+    assert!(
+        !asked.contains("value^="),
+        "the oracle never reaches a page: {asked}"
+    );
     assert_eq!(host.reads().len(), 0);
     let (id, card) = ask(&s, "Good selector").await?;
     let card = card.expect("a good one asks");
     assert_eq!(
-        card["approval"]["operation"]["targets"][2], "form#login",
+        card["approval"]["operation"]["targets"][2],
+        r#"form#login input[type="text"][name=q]:not([value])"#,
         "{card}"
     );
     allow(&s, &id, &card, "once").await?;

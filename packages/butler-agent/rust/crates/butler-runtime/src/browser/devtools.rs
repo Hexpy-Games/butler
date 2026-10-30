@@ -3,6 +3,8 @@
 //! No script the model writes ever runs; the page's reply is untrusted data.
 pub(super) mod dom;
 pub(super) mod mask;
+pub(super) mod names;
+pub use dom::selector_allowed as devtools_selector_allowed;
 use mask::{mask_headers, mask_text, mask_url};
 use serde_json::{Map, Value, json};
 

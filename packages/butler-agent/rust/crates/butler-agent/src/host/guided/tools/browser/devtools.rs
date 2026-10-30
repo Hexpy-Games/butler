@@ -8,6 +8,7 @@ use super::{authority, client, encode_page_data, grant, settle};
 use butler_core::json::JsonDocument;
 use butler_runtime::browser::{
     DEVTOOLS_PLACE_OP, DEVTOOLS_READ_OP, DevtoolsPlace as Place, devtools_scope,
+    devtools_selector_allowed,
 };
 use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
@@ -59,7 +60,9 @@ fn invalid(args: &Value) -> Option<&'static str> {
     }
     args["selector"]
         .as_str()
-        .is_some_and(|selector| selector.len() > MAX_SELECTOR)
+        .is_some_and(|selector| {
+            selector.len() > MAX_SELECTOR || !devtools_selector_allowed(selector)
+        })
         .then_some("invalid_selector")
 }
 
@@ -80,7 +83,7 @@ pub(super) async fn execute(
     let signal = invocation.cancellation;
     let tab = &args["tab"];
     // The browser checks a selector before anyone is asked about it.
-    let check = json!({"selector":args["selector"].as_str().filter(|_| read == "dom")});
+    let check = json!({"read":read,"selector":args["selector"].as_str().filter(|_| read == "dom")});
     let request = (DEVTOOLS_PLACE_OP, tab, &check);
     let standing = grant::call(owner, call, occurrence, &client, request, signal).await?;
     let Some(place) = place_of(&standing).filter(|_| standing["status"] == "ok") else {

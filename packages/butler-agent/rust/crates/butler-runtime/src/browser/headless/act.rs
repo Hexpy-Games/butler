@@ -233,6 +233,9 @@ async fn dispatch(
 ) -> Result<Value, String> {
     let action = step["action"].as_str().unwrap_or("");
     let done = || json!({"status":"completed","hit":target["hit"]});
+    if matches!(action, "fill" | "type") {
+        super::devtools::note_password_entry(page, &target["hit"]);
+    }
     match action {
         "wait" => {
             let ms = wait_value(&step["value"])

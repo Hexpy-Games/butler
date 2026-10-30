@@ -1,6 +1,7 @@
 import { webUrl } from "./policy.mjs";
 import { devtoolsDom, devtoolsSelectorValid } from "./page/devtools-dom.mjs";
 import { trackRequests } from "./guard.mjs";
+import { credentialHeader, credentialName, loginCookie, passwordField } from "./credential-names.mjs";
 
 /** DevTools capture for a conversation tab: console errors and request rows,
  * bounded, cleared when the main frame commits a new document. Cookies and
@@ -8,10 +9,6 @@ import { trackRequests } from "./guard.mjs";
 const MAX_CONSOLE = 200, MAX_NETWORK = 500, MAX_PENDING = 500, MAX_HOSTS = 64, MAX_TEXT = 4000, MAX_HEADERS = 40, MAX_HEADER_VALUE = 500;
 /** One reply stays well under the 256 KiB a host reply may be. */
 const PAGE_SIZE = 100, PAGE_BYTES = 200 * 1024;
-const CREDENTIAL_HEADER = /cookie|authorization|auth|token|secret|session|csrf|xsrf|api-?key|credential|signature/iu;
-/** Mirrors `login_cookie` in butler-runtime: a false positive only costs an extra card. */
-const OWN_COOKIE = "butler_preview";
-const LOGIN_COOKIE = /token|secret|passw|pwd|passphrase|cookie|sess|csrf|xsrf|credential|api-?_?key|accesskey|signature|jwt|bearer|auth|login|remember|(^|[^a-z0-9])(key|sig|sid|otp|pin)([^a-z0-9]|$)/iu;
 const seen = new WeakMap();
 
 export const DEVTOOLS_OPS = new Set(["tab.devtools_place", "tab.devtools"]);
@@ -32,33 +29,45 @@ function noteCredential(tab, ...urls) {
   }
 }
 const liveUrl = tab => (tab.view && !tab.view.webContents.isDestroyed() ? webUrl(tab.view.webContents.getURL()) : null);
-function isLocal(url) {
-  const host = hostOf(url).replace(/\.$/u, "");
+function isLocalHost(raw) {
+  const host = raw.toLowerCase().replace(/\.$/u, "");
   return host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || /^127(\.\d{1,3}){3}$/u.test(host);
 }
+const isLocal = url => isLocalHost(hostOf(url));
+const originOf = raw => { try { return new URL(raw).origin; } catch { return ""; } };
 /** Whatever the user did on this site may have signed them in. A loopback page stays as it was. */
 export function noteUserHold(tab) {
   const url = liveUrl(tab);
   if (url && !isLocal(url)) noteCredential(tab, url);
 }
 
+/** A password going into a field by Butler's own hand is a sign-in in progress, whatever the site keeps afterwards. */
+export function notePasswordEntry(tab, hit) {
+  if (passwordField(hit?.name)) noteCredential(tab, liveUrl(tab) ?? tab.url);
+}
+
 /** How the tab reached its page. Only a navigation the browser started (the
  * address bar, a bookmark, Butler opening a tab) can make a loopback page the
- * user's own; one a page started keeps what the page before it had. */
+ * user's own; one a page started keeps what the page before it had, and only
+ * on the same origin. Asked of each navigation, so one that came to nothing (a
+ * 204, a download) leaves no mark on the next. */
 export function watchArrival(tab) {
   if (tab.arrival || !tab.view) return;
   const contents = tab.view.webContents;
-  // A pop-up's first page is its opener's doing, and starts before this listens.
-  tab.arrival = { byPage: Boolean(tab.opener), start: "", url: "", trusted: false };
-  contents.on("will-navigate", () => { tab.arrival.byPage = true; });
+  // A page-opened tab's first page is the page's doing, and may start before this listens.
+  tab.arrival = { opened: Boolean(tab.opener || tab.pageOpened), byPage: false, start: "", url: "", trusted: false };
   contents.on("did-start-navigation", details => {
-    if (details.isMainFrame && !details.isSameDocument) tab.arrival.start = details.url;
+    if (!details.isMainFrame || details.isSameDocument) return;
+    tab.arrival.start = details.url; tab.arrival.byPage = Boolean(details.initiator);
   });
+  // Fires only for a navigation the renderer started, after the one above: holds when an initiator is gone.
+  contents.on("will-navigate", () => { tab.arrival.byPage = true; });
   contents.on("did-navigate", (_event, url) => {
-    const { byPage, start, url: before, trusted } = tab.arrival;
-    const reload = url === before;
-    tab.arrival.trusted = isLocal(url) && (!start || isLocal(start)) && (byPage || reload ? trusted : true);
-    tab.arrival.byPage = false; tab.arrival.url = url;
+    const { opened, byPage, start, url: before, trusted } = tab.arrival;
+    const sameOrigin = originOf(url) === originOf(before);
+    const inherits = (opened || byPage) ? trusted && sameOrigin : url === before ? trusted : true;
+    tab.arrival.trusted = isLocal(url) && (!start || isLocal(start)) && inherits;
+    tab.arrival.opened = false; tab.arrival.url = url;
   });
 }
 
@@ -93,12 +102,12 @@ export function noteRequestStarted(tab, detail) {
 }
 export function noteRequestSent(tab, detail) {
   if (!tab.devtools) return;
-  if (Object.keys(detail.requestHeaders ?? {}).some(name => name.toLowerCase() === "authorization")) noteCredential(tab, detail.url, tab.url);
+  if (Object.keys(detail.requestHeaders ?? {}).some(credentialHeader)) noteCredential(tab, detail.url, tab.url);
 }
 function failedHeaders(tab, detail) {
   if (tab.profile === "signed_in" || !(detail.statusCode >= 400)) return undefined;
   return Object.fromEntries(Object.entries(detail.responseHeaders ?? {})
-    .filter(([name]) => !CREDENTIAL_HEADER.test(name)).slice(0, MAX_HEADERS).map(([name, value]) => [name, [value].flat().join(", ").slice(0, MAX_HEADER_VALUE)]));
+    .filter(([name]) => !credentialName(name)).slice(0, MAX_HEADERS).map(([name, value]) => [name, [value].flat().join(", ").slice(0, MAX_HEADER_VALUE)]));
 }
 const headerValue = (detail, wanted) => {
   const entry = Object.entries(detail.responseHeaders ?? {}).find(([name]) => name.toLowerCase() === wanted);
@@ -127,7 +136,8 @@ async function standing(tab) {
   if (tab.profile !== "signed_in") {
     try {
       for (const cookie of await tab.session.cookies.get({})) {
-        if (cookie.name !== OWN_COOKIE && (cookie.httpOnly || LOGIN_COOKIE.test(cookie.name))) hosts.add(cookie.domain.replace(/^\./u, "").toLowerCase());
+        const domain = cookie.domain.replace(/^\./u, "").toLowerCase();
+        if (loginCookie(cookie.name, cookie.httpOnly, domain, isLocalHost)) hosts.add(domain);
       }
     } catch { overflow = true; }
   }

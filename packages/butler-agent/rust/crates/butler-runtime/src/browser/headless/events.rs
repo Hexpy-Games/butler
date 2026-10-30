@@ -80,8 +80,12 @@ fn tab_event(browser: &Browser, session: &str, method: &str, params: &Value) {
     if let Some(diagnostics) = tab.diagnostics.as_mut() {
         diagnostics.event(method, params, &tab.target);
     }
-    tab.devtools
-        .event(method, params, &tab.url, session == tab.session);
+    tab.devtools.event(
+        method,
+        params,
+        &tab.url,
+        (session == tab.session, &tab.target),
+    );
     let main = |frame: &Value| frame == tab.target.as_str();
     match method {
         "Page.frameNavigated" | "Page.navigatedWithinDocument" => tab.changed(),

@@ -40,11 +40,18 @@ const trusted: Record<string, boolean> = {
   "link on a local page": true,
   "remote redirect to loopback": false,
   "user typed it after a page moved it": true,
+  "page moved it to another local origin": false,
+  "user typed it after a 204 a page started": true,
   "opened as a pop-up": false,
 };
 for (const [name, expected] of Object.entries(trusted)) {
-  assert.match(out.arrivals[name].url, /localhost/u, name);
+  assert.match(out.arrivals[name].url, /localhost|127\.0\.0\.1/u, name);
   assert.equal(out.arrivals[name].trusted, expected, `${name}: ${JSON.stringify(out.arrivals[name])}`);
+}
+
+assert.deepEqual(out.ownCookie, [], "Butler's preview cookie is no login on loopback");
+for (const [name, expected] of Object.entries({ "target=_blank link, no gesture": false, "target=_blank form, no gesture": false, "window.open, gesture": false, "opened in the pane": true })) {
+  assert.deepEqual(out.realBrowser[name], [expected], `${name}: ${JSON.stringify(out.realBrowser[name])}`);
 }
 
 assert.equal(out.crossing.status, "ok");
