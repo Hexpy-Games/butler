@@ -1,7 +1,8 @@
 export interface CanonOrderCopy {
   chain: Record<"user_message" | "schedule" | "detach", string>;
   status: Record<"waiting" | "running" | "held" | "failed" | "done", string>;
-  after: (title: string) => string; heldBy: string; join: string; newStep: string;
+  after: (title: string) => string; afterStack: (title: string, count: number) => string;
+  heldBy: string; join: string; newStep: string;
   more: (count: number) => string; menu: (title: string) => string;
   startNow: string; unstack: string; remove: string; failed: string; changed: string;
   drag: {

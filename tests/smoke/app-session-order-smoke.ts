@@ -107,15 +107,17 @@ async function scenario(id: string, layout: string) {
     assert.equal(ids[ids.indexOf("subtasks") + 1], "order");
     assert.equal(await section(page).locator("[data-step-items]").count(), 5);
     assert.equal(await grip(page, epics[0]!.id).count(), 0, "running is pinned");
+    assert.equal(await section(page).locator('[data-step-items]').first().locator('[data-slot="card"]').getAttribute("data-activity"), "running");
   }
   await shot(page, `${layout}-running-plan`);
-  if (!baseline && layout === "plain") await editFlows(page, id, epics.map(epic => epic.id));
+  if (layout === "plain") await editFlows(page, id, epics.map(epic => epic.id));
   await closeInfo(page);
   await stopOrderTurn(host, id);
   await waitOrder(host, id, view => view.counts.failed === 1 && view.counts.held > 0);
   const hold = page.locator('[data-test-class="canon-hold"]');
   if (!baseline) await hold.waitFor();
   await shot(page, `${layout}-hold`);
+  await heldOrder(page, id, layout);
   await assertNoCanonInstructions(page);
   if (!baseline) {
     const decision = layout === "plain" ? "delete" : "continue";
@@ -149,6 +151,28 @@ async function scenario(id: string, layout: string) {
   await page.unrouteAll({ behavior: "wait" });
   await page.close();
 }
+async function heldOrder(page: Page, id: string, layout: string) {
+  await info(page);
+  const view = await readOrder(host, id);
+  const chain = view.chains.find(chain => chain.steps.some(step => step.items.some(item => item.state === "running" && item.hold_reason)))!;
+  const head = chain.steps[0]!.items[0]!;
+  const row = section(page).locator(`[data-step-item="${head.epic_id}"]`);
+  await row.getByText(c.status.failed, { exact: true }).waitFor();
+  await shot(page, `${layout}-held-order`);
+  if (!baseline) {
+    assert.equal(await row.locator('xpath=ancestor::*[@data-slot="card"][1]').getAttribute("data-activity"), null, "a blocked head has no running glow");
+    assert.equal(await row.locator("svg").count(), 1, "the blocked alert marker remains");
+    assert.equal(await grip(page, head.epic_id).count(), 0, "the blocked head stays pinned");
+    assert.equal(await row.getByRole("button", { name: c.menu(head.title), exact: true }).count(), 0, "the blocked head has no menu");
+    const last = chain.steps.at(-1)!.items[0]!;
+    const edit = await keyboardEdit(page, id, last.epic_id, Array<string>(8).fill("ArrowUp"));
+    assert.equal(edit.op, "move_to_new_step", "a blocked head takes no joins");
+    assert.equal(edit.index, 1, "nothing drops before the blocked head");
+    const next = (await readOrder(host, id)).chains.find(next => next.chain_id === chain.chain_id)!;
+    assert.deepEqual(next.steps[0], chain.steps[0], "the blocked head retains its index and exact membership");
+  }
+  await closeInfo(page);
+}
 async function keyboardEdit(page: Page, id: string, item: string, keys: string[], stack = false) {
   await grip(page, item, stack).focus();
   await page.keyboard.press("Space");
@@ -180,6 +204,10 @@ async function editFlows(page: Page, id: string, items: string[]) {
   const joined = await keyboardEdit(page, id, second!, ["ArrowDown"]);
   assert.equal(joined.op, "join_stack"); assert.equal(joined.target_epic_id, third);
   const stack = [third!, second!];
+  if (!baseline) {
+    const after = section(page).locator(`[data-step-item="${items[3]}"]`);
+    await after.getByText(lang === "ko" ? "‘발표 자료 외 1건’ 끝나면" : "After ‘발표 자료’ +1 more", { exact: true }).waitFor();
+  }
   await shot(page, "stack");
   const moved = await keyboardEdit(page, id, third!, ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown"], true);
   assert.deepEqual(moved.epic_ids, stack, "a collapsed stack moves as an ordered selection");

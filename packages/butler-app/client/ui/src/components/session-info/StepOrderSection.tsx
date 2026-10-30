@@ -15,18 +15,19 @@ export function StepOrderSection({ order }: { order: ReturnType<typeof useSessio
   });
   const renderItem = (item: OrderItem, place: StepSortableRowContext) => {
     const epic = item.epic;
-    const status = epic.hold_reason && item.running ? "failed" : epic.state;
-    const previous = chains.find(chain => chain.id === place.chainId)?.steps[place.stepIndex - 1]?.[0];
+    const status = epic.hold_reason && epic.state === "running" ? "failed" : epic.state;
+    const previous = chains.find(chain => chain.id === place.chainId)?.steps[place.stepIndex - 1];
+    const after = previous && (previous.length > 1 ? copy.afterStack(previous[0]!.label, previous.length - 1) : copy.after(previous[0]!.label));
     const progress = epic.progress;
     const activity = progress.actions.find(action => action.status === "active")?.description;
     const caption = activity || (progress.counts.total > 0 ? appCopy.canon.done(progress.counts.completed, progress.counts.total) : undefined)
-      || (epic.held_by_epic_id ? copy.heldBy : previous ? copy.after(previous.label) : undefined);
+      || (epic.held_by_epic_id ? copy.heldBy : after);
     return {
       marker: <OrderMarker status={status} number={place.stepNumber} />,
       title: item.label, meta: copy.status[status],
       more: place.count > 1 && !place.expanded ? copy.more(place.count - 1) : undefined,
       caption: place.lifted && place.outcome ? (place.outcome === "join" ? copy.join : copy.newStep) : caption,
-      trailing: item.running || item.done || order.busy ? undefined : <OverflowActionMenu label={copy.menu(item.label)} items={[
+      trailing: item.pinned || order.busy ? undefined : <OverflowActionMenu label={copy.menu(item.label)} items={[
         { icon: <Play size="sm" />, label: copy.startNow, onSelect: () => { void order.edit({ action: "startNow", epicId: item.id }); } },
         ...(place.count > 1 ? [{ icon: <Blocks size="sm" />, label: copy.unstack, onSelect: () => { void order.edit({ action: "unstack", epicId: item.id }); } }] : []),
         { icon: <Trash2 size="sm" />, label: copy.remove, variant: "destructive", onSelect: () => { void order.edit({ action: "remove", epicId: item.id }); } },

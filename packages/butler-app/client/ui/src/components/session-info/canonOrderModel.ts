@@ -9,7 +9,8 @@ const donePrefix = (chain: CanonQueueView["chains"][number]) => {
 };
 export function orderChains(view: CanonQueueView): StepSortableChain<OrderItem>[] {
   return view.chains.map(chain => ({ id: chain.chain_id, label: chain.origin, steps: chain.steps.slice(donePrefix(chain)).map(step => step.items.map(epic => ({
-    id: epic.epic_id, label: epic.title, epic, running: epic.state === "running", done: epic.state === "done", pinned: epic.state === "done",
+    id: epic.epic_id, label: epic.title, epic, running: epic.state === "running" && !epic.hold_reason,
+    done: epic.state === "done", pinned: epic.state === "running" || epic.state === "done",
   }))) }));
 }
 
@@ -41,7 +42,7 @@ export function optimisticOrder(view: CanonQueueView, edit: StepSortableEdit): C
   })) };
 }
 
-/** Running steps retain both their index and their exact predecessor membership. */
+/** Started steps, including blocked heads, retain their index and exact predecessor membership. */
 export function acceptsOrderEdit(view: CanonQueueView, edit: StepSortableEdit): boolean {
   const next = optimisticOrder(view, edit);
   return view.chains.every(chain => chain.steps.every((step, index) => {
