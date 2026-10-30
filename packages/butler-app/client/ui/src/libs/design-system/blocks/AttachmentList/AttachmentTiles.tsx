@@ -14,6 +14,7 @@ export interface AttachmentTilesProps extends WindowDragProps {
   layout: "row" | "wrap";
   align?: "start" | "end";
   onOpen?: (item: AttachmentListItem) => void;
+  onMediaError?: (item: AttachmentListItem) => void;
   onRemove?: (id: string) => void;
   removeLabel: (name: string) => string;
   className?: string;
@@ -37,7 +38,7 @@ function TileTarget({ item, onOpen, children, ref, ...trigger }: { item: Attachm
   return <span {...shared} ref={ref as Ref<HTMLSpanElement>} role="img">{children}</span>;
 }
 
-function Tile({ item, layout, onOpen, onRemove, removeLabel, register }: Omit<AttachmentTilesProps, "items" | "windowDrag" | "align"> & {
+function Tile({ item, layout, onOpen, onMediaError, onRemove, removeLabel, register }: Omit<AttachmentTilesProps, "items" | "windowDrag" | "align"> & {
   item: AttachmentListItem; register: Register;
 }) {
   const node = useRef<HTMLDivElement | null>(null);
@@ -57,7 +58,7 @@ function Tile({ item, layout, onOpen, onRemove, removeLabel, register }: Omit<At
       data-blocked={item.blockedReason ? "true" : undefined} data-upload={item.upload}
       aria-busy={item.upload === "uploading" ? true : undefined} data-leaving={leaving ? "true" : undefined}>
       <Tooltip label={item.blockedReason ?? item.name}>
-        <TileTarget item={item} onOpen={onOpen}><AttachmentTileFace item={item} withMeta={layout === "wrap"} /></TileTarget>
+        <TileTarget item={item} onOpen={onOpen}><AttachmentTileFace item={item} withMeta={layout === "wrap"} onMediaError={onMediaError} /></TileTarget>
       </Tooltip>
       {onRemove ? <AttachmentTileRemove label={removeLabel(item.name)} onRemove={() => setLeaving(true)} /> : null}
     </div>
@@ -93,11 +94,11 @@ function useSlideClosed(order: string): Register {
  * Square attachment tiles: `row` 64px in one sideways-scrolling row with the shared edge fade (composer),
  * `wrap` 96px wrapping (end-aligned in a sent message, `align="start"` in a document), with the size line. Every item shows.
  */
-export function AttachmentTiles({ items, layout, align, onOpen, onRemove, removeLabel, windowDrag, className }: AttachmentTilesProps) {
+export function AttachmentTiles({ items, layout, align, onOpen, onMediaError, onRemove, removeLabel, windowDrag, className }: AttachmentTilesProps) {
   const edges = useScrollEdges("x", layout === "row");
   const register = useSlideClosed(items.map((item) => item.id).join("\n"));
   const tiles = items.map((item) => (
-    <Tile key={item.id} item={item} layout={layout} onOpen={onOpen} onRemove={onRemove} removeLabel={removeLabel} register={register} />
+    <Tile key={item.id} item={item} layout={layout} onOpen={onOpen} onMediaError={onMediaError} onRemove={onRemove} removeLabel={removeLabel} register={register} />
   ));
   if (layout === "wrap") {
     return <div className={cn(styles.wrap, windowDragClassName(windowDrag), className)} data-slot="attachment-list" data-variant="tiles" data-layout="wrap" data-align={align}>{tiles}</div>;

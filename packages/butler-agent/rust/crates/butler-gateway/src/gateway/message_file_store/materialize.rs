@@ -57,14 +57,10 @@ pub(super) fn run(
     let mut unavailable = false;
     let mut staging = Staging(None);
     for candidate in &request.candidates {
-        // A file the reader policy refuses is reported like a missing deliverable.
-        let (path, file) = match paths.first_readable(candidate, &seen) {
-            Ok(found) => found,
-            Err(refused) => {
-                unavailable |=
-                    refused || candidate.deliverable && !paths.already_seen(candidate, &seen);
-                continue;
-            }
+        // A deliverable that cannot be read (gone or refused) is reported unavailable.
+        let Some((path, file)) = paths.first_readable(candidate, &seen) else {
+            unavailable |= candidate.deliverable && !paths.already_seen(candidate, &seen);
+            continue;
         };
         seen.insert(path.clone());
         let fallback = path

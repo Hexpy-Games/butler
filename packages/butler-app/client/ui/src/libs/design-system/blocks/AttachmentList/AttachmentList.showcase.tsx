@@ -14,10 +14,10 @@ const THUMBNAIL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' 
 
 const labels = {
   "en-US": { preview: "Screenshot preview", empty: "No attachments", notes: "project-notes.md", shot: "settings-375.png", noImages: "Model doesn't accept images",
-    lake: "lake.jpg", bowl: "lunch.jpg", report: "q2-report.pdf", draft: "contract-draft-v3.docx", license: "LICENSE", broken: "broken-photo.jpg", file: "File",
+    lake: "lake.jpg", bowl: "lunch.jpg", report: "q2-revenue-report-final-reviewed.pdf", draft: "contract-draft-v3.docx", license: "LICENSE", broken: "broken-photo.jpg", file: "File",
     remove: (name: string) => `Remove ${name}`, uploading: "Uploading 40%", tooLarge: "Over 10 MB" },
   "ko-KR": { preview: "스크린샷 미리보기", empty: "첨부 파일 없음", notes: "프로젝트-메모.md", shot: "설정-375.png", noImages: "이미지 미지원 모델",
-    lake: "호수.jpg", bowl: "점심.jpg", report: "2분기_보고서.pdf", draft: "계약서_초안_v3.docx", license: "LICENSE", broken: "깨진_사진.jpg", file: "파일",
+    lake: "호수.jpg", bowl: "점심.jpg", report: "2026년_2분기_매출_보고서_최종.pdf", draft: "계약서_초안_v3.docx", license: "LICENSE", broken: "깨진_사진.jpg", file: "파일",
     remove: (name: string) => `${name} 제거`, uploading: "올리는 중 40%", tooLarge: "10MB 초과" },
 } as const;
 

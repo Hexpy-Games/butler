@@ -5,6 +5,7 @@ import { Typo } from "../../components/Typo";
 import { dsClass } from "../../lib/internal";
 import type { AttachmentListItem } from "./AttachmentList";
 import { AttachmentStatusIcon } from "./attachmentStatus";
+import { breakableName } from "./fileNameBreaks";
 import styles from "./AttachmentTiles.module.css";
 
 /** A video's length as m:ss, from the metadata the first frame already loads; none while unknown. */
@@ -76,7 +77,7 @@ function FileFace({ item, withMeta }: { item: AttachmentListItem; withMeta: bool
           <Typo.Caption className={dsClass(styles.fileType)} weight="semibold" tone="secondary" truncate>{item.extension}</Typo.Caption>
         ) : null}
       </span>
-      <Typo.Caption className={dsClass(styles.fileName)} lineClamp={2} wrap="anywhere">{item.name}</Typo.Caption>
+      <Typo.Caption className={dsClass(styles.fileName)} lineClamp={2} wrap="anywhere">{breakableName(item.name)}</Typo.Caption>
       {withMeta && item.meta ? (
         <Typo.Caption className={dsClass(styles.fileMeta)} tone="tertiary" numeric="tabular" truncate>{item.meta}</Typo.Caption>
       ) : null}
@@ -88,13 +89,15 @@ function FileFace({ item, withMeta }: { item: AttachmentListItem; withMeta: bool
  * A tile's face: the cover picture, a video's first frame, or the file type; a broken picture shows the file
  * face. An upload's status marks a picture with a centred glass badge; a file face shows it as its icon.
  */
-export function AttachmentTileFace({ item, withMeta }: { item: AttachmentListItem; withMeta: boolean }) {
+export function AttachmentTileFace({ item, withMeta, onMediaError }: {
+  item: AttachmentListItem; withMeta: boolean; onMediaError?: (item: AttachmentListItem) => void;
+}) {
   const [failed, setFailed] = useState<string | null>(null);
   const video = item.video?.src;
   const picture = video ? undefined : item.thumbnail?.src;
   const source = video ?? picture;
   if (source && failed !== source) {
-    const fail = () => setFailed(source);
+    const fail = () => { setFailed(source); onMediaError?.(item); };
     const status = item.upload ? <TintedGlass className={dsClass(styles.status)} radius="control" padding="none">
       <AttachmentStatusIcon status={item.upload} size="sm" /></TintedGlass> : null;
     return <>{video ? <VideoFrame key={video} src={video} onFailed={fail} /> : <Picture key={picture} src={picture!} onFailed={fail} />}{status}</>;
