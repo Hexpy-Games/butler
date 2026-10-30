@@ -40,7 +40,7 @@ pub(super) fn assert_hosted_chat_catalog_presets_limits_and_wire_policy() {
             metadata.hosted_api_shape,
             Some(HostedApiShape::OpenaiChatCompletions)
         );
-        let policy = chat_wire_policy(provider);
+        let policy = metadata.chat_wire_policy;
         assert!(policy.reasoning_response_field.is_some());
         let mut body = serde_json::json!({"tool_choice":"required"})
             .as_object()

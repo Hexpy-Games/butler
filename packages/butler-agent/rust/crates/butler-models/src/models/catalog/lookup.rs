@@ -143,6 +143,7 @@ fn unavailable(parsed: ParsedModelRef, reason: &str) -> ModelProviderMetadata {
 /// Metadata with every optional fact unset, for struct-update construction.
 pub(super) fn blank_metadata() -> ModelProviderMetadata {
     ModelProviderMetadata {
+        chat_wire_policy: Default::default(),
         output_modalities: None,
         image_output: None,
         provider_id: String::new(),

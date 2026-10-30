@@ -160,11 +160,8 @@ impl ModelProvider {
             prepared.continuation,
         );
         if prepared.summary {
-            result.reasoning_summary = super::thinking_summary::extract(
-                result.raw.as_ref(),
-                prepared.carrier,
-                &config.metadata.provider_id,
-            );
+            result.reasoning_summary =
+                super::thinking_summary::extract(result.raw.as_ref(), prepared.carrier);
         }
         if let Some(binding) = &prepared.thinking_binding {
             super::anthropic_thinking::bind(&mut result, binding);
@@ -227,7 +224,7 @@ impl ModelProvider {
             .header("content-type", "application/json");
         if matches!(
             mode,
-            transport::ResponseMode::HostedChatSse
+            transport::ResponseMode::HostedChatSse(_)
                 | transport::ResponseMode::ResponsesSse
                 | transport::ResponseMode::AnthropicSse
                 | transport::ResponseMode::GeminiSse { .. }

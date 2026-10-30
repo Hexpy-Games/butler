@@ -356,7 +356,7 @@ fn chat(
     if metadata.provider_id == "local" {
         body.extend(reasoning::local(metadata, request)?);
     }
-    let policy = crate::models::chat_wire_policy(&metadata.provider_id);
+    let policy = metadata.chat_wire_policy;
     policy.apply(
         &mut body,
         Some(reasoning::effort(request).unwrap_or("none")),

@@ -252,12 +252,12 @@ fn every_setup_provider_has_a_servable_routine_preset() {
             assert_eq!(preset.effort, ReasoningEffort::None);
             assert_eq!(model.default_reasoning_effort, ReasoningEffort::None);
             assert!(matches!(
-                chat_wire_policy(&provider).reasoning_request,
+                model.chat_wire_policy.reasoning_request,
                 ChatReasoningRequest::None
             ));
         } else {
             assert!(
-                model.reasoning_efforts.contains(&preset.effort),
+                model.supports_preset_effort(preset.effort),
                 "{} does not support {:?}",
                 preset.model,
                 preset.effort

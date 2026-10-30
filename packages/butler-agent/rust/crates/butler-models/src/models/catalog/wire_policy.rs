@@ -21,7 +21,6 @@ pub const ZAI_THINKING_REFS: &[&str] = &[
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use std::{collections::HashMap, sync::OnceLock};
 
 /// Hosted chat extensions, declared by the provider rather than the carrier.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
@@ -62,26 +61,6 @@ pub enum ChatReasoningHistory {
     #[default]
     Omit,
     Echo,
-}
-
-static CHAT_POLICIES: OnceLock<HashMap<String, ChatWirePolicy>> = OnceLock::new();
-
-pub(super) fn initialize_chat_wire_policies(entries: &[super::presets::StaticProviderEntry]) {
-    CHAT_POLICIES.get_or_init(|| {
-        entries
-            .iter()
-            .map(|entry| (entry.provider_id.clone(), entry.chat_wire_policy))
-            .collect()
-    });
-}
-
-/// Immutable index populated during catalog loading, before provider requests.
-pub fn chat_wire_policy(provider: &str) -> ChatWirePolicy {
-    CHAT_POLICIES
-        .get()
-        .and_then(|policies| policies.get(provider))
-        .copied()
-        .unwrap_or_default()
 }
 
 impl ChatWirePolicy {

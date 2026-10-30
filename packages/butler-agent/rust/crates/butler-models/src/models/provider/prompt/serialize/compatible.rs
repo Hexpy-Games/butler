@@ -175,7 +175,9 @@ pub(super) fn chat(
     body.insert("messages".into(), Value::Array(messages));
     body.insert("stream".into(), (provider != "local").into());
     chat_reasoning(&mut body, config, reasoning)?;
-    crate::models::chat_wire_policy(provider)
+    config
+        .metadata
+        .chat_wire_policy
         .apply(&mut body, reasoning.map(ReasoningEffort::as_str));
     if let Some(format) = response_format {
         body.insert("response_format".into(), format);

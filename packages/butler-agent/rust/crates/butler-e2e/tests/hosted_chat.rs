@@ -25,6 +25,7 @@ struct Wire {
     bodies: Arc<Mutex<Vec<Value>>>,
     field: &'static str,
     cumulative: bool,
+    text_chunks: Option<Vec<&'static str>>,
 }
 struct Server(tokio::task::JoinHandle<()>);
 impl Drop for Server {
@@ -35,6 +36,17 @@ impl Drop for Server {
 
 async fn chat(State(wire): State<Wire>, Json(body): Json<Value>) -> impl IntoResponse {
     wire.bodies.lock().unwrap().push(body.clone());
+    if let Some(chunks) = &wire.text_chunks {
+        let mut text = String::new();
+        for chunk in chunks {
+            let frame = json!({"choices":[{"delta":{"role":"assistant","content":chunk},"finish_reason":null}]});
+            text.push_str(&format!("data: {frame}\n\n"));
+        }
+        text.push_str(
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+        );
+        return ([("content-type", "text/event-stream")], text);
+    }
     let followup = body["messages"]
         .as_array()
         .unwrap()
@@ -168,6 +180,7 @@ async fn exercise(
         bodies: Arc::default(),
         field,
         cumulative,
+        text_chunks: None,
     };
     let (provider, metadata, _server) = provider(model, &wire).await?;
     let events = Events::default();
@@ -192,7 +205,7 @@ async fn exercise(
         request.tool_choice = Some(ToolChoice::Required);
         request.stream_observer = Some(&events);
         let result = provider.run_round(request).await?;
-        assert_eq!(result.reasoning_summary.as_deref(), Some("Check the tool."));
+        assert!(result.reasoning_summary.is_none());
         let usage = result.usage.as_ref().unwrap();
         assert_eq!(usage["model"], model);
         assert_eq!(usage["promptTokens"], 240.0);
@@ -259,7 +272,7 @@ async fn exercise(
     assert_eq!(
         events
             .iter()
-            .filter(|e| e["type"] == "reasoning_delta")
+            .filter(|e| e["type"] == "reasoning_delta" && e["display"] == "internal")
             .count(),
         3
     );
@@ -358,4 +371,70 @@ async fn upstage_strict_wire_dated_model_and_cost() -> Result<(), Error> {
 async fn motif_running_usage_history_and_cost() -> Result<(), Error> {
     butler_e2e::gate!();
     exercise("motif/motif/motif-3", "reasoning", true, [0.20, 0.04, 0.80]).await
+}
+
+#[tokio::test]
+async fn upstage_effort_none_is_explicit() -> Result<(), Error> {
+    butler_e2e::gate!();
+    let wire = Wire {
+        bodies: Arc::default(),
+        field: "reasoning",
+        cumulative: false,
+        text_chunks: Some(vec!["Delivered."]),
+    };
+    let model = "upstage/solar-mini4";
+    let (provider, _, _server) = provider(model, &wire).await?;
+    let messages = [ModelRoundMessage::user("Answer.".into(), None)];
+    let effort = butler_turn::btcc::ReasoningEffort::None;
+    let result = provider
+        .run_round(config::request(
+            model,
+            &messages,
+            &effort,
+            CancellationToken::new(),
+            None,
+        ))
+        .await?;
+    assert_eq!(result.text.as_deref(), Some("Delivered."));
+    assert!(result.reasoning_summary.is_none());
+    let bodies = wire.bodies.lock().unwrap();
+    assert_eq!(bodies.len(), 1);
+    assert_eq!(bodies[0]["reasoning_effort"], "none");
+    assert!(!bodies[0].as_object().unwrap().contains_key("thinking"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn qwen_stream_preserves_whitespace_chunks() -> Result<(), Error> {
+    butler_e2e::gate!();
+    let chunks = vec![" ", "\n", "First", " ", "\t", "second", "\n", " "];
+    let expected = chunks.concat();
+    let wire = Wire {
+        bodies: Arc::default(),
+        field: "reasoning_content",
+        cumulative: false,
+        text_chunks: Some(chunks),
+    };
+    let model = "qwen/qwen3.7-plus";
+    let (provider, _, _server) = provider(model, &wire).await?;
+    let messages = [ModelRoundMessage::user("Answer.".into(), None)];
+    let effort = butler_turn::btcc::ReasoningEffort::Medium;
+    let events = Events::default();
+    let mut request = config::request(model, &messages, &effort, CancellationToken::new(), None);
+    request.stream_observer = Some(&events);
+    let result = provider.run_round(request).await?;
+    assert_eq!(
+        result.raw.as_ref().unwrap()["choices"][0]["message"]["content"],
+        expected
+    );
+    let streamed = events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|e| e["type"] == "text_delta")
+        .map(|e| e["textDelta"].as_str().unwrap())
+        .collect::<String>();
+    assert_eq!(streamed.as_bytes(), expected.as_bytes());
+    Ok(())
 }

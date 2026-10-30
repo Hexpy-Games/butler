@@ -22,8 +22,9 @@ pub(in crate::models::transport) async fn hosted_chat(
     api: &str,
     progress: RequestProgress,
     observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+    policy: crate::models::ChatWirePolicy,
 ) -> Result<Value, Box<ProviderRequestError>> {
-    let mut state = ChatState::new(crate::models::chat_wire_policy(provider));
+    let mut state = ChatState::new(policy);
     consume(response, provider, api, Some(HOSTED_FRAME_LIMIT), |frame| {
         progress.record_progress();
         state.frame(frame, observer, provider, api)
@@ -203,7 +204,7 @@ impl ChatState {
         };
         self.sequence += 1;
         observer.event(&serde_json::json!({
-            "type":"reasoning_delta", "display":"summary",
+            "type":"reasoning_delta", "display":"internal",
             "streamId":self.stream_id, "sequence":self.sequence,
             "textDelta":delta, "charCount":delta.encode_utf16().count(),
         }));

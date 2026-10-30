@@ -15,6 +15,7 @@ pub struct ModelPreset {
     /// Namespaced model ref, e.g. `openai/gpt-6.1-sol`.
     pub model: String,
     /// Reasoning effort the preset runs at.
+    #[serde(default = "no_effort")]
     pub effort: ReasoningEffort,
 }
 
@@ -180,4 +181,19 @@ pub fn upgrade_routine_preset(
             effort: static_preset.effort,
         },
     )
+}
+
+fn no_effort() -> ReasoningEffort {
+    ReasoningEffort::None
+}
+
+impl super::ModelProviderMetadata {
+    /// Models without effort controls run presets with no effort.
+    pub fn supports_preset_effort(&self, effort: ReasoningEffort) -> bool {
+        if self.reasoning_efforts.is_empty() {
+            effort == ReasoningEffort::None
+        } else {
+            self.reasoning_efforts.contains(&effort)
+        }
+    }
 }
