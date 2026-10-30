@@ -50,7 +50,7 @@ pub(super) fn requested(body: &serde_json::Value, provider: &str) -> bool {
     }
 }
 
-/// Extract only provider-documented display summaries, never raw reasoning.
+/// Extract provider summaries only; never expose raw reasoning.
 pub(super) fn extract(
     response: Option<&serde_json::Value>,
     carrier: super::serialize::Carrier,

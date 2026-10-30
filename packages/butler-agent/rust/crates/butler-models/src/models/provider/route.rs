@@ -50,7 +50,7 @@ pub(in crate::models::provider) fn carrier(
         ),
         _ => (
             Carrier::Chat { stream: true },
-            transport::ResponseMode::HostedChatSse,
+            transport::ResponseMode::HostedChatSse(config.metadata.chat_wire_policy),
             "chat_completions",
         ),
     }
