@@ -141,7 +141,14 @@ async fn secrets_stay_masked_whatever_shape_they_come_in() -> Result<(), Harness
     allow(&s, &id, &card.expect("signed-in asks"), "once").await?;
     let signed_in = newest_read(&s);
     let html = signed_in["untrusted_content"]["html"].as_str().unwrap();
-    for plain in ["plain-nick", "plain-user", "plain-radio"] {
+    // What a page's own framework keeps in attributes is account data here.
+    for plain in [
+        "plain-nick",
+        "plain-user",
+        "plain-radio",
+        "SECRET-FRAMEWORK",
+        "SECRET-EMAIL",
+    ] {
         assert!(!html.contains(plain), "{plain}: {html}");
     }
     assert!(html.contains("class=\"card\""), "{html}");
@@ -226,7 +233,7 @@ async fn selectors_are_checked_first_and_schedules_keep_their_switch() -> Result
         .filter(|value| value["reason"] == "invalid_selector")
         .count();
     assert_eq!(refused, 2);
-    assert!(host.reads().is_empty());
+    assert_eq!(host.reads().len(), 0);
     let (id, card) = ask(&s, "Good selector").await?;
     let card = card.expect("a good one asks");
     assert_eq!(

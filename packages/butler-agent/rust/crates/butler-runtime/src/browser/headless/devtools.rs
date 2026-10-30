@@ -17,6 +17,8 @@ const MAX_HOSTS: usize = 64;
 const MAX_TEXT: usize = 4000;
 const MAX_HEADERS: usize = 40;
 const MAX_HEADER_VALUE: usize = 500;
+const LIVE_URL_TRIES: usize = 5;
+const LIVE_URL_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
 
 #[derive(Default)]
 pub(crate) struct Devtools {
@@ -262,12 +264,22 @@ impl Devtools {
 }
 
 /// The address the page itself reports, not the last one a target event named.
+/// While a document commits there is no page to ask for a moment.
 async fn live_url(page: &Page) -> Result<String, String> {
-    let context = page.world(&page.session, &page.target).await?;
-    let href = page
-        .evaluate_in(&page.session, context, "location.href")
-        .await?;
-    Ok(href.as_str().unwrap_or("").to_owned())
+    let mut failure = String::new();
+    for _ in 0..LIVE_URL_TRIES {
+        let asked = async {
+            let context = page.world(&page.session, &page.target).await?;
+            page.evaluate_in(&page.session, context, "location.href")
+                .await
+        };
+        match asked.await {
+            Ok(href) => return Ok(href.as_str().unwrap_or("").to_owned()),
+            Err(error) => failure = error,
+        }
+        tokio::time::sleep(LIVE_URL_WAIT).await;
+    }
+    Err(failure)
 }
 
 /// Every host with a cookie that looks like a sign-in, from the context's store.
@@ -336,15 +348,30 @@ async fn selector_valid(page: &Page, selector: &str) -> Result<bool, String> {
 }
 
 pub(crate) async fn call(page: &Page, op: &str, args: &Value) -> Result<Value, String> {
-    if op == DEVTOOLS_PLACE_OP {
-        if let Some(selector) = args["selector"].as_str()
-            && !selector_valid(page, selector).await?
-        {
-            return Ok(json!({"status":"not_dispatched","reason":"invalid_selector"}));
-        }
-        return place(page).await;
+    let reply = if op == DEVTOOLS_PLACE_OP {
+        checked_place(page, args).await
+    } else {
+        read(page, args).await
+    };
+    // A page that went away mid-call is one that moved; the browser going is not.
+    match reply {
+        Err(error) if error != "browser_closed" => Ok(moved()),
+        reply => reply,
     }
-    read(page, args).await
+}
+
+fn moved() -> Value {
+    json!({"status":"not_dispatched","reason":"devtools_page_changed",
+        "recovery":"The tab moved during this read. Call browser_devtools again."})
+}
+
+async fn checked_place(page: &Page, args: &Value) -> Result<Value, String> {
+    if let Some(selector) = args["selector"].as_str()
+        && !selector_valid(page, selector).await?
+    {
+        return Ok(json!({"status":"not_dispatched","reason":"invalid_selector"}));
+    }
+    place(page).await
 }
 
 async fn document(page: &Page, args: &Value) -> Result<Value, String> {
@@ -377,12 +404,9 @@ async fn read(page: &Page, args: &Value) -> Result<Value, String> {
         return Ok(json!({"status":"not_dispatched","reason":"invalid_selector"}));
     }
     let after = place(page).await?;
-    let moved = result["href"].as_str().is_some_and(|href| href != before);
-    if moved || after["url"] != before.as_str() {
-        return Ok(
-            json!({"status":"not_dispatched","reason":"devtools_page_changed",
-            "recovery":"The tab moved during this read. Call browser_devtools again."}),
-        );
+    let moved_during = result["href"].as_str().is_some_and(|href| href != before);
+    if moved_during || after["url"] != before.as_str() {
+        return Ok(moved());
     }
     for key in [
         "status",

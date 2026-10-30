@@ -27,8 +27,6 @@ pub(super) const SECRETS: &[&str] = &[
     "SECRET-PHRASE",
     "SECRET-URL",
     "SECRET-TYPED",
-    "SECRET-FRAMEWORK",
-    "SECRET-EMAIL",
     "ghp_SECRET",
     "sk-SECRET",
     "AKIASECRET",

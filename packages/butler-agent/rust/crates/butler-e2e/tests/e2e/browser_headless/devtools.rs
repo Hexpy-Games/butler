@@ -62,7 +62,15 @@ Bun.serve({ hostname: "127.0.0.1", port, idleTimeout: 0, fetch(request) {
 async fn read(admin: &AdminClient, tab: &Value, args: Value) -> Result<Value, HarnessError> {
     let mut args = args;
     args["expect"] = json!({"place":"local","site":""});
-    let reply = call(admin, "general", "tab.devtools", tab, args).await?;
+    // A page on its way somewhere says so; ask again once it has arrived.
+    let mut reply = Value::Null;
+    for _ in 0..20 {
+        reply = call(admin, "general", "tab.devtools", tab, args.clone()).await?;
+        if reply["reason"] != "devtools_page_changed" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert_eq!(reply["status"], "ok", "{reply}");
     assert_eq!(reply["place"], "local", "{reply}");
     assert_eq!(
@@ -395,11 +403,17 @@ async fn a_preview_reads_only_its_current_document() -> Result<(), HarnessError>
     let mut gone = Value::Null;
     for _ in 0..80 {
         gone = call(&admin, "general", "tab.devtools_place", &tab, json!({})).await?;
-        if gone["status"] != "ok" {
+        if matches!(
+            gone["reason"].as_str(),
+            Some("navigation_denied" | "not_your_tab")
+        ) {
             break;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    assert_ne!(gone["status"], "ok", "{gone}");
+    assert_ne!(
+        gone["status"], "ok",
+        "a page off http has no address to report: {gone}"
+    );
     s.finish().await
 }
