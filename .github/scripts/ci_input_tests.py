@@ -233,8 +233,8 @@ class DerivedInputs(unittest.TestCase):
                     for group in ('package', 'install', 'linux-package'):
                         self.assertEqual(output[group], 'false')
                 jobs = json.loads(output['jobs'])
-                for name in ('shellcheck', 'selftest'):
-                    self.assertFalse(jobs[name])
+                self.assertEqual(jobs['shellcheck'], output['package'] == 'true' or signing)
+                self.assertFalse(jobs['selftest'])
         for name in ('shellcheck', 'selftest'):
             self.assertEqual(changes.job_groups(workflow)[name], ['package', 'signing'])
             block = re.split(r'\n  [a-z]', source.split(f'  {name}:\n', 1)[1], maxsplit=1)[0]
