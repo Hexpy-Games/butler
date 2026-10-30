@@ -153,7 +153,8 @@ async fn project_hooks_reach_a_child_after_the_parent_is_answered() -> Result<()
     let turn = s.gw.say_turn(&chat, child_stub::OWNER).await?;
     answer(&s, &chat, &card(&s, &chat).await?, "allow").await?;
     let deadline = Instant::now() + Duration::from_secs(60);
-    while !out.exists() {
+    // The hook writes its payload and then a newline: wait for the whole line.
+    while !fs::read_to_string(&out).is_ok_and(|text| text.ends_with('\n')) {
         assert!(
             Instant::now() < deadline,
             "{:?}\n{}",
