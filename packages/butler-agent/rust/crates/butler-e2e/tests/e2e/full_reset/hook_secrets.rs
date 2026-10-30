@@ -100,6 +100,14 @@ async fn hook_secret_left_in_an_unreachable_store_is_still_listed_for_reset()
     let mut config: Value = serde_json::from_slice(&fs::read(&config_path)?).unwrap();
     config["secrets"] = json!({"store":"file"});
     fs::write(&config_path, config.to_string())?;
+    // An undelivered secret for another hook is also stuck in that store.
+    let index_path = root.join("auth/hook-secrets.json");
+    let mut index: Value = serde_json::from_slice(&fs::read(&index_path)?).unwrap();
+    index["orphans"].as_array_mut().unwrap().push(json!({
+        "id":"undelivered","storage":"keychain","key":"undelivered.seeded",
+        "origin":"https://hooks.example.com",
+    }));
+    fs::write(&index_path, index.to_string())?;
     let current = admin(&s).send(Method::GET, "/hooks", None, &[]).await?;
     let body = put(
         current.data()["revision"].clone(),
@@ -109,30 +117,43 @@ async fn hook_secret_left_in_an_unreachable_store_is_still_listed_for_reset()
         .send(Method::PUT, "/hooks", Some(body), &[])
         .await?;
     assert_eq!(saved.status, 200, "{saved:?}");
-    let index: Value =
-        serde_json::from_slice(&fs::read(root.join("auth/hook-secrets.json"))?).unwrap();
+    // The replaced key has no origin from the write that retired it, and the sweep
+    // that cannot delete the undelivered one takes its origin away.
+    let find = |index: &Value, id: &str| {
+        let orphans = index["orphans"].as_array().unwrap();
+        orphans.iter().find(|o| o["id"] == id).cloned().unwrap()
+    };
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let index = loop {
+        let index: Value = serde_json::from_slice(&fs::read(&index_path)?).unwrap();
+        if find(&index, "undelivered")["origin"].is_null() {
+            break index;
+        }
+        assert!(Instant::now() < deadline, "the kept orphan is still marked");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    };
     assert_eq!(
         index["hooks"]["moved"]["storage"], "fallback_file",
         "{index}"
     );
-    assert_eq!(index["orphans"][0]["id"], "moved", "{index}");
-    assert_eq!(index["orphans"][0]["storage"], "keychain", "{index}");
-    assert!(index["orphans"][0]["origin"].is_null(), "{index}");
+    let moved = find(&index, "moved");
+    assert_eq!(moved["storage"], "keychain", "{index}");
+    assert!(moved["origin"].is_null(), "{index}");
 
-    // A reset still lists the untracked key for deletion.
+    // A reset still lists both untracked keys for deletion.
     assert_eq!(request(&s, &nonce(&s).await?).await?.status, 202);
     let journal: Value =
         serde_json::from_slice(&fs::read(root.join("state/full-reset.json"))?).unwrap();
     let listed = journal["secret_keys"].as_array().unwrap();
-    assert!(
-        listed
-            .iter()
-            .any(|key| key["account"] == index["orphans"][0]["key"]
+    for account in [moved["key"].clone(), json!("undelivered.seeded")] {
+        assert!(
+            listed.iter().any(|key| key["account"] == account
                 && key["service"]
                     .as_str()
                     .unwrap()
                     .starts_with("com.hexpy.butler.hook-secret")),
-        "{journal}"
-    );
+            "{journal}"
+        );
+    }
     s.finish().await
 }

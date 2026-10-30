@@ -219,49 +219,41 @@ fn hold_store(s: &Scenario) -> Result<butler_platform::secrets::ChangeLock, Harn
     )?)
 }
 
-/// Sends a save that gives up while the store is busy, then lets the store go.
+/// Sends a save that gives up while the store is busy, lets the store go, and
+/// waits for it: an invalid save queues behind it and changes nothing.
 async fn abandon_save(s: &Scenario, hooks: Value, secrets: Value) -> Result<(), HarnessError> {
     let held = hold_store(s)?;
     let abandoned = tokio::time::timeout(Duration::from_millis(500), save(s, hooks, secrets)).await;
     assert!(abandoned.is_err(), "the save should still be waiting");
     tokio::time::sleep(Duration::from_millis(200)).await;
     drop(held);
+    let barrier = save(s, json!([]), json!({"any": "short"})).await?;
+    assert_eq!(barrier.error_code(), Some("hook_invalid"), "{barrier:?}");
     Ok(())
 }
 
-/// Waits for an abandoned save to publish its configuration.
-async fn published_after(s: &Scenario, revision: u64) -> Result<(), HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(15);
-    loop {
-        let settings = api(s, Method::GET, "/hooks", None).await?;
-        if settings.data()["revision"].as_u64().unwrap() > revision {
-            return Ok(());
-        }
-        assert!(Instant::now() < deadline, "the save did not finish");
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-}
-
 #[tokio::test]
-async fn hooks_http_disconnected_save_finishes_and_its_secret_never_signs()
--> Result<(), HarnessError> {
+async fn hooks_http_disconnected_save_changes_nothing() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let endpoint = Endpoint::start().await?;
     let s = setup("HOOK-HTTP-DISCONNECT")?.start().await?;
     let seeded = http_hook("seed", "Stop", &endpoint.url("/seed"));
     let saved = save(&s, json!([seeded]), json!({})).await?;
     assert_eq!(saved.status, 200, "{saved:?}");
-    let revision = saved.data()["revision"].as_u64().unwrap();
+    let before = saved.data()["revision"].clone();
     let origin = endpoint.base.clone();
 
-    // The client gives up while the store is busy, before any response.
+    // The client gives up while the store is busy, before any response: no answer
+    // means no change, and the key it wrote is only ever marked for deletion.
     let lost = http_hook("lost", "Stop", &endpoint.url("/lost"));
     abandon_save(&s, json!([seeded, lost]), json!({})).await?;
-
-    // The save still publishes, but its secret reached nobody, so it never signs.
-    published_after(&s, revision).await?;
-    assert_eq!(test_hook(&s, "lost").await?["outcome"], "error");
-    assert!(endpoint.seen("/lost").is_empty());
+    let settings = api(&s, Method::GET, "/hooks", None).await?;
+    assert_eq!(settings.data()["revision"], before, "{settings:?}");
+    assert_eq!(
+        settings.data()["config"]["hooks"].as_array().unwrap().len(),
+        1,
+        "{settings:?}"
+    );
     let after = index(&s)?;
     assert!(after["hooks"].get("lost").is_none(), "{after}");
     assert!(undelivered(&after, "lost", &origin), "{after}");
@@ -279,36 +271,83 @@ async fn hooks_http_disconnected_save_finishes_and_its_secret_never_signs()
     assert!(unchanged.data().get("generated_secrets").is_none());
     assert_eq!(test_hook(&s, "lost").await?["outcome"], "error");
     assert!(elsewhere.seen("/lost").is_empty());
-
-    // That save cleared the stale mark, so going back asks for a change like any
-    // other: a save that changes the URL issues a secret, and that one signs.
-    let retried = save(&s, json!([seeded, lost]), json!({})).await?;
-    assert_eq!(retried.status, 200, "{retried:?}");
-    let secret = generated(&retried, "lost");
-    assert_eq!(test_hook(&s, "lost").await?["outcome"], "continue");
-    assert!(signature_matches(&endpoint.seen("/lost")[0], &secret));
     s.finish().await
 }
 
 #[tokio::test]
-async fn hooks_http_retry_after_a_disconnect_issues_the_undelivered_secret()
--> Result<(), HarnessError> {
+async fn hooks_http_retry_after_a_disconnect_issues_a_new_secret() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let endpoint = Endpoint::start().await?;
     let s = setup("HOOK-HTTP-RETRY")?.start().await?;
     let seeded = http_hook("seed", "Stop", &endpoint.url("/seed"));
     let saved = save(&s, json!([seeded]), json!({})).await?;
-    let revision = saved.data()["revision"].as_u64().unwrap();
+    assert_eq!(saved.status, 200, "{saved:?}");
     let lost = http_hook("lost", "Stop", &endpoint.url("/lost"));
     abandon_save(&s, json!([seeded, lost]), json!({})).await?;
-    published_after(&s, revision).await?;
+    let abandoned_key = index(&s)?["orphans"][0]["key"].as_str().unwrap().to_owned();
 
-    // The configuration already holds the hook, so only the mark asks for this.
+    // The configuration never took the hook, so the retry is a plain addition.
     let retried = save(&s, json!([seeded, lost]), json!({})).await?;
     assert_eq!(retried.status, 200, "{retried:?}");
     let secret = generated(&retried, "lost");
     assert_eq!(test_hook(&s, "lost").await?["outcome"], "continue");
     assert!(signature_matches(&endpoint.seen("/lost")[0], &secret));
+    store_loses(&s, &abandoned_key).await?;
+    s.finish().await
+}
+
+/// Starts from what a process exit between the commit and the promotion leaves: a
+/// committed hook with no entry and an orphan marking its undelivered secret.
+#[tokio::test]
+async fn hooks_http_undelivered_secret_is_issued_again_only_for_its_origin()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let endpoint = Endpoint::start().await?;
+    let setup = setup("HOOK-HTTP-UNDELIVERED")?;
+    let hooks = [
+        http_hook("crashed", "Stop", &endpoint.url("/crashed")),
+        http_hook("edited", "Stop", &endpoint.url("/edited")),
+        http_hook("replaced", "Stop", &endpoint.url("/replaced")),
+    ];
+    configure(&setup, &hooks)?;
+    let orphan = |id: &str, origin: Value| json!({"id":id,"storage":"fallback_file","key":format!("{id}.seeded"),"origin":origin});
+    let auth = setup.sandbox.data.join("auth");
+    butler_platform::secure_fs::create_private_dir_all(&auth)?;
+    fs::write(
+        auth.join("hook-secrets.json"),
+        json!({"hooks":{},"orphans":[
+            orphan("crashed", json!(endpoint.base)),
+            orphan("edited", json!("https://another.example.com")),
+            orphan("replaced", Value::Null),
+        ]})
+        .to_string(),
+    )?;
+    let s = setup.start().await?;
+    assert_eq!(test_hook(&s, "crashed").await?["outcome"], "error");
+    assert!(endpoint.seen("/crashed").is_empty());
+
+    // Saving the list unchanged issues only for the matching mark.
+    let saved = save(&s, json!(hooks), json!({})).await?;
+    assert_eq!(saved.status, 200, "{saved:?}");
+    let issued = saved.data()["generated_secrets"].as_object().unwrap();
+    assert_eq!(issued.len(), 1, "{saved:?}");
+    assert_eq!(test_hook(&s, "crashed").await?["outcome"], "continue");
+    let received = endpoint.seen("/crashed");
+    assert!(signature_matches(
+        &received[0],
+        &generated(&saved, "crashed")
+    ));
+    for id in ["edited", "replaced"] {
+        assert_eq!(test_hook(&s, id).await?["outcome"], "error", "{id}");
+        assert!(endpoint.seen(&format!("/{id}")).is_empty(), "{id}");
+    }
+
+    // The sweep that followed consumed every orphan.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !index(&s)?["orphans"].as_array().unwrap().is_empty() {
+        assert!(Instant::now() < deadline, "the orphans were not swept");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
     s.finish().await
 }
 
@@ -321,18 +360,20 @@ async fn hooks_http_interrupted_save_leaves_a_working_hook_working() -> Result<(
     let first = "the-secret-that-the-receiver-holds";
     let saved = save(&s, json!([hook]), json!({"kept": first})).await?;
     assert_eq!(saved.status, 200, "{saved:?}");
-    let revision = saved.data()["revision"].as_u64().unwrap();
+    let before = saved.data()["revision"].clone();
     let entry = index(&s)?["hooks"]["kept"].clone();
 
-    // Rotating a secret, the client leaves: the old secret keeps signing.
+    // Rotating a secret, the client leaves: no change, the old secret keeps signing.
     let lost = "a-secret-from-a-client-that-left";
     abandon_save(&s, json!([hook]), json!({"kept": lost})).await?;
-    published_after(&s, revision).await?;
+    let settings = api(&s, Method::GET, "/hooks", None).await?;
+    assert_eq!(settings.data()["revision"], before, "{settings:?}");
     assert_eq!(index(&s)?["hooks"]["kept"], entry);
     assert_eq!(test_hook(&s, "kept").await?["outcome"], "continue");
     assert!(signature_matches(&endpoint.seen("/kept")[0], first));
 
-    // The process dies while moving the hook: nothing changed for the old receiver.
+    // The process is killed with `stage` blocked in `put`, so nothing is committed:
+    // the hook keeps its old URL, and nothing changed for the old receiver.
     let target = http_hook("kept", "Stop", &moved_to.url("/kept"));
     let held = hold_store(&s)?;
     let abandoned = tokio::time::timeout(

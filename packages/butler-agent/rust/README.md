@@ -209,9 +209,10 @@ otherwise it fails without sending anything until `PUT /hooks` sets one with
 is invalid.
 
 A new secret signs only once its save completes with the client still connected.
-A save that fails or is interrupted leaves the existing secret signing for its
-origin. If it had already saved a new origin, the hook refuses to send until the
-next save for that hook and origin issues a new secret.
+A save that fails, or whose client disconnects first, changes nothing: the old URL
+and secret keep working, and any other part of that request does not apply. If the
+process stops after saving the configuration but before the secret takes effect,
+the hook refuses to send until the next save issues a new one.
 
 Redirects are not followed. A 2xx response body is read like
 command stdout: the same decision JSON denies a pre-event, and an empty or

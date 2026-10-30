@@ -64,8 +64,9 @@ async fn reload_held(hooks: &Arc<Hooks>) -> Result<(), String> {
     }
     Ok(())
 }
-/// Saves a configuration; the caller holds `saving`. New keys sign only if the
-/// client is still there to receive them: otherwise they stay undelivered.
+/// Saves a configuration; the caller holds `saving`. A client that has left
+/// changes nothing: no answer means no change. New keys sign only if the client
+/// is still there at the end to receive them, otherwise they stay undelivered.
 pub(super) async fn save(
     hooks: &Arc<Hooks>,
     revision: u64,
@@ -95,6 +96,9 @@ pub(super) async fn save(
     // A store may wait on the user, so `mutation` is not held here: session
     // creation and send keep reloading while it does.
     let staged = hooks.secrets.stage(&config, &published, secrets).await?;
+    if client_left() {
+        return Err("client_left".into());
+    }
     let settings = commit(hooks, revision, config, bytes).await?;
     if !client_left() {
         hooks.secrets.promote(&staged, &settings.config).await?;

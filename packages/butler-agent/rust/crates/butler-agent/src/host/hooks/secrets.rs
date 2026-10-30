@@ -295,7 +295,8 @@ impl HookSecrets {
         }
         self.save_index(&index).await
     }
-    /// Deletes every orphan; one that fails stays for the next save and a reset.
+    /// Deletes every orphan. One that fails stays for the next save and a reset,
+    /// and no longer asks for a new secret: this save already dealt with its hook.
     pub(super) async fn sweep(&self) {
         let Ok(mut index) = self.index().await else {
             return;
@@ -304,9 +305,10 @@ impl HookSecrets {
             return;
         }
         let mut left = Vec::new();
-        for orphan in std::mem::take(&mut index.orphans) {
+        for mut orphan in std::mem::take(&mut index.orphans) {
             if self.delete(&orphan.storage, &orphan.key).await.is_err() {
                 tracing::warn!(event = "hook_secret_left", hook_id = %orphan.id);
+                orphan.origin = None;
                 left.push(orphan);
             }
         }

@@ -147,8 +147,9 @@ impl HookPort for Dispatcher {
         let hooks = self.0.clone();
         Box::pin(async move {
             let (answer, answered) = tokio::sync::oneshot::channel();
-            // A disconnected client must not cancel a save halfway. Orphans wait
-            // for the next save when it left: they say what to issue again.
+            // A disconnected client must not cancel a save halfway. If it left,
+            // the save stops short of committing, and its orphans wait for the
+            // next successful save.
             tokio::spawn(async move {
                 let _saving = hooks.saving.lock().await;
                 let left = || answer.is_closed();
