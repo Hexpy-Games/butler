@@ -16,6 +16,7 @@ export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
 
 /** Kinds whose example is the command line, shown as sent. */
 const COMMAND_KINDS: ReadonlySet<string> = new Set(["run_command", "network_command"]);
+export const isCommandKind = (kind: string): boolean => COMMAND_KINDS.has(kind);
 
 /** The approval card's content in the app language. */
 export interface ApprovalRequestView {
@@ -152,7 +153,7 @@ export function approvalRequestView(
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
-      ...actionDetails(approval, actionKind, card, copy)].map(line => maskUnlessExecutable(line, approval)),
+      ...actionDetails(approval, actionKind, card, copy)],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -168,20 +169,9 @@ export function approvalActionView(approval: ApprovalSummary, copy: ApprovalRequ
   const kind = knownActionKind(approval);
   return {
     label: (approval.operation && toolLabels[approval.operation.tool]) || toolLabels[approval.actionKind] || toolLabels.fallback,
-    // This one-line summary is not the decision surface, so it still masks token-shaped arguments.
-    target: maskActionSecrets((COMMAND_KINDS.has(kind) ? approval.operation?.command ?? approval.examples[0] : undefined)
-      ?? actionDetails(approval, kind, { reason: "" }, copy)[0] ?? ""),
+    // The notice is not the decision card. No command appears in it, so it cannot mislead or leak.
+    target: COMMAND_KINDS.has(kind) || approval.operation?.command ? "" : maskActionSecrets(actionDetails(approval, kind, { reason: "" }, copy)[0] ?? ""),
   };
-}
-
-/**
- * Approval cards show the exact action. Text the agent can run (the operation's command and every
- * example, which carries command lines) is shown verbatim: a regex cannot know shell quote state,
- * so any masking there can hide what will execute. Other lines (paths, URLs, titles) keep masking.
- */
-function maskUnlessExecutable(line: string, approval: ApprovalSummary): string {
-  const executable = [approval.operation?.command, ...approval.examples].filter((text): text is string => Boolean(text));
-  return executable.some(text => line === text || line === `${text}…`) ? line : maskActionSecrets(line);
 }
 
 function knownActionKind(approval: ApprovalSummary): ApprovalActionKind {
