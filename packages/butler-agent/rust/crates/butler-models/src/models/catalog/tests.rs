@@ -29,6 +29,7 @@ fn setup_providers(catalog: &StaticCatalog) -> BTreeSet<String> {
 #[test]
 fn every_static_model_has_a_tier_and_pricing() {
     image_output::assert_output_catalog();
+    hosted_chat::assert_hosted_chat_catalog_presets_limits_and_wire_policy();
     for model in &catalog().models {
         if model.is_image_output() {
             model.image_output.as_ref().unwrap().validate().unwrap();
@@ -247,12 +248,21 @@ fn every_setup_provider_has_a_servable_routine_preset() {
             .unwrap_or_else(|| panic!("{provider} preset {} is not cataloged", preset.model));
         assert_eq!(model.provider_id, provider);
         assert!(model.runtime_supported, "{}", preset.model);
-        assert!(
-            model.reasoning_efforts.contains(&preset.effort),
-            "{} does not support {:?}",
-            preset.model,
-            preset.effort
-        );
+        if model.reasoning_efforts.is_empty() {
+            assert_eq!(preset.effort, ReasoningEffort::None);
+            assert_eq!(model.default_reasoning_effort, ReasoningEffort::None);
+            assert!(matches!(
+                model.chat_wire_policy.reasoning_request,
+                ChatReasoningRequest::None
+            ));
+        } else {
+            assert!(
+                model.supports_preset_effort(preset.effort),
+                "{} does not support {:?}",
+                preset.model,
+                preset.effort
+            );
+        }
     }
     for worker in &catalog.presets {
         let routine = catalog.routine_preset(&worker.provider_id).unwrap();
@@ -415,3 +425,5 @@ fn pricing_picks_the_prompt_band_day_and_cache_rates() {
             .is_none()
     );
 }
+
+mod hosted_chat;

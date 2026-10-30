@@ -54,6 +54,25 @@ class LiveE2EConfig(unittest.TestCase):
                                if re.search(rf'(?<![\w.-]){re.escape(model)}(?![\w.-])', job))
                 self.assertEqual(named, [], 'hard-coded model')
 
+    # test-category: format-pin
+    def test_callers_pass_the_environment_secret(self):
+        # A called workflow reads an environment secret only when its caller passes it.
+        called = {name.split(':')[0] for name, _ in live_jobs()}
+        callers = 0
+        for path in sorted(WORKFLOWS.glob('*.yml')):
+            body = path.read_text(encoding='utf-8').split('\njobs:\n', 1)[-1]
+            starts = [match.start() for match in JOB.finditer(body)] + [len(body)]
+            for start, end in zip(starts, starts[1:]):
+                job = body[start:end]
+                uses = re.search(r'^    uses: \./\.github/workflows/([\w.-]+)\s*$', job, re.M)
+                if not uses or uses.group(1) not in called:
+                    continue
+                callers += 1
+                with self.subTest(caller=f'{path.name}:{JOB.match(job).group(1)}'):
+                    self.assertRegex(job, re.compile(r'^    secrets:( inherit$|\n(      .*\n)*      BUTLER_E2E_API_KEY: '
+                                                     r'\$\{\{ secrets\.BUTLER_E2E_API_KEY \}\}$)', re.M))
+        self.assertGreaterEqual(callers, 1, 'live-e2e workflow callers not found')
+
 
 if __name__ == '__main__':
     unittest.main()

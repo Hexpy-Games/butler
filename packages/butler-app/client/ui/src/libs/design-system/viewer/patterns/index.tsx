@@ -109,7 +109,8 @@ export const PATTERNS: PatternDefinition[] = [
       "Use NavDropScope, NavDropTarget and CollapsibleList; reduced motion shows the line without moving rows.",
     ],
     tokens: ["--motion-scale-lift", "--shadow-drag-lift", "--drop-clip-margin", "--z-drop-indicator"],
-    live: [{ entry: "blocks/NavDropTarget", story: "Drag and drop (interactive)" }, { entry: "blocks/SortableCardList", story: "Reorder with lift" }],
+    live: [{ entry: "blocks/NavDropTarget", story: "Drag and drop (interactive)" }, { entry: "blocks/SortableCardList", story: "Reorder with lift" },
+      { entry: "blocks/StepSortableList", story: "Multiple chains" }],
     demo: () => <DropZoneDiagram />,
   },
   {

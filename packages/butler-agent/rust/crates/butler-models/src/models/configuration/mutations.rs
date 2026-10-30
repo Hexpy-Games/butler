@@ -26,6 +26,8 @@ pub struct LocalModelMutation {
     pub reasoning_budget_ratio: Option<f64>,
     /// Outer None preserves the declaration; Some(None) clears it.
     pub image_input: Option<Option<bool>>,
+    /// Outer None keeps the saved limit; Some(None) clears it.
+    pub response_timeout_ms: Option<Option<u64>>,
     pub source: LocalModelSource,
 }
 
@@ -71,14 +73,14 @@ impl ModelConfiguration {
                 "Browser OAuth is only supported for OpenAI Codex auth.",
             ));
         }
-        let requested = if input.model_id.contains('/') {
-            input.model_id.clone()
-        } else {
-            format!("{}/{}", input.provider_id, input.model_id)
-        };
+        let requested = format!("{}/{}", input.provider_id, input.model_id);
         let available = self
             .registration_catalog
             .find_static_model_metadata(Some(&requested))
+            .or_else(|| {
+                self.registration_catalog
+                    .find_static_model_metadata(Some(&input.model_id))
+            })
             .is_some_and(|model| {
                 model.provider_id == input.provider_id
                     && model.runtime_supported

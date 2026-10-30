@@ -3,6 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import { confirmAction } from "@/app/confirmation.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { AppModelSummary, LocalModelDiscoveryRequest } from "@/app/types.ts";
+import { responseTimeoutSeconds } from "../localModelApi";
 
 interface LocalModelUnsavedGuardProps {
   initialEditModel: AppModelSummary | null;
@@ -13,6 +14,7 @@ interface LocalModelUnsavedGuardProps {
   modelId: string;
   displayName: string;
   context: string;
+  responseTimeout: string;
   imageInputChanged: boolean;
 }
 
@@ -25,6 +27,7 @@ export function useLocalModelUnsavedGuard({
   modelId,
   displayName,
   context,
+  responseTimeout,
   imageInputChanged,
 }: LocalModelUnsavedGuardProps) {
   const setLeaveGuard = useSettingsUIStore((state) => state.setModelRouteLeaveGuard);
@@ -41,7 +44,8 @@ export function useLocalModelUnsavedGuard({
         serverUrl !== baseline.serverUrl ||
         modelId !== baseline.modelId ||
         displayName !== baseline.displayName ||
-        context !== baseline.context),
+        context !== baseline.context ||
+        responseTimeout !== baseline.responseTimeout),
   );
 
   useEffect(() => {
@@ -77,5 +81,6 @@ function localModelBaseline(model: AppModelSummary | null) {
     modelId: model.model_id,
     displayName: model.display_name,
     context: String(model.context_window_tokens),
+    responseTimeout: responseTimeoutSeconds(model.response_timeout_ms),
   };
 }

@@ -15,6 +15,8 @@ use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, nonce};
 use serde_json::{Value, json};
 
+mod failed_output;
+
 async fn send(s: &Scenario, text: &str, access_mode: &str) -> Result<String, HarnessError> {
     let accepted =
         s.gw.send_message(

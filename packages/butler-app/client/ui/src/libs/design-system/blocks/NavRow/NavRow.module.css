@@ -239,6 +239,29 @@
   }
 }
 
+/* NavRowChildren: nested rows joined by a 1px guide centred on the parent's
+   icon column (the density's row inset plus half its icon size). */
+.children {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.children::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-start: calc(
+    var(--sidebar-row-padding-inline, var(--space-sm)) +
+      var(--sidebar-icon-size, var(--icon-size-md)) / 2
+  );
+  width: 1px;
+  margin-inline-start: -0.5px;
+  background: var(--line);
+  content: "";
+  pointer-events: none;
+}
+
 /* NavRowSwap: rest content at rest, row actions on hover or keyboard focus. */
 .swap {
   position: relative;

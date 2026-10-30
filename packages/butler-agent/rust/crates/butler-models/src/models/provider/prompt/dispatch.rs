@@ -94,7 +94,10 @@ fn build_http(
         .client
         .post(config.endpoint.clone())
         .header("content-type", "application/json");
-    if matches!(mode, crate::models::transport::ResponseMode::HostedChatSse) {
+    if matches!(
+        mode,
+        crate::models::transport::ResponseMode::HostedChatSse(_)
+    ) {
         http = http.header("accept", "text/event-stream");
     }
     crate::models::provider::client::authorize(

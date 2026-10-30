@@ -47,7 +47,7 @@ impl LocalStreaming {
         }
         (
             Carrier::Chat { stream: true },
-            ResponseMode::HostedChatSse,
+            ResponseMode::HostedChatSse(config.metadata.chat_wire_policy),
             base.2,
         )
     }

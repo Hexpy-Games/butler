@@ -21,8 +21,9 @@ export function SessionSectionList({ layout, children }: { layout: AsideLayout; 
 export function SessionSection({ id, layout, title, count, children }: {
   id: string; layout: AsideLayout; title?: string; count?: number; children: ReactNode;
 }) {
-  // Floating sections have no card edge, so they keep the larger inset the inline-edit hover bleed and ring need.
-  const content = <Box padding={layout === "docked" ? "sm" : "md"}><Stack gap="sm">
+  // Rows reach into the inline inset by their bleed (Clickable, 10px); the inset holds that hover fill and
+  // its focus ring, so a fill stays inside the card on its own corners. Floating sections have no card edge.
+  const content = <Box paddingX={layout === "docked" ? "lg" : "md"} paddingY={layout === "docked" ? "sm" : "md"}><Stack gap="sm">
     {title && <SessionSectionHeader title={title} count={count} />}
     {children}
   </Stack></Box>;

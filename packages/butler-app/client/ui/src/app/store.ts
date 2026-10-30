@@ -249,7 +249,8 @@ interface ButlerStore {
   ) => Promise<boolean>;
   refreshSessionObserver: (sessionId?: string) => Promise<boolean>;
   cancelObservedSteward: (relationId: string) => Promise<boolean>;
-  resumeObservedSteward: (relationId: string) => Promise<boolean>;
+  /** Resumes a paused subtask of `parentSessionId` (the open chat by default). */
+  resumeObservedSteward: (relationId: string, parentSessionId?: string) => Promise<boolean>;
   reloadMessages: (chatId?: string) => Promise<void>;
   refreshSessionSummary: (chatId?: string) => Promise<void>;
   submitPlanDecision: (
@@ -652,6 +653,7 @@ function summaryFromSessionView(view: SessionView): SessionSummaryView {
     ),
     work_streams: view.work_streams,
     steward_children: view.steward_children,
+    subtasks: view.subtasks,
   };
 }
 
@@ -1388,8 +1390,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
     }
   },
 
-  resumeObservedSteward: async (relationId) => {
-    const parentSessionId = get().activeChatId;
+  resumeObservedSteward: async (relationId, parentSessionId = get().activeChatId) => {
     if (!isServerBackedSessionId(parentSessionId) || !relationId.trim()) return false;
     try {
       await api(`/steward-relations/${encodeURIComponent(relationId)}/resume`, {
@@ -1397,7 +1398,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         body: JSON.stringify({ parent_session_id: parentSessionId }),
       });
       await get().refreshSessionObserver();
-      await get().refreshSessionView(parentSessionId);
+      if (parentSessionId === get().activeChatId) await get().refreshSessionView(parentSessionId);
       return true;
     } catch (error) {
       notifyError(error, appCopy.interfaceFeedback.stewardResumeFailed, { id: `steward-resume-${relationId}` });

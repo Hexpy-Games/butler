@@ -145,7 +145,10 @@ impl PrincipalAuthority {
         self.in_read(|repo| repo.waiting_source_sessions()).await
     }
     /// Visible conversations waiting for a principal decision (including delegated work).
-    pub async fn attention_owners(&self, owners: Vec<String>) -> AuthorityResult<Vec<String>> {
+    pub async fn attention_owners(
+        &self,
+        owners: Vec<String>,
+    ) -> AuthorityResult<Vec<(String, bool)>> {
         self.in_read(move |repo| repo.attention_owners(&owners))
             .await
     }

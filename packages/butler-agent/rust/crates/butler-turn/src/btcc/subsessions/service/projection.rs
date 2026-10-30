@@ -141,6 +141,7 @@ impl SubsessionService {
         } else {
             None
         };
+        let subtasks = self.open_subtasks(vec![session_id.to_owned()]).await?;
         let mut projection =
             own.unwrap_or_else(|| json!({"session_id":session_id,"relation":null,"status":"idle"}));
         let object = projection.as_object_mut().ok_or_else(|| {
@@ -163,6 +164,7 @@ impl SubsessionService {
         }
         object.insert("steward_children".into(), json!(stewards));
         object.insert("workers".into(), json!(workers));
+        object.insert("subtasks".into(), json!(subtasks));
         Ok(projection)
     }
 
@@ -243,7 +245,7 @@ impl SubsessionService {
         Ok(false)
     }
 
-    async fn child_recoverable(
+    pub(super) async fn child_recoverable(
         &self,
         relation: &StoredSubsessionDelegation,
     ) -> Result<bool, BtccError> {
@@ -289,6 +291,19 @@ impl SubsessionService {
     }
 
     async fn plan_counters(&self, turn_id: &str, projection: &mut Value) -> Result<(), BtccError> {
+        if let Some((revision, total, completed)) = self.plan_progress(turn_id).await? {
+            projection["approved_plan_revision"] = json!(revision);
+            projection["approved_plan_total"] = json!(total);
+            projection["approved_plan_completed"] = json!(completed);
+        }
+        Ok(())
+    }
+
+    /// The accepted plan's revision, action count and done actions for a turn.
+    pub(super) async fn plan_progress(
+        &self,
+        turn_id: &str,
+    ) -> Result<Option<(u64, usize, usize)>, BtccError> {
         let work = match self.work.bound_work_for_turn(turn_id.to_owned()).await {
             Ok(work) => work,
             // Legacy children without a durable Work binding have no plan.
@@ -303,16 +318,16 @@ impl SubsessionService {
             Err(error) => return Err(error),
         };
         let Some(work) = work else {
-            return Ok(());
+            return Ok(None);
         };
         let Some(plan) = &work.current_plan else {
-            return Ok(());
+            return Ok(None);
         };
         if !work.latest_plan_review.as_ref().is_some_and(|review| {
             review.verdict == crate::btcc::ReviewVerdict::Accept
                 && review.bound_plan_revision_id.as_deref() == Some(&plan.plan_revision_id)
         }) {
-            return Ok(());
+            return Ok(None);
         }
         let completed = plan
             .actions
@@ -324,10 +339,7 @@ impl SubsessionService {
                 })
             })
             .count();
-        projection["approved_plan_revision"] = json!(plan.revision);
-        projection["approved_plan_total"] = json!(plan.actions.len());
-        projection["approved_plan_completed"] = json!(completed);
-        Ok(())
+        Ok(Some((plan.revision, plan.actions.len(), completed)))
     }
 }
 
