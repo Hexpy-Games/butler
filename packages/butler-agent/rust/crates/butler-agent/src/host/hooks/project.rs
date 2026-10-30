@@ -1,7 +1,7 @@
 //! Project-folder hooks. The file is read once for each review; what that read
 //! parsed is what gets hashed, shown on the card and run, and nothing reads the
 //! file again until the next review. A file that is a symlink, or reached through
-//! one, is refused, and so is one with anything but command hooks.
+//! one, is refused, and so is an invalid one.
 use super::{Dispatcher, Hooks, execute, project_lines, trust};
 use butler_core::hooks::*;
 use butler_platform::secure_fs;
@@ -58,9 +58,6 @@ fn read_config(root: &Path) -> Result<Option<HookConfig>, String> {
     }
     let config: HookConfig = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
     config.validate()?;
-    if config.hooks.iter().any(|hook| hook.kind != "command") {
-        return Err("Project hooks must be commands".into());
-    }
     Ok(Some(config))
 }
 
@@ -198,7 +195,6 @@ fn report_refused(hooks: &Hooks, reason: &str) {
         outcome: "error".into(),
         reason: Some(reason),
         exit_code: None,
-        http_status: None,
         duration_ms: 0,
         stdout: String::new(),
         stderr: String::new(),
@@ -299,13 +295,8 @@ impl HookPort for Scoped {
     fn settings(&self) -> HookSettings {
         self.inner.settings()
     }
-    fn save(
-        &self,
-        revision: u64,
-        config: HookConfig,
-        secrets: std::collections::BTreeMap<String, butler_platform::secrets::SecretText>,
-    ) -> HookFuture<'_, HookSaved> {
-        self.inner.save(revision, config, secrets)
+    fn save(&self, revision: u64, config: HookConfig) -> HookFuture<'_, HookSettings> {
+        self.inner.save(revision, config)
     }
     fn test(&self, id: String, cancel: CancellationToken) -> HookFuture<'_, HookRun> {
         self.inner.test(id, cancel)

@@ -30,7 +30,7 @@ pub enum ProjectHooksOff {
     Missing,
     /// The file has no enabled hook.
     Disabled,
-    /// The file cannot be used: invalid, a link, or an HTTP hook.
+    /// The file cannot be used: invalid or a link.
     Refused,
 }
 

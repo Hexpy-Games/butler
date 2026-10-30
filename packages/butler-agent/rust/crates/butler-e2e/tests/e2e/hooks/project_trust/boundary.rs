@@ -282,10 +282,10 @@ async fn project_hooks_refused_forms_run_nothing_and_ask_nothing() -> Result<(),
         json!({"id":"web","event":"Stop","type":"http","url":url,"timeout_ms":1000}),
         project.observer("guard", "Stop", "ran.jsonl"),
     ])?;
-    quiet_turn(&s, &chat, "HTTP hook.").await?;
+    quiet_turn(&s, &chat, "Not a command.").await?;
     assert_eq!(project.ran("ran.jsonl").len(), 0);
     let accept = tokio::time::timeout(Duration::from_millis(200), listener.accept()).await;
-    assert!(accept.is_err(), "a project HTTP hook reached its receiver");
+    assert!(accept.is_err(), "an invalid entry reached a receiver");
     let runs = api(&s, Method::GET, "/hooks/runs", None).await?;
     assert!(
         runs.text.contains("project:.butler/hooks.json"),

@@ -13,7 +13,6 @@ use std::{
     time::{Duration, Instant},
 };
 mod allowlist;
-mod hook_secrets;
 mod interruption;
 mod review;
 mod round2;
