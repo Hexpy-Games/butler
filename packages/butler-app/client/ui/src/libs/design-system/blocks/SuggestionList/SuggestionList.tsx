@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { IconSlot } from "../../components/IconSlot";
 import { Star, StarFilled } from "../../components/Icons";
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { SiteIcon } from "../../lib/SiteIcon";
@@ -72,6 +73,41 @@ export function SuggestionRow({
         {named ? <span className={styles.address}><Matched text={address} query={query} /></span> : null}
       </span>
       {kind === "bookmark" ? <span className={styles.badge} role="img" aria-label={bookmarkLabel}><StarFilled size="sm" /></span> : null}
+    </div>
+  );
+}
+
+export interface SuggestionItemRowProps extends DsPrivateStyleProps {
+  /** Option id; the field sets it as aria-activedescendant while the row is highlighted. */
+  id: string;
+  /** The item's type glyph: a DS icon at size md, in the 16px favicon column. */
+  icon: ReactNode;
+  title: string;
+  /** Muted text after the title (where the item lives, or its type); truncates first. */
+  meta?: string;
+  /** The meta is a field the query searches (a project name), so its matches are bold too. Leave it
+   * off for a type label ("Project"), which never matches. */
+  matchMeta?: boolean;
+  /** The typed text; its terms are bold in the title (and in the meta with `matchMeta`). */
+  query?: string;
+  /** Keyboard highlight (aria-selected). */
+  active?: boolean;
+  onSelect: () => void;
+}
+
+/**
+ * One app item on one line: a type glyph, the title and muted meta, with the typed terms in bold.
+ * Same height, highlight and pointer behaviour as SuggestionRow, for app items instead of addresses.
+ */
+export function SuggestionItemRow({ id, icon, title, meta, matchMeta = false, query, active = false, onSelect, className }: SuggestionItemRowProps) {
+  return (
+    <div id={id} role="option" aria-selected={active} data-active={active || undefined} data-kind="item"
+      className={cn(styles.row, className)} onPointerDown={(event) => event.preventDefault()} onClick={onSelect}>
+      <IconSlot size="md" tone="secondary" aria-hidden="true">{icon}</IconSlot>
+      <span className={styles.text}>
+        <span className={styles.title}><Matched text={title} query={query} /></span>
+        {meta ? <span className={styles.address}><Matched text={meta} query={matchMeta ? query : undefined} /></span> : null}
+      </span>
     </div>
   );
 }
