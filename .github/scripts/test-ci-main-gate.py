@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 import unittest
@@ -202,6 +203,46 @@ class MainGate(unittest.TestCase):
                                  0 if conclusion == 'success' else 1)
             self.assertEqual(sleep.call_count, 2)
             self.assertIn('/runs/12/attempts/1/jobs', api.call_args_list[-1].args[0])
+
+    # test-category: race
+    def test_metadata_retries_transient_api_errors_but_stays_fail_closed(self):
+        run = dict(id=12, run_attempt=1, display_title='CI #12', head_sha=PR['head']['sha'],
+                   pull_requests=[dict(number=7)], html_url='https://github.com/owner/repo/actions/runs/12')
+        listing = lambda status: dict(workflow_runs=[dict(run, status=status)])
+        error = subprocess.CalledProcessError(1, 'gh')
+        for conclusion, expected in [('success', 0), ('failure', 1)]:
+            jobs = dict(total_count=1, jobs=[dict(name='gate', steps=[dict(
+                name='Require every selected check', conclusion=conclusion)])])
+            sleep = Mock()
+            with patch.object(gate, 'api', side_effect=[listing('in_progress'), error, listing('completed'), error, jobs]), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO, sleep=sleep), expected)
+            self.assertEqual(sleep.call_count, 3)
+        # A persistent error fails at the deadline instead of crashing or passing.
+        ticks = iter(range(0, 100000, 1000))
+        with patch.object(gate, 'api', side_effect=error), contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO, sleep=Mock(),
+                                               clock=lambda: next(ticks), wait_seconds=3000), 1)
+        self.assertIn('stayed unavailable', out.getvalue())
+
+    # test-category: race
+    def test_metadata_times_out_when_full_run_never_completes(self):
+        run = dict(id=12, run_attempt=1, display_title='CI #12', head_sha=PR['head']['sha'],
+                   pull_requests=[dict(number=7)], status='in_progress', html_url='u')
+        ticks = iter(range(0, 100000, 1000))
+        with patch.object(gate, 'api', return_value=dict(workflow_runs=[run])) as api, \
+             contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO, sleep=Mock(),
+                                               clock=lambda: next(ticks), wait_seconds=3000), 1)
+        self.assertIn('Timed out', out.getvalue())
+        self.assertNotIn('/jobs', ' '.join(call.args[0] for call in api.call_args_list))
+
+    # test-category: format-pin
+    def test_gate_job_has_a_timeout_above_the_wait_deadline(self):
+        source = (Path(__file__).parent.parent / 'workflows/rust-quality.yml').read_text()
+        job = source.split('\n  gate:\n')[1].split('\n    steps:')[0]
+        minutes = int(re.search(r'^    timeout-minutes: (\d+)$', job, re.M)[1])
+        self.assertGreater(minutes * 60, gate.WAIT_SECONDS)
 
     # test-category: format-pin
     def test_metadata_skips_changes_and_has_separate_concurrency(self):

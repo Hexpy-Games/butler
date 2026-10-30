@@ -12,6 +12,9 @@ from ci_main_baseline import latest_main_run
 from issue_links import references
 
 POLL_SECONDS = 60
+# Stay below the gate job's timeout-minutes (90) so the step fails closed itself.
+WAIT_SECONDS = 80 * 60
+API_ERRORS = (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError)
 
 
 def command(*args):
@@ -113,20 +116,42 @@ def full_run_passed(run, repository):
         for step in job.get('steps', [])) for job in jobs['jobs'])
 
 
-def quality_gate(event, repository, sleep=time.sleep):
+def poll(call, sleep, clock, deadline):
+    """Retry a transient GitHub API error until the deadline, then re-raise it."""
+    while True:
+        try:
+            return call()
+        except API_ERRORS as error:
+            print(f'::warning::GitHub API error while polling the full CI run: {error!r}', flush=True)
+            if clock() >= deadline:
+                raise
+            sleep(POLL_SECONDS)
+
+
+def quality_gate(event, repository, sleep=time.sleep, clock=time.monotonic, wait_seconds=WAIT_SECONDS):
     """A metadata-only gate must never replace failed/pending quality with green.
 
     A full run still in progress is awaited, so this gate finishes after the
     full run's own gate and reports its result instead of a stale failure.
+    A transient API error is retried until the deadline; the deadline, a run
+    still unfinished at that point, or a persistent error all fail the gate.
     """
     pr = event['pull_request']
-    run = latest_full_run(pr, repository)
-    while run and run['status'] != 'completed':
-        print(f'Waiting for the full CI run to finish: {run["html_url"]}', flush=True)
-        sleep(POLL_SECONDS)
-        run = latest_full_run(pr, repository)
-    if run and full_run_passed(run, repository):
-        return 0
+    deadline = clock() + wait_seconds
+    try:
+        run = poll(lambda: latest_full_run(pr, repository), sleep, clock, deadline)
+        while run and run['status'] != 'completed':
+            if clock() >= deadline:
+                print('Timed out waiting for the full CI run to finish.')
+                return 1
+            print(f'Waiting for the full CI run to finish: {run["html_url"]}', flush=True)
+            sleep(POLL_SECONDS)
+            run = poll(lambda: latest_full_run(pr, repository), sleep, clock, deadline)
+        if run and poll(lambda: full_run_passed(run, repository), sleep, clock, deadline):
+            return 0
+    except API_ERRORS:
+        print('GitHub API stayed unavailable; quality cannot be confirmed for this SHA.')
+        return 1
     print('Quality checks have not passed for this SHA; complete a full CI run.')
     return 1
 
