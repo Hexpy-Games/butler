@@ -1,6 +1,6 @@
 use super::*;
 use butler_platform::hook_process::{
-    CONTEXT_OUTPUT_LIMIT, HookProcess, HookProcessError, OUTPUT_LIMIT, run,
+    CONTEXT_OUTPUT_LIMIT, HookOutput, HookProcess, HookProcessError, OUTPUT_LIMIT, run,
 };
 use futures_util::future::join_all;
 use std::{
@@ -90,13 +90,7 @@ async fn execute(
         Err(e) => (Err(e), Vec::new()),
     };
     let result = match input {
-        Ok(input) => {
-            let mut future = Box::pin(run(input, cancel.clone()));
-            tokio::select! {
-                result = &mut future => result,
-                () = hooks.shutdown.cancelled() => { cancel.cancel(); future.await },
-            }
-        }
+        Ok(input) => run_process(hooks, input, cancel).await,
         Err(error) => Err(error),
     };
     let (outcome, reason) = super::decision::resolve(hook, &result);
@@ -156,6 +150,17 @@ async fn execute(
         run: record,
         deny: reason,
         context: added.context,
+    }
+}
+async fn run_process(
+    hooks: &Hooks,
+    input: HookProcess,
+    cancel: CancellationToken,
+) -> Result<HookOutput, HookProcessError> {
+    let mut future = Box::pin(run(input, cancel.clone()));
+    tokio::select! {
+        result = &mut future => result,
+        () = hooks.shutdown.cancelled() => { cancel.cancel(); future.await },
     }
 }
 fn environment(

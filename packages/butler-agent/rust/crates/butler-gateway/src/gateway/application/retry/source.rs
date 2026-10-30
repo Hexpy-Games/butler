@@ -147,16 +147,8 @@ pub(super) fn retry_snapshot(
     }
     let control_resolution_json = queue.2.ok_or_else(queue_snapshot_error)?;
     let controls_json = queue.3;
-    let attachments: Value = serde_json::from_str(&queue.4)
-        .map_err(|source| queue_snapshot_error().with_source(source))?;
-    if !attachments.is_array() {
-        return Err(queue_snapshot_error());
-    }
-    let project_source_refs: Value = serde_json::from_str(&queue.6)
-        .map_err(|source| queue_snapshot_error().with_source(source))?;
-    if !project_source_refs.is_array() {
-        return Err(queue_snapshot_error());
-    }
+    ensure_json_array(&queue.4)?;
+    ensure_json_array(&queue.6)?;
     let execution_controls_json = turn.5.ok_or_else(execution_controls_error)?;
     let input_identity_digest = queue
         .1
@@ -176,6 +168,16 @@ pub(super) fn retry_snapshot(
         hook_context_json: queue.9,
         input_identity_digest,
     })
+}
+
+fn ensure_json_array(json: &str) -> Result<(), AppStorageError> {
+    let value: Value =
+        serde_json::from_str(json).map_err(|source| queue_snapshot_error().with_source(source))?;
+    if value.is_array() {
+        Ok(())
+    } else {
+        Err(queue_snapshot_error())
+    }
 }
 
 pub(super) fn verified_execution_controls(
