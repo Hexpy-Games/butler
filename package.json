@@ -53,6 +53,7 @@
     "app:session-info:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-session-info-smoke.ts",
     "app:session-order:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-session-order-smoke.ts",
     "app:session-subtasks:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-session-subtasks-smoke.ts",
+    "app:usage-share:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-usage-subtask-share-smoke.ts",
     "app:noticed-patterns:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-noticed-patterns-smoke.ts",
     "app:chats-results:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-chats-results-smoke.ts",
     "app:chats-initiated:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-chats-initiated-smoke.ts",
