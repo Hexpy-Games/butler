@@ -19,8 +19,7 @@ function SpecNodeRow({ node, onRefresh }: { node: SpecNode; onRefresh: () => Pro
     const group = parts.get(criterion.part_id) ?? [];
     group.push(criterion); parts.set(criterion.part_id, group);
   }
-  return <DisclosureRow title={node.concern_id} surface="plain" open={open} onToggle={() => setOpen(!open)}
-    affordance={hasChildren ? "leading" : "none"}>
+  return <DisclosureRow title={node.concern_id} surface="plain" open={open} onToggle={() => setOpen(!open)}>
     {hasChildren ? <Stack gap="sm">
       {[...parts].map(([part, criteria]) => <SpecPart key={part} part={part} criteria={criteria} node={node} onRefresh={onRefresh} />)}
       {node.children.map(child => <SpecNodeRow key={child.node_id} node={child} onRefresh={onRefresh} />)}

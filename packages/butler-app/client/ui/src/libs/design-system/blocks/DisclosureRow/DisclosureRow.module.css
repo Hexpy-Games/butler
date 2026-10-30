@@ -1,5 +1,5 @@
 .root {
-  /* One title line: chevron and icon boxes, and the panel's text inset. */
+  /* One title line: the icon box, and the panel's text inset. */
   --disclosure-line: var(--typo-body-line-height);
   --disclosure-inset: var(--space-sm);
   /* The trigger's own start/end padding; the text indent adds to it. */
@@ -13,7 +13,6 @@
 /* Plain rows sit flush with the surrounding text (dialogs, readers). */
 .plain {
   --disclosure-inset: 0px;
-  --disclosure-pad-inline: var(--space-sm);
 
   background: transparent;
 }
@@ -22,10 +21,14 @@
   margin-top: var(--space-xs);
 }
 
-.trigger[data-slot="clickable"] {
+/* One first line for every row: [icon] title line, then meta at the end.
+   The chevron lives inside the title line, so nothing comes before the
+   icon or the title. Every first-line item is placed explicitly, so a row
+   without meta or a static row keeps the same columns. */
+.trigger:is([data-slot="clickable"], [data-static="true"]) {
   display: grid;
   grid-template-columns:
-    var(--disclosure-line) var(--disclosure-line) minmax(0, 1fr)
+    var(--disclosure-line) minmax(0, 1fr)
     fit-content(50%);
   gap: var(--space-xs) var(--space-sm);
   align-items: baseline;
@@ -38,26 +41,28 @@
   border-radius: inherit;
 }
 
-/* Plain rows keep the chevron on the content edge (aligned with labels in
-   other cards) and bleed the hover fill by --space-sm past it. Overrides
-   Clickable's stretch width and max-width so the negative margins widen it. */
-.plain .trigger[data-slot="clickable"] {
-  width: auto;
-  max-width: none;
-  margin-inline: calc(-1 * var(--space-sm));
+.trigger.noIcon {
+  grid-template-columns: minmax(0, 1fr) fit-content(50%);
 }
 
-/* The bleed can reach a scroll container's clipping edge (dialog readers):
-   draw the ring inside the fill so it is never cut off. */
-.plain .trigger[data-slot="clickable"]:focus-visible {
+/* Plain rows bleed like every clickable row in a card (Clickable
+   bleed="inline"): the padding equals the bleed, so the title stays on the
+   content edge and the hover fill reaches the bleed past it on both sides. */
+.plain > .trigger[data-slot="clickable"] {
+  --disclosure-pad-inline: var(--clickable-padding-inline);
+}
+
+/* Static plain rows have no fill: no bleed and no padding. */
+.plain > .trigger[data-static="true"] {
+  --disclosure-pad-inline: 0px;
+}
+
+/* The ring sits inside the fill: rows span their list edge to edge, so an
+   outer ring would be cut by a clipping card or scroll frame. */
+.trigger[data-slot="clickable"]:focus-visible {
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
 }
 
-.trigger.noIcon {
-  grid-template-columns: var(--disclosure-line) minmax(0, 1fr) fit-content(50%);
-}
-
-.chevron,
 .icon {
   display: inline-grid;
   align-self: start;
@@ -65,9 +70,10 @@
   height: var(--disclosure-line);
   place-items: center;
   color: var(--text-tertiary);
+  grid-row: 1;
+  grid-column: 1;
 }
 
-.chevron svg,
 .icon svg {
   display: block;
 }
@@ -87,28 +93,31 @@
 
 .meta {
   overflow-wrap: anywhere;
-  grid-column: 4;
   grid-row: 1;
-}
-
-.noIcon .meta {
-  grid-column: 3;
+  grid-column: -2 / -1;
 }
 
 .description {
-  grid-column: 3 / -1;
-}
-
-.noIcon .description {
   grid-column: 2 / -1;
 }
 
-/* The panel starts under the title column (after the chevron) and keeps
-   the trigger's inset on the other sides. */
+.noIcon > .description {
+  grid-column: 1 / -1;
+}
+
+/* The panel starts under the title (after the icon) and keeps the
+   trigger's inset on the other sides. */
 .panel {
   padding: 0 var(--disclosure-inset) var(--disclosure-inset)
-    calc(var(--disclosure-inset) + var(--disclosure-line) + var(--space-sm));
+    calc(var(--disclosure-inset) + var(--disclosure-indent));
   color: var(--text-secondary);
+}
+
+.panel[data-icon="true"] {
+  padding-left: calc(
+    var(--disclosure-inset) + var(--disclosure-indent) +
+      var(--disclosure-line) + var(--space-sm)
+  );
 }
 
 .plain .panel {
@@ -119,103 +128,49 @@
   background: var(--selection);
 }
 
-.withIcon .panel {
-  padding-left: calc(
-    var(--disclosure-inset) + 2 * (var(--disclosure-line) + var(--space-sm))
-  );
-}
-
-/* Trailing and no-chevron rows (log lists, trace steps): the title starts at
-   the row inset, meta ends the first line, and a trailing chevron follows
-   it. Every first-line item is placed explicitly, so a row without meta or
-   a static row keeps the same columns. */
-.root[data-affordance="trailing"] > .trigger {
-  grid-template-columns: minmax(0, 1fr) fit-content(50%) var(--disclosure-line);
-}
-
-.root[data-affordance="trailing"] > .trigger:not(.noIcon) {
-  grid-template-columns:
-    var(--disclosure-line) minmax(0, 1fr) fit-content(50%)
-    var(--disclosure-line);
-}
-
-.root[data-affordance="none"] > .trigger {
-  grid-template-columns: minmax(0, 1fr) fit-content(50%);
-}
-
-.root[data-affordance="none"] > .trigger:not(.noIcon) {
-  grid-template-columns: var(--disclosure-line) minmax(0, 1fr) fit-content(50%);
-}
-
-.root[data-affordance] > .trigger > .title,
-.root[data-affordance] > .trigger > .titleLine {
-  grid-row: 1;
-  grid-column: 1;
-}
-
-.root[data-affordance] > .trigger:not(.noIcon) > .title,
-.root[data-affordance] > .trigger:not(.noIcon) > .titleLine {
-  grid-column: 2;
-}
-
-.root[data-affordance="trailing"] > .trigger > .meta {
-  grid-row: 1;
-  grid-column: -3 / -2;
-}
-
-.root[data-affordance="none"] > .trigger > .meta {
-  grid-row: 1;
-  grid-column: -2 / -1;
-}
-
-.root[data-affordance] > .trigger > .description {
-  grid-column: 1 / -1;
-}
-
-.root[data-affordance] > .trigger:not(.noIcon) > .description {
-  grid-column: 2 / -1;
-}
-
-/* The ring sits inside the fill: these rows span their list edge to edge,
-   so an outer ring would be cut by a clipping card or scroll frame. */
-.root[data-affordance] > .trigger[data-slot="clickable"]:focus-visible {
-  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
-}
-
 /* Static rows (nothing to reveal): the trigger's grid and Clickable's
    height, without the button, hover fill or focus stop. */
 .trigger[data-static="true"] {
-  display: grid;
-  gap: var(--space-xs) var(--space-sm);
-  align-items: baseline;
-  align-content: center;
   box-sizing: border-box;
-  width: 100%;
   min-height: var(--control-height-md);
-  padding: var(--disclosure-inset) var(--disclosure-pad-inline);
-  border-radius: inherit;
 }
 
 .trigger[data-static="true"] > * {
   min-width: 0;
 }
 
-.plain .trigger[data-static="true"] {
-  width: auto;
-  margin-inline: calc(-1 * var(--space-sm));
+/* Title line: a problem dot, the title, a muted count, then the chevron.
+   Only the title text truncates; the count and the chevron never leave the
+   line. */
+.titleLine {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: baseline;
+  min-width: 0;
+  grid-row: 1;
+  grid-column: 2;
 }
 
-/* Trailing chevron: hugs the meta and turns down when the row opens. */
+.noIcon > .titleLine {
+  grid-column: 1;
+}
+
+.titleLine > .title {
+  flex: 0 1 auto;
+}
+
+.count {
+  flex: none;
+}
+
+/* Chevron: right after the title, as tall as the title line, turns down
+   when the row opens. */
 .turn {
   display: inline-grid;
-  align-self: start;
-  width: var(--disclosure-line);
-  height: var(--disclosure-line);
+  flex: none;
+  align-self: stretch;
   place-items: center;
-  margin-inline-start: calc(-1 * var(--space-xs));
   color: var(--text-tertiary);
-  grid-row: 1;
-  grid-column: -2 / -1;
   transition: transform var(--motion-fast) var(--motion-ease-standard);
 }
 
@@ -239,23 +194,6 @@
   }
 }
 
-/* Title extras: a problem dot before the title, a muted count after it.
-   Only the title text truncates. */
-.titleLine {
-  display: flex;
-  gap: var(--space-xs);
-  align-items: baseline;
-  min-width: 0;
-}
-
-.titleLine > .title {
-  flex: 0 1 auto;
-}
-
-.count {
-  flex: none;
-}
-
 .dot {
   flex: none;
   align-self: center;
@@ -269,22 +207,13 @@
   background: var(--trace-wait);
 }
 
-/* The bar line spans the whole row (inside its inset) on trailing and
-   no-chevron rows, and the description column on leading rows. It reaches
-   back over a text indent, so the fill and the bar keep the full width. */
+/* The bar line spans the whole row inside its inset. It reaches back over
+   a text indent, so the fill and the bar keep the full width. */
 .barLine {
   display: block;
   min-width: 0;
-  grid-column: 3 / -1;
-  margin-inline-start: calc(-1 * var(--disclosure-indent));
-}
-
-.noIcon > .barLine {
-  grid-column: 2 / -1;
-}
-
-.root[data-affordance] > .trigger > .barLine {
   grid-column: 1 / -1;
+  margin-inline-start: calc(-1 * var(--disclosure-indent));
 }
 
 /* Text indent: 16px per level moves the first line, the description and
@@ -299,22 +228,5 @@
 .root[data-indent="true"] > .trigger {
   padding-inline-start: calc(
     var(--disclosure-pad-inline) + var(--disclosure-indent)
-  );
-}
-
-/* Panels read their own row's indent (0 unless indented), so rows nested
-   in a panel never inherit it. */
-.panel:not([data-affordance]) {
-  margin-inline-start: var(--disclosure-indent);
-}
-
-.panel[data-affordance] {
-  padding-left: calc(var(--disclosure-inset) + var(--disclosure-indent));
-}
-
-.panel[data-affordance][data-icon="true"] {
-  padding-left: calc(
-    var(--disclosure-inset) + var(--disclosure-indent) +
-      var(--disclosure-line) + var(--space-sm)
   );
 }

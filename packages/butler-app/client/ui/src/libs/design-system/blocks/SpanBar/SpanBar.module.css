@@ -121,21 +121,14 @@
   }
 }
 
-/* Shared by rows and the axis. A bar may reach back at most the row's
-   inner inset (the DisclosureRow inset kept inside the fill, plus its
-   chevron line); when the deepest indent passes that, the shared axis
-   shifts right by the difference, so even the deepest row's bar starts
-   --space-sm inside its own hover and open fill. */
+/* Shared by rows and the axis. A bar starts in the row's description,
+   --space-sm inside its own hover and open fill, and never reaches back
+   past it: the shared axis shifts right by the deepest indent, so every
+   row's bar starts at the deepest row's description. */
 .row,
 .axis {
   --span-depth-step: var(--space-lg);
-  --span-row-reach: calc(var(--space-sm) + var(--typo-body-line-height));
-  --span-shift: max(
-    0px,
-    calc(
-      var(--span-max-depth, 0) * var(--span-depth-step) - var(--span-row-reach)
-    )
-  );
+  --span-shift: calc(var(--span-max-depth, 0) * var(--span-depth-step));
 }
 
 /* SpanRow: one 16px step per nesting level, row spacing as DisclosureRow. */
@@ -154,22 +147,19 @@
 }
 
 /* SpanAxis: labels over the same track width as the bars. "disclosure"
-   matches a DisclosureRow description column: the row inset, the chevron
-   line and the column gap on the start, the row inset on the end. */
+   matches a DisclosureRow description column: the row inset (and the
+   shift) on the start, the row inset on the end. */
 .axis {
   display: block;
   padding-inline-start: var(--span-shift);
 }
 
 .axis[data-inset="disclosure"] {
-  padding-inline: calc(
-      2 * var(--space-sm) + var(--typo-body-line-height) + var(--span-shift)
-    )
-    var(--space-sm);
+  padding-inline: calc(var(--space-sm) + var(--span-shift)) var(--space-sm);
 }
 
-/* "row" matches a row whose bar spans the whole row inside its inset: a
-   DisclosureRow with a trailing or no chevron, as text-indent SpanRows use. */
+/* "row" matches a row whose bar spans the whole row inside its inset: the
+   `bar` line of a DisclosureRow, as text-indent SpanRows use. */
 .axis[data-inset="row"] {
   padding-inline: var(--space-sm);
 }

@@ -88,7 +88,8 @@ The title, description, and toolchain row start edge should align on the same
 content column. Multiple toolchain rows are grouped into one capped outline
 control with concise counts by tool kind. Opening the group reveals ordered
 text-style tool rows; each row can expand safe detail text inline without
-creating nested outline buttons. A single tool row may still use the capped
+creating nested outline buttons. A row's chevron sits directly after its
+title, never at the row's far edge. A single tool row may still use the capped
 outline control directly so long commands do not stretch the whole
 conversation.
 Titles must wrap. Do not truncate or force a single line for work labels,
