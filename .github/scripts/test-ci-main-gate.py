@@ -8,7 +8,7 @@ import os
 import subprocess
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location('main_gate', Path(__file__).with_name('ci-main-gate.py'))
 gate = importlib.util.module_from_spec(SPEC)
@@ -179,11 +179,29 @@ class MainGate(unittest.TestCase):
             with patch.object(gate, 'api', side_effect=[dict(workflow_runs=[run]), jobs]) as api:
                 self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO), 0 if conclusion == 'success' else 1)
                 self.assertIn(f'&head_sha={PR["head"]["sha"]}&', api.call_args_list[0].args[0])
-        for update in [dict(status='in_progress'), dict(head_sha='old'),
-                       dict(pull_requests=[dict(number=8)]), dict(display_title='Gate re-evaluation #12')]:
+        for update in [dict(head_sha='old'), dict(pull_requests=[dict(number=8)]),
+                       dict(display_title='Gate re-evaluation #12')]:
             with patch.object(gate, 'api', return_value=dict(workflow_runs=[dict(run, **update)])) as api:
                 self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO), 1)
                 api.assert_called_once()
+
+    # test-category: race
+    def test_metadata_waits_for_running_full_run_then_reports_its_result(self):
+        run = dict(id=12, run_attempt=1, display_title='CI #12', head_sha=PR['head']['sha'],
+                   pull_requests=[dict(number=7)], html_url='https://github.com/owner/repo/actions/runs/12')
+        older = dict(run, id=11, display_title='CI #11', status='completed')
+        pending = [dict(workflow_runs=[dict(run, status=status), older]) for status in ['queued', 'in_progress']]
+        for conclusion in ['success', 'failure']:
+            jobs = dict(total_count=1, jobs=[dict(name='gate', steps=[dict(
+                name='Require every selected check', conclusion=conclusion)])])
+            done = dict(workflow_runs=[dict(run, status='completed'), older])
+            sleep = Mock()
+            with patch.object(gate, 'api', side_effect=[*pending, done, jobs]) as api, \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO, sleep=sleep),
+                                 0 if conclusion == 'success' else 1)
+            self.assertEqual(sleep.call_count, 2)
+            self.assertIn('/runs/12/attempts/1/jobs', api.call_args_list[-1].args[0])
 
     # test-category: format-pin
     def test_metadata_skips_changes_and_has_separate_concurrency(self):
