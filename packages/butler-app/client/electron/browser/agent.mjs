@@ -15,14 +15,14 @@ import { applySignedInPolicy, revokeSignedInSite, signedInPlace } from "./signed
 import { fillSignIn } from "./signin-fill.mjs";
 import { fillPay, inspectPay } from "./pay-fill.mjs";
 import { makeAgentRoom } from "./capacity.mjs";
-import { DEVTOOLS_OPS, devtoolsCall, noteUserHold, onLocalPage, watchDevtools } from "./devtools.mjs";
+import { devtoolsRead, onLocalPage, watchDevtools } from "./devtools.mjs";
 import { attachView } from "./view-capture.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
   // A pop-up the user took somewhere Butler may not go closes instead of returning.
   if (holder === "agent" && tab.opener && tab.holder === "user" && tab.url && !agentPopupAllowed(tab.policy ?? {}, tab.popupParentUrl, tab.url)) { browser.close(tab.id); return; }
-  if (holder === "user") { if (tab.holder === "agent") pauseHold(browser, tab); releaseHold(browser, tab); hearTab(tab); noteUserHold(tab); } else tab.pausedTurns = null;
+  if (holder === "user") { if (tab.holder === "agent") pauseHold(browser, tab); releaseHold(browser, tab); hearTab(tab); } else tab.pausedTurns = null;
   if (tab.dialog) void resolveDialog(browser, tab, { accept: false }, "control_changed");
   tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
   if (holder === "agent") { tab.signinStep = null; tab.payStep = null; }
@@ -142,7 +142,7 @@ export async function executeBrowser(browser, frame) {
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
   if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id, frame.args?.close_read_tabs === true); return; }
-  const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.image_collect", "tab.devtools_place", "tab.devtools", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
+  const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.image_collect", "tab.devtools", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
   try { return await executeCall(browser, frame, tracked); }
@@ -174,7 +174,7 @@ async function executeFrame(browser, frame) {
   if (INTERACTIONS.has(op)) tab.acted = true;
   if (op === "tab.selection") return browser.selection.result(tab, session);
   // A loopback page is read where it is: never driven, whoever holds the tab.
-  if (DEVTOOLS_OPS.has(op) && onLocalPage(tab)) return tab.dialog && op === "tab.devtools" && args.read === "dom" ? pendingDialog(tab) : devtoolsCall(tab, op, args);
+  if (op === "tab.devtools" && onLocalPage(tab)) return tab.dialog && args.read === "dom" ? pendingDialog(tab) : devtoolsRead(tab, args);
   if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
     return { status: "not_dispatched", reason: args.policy?.mode === "signed_in" ? "navigation_denied" : "signed_in_unavailable" };
   if (op === "tab.cancel") { if (tab.callId === args.call_id) tab.cancelled = true; return { status: "ok" }; }
@@ -204,7 +204,7 @@ async function executeFrame(browser, frame) {
   if (!browser.uses.has(frame.id)) return { status: "unknown", reason: "cancelled" };
   if (op === "tab.observe") return observeTab(tab, args);
   if (op === "tab.read") return readTab(tab);
-  if (DEVTOOLS_OPS.has(op)) return devtoolsCall(tab, op, args);
+  if (op === "tab.devtools") return devtoolsRead(tab, args);
   if (op === "tab.image_collect") return collectImage(tab, args);
   if (op === "tab.screenshot") return screenshotTab(tab, args);
   if (op === "tab.zoom") return zoomTab(tab, args);

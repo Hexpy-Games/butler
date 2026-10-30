@@ -22,7 +22,6 @@ pub(super) const LONG_PAGE: &str = r##"<!doctype html><meta charset="utf-8"><tit
 for (let i = 0; i < 260; i++) console.error(`오류 ${i} ${"한".repeat(3000)}`);
 const all = document.querySelector("#all");
 for (let i = 0; i < 9000; i++) { const row = document.createElement("div"); row.className = "row-" + i; row.textContent = "한글 내용 ".repeat(30); all.append(row); }
-fetch("./signed.json", { headers: { Authorization: "Bearer SECRET-HEADER" } }).catch(() => {});
 const ctrl = document.createElement("section"); ctrl.id = "ctrl";
 for (let i = 0; i < 300; i++) { const row = document.createElement("p"); row.textContent = "\u0001".repeat(400); ctrl.append(row); }
 document.body.append(ctrl);
@@ -40,10 +39,6 @@ const SECRETS: &[&str] = &[
     "SECRET-CARD",
 ];
 
-/// A page with its own cookie; a login shows in the store whoever wrote it.
-pub(super) const COOKIE_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><title>Cookie fixture</title><p>signed in</p>
-<script>document.cookie = "session=SECRET-COOKIE; path=/";</script>"#;
-
 /// A dev server for what a preview can show: a request left hanging across a
 /// navigation, requests that never finish, and a page leaving http.
 pub(super) const SERVER: &str = r#"
@@ -60,8 +55,6 @@ Bun.serve({ hostname: "127.0.0.1", port, idleTimeout: 0, fetch(request) {
 "#;
 
 async fn read(admin: &AdminClient, tab: &Value, args: Value) -> Result<Value, HarnessError> {
-    let mut args = args;
-    args["expect"] = json!({"place":"local","site":""});
     // A page on its way somewhere says so; ask again once it has arrived.
     let mut reply = Value::Null;
     for _ in 0..20 {
@@ -72,7 +65,6 @@ async fn read(admin: &AdminClient, tab: &Value, args: Value) -> Result<Value, Ha
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert_eq!(reply["status"], "ok", "{reply}");
-    assert_eq!(reply["place"], "local", "{reply}");
     assert_eq!(
         reply["untrusted_content"]["kind"], "web_page_data",
         "{reply}"
@@ -116,10 +108,6 @@ async fn a_butler_page_reads_its_console_network_and_dom() -> Result<(), Harness
     let opened = open(&admin, "general", &url).await?;
     assert_eq!(opened["status"], "ok", "{opened}");
     let tab = opened["tab"].clone();
-
-    let place = call(&admin, "general", "tab.devtools_place", &tab, json!({})).await?;
-    assert_eq!(place["place"], "local", "{place}");
-    assert_eq!(place["masked"], false, "{place}");
 
     let console = entries_with(&admin, &tab, "console", "fixture failed").await?;
     let first = &console["untrusted_content"]["entries"][0];
@@ -182,22 +170,10 @@ async fn a_butler_page_reads_its_console_network_and_dom() -> Result<(), Harness
         "general",
         "tab.devtools",
         &tab,
-        json!({"read":"dom","selector":"[[","expect":{"place":"local","site":""}}),
+        json!({"read":"dom","selector":"[["}),
     )
     .await?;
     assert_eq!(bad["reason"], "invalid_selector", "{bad}");
-
-    // A read allowed for somewhere else returns nothing from here.
-    let elsewhere = call(
-        &admin,
-        "general",
-        "tab.devtools",
-        &tab,
-        json!({"read":"console","expect":{"place":"signed_out","site":"example.com"}}),
-    )
-    .await?;
-    assert_eq!(elsewhere["reason"], "devtools_page_changed", "{elsewhere}");
-    assert!(elsewhere["untrusted_content"].is_null(), "{elsewhere}");
 
     // The same page again: the old document's entries went with it.
     let observed = call(&admin, "general", "tab.observe", &tab, json!({})).await?;
@@ -228,18 +204,6 @@ async fn a_long_page_reads_in_parts_and_says_so() -> Result<(), HarnessError> {
     let opened = open(&admin, "general", &url).await?;
     assert_eq!(opened["status"], "ok", "{opened}");
     let tab = opened["tab"].clone();
-
-    // Its own traffic carried a credential: it reads masked from here on, without a card.
-    let mut masked = Value::Null;
-    for _ in 0..50 {
-        masked = call(&admin, "general", "tab.devtools_place", &tab, json!({})).await?;
-        if masked["masked"] == true {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    assert_eq!(masked["masked"], true, "{masked}");
-    assert_eq!(masked["place"], "local", "{masked}");
 
     let console = entries_with(&admin, &tab, "console", "오류 259").await?;
     let data = &console["untrusted_content"];
@@ -286,68 +250,10 @@ async fn a_long_page_reads_in_parts_and_says_so() -> Result<(), HarnessError> {
         ctrl["untrusted_content"]["rendered_nodes"]
     );
 
-    // The credential outlives the tab that showed it, while the context lives.
-    let second = open(&admin, "general", &url).await?;
-    assert_eq!(second["status"], "ok", "{second}");
-    let closed = call(&admin, "general", "tab.close", &tab, json!({})).await?;
-    assert_eq!(closed["status"], "ok", "{closed}");
-    let kept = call(
-        &admin,
-        "general",
-        "tab.devtools_place",
-        &second["tab"],
-        json!({}),
-    )
-    .await?;
-    assert_eq!(kept["masked"], true, "{kept}");
     s.finish().await
 }
 
-/// A cookie in the store counts, with no traffic to show it, on every tab of
-/// the conversation's browser context.
-#[tokio::test]
-async fn a_cookie_in_the_store_reads_masked() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    if !selected() {
-        return Ok(());
-    }
-    let s = setup("HEADLESS-DEVTOOLS-COOKIE")?.start().await?;
-    let admin = admin(&s);
-    let (_, plain) = publish_as(&s, "Publish devtools").await?;
-    let (_, cookie) = publish_as(&s, "Publish devtools cookie").await?;
-    let first = open(&admin, "general", &plain).await?;
-    let place = call(
-        &admin,
-        "general",
-        "tab.devtools_place",
-        &first["tab"],
-        json!({}),
-    )
-    .await?;
-    assert_eq!(place["masked"], false, "{place}");
-    let second = open(&admin, "general", &cookie).await?;
-    assert_eq!(second["status"], "ok", "{second}");
-    let mut seen = Value::Null;
-    for _ in 0..50 {
-        seen = call(
-            &admin,
-            "general",
-            "tab.devtools_place",
-            &first["tab"],
-            json!({}),
-        )
-        .await?;
-        if seen["masked"] == true {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    assert_eq!(seen["masked"], true, "{seen}");
-    s.finish().await
-}
-
-/// A preview's own cookie is not a login; a read never carries the last
-/// document's requests; requests that never finish stay bounded; a page that
+/// A read never carries the last document's requests; requests that never finish stay bounded; a page that
 /// leaves http can't be reported under its old address.
 #[tokio::test]
 async fn a_preview_reads_only_its_current_document() -> Result<(), HarnessError> {
@@ -379,13 +285,6 @@ async fn a_preview_reads_only_its_current_document() -> Result<(), HarnessError>
     let next = entries_with(&admin, &tab, "network", "/own").await?;
     let rows = next["untrusted_content"]["entries"].to_string();
     assert!(!rows.contains("OLD_DOCUMENT"), "{rows}");
-    let place = call(&admin, "general", "tab.devtools_place", &tab, json!({})).await?;
-    assert_eq!(place["place"], "local", "{place}");
-    assert_eq!(
-        place["masked"], false,
-        "a preview's own cookie is no login: {place}"
-    );
-
     entries_with(&admin, &tab, "network", "/hang?i=").await?;
     let mut bounded = Value::Null;
     for _ in 0..25 {
@@ -402,7 +301,14 @@ async fn a_preview_reads_only_its_current_document() -> Result<(), HarnessError>
 
     let mut gone = Value::Null;
     for _ in 0..80 {
-        gone = call(&admin, "general", "tab.devtools_place", &tab, json!({})).await?;
+        gone = call(
+            &admin,
+            "general",
+            "tab.devtools",
+            &tab,
+            json!({"read":"console"}),
+        )
+        .await?;
         if matches!(
             gone["reason"].as_str(),
             Some("navigation_denied" | "not_your_tab")
@@ -415,5 +321,31 @@ async fn a_preview_reads_only_its_current_document() -> Result<(), HarnessError>
         gone["status"], "ok",
         "a page off http has no address to report: {gone}"
     );
+    s.finish().await
+}
+
+pub(super) const HUNG_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><title>Hung fixture</title><p>page</p>
+<script>console.error("before the hang");setTimeout(() => { for (;;) {} }, 300);</script>"#;
+
+#[tokio::test]
+async fn a_hung_page_still_answers_for_its_console_and_network() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if !selected() {
+        return Ok(());
+    }
+    let s = setup("HEADLESS-DEVTOOLS-HUNG")?.start().await?;
+    let admin = admin(&s);
+    let (_, url) = publish_as(&s, "Publish devtools hung").await?;
+    let opened = open(&admin, "general", &url).await?;
+    let tab = opened["tab"].clone();
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let console = read(&admin, &tab, json!({"read":"console"})).await?;
+    assert!(
+        console["untrusted_content"]["entries"]
+            .to_string()
+            .contains("before the hang"),
+        "{console}"
+    );
+    read(&admin, &tab, json!({"read":"network"})).await?;
     s.finish().await
 }

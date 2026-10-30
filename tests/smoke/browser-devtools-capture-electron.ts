@@ -1,6 +1,6 @@
 // test-category: security
-// Real Electron, the App's real capture code: logins seen at read time, how a tab
-// reached a loopback page, and what a read may carry across a navigation.
+// Real Electron, the App's real capture and fill code: what a read may carry
+// across a navigation, how far a reply goes, and a document Butler filled a secret into.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
@@ -23,37 +23,6 @@ const fail = () => readFileSync(join(work, "electron.log"), "utf8").slice(-2000)
 assert.equal(code, 0, fail());
 const out = JSON.parse(readFileSync(output, "utf8"));
 
-for (const [name, hosts] of Object.entries(out.logins as Record<string, string[]>)) {
-  if (name.startsWith("no login")) assert.deepEqual(hosts, [], name);
-  else assert(hosts.includes("remote.test"), `${name}: ${JSON.stringify(hosts)}`);
-}
-assert.equal(out.overflow.flag, true, "a full host set fails closed");
-assert(out.overflow.hosts <= 64, `the host list stays small: ${out.overflow.hosts}`);
-assert.deepEqual(out.userHold.before, []);
-for (const host of ["remote.test", "other.test"]) assert(out.userHold.after.includes(host), JSON.stringify(out.userHold));
-assert.deepEqual(out.userHold.local, [], "a loopback page the user holds stays readable");
-
-const trusted: Record<string, boolean> = {
-  "opened by the user": true,
-  "page moved it from a remote site": false,
-  "reload after a page moved it": false,
-  "link on a local page": true,
-  "remote redirect to loopback": false,
-  "user typed it after a page moved it": true,
-  "page moved it to another local origin": false,
-  "user typed it after a 204 a page started": true,
-  "opened as a pop-up": false,
-};
-for (const [name, expected] of Object.entries(trusted)) {
-  assert.match(out.arrivals[name].url, /localhost|127\.0\.0\.1/u, name);
-  assert.equal(out.arrivals[name].trusted, expected, `${name}: ${JSON.stringify(out.arrivals[name])}`);
-}
-
-assert.deepEqual(out.ownCookie, [], "Butler's preview cookie is no login on loopback");
-for (const [name, expected] of Object.entries({ "target=_blank link, no gesture": false, "target=_blank form, no gesture": false, "window.open, gesture": false, "opened in the pane": true })) {
-  assert.deepEqual(out.realBrowser[name], [expected], `${name}: ${JSON.stringify(out.realBrowser[name])}`);
-}
-
 assert.equal(out.crossing.status, "ok");
 assert(!out.crossing.rows.some((url: string) => url.includes("OLD_DOCUMENT")), JSON.stringify(out.crossing));
 assert(out.crossing.rows.some((url: string) => url.endsWith("/with-fetch")), JSON.stringify(out.crossing));
@@ -67,8 +36,16 @@ assert.equal(out.dom.status, "ok", JSON.stringify(out.dom));
 assert(out.dom.bytes < 256 * 1024, `a DOM reply fits: ${out.dom.bytes}`);
 assert.equal(out.dom.walked_all, false, "and says it stopped");
 assert.equal(out.dom.href, out.dom.url);
-assert.equal(out.selector.invalid.reason, "invalid_selector");
-assert.equal(out.selector.valid, "ok");
+assert.equal(out.selector.reason, "invalid_selector");
+
+for (const name of ["sign-in", "card"]) {
+  const fill = out.fills[name];
+  assert.deepEqual(fill.before, { console: "ok", dom: "ok" }, `${name}: read before the fill: ${JSON.stringify(fill)}`);
+  assert.equal(fill.console, "secret_filled", `${name}: ${JSON.stringify(fill)}`);
+  assert.equal(fill.dom, "secret_filled", `${name}: ${JSON.stringify(fill)}`);
+  assert.equal(fill.network, "ok", `${name}: the summary stays: ${JSON.stringify(fill)}`);
+  assert.equal(fill.after, "ok", `${name}: readable once the page changes: ${JSON.stringify(fill)}`);
+}
 
 rmSync(work, { recursive: true, force: true });
-console.log(JSON.stringify({ ok: true, logins: Object.keys(out.logins).length, arrivals: Object.keys(trusted).length, ms: Date.now() - started }));
+console.log(JSON.stringify({ ok: true, ms: Date.now() - started }));

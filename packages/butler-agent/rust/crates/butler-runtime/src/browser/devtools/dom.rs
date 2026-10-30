@@ -20,13 +20,9 @@ const URL_ATTRIBUTES: &[&str] = &[
 const SECRET_AUTOCOMPLETE: &[&str] = &["current-password", "new-password", "one-time-code"];
 /// Inputs whose value the page wrote, not the person typing.
 const SHOWN_INPUT_TYPES: &[&str] = &["button", "submit", "reset", "radio", "checkbox"];
-/// Other tags whose `value` is the page's own. Any other tag may be a custom field.
-const SHOWN_VALUE_TAGS: &[&str] = &[
-    "option", "button", "li", "meter", "progress", "param", "data",
-];
-/// What a masked read may show as written: page structure, no page data. Any
-/// other attribute keeps its name and loses its value.
-const MASKED_READ_ATTRIBUTES: &[&str] = &[
+/// What a selector may compare a value against: attributes always shown as
+/// written. Comparing any other could reveal a masked value.
+const COMPARABLE_ATTRIBUTES: &[&str] = &[
     "id",
     "class",
     "type",
@@ -67,7 +63,7 @@ const MASKED_READ_ATTRIBUTES: &[&str] = &[
 
 /// Whether a selector may be run: matching `[value^="a"]` would reveal a masked
 /// value one character at a time, so an attribute value may only be compared
-/// where a masked read already shows it. An escape could spell any name.
+/// where the read shows it as written. An escape could spell any name.
 pub fn selector_allowed(selector: &str) -> bool {
     if selector.contains('\\') {
         return false;
@@ -97,7 +93,7 @@ pub fn selector_allowed(selector: &str) -> bool {
                 .unwrap_or(name)
                 .trim()
                 .to_ascii_lowercase();
-            if !MASKED_READ_ATTRIBUTES.contains(&name.as_str()) {
+            if !COMPARABLE_ATTRIBUTES.contains(&name.as_str()) {
                 return false;
             }
         }
@@ -122,17 +118,17 @@ fn attribute<'a>(node: &'a Value, name: &str) -> &'a str {
 
 /// Whether a `value` is the page's own rather than something typed or filled
 /// (a controlled field copies what is typed into this attribute). Everything
-/// not known to be the page's own stays masked, on every tab.
+/// not known to be the page's own stays masked.
 fn value_shown(node: &Value, tag: &str) -> bool {
     let shown_kind = match tag {
         "input" => SHOWN_INPUT_TYPES
             .iter()
             .any(|kind| attribute(node, "type").eq_ignore_ascii_case(kind)),
-        _ => SHOWN_VALUE_TAGS.contains(&tag),
+        "button" => true,
+        _ => false,
     };
     let autocomplete = attribute(node, "autocomplete").to_ascii_lowercase();
     shown_kind
-        && !attribute(node, "type").eq_ignore_ascii_case("password")
         && !SECRET_AUTOCOMPLETE
             .iter()
             .any(|name| autocomplete.contains(name))
@@ -157,20 +153,17 @@ fn meta_secret(node: &Value) -> bool {
 }
 
 /// One attribute as shown, or `None` when it is never shown.
-fn shown_attribute(node: &Value, name: &str, value: &str, masked: bool) -> Option<String> {
+fn shown_attribute(node: &Value, name: &str, value: &str) -> Option<String> {
     let lower = name.to_ascii_lowercase();
     let tag = node["t"].as_str().unwrap_or("");
     if lower.starts_with("on") {
         return None;
     }
-    if lower == "srcdoc" || lower == "srcset" && masked {
+    if lower == "srcdoc" {
         return Some(MASK.to_owned());
     }
     if URL_ATTRIBUTES.contains(&lower.as_str()) {
-        return Some(capped_attribute(&mask_url(value, masked)));
-    }
-    if masked && !MASKED_READ_ATTRIBUTES.contains(&lower.as_str()) {
-        return Some(MASK.to_owned());
+        return Some(capped_attribute(&mask_url(value)));
     }
     if lower == "value" && !value_shown(node, tag) {
         return Some(MASK.to_owned());
@@ -178,14 +171,14 @@ fn shown_attribute(node: &Value, name: &str, value: &str, masked: bool) -> Optio
     if credential_name(&lower) || tag == "meta" && lower == "content" && meta_secret(node) {
         return Some(MASK.to_owned());
     }
-    Some(capped_attribute(&mask_text(value, masked)))
+    Some(capped_attribute(&mask_text(value)))
 }
 
-fn line(node: &Value, masked: bool) -> String {
+fn line(node: &Value) -> String {
     let depth = usize::try_from(node["d"].as_u64().unwrap_or(0)).unwrap_or(0);
     let indent = " ".repeat(depth.min(40));
     let Some(tag) = node["t"].as_str() else {
-        let text = mask_text(node["x"].as_str().unwrap_or(""), masked);
+        let text = mask_text(node["x"].as_str().unwrap_or(""));
         let more = node["n"].as_u64().unwrap_or(0);
         return if more > 0 {
             format!("{indent}{text}…[+{more} chars]\n")
@@ -198,7 +191,7 @@ fn line(node: &Value, masked: bool) -> String {
         let (Some(name), Some(value)) = (pair[0].as_str(), pair[1].as_str()) else {
             continue;
         };
-        if let Some(value) = shown_attribute(node, name, value, masked) {
+        if let Some(value) = shown_attribute(node, name, value) {
             out.push_str(&format!(" {name}=\"{}\"", value.replace('"', "&quot;")));
         }
     }
@@ -217,11 +210,11 @@ pub(crate) struct Rendered {
 }
 
 /// Renders within the output budget; what it leaves out is counted, never silent.
-pub(crate) fn render(nodes: &[Value], masked: bool) -> Rendered {
+pub(crate) fn render(nodes: &[Value]) -> Rendered {
     let mut html = String::new();
     let mut rendered_nodes = 0;
     for node in nodes {
-        let next = line(node, masked);
+        let next = line(node);
         if html.len() + next.len() > OUTPUT_LIMIT {
             break;
         }

@@ -608,14 +608,6 @@ export const koKrCopy: AppCopy = {
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
       browserMode: { signed_out: "로그인 없이", signed_in: "로그인 사용" },
-      devtools: {
-        read: { console: "콘솔 오류 읽기", network: "네트워크 요약 읽기", dom: "DOM 읽기" },
-        title: (read, site, mode) => `개발자 도구: ${read} · ${site} · ${mode}`,
-        tab: host => `${host} 탭 · 읽기 전용, 스크립트 실행 안 함`,
-        selector: selector => `읽을 부분: ${selector}`,
-        masked: { console: "쿠키·헤더·본문은 가려서 읽음", network: "쿠키·헤더·본문은 가려서 읽음", dom: "입력값·토큰은 가려서 읽음" },
-        covers: site => `${site} 개발자 도구 읽기`,
-      },
       signInStep: reason => ({ mfa: "2단계 인증", passkey: "패스키", captcha: "보안 문자", secure_keypad: "보안 키패드", unknown_form: "로그인 양식 확인" } as Record<string, string>)[reason] ?? "로그인 양식 확인",
       waitHandoff: reason => ({ sign_in: "로그인 필요", secure_field: "직접 입력 필요", secure_keypad: "보안 키패드 입력 필요", captcha: "보안 문자 입력 필요" } as Record<string, string>)[reason] ?? "직접 확인 필요",
       payStep: reason => ({ secure_keypad: "보안 키패드", app_auth: "카드사 앱 인증", otp: "인증번호", three_ds: "카드사 본인 인증", captcha: "보안 문자" } as Record<string, string>)[reason] ?? "결제 화면 확인",

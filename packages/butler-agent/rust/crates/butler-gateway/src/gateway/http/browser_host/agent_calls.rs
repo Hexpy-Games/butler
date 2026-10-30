@@ -46,7 +46,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
-    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"],"payment_skip":frame["args"]["payment_skip"],"expect":frame["args"]["expect"]},"tab":frame["tab"],"turn_id":frame["turn_id"],"schedule_browser":frame["schedule_browser"]});
+    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"],"payment_skip":frame["args"]["payment_skip"]},"tab":frame["tab"],"turn_id":frame["turn_id"],"schedule_browser":frame["schedule_browser"]});
     if let Some(refused) = dispatch_reserved(&state, frame, count, deadline, &id, sender).await? {
         return Ok(refused);
     }
@@ -241,7 +241,6 @@ fn page_op(op: &str) -> bool {
             | "tab.zoom"
             | "tab.screenshot"
             | "tab.image_collect"
-            | "tab.devtools_place"
             | "tab.devtools"
             | "tab.prepare"
             | "tab.act"
@@ -464,8 +463,8 @@ async fn finish_result(
     sent: &Value,
     result: &mut Value,
 ) -> Result<(), HttpError> {
-    if butler_runtime::browser::is_devtools_op(op) {
-        super::devtools::finish(op, &sent["args"], result);
+    if op == butler_runtime::browser::DEVTOOLS_OP {
+        super::devtools::finish(state, session, result);
         return Ok(());
     }
     enforce_result_policy(state, session, op, result);

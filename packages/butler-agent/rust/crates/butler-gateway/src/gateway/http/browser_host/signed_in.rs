@@ -17,6 +17,7 @@ const READS: &[&str] = &[
     "tab.zoom",
     "tab.screenshot",
     "tab.image_collect",
+    "tab.devtools",
 ];
 
 /// The signed-in sites a conversation's turn may use.

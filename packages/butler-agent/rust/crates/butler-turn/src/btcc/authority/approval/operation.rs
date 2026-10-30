@@ -19,9 +19,6 @@ pub struct ApprovalOperation {
     pub browser_tab: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser_mode: Option<String>,
-    /// Which DevTools read a `browser_devtools` card asks for.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub devtools_read: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub browser_steps: Vec<BrowserApprovalStep>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,9 +65,6 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
     }
     if facts.capability == "browser_wait_for_user" {
         return wait_operation(&facts);
-    }
-    if facts.capability == "browser_devtools" {
-        return devtools_operation(&facts);
     }
     let command = input["command"].as_str().map(str::to_owned);
     let paths = match facts.capability {
@@ -123,7 +117,6 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: None,
         browser_mode: None,
-        devtools_read: None,
         browser_steps: Vec::new(),
         sign_in_step: None,
         wait_reason: None,
@@ -191,7 +184,6 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: facts.input["mode"].as_str().map(str::to_owned),
-        devtools_read: None,
         browser_steps,
         sign_in_step: None,
         wait_reason: None,
@@ -265,7 +257,6 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: (access == "change").then(|| "signed_in".into()),
-        devtools_read: None,
         sign_in_step: (tool == "browser_sign_in_wait")
             .then(|| text(input.pointer("/wait/reason").unwrap_or(&Value::Null))),
         wait_reason: None,
@@ -327,42 +318,11 @@ fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: None,
-        devtools_read: None,
         browser_steps: Vec::new(),
         sign_in_step: None,
         wait_reason,
         image: None,
     })
-}
-
-/// A DevTools read: the site it is allowed on, the host the tab is on and any
-/// narrowing selector. A signed-in read is one exact card every time.
-fn devtools_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
-    let input = facts.input;
-    let targets = ["/devtools/site", "/devtools/host", "/devtools/selector"]
-        .iter()
-        .filter_map(|pointer| input.pointer(pointer).and_then(Value::as_str))
-        .filter(|text| !text.is_empty())
-        .map(str::to_owned)
-        .collect();
-    ApprovalOperation {
-        tool: facts.capability.into(),
-        access: "read_only".into(),
-        targets,
-        command: None,
-        allow_conversation: Some(input["always_confirm"] != true),
-        allow_site: None,
-        browser_tab: None,
-        browser_mode: input["mode"].as_str().map(str::to_owned),
-        devtools_read: input
-            .pointer("/devtools/read")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        browser_steps: Vec::new(),
-        sign_in_step: None,
-        wait_reason: None,
-        image: None,
-    }
 }
 
 /// `browser_wait_for_user`: the site and why, never the tab id; the
@@ -383,7 +343,6 @@ fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: None,
-        devtools_read: None,
         browser_steps: Vec::new(),
         sign_in_step: None,
         image: None,

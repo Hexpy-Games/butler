@@ -148,7 +148,6 @@ pub(super) async fn headless_call(
                 | "tab.zoom"
                 | "tab.screenshot"
                 | "tab.image_collect"
-                | "tab.devtools_place"
                 | "tab.devtools"
                 | "tab.prepare"
                 | "tab.act"
@@ -176,7 +175,6 @@ pub(super) async fn headless_call(
         }
     }
     let limit = deadline(op, &frame["args"]);
-    let frame_args = frame["args"].clone();
     frame["deadline_ms"] = json!(limit);
     frame["id"] = json!(uuid::Uuid::new_v4().to_string());
     let call = headless.execute(frame);
@@ -186,8 +184,8 @@ pub(super) async fn headless_call(
             result.unwrap_or_else(|_| json!({"status":"unknown","reason":"timeout"}))
         }
     };
-    if butler_runtime::browser::is_devtools_op(op) {
-        super::devtools::finish(op, &frame_args, &mut result);
+    if op == butler_runtime::browser::DEVTOOLS_OP {
+        super::devtools::finish(&state, session, &mut result);
         return response(count, result);
     }
     enforce_result_policy(&state, session, op, &mut result);

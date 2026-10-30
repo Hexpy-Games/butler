@@ -45,7 +45,6 @@ pub(crate) struct Host {
     pages: Pages,
     admin: AdminClient,
     frames: Arc<Mutex<Vec<Value>>>,
-    during_read: Arc<Mutex<Option<(String, Value)>>>,
     task: tokio::task::JoinHandle<()>,
 }
 
@@ -69,11 +68,12 @@ fn raw_rows() -> Value {
             "X-CSRF-Token":"SECRET-CSRF","Content-Type":"application/json"}},
         {"method":"GET","url":"https://user:SECRET-AUTH@cdn.example.test/a.js?v=1#id_token=SECRET-AUTH","type":"Script","status":200},
         {"method":"GET","url":"https://app.example.test/r/abcdefghijklmnopqrstuvwx1234?q=coat#top","type":"Document","status":200},
-        {"method":"POST","url":"https://checkout.stripe.com/pay/SECRET-CARD?x=1","type":"Fetch","status":402,"error":"token=SECRET-CONSOLE rejected"},
+        {"method":"POST","url":"https://checkout.stripe.com/pay/cs?x=1","type":"Fetch","status":402,"error":"token=SECRET-CONSOLE rejected"},
         {"method":"GET","url":"https://sso.example.test/in?ticket=SECRET-URL&sso=SECRET-URL&magic=SECRET-URL&keep=1","type":"Document","status":200},
         {"method":"GET","url":"https://matrix.example.test/p?a=1;token=SECRET-URL;b=2","type":"Fetch","status":200},
         {"method":"GET","url":"https://a.example.test/in?next=https%3A%2F%2Fy.test%3Ftoken%3DSECRET-URL&go=https%3A%2F%2Fy.test%2Fhome","type":"Document","status":200},
-        {"method":"GET","url":"https://a.example.test/in?pass=SECRET-URL&pw=SECRET-URL&passcode=SECRET-URL&hmac=SECRET-URL&lasso=keep","type":"Document","status":200}])
+        {"method":"GET","url":"https://a.example.test/in?pass=SECRET-URL&pw=SECRET-URL&passcode=SECRET-URL&hmac=SECRET-URL&lasso=keep","type":"Document","status":200},
+        {"method":"GET","url":"https://a.example.test/in?card=SECRET-URL&cvc=SECRET-URL&cvv=SECRET-URL&pan=SECRET-URL&company=keep","type":"Document","status":200}])
 }
 
 fn raw_nodes() -> Value {
@@ -94,10 +94,9 @@ fn raw_nodes() -> Value {
         {"d":1,"t":"input","a":[["type","text"],["name","q"],["value","SECRET-TYPED"]]},
         {"d":1,"t":"input","a":[["type","radio"],["name","size"],["value","plain-radio"]]},
         {"d":1,"t":"sl-input","a":[["type","password"],["value","SECRET-TYPED"]]},
-        {"d":1,"t":"div","a":[["ng-init","user='SECRET-FRAMEWORK'"]]},
-        {"d":1,"t":"div","a":[["x-data","{ me: 'SECRET-FRAMEWORK' }"]]},
-        {"d":1,"t":"div","a":[["wire:snapshot","SECRET-FRAMEWORK"]]},
-        {"d":1,"t":"my-widget","a":[["config","SECRET-FRAMEWORK"],["title","SECRET-EMAIL@example.test"]]},
+        {"d":1,"t":"input","a":[["name","card"],["autocomplete","cc-number"],["value","SECRET-CARD"]]},
+        {"d":1,"t":"input","a":[["type","checkbox"],["name","cvv"],["value","SECRET-CARD"]]},
+        {"d":1,"t":"button","a":[["value","plain-button"]]},
         {"d":1,"t":"script","a":[],"hidden_chars":40},
         {"d":1,"t":"button","a":[["onclick","send('SECRET-AUTH')"]]},
         {"d":2,"x":"Sign in"}])
@@ -105,7 +104,6 @@ fn raw_nodes() -> Value {
 
 fn read_reply(tab: &str, page: &Value, read: &str) -> Value {
     let mut reply = json!({"status":"ok","tab":tab,"url":page["url"],"profile":page["profile"],
-        "credentialed_hosts":page["credentialed_hosts"],"local_trusted":page["local_trusted"],
         "read":read,"dropped":0,"from_load":true});
     match read {
         "console" => {
@@ -119,6 +117,7 @@ fn read_reply(tab: &str, page: &Value, read: &str) -> Value {
                 {"level":"error","text":"password: \"my SECRET-PHRASE pass\" then password = my SECRET-PHRASE pass, status: 500"},
                 {"level":"error","text":"{\\\"token\\\":\\\"SECRET-TEXT\\\"} \"refresh\":\"SECRET-TEXT\" pw=SECRET-TEXT passcode: SECRET-TEXT"},
                 {"level":"error","text":"오류: 비밀번호: SECRET-TEXT 토큰=SECRET-TEXT"},
+                {"level":"error","text":"card: SECRET-TEXT cvv=SECRET-TEXT pan=SECRET-TEXT panel=plain-panel"},
                 {"level":"error","text":"TokenExpiredError: jwt expired"},
                 {"level":"error","text":"AuthError: login failed"}]);
         }
@@ -150,15 +149,15 @@ impl Host {
         assert_eq!(stream.status(), 200);
         let pages = Pages::default();
         for (id, profile, url) in tabs {
-            pages.0.lock().unwrap().insert(
-                (*id).to_owned(),
-                json!({"url":url,"profile":profile,"credentialed_hosts":[],"local_trusted":true}),
-            );
+            pages
+                .0
+                .lock()
+                .unwrap()
+                .insert((*id).to_owned(), json!({"url":url,"profile":profile}));
         }
         let frames = Arc::new(Mutex::new(Vec::new()));
-        let during_read = Arc::new(Mutex::new(None::<(String, Value)>));
         let replying = admin.clone();
-        let (seen, moved, live) = (frames.clone(), during_read.clone(), pages.clone());
+        let (seen, live) = (frames.clone(), pages.clone());
         let task = tokio::spawn(async move {
             let mut buffer = String::new();
             loop {
@@ -173,19 +172,15 @@ impl Host {
                 }
                 seen.lock().unwrap().push(frame.clone());
                 let tab = frame["tab"].as_str().unwrap_or("");
-                if op == "tab.devtools"
-                    && let Some((target, page)) = moved.lock().unwrap().take()
-                {
-                    live.0.lock().unwrap().insert(target, page);
-                }
                 let page = live.page(tab);
                 let reply = match op.as_str() {
-                    "tab.devtools_place" if frame["args"]["selector"] == "[[" => {
+                    "tab.devtools" if frame["args"]["selector"] == "[[" => {
                         json!({"status":"not_dispatched","reason":"invalid_selector"})
                     }
-                    "tab.devtools_place" => json!({"status":"ok","tab":tab,"url":page["url"],
-                        "profile":page["profile"],"credentialed_hosts":page["credentialed_hosts"],
-                        "local_trusted":page["local_trusted"]}),
+                    "tab.observe" => {
+                        json!({"status":"ok","tab":tab,"obs":"obs-1","url":page["url"],
+                        "text":"button Fixture [e1]"})
+                    }
                     "tab.devtools" => {
                         read_reply(tab, &page, frame["args"]["read"].as_str().unwrap_or(""))
                     }
@@ -206,7 +201,6 @@ impl Host {
             pages,
             admin,
             frames,
-            during_read,
             task,
         };
         host.publish().await?;
@@ -242,29 +236,6 @@ impl Host {
             .await?;
         assert_eq!(reply.status, 200, "{}", reply.text);
         Ok(())
-    }
-
-    /// The tab commits another page.
-    pub(crate) async fn navigate(&self, tab: &str, url: &str) -> Result<(), HarnessError> {
-        if let Some(page) = self.pages.0.lock().unwrap().get_mut(tab) {
-            page["url"] = json!(url);
-        }
-        self.publish().await
-    }
-
-    /// A page moved the tab here: it did not arrive by the user's own navigation.
-    pub(crate) fn arrived_by_page(&self, tab: &str) {
-        if let Some(page) = self.pages.0.lock().unwrap().get_mut(tab) {
-            page["local_trusted"] = json!(false);
-        }
-    }
-
-    /// The next read finds the tab on `url`, as if it moved after the place check.
-    pub(crate) fn moves_during_read(&self, tab: &str, url: &str, credentialed: &[&str]) {
-        let mut page = self.pages.page(tab);
-        page["url"] = json!(url);
-        page["credentialed_hosts"] = json!(credentialed);
-        *self.during_read.lock().unwrap() = Some((tab.to_owned(), page));
     }
 
     /// The args of every dispatched read, in order.

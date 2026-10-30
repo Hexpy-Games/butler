@@ -2,18 +2,13 @@
 //! from page events the tab already receives, bounded, and cleared when the
 //! main frame commits a new document. Nothing is kept of cookies or bodies.
 use super::{page::Page, scripts::scripts};
-use crate::browser::devtools::{
-    DEVTOOLS_PLACE_OP, local_url,
-    names::{credential_header, credential_name, login_cookie, password_field},
-    page_of,
-};
+use crate::browser::devtools::{names::credential_name, page_of};
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 const MAX_CONSOLE: usize = 200;
 const MAX_NETWORK: usize = 500;
 const MAX_PENDING: usize = 500;
-const MAX_HOSTS: usize = 64;
 const MAX_TEXT: usize = 4000;
 const MAX_HEADERS: usize = 40;
 const MAX_HEADER_VALUE: usize = 500;
@@ -27,38 +22,8 @@ pub(crate) struct Devtools {
     pending: HashMap<String, Value>,
     dropped_console: u64,
     dropped_network: u64,
-    /// Hosts whose traffic sent a credential header, until the state takes them.
-    seen: HashSet<String>,
     /// The main frame's last commit: what a read that runs no page script reports.
     committed_url: Option<String>,
-    /// A commit away from loopback: a local page after it was not simply opened.
-    left_local: bool,
-}
-
-/// What a browser context's traffic showed; it outlives the tabs that showed it.
-#[derive(Default)]
-pub(crate) struct Credentials {
-    hosts: HashSet<String>,
-    overflow: bool,
-}
-
-impl Credentials {
-    pub(crate) fn add(&mut self, seen: HashSet<String>) {
-        for host in seen {
-            if self.hosts.len() < MAX_HOSTS {
-                self.hosts.insert(host);
-            } else {
-                self.overflow = true;
-            }
-        }
-    }
-}
-
-fn host_of(url: &str) -> Option<String> {
-    url::Url::parse(url)
-        .ok()?
-        .host_str()
-        .map(str::to_ascii_lowercase)
 }
 
 fn capped(text: &str, limit: usize) -> String {
@@ -74,28 +39,7 @@ fn millis(seconds: f64) -> u64 {
     }
 }
 
-fn header<'a>(headers: &'a Value, name: &str) -> Option<&'a str> {
-    headers
-        .as_object()?
-        .iter()
-        .find(|(key, _)| key.eq_ignore_ascii_case(name))
-        .and_then(|(_, value)| value.as_str())
-}
-
 impl Devtools {
-    pub(crate) fn take_seen(&mut self) -> HashSet<String> {
-        std::mem::take(&mut self.seen)
-    }
-
-    /// The request's own host comes from its headers, which cannot name the
-    /// wrong hop of a redirect; the page it ran on counts too.
-    fn note_credential(&mut self, headers: &Value, page_url: &str) {
-        let named = header(headers, ":authority")
-            .or_else(|| header(headers, "host"))
-            .and_then(|host| host_of(&format!("http://{host}")));
-        self.seen.extend(named.into_iter().chain(host_of(page_url)));
-    }
-
     fn add_console(&mut self, entry: Value) {
         if self.console.len() == MAX_CONSOLE {
             self.console.pop_front();
@@ -126,22 +70,10 @@ impl Devtools {
     }
 
     /// Applies one page event. `main` says it came from the tab's own session.
-    pub(crate) fn event(
-        &mut self,
-        method: &str,
-        params: &Value,
-        page_url: &str,
-        (main, main_frame): (bool, &str),
-    ) {
+    pub(crate) fn event(&mut self, method: &str, params: &Value, (main, main_frame): (bool, &str)) {
         let id = params["requestId"].as_str().unwrap_or("");
         match method {
             "Network.requestWillBeSent" => self.request(id, params),
-            "Network.requestWillBeSentExtraInfo" => {
-                let sent = params["headers"].as_object();
-                if sent.is_some_and(|sent| sent.keys().any(|name| credential_header(name))) {
-                    self.note_credential(&params["headers"], page_url);
-                }
-            }
             "Network.responseReceived" => self.response(id, params),
             "Network.loadingFinished" => {
                 if let Some(row) = self.pending.get_mut(id)
@@ -250,9 +182,6 @@ impl Devtools {
         let loader = &frame["loaderId"];
         let url = frame["url"].as_str().unwrap_or("");
         self.committed_url = Some(url.to_owned());
-        if url.starts_with("http") && !local_url(url) {
-            self.left_local = true;
-        }
         self.console.clear();
         self.dropped_console = 0;
         self.network.retain(|row| row["loader"] == *loader);
@@ -317,101 +246,9 @@ async fn current_url(page: &Page, ask_page: bool) -> Result<String, String> {
         .ok_or_else(|| "tab_closed".to_owned())
 }
 
-/// Every host with a cookie that looks like a sign-in, from the context's store.
-async fn cookie_hosts(page: &Page, context: &str) -> Result<HashSet<String>, String> {
-    let params = if context.is_empty() {
-        json!({})
-    } else {
-        json!({"browserContextId":context})
-    };
-    let reply = page.cdp.send("Storage.getCookies", params, None).await?;
-    Ok(reply["cookies"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|cookie| {
-            login_cookie(
-                cookie["name"].as_str().unwrap_or(""),
-                cookie["httpOnly"] == true,
-                cookie["domain"]
-                    .as_str()
-                    .unwrap_or("")
-                    .trim_start_matches('.'),
-            )
-        })
-        .filter_map(|cookie| cookie["domain"].as_str())
-        .map(|domain| domain.trim_start_matches('.').to_ascii_lowercase())
-        .collect())
-}
-
-/// Where the tab is now: the page's own address, and at this moment what its
-/// browser context shows of a sign-in.
-async fn place(page: &Page, ask_page: bool) -> Result<Value, String> {
-    let url = current_url(page, ask_page).await?;
-    let (id, context, mut hosts, mut overflow, left_local) = {
-        let state = page.shared.lock();
-        let Some(tab) = state.tabs.get(&page.tab) else {
-            return Ok(json!({"status":"not_dispatched","reason":"not_your_tab"}));
-        };
-        let seen = state.credentials.get(&tab.context);
-        (
-            tab.id.clone(),
-            tab.context.clone(),
-            seen.map(|one| one.hosts.clone()).unwrap_or_default(),
-            seen.is_some_and(|one| one.overflow),
-            tab.devtools.left_local,
-        )
-    };
-    match cookie_hosts(page, &context).await {
-        Ok(found) => hosts.extend(found),
-        // An unread store cannot rule a sign-in out.
-        Err(_) => overflow = true,
-    }
-    if hosts.len() > MAX_HOSTS {
-        overflow = true;
-    }
-    let hosts: Vec<String> = hosts.into_iter().take(MAX_HOSTS).collect();
-    Ok(
-        json!({"status":"ok","tab":id,"url":url,"profile":"signed_out",
-        "credentialed_hosts":hosts,"credentials_overflow":overflow,"local_trusted":!left_local}),
-    )
-}
-
-/// A password going into a field by Butler's own hand is a sign-in in progress,
-/// whatever the site keeps afterwards.
-pub(crate) fn note_password_entry(page: &Page, hit: &Value) {
-    if !password_field(hit["name"].as_str().unwrap_or("")) {
-        return;
-    }
-    let mut state = page.shared.lock();
-    let Some(tab) = state.tabs.get(&page.tab) else {
-        return;
-    };
-    let (context, host) = (tab.context.clone(), host_of(&tab.url));
-    state
-        .credentials
-        .entry(context)
-        .or_default()
-        .add(host.into_iter().collect());
-}
-
-async fn selector_valid(page: &Page, selector: &str) -> Result<bool, String> {
-    let context = page.world(&page.session, &page.target).await?;
-    let script = scripts()
-        .ok_or("scripts_unavailable")?
-        .devtools_selector(&json!(selector));
-    let valid = page.evaluate_in(&page.session, context, &script).await?;
-    Ok(valid == true)
-}
-
-pub(crate) async fn call(page: &Page, op: &str, args: &Value) -> Result<Value, String> {
-    let reply = if op == DEVTOOLS_PLACE_OP {
-        checked_place(page, args).await
-    } else {
-        read(page, args).await
-    };
-    // A page that went away mid-call is one that moved; anything else is an error.
-    match reply {
+pub(crate) async fn call(page: &Page, args: &Value) -> Result<Value, String> {
+    match read(page, args).await {
+        // A page that went away mid-call is one that moved; anything else is an error.
         Err(error) if page_gone(&error) => Ok(moved()),
         reply => reply,
     }
@@ -420,15 +257,6 @@ pub(crate) async fn call(page: &Page, op: &str, args: &Value) -> Result<Value, S
 fn moved() -> Value {
     json!({"status":"not_dispatched","reason":"devtools_page_changed",
         "recovery":"The tab moved during this read. Call browser_devtools again."})
-}
-
-async fn checked_place(page: &Page, args: &Value) -> Result<Value, String> {
-    if let Some(selector) = args["selector"].as_str()
-        && !selector_valid(page, selector).await?
-    {
-        return Ok(json!({"status":"not_dispatched","reason":"invalid_selector"}));
-    }
-    place(page, args["read"] == "dom").await
 }
 
 async fn document(page: &Page, args: &Value) -> Result<Value, String> {
@@ -440,8 +268,7 @@ async fn document(page: &Page, args: &Value) -> Result<Value, String> {
 }
 
 /// One read. A tab that committed another page meanwhile answers that, so a
-/// read is never reported against the page it did not come from. The report
-/// is taken after the read: a sign-in that appeared meanwhile counts.
+/// read is never reported against the page it did not come from.
 async fn read(page: &Page, args: &Value) -> Result<Value, String> {
     let read = args["read"].as_str().unwrap_or("");
     let ask_page = read == "dom";
@@ -461,22 +288,13 @@ async fn read(page: &Page, args: &Value) -> Result<Value, String> {
     if result["invalid_selector"] == true {
         return Ok(json!({"status":"not_dispatched","reason":"invalid_selector"}));
     }
-    let after = place(page, ask_page).await?;
     let moved_during = result["href"].as_str().is_some_and(|href| href != before);
-    if moved_during || after["url"] != before.as_str() {
+    if moved_during || current_url(page, ask_page).await? != before {
         return Ok(moved());
     }
-    for key in [
-        "status",
-        "tab",
-        "url",
-        "profile",
-        "credentialed_hosts",
-        "credentials_overflow",
-        "local_trusted",
-    ] {
-        result[key] = after[key].clone();
-    }
+    result["status"] = json!("ok");
+    result["tab"] = json!(page.tab);
+    result["url"] = json!(before);
     result["read"] = json!(read);
     Ok(result)
 }

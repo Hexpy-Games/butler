@@ -1,16 +1,13 @@
-//! DevTools replies at the gateway: the host's report of the page at read time
-//! decides where the tab stands, a read off what was allowed returns nothing,
-//! and masking happens here before anything goes further.
-use butler_runtime::browser::{
-    DEVTOOLS_PLACE_OP, devtools_place_reply, devtools_read_reply, devtools_standing,
-    is_devtools_op, local_url,
-};
-use serde_json::{Map, Value, json};
+//! DevTools replies at the gateway: the page must be one the conversation may
+//! read, and masking happens here before anything goes further.
+use super::HttpState;
+use butler_runtime::browser::{DEVTOOLS_OP, devtools_reply, local_url};
+use serde_json::{Map, Value};
 
-/// A DevTools op on a loopback page: the one reach those ops have that page
-/// reads do not. The model cannot navigate there; the tab is already on it.
+/// A read on a loopback page: the one reach this op has that page reads do not.
+/// The model cannot navigate there; the tab is already on it.
 pub(super) fn local_read(op: &str, url: &str) -> bool {
-    is_devtools_op(op) && local_url(url)
+    op == DEVTOOLS_OP && local_url(url)
 }
 
 /// What a refusal may carry: never anything the host read from the page.
@@ -24,30 +21,17 @@ fn refusal(result: &Value) -> Value {
     Value::Object(kept)
 }
 
-pub(super) fn finish(op: &str, args: &Value, result: &mut Value) {
+pub(super) fn finish(state: &HttpState, session: &str, result: &mut Value) {
     let events = result.get("events").cloned();
-    *result = reply(op, args, result);
+    if !result["url"].as_str().is_some_and(local_url) {
+        super::agent_calls::enforce_result_policy(state, session, DEVTOOLS_OP, result);
+    }
+    *result = if result["status"] == "ok" {
+        devtools_reply(result)
+    } else {
+        refusal(result)
+    };
     if let Some(events) = events {
         result["events"] = events;
     }
-}
-
-fn reply(op: &str, args: &Value, report: &Value) -> Value {
-    if report["status"] != "ok" {
-        return refusal(report);
-    }
-    let standing = match devtools_standing(report) {
-        Ok(standing) => standing,
-        Err(reason) => return json!({"status":"not_dispatched","reason":reason}),
-    };
-    if op == DEVTOOLS_PLACE_OP {
-        return devtools_place_reply(report, &standing);
-    }
-    let expected = &args["expect"];
-    if expected["place"] != standing.place.as_str() || expected["site"] != standing.site.as_str() {
-        return json!({"status":"not_dispatched","reason":"devtools_page_changed",
-            "place":standing.place.as_str(),"site":standing.site,
-            "recovery":"The tab is no longer where this read was allowed. Call browser_devtools again; it asks about the tab's current page."});
-    }
-    devtools_read_reply(report, &standing)
 }

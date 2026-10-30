@@ -1,6 +1,5 @@
-//! Masking applied before DevTools data leaves the browser host's reply: names
-//! that carry credentials on every tab, and everything account-bound on a
-//! signed-in one.
+//! Masking applied before DevTools data leaves the browser host's reply, the
+//! same on every tab: names that carry credentials, and shapes that do.
 use super::names::{credential_name, secret_parameter};
 use regex::{Captures, Regex};
 use serde_json::{Map, Value};
@@ -8,7 +7,6 @@ use std::sync::LazyLock;
 
 pub(crate) const MASK: &str = "[masked]";
 const TEXT_LIMIT: usize = 2000;
-const SIGNED_IN_TEXT_LIMIT: usize = 500;
 const URL_LIMIT: usize = 2000;
 
 static SET_COOKIE: LazyLock<Option<Regex>> =
@@ -47,16 +45,9 @@ fn secret_value(value: &str) -> bool {
             .any(|regex| regex.as_ref().is_none_or(|regex| regex.is_match(&decoded)))
 }
 
-fn parameter(pair: &str, masked: bool) -> String {
+fn parameter(pair: &str) -> String {
     let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
-    if value.is_empty() && !pair.contains('=') {
-        return if masked {
-            MASK.to_owned()
-        } else {
-            pair.to_owned()
-        };
-    }
-    if masked || secret_parameter(name) || secret_value(value) {
+    if pair.contains('=') && (secret_parameter(name) || secret_value(value)) {
         format!("{name}={MASK}")
     } else {
         pair.to_owned()
@@ -64,24 +55,16 @@ fn parameter(pair: &str, masked: bool) -> String {
 }
 
 /// Parameters split on `&` and on `;`, the older separator servers still honour.
-fn parameters(raw: &str, masked: bool) -> String {
+fn parameters(raw: &str) -> String {
     let mut out = String::new();
     let mut start = 0;
     for (index, separator) in raw.match_indices(['&', ';']) {
-        out.push_str(&parameter(&raw[start..index], masked));
+        out.push_str(&parameter(&raw[start..index]));
         out.push_str(separator);
         start = index + separator.len();
     }
-    out.push_str(&parameter(&raw[start..], masked));
+    out.push_str(&parameter(&raw[start..]));
     out
-}
-
-fn token_like(segment: &str) -> bool {
-    segment.len() >= 24
-        && segment
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~'))
-        && segment.bytes().any(|b| b.is_ascii_digit())
 }
 
 fn capped(mut text: String, limit: usize) -> String {
@@ -94,26 +77,16 @@ fn capped(mut text: String, limit: usize) -> String {
 }
 
 /// The path, query and fragment of a URL, as shown.
-fn location(url: &url::Url, masked: bool) -> String {
-    let mut out = if masked {
-        url.path()
-            .split('/')
-            .map(|part| if token_like(part) { MASK } else { part })
-            .collect::<Vec<_>>()
-            .join("/")
-    } else {
-        url.path().to_owned()
-    };
+fn location(url: &url::Url) -> String {
+    let mut out = url.path().to_owned();
     if let Some(query) = url.query() {
         out.push('?');
-        out.push_str(&parameters(query, masked));
+        out.push_str(&parameters(query));
     }
     if let Some(fragment) = url.fragment() {
         out.push('#');
-        if masked {
-            out.push_str(MASK);
-        } else if fragment.contains('=') {
-            out.push_str(&parameters(fragment, false));
+        if fragment.contains('=') {
+            out.push_str(&parameters(fragment));
         } else {
             out.push_str(fragment);
         }
@@ -121,20 +94,16 @@ fn location(url: &url::Url, masked: bool) -> String {
     out
 }
 
-/// A URL with its credentials removed: userinfo always, credential parameters
-/// always; on a signed-in tab every query value and token-like path segment.
-/// A relative one keeps its form; what cannot be read as a URL is not shown.
-pub(crate) fn mask_url(raw: &str, masked: bool) -> String {
+/// A URL with its credentials removed: userinfo and credential parameters. A
+/// relative one keeps its form; what cannot be read as a URL is not shown.
+pub(crate) fn mask_url(raw: &str) -> String {
     let url = match url::Url::parse(raw) {
         Ok(url) => url,
         Err(url::ParseError::RelativeUrlWithoutBase) => {
             let joined = url::Url::parse("http://relative.invalid/")
                 .ok()
                 .and_then(|base| base.join(raw).ok());
-            return joined.map_or_else(
-                || MASK.to_owned(),
-                |url| capped(location(&url, masked), URL_LIMIT),
-            );
+            return joined.map_or_else(|| MASK.to_owned(), |url| capped(location(&url), URL_LIMIT));
         }
         Err(_) => return MASK.to_owned(),
     };
@@ -142,10 +111,7 @@ pub(crate) fn mask_url(raw: &str, masked: bool) -> String {
         return format!("{}:[{} chars]", url.scheme(), raw.len());
     }
     let origin = url.origin().ascii_serialization();
-    if url.host_str().is_some_and(super::super::payment_host) {
-        return format!("{origin}/{MASK}");
-    }
-    capped(format!("{origin}{}", location(&url, masked)), URL_LIMIT)
+    capped(format!("{origin}{}", location(&url)), URL_LIMIT)
 }
 
 fn replaced(
@@ -191,30 +157,18 @@ fn named(text: &str) -> String {
 
 /// Page text with anything shaped like a credential removed, bounded and
 /// saying how much it left out.
-pub(crate) fn mask_text(text: &str, masked: bool) -> String {
+pub(crate) fn mask_text(text: &str) -> String {
     let text = replaced(&SET_COOKIE, text, |c| format!("{}: {MASK}", &c[1]));
     let text = replaced(&BEARER, &text, |c| format!("{} {MASK}", &c[1]));
     let text = replaced(&JWT, &text, |_| MASK.to_owned());
     let text = replaced(&RAW_KEY, &text, |_| MASK.to_owned());
-    let text = replaced(&URLS, &text, |c| mask_url(&c[0], masked));
+    let text = replaced(&URLS, &text, |c| mask_url(&c[0]));
     let text = replaced(&PHRASE, &text, |c| format!("{}{}{MASK}", &c[1], &c[2]));
-    let text = named(&text);
-    capped(
-        text,
-        if masked {
-            SIGNED_IN_TEXT_LIMIT
-        } else {
-            TEXT_LIMIT
-        },
-    )
+    capped(named(&text), TEXT_LIMIT)
 }
 
-/// Headers as the model may see them: credential values never; on a signed-in
-/// tab no header at all.
-pub(crate) fn mask_headers(headers: &Value, masked: bool) -> Option<Value> {
-    if masked {
-        return None;
-    }
+/// Headers as the model may see them: never a credential's value.
+pub(crate) fn mask_headers(headers: &Value) -> Option<Value> {
     let shown: Map<String, Value> = headers
         .as_object()?
         .iter()
@@ -222,7 +176,7 @@ pub(crate) fn mask_headers(headers: &Value, masked: bool) -> Option<Value> {
             let value = if credential_name(name) {
                 Value::String(MASK.to_owned())
             } else {
-                Value::String(mask_text(value.as_str().unwrap_or(""), false))
+                Value::String(mask_text(value.as_str().unwrap_or("")))
             };
             (name.clone(), value)
         })

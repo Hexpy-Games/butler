@@ -80,12 +80,8 @@ fn tab_event(browser: &Browser, session: &str, method: &str, params: &Value) {
     if let Some(diagnostics) = tab.diagnostics.as_mut() {
         diagnostics.event(method, params, &tab.target);
     }
-    tab.devtools.event(
-        method,
-        params,
-        &tab.url,
-        (session == tab.session, &tab.target),
-    );
+    tab.devtools
+        .event(method, params, (session == tab.session, &tab.target));
     let main = |frame: &Value| frame == tab.target.as_str();
     match method {
         "Page.frameNavigated" | "Page.navigatedWithinDocument" => tab.changed(),
@@ -123,11 +119,6 @@ fn tab_event(browser: &Browser, session: &str, method: &str, params: &Value) {
         }
         "Runtime.executionContextsCleared" => tab.contexts.retain(|(s, _), _| s != session),
         _ => {}
-    }
-    let seen = tab.devtools.take_seen();
-    if !seen.is_empty() {
-        let context = tab.context.clone();
-        state.credentials.entry(context).or_default().add(seen);
     }
 }
 

@@ -9,7 +9,6 @@ import { NAVIGATION, navigationTarget, dispatchNavigation, dispatchUpload } from
 import { recordBatch, repeatRefusal, rememberRefusal, resentRefusal } from "./progress.mjs";
 import { canvasBefore, canvasEffect } from "./canvas-effect.mjs";
 import { insertText, mouseSender } from "./frame-input.mjs";
-import { notePasswordEntry } from "./devtools.mjs";
 
 const POINTER = ["click", "fill", "select", "scroll", "hover", "drag", "upload"];
 const ACTIONS = [...POINTER, "press", "type", "wait", ...NAVIGATION];
@@ -110,7 +109,6 @@ async function dispatch(tab, args, step, target) {
   tab.dispatching = true;
   try {
     tab.onPointer?.(step, target);
-    if (step.action === "fill" || step.action === "type") notePasswordEntry(tab, target.hit);
     if (step.action === "wait") { await new Promise(resolve => setTimeout(resolve, Number(step.value))); return { status: "completed", hit: target.hit }; }
     if (step.action === "press") { await dispatchKey(tab, parseChord(step.value), target); await new Promise(resolve => setTimeout(resolve, 0)); return { status: "completed", hit: target.hit }; }
     if (step.action === "type") { tab.expectedInputs = []; await insertText(tab, target, step.value); return { status: "completed", hit: target.hit }; }

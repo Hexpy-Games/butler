@@ -3,7 +3,7 @@ import { agentPopupAllowed } from "./popup-policy.mjs";
 import { isIP } from "node:net";
 import { webUrl } from "./policy.mjs";
 import { signedInPlace } from "./signed-in.mjs";
-import { noteRequestFinished, noteRequestSent, noteRequestStarted } from "./devtools.mjs";
+import { noteRequestFinished, noteRequestStarted } from "./devtools.mjs";
 
 export function privateAddress(address) {
   const v = address.toLowerCase().replace(/^::ffff:/u, "");
@@ -45,10 +45,6 @@ function profileRouter(profile) {
     };
     profile.webRequest.onCompleted(finished);
     profile.webRequest.onErrorOccurred(finished);
-    profile.webRequest.onSendHeaders(detail => {
-      const entry = router.get(detail.webContentsId);
-      if (entry) noteRequestSent(entry.tab, detail);
-    });
     profile.webRequest.onBeforeRequest((detail, done) => {
       networkLog("browser.request", detail.url, { method: detail.method, type: detail.resourceType });
       const entry = router.get(detail.webContentsId);

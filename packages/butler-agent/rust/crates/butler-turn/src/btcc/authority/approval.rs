@@ -174,20 +174,6 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             facts.target.strip_prefix("folder:").unwrap_or(facts.target),
             ApprovalRisk::Medium,
         ),
-        "browser_devtools" => single(
-            ApprovalActionKind::WebRequest,
-            ApprovalTargetKind::Other,
-            facts
-                .input
-                .pointer("/devtools/site")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or(facts.target),
-            if facts.input["always_confirm"] == true {
-                ApprovalRisk::Medium
-            } else {
-                ApprovalRisk::Low
-            },
-        ),
         "browser_act" | "browser_close" => single(
             ApprovalActionKind::Other,
             ApprovalTargetKind::Other,

@@ -19,7 +19,6 @@ pub(super) fn executes(op: &str) -> bool {
             | "tab.zoom"
             | "tab.screenshot"
             | "tab.image_collect"
-            | "tab.devtools_place"
             | "tab.devtools"
             | "tab.prepare"
             | "tab.act"

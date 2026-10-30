@@ -15,7 +15,6 @@ import { MAX_TABS, USER_TABS, agentTabFits } from "./capacity.mjs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachNativeWorlds } from "./native-worlds.mjs";
-import { watchArrival } from "./devtools.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
 import { backgroundTab, controlTab, emulation, hearTab, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
@@ -178,7 +177,6 @@ class UserBrowser {
     tab.session = tab.view.webContents.session;
     tab.identityReady = configureWebSession(tab.session);
     attachNativeWorlds(tab);
-    watchArrival(tab);
     this.live.watch(tab);
     tab.afterCapture = image => this.live.changed(tab, image);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
@@ -214,7 +212,7 @@ class UserBrowser {
     if (profile === "signed_out" && !this.conversationPartitions.has(partitionOwner)) this.conversationPartitions.set(partitionOwner, `butler-conv-${randomUUID()}`);
     const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(partitionOwner)),
       preview: input.preview_id ?? (url && new URL(url).pathname.startsWith("/__p/") ? new URL(url).pathname.slice(5) : undefined),
-      pageOpened: input.pageOpened === true, agent: input.agent === true, muted: input.agent === true, placeholder: input.placeholder === true && !url && !popupSource, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
+      agent: input.agent === true, muted: input.agent === true, placeholder: input.placeholder === true && !url && !popupSource, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
       still: "", view: null, attached: null, slot: null, bounds: null, covered: false, capture: null };
     tab.onStillChanged = () => this.publish();
     this.tabs.set(tab.id, tab);

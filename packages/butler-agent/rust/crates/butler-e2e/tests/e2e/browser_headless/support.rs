@@ -287,40 +287,10 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
                 json!({"path":"devtools-site","title":"DevTools fixture"}),
             ),
         ],
-        "Publish devtools cookie" => vec![
-            (
-                "write_file",
-                json!({"path":"devtools-cookie/index.html","content":super::devtools::COOKIE_PAGE,"create_parents":true}),
-            ),
-            (
-                "output_publish",
-                json!({"path":"devtools-cookie","title":"Cookie fixture"}),
-            ),
-        ],
-        "Publish devtools named cookie" => vec![
-            (
-                "write_file",
-                json!({"path":"devtools-named/index.html","content":super::devtools_login::NAMED_COOKIE_PAGE,"create_parents":true}),
-            ),
-            (
-                "output_publish",
-                json!({"path":"devtools-named","title":"named cookie fixture"}),
-            ),
-        ],
-        "Publish devtools fill" => vec![
-            (
-                "write_file",
-                json!({"path":"devtools-fill/index.html","content":super::devtools_login::FILL_PAGE,"create_parents":true}),
-            ),
-            (
-                "output_publish",
-                json!({"path":"devtools-fill","title":"fill fixture"}),
-            ),
-        ],
         "Publish devtools hung" => vec![
             (
                 "write_file",
-                json!({"path":"devtools-hung/index.html","content":super::devtools_login::HUNG_PAGE,"create_parents":true}),
+                json!({"path":"devtools-hung/index.html","content":super::devtools::HUNG_PAGE,"create_parents":true}),
             ),
             (
                 "output_publish",
@@ -402,10 +372,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
             "Publish broken",
             "Publish devtools",
             "Publish devtools long",
-            "Publish devtools named cookie",
-            "Publish devtools fill",
             "Publish devtools hung",
-            "Publish devtools cookie",
             "Publish fixture",
             "Publish shop",
             "Publish parallel",

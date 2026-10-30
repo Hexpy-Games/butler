@@ -36,8 +36,3 @@ export function devtoolsDom({ selector }) {
   }
   return { selector_matched: true, nodes, walked_all: walked, total_elements: root.querySelectorAll("*").length + 1, href: location.href };
 }
-
-/** Whether the browser can parse a selector, asked before anyone sees it on a card. */
-export function devtoolsSelectorValid(selector) {
-  try { document.createDocumentFragment().querySelector(selector); return true; } catch { return false; }
-}

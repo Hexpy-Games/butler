@@ -171,14 +171,6 @@ type CountFormatter = (count: number) => string;
  */
 export interface ApprovalRequestCopy {
   browserMode: { signed_out: string; signed_in: string };
-  devtools: {
-    read: Record<"console" | "network" | "dom", string>;
-    title: (read: string, site: string, mode: string) => string;
-    tab: (host: string) => string;
-    selector: (selector: string) => string;
-    masked: Record<"console" | "network" | "dom", string>;
-    covers: (site: string) => string;
-  };
   signInStep: (reason: string) => string;
   /** The sign-in hand-off card: a step only the user can do in the tab; nothing to allow. */
   signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string };
