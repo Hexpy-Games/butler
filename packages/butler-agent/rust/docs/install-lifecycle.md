@@ -1,7 +1,7 @@
 # Agent install lifecycle
 
 What the Rust CLI does to an Agent home, and the contract other installers
-(`install.sh`, the npm wrapper, the desktop App) can rely on. The layout itself
+(`install.sh`, the desktop App) can rely on. The layout itself
 (`AGENT_HOME`, version directories, `current`, `previous`, the launcher) is
 specified in [install-layout.md](install-layout.md); this page adds the
 commands that change it.
@@ -58,7 +58,7 @@ are checked after extraction either way. Order of work:
 (`wasRunning`, `restarted`, `pid`). Exit codes: 0, 1 (failure, with an
 `install_*` or `update_*` code), 2 (bad arguments or confirmation missing).
 
-**Stable contract for other installers.** `install.sh` and the npm wrapper
+**Stable contract for other installers.** `install.sh`
 should not re-implement steps 1-8: after downloading and checking the archive
 they extract it to a temporary directory (or use `tar` on just
 `butler-agent`, `resources/` and the manifest) and run
@@ -137,7 +137,7 @@ artifact for another platform, or one with no platform, is never selected
   four** of `Could not launch Butler CLI with`, `butler.js`, `BUTLER_HOME` and
   `BUTLER_BUN` (scanned up to 512 MiB). Any other file at the path, such as a
   script that merely mentions `butler.js`, is the user's. An installer
-  (`install.sh`, the npm wrapper) that needs to recognize the stale launcher
+  (`install.sh`) that needs to recognize the stale launcher
   must use exactly this rule, or leave the file to `butler install`.
 - **Migration:** nothing to do for an existing owner. A `DATA/bin/butler` that
   pointed at the App bundle is repointed to `AGENT_HOME/current` the first time

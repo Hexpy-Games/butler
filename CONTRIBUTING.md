@@ -12,7 +12,6 @@ Butler is licensed to everyone under the [MIT License](LICENSE), and so are your
 | --- | --- |
 | `packages/butler-app` | The desktop app: the Electron shell (`client/electron`), the React UI and design system (`client/ui`), and dev, lint and release scripts (`scripts`). |
 | `packages/butler-agent` | The native agent: the Rust workspace (`rust`) and the resources shipped beside the binary (`resources`: prompts, personas, skills, templates). |
-| `packages/butler-npm` | The `@hexpygames/butler` installer wrapper for the native Agent. |
 | `packages/butler-i18n` | English and Korean UI copy. |
 | `packages/butler-progress-projection` | The event-to-progress projection behind live progress rows. |
 | `packages/project-ledger` | The Project Ledger CLI (`pl`), record templates and skill. |
@@ -175,14 +174,13 @@ A release is a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag on a proven commit of `relea
    - `package.json`
    - `packages/butler-app/client/electron/package.json`: the app version
    - `packages/butler-progress-projection/package.json`
-   - `packages/butler-npm/package.json`: the installer package version (the publish job sets it from the tag)
    - `packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml`
 2. Refresh the lockfiles: `bun install`, `npm --prefix packages/butler-app/client/electron install`, and `cargo update --workspace` in `packages/butler-agent/rust`.
 3. Write the release notes in `.github/releases/vX.Y.Z.md`. Preview tags (`vX.Y.Z-preview.N`) use `.github/releases/vX.Y.Z-preview.md`. Every macOS release, preview or stable, is signed, notarized and stapled.
 4. Merge the notes/version changes into main, then cut `release/<v>` from `origin/main` (hotfixes may start from the last tag). The push starts integration and derives both test-build versions from the release branch.
 5. The owner installs the Mac and Windows test builds while integration runs. Fix failures through `fix/<v>-<slug>` PRs into the candidate. Do not rerun passing jobs with unchanged inputs or retry flaky tests to get green; search existing issues first and link an open issue.
 6. After complete integration proof and real-machine approval, the coordinator tags that exact SHA `v<v>`. Previews have standing approval; stable tags require the owner's explicit confirmation. `release.yml` blocks builds until every integration workflow gate, including live E2E on that SHA, is green directly or through matching integration receipts.
-7. The tag builds all release platforms and publishes only after the assets and checksums exist. Stable npm publication runs through `.github/workflows/npm-publish.yml`; previews can be published by dispatching that workflow after desktop verification. After the first successful OIDC publish, the owner may delete the `NPM_ACCESS_TOKEN` repository secret. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
+7. The tag builds all release platforms and publishes only after the assets and checksums exist. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
 
 Windows tag evidence comes from `windows-preview-smoke.yml` ("Complete Windows preview verification"), `windows-installer.yml` ("windows-installer gate"), and `e2e.yml` ("E2E live tier").
 
@@ -224,8 +222,8 @@ Repeat the login only if it is revoked. The profile is never uploaded as an arti
 
 Run `gh workflow run release.yml --ref release/<v> -f reuse_run_id=RUN_ID -f tag=vX.Y.Z` after the original run completes.
 The optional tag must match that run; recovery verifies its commit and requires every platform artifact (including Windows for previews).
-It skips builds, signing and smoke checks, then repeats manifest merging, npm packing, checksums and publication with asset replacement.
-Stable npm recovery skips an already published version and sends a missing version through `.github/workflows/npm-publish.yml`; previews keep owner-controlled npm publication through that workflow. After the first successful OIDC publish, the owner may delete the `NPM_ACCESS_TOKEN` repository secret. Artifacts must still be retained; older runs without `app-darwin-arm64` cannot be recovered.
+It skips builds, signing and smoke checks, then repeats manifest merging, checksums and publication with asset replacement.
+Artifacts must still be retained; older runs without `app-darwin-arm64` cannot be recovered.
 
 ## Reporting issues
 

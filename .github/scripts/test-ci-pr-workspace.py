@@ -57,7 +57,7 @@ class PrWorkspace(unittest.TestCase):
 
     # test-category: security
     def test_pr_archive_owns_gate_and_main_keeps_separate_workspace(self):
-        flags = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
+        flags = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'workflows'], 'true')
         flags['tier'] = 'smoke'
         for event in ['pull_request', 'push', 'workflow_dispatch']:
             selected = ci_policy.rust_jobs(flags, event)

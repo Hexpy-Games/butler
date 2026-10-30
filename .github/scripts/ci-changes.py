@@ -12,7 +12,7 @@ import tempfile
 
 # Also importable by pure-logic tests loaded from an absolute file path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ci_policy import rust_jobs, windows_preview_jobs
+from ci_policy import CI_TEST_INPUTS, rust_jobs, windows_preview_jobs
 import ci_parts
 import ci_rust_inputs
 import ci_runtime_crates
@@ -29,7 +29,7 @@ WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts',
                           'tests/support/smoke-browser*', 'tests/support/bun-child-stdio.ts')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
              'packages/butler-app/main/*', 'packages/butler-app/scripts/release/*',
-             'packages/butler-app/scripts/windows/*', 'packages/butler-npm/*', 'deploy/*',
+             'packages/butler-app/scripts/windows/*', 'deploy/*',
              'tests/smoke/*update*', 'tests/smoke/quick-fixes*', 'tests/smoke/settings-release*',
              'tests/support/quick-fixes*', 'tests/support/native-app-server*',
              'tests/support/update-work*', 'tests/support/electron-page-cdp*',
@@ -64,7 +64,7 @@ WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions
 # Lint-only inputs have no product consumer. Matching consumer rules below also
 # apply: integration reuse hashes must observe release-only workflow changes.
 CI_LINT_ONLY = (
-    '.github/workflows/ci-windows-main-failure.yml', '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
+    '.github/workflows/ci-windows-main-failure.yml', '.github/workflows/release*.yml',
     '.github/workflows/post-release-verify.yml', '.github/workflows/macos-release-recovery.yml',
     '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml', '.github/workflows/ds-approval.yml', '.github/workflows/ci-store-maintenance.yml',
     '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py', '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
@@ -148,9 +148,9 @@ def github_categories(path):
         return set(GROUPS) - {'shell'}
     groups = {group for consumers, patterns in CI_CONSUMERS
               if matches(path, patterns) for group in consumers}
-    if matches(path, CI_LINT_ONLY):
-        groups.add('workflows')
-    return groups or (set(GROUPS) - {'shell'})  # Unknown legacy CI inputs fail closed.
+    if not groups and not matches(path, CI_LINT_ONLY):
+        return set(GROUPS) - {'shell'}  # Unknown legacy CI inputs fail closed.
+    return groups | {'workflows'}  # Lint and ci-invariants read every CI input.
 
 
 def categories(path, event=None):
@@ -190,6 +190,8 @@ def categories(path, event=None):
         result.add('licenses')
     if matches(path, SIGNING):
         result.add('signing')
+    if matches(path, CI_TEST_INPUTS):
+        result.add('workflows')
     # Unknown executable/configuration inputs fail closed, rather than silently
     # leaving a new package or tool untested. Assets/readme are product assets.
     if not result and not path.startswith('assets/readme/'):
@@ -293,7 +295,7 @@ ARTIFACTS = {
     'macos-native': ['agent-payload-darwin-arm64'],
     'linux-arm64-native': ['agent-payload-linux-arm64'],
     'macos-updates': ['macos-update-agent-builds'],
-    'install-x64': ['agent-linux-x64', 'butler-npm-x64'], 'install-arm64': ['agent-linux-arm64'],
+    'install-x64': ['agent-linux-x64'], 'install-arm64': ['agent-linux-arm64'],
     'install-macos': ['agent-darwin-arm64'],
     'build': ['agent-windows-x64'], 'stub': ['windows-e2e'],
     'release': ['windows-completed-installed'],
@@ -339,16 +341,6 @@ def reuse_inputs(repository, pr, workflow, branch, current, job_inputs, receipts
     except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError) as error:
         print(f'Reuse unavailable ({type(error).__name__}); unmatched checks will run.')
     return reuse, job_reuse
-
-
-def couple_perf_native(job_reuse):
-    # Perf consumes a fixture produced in its own run. Reuse the pair only
-    # when both jobs passed; a partial pair must execute together.
-    for platform in ('linux', 'linux-arm64', 'macos'):
-        pair = (platform + '-native', platform + '-perf')
-        if not all(name in job_reuse for name in pair):
-            for name in pair:
-                job_reuse.pop(name, None)
 
 
 def main_base(workflow):
@@ -415,7 +407,7 @@ def select(event, workflow):
             receipts = []
     reuse, job_reuse = reuse_inputs(repository, pr.get('number'), workflow, branch, current, job_inputs, receipts) if smoke_pr or candidate else ({}, {})
     if candidate and workflow == 'rust-quality.yml':
-        couple_perf_native(job_reuse)
+        ci_parts.couple_perf_native(job_reuse)
     parts, part_reuse, part_artifacts = ci_parts.select(workflow, job_inputs, receipts or []) if candidate else ({}, {}, [])
     outputs = {group: str(group in required and group not in reuse).lower() for group in GROUPS}
     jobs = {name: name not in job_reuse for name in job_inputs}

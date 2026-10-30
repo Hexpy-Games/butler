@@ -1,7 +1,7 @@
 # Agent install layout
 
 One layout and one `butler` command for every way the Agent gets installed:
-`install.sh`, `npx @hexpygames/butler install`, the desktop App, and the Rust
+`install.sh`, `install.ps1`, the desktop App, and the Rust
 `butler install/update/rollback/uninstall` commands. `deploy/install.sh` and
 the Rust CLI both implement this page; change it first.
 

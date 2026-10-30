@@ -33,8 +33,6 @@ Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실
   <TabPanel value="macos">
     ```bash
     curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전>
-    # Node.js 사용 시
-    npx @hexpygames/butler install
     ```
   </TabPanel>
   <TabPanel value="windows">
@@ -47,8 +45,6 @@ Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실
   <TabPanel value="linux">
     ```bash
     curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전>
-    # Node.js 사용 시
-    npx @hexpygames/butler install
     ```
   </TabPanel>
 </Tabs>
@@ -64,7 +60,7 @@ Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실
 
 같은 명령을 다시 실행해도 안전합니다. 이미 설치된 버전은 다시 풀지 않고, 데이터 폴더는 건드리지 않습니다. 이미 Butler가 실행 중이라면 `butler restart`로 새 버전을 적용합니다.
 
-옵션은 `sh -s --` 뒤에 붙입니다(npx는 `install` 뒤에 붙입니다).
+옵션은 `sh -s --` 뒤에 붙입니다.
 
 ```bash
 curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전> --no-start
@@ -168,7 +164,7 @@ butler version
 
 | 명령 | 용도 |
 | --- | --- |
-| `install --from ARCHIVE\|URL` | 내려받은 아카이브를 설치합니다. 첫 설치는 위의 npx 경로를 씁니다. |
+| `install --from ARCHIVE\|URL` | 내려받은 아카이브를 설치합니다. 첫 설치는 위의 설치 스크립트를 씁니다. |
 | `start`, `stop`, `restart` | 서비스를 시작·중지·재시작합니다. |
 | `remote status`, `remote enable`, `remote disable`, `remote pair`, `remote devices`, `remote hosts add\|remove HOST` | 원격 접근 관리 |
 | `status`, `open`, `doctor [--check NAME]`, `doctor --collect-logs` | 상태 확인, 브라우저 열기, 설치 점검 |
