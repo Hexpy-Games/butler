@@ -83,23 +83,6 @@ async fn project_hooks_a_held_session_start_runs_and_its_text_is_dropped()
     s.finish().await
 }
 
-/// The next card after `previous`, with the model's turn still going.
-async fn next_card(s: &Scenario, chat: &str, previous: &Value) -> Result<Value, HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let shown = card(s, chat).await?;
-        if shown["request_ref"] != previous["request_ref"] {
-            return Ok(shown);
-        }
-        assert!(
-            Instant::now() < deadline,
-            "no next card\n{}",
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-}
-
 const TAINTED: &str = "authority.taintReason";
 
 /// A sandboxed hook has no network, but its text can ask the model to send something out.

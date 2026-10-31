@@ -12,7 +12,7 @@ pub use denial::{
 mod credentials;
 mod hook_containment;
 pub use hook_containment::{
-    ContainedHook, HookContainment, HookSandbox, contain_hook, hook_invocation,
+    ContainedHook, HookContainment, HookSandbox, contain_hook, hook_invocation, powershell_literal,
 };
 pub mod mxc_policy;
 mod project_secrets;

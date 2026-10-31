@@ -214,7 +214,9 @@ of the first turn that reaches a folder with hooks. A folder with no hooks is ne
 asked about.
 
 After you trust a folder its hooks run, including ones added or changed later, with no
-further question. If you don't, nothing from that file runs, whatever it says later.
+further question. If the file changed while the card waited, the answer saves nothing
+and a new card lists what is there now. If you don't trust it, nothing from that file
+runs, whatever it says later.
 The answer covers that folder: a replaced or renamed one asks again. Answers are kept
 in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write. A
 scheduled run has nobody to answer, so without an answer its hooks do not run and the

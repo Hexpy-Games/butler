@@ -179,7 +179,7 @@ impl HookPort for Dispatcher {
         Box::pin(project::review(&self.0, project_dir, session_id))
     }
     fn decide_project(&self, request: ProjectHookRequest, allowed: bool) -> HookFuture<'_, ()> {
-        Box::pin(trust::decide(&self.0, request, allowed))
+        Box::pin(project::decide(&self.0, request, allowed))
     }
     fn hold_session_start(&self, envelope: HookEnvelope) {
         if let Some(session) = envelope.session_id.clone() {

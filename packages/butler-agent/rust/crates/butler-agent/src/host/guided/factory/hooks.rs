@@ -177,17 +177,22 @@ impl GuidedTurnFactoryAdapter {
     }
 }
 
-/// One card per turn and folder: slots ignore the session, so another turn or chat
-/// on the same folder must not share this one.
+/// One card per turn, folder and list of hooks: slots ignore the session, so another
+/// turn or chat on the same folder must not share this one, and a file that changed
+/// while its card waited gets a card of its own. Nothing keeps this digest afterwards.
 fn card_facts(
     request: &ProjectHookRequest,
     semantic: &SemanticTurn,
     turn: &butler_turn::btcc::TurnRecord,
     tools: &GuidedTools,
 ) -> Result<AuthorityAdmissionInput, BtccError> {
+    let listed =
+        serde_json::to_string(&request.hooks).map_err(|_| error("project_hooks_card_invalid"))?;
     let call_id = format!(
-        "{PROJECT_HOOKS_CAPABILITY}:{}:{}",
-        turn.turn_id, request.project_identity
+        "{PROJECT_HOOKS_CAPABILITY}:{}:{}:{}",
+        turn.turn_id,
+        request.project_identity,
+        butler_turn::btcc::digest_identity(&listed)
     );
     let target = request.project_path.clone();
     let normalized_input =

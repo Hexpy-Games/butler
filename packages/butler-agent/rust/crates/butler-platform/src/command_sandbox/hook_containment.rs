@@ -105,6 +105,24 @@ pub fn hook_invocation(
     })
 }
 
+/// `word` as a single-quoted PowerShell string. PowerShell reads the typographic single
+/// quotes as delimiters too, so each of them is doubled like the plain one.
+pub fn powershell_literal(word: &str) -> String {
+    let mut literal = String::with_capacity(word.len() + 2);
+    literal.push('\'');
+    for character in word.chars() {
+        if matches!(
+            character,
+            '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}'
+        ) {
+            literal.push(character);
+        }
+        literal.push(character);
+    }
+    literal.push('\'');
+    literal
+}
+
 /// The Windows sandbox builds its own environment and launches shell scripts, so the
 /// script sets `own` first, and argv becomes literal words.
 #[cfg(windows)]
@@ -114,13 +132,12 @@ pub fn hook_invocation(
     environment: &HashMap<String, String>,
     own: &HashMap<String, String>,
 ) -> Result<Invocation, SandboxError> {
-    let literal = |word: &str| format!("'{}'", word.replace('\'', "''"));
     let mut script = String::new();
     for (key, value) in sorted(own) {
         script.push_str(&format!(
             "Set-Item -LiteralPath {} -Value {}\n",
-            literal(&format!("env:{key}")),
-            literal(value)
+            powershell_literal(&format!("env:{key}")),
+            powershell_literal(value)
         ));
     }
     if let Some(text) = command {
@@ -128,10 +145,10 @@ pub fn hook_invocation(
     } else {
         let args = args.unwrap_or_default();
         let program = args.first().ok_or(SandboxError::ProjectWriteUnavailable)?;
-        script.push_str(&format!("& {}", literal(program)));
+        script.push_str(&format!("& {}", powershell_literal(program)));
         for argument in args.get(1..).unwrap_or_default() {
             script.push(' ');
-            script.push_str(&literal(argument));
+            script.push_str(&powershell_literal(argument));
         }
     }
     command_sandbox::login_shell(&script, ShellAccess::Full, environment)

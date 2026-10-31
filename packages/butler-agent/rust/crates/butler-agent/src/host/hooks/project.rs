@@ -210,6 +210,37 @@ pub(super) async fn review(
     })
 }
 
+/// Whether the folder's file still lists exactly what this card showed.
+async fn still_listed(hooks: &Hooks, request: &ProjectHookRequest) -> Result<bool, String> {
+    let root = request.project_path.clone();
+    let user_hooks = hooks.path.clone();
+    let data = hooks.data.clone();
+    let found = tokio::task::spawn_blocking(move || load(Path::new(&root), &user_hooks, &data))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(found.is_ok_and(|found| {
+        found.is_some_and(|(file, _)| {
+            file.request.project_identity == request.project_identity
+                && file.request.hooks == request.hooks
+        })
+    }))
+}
+
+/// Saves the answer to a card. Trust covers what the user was shown: if the file reads
+/// differently by now the answer saves nothing, and the review that follows asks about
+/// what is there. Refusing is never stale.
+pub(super) async fn decide(
+    hooks: &Arc<Hooks>,
+    request: ProjectHookRequest,
+    trusted: bool,
+) -> Result<(), String> {
+    if trusted && !still_listed(hooks, &request).await? {
+        tracing::info!(event = "project_hook_card_stale");
+        return Ok(());
+    }
+    trust::decide(hooks, request, trusted).await
+}
+
 /// A held SessionStart runs after its turn's context was claimed, so what it prints
 /// has no turn to join. Its side effects stand; the run log says the text was dropped.
 fn record_dropped(hooks: &Hooks, session_id: &str, context: &[HookContext]) {

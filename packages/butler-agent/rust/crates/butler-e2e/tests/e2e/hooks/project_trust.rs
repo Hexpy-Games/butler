@@ -13,6 +13,8 @@ mod modes;
 mod sandbox;
 #[path = "project_trust/slots.rs"]
 mod slots;
+#[path = "project_trust/stale_card.rs"]
+mod stale_card;
 
 pub(super) struct Project {
     pub(super) root: PathBuf,
@@ -152,6 +154,27 @@ pub(super) async fn delivered(s: &Scenario, chat: &str, turn: &str) -> Result<()
             .await?;
     assert_eq!(done["state"], "delivered", "{done}\n{}", s.agent.logs());
     Ok(())
+}
+
+/// The next card after `previous`, with the model's turn still going.
+pub(super) async fn next_card(
+    s: &Scenario,
+    chat: &str,
+    previous: &Value,
+) -> Result<Value, HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let shown = card(s, chat).await?;
+        if shown["request_ref"] != previous["request_ref"] {
+            return Ok(shown);
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no next card\n{}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
 }
 
 /// A whole turn that must not show a card.
