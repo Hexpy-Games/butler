@@ -5,13 +5,41 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
-use super::chats_initiated::support::{clock, runs, setup};
-use butler_e2e::e2e::{HarnessError, scenario::Scenario};
+use super::chats_initiated::support::{clock, runs};
+use butler_e2e::e2e::{
+    HarnessError,
+    cassette::Cassette,
+    scenario::{Scenario, Setup},
+};
 use serde_json::{Value, json};
 use std::time::Duration;
 
 mod lifecycle;
 mod manual;
+
+async fn setup(name: &str, now: &str) -> Result<(Scenario, String), HarnessError> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let address = listener.local_addr()?.to_string();
+    drop(listener);
+    let mut cassette = Cassette::load("TURN-01")?;
+    cassette.exchanges.clear();
+    // Observe normal idle writes without file-read diagnostic tracing.
+    let setup = Setup::new(name)?
+        .stub_cassette(cassette)
+        .env("TZ", "UTC")
+        .env("BUTLER_E2E_APP_NOW", now)
+        .env("BUTLER_E2E_APP_CLOCK_ADDRESS", &address);
+    crate::memory_fixture::initialize_empty(&setup.sandbox.data)?;
+    let s = setup.start().await?;
+    s.provider()?.set_chat_responder(|_| {
+        Some(butler_e2e::e2e::provider::title_response(
+            "Complete scheduled report.",
+        ))
+    });
+    let r = s.gw.patch("/settings", json!({"timezone":"UTC"})).await?;
+    assert_eq!(r.status, 200, "{}", r.text);
+    Ok((s, address))
+}
 
 async fn create(s: &Scenario, id: &str, timing: Value) -> Result<(), HarnessError> {
     let mut body = json!({"id":id,"title":"Held report","prompt_body":"Prepare a report.",
@@ -90,7 +118,7 @@ async fn hourly_hold_replays_only_latest_and_later_occurrence_does_not_freeze()
     }
     let held = runs(&s, "hourly").await?;
     assert!(held.iter().all(|r| r["state"] == "queued"), "{held:?}");
-    assert!(reports(&s, "general", "hourly").await?.is_empty());
+    assert_eq!(reports(&s, "general", "hourly").await?, [] as [Value; 0]);
     s.agent
         .launch
         .set_env("BUTLER_E2E_APP_NOW", "2026-10-27T06:31:00.000Z");
@@ -114,11 +142,14 @@ async fn hourly_hold_replays_only_latest_and_later_occurrence_does_not_freeze()
     assert_eq!(replies.len(), 1, "{replies:?}");
     assert_eq!(records[0]["scheduled_at"], "2026-10-27T06:30:00.000Z");
     assert_eq!(records[0]["id"], held[0]["id"]);
-    assert!(
-        s.provider()?
-            .requests()
-            .iter()
-            .any(|r| r.to_string().contains("2026-10-27T06:30:00.000Z"))
+    assert_eq!(replies[0]["turn_id"], records[0]["turn_id"]);
+    let turn =
+        s.gw.turn("general", records[0]["turn_id"].as_str().unwrap())
+            .await?
+            .unwrap();
+    assert_eq!(
+        turn["execution_controls"]["schedule_run"]["scheduled_at"],
+        records[0]["scheduled_at"]
     );
     // Clock advance alone: no dispatch request, settings edit, or OS wake.
     clock(&address, "2026-10-27T07:30:00.000Z").await?;

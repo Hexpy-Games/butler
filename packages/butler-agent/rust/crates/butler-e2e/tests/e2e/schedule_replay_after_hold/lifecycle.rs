@@ -164,7 +164,7 @@ async fn pause_and_delete_while_held_keep_main_delivery_semantics() -> Result<()
     dispatch(&s).await?;
     assert_eq!(runs(&s, "deleted").await?.len(), 1);
     assert_eq!(runs(&s, "deleted").await?[0]["state"], "queued");
-    assert!(reports(&s, "general", "deleted").await?.is_empty());
+    assert_eq!(reports(&s, "general", "deleted").await?, [] as [Value; 0]);
     let list = s.gw.get("/automations").await?;
     assert!(
         !list.data()["automations"]
@@ -197,14 +197,14 @@ async fn retarget_keeps_the_original_run_target_and_future_schedule_visible()
     assert_eq!(merged.len(), 1, "{merged:?}");
     assert_eq!(merged[0]["state"], "queued");
     assert_eq!(merged[0]["scheduled_at"], "2026-10-27T06:30:00.000Z");
-    assert!(s.gw.messages(&chat).await?.is_empty());
+    assert_eq!(s.gw.messages(&chat).await?, [] as [Value; 0]);
     clock(&address, "2026-10-27T07:00:00.000Z").await?;
     let records = delivered(&s, "retarget").await?;
     assert_eq!(records.len(), 1);
     assert_eq!(records[0]["id"], queued["id"]);
     assert_eq!(records[0]["target_session_id"], "general");
     assert_eq!(reports(&s, "general", "retarget").await?.len(), 1);
-    assert!(s.gw.messages(&chat).await?.is_empty());
+    assert_eq!(s.gw.messages(&chat).await?, [] as [Value; 0]);
     assert_eq!(schedule(&s, "retarget").await?["target_session_id"], chat);
     assert_eq!(
         schedule(&s, "retarget").await?["next_run_at"],
@@ -238,17 +238,17 @@ async fn held_queue_has_no_idle_writes() -> Result<(), HarnessError> {
     assert_eq!(before.len(), 1);
     assert_eq!(before[0]["state"], "queued");
     assert_eq!(before[0]["scheduled_at"], "2026-10-27T05:30:00.000Z");
-    let mut watch =
-        crate::idle_resources::writes::Watch::open_after_quiet_with_paths(
-            &s.sandbox.data,
-            &[&s.sandbox.logs],
-        )
-        .await?;
+    crate::memory_fixture::settle(&s.sandbox.data).await?;
+    let mut watch = crate::idle_resources::writes::Watch::open_after_quiet_with_paths(
+        &s.sandbox.data,
+        &[&s.sandbox.logs],
+    )
+    .await?;
     tokio::time::sleep(Duration::from_secs(60)).await;
     watch.assert_unchanged();
     drop(watch);
     assert_eq!(runs(&s, "idle").await?, before);
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(s.gw.messages("general").await?, [] as [Value; 0]);
     eprintln!("HOLD-IDLE idle_seconds=60 data_and_log_writes=0 queued_runs=1 replies=0");
     s.finish().await
 }
