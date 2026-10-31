@@ -66,6 +66,24 @@ pub struct ProcessUsage {
     pub cpu_system_time: Option<u64>,
 }
 
+impl ProcessUsage {
+    /// Cumulative user and system CPU time in a portable unit.
+    pub fn cpu_time(&self) -> Option<std::time::Duration> {
+        let total = self.cpu_user_time?.checked_add(self.cpu_system_time?)?;
+        #[cfg(target_os = "linux")]
+        {
+            let ticks = nix::unistd::sysconf(nix::unistd::SysconfVar::CLK_TCK).ok()??;
+            Some(std::time::Duration::from_secs_f64(
+                total as f64 / ticks as f64,
+            ))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Some(std::time::Duration::from_nanos(total))
+        }
+    }
+}
+
 /// Samples native process counters; unavailable metrics remain `None`.
 pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
     #[cfg(target_os = "linux")]
