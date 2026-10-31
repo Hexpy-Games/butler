@@ -125,6 +125,8 @@ try {
   if (!await app.page.expression<boolean>(`Boolean(document.querySelector('${pane}'))`)) await togglePane(app, true);
   await nativeAligned(app);
 
+  // A window fully covered by others paints nothing and cannot capture: this measures nothing then.
+  assert.equal(await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).view.webContents.executeJavaScript('document.visibilityState')`), "visible", "the page is visible before the first motion");
   const rest = await app.main<{ x: number }>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).slot`);
   const restGap = await app.page.expression<number>("document.querySelector('[data-slot=adaptive-shell-split-pane]').getBoundingClientRect().left - document.querySelector('[data-slot=adaptive-shell-split-chat]').getBoundingClientRect().right");
 
