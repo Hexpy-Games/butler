@@ -138,12 +138,11 @@ pub(super) fn ready(db: &rusqlite::Connection) -> std::io::Result<bool> {
     .map_err(std::io::Error::other)
 }
 
-/// Correct only the keyed projection and references belonging to the departing
-/// session. Other sessions' references survive. The caller owns the transaction.
+/// Correct only the keyed ownership projection. Transcript references follow
+/// their session through transfer or removal. The caller owns the transaction.
 pub(super) fn correct_owner(
     db: &rusqlite::Connection,
     id: &str,
-    source: &str,
     owner: &str,
 ) -> std::io::Result<()> {
     if !ready(db)? {
@@ -152,11 +151,6 @@ pub(super) fn correct_owner(
     db.execute(
         "UPDATE outputs SET session=?2 WHERE id=?1 AND session<>?2",
         params![id, owner],
-    )
-    .map_err(std::io::Error::other)?;
-    db.execute(
-        "UPDATE output_refs SET session=?3 WHERE id=?1 AND session=?2",
-        params![id, source, owner],
     )
     .map_err(std::io::Error::other)?;
     Ok(())
@@ -172,7 +166,8 @@ pub(super) fn transfer(store: &OutputStore, source: &str, target: &str) -> std::
     if !ready(&tx)? {
         return Ok(());
     }
-    let ids = tx.prepare("SELECT id FROM outputs WHERE session=?1 UNION SELECT id FROM output_refs WHERE session=?1")
+    let ids = tx
+        .prepare("SELECT id FROM outputs WHERE session=?1")
         .map_err(std::io::Error::other)?
         .query_map([source], |r| r.get::<_, String>(0))
         .map_err(std::io::Error::other)?
@@ -184,7 +179,7 @@ pub(super) fn transfer(store: &OutputStore, source: &str, target: &str) -> std::
         if let Ok(output) = store.read(&id)
             && output.session_id != source
         {
-            correct_owner(&tx, &id, source, &output.session_id)?;
+            correct_owner(&tx, &id, &output.session_id)?;
         }
     }
     for table in ["outputs", "output_refs"] {

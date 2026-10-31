@@ -2,7 +2,7 @@
 use super::store::{Output, OutputStore, error};
 use butler_platform::sqlite;
 use rusqlite::{Connection, params};
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::BTreeSet, io::Read, path::Path};
 
 mod backfill;
 pub(super) use backfill::run;
@@ -140,6 +140,28 @@ fn queue(db: &Connection, sha: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+/// A missing manifest or unparseable migrated manifest can be collected from
+/// indexed references. An I/O failure leaves ownership unknown and must replay.
+fn deletion_manifest(
+    store: &OutputStore,
+    id: &str,
+    migrated: bool,
+) -> std::io::Result<Option<Output>> {
+    let mut bytes = Vec::new();
+    let read = butler_platform::secure_fs::open_read_no_follow(&store.manifest(id)?)
+        .and_then(|mut file| file.read_to_end(&mut bytes));
+    match read {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    }
+    match serde_json::from_slice(&bytes) {
+        Ok(output) => Ok(Some(output)),
+        Err(_) if migrated => Ok(None),
+        Err(e) => Err(std::io::Error::other(e)),
+    }
+}
+
 /// Persist candidates before deleting any manifest. Until migration completes,
 /// the session's own marker directory supplies references absent from the index.
 pub(super) fn queue_session(
@@ -165,24 +187,18 @@ pub(super) fn queue_session(
     let mut candidates = BTreeSet::new();
     let mut owned = Vec::new();
     for id in ids {
-        match store.read(&id) {
-            Ok(output) if output.session_id != session => {
-                super::index::correct_owner(&tx, &id, session, &output.session_id)?;
+        match deletion_manifest(store, &id, migrated)? {
+            Some(output) if output.session_id != session => {
+                super::index::correct_owner(&tx, &id, &output.session_id)?;
                 continue;
             }
-            Ok(output) => {
-                if !migrated {
-                    for sha in shas(&output) {
-                        candidates.insert(sha.to_owned());
-                        queue(&tx, sha)?;
-                    }
+            Some(output) if !migrated => {
+                for sha in shas(&output) {
+                    candidates.insert(sha.to_owned());
+                    queue(&tx, sha)?;
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            // Migrated deletion previously used only blob rows, even when the
-            // manifest could not be read. Preserve that recovery behavior.
-            Err(_) if migrated => {}
-            Err(e) => return Err(e),
+            _ => {}
         }
         for sha in strings(&tx, "SELECT sha FROM output_blobs WHERE output_id=?1", &id)? {
             queue(&tx, &sha)?;
