@@ -14,6 +14,7 @@ import { FILES, IMAGE_SIZE, headerLayout, seedFileSession, viewerGeometry, withR
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { verifyPaneToggleFill } from "../support/pane-toggle-fill.ts";
 import { auditSessionInfoFocus, installSessionBrowser } from "../support/session-info-fixtures.ts";
+import { watchLeavingPane } from "../support/split-motion-frames.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 
 const cases = ["light", "dark"];
@@ -71,7 +72,7 @@ try {
   const slid = slotMotion(page);
   await aside.locator('[data-slot="document-tile"]').getByText(FILES.markdown, { exact: true }).click();
   await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
-  assert((await slid).includes("transform"), "the slot slides in");
+  assert((await slid).includes("left"), "the slot slides in");
   await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
   assert.equal(await aside.locator('[data-test-class="artifact-viewer"]').count(), 0, "nothing renders in the 세션 정보 pane");
   assert.equal(await page.locator('[data-test-class="browser-area"]').count(), 0, "the browser stays closed");
@@ -170,6 +171,20 @@ try {
   await browserToggle.click();
   await split.waitFor({ state: "detached" });
 
+  // The last file closes with the browser shut: the slot leaves with the file still on it.
+  await infoToggle.click();
+  await aside.locator('[data-slot="document-tile"]').getByText(FILES.code, { exact: true }).click();
+  await viewer.locator("pre").waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-slot="adaptive-shell-split-pane"]')?.getAnimations().every((animation) => animation.playState !== "running"));
+  const leaving = watchLeavingPane(page, '[data-test-class="file-viewer"] pre');
+  await viewer.locator('[data-test-class="file-viewer-close"]').click();
+  const leavingFrames = await leaving;
+  assert(leavingFrames.total > 0, "closing the last file moves the slot");
+  assert.equal(leavingFrames.missing, 0, `the leaving slot keeps showing the file (${JSON.stringify(leavingFrames)})`);
+  await split.waitFor({ state: "detached" });
+  await infoToggle.click();
+  await aside.waitFor({ state: "hidden" });
+
   // Reduced motion: the slot fades in without travel.
   await page.emulateMedia({ reducedMotion: "reduce" });
   await infoToggle.click();
@@ -177,7 +192,7 @@ try {
   await aside.locator('[data-slot="document-tile"]').getByText(FILES.code, { exact: true }).click();
   await viewer.locator("pre").waitFor();
   const reduced = await faded;
-  assert(reduced.includes("opacity") && !reduced.includes("transform"), `reduced motion fades the slot in: ${reduced}`);
+  assert(reduced.includes("opacity") && !reduced.includes("left"), `reduced motion fades the slot in: ${reduced}`);
   await viewer.locator('[data-test-class="file-viewer-close"]').click();
   await split.waitFor({ state: "detached" });
 
