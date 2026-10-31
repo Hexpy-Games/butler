@@ -97,22 +97,6 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.create_project_owned(request).await })
     }
-    fn project_folder_question(
-        &self,
-        project_id: String,
-    ) -> ApplicationFuture<Option<butler_core::hooks::ProjectHookRequest>> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.project_folder_question(project_id).await })
-    }
-    fn answer_project_folder(
-        &self,
-        project_id: String,
-        hooks: Vec<butler_core::hooks::ProjectHookLine>,
-        trusted: bool,
-    ) -> ApplicationFuture<()> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.answer_project_folder(project_id, hooks, trusted).await })
-    }
     fn list_projects(&self, include_sessions: bool) -> ApplicationFuture<AppProjectList> {
         let this = self.clone_handle();
         Box::pin(async move { this.list_projects(include_sessions).await })
