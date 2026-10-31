@@ -2,7 +2,8 @@ import { Fragment } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { isAbsolutePath } from "@/app/approvalTargets.ts";
-import type { ApprovalActionKind } from "@/app/approvalRequest.ts";
+import { isCommandKind, type ApprovalActionKind } from "@/app/approvalRequest.ts";
+import { visibleText } from "@/app/visibleText.ts";
 import type { ApprovalRisk } from "@/app/types.ts";
 import {
   ImageIcon, Pencil, Button, ButtonContainer, Clock3, ComposerDecisionPanel, Folder, GitBranch, Globe2, ListChecks, McpServer,
@@ -21,9 +22,6 @@ const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "war
 
 const hookCopy = () => appCopy.interfaceTemplates.approvalRequest.projectHooks;
 
-/** Every hook stays in the card's scroll area: what is not on screen would still run. */
-const FULL_DETAIL_KINDS: ReadonlySet<ApprovalActionKind> = new Set(["manage_schedule", "generate_image", "edit_image", "project_hooks"]);
-
 /** A hook line's text, then what the card says about it: its own element in its own tone, which a command's text never has. */
 function hookLine(text: string, decision: ComposerAuthorityDecision) {
   const tags = decision.hookTags?.get(text);
@@ -34,8 +32,10 @@ function hookLine(text: string, decision: ComposerAuthorityDecision) {
 function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
   const shorten = (path: string) => isAbsolutePath(path) && path.length > 64
     ? `${path.slice(0, 30)}…${path.slice(-25)}` : path;
-  const display = decision.pathDetails?.includes(text) ? shorten(text)
-    : text === decision.title ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : text;
+  const isTitle = text === decision.title;
+  const shown = isTitle ? text : visibleText(text);
+  const display = decision.pathDetails?.includes(text) ? shorten(shown)
+    : isTitle ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : shown;
   return display === text ? text : <span title={text} aria-label={text}>{display}</span>;
 }
 
@@ -44,6 +44,8 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
   const { handoff } = decision;
   if (handoff) return <ComposerBrowserHandoffSurface placement={placement} decision={{ ...decision, handoff }} />;
   const Icon = KIND_ICONS[decision.actionKind];
+  // Commands, hooks and schedules stay whole in the scroll area; a clamp would hide part of them while Allow is active.
+  const unclamped = isCommandKind(decision.actionKind) || ["manage_schedule", "generate_image", "edit_image", "project_hooks"].includes(decision.actionKind);
   return <ComposerDecisionPanel
     placement={placement}
     media={decision.media}
@@ -52,8 +54,8 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     title={decision.title}
     details={decision.details}
     renderText={(text) => decision.hookTags ? hookLine(text, decision) : approvalPathText(text, decision)}
-    detailsShowMoreLabel={FULL_DETAIL_KINDS.has(decision.actionKind) ? undefined : appCopy.conversation.messageActions.showMore}
-    detailsShowLessLabel={FULL_DETAIL_KINDS.has(decision.actionKind) ? undefined : appCopy.conversation.messageActions.showLess}
+    detailsShowMoreLabel={unclamped ? undefined : appCopy.conversation.messageActions.showMore}
+    detailsShowLessLabel={unclamped ? undefined : appCopy.conversation.messageActions.showLess}
     onOpen={decision.onOpenSource}
     error={decision.error}
     aside={<>

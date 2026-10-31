@@ -179,3 +179,23 @@ test("a structured request reads as a plain question with its examples in full, 
     expect(decisionButtons(rendered.container)).toEqual(["거절", "이번만 허용", ""]);
   }
 });
+
+// test-category: security
+test("a command renders whole and exact: newlines and invisible characters show as escapes, and no clamp hides its tail", async () => {
+  const { normalizeApprovalSummary } = await import("@/app/approvalRequest.ts");
+  const command = `./run --password\n./evil.sh \u202Ex\u200Bz\u00A0${"long-argument-".repeat(80)}`;
+  const approval = normalizeApprovalSummary({ action_kind: "run_command", count: 1, risk: "high",
+    targets: [{ kind: "folder", path: "garden" }], examples: [command] })!;
+  const { container } = await renderDecision([{ ...renameCard, approval }]);
+  const lines = container.querySelector('[data-slot="composer-decision-details"]')!;
+  expect(lines.textContent).toContain("./run --password⏎./evil.sh ‹U+202E›x‹U+200B›z‹U+00A0›long-argument-");
+  expect(lines.textContent).not.toMatch(/[\n\u202E\u200B\u00A0]/u);
+  expect(lines.textContent!.endsWith("long-argument-")).toBe(true);
+  expect(lines.querySelector("[data-clamped]")).toBeNull();
+  expect(container.textContent).not.toContain("더 보기");
+  // Other kinds still clamp long text behind "더 보기".
+  await act(async () => { root?.unmount(); });
+  dom?.window.close();
+  const edit = await renderDecision([renameCard]);
+  expect(edit.container.querySelector('[data-slot="composer-decision-details"] [data-clamped="true"]')).not.toBeNull();
+});
