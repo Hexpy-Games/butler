@@ -104,12 +104,13 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
                 .and_then(Value::as_str)
                 .ok_or(Error::Invalid("epic id"))?;
             let progress = progress(db, id, views)?;
-            let delete_running = super::epic_delete_running(db, id)?;
             if object.contains_key("epic_id") {
                 object.insert("progress".into(), progress);
             } else {
+                let delete_blocked = super::epic_delete_running(db, id)?;
+                object.insert("delete_blocked".into(), json!(delete_blocked));
                 object.insert("task_counts".into(), progress["counts"].clone());
-                object.insert("running".into(), json!(delete_running));
+                object.insert("running".into(), progress["running"].clone());
             }
         }
         for key in [

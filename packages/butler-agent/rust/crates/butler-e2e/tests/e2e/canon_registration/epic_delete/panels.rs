@@ -116,6 +116,16 @@ mod requires_e2e_fixtures {
     #[tokio::test]
     async fn epic_delete_cannot_reopen_an_in_flight_hold_panel() -> Result<(), HarnessError> {
         butler_e2e::gate!();
+        in_flight_panel(true).await
+    }
+
+    #[tokio::test]
+    async fn epic_delete_first_in_flight_panel_has_terminal_text() -> Result<(), HarnessError> {
+        butler_e2e::gate!();
+        in_flight_panel(false).await
+    }
+
+    async fn in_flight_panel(settled: bool) -> Result<(), HarnessError> {
         let (mut s, _, server, project, _) =
             setup("EPIC-DELETE-PANEL-RACE", Access::AskAlways).await?;
         let epic = create(&s, &project).await?;
@@ -143,6 +153,9 @@ mod requires_e2e_fixtures {
             |r| r.get(0),
         )?;
         canon.execute("INSERT INTO canon_intents(op_id,kind,payload_json,state,created_at) VALUES('in-flight-panel','canon_hold',?1,'pending',0)", [json!({"session_id":owner,"epic_id":id,"epic_title":"삭제할 과제","state":"pending"}).to_string()])?;
+        let app =
+            butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+        app.execute_batch("CREATE TABLE panel_attempts(n INTEGER); CREATE TRIGGER observe_panel BEFORE INSERT ON app_initiated_messages WHEN NEW.source_key='in-flight-panel' BEGIN INSERT INTO panel_attempts VALUES(1); END;")?;
         s.gw = s.agent.start_again().await?;
         let deadline = std::time::Instant::now() + Duration::from_secs(15);
         while !release.with_extension("held").exists() {
@@ -153,6 +166,11 @@ mod requires_e2e_fixtures {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         assert_eq!(delete(&s, &epic, &epic["revision"]).await?.status, 200);
+        // Commit the terminal App projection while the earlier snapshot is paused.
+        if settled {
+            app.execute("INSERT INTO app_initiated_messages(id,chat_id,kind,source_key,text,payload_json,state,created_at) VALUES('settled-in-flight',?1,'canon_hold','in-flight-panel','Deleted',?2,'posted','2026-01-01')", rusqlite::params![home,json!({"panel":{"epic_id":id,"state":"deleted"}}).to_string()])?;
+        }
+        app.execute_batch("CREATE TABLE reopened_panels(n INTEGER); CREATE TRIGGER observe_reopen AFTER UPDATE OF payload_json ON app_initiated_messages WHEN NEW.source_key='in-flight-panel' AND json_extract(NEW.payload_json,'$.panel.state')='pending' BEGIN INSERT INTO reopened_panels VALUES(1); END;")?;
         std::fs::write(&release, b"continue")?;
         let app =
             butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
@@ -166,7 +184,32 @@ mod requires_e2e_fixtures {
             assert!(std::time::Instant::now() < deadline);
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
+        while app.query_row::<i64, _, _>("SELECT count(*) FROM panel_attempts", [], |r| r.get(0))?
+            < 2
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "stale projection did not finish"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        if settled {
+            assert_eq!(
+                app.query_row::<i64, _, _>("SELECT count(*) FROM reopened_panels", [], |r| r
+                    .get(0))?,
+                0
+            );
+        }
         wait_settled(&app, "in-flight-panel").await?;
+        let text: String = app.query_row(
+            "SELECT text FROM app_initiated_messages WHERE source_key='in-flight-panel'",
+            [],
+            |r| r.get(0),
+        )?;
+        assert!(
+            !text.contains("막혀") && !text.contains("blocked"),
+            "{text}"
+        );
         assert_eq!(
             app.query_row::<String, _, _>(
                 "SELECT chat_id FROM app_initiated_messages WHERE source_key='in-flight-panel'",

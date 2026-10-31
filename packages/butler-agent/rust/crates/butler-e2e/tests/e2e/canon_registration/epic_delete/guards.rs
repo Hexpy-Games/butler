@@ -63,7 +63,7 @@ async fn epic_delete_refuses_started_unlinked_moved_and_live_bound_turns()
         assert_eq!(refusal.status, 409, "{kind}: {}", refusal.text);
         assert_eq!(refusal.body["error"]["code"], "running");
         assert_eq!(
-            data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200)["running"],
+            data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200)["delete_blocked"],
             true
         );
         let refused =
@@ -79,16 +79,12 @@ async fn epic_delete_refuses_started_unlinked_moved_and_live_bound_turns()
             s.gw.wait_terminal(&home, &turn, Duration::from_secs(60))
                 .await?;
         }
-        // A held row with no live turn is intentionally deletable.
+        // A finished turn needs no artificial hold to become deletable.
         if kind == "moved" {
             canon.execute_batch("DROP TRIGGER hold_cancellation")?;
         }
         canon.execute(
             "DELETE FROM canon_step_cancellations WHERE epic_id=?1",
-            [id],
-        )?;
-        canon.execute(
-            "UPDATE canon_session_queue SET hold_reason='blocked' WHERE epic_id=?1",
             [id],
         )?;
         assert_eq!(delete(&s, &epic, &epic["revision"]).await?.status, 200);
@@ -148,7 +144,16 @@ async fn epic_delete_proposal_refuses_another_project() -> Result<(), HarnessErr
     )
     .await?;
     assert_eq!(asks(&s, &chat).await?["open_count"], 0);
-    assert!(stub::results(&script).iter().any(|r| r["ok"] == false));
+    assert!(
+        stub::results(&script)
+            .iter()
+            .any(|r| r["error"]["code"] == "work_model_invalid"
+                && r["error"]["message"]
+                    .as_str()
+                    .is_some_and(|s| s.contains("operation outside project"))),
+        "{:?}",
+        stub::results(&script)
+    );
     assert_eq!(
         s.gw.get(&format!("/canon/epics/{}", epic["id"].as_str().unwrap()))
             .await?
@@ -196,6 +201,18 @@ async fn epic_delete_missing_target_settles_the_ask_without_future_reminders()
                 .contains("## Open asks")
         );
     }
+    assert!(
+        script.requests.lock().unwrap()[start + 1..]
+            .iter()
+            .any(|request| {
+                request["input"].as_array().unwrap().iter().any(|item| {
+                    item["output"]
+                        .as_str()
+                        .is_some_and(|output| output.contains("canon_not_found"))
+                })
+            }),
+        "the same turn receives the terminal refusal"
+    );
     script.requests.lock().unwrap().clear();
     s.turn(&chat, "다음 요청").await?;
     assert!(script.requests.lock().unwrap().iter().all(|request| {

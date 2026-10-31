@@ -124,6 +124,12 @@ pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) 
             ready(tx, ctx, text(&owner, "session_id")?)?;
         }
     }
+    if matches!(
+        outcome,
+        "delivered" | "cancelled" | "failed" | "turn_interrupted"
+    ) {
+        tx.execute("UPDATE canon_session_queue SET turn_ended_at=COALESCE(turn_ended_at,?2) WHERE step_op_id=?1", params![op,ctx.now])?;
+    }
     let item = rows(tx, sql::STEP, [op])?.into_iter().next();
     if let Some(item) = item
         && item["state"] == "running"

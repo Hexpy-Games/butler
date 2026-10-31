@@ -36,6 +36,14 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
             FROM canon_session_queue q INDEXED BY canon_queue_active_epic JOIN canon_epics e ON e.id=q.epic_id LEFT JOIN canon_intents i ON i.op_id=q.step_op_id
             WHERE q.state IN ('waiting','running','held') GROUP BY q.session_id,q.chain_id")?;
     }
+    let has_receipt: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('canon_session_queue') WHERE name='turn_ended_at')",
+        [], |r| r.get(0),
+    )?;
+    if !has_receipt {
+        connection
+            .execute_batch("ALTER TABLE canon_session_queue ADD COLUMN turn_ended_at INTEGER")?;
+    }
     proposals::upgrade(connection)?;
     connection.execute_batch(include_str!("work_schema/mcp.sql"))?;
     connection.execute_batch(include_str!("work_schema/activity.sql"))?;

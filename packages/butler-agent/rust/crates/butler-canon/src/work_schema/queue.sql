@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS canon_session_queue (
   started_at INTEGER,
   btcc_work_id TEXT,
   result_reported_at INTEGER,
+  turn_ended_at INTEGER,
   PRIMARY KEY(session_id,epic_id)
 );
 CREATE TABLE IF NOT EXISTS canon_session_queue_chains (

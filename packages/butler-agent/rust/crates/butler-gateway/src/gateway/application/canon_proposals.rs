@@ -77,6 +77,7 @@ pub(super) async fn resolve(
         .proposal("raw".into(), json!({"id":id}))
         .await?;
     if input["by"] == "chat"
+        && input["outcome"] == "accepted"
         && row["document"]["changes"]
             .as_array()
             .is_some_and(|changes| changes.iter().any(|change| change["op"] == "epic.delete"))

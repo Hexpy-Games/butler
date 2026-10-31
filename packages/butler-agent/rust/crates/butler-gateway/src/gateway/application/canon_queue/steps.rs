@@ -69,6 +69,8 @@ pub(in crate::gateway::application) async fn deliver(
     else {
         return Ok(());
     };
+    #[cfg(feature = "e2e-fixtures")]
+    super::super::canon::hold(app, "canon_step_admission").await?;
     app.send_message(SendMessageCommand {
         chat_id: chat,
         request: MessageSendRequest {

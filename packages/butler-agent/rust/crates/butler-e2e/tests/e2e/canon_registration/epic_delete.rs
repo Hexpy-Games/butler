@@ -4,6 +4,7 @@ mod guards;
 mod panels;
 mod queue;
 mod receipts;
+mod round3;
 
 async fn create(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
     Ok(data(
@@ -138,6 +139,15 @@ async fn epic_delete_http_preserves_conversation_specs_and_history_after_restart
         .await?,
         200,
     );
+    canon.execute("INSERT INTO canon_intents(op_id,kind,payload_json,state,created_at) VALUES('delete-pending-step','canon_step',?1,'pending',0)", [json!({"session_id":owner,"epic_id":id}).to_string()])?;
+    assert_eq!(
+        canon.query_row::<i64, _, _>(
+            "SELECT count(*) FROM canon_intents WHERE op_id='delete-pending-step'",
+            [],
+            |r| r.get(0)
+        )?,
+        1
+    );
     let before: i64 =
         canon.query_row("SELECT count(*) FROM btcc_guided_works", [], |r| r.get(0))?;
     let stale = delete(&s, &epic, &json!(-1)).await?;
@@ -155,7 +165,6 @@ async fn epic_delete_http_preserves_conversation_specs_and_history_after_restart
         "canon_session_epics",
         "canon_epic_work_links",
         "canon_epic_tags",
-        "canon_step_cancellations",
     ] {
         assert_eq!(count(&canon, table, id), 0, "{table}");
     }

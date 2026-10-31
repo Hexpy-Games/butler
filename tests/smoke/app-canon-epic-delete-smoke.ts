@@ -42,7 +42,7 @@ try {
         const body = await response.json();
         if (!response.ok()) return route.fulfill({ response });
         const canon = body.data as CanonOverview;
-        for (const row of [...canon.backlog, ...canon.plans.flatMap(plan => plan.works)]) if (row.id === epic.id) row.running = running;
+        for (const row of [...canon.backlog, ...canon.plans.flatMap(plan => plan.works)]) if (row.id === epic.id)  { row.delete_blocked = running; row.running = process.env.BUTLER_R3_BASELINE === "1" ? running : false; }
         await route.fulfill({ response, json: body });
       });
       await page.route(`**/canon/epics/${epic.id}`, async route => {
@@ -50,7 +50,7 @@ try {
         const response = await route.fetch({ headers: { ...route.request().headers(), origin: new URL(server.url).origin } });
         if (!response.ok()) return route.fulfill({ response });
         const body = await response.json();
-        body.data.running = running; await route.fulfill({ response, json: body });
+        body.data.delete_blocked = running; body.data.running = process.env.BUTLER_R3_BASELINE === "1" ? running : false; await route.fulfill({ response, json: body });
       });
       await page.route(`**/canon/epics/${epic.id}/progress`, route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: {
         epic_id: epic.id, stage: null, stage_history: [], actions: [], counts: { completed: 0, total: 0 }, running: false, disposition: null,
@@ -59,6 +59,9 @@ try {
       await showCanonSidebar(page);
       await openCanonBoard(page);
       await page.screenshot({ path: join(shots, `${name}-before.png`), animations: "disabled" });
+      const epicCard = page.locator(`[data-kanban-item="${epic.id}"]`);
+      assert.equal(await epicCard.locator('[data-slot="spinner"]').count(), process.env.BUTLER_R3_BASELINE === "1" ? 1 : 0);
+      await epicCard.screenshot({ path: join(shots, `${name}-bound-unrelated-turn.png`), animations: "disabled" });
       const card = page.locator(`[data-kanban-item="${epic.id}"]`).getByRole("button").first();
       await card.click();
       const detail = page.locator('[data-test-class="canon-epic-detail"]');

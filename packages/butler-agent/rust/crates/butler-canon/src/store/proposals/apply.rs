@@ -101,9 +101,15 @@ pub(super) fn validate(
         return Err(Error::Invalid("new project requires an epic"));
     }
     tx.execute_batch("SAVEPOINT proposal_validate")?;
-    let result = changes
-        .iter()
-        .try_for_each(|change| operations::execute(tx, ctx, project, change).map(|_| ()));
+    let result =
+        changes.iter().try_for_each(
+            |change| match operations::execute(tx, ctx, project, change) {
+                // Drafts may be requested by the very turn that blocks deletion.
+                // Scope and revision were already checked by the writer.
+                Err(Error::Running) if change["op"] == "epic.delete" => Ok(()),
+                result => result.map(|_| ()),
+            },
+        );
     tx.execute_batch("ROLLBACK TO proposal_validate; RELEASE proposal_validate")?;
     result
 }

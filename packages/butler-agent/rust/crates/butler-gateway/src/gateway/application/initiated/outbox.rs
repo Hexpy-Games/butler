@@ -194,9 +194,19 @@ pub(in crate::gateway::application) fn update_payload(
     payload: &Value,
     now: &str,
 ) -> Result<Option<crate::gateway::AppEventEnvelope>, AppStorageError> {
+    update_payload_with_text(db, source, payload, None, now)
+}
+
+pub(in crate::gateway::application) fn update_payload_with_text(
+    db: &Connection,
+    source: &str,
+    payload: &Value,
+    text: Option<&str>,
+    now: &str,
+) -> Result<Option<crate::gateway::AppEventEnvelope>, AppStorageError> {
     db.execute(
-        "UPDATE app_initiated_messages SET payload_json=?1 WHERE source_key=?2",
-        params![payload.to_string(), source],
+        "UPDATE app_initiated_messages SET payload_json=?1,text=COALESCE(?3,text) WHERE source_key=?2",
+        params![payload.to_string(), source, text],
     )
     .map_err(AppStorageError::sqlite)?;
     let id: Option<String> = db
@@ -210,8 +220,8 @@ pub(in crate::gateway::application) fn update_payload(
         .flatten();
     id.map(|id| {
         db.execute(
-            "UPDATE messages SET updated_at=?1 WHERE id=?2",
-            params![now, id],
+            "UPDATE messages SET updated_at=?1,text=COALESCE(?3,text) WHERE id=?2",
+            params![now, id, text],
         )
         .map_err(AppStorageError::sqlite)?;
         message_event(db, "message.updated", &id, now)

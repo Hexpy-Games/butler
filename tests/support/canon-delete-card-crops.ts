@@ -24,8 +24,9 @@ export async function captureDeleteCards(page: Page, server: NativeAppServerHand
     await route.fulfill({ response, json: body });
   });
   const chat = await server.api<{ session: { id: string } }>("/sessions", post({ kind: "project", project_id: project, title: "과제 변경 검토" }));
+  const plan = await server.api<{ id: string }>(`/projects/${project}/canon/plans`, post({ title: "교체 계획" }));
   const deletion = { op: "epic.delete", id: epic.id, expected_revision: epic.revision };
-  arm({ name: "canon_propose", arguments: { project_id: project, summary: "과제 교체", changes: [{ op: "epic.create", title: "새로 등록할 과제" }, deletion] } });
+  arm({ name: "canon_propose", arguments: { project_id: project, summary: "과제 교체", changes: [{ op: "epic.create", title: "새로 등록할 과제", plan_id: plan.id }, deletion] } });
   await page.evaluate(id => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({ schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), active_session_id: id, left_open: false, right_open: false })), chat.session.id);
   await page.reload();
   const compact = page.locator('[data-slot="composer-compact-preview"]');
@@ -38,9 +39,19 @@ export async function captureDeleteCards(page: Page, server: NativeAppServerHand
   await mixed.getByText("새로 등록할 과제", { exact: true }).waitFor();
   await settleCrop(page, mixed);
   await mixed.screenshot({ path: join(shots, `${name}-mixed-card.png`), animations: "disabled" });
+  if (process.env.BUTLER_R3_BASELINE !== "1") await mixed.getByText("‘교체 계획’에 과제 등록", { exact: true }).waitFor();
+  await captureEnglishCard(page, server, mixed, shots, name, "mixed-card", "Add and delete Epics");
   const pending = await server.api<{ asks: Array<{ ask_id: string; source_turn_id: string }> }>(`/sessions/${chat.session.id}/pending-asks`);
   const anchor = pending.asks[0]!; assert(anchor);
   const draft = async (changes: unknown[]) => (await server.api<{ ask_id: string }>(`/sessions/${chat.session.id}/canon/propose`, post({ turn_id: anchor.source_turn_id, call_id: `delete-${changes[0] && Date.now()}`, apply: false, arguments: { project_id: project, summary: "과제 변경", changes } }))).ask_id.slice(6);
+  const editTarget = await server.api<EpicDetail>(`/projects/${project}/canon/epics`, post({ title: "변경할 과제" }));
+  const mixedEditId = await draft([{ op: "epic.edit", id: editTarget.id, expected_revision: editTarget.revision, description: "변경된 내용" }, deletion]);
+  await page.reload();
+  const mixedEdit = page.locator(`[data-proposal-id="${mixedEditId}"]`);
+  await mixedEdit.getByRole("button", { name: process.env.BUTLER_R3_BASELINE === "1" ? "과제 삭제" : "과제 변경 및 삭제", exact: true }).waitFor();
+  await settleCrop(page, mixedEdit);
+  await mixedEdit.screenshot({ path: join(shots, `${name}-edit-delete-card.png`), animations: "disabled" });
+  await captureEnglishCard(page, server, mixedEdit, shots, name, "edit-delete-card", process.env.BUTLER_R3_BASELINE === "1" ? "Delete Epic" : "Change and delete Epics");
   const onlyId = await draft([deletion]);
   await page.reload();
   const only = page.locator(`[data-proposal-id="${onlyId}"]`);
@@ -68,4 +79,14 @@ export async function captureDeleteMenu(page: Page, shots: string, name: string)
   const right = Math.min(page.viewportSize()!.width, Math.ceil(Math.max(...boxes.map(box => box!.x + box!.width)) + 4));
   const bottom = Math.min(page.viewportSize()!.height, Math.ceil(Math.max(...boxes.map(box => box!.y + box!.height)) + 4));
   await page.screenshot({ path: join(shots, `${name}-crop.png`), clip: { x: left, y: top, width: right - left, height: bottom - top }, animations: "disabled" });
+}
+
+async function captureEnglishCard(page: Page, server: NativeAppServerHandle, card: ReturnType<Page["locator"]>, shots: string, name: string, kind: string, button: string) {
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en" }) });
+  await page.reload();
+  await card.getByRole("button", { name: button, exact: true }).waitFor();
+  await settleCrop(page, card);
+  await card.screenshot({ path: join(shots, `${name}-${kind}-en.png`), animations: "disabled" });
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko" }) });
+  await page.reload();
 }

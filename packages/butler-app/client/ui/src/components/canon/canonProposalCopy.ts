@@ -1,6 +1,8 @@
 import { appCopy } from "@/app/copy.ts";
 export const canonProposalCopy = (ko: boolean) => ({
   addDelete: appCopy.canon.deletion.addDelete,
+  changeDelete: appCopy.canon.deletion.changeDelete,
+  changed: appCopy.canon.deletion.changed,
   deleteEpic: appCopy.canon.deletion.action,
   deleted: appCopy.canon.deletion.deleted,
   deleteDetail: appCopy.canon.deletion.detail,

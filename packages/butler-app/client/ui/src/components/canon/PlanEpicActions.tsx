@@ -27,7 +27,7 @@ export function PlanEpicActions({ epic, plans, busy, onWrite, onOpen }: {
         {options.map(plan => <DropdownMenuItem key={plan.id ?? "backlog"} disabled={epic.plan_id === plan.id}
           onSelect={() => onWrite(epic, { plan_id: plan.id }, copy.moved(plan.title))}>{plan.title}</DropdownMenuItem>)}
       </DropdownMenuSubContent></DropdownMenuSub>
-      <Tooltip wrap label={epic.running ? copy.deletion.running : undefined}><Stack><DropdownMenuItem variant="destructive" disabled={busy || epic.running} onSelect={deletion.request}>{copy.deletion.action}</DropdownMenuItem></Stack></Tooltip>
+      <Tooltip wrap label={epic.delete_blocked ? copy.deletion.running : undefined}><Stack><DropdownMenuItem variant="destructive" disabled={busy || epic.delete_blocked} onSelect={deletion.request}>{copy.deletion.action}</DropdownMenuItem></Stack></Tooltip>
     </DropdownMenuContent></DropdownMenu>
   </ButtonContainer>{deletion.dialog}</>;
 }

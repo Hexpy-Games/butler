@@ -31,6 +31,7 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
   const chooseProject = !projectId || !("id" in p.project) || p.project.id !== projectId;
   const projectName = target === "@new" ? `${copy.newProject}: ${name}` : projects.find(project => project.id === target)?.display_name ?? ("name" in p.project ? p.project.name : "");
   const deletes = p.changes.some(change => change.op === "epic.delete");
+  const mixedDelete = deletes && p.changes.some(change => change.op !== "epic.delete");
   const creates = p.changes.some(change => change.op === "epic.create");
   const apply = async (outcome: "accepted" | "declined") => {
     setBusy(true);
@@ -54,7 +55,7 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
   };
   if (p.state !== "open") return <Card padding="sm" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
     <Stack align="row" cross="center" justify="between" gap="sm">
-      <Typo.Caption>{p.state === "applied" ? deletes ? copy.deleted : p.resolved_by === null ? copy.record : p.resolved_by === "chat" ? copy.chat : copy.added
+      <Typo.Caption>{p.state === "applied" ? deletes ? mixedDelete ? copy.changed : copy.deleted : p.resolved_by === null ? copy.record : p.resolved_by === "chat" ? copy.chat : copy.added
         : p.state === "cancelled" ? copy.cancelled : p.state === "superseded" ? copy.superseded : copy.stale}</Typo.Caption>
       {p.state === "applied" && <ButtonContainer size="sm" justify="end"><Button size="sm" variant="link" onClick={open}>{copy.open}</Button></ButtonContainer>}
     </Stack>
@@ -64,7 +65,7 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
     <Stack gap="lg">
       <Stack gap="md">
         <Typo.Caption tone="tertiary">{creates && !deletes ? copy.draft : copy.changes}</Typo.Caption>
-        <Typo.Caption>{deletes ? creates ? copy.addDelete : p.target_label : creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.target_label}</Typo.Caption>
+        <Typo.Caption>{creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.target_label}</Typo.Caption>
         {p.epics.map((epic, index) => {
           const description = epic.description.replace(/!?\[[^\]]*\]\(attachment:[^)]+\)/giu, "");
           return <Stack key={index} gap="sm">
@@ -80,7 +81,7 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
         : <CanonProposalFact label={copy.project} value={projectName} />}
       <ButtonContainer size="sm" justify="end">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => void apply("declined")}>{copy.cancel}</Button>
-        <Tooltip wrap label={empty ? copy.name : undefined}><Button size="sm" variant={deletes ? "destructive" : "default"} disabled={busy} aria-disabled={empty || undefined} onClick={() => void apply("accepted")}>{deletes ? creates ? copy.addDelete : copy.deleteEpic : creates ? copy.add : copy.apply}</Button></Tooltip>
+        <Tooltip wrap label={empty ? copy.name : undefined}><Button size="sm" variant={deletes ? "destructive" : "default"} disabled={busy} aria-disabled={empty || undefined} onClick={() => void apply("accepted")}>{deletes ? mixedDelete ? creates ? copy.addDelete : copy.changeDelete : copy.deleteEpic : creates ? copy.add : copy.apply}</Button></Tooltip>
       </ButtonContainer>
     </Stack>
   </Card>;
