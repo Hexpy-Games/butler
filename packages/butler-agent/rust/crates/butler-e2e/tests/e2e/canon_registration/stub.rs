@@ -57,6 +57,23 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
             item["arguments"] = json!(raw.replace("$work", &work));
         }
     }
+    if let Some(raw) = item["arguments"].as_str().filter(|s| s.contains("$epic")) {
+        let epic = body["input"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .rev()
+            .filter_map(|i| i["output"].as_str())
+            .filter_map(|s| serde_json::from_str::<Value>(s).ok())
+            .find_map(|v| {
+                v.get("output").unwrap_or(&v)["bound"][0]
+                    .as_str()
+                    .map(str::to_owned)
+            });
+        if let Some(epic) = epic {
+            item["arguments"] = json!(raw.replace("canon:epic/$epic", &epic));
+        }
+    }
     (
         [("content-type", "text/event-stream")],
         crate::token_cache::wire(&item),

@@ -10,6 +10,7 @@ mod cleanup;
 mod epic_delete;
 mod migration;
 mod operations;
+mod planning;
 mod queries;
 mod recovery;
 mod review;
@@ -43,8 +44,24 @@ async fn setup(
     ),
     HarnessError,
 > {
+    setup_with(Setup::new(name)?, access).await
+}
+/// Recency scenarios unset the fixed App clock so timestamps can differ.
+async fn setup_with(
+    setup: Setup,
+    access: Access,
+) -> Result<
+    (
+        Scenario,
+        Arc<stub::Script>,
+        tokio::task::JoinHandle<()>,
+        String,
+        String,
+    ),
+    HarnessError,
+> {
     let (url, script, server) = stub::start().await?;
-    let s = Setup::new(name)?
+    let s = setup
         .access(access)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", url)

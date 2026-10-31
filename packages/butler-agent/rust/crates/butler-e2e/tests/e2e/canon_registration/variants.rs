@@ -274,3 +274,63 @@ async fn cp_09_existing_epic_binds_without_a_card_or_move() -> Result<(), Harnes
     server.abort();
     s.finish().await
 }
+#[tokio::test]
+async fn cn_21_no_project_chat_card_defaults_to_most_recent_project() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, project, chat) = setup_with(
+        Setup::new("CN-21")?.unset_env("BUTLER_E2E_APP_NOW"),
+        Access::AskAlways,
+    )
+    .await?;
+    let other = data(
+        s.gw.post(
+            "/projects",
+            json!({"source":"scratch","display_name":"다른 제품"}),
+        )
+        .await?,
+        201,
+    )["project"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let unscoped =
+        |title: &str| json!({"summary":title,"changes":[{"op":"epic.create","title":title}]});
+    let id = draft(&s, &script, &chat, unscoped("최근 프로젝트")).await?;
+    assert_eq!(
+        read(&s, &id).await?["project"],
+        json!({"id":other,"name":"다른 제품"})
+    );
+    data(
+        s.gw.patch(
+            &format!("/projects/{project}"),
+            json!({"display_name":"제품 앱"}),
+        )
+        .await?,
+        200,
+    );
+    let message = "이 문제도 버그로 등록해 줘";
+    run(
+        &s,
+        &script,
+        &chat,
+        message,
+        vec![("canon_propose", unscoped("다시 고른 프로젝트"))],
+    )
+    .await?;
+    let page = asks(&s, &chat).await?;
+    let latest = page["asks"][0]["ask_id"]
+        .as_str()
+        .unwrap()
+        .trim_start_matches("canon:")
+        .to_owned();
+    assert_ne!(latest, id);
+    assert_eq!(
+        read(&s, &latest).await?["project"],
+        json!({"id":project,"name":"제품 앱"})
+    );
+    let result = accept(&s, &latest).await?;
+    assert_eq!(result["ok"], true, "{result}");
+    assert_bound(&s, &chat, &project, &epic_id(&result), "user").await?;
+    server.abort();
+    s.finish().await
+}
