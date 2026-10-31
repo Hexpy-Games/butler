@@ -50,21 +50,26 @@ async fn observe(s: &Scenario, address: &str) -> Result<(), HarnessError> {
     clock(address, FREE).await?;
     tokio::time::sleep(Duration::from_secs(60)).await;
     let after = usage::sample(pid)?.unwrap();
-    let cpu = after.cpu_time().unwrap() - before.cpu_time().unwrap();
+    let cpu = after
+        .cpu_time()
+        .unwrap()
+        .checked_sub(before.cpu_time().unwrap())
+        .expect("CPU time must be monotonic");
     let writes = after.write_bytes - before.write_bytes;
     eprintln!(
         "DELETED-SCHEDULE idle_seconds=60 disk_write_bytes={writes} cpu_ms={}",
         cpu.as_millis()
     );
+    watch.assert_unchanged();
+    assert_eq!(writes, 0, "physical writes during idle");
+    drop(watch);
     assert!(
         cpu.as_secs_f64() <= 1.0,
         "scheduler spun after schedule deletion: {cpu:?}"
     );
-    watch.assert_unchanged();
-    assert_eq!(writes, 0, "physical writes during idle");
-    drop(watch);
+
     deleted(s).await?;
-    assert!(runs(s, "live").await?.is_empty());
+    assert_eq!(runs(s, "live").await?, [] as [Value; 0]);
     // A second observation checks a due schedule inside a real 60-second window.
     // Its expected turn commits are separate from the zero-write idle minute.
     tokio::time::sleep(Duration::from_secs(30)).await;
