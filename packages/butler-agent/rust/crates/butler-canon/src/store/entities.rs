@@ -200,7 +200,7 @@ pub fn set_label(
 ) -> Result<Value> {
     let old = read_work(tx, id)?;
     cas(&old, "revision", expected_revision)?;
-    if label == CanonStatus::Done && runtime::epic_running(tx, id)? {
+    if matches!(label, CanonStatus::Done | CanonStatus::Cancelled) && runtime::epic_running(tx, id)? {
         return Err(Error::Running);
     }
     tx.execute(

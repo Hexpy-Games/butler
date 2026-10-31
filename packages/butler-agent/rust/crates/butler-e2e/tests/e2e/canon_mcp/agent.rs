@@ -111,3 +111,63 @@ async fn cn_14_agent_mark_follows_latest_status_change() -> Result<(), HarnessEr
     server.abort();
     s.finish().await
 }
+async fn plan_marks(
+    s: &Scenario,
+    project: &str,
+    plan: &str,
+    id: &str,
+    expected: Value,
+) -> Result<(), HarnessError> {
+    let overview = s.gw.get(&format!("/canon/plans/{plan}")).await?;
+    assert_eq!(overview.data()["works"][0]["id"], id, "{}", overview.text);
+    assert_eq!(overview.data()["works"][0]["agent"], expected);
+    let board = s.gw.get(&format!("/projects/{project}/canon")).await?;
+    assert_eq!(board.data()["plans"][0]["works"][0]["agent"], expected);
+    let sidebar = s.gw.get(&format!("/projects/{project}/canon/sidebar")).await?;
+    let group = sidebar.data()["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["key"] == plan)
+        .cloned()
+        .unwrap();
+    assert_eq!(group["rows"][0]["id"], id, "{group}");
+    assert_eq!(group["rows"][0]["agent"], expected);
+    Ok(())
+}
+#[tokio::test]
+async fn cn_14_agent_mark_shows_in_plan_overview_board_plan_and_sidebar_group()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CN-14-PLAN")?.data_folder_token().start().await?;
+    let project = project(&s).await?;
+    trust(&s).await?;
+    let plan = s.gw.post(
+        &format!("/projects/{project}/canon/plans"),
+        json!({"title":"Preview 14"}),
+    )
+    .await?;
+    assert_eq!(plan.status, 201, "{}", plan.text);
+    let plan = plan.data()["id"].as_str().unwrap().to_owned();
+    let epic = call(
+        &s,
+        "canon_create_epic",
+        json!({"project":project,"title":"Canon","assign_to_me":true}),
+    )
+    .await?;
+    let id = epic["id"].as_str().unwrap();
+    let moved =
+        s.gw.patch(
+            &format!("/canon/epics/{id}"),
+            json!({"expected_revision":epic["revision"],"plan_id":plan}),
+        )
+        .await?;
+    assert_eq!(moved.status, 200, "{}", moved.text);
+    let expected = json!({"person":"app-user","via":"Claude Code"});
+    plan_marks(&s, &project, &plan, id, Value::Null).await?;
+    status(&s, id, "in_progress").await?;
+    plan_marks(&s, &project, &plan, id, expected).await?;
+    status(&s, id, "done").await?;
+    plan_marks(&s, &project, &plan, id, Value::Null).await?;
+    s.finish().await
+}

@@ -9,6 +9,7 @@ mod attachments;
 mod cleanup;
 mod migration;
 mod operations;
+mod planning;
 mod queries;
 mod recovery;
 mod review;
