@@ -123,7 +123,9 @@ async fn plan_marks(
     assert_eq!(overview.data()["works"][0]["agent"], expected);
     let board = s.gw.get(&format!("/projects/{project}/canon")).await?;
     assert_eq!(board.data()["plans"][0]["works"][0]["agent"], expected);
-    let sidebar = s.gw.get(&format!("/projects/{project}/canon/sidebar")).await?;
+    let sidebar =
+        s.gw.get(&format!("/projects/{project}/canon/sidebar"))
+            .await?;
     let group = sidebar.data()["groups"]
         .as_array()
         .unwrap()
@@ -139,14 +141,18 @@ async fn plan_marks(
 async fn cn_14_agent_mark_shows_in_plan_overview_board_plan_and_sidebar_group()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("CN-14-PLAN")?.data_folder_token().start().await?;
+    let s = Setup::new("CN-14-PLAN")?
+        .data_folder_token()
+        .start()
+        .await?;
     let project = project(&s).await?;
     trust(&s).await?;
-    let plan = s.gw.post(
-        &format!("/projects/{project}/canon/plans"),
-        json!({"title":"Preview 14"}),
-    )
-    .await?;
+    let plan =
+        s.gw.post(
+            &format!("/projects/{project}/canon/plans"),
+            json!({"title":"Preview 14"}),
+        )
+        .await?;
     assert_eq!(plan.status, 201, "{}", plan.text);
     let plan = plan.data()["id"].as_str().unwrap().to_owned();
     let epic = call(

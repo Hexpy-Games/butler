@@ -4,12 +4,30 @@ use super::*;
 fn pipeline(refs: Value) -> Vec<(&'static str, Value)> {
     let done = json!([{"action_key":"inspect","status":"done"}]);
     vec![
-        ("replace_work_plan",json!({"objective":"과제 확인","execution_mode":"direct","governing_refs":refs,"actions":[{"action_key":"inspect","description":"과제 내용 확인"}],"checks":["명세 기준 충족"]})),
-        ("record_work_review",json!({"subject":"plan","verdict":"accept","summary":"확인 범위 충족"})),
-        ("record_work_checkpoint",json!({"action_updates":done,"public_summary":"내용 확인","next_step":"결과 검토"})),
-        ("record_work_review",json!({"subject":"result","verdict":"accept","summary":"기준 충족"})),
-        ("record_work_review",json!({"subject":"completion","verdict":"accept","summary":"검증 완료"})),
-        ("record_work_disposition",json!({"work_id":"$work","disposition":"completed","summary":"확인 완료","action_updates":[],"remaining_actions":[],"followups":[]})),
+        (
+            "replace_work_plan",
+            json!({"objective":"과제 확인","execution_mode":"direct","governing_refs":refs,"actions":[{"action_key":"inspect","description":"과제 내용 확인"}],"checks":["명세 기준 충족"]}),
+        ),
+        (
+            "record_work_review",
+            json!({"subject":"plan","verdict":"accept","summary":"확인 범위 충족"}),
+        ),
+        (
+            "record_work_checkpoint",
+            json!({"action_updates":done,"public_summary":"내용 확인","next_step":"결과 검토"}),
+        ),
+        (
+            "record_work_review",
+            json!({"subject":"result","verdict":"accept","summary":"기준 충족"}),
+        ),
+        (
+            "record_work_review",
+            json!({"subject":"completion","verdict":"accept","summary":"검증 완료"}),
+        ),
+        (
+            "record_work_disposition",
+            json!({"work_id":"$work","disposition":"completed","summary":"확인 완료","action_updates":[],"remaining_actions":[],"followups":[]}),
+        ),
     ]
 }
 fn accepted_plans(s: &Scenario) -> Result<Vec<(String, Value)>, HarnessError> {

@@ -170,7 +170,10 @@ async fn cn_17_completed_epic_never_starts_the_next_in_plan() -> Result<(), Harn
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
         for (query, expected) in [
             ("SELECT count(*) FROM canon_session_queue", 0),
-            ("SELECT count(*) FROM canon_intents WHERE kind='canon_step'", 0),
+            (
+                "SELECT count(*) FROM canon_intents WHERE kind='canon_step'",
+                0,
+            ),
             ("SELECT count(*) FROM canon_epic_work_links", 1),
         ] {
             assert_eq!(

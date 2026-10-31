@@ -277,7 +277,11 @@ async fn cp_09_existing_epic_binds_without_a_card_or_move() -> Result<(), Harnes
 #[tokio::test]
 async fn cn_21_no_project_chat_card_defaults_to_most_recent_project() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, script, server, project, chat) = setup("CN-21", Access::AskAlways).await?;
+    let (s, script, server, project, chat) = setup_with(
+        Setup::new("CN-21")?.unset_env("BUTLER_E2E_APP_NOW"),
+        Access::AskAlways,
+    )
+    .await?;
     let other = data(
         s.gw.post(
             "/projects",
@@ -289,7 +293,8 @@ async fn cn_21_no_project_chat_card_defaults_to_most_recent_project() -> Result<
         .as_str()
         .unwrap()
         .to_owned();
-    let unscoped = |title: &str| json!({"summary":title,"changes":[{"op":"epic.create","title":title}]});
+    let unscoped =
+        |title: &str| json!({"summary":title,"changes":[{"op":"epic.create","title":title}]});
     let id = draft(&s, &script, &chat, unscoped("최근 프로젝트")).await?;
     assert_eq!(
         read(&s, &id).await?["project"],

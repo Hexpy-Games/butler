@@ -371,8 +371,12 @@ async fn cn_22_board_card_and_progress_show_the_same_read_only_work() -> Result<
             wait_label(&s, &id, "in_review").await?;
         }
         let progress = progress(&s, &id).await?;
-        let keys: std::collections::BTreeSet<_> =
-            progress.as_object().unwrap().keys().map(String::as_str).collect();
+        let keys: std::collections::BTreeSet<_> = progress
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
         assert_eq!(
             keys,
             std::collections::BTreeSet::from([
