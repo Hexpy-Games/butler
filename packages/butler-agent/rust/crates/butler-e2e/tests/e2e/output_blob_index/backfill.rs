@@ -154,10 +154,7 @@ async fn orphan_blob_is_reclaimed_by_backfill() -> Result<(), HarnessError> {
     for n in 0..300 {
         orphans.push(blob(&setup.sandbox.data, format!("Orphan {n}").as_bytes())?);
     }
-    std::fs::write(
-        setup.sandbox.data.join("outputs/manifests/corrupt.json"),
-        b"{",
-    )?;
+    seed(&setup.sandbox.data, "general", "also-live", b"Live", false)?;
     let s = setup.start().await?;
     completed(&s).await?;
     for orphan in orphans {

@@ -44,8 +44,8 @@ fn schema(data: &Path, complete: bool) -> Result<(), HarnessError> {
         CREATE INDEX output_refs_turn ON output_refs(session,turn);
         CREATE TABLE output_blobs(sha TEXT NOT NULL, output_id TEXT NOT NULL, PRIMARY KEY(output_id,sha)) WITHOUT ROWID;
         CREATE TABLE output_blob_sweep(sha TEXT PRIMARY KEY) WITHOUT ROWID;
-        CREATE TABLE output_blob_backfill(id INTEGER PRIMARY KEY CHECK(id=1), cursor TEXT NOT NULL, complete INTEGER NOT NULL, indexed INTEGER NOT NULL, queued INTEGER NOT NULL);
-        INSERT INTO output_blob_backfill VALUES(1,'',{},0,0);", i32::from(complete)))?;
+        CREATE TABLE output_blob_backfill(id INTEGER PRIMARY KEY CHECK(id=1), cursor TEXT NOT NULL, complete INTEGER NOT NULL, indexed INTEGER NOT NULL, queued INTEGER NOT NULL, skip_orphans INTEGER NOT NULL DEFAULT 0);
+        INSERT INTO output_blob_backfill(id,cursor,complete,indexed,queued) VALUES(1,'',{},0,0);", i32::from(complete)))?;
     if complete {
         db(data)?.execute_batch("CREATE INDEX output_blobs_sha ON output_blobs(sha);")?;
     }

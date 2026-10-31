@@ -11,10 +11,10 @@ const PAGE: usize = 128;
 pub(super) fn schema(db: &Connection, empty: bool) -> std::io::Result<()> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS output_blobs(sha TEXT NOT NULL, output_id TEXT NOT NULL, PRIMARY KEY(output_id,sha)) WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS output_blob_sweep(sha TEXT PRIMARY KEY) WITHOUT ROWID;
-        CREATE TABLE IF NOT EXISTS output_blob_backfill(id INTEGER PRIMARY KEY CHECK(id=1), cursor TEXT NOT NULL, complete INTEGER NOT NULL, indexed INTEGER NOT NULL, queued INTEGER NOT NULL);")
+        CREATE TABLE IF NOT EXISTS output_blob_backfill(id INTEGER PRIMARY KEY CHECK(id=1), cursor TEXT NOT NULL, complete INTEGER NOT NULL, indexed INTEGER NOT NULL, queued INTEGER NOT NULL, skip_orphans INTEGER NOT NULL DEFAULT 0);")
         .map_err(std::io::Error::other)?;
     db.execute(
-        "INSERT OR IGNORE INTO output_blob_backfill VALUES(1,'',?1,0,0)",
+        "INSERT OR IGNORE INTO output_blob_backfill(id,cursor,complete,indexed,queued) VALUES(1,'',?1,0,0)",
         [empty],
     )
     .map_err(std::io::Error::other)?;

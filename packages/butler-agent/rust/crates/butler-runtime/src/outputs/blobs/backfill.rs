@@ -63,7 +63,18 @@ pub(in crate::outputs) fn run(
             .map_err(std::io::Error::other)?;
         sha_index(&db)?;
     }
-    queue_orphans(store, &mut db, stop)?;
+    let skip_orphans: bool = db
+        .query_row(
+            "SELECT skip_orphans FROM output_blob_backfill WHERE id=1",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(std::io::Error::other)?;
+    if skip_orphans {
+        butler_core::diagnostic!("[outputs] orphan pass skipped: uncertain manifest ownership");
+    } else {
+        queue_orphans(store, &mut db, stop)?;
+    }
     if stop.is_cancelled() {
         return Ok(());
     }
@@ -108,8 +119,8 @@ fn index_batch(
     let tx = db.transaction().map_err(std::io::Error::other)?;
     let mut indexed = 0;
     for name in batch {
-        if let Some(output) = read(&store.root.join("manifests").join(name))? {
-            reconcile(&tx, &output)?;
+        if let Some(manifest) = read(&store.root.join("manifests").join(name))? {
+            index_manifest(&tx, manifest)?;
             indexed += 1;
         }
     }
@@ -153,7 +164,42 @@ fn finish(
     Ok(())
 }
 
-fn read(path: &Path) -> std::io::Result<Option<Output>> {
+enum Manifest {
+    Parsed(Output),
+    Uncertain { id: String, shas: BTreeSet<String> },
+}
+
+fn index_manifest(db: &Connection, manifest: Manifest) -> std::io::Result<()> {
+    match manifest {
+        Manifest::Parsed(output) => reconcile(db, &output),
+        Manifest::Uncertain { id, shas } => {
+            for sha in shas {
+                db.execute(
+                    "INSERT OR IGNORE INTO output_blobs(sha,output_id) VALUES(?1,?2)",
+                    params![sha, id],
+                )
+                .map_err(std::io::Error::other)?;
+            }
+            db.execute(
+                "UPDATE output_blob_backfill SET skip_orphans=1 WHERE id=1",
+                [],
+            )
+            .map_err(std::io::Error::other)?;
+            Ok(())
+        }
+    }
+}
+
+// Preserve even references embedded in an unknown format or cut off mid-write.
+fn raw_shas(bytes: &[u8]) -> BTreeSet<String> {
+    bytes
+        .split(|b| !b.is_ascii_hexdigit())
+        .flat_map(|run| run.windows(64))
+        .map(|sha| String::from_utf8_lossy(sha).into_owned())
+        .collect()
+}
+
+fn read(path: &Path) -> std::io::Result<Option<Manifest>> {
     let mut bytes = Vec::new();
     match secure_fs::open_read_no_follow(path).and_then(|mut f| f.read_to_end(&mut bytes)) {
         Ok(_) => {}
@@ -161,10 +207,21 @@ fn read(path: &Path) -> std::io::Result<Option<Output>> {
         Err(e) => return Err(e),
     }
     match serde_json::from_slice(&bytes) {
-        Ok(output) => Ok(Some(output)),
+        Ok(output) => Ok(Some(Manifest::Parsed(output))),
         Err(e) => {
-            butler_core::diagnostic!("[outputs] unreadable manifest {}: {e}", path.display());
-            Ok(None)
+            butler_core::diagnostic!(
+                "[outputs] unreadable manifest {}; orphan pass skipped: {e}",
+                path.display()
+            );
+            let id = path
+                .file_stem()
+                .ok_or_else(|| error("manifest_stem_missing"))?
+                .to_string_lossy()
+                .into_owned();
+            Ok(Some(Manifest::Uncertain {
+                id,
+                shas: raw_shas(&bytes),
+            }))
         }
     }
 }
