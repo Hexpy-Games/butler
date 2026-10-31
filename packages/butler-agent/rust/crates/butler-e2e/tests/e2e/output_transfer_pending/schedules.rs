@@ -111,7 +111,10 @@ async fn idle(s: &Scenario, kind: &str) -> Result<(), HarnessError> {
     tokio::time::sleep(Duration::from_secs(60)).await;
     let after = usage::sample(pid)?.unwrap();
     let writes = after.write_bytes - before.write_bytes;
-    let cpu = after.cpu_time().zip(before.cpu_time()).map(|(a, b)| a - b);
+    let cpu = after
+        .cpu_time()
+        .zip(before.cpu_time())
+        .map(|(a, b)| a.checked_sub(b).expect("CPU time must be monotonic"));
     eprintln!(
         "TRANSFER-HOLD kind={kind} idle_seconds=60 disk_write_bytes={writes} buffered_write_bytes={:?} cpu_ms={:?}",
         after
