@@ -64,6 +64,7 @@ impl AppApplication {
                     .summary
                     .target_session_id,
                 trigger,
+                self.dependencies.identity_clock.now_iso(),
             )
             .await?;
         let held = !matches!(hold, Hold::Free);
@@ -159,11 +160,13 @@ impl AppApplication {
         &self,
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
         let mut runs = Vec::new();
-        // Merge the current occurrence before a released queued run is sent.
+        // One cutoff for due occurrences and release gates: crossing a hold's
+        // end between passes must not release a run before its occurrence merges.
         let now = self.dependencies.identity_clock.now_iso();
+        let due_at = now.clone();
         let due = self
             .storage
-            .read(move |db| records::due(db, &now))
+            .read(move |db| records::due(db, &due_at))
             .await
             .map_err(app_error)?;
         for row in due {
@@ -181,13 +184,13 @@ impl AppApplication {
         let mut dispatched_queued = 0;
         for row in queued {
             let hold = self
-                .automation_hold(row.run_target_id.clone(), &row.trigger)
+                .automation_hold(row.run_target_id.clone(), &row.trigger, now.clone())
                 .await?;
             let held = !matches!(hold, Hold::Free);
             let run = row.run_id.clone();
-            let now = self.dependencies.identity_clock.now_iso();
+            let held_at = now.clone();
             self.storage
-                .execute(move |db| super::holds::record(db, &run, hold, &now))
+                .execute(move |db| super::holds::record(db, &run, hold, &held_at))
                 .await
                 .map_err(app_error)?;
             if held {

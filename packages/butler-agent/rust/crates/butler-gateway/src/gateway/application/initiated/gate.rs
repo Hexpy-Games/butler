@@ -89,6 +89,7 @@ impl AppApplication {
         &self,
         chat: String,
         trigger: &str,
+        now: String,
     ) -> Result<Hold, GatewayApplicationError> {
         let target = chat.clone();
         if self
@@ -114,7 +115,8 @@ impl AppApplication {
                 .await
                 .map_err(app_error);
         }
-        let gate = self.initiated_gate().await?;
+        let mut gate = self.initiated_gate().await?;
+        gate.now = now;
         self.storage
             .read(move |db| gate.hold(db, &chat, false))
             .await

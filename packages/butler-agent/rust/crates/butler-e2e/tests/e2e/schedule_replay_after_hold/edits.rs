@@ -35,6 +35,8 @@ async fn edited_time_merges_before_lift_and_preserves_new_timing() -> Result<(),
                 .await?;
         assert_eq!(r.status, 200, "{}", r.text);
         clock(&address, "2026-10-27T05:16:00.000Z").await?;
+        // Settings edits and fixture clock changes do not wake the scheduler.
+        dispatch(&s).await?;
         let records = delivered(&s, name).await?;
         assert_eq!(records.len(), 1);
         assert_eq!(records[0]["scheduled_at"], merged[0]["scheduled_at"]);
@@ -88,8 +90,7 @@ async fn once_reenabled_edit_merges_then_pauses() -> Result<(), HarnessError> {
 }
 
 #[tokio::test]
-async fn hold_lifts_just_before_occurrence_with_queued_run_in_next_round()
--> Result<(), HarnessError> {
+async fn hold_lifts_before_next_occurrence_delivers_two_reports() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, address) = setup("HOLD-MOMENT", "2026-10-27T04:29:00.000Z").await?;
     create(&s, "moment", json!({"schedule_type":"interval","interval_seconds":3600,"start_at":"2026-10-27T05:00:00.001Z"})).await?;
@@ -101,14 +102,25 @@ async fn hold_lifts_just_before_occurrence_with_queued_run_in_next_round()
     assert_eq!(merged.len(), 1);
     assert_eq!(merged[0]["scheduled_at"], "2026-10-27T06:00:00.001Z");
     clock(&address, "2026-10-27T07:00:00.000Z").await?;
-    assert_eq!(runs(&s, "moment").await?[0]["state"], "queued");
+    dispatch(&s).await?;
+    let first = delivered(&s, "moment").await?;
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0]["id"], merged[0]["id"]);
+    assert_eq!(first[0]["scheduled_at"], "2026-10-27T06:00:00.001Z");
+    assert_eq!(reports(&s, "general", "moment").await?.len(), 1);
+    // The next occurrence is after the release cutoff, so it runs separately.
     clock(&address, "2026-10-27T07:00:00.001Z").await?;
     dispatch(&s).await?;
-    let current = runs(&s, "moment").await?;
-    assert_eq!(current.len(), 1, "{current:?}");
+    let current = delivered(&s, "moment").await?;
+    assert_eq!(current.len(), 2, "{current:?}");
     assert_eq!(current[0]["scheduled_at"], "2026-10-27T07:00:00.001Z");
-    assert_eq!(delivered(&s, "moment").await?.len(), 1);
-    assert_eq!(reports(&s, "general", "moment").await?.len(), 1);
+    assert_ne!(current[0]["id"], first[0]["id"]);
+    assert_eq!(current[1], first[0]);
+    assert_eq!(reports(&s, "general", "moment").await?.len(), 2);
+    assert_eq!(
+        schedule(&s, "moment").await?["next_run_at"],
+        "2026-10-27T08:00:00.001Z"
+    );
     s.finish().await
 }
 
