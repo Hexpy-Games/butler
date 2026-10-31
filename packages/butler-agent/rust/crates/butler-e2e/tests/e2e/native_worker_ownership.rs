@@ -18,6 +18,19 @@ async fn native_worker_exits_on_owner_eof_during_slow_initialization() -> Result
     butler_e2e::gate!();
     let (sandbox, _launch) = install_support::sandbox("WORKER-OWNER-EOF")?;
     let barrier = sandbox.root.join("worker-initializing");
+    // The OS validates a fresh copy of the large test executable on its first
+    // launch (seconds on macOS, longer while other copies launch too). Launch it
+    // once to completion so the wait below covers the worker, not the host.
+    let launched = std::process::Command::new(&sandbox.binary)
+        .env("BUTLER_DATA", &sandbox.data)
+        .env("HOME", &sandbox.home)
+        .env("BUTLER_E2E_TIER", "stub")
+        .arg("--private-embedding-worker")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    assert!(launched.success(), "an idle worker exits at owner EOF");
     let mut child = std::process::Command::new(&sandbox.binary)
         .env("BUTLER_DATA", &sandbox.data)
         .env("HOME", &sandbox.home)
