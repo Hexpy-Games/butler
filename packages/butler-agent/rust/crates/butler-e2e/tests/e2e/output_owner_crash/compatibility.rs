@@ -113,3 +113,66 @@ async fn missing_manifest_replay_cleans_rows() -> Result<(), HarnessError> {
     }
     Ok(())
 }
+
+fn rows(data: &Path) -> Result<Vec<String>, HarnessError> {
+    let db = db(data)?;
+    let mut result = Vec::new();
+    for sql in [
+        "SELECT json_array(id,session,message,turn,title,bytes,created) FROM outputs ORDER BY id",
+        "SELECT json_array(id,session,turn,message) FROM output_refs ORDER BY id,turn",
+        "SELECT json_array(sha,output_id) FROM output_blobs ORDER BY output_id,sha",
+    ] {
+        result.extend(
+            db.prepare(sql)?
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
+    Ok(result)
+}
+
+#[tokio::test]
+async fn same_session_adopt_preserves_existing_rows_and_only_adds_requested_reference()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("OWNER-SAME-SESSION")?;
+    schema(&setup.sandbox.data, true)?;
+    let mut s = setup.start().await?;
+    let session = chat(&s).await?;
+    s.agent.terminate().await?;
+    let data = &s.sandbox.data;
+    let id = seed(data, &session, "publish-turn", b"Unchanged", true)?;
+    // Existing projections need not use the manifest's turn/message or retain its reference.
+    db(data)?.execute(
+        "UPDATE outputs SET turn='row-turn',message='row-message' WHERE id=?1",
+        [&id],
+    )?;
+    db(data)?.execute("DELETE FROM output_refs WHERE id=?1", [&id])?;
+    let before = rows(data)?;
+    let manifest_before = std::fs::read(manifest(data, &id))?;
+    let store = OutputStore::new(data);
+    store.adopt(&id, &session, "reference-turn", "reference-message")?;
+    let after = rows(data)?;
+    db(data)?.execute(
+        "DELETE FROM output_refs WHERE id=?1 AND turn='reference-turn'",
+        [&id],
+    )?;
+    assert_eq!(
+        rows(data)?,
+        before,
+        "same-session adopt rewrote existing rows"
+    );
+    db(data)?.execute(
+        "INSERT INTO output_refs VALUES(?1,?2,'reference-turn','reference-message')",
+        params![id, session],
+    )?;
+    assert_eq!(
+        rows(data)?,
+        after,
+        "adopt changed more than the requested reference"
+    );
+    store.adopt(&id, &session, "reference-turn", "reference-message")?;
+    assert_eq!(rows(data)?, after, "same-session replay changed row bytes");
+    assert_eq!(std::fs::read(manifest(data, &id))?, manifest_before);
+    s.finish().await
+}

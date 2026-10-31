@@ -119,3 +119,66 @@ async fn archive_manifest_crash_replays_transfer_and_keeps_cards() -> Result<(),
     content(&s, &adopted, "Adopted").await?;
     s.finish().await
 }
+
+#[tokio::test]
+async fn archive_crash_partway_through_three_manifests_replays_all() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("OWNER-PARTIAL-ARCHIVE")?;
+    schema(&setup.sandbox.data, true)?;
+    let mut s = setup.start().await?;
+    s.agent.terminate().await?;
+    let data = &s.sandbox.data;
+    let mut outputs = Vec::new();
+    for (slot, body) in [("one", "First"), ("two", "Second"), ("three", "Third")] {
+        outputs.push((
+            seed(data, "general", slot, body.as_bytes(), true)?,
+            slot,
+            body,
+        ));
+    }
+    outputs.sort();
+    db(data)?.execute_batch(&format!(
+        "CREATE TRIGGER stop_archive BEFORE INSERT ON outputs WHEN NEW.id='{}' AND NEW.session<>'general' BEGIN SELECT RAISE(ABORT,'archive index interrupted'); END;", outputs[0].0
+    ))?;
+    s.gw = s.agent.start_again().await?;
+    let reply =
+        s.gw.post("/sessions/general/clear", json!({"title":"Saved"}))
+            .await?;
+    assert_eq!(reply.status, 500, "{reply:?}");
+    s.agent.kill9()?;
+    let app = butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite"))?;
+    let archived: String =
+        app.query_row("SELECT archive_id FROM app_output_transfers", [], |r| {
+            r.get(0)
+        })?;
+    for (i, (id, turn, _)) in outputs.iter().enumerate() {
+        assert_eq!(owner(data, id)?, if i == 0 { &archived } else { "general" });
+        assert!(markers(data, "general").join(id).is_file());
+        assert_eq!(markers(data, &archived).join(id).is_file(), i == 0);
+        reference(data, id, turn, "general")?;
+    }
+    assert_eq!(OutputStore::new(data).summaries("general")?.len(), 3);
+    db(data)?.execute_batch("DROP TRIGGER stop_archive")?;
+    s.gw = s.agent.start_again().await?;
+    assert_eq!(
+        app.query_row("SELECT count(*) FROM app_output_transfers", [], |r| r
+            .get::<_, i64>(0))?,
+        0
+    );
+    let summaries = OutputStore::new(data).summaries(&archived)?;
+    assert_eq!(summaries.len(), 3);
+    assert_eq!(
+        summaries.iter().map(|r| &r.output_id).collect::<Vec<_>>(),
+        outputs.iter().map(|r| &r.0).collect::<Vec<_>>()
+    );
+    assert_eq!(scalar(data, "SELECT count(*) FROM outputs")?, 3);
+    assert_eq!(scalar(data, "SELECT count(*) FROM output_refs")?, 3);
+    assert_eq!(scalar(data, "SELECT count(*) FROM output_blobs")?, 3);
+    for (id, turn, body) in outputs {
+        live_rows(data, &id, &archived)?;
+        reference(data, &id, turn, &archived)?;
+        content(&s, &id, body).await?;
+    }
+    no_session_rows(data, "general")?;
+    s.finish().await
+}

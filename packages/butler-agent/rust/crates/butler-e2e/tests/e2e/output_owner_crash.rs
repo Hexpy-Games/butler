@@ -3,6 +3,7 @@
 mod archive_refs;
 mod compatibility;
 mod read_failure;
+mod replay;
 use super::output_blob_index::{
     blob, block_completion, chat, completed, content, db, delete, hash, scalar, schema, seed, setup,
 };
@@ -102,7 +103,7 @@ async fn archive(s: &Scenario) -> Result<String, HarnessError> {
         .unwrap()
         .to_owned())
 }
-async fn adopt_delete(complete: bool) -> Result<(), HarnessError> {
+async fn adopt_delete(complete: bool, saved: bool) -> Result<(), HarnessError> {
     let setup = setup("OWNER-ADOPT-DELETE")?;
     schema(&setup.sandbox.data, true)?;
     let mut s = setup.start().await?;
@@ -110,7 +111,7 @@ async fn adopt_delete(complete: bool) -> Result<(), HarnessError> {
     let real = chat(&s).await?;
     s.agent.terminate().await?;
     let id = seed(&s.sandbox.data, &old, "adopt", b"Adopted", true)?;
-    interrupted_move(&s.sandbox.data, &id, &real, true)?;
+    interrupted_move(&s.sandbox.data, &id, &real, saved)?;
     migration(&s.sandbox.data, complete)?;
     let bytes = blob(&s.sandbox.data, b"Adopted")?;
     s.gw = s.agent.start_again().await?;
@@ -118,7 +119,14 @@ async fn adopt_delete(complete: bool) -> Result<(), HarnessError> {
     assert!(manifest(&s.sandbox.data, &id).is_file());
     assert!(bytes.is_file());
     no_session_rows(&s.sandbox.data, &old)?;
-    live_rows(&s.sandbox.data, &id, &real)?;
+    if saved {
+        live_rows(&s.sandbox.data, &id, &real)?;
+    } else {
+        let rows = OutputStore::new(&s.sandbox.data).summaries(&real)?;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].output_id, id);
+        assert_eq!(rows[0].session_id, real);
+    }
     content(&s, &id, "Adopted").await?;
     finish_migration(&mut s, complete).await?;
     delete(&s, &real).await?;
@@ -166,7 +174,7 @@ async fn adopt_archive(complete: bool) -> Result<(), HarnessError> {
     content(&s, &own, "Own").await?;
     s.finish().await
 }
-async fn transfer_delete(complete: bool) -> Result<(), HarnessError> {
+async fn row_hint_delete(complete: bool) -> Result<(), HarnessError> {
     let setup = setup("OWNER-TRANSFER-DELETE")?;
     schema(&setup.sandbox.data, true)?;
     let mut s = setup.start().await?;
@@ -175,7 +183,7 @@ async fn transfer_delete(complete: bool) -> Result<(), HarnessError> {
     s.agent.terminate().await?;
     let id = seed(&s.sandbox.data, &source, "transfer", b"Transferred", true)?;
     interrupted_move(&s.sandbox.data, &id, &target, false)?;
-    // The row alone must suffice to reproduce this failure.
+    // Row-hint coverage only: gateway transfers start at undeletable general and keep markers.
     std::fs::remove_file(markers(&s.sandbox.data, &source).join(&id))?;
     migration(&s.sandbox.data, complete)?;
     s.gw = s.agent.start_again().await?;
@@ -240,12 +248,12 @@ async fn temporary_marker(complete: bool, clear: bool) -> Result<(), HarnessErro
 #[tokio::test]
 async fn adopt_delete_migrated() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    adopt_delete(true).await
+    adopt_delete(true, true).await
 }
 #[tokio::test]
 async fn adopt_delete_unmigrated() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    adopt_delete(false).await
+    adopt_delete(false, true).await
 }
 #[tokio::test]
 async fn adopt_archive_migrated() -> Result<(), HarnessError> {
@@ -258,14 +266,14 @@ async fn adopt_archive_unmigrated() -> Result<(), HarnessError> {
     adopt_archive(false).await
 }
 #[tokio::test]
-async fn transfer_delete_migrated() -> Result<(), HarnessError> {
+async fn row_hint_delete_migrated() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    transfer_delete(true).await
+    row_hint_delete(true).await
 }
 #[tokio::test]
-async fn transfer_delete_unmigrated() -> Result<(), HarnessError> {
+async fn row_hint_delete_unmigrated() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    transfer_delete(false).await
+    row_hint_delete(false).await
 }
 #[tokio::test]
 async fn temp_delete_migrated() -> Result<(), HarnessError> {
@@ -286,4 +294,15 @@ async fn temp_archive_migrated() -> Result<(), HarnessError> {
 async fn temp_archive_unmigrated() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     temporary_marker(false, true).await
+}
+
+#[tokio::test]
+async fn adopt_before_index_save_delete_source_migrated() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    adopt_delete(true, false).await
+}
+#[tokio::test]
+async fn adopt_before_index_save_delete_source_unmigrated() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    adopt_delete(false, false).await
 }
