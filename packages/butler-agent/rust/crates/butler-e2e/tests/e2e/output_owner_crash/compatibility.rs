@@ -64,9 +64,23 @@ async fn malformed(complete: bool, clear: bool) -> Result<(), HarnessError> {
         s.gw.delete(&format!("/sessions/{session}?permanent=true"))
             .await?
     };
-    // Existing semantics: archive and pre-migration delete require parsing.
+    // Clearing skips unservable manifests; pre-migration deletion still requires parsing.
     let kept = clear || !complete;
-    assert_eq!(r.status, if kept { 500 } else { 200 }, "{r:?}");
+    assert_eq!(
+        r.status,
+        if !clear && !complete { 500 } else { 200 },
+        "{r:?}"
+    );
+    if clear {
+        let archived = r.data()["archived_session"]["id"].as_str().unwrap();
+        let actual: String = db(&s.sandbox.data)?.query_row(
+            "SELECT session FROM outputs WHERE id=?1",
+            [&id],
+            |r| r.get(0),
+        )?;
+        assert_eq!(actual, archived);
+        no_session_rows(&s.sandbox.data, "general")?;
+    }
     assert_eq!(manifest(&s.sandbox.data, &id).exists(), kept);
     assert_eq!(blob_path(&s.sandbox.data, b"Malformed").exists(), kept);
     s.finish().await

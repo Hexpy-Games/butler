@@ -194,9 +194,13 @@ pub(super) fn transfer(store: &OutputStore, source: &str, target: &str) -> std::
         .collect::<Result<Vec<_>, _>>()
         .map_err(std::io::Error::other)?;
     for id in ids {
-        // Missing/unreadable row-only manifests previously transferred without
-        // parsing. Marker-backed parse errors still fail in OutputStore::list.
-        if let Ok(output) = store.read(&id)
+        if store.manifest(&id).is_err() {
+            butler_core::diagnostic!("[outputs] ignoring invalid indexed output id {id:?}");
+            continue;
+        }
+        // Reconcile stale row hints too; only missing or unparseable manifests
+        // have no servable owner. Other I/O errors must leave the transfer pending.
+        if let Some(output) = store.read_optional(&id, true)?
             && output.session_id != source
         {
             correct_owner(&tx, &id, &output.session_id)?;

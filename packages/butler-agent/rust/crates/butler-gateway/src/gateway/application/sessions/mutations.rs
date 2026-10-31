@@ -39,6 +39,7 @@ impl AppApplication {
         }
         let archived = input.archived.unwrap_or(false);
         if archived {
+            self.ensure_output_transfer_complete(&session_id).await?;
             super::cleanup::replay(self).await;
         }
         let cleanup_guard = self.session_cleanup_locks.acquire(session_id.clone()).await;
@@ -85,6 +86,7 @@ impl AppApplication {
         session_id: String,
         title: Option<String>,
     ) -> Result<AppSessionActionResult, GatewayApplicationError> {
+        self.ensure_output_transfer_complete(&session_id).await?;
         super::cleanup::replay(self).await;
         let cleanup_guard = self.session_cleanup_locks.acquire(session_id.clone()).await;
         self.read_session_row(session_id.clone()).await?;
@@ -134,6 +136,7 @@ impl AppApplication {
         session_id: String,
         permanent: bool,
     ) -> Result<AppSessionActionResult, GatewayApplicationError> {
+        self.ensure_output_transfer_complete(&session_id).await?;
         super::cleanup::replay(self).await;
         let cleanup_guard = self.session_cleanup_locks.acquire(session_id.clone()).await;
         self.read_session_row(session_id.clone()).await?;
