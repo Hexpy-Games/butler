@@ -22,31 +22,35 @@ impl AppApplication {
         let reason_kind = super::failures::Reason::from_error(error);
         let now = gate.now;
         let subscribers = self.subscribers.clone();
-        self.storage.execute(move |db| {
+        let permanent = self.storage.execute(move |db| {
             let tx = db.savepoint().map_err(super::super::AppStorageError::sqlite)?;
-            let attempts: u32 = tx.query_row("SELECT attempts FROM app_initiated_messages WHERE id=?1", [&id], |r| r.get(0))
+            let (attempts, kind): (u32, String) = tx.query_row("SELECT attempts,kind FROM app_initiated_messages WHERE id=?1", [&id], |r| Ok((r.get(0)?, r.get(1)?)))
                 .map_err(super::super::AppStorageError::sqlite)?;
+            let permanent = permanent || (kind == "canon_step" && reason == "session_model_unavailable");
             let time = chrono::DateTime::parse_from_rfc3339(&now).map_err(|_| super::super::automations::timing::invalid())?;
             let next = (time + chrono::Duration::seconds((1_i64 << attempts.min(9)).min(300)))
                 .with_timezone(&chrono::Utc).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
             let changed = tx.execute("UPDATE app_initiated_messages SET state=?1,posting=0,reason=?2,attempts=attempts+1,next_attempt_at=?3 WHERE id=?4 AND state='held'",
                 params![if permanent {"failed"} else {"held"},reason,if permanent || reason == "session_model_unavailable" {None} else {Some(next)},&id])
                 .map_err(super::super::AppStorageError::sqlite)?;
-            if permanent && changed == 1 {
-                let work: bool = tx.query_row("SELECT kind='work_result' FROM app_initiated_messages WHERE id=?1", [&id], |r| r.get(0)).map_err(super::super::AppStorageError::sqlite)?;
-                if work && let Some(event) = super::failures::enqueue(&tx, &id, &reason_kind, &gate.language, false, &now)? {
-                    super::super::events::publish(&subscribers, &event);
-                }
+            if permanent && changed == 1 && kind == "work_result"
+                && let Some(event) = super::failures::enqueue(&tx, &id, &reason_kind, &gate.language, false, &now)? {
+                super::super::events::publish(&subscribers, &event);
             }
-            tx.commit().map_err(super::super::AppStorageError::sqlite)
+            tx.commit().map_err(super::super::AppStorageError::sqlite)?;
+            Ok(permanent)
         }).await.map_err(app_error)?;
-        if permanent {
-            super::super::canon_queue::steps::delivery_failed(self, failed_id, false).await?;
+        let receipt = if permanent {
+            let result =
+                super::super::canon_queue::steps::delivery_failed(self, failed_id, false).await;
             self.projection.handoffs_changed();
-        }
+            result
+        } else {
+            Ok(())
+        };
         self.automation_wake.notify_one();
-        self.queue_wake.wake(None).await?;
-        Ok(())
+        let wake = self.queue_wake.wake(None).await;
+        receipt.and(wake)
     }
     pub(super) async fn work_retry_pending(
         &self,

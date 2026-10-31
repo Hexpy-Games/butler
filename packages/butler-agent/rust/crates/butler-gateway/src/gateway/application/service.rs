@@ -286,6 +286,7 @@ impl AppApplication {
     ) -> Result<(), GatewayApplicationError> {
         let claim = claim.clone();
         let wake_chat = claim.chat_id.clone();
+        let failed_id = claim.queued_message_id.clone();
         let code = code.to_owned();
         let now = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
@@ -312,10 +313,11 @@ impl AppApplication {
             events::append(&tx,&subscribers,"session_queue.changed",turn_id.as_deref(),payload,&now)?;
             tx.commit().map_err(AppStorageError::sqlite)?;Ok(())
         }).await.map_err(app_error)?;
+        let receipt = super::canon_queue::steps::delivery_failed(self, failed_id, true).await;
         if let Some(dispatcher) = &self.queue_dispatcher {
             dispatcher.wake_chat(wake_chat).await?;
         }
-        Ok(())
+        receipt
     }
 }
 
