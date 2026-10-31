@@ -16,10 +16,11 @@ async fn shared_blob_survives_delete_before_backfill() -> Result<(), HarnessErro
         .execute_batch("DELETE FROM output_blobs; DELETE FROM output_blob_backfill; DROP INDEX IF EXISTS output_blobs_sha;")?;
     s.gw = s.agent.start_again().await?;
     assert_eq!(
-        scalar(
+        read_scalar(
             &s.sandbox.data,
             "SELECT count(*) FROM sqlite_master WHERE name='output_blobs_sha'"
-        )?,
+        )
+        .await?,
         0
     );
     // Publish through the public tool path while the old output has no rows.

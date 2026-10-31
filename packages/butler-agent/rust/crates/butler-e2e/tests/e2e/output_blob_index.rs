@@ -99,22 +99,64 @@ fn seed(
 fn scalar(data: &Path, sql: &str) -> Result<i64, HarnessError> {
     Ok(db(data)?.query_row(sql, [], |r| r.get(0))?)
 }
-async fn completed(s: &Scenario) -> Result<(), HarnessError> {
-    tokio::time::timeout(Duration::from_secs(10), async {
+async fn observe_scalar(data: &Path, sql: &str) -> Result<Option<i64>, HarnessError> {
+    let path = data.join("outputs/index.sqlite");
+    let sql = sql.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let value = (|| -> rusqlite::Result<i64> {
+            let db = sqlite::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+            db.busy_timeout(Duration::ZERO)?;
+            db.query_row(&sql, [], |r| r.get(0))
+        })();
+        match value {
+            Ok(value) => Ok(Some(value)),
+            Err(rusqlite::Error::SqliteFailure(error, _))
+                if matches!(
+                    error.code,
+                    rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+                ) =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error.into()),
+        }
+    })
+    .await
+    .map_err(|e| HarnessError(e.to_string()))?
+}
+async fn read_scalar(data: &Path, sql: &str) -> Result<i64, HarnessError> {
+    // Match SQLite's default five-second busy deadline, without blocking Tokio.
+    tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let ready = scalar(
-                &s.sandbox.data,
-                "SELECT complete FROM output_blob_backfill WHERE id=1",
-            )? != 0;
-            // Completion commits before the durable queue drains.
-            if ready && scalar(&s.sandbox.data, "SELECT count(*) FROM output_blob_sweep")? == 0 {
-                return Ok(());
+            if let Some(value) = observe_scalar(data, sql).await? {
+                return Ok(value);
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await
-    .map_err(|_| HarnessError("backfill or sweep did not complete".into()))?
+    .map_err(|_| HarnessError(format!("output index remained busy: {sql}")))?
+}
+async fn wait_for_completion(s: &Scenario, deadline: Duration) -> Result<(), HarnessError> {
+    let sql = "SELECT COALESCE((SELECT complete=1 AND NOT EXISTS(SELECT 1 FROM output_blob_sweep) FROM output_blob_backfill WHERE id=1),0)";
+    let result = tokio::time::timeout(deadline, async {
+        loop {
+            if observe_scalar(&s.sandbox.data, sql).await? == Some(1) {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    result.map_err(|_| {
+        HarnessError(format!(
+            "backfill or sweep did not complete:\n{}",
+            s.agent.logs()
+        ))
+    })?
+}
+async fn completed(s: &Scenario) -> Result<(), HarnessError> {
+    wait_for_completion(s, Duration::from_secs(10)).await
 }
 async fn chat(s: &Scenario) -> Result<String, HarnessError> {
     let r = s.gw.post("/sessions", json!({"kind":"chat"})).await?;

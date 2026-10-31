@@ -67,20 +67,7 @@ async fn stop_during_backfill_preserves_cursor_and_resumes() -> Result<(), Harne
             .query_row("SELECT cursor FROM output_blob_backfill", [], |r| r.get(0))?;
     db(&s.sandbox.data)?.execute_batch(&format!("CREATE TRIGGER no_rewind BEFORE UPDATE OF cursor ON output_blob_backfill WHEN NEW.cursor<='{cursor}' BEGIN SELECT RAISE(ABORT,'cursor rewound'); END;"))?;
     s.gw = s.agent.start_again().await?;
-    let mut log = tokio::fs::File::open(s.sandbox.logs.join("agent-2.log")).await?;
-    let mut observed = String::new();
-    tokio::time::timeout(Duration::from_secs(120), async {
-        use tokio::io::AsyncReadExt;
-        loop {
-            log.read_to_string(&mut observed).await?;
-            if observed.contains("output blob backfill finished") {
-                return Ok::<_, HarnessError>(());
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    .map_err(|_| HarnessError("resumed backfill hung".into()))??;
+    wait_for_completion(&s, Duration::from_secs(120)).await?;
     assert_eq!(
         scalar(&s.sandbox.data, "SELECT indexed FROM output_blob_backfill")?,
         100_000
