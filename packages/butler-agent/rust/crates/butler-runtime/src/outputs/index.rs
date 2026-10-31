@@ -194,6 +194,10 @@ pub(super) fn transfer(store: &OutputStore, source: &str, target: &str) -> std::
         .collect::<Result<Vec<_>, _>>()
         .map_err(std::io::Error::other)?;
     for id in ids {
+        if store.manifest(&id).is_err() {
+            butler_core::diagnostic!("[outputs] ignoring invalid indexed output id {id:?}");
+            continue;
+        }
         // Reconcile stale row hints too; only missing or unparseable manifests
         // have no servable owner. Other I/O errors must leave the transfer pending.
         if let Some(output) = store.read_optional(&id, true)?

@@ -23,7 +23,7 @@ async fn assert_held(s: &Scenario) -> Result<(), HarnessError> {
     let r = s.gw.get("/automations/held").await?;
     assert_eq!(r.data()["automation"]["state"], "enabled", "{r:?}");
     assert_eq!(r.data()["automation"]["next_run_at"], DUE, "{r:?}");
-    assert!(s.gw.turns("general").await?.is_empty());
+    assert_eq!(s.gw.turns("general").await?, [] as [serde_json::Value; 0]);
     Ok(())
 }
 async fn held_schedule(kind: &str) -> Result<(), HarnessError> {
@@ -81,11 +81,19 @@ async fn held_schedule(kind: &str) -> Result<(), HarnessError> {
         "idle disk writes exceeded 1 MB: {writes}"
     );
     watch.assert_unchanged();
-    // Rechecking unchanged holds must also be a write-free operation.
-    dispatch(&s).await?;
-    dispatch(&s).await?;
-    watch.assert_unchanged();
     drop(watch);
+    // Explicit requests write access logs; an unchanged hold must not commit App data.
+    let db = app(&s)?;
+    let before: u64 = db.query_row("PRAGMA data_version", [], |r| r.get(0))?;
+    dispatch(&s).await?;
+    dispatch(&s).await?;
+    let after: u64 = db.query_row("PRAGMA data_version", [], |r| r.get(0))?;
+    eprintln!(
+        "TRANSFER-HOLD kind={kind} repeated_check_commits={}",
+        after - before
+    );
+    assert_eq!(after, before, "unchanged hold committed App data");
+    drop(db);
     assert_held(&s).await?;
     s.agent.terminate().await?;
     std::fs::remove_dir(manifest(&s.sandbox.data, &id))?;
@@ -101,6 +109,13 @@ async fn held_schedule(kind: &str) -> Result<(), HarnessError> {
         s.gw.wait_terminal("general", turn_id, Duration::from_secs(90))
             .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
+    let messages = s.gw.messages("general").await?;
+    let replies: Vec<_> = messages
+        .iter()
+        .filter(|m| m["role"] == "assistant" && m["turn_id"] == turn_id)
+        .collect();
+    assert_eq!(replies.len(), 1, "{messages:?}");
+    assert_eq!(replies[0]["text"], "Complete scheduled report.");
     dispatch(&s).await?;
     assert_eq!(runs(&s).await?.len(), 1);
     assert_eq!(s.gw.turns("general").await?.len(), 1);
