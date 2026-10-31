@@ -55,9 +55,9 @@ export function useMessageVirtualizer({
     overscan: 8,
     paddingStart: headerHeight,
   });
-  const columnWidth = useRef({ width: 0, changedAt: Number.NEGATIVE_INFINITY });
-  rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
-    keepReaderOnWidthChange(item, instance, columnWidth.current);
+  const measuredAtWidth = useRef(new Map<VirtualItem["key"], number>());
+  rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) =>
+    keepReaderOnRewrap(item, delta, instance, measuredAtWidth.current);
 
   const virtualContentHeight = Math.max(headerHeight, rowVirtualizer.getTotalSize());
   const viewportHeight =
@@ -93,22 +93,23 @@ const NO_QUEUED_KEYS: readonly string[] = [];
 /** Status line, one-line bubble and controls row of a QueuedMessage. */
 const QUEUED_ROW_ESTIMATE = 112;
 
-/** How long after the column's width last changed row resizes still count as its rewrap. */
-const REWRAP_SETTLE_MS = 200;
-
 /**
- * Rows above the reader re-measured because the column's width changed (the window, a pane beside the chat) rewrapped:
- * the scroll offset follows them, so the reader keeps their place. Any other row resize (streaming, a block opening)
- * leaves the offset alone.
+ * A row re-measured at another column width (the window, a pane beside the chat) rewrapped, now or when it scrolled back
+ * into range, and the reader keeps their place. Above the reader, the scroll offset follows its whole change. Under
+ * the top of the view, it follows the part above the reader's line, in proportion, as the text rewraps evenly. Any other
+ * resize (streaming, a block opening) leaves the offset alone.
  */
-function keepReaderOnWidthChange(item: VirtualItem, instance: Virtualizer<HTMLDivElement, Element>, column: { width: number; changedAt: number }) {
-  const width = instance.scrollElement?.clientWidth ?? 0;
-  const now = performance.now();
-  if (width !== column.width) {
-    if (column.width) column.changedAt = now;
-    column.width = width;
-  }
-  return now - column.changedAt < REWRAP_SETTLE_MS && item.start < (instance.scrollOffset ?? 0);
+function keepReaderOnRewrap(item: VirtualItem, delta: number, instance: Virtualizer<HTMLDivElement, Element>, measuredAtWidth: Map<VirtualItem["key"], number>) {
+  const element = instance.scrollElement;
+  if (!element) return false;
+  const width = element.clientWidth, measured = measuredAtWidth.get(item.key);
+  measuredAtWidth.set(item.key, width);
+  if (measured === undefined || measured === width) return false;
+  const offset = instance.scrollOffset ?? 0;
+  if (item.end <= offset) return true;
+  // After the rows above, whose adjustment sets the offset outright.
+  if (item.start < offset) queueMicrotask(() => { element.scrollTop += delta * (offset - item.start) / item.size; });
+  return false;
 }
 
 function estimateMessageRowSize(

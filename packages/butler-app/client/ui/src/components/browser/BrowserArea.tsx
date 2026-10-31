@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
-import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, type TabStripGroup } from "@/butler-ds";
+import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, useHeldWhilePaneLeaves, type TabStripGroup } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { activeChatFromNavigation } from "@/app/utils";
 import { BrowserDialog } from "./BrowserDialog";
@@ -21,7 +21,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const locale = useAppLocale();
   const reducedMotion = useButlerStore((store) => store.settings.reduce_motion);
   useEffect(() => { void browserCall("presentation", { locale, reducedMotion }); }, [locale, reducedMotion]);
-  const state = useBrowserState();
+  const state = useHeldWhilePaneLeaves(useBrowserState());
   const navigation = useButlerStore((store) => store.navigation);
   // The hub shows conversation tabs by navigation; before it loads they are unknown, not absent.
   const tabsKnown = useButlerStore((store) => Boolean(sessionId) || store.navigationLoaded);
