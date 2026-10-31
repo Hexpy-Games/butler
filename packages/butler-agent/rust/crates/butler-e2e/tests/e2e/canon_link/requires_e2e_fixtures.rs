@@ -5,7 +5,6 @@ use super::stub::delegated::{DIRECTION, STEER};
 use super::*;
 use rusqlite::Connection;
 use std::{
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::atomic::Ordering,
 };
@@ -302,7 +301,7 @@ async fn blocked_direction_keeps_the_epic_short_of_review() -> Result<(), Harnes
 }
 
 /// Directories of one project Ledger stay read-only until this is dropped.
-struct ReadOnlyLedger(Vec<PathBuf>);
+struct ReadOnlyLedger(Vec<(PathBuf, std::fs::Permissions)>);
 
 impl ReadOnlyLedger {
     fn set(root: &Path) -> std::io::Result<Self> {
@@ -315,10 +314,13 @@ impl ReadOnlyLedger {
                     pending.push(entry.path());
                 }
             }
-            directories.push(directory);
+            let writable = std::fs::metadata(&directory)?.permissions();
+            directories.push((directory, writable));
         }
-        for directory in &directories {
-            std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o555))?;
+        for (directory, writable) in &directories {
+            let mut read_only = writable.clone();
+            read_only.set_readonly(true);
+            std::fs::set_permissions(directory, read_only)?;
         }
         Ok(Self(directories))
     }
@@ -326,8 +328,8 @@ impl ReadOnlyLedger {
 
 impl Drop for ReadOnlyLedger {
     fn drop(&mut self) {
-        for directory in &self.0 {
-            let _ = std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o755));
+        for (directory, writable) in &self.0 {
+            let _ = std::fs::set_permissions(directory, writable.clone());
         }
     }
 }
