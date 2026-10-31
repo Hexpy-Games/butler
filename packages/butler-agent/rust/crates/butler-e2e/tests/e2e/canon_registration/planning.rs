@@ -1,7 +1,7 @@
 //! Canon changes found while BTCC plans: 명세 refinement and mid-work registration.
 use super::*;
 
-fn pipeline(refs: Value) -> Vec<(&'static str, Value)> {
+fn pipeline(refs: &Value) -> Vec<(&'static str, Value)> {
     let done = json!([{"action_key":"inspect","status":"done"}]);
     vec![
         (
@@ -103,7 +103,7 @@ async fn cb_05_confirmed_spec_revision_reaches_context_and_governing_refs()
         &script,
         &chat,
         message,
-        pipeline(json!([format!("canon:epic/{epic}"), spec_ref])),
+        pipeline(&json!([format!("canon:epic/{epic}"), spec_ref])),
     )
     .await?;
     let first = script
@@ -141,8 +141,8 @@ async fn cb_05_confirmed_spec_revision_reaches_context_and_governing_refs()
 async fn cn_15_registering_mid_work_links_the_running_work_in_place() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server, project, chat) = setup("CN-15", Access::Auto).await?;
-    let mut calls = pipeline(json!([]));
-    let linked = pipeline(json!(["canon:epic/$epic"]));
+    let mut calls = pipeline(&json!([]));
+    let linked = pipeline(&json!(["canon:epic/$epic"]));
     calls.truncate(2);
     calls.push(("canon_propose",json!({"project_id":project,"summary":"과제 등록","changes":[{"op":"epic.create","title":"언어 설정 멈춤","description":"설정 화면에서 언어를 바꾸면 앱이 멈춘다"}]})));
     calls.extend(linked);
