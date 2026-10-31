@@ -124,8 +124,10 @@ async fn next_direction_stays_on_the_work_a_continuation_left_blocked() -> Resul
     let statuses: Vec<_> = saved.iter().map(|(_, status)| status.as_str()).collect();
     assert_eq!(statuses, ["success", "blocked", "success"]);
     assert_eq!(works(&s, &session), ["completed", "completed"]);
-    let requests = script.requests.lock().unwrap();
-    let second = requests
+    let second = script
+        .requests
+        .lock()
+        .unwrap()
         .iter()
         .find(|r| {
             let text = request_text(r);
@@ -141,7 +143,6 @@ async fn next_direction_stays_on_the_work_a_continuation_left_blocked() -> Resul
         !current.contains("runs on a new Work") && current.contains("Continue the existing Work"),
         "the blocked Work is re-bound, not replaced: {current}"
     );
-    drop(requests);
     s.finish().await?;
     server.abort();
     Ok(())
