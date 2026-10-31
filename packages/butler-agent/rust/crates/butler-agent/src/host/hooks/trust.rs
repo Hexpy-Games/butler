@@ -1,9 +1,9 @@
-//! The user's answers about project hooks. They live under `auth/` in the data
+//! The user's answers about project folders. They live under `auth/` in the data
 //! folder, a credential root, where neither a project folder nor a model tool can
-//! write. An answer covers one exact content of one exact folder: anything else
-//! asks again. A store that cannot be read holds no answers, so it asks again too.
+//! write. An answer covers one folder: a replaced or renamed one asks again, and a
+//! store that cannot be read holds no answers, so it asks again too.
 use super::Hooks;
-use butler_core::hooks::{ProjectHookChange, ProjectHookLine, ProjectHookRequest};
+use butler_core::hooks::ProjectHookRequest;
 use butler_platform::secure_fs;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -15,14 +15,11 @@ use std::{
 
 const STORE: &str = "auth/project-hook-trust.json";
 
-/// The answer about one project folder's hook file.
-#[derive(Clone, Deserialize, Serialize)]
+/// The answer about one project folder.
+#[derive(Deserialize, Serialize)]
 struct Answer {
     identity: String,
-    hash: String,
-    allowed: bool,
-    /// The hooks of the content last allowed, which later cards mark changes from.
-    last_allowed: Vec<ProjectHookLine>,
+    trusted: bool,
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -32,20 +29,12 @@ pub(super) struct Store {
 }
 
 impl Store {
-    /// The answer for exactly this content, in this folder.
-    pub(super) fn answer(&self, request: &ProjectHookRequest) -> Option<bool> {
-        self.projects
-            .get(&request.project_path)
-            .filter(|answer| answer.hash == request.content_hash)
-            .map(|answer| answer.allowed)
-    }
-
-    /// What the user allowed last in this same folder; a replaced folder has nothing.
-    pub(super) fn last_allowed(&self, path: &str, identity: &str) -> &[ProjectHookLine] {
+    /// The answer for exactly this folder.
+    pub(super) fn answer(&self, path: &str, identity: &str) -> Option<bool> {
         self.projects
             .get(path)
             .filter(|answer| answer.identity == identity)
-            .map_or(&[], |answer| answer.last_allowed.as_slice())
+            .map(|answer| answer.trusted)
     }
 }
 
@@ -76,38 +65,21 @@ fn write(data: &Path, store: &Store) -> io::Result<()> {
     })
 }
 
-/// Remembers the answer for the content on this card; the store keeps one per folder.
+/// Remembers the answer about the folder on this card.
 pub(super) async fn decide(
     hooks: &Arc<Hooks>,
     request: ProjectHookRequest,
-    allowed: bool,
+    trusted: bool,
 ) -> Result<(), String> {
     let _writer = hooks.trust_writer.lock().await;
     let data = hooks.data.clone();
     tokio::task::spawn_blocking(move || {
         let mut store = read(&data);
-        let last_allowed = if allowed {
-            request
-                .hooks
-                .iter()
-                .filter(|hook| hook.change != Some(ProjectHookChange::Removed))
-                .map(|hook| ProjectHookLine {
-                    change: None,
-                    ..hook.clone()
-                })
-                .collect()
-        } else {
-            store
-                .last_allowed(&request.project_path, &request.project_identity)
-                .to_vec()
-        };
         store.projects.insert(
             request.project_path,
             Answer {
                 identity: request.project_identity,
-                hash: request.content_hash,
-                allowed,
-                last_allowed,
+                trusted,
             },
         );
         write(&data, &store)

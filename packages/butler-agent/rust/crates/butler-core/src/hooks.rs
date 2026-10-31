@@ -7,8 +7,8 @@ pub use config::{HookConfig, HookDefinition, HookMatcher};
 pub use context::{HookContext, HookDispatched};
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
 pub use project::{
-    PROJECT_HOOK_FILE, PROJECT_HOOK_ID_PREFIX, PROJECT_HOOKS_CAPABILITY, ProjectHookChange,
-    ProjectHookLine, ProjectHookRequest, ProjectHookReview, ProjectHooksOff,
+    PROJECT_HOOK_FILE, PROJECT_HOOK_ID_PREFIX, PROJECT_HOOKS_CAPABILITY, ProjectHookLine,
+    ProjectHookRequest, ProjectHookReview,
 };
 use serde::{Deserialize, Serialize};
 use std::{future::Future, pin::Pin};

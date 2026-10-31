@@ -114,7 +114,7 @@ impl AppApplication {
             ),
             ..HookPayload::default()
         };
-        let envelope = self
+        let mut envelope = self
             .hook_envelope(
                 chat,
                 HookEvent::UserPromptSubmit,
@@ -122,6 +122,10 @@ impl AppApplication {
                 payload,
             )
             .await?;
+        // A message can run in another mode than its chat's, as a schedule's does.
+        if let Some(mode) = request.access_mode.as_ref().and_then(Value::as_str) {
+            envelope.access_mode = Some(mode.to_owned());
+        }
         let dispatched = port
             .dispatch(envelope, self.dependencies.service_shutdown.child_token())
             .await

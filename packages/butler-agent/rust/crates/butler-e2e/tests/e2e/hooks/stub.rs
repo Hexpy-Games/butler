@@ -72,6 +72,29 @@ pub(super) fn forge_trust_by_command(body: &Value) -> Option<ResponseRecord> {
         &json!({"command":command,"summary":"Hook check","state_effect":"mutation","timeout_ms":30000}),
     )
 }
+/// Checks a remote: a command the access tiers treat as going out.
+pub(super) fn remote_check(body: &Value) -> Option<ResponseRecord> {
+    tool(
+        body,
+        "run_command",
+        &json!({"command":"echo remote-ok","summary":"Check remote","state_effect":"remote_observation"}),
+    )
+}
+/// Reads a file; once that has an outcome, checks a remote.
+pub(super) fn read_then_remote_check(body: &Value) -> Option<ResponseRecord> {
+    let read = body["input"]
+        .as_array()?
+        .iter()
+        .any(|item| item["type"] == "function_call_output" && item["call_id"] == "call_read");
+    if read {
+        return remote_check(body);
+    }
+    Some(response(
+        &json!({"type":"function_call","id":"fc_read","call_id":"call_read",
+        "name":"read_file","arguments":json!({"requests":[{"path":"hook-input.txt"}]}).to_string(),
+        "status":"completed"}),
+    ))
+}
 pub(super) fn large(body: &Value) -> Option<ResponseRecord> {
     tool(
         body,

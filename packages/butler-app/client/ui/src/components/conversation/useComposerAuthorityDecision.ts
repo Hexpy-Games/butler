@@ -13,7 +13,6 @@ export interface ComposerAuthorityDecision {
   media?: ComposerDecisionMedia;
   pathDetails?: string[];
   title: string; details: string[]; risk: ApprovalRequestView["risk"]; actionKind: ApprovalRequestView["actionKind"];
-  hookTags?: ApprovalRequestView["hookTags"]; hooksOff?: boolean; onStopTurn?: () => void;
   /** What "Always allow in this conversation" covers; the grant needs the legacy `scope`. */
   conversationScope?: string; scope: AuthorityApprovalCard["scope"]; pending: boolean; error?: string;
   composingMessage: boolean; pendingCount: number;
@@ -57,8 +56,6 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
       onStop: () => void useButlerStore.getState().cancelActiveTurn() } } : {}),
     title: handoff?.title ?? view.title, details: handoff?.details ?? view.details, risk: view.risk, actionKind: view.actionKind,
     pathDetails: view.pathDetails,
-    hookTags: view.hookTags, hooksOff: view.hooksOff,
-    onStopTurn: () => void useButlerStore.getState().cancelActiveTurn(),
     conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     composingMessage: collapsed === key, pendingCount: requests.length,

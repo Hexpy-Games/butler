@@ -35,6 +35,8 @@ pub(super) fn render(items: &[HookContext]) -> Option<String> {
 pub(super) struct Claimed {
     /// The labelled section for the turn.
     pub(super) text: Option<String>,
+    /// Part of that section comes from a project folder's hook.
+    pub(super) project: bool,
     /// The session's waiting SessionStart items in that section, as stored.
     pub(super) waiting: Option<String>,
 }
@@ -52,6 +54,7 @@ pub(super) fn claimed(
     items.extend(parse(own(db, queued_id)?.as_deref())?);
     Ok(Claimed {
         text: render(&items),
+        project: items.iter().any(|item| item.scope == "project"),
         waiting,
     })
 }

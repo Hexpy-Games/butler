@@ -69,13 +69,6 @@ impl GuidedTools {
     pub(crate) fn authority_owner(&self) -> &str {
         &self.binding.owner_session_id
     }
-
-    /// Tells the schedule's owner about a step this run could not ask about.
-    pub(crate) async fn report_unattended(&self, facts: AuthorityAdmissionInput) {
-        if self.refresh_instruction_context().await.is_ok() {
-            skipped(self, facts, "schedule_permission_required").await;
-        }
-    }
 }
 
 async fn skipped(owner: &GuidedTools, facts: AuthorityAdmissionInput, code: &str) {

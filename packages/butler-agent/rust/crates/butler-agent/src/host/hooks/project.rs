@@ -1,8 +1,7 @@
-//! Project-folder hooks. The file is read once for each review; what that read
-//! parsed is what gets hashed, shown on the card and run, and nothing reads the
-//! file again until the next review. A file that is a symlink, or reached through
+//! Project-folder hooks. A folder the user trusts runs what its file says at each
+//! review, with no further question. A file that is a symlink, or reached through
 //! one, is refused, and so is an invalid one.
-use super::{Dispatcher, Hooks, execute, project_lines, trust};
+use super::{Dispatcher, Hooks, execute, trust};
 use butler_core::hooks::*;
 use butler_platform::secure_fs;
 use std::{
@@ -13,18 +12,14 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 const CAP: u64 = 256 * 1024;
+/// A refusal reason is cut after this many characters.
+const MAX_REASON_CHARS: usize = 512;
 
 /// One read of a project's hook file.
 struct ProjectFile {
     request: ProjectHookRequest,
     /// The hooks that would run, ids prefixed for run records.
     hooks: Vec<HookDefinition>,
-}
-
-/// What a review found on disk.
-enum Found {
-    Nothing,
-    File(Box<ProjectFile>, trust::Store),
 }
 
 /// A root's filesystem identity: a replaced folder has another one, even at the
@@ -61,119 +56,94 @@ fn read_config(root: &Path) -> Result<Option<HookConfig>, String> {
     Ok(Some(config))
 }
 
-/// One folder, as the review found it.
-struct Folder {
-    path: String,
-    identity: String,
-    location: String,
-    name: String,
-}
-
-/// Hooks the user allowed can no longer run. That is a question only if they had
-/// allowed some here: otherwise there was never anything to lose.
-fn hooks_off(folder: Folder, off: ProjectHooksOff, store: trust::Store) -> Found {
-    let last_allowed = store.last_allowed(&folder.path, &folder.identity);
-    if last_allowed.is_empty() {
-        return Found::Nothing;
+/// Quotes what a reader could otherwise split differently from the real value.
+fn quoted(argument: &str) -> String {
+    let plain = !argument.is_empty()
+        && argument
+            .chars()
+            .all(|c| c.is_alphanumeric() || "-_./:=@%+,".contains(c));
+    if plain {
+        argument.to_owned()
+    } else {
+        format!("'{}'", argument.replace('\'', "'\\''"))
     }
-    let content_hash = butler_turn::btcc::digest_identity(&format!(
-        "project-hooks-off\0{}\0{}\0{off:?}",
-        folder.path, folder.identity
-    ));
-    let request = ProjectHookRequest {
-        content_hash,
-        folder: folder.name,
-        file: PROJECT_HOOK_FILE.into(),
-        location: folder.location,
-        changed: true,
-        unsandboxed: false,
-        off: Some(off),
-        hooks: project_lines::with_changes(Vec::new(), last_allowed),
-        project_identity: folder.identity,
-        project_path: folder.path,
-    };
-    let file = ProjectFile {
-        request,
-        hooks: Vec::new(),
-    };
-    Found::File(Box::new(file), store)
 }
 
-/// Hashes what would run, not the bytes: only a change in that asks again.
-fn hooks_on(folder: Folder, config: &HookConfig, store: trust::Store) -> Result<Found, String> {
-    let enabled = config.hooks.iter().filter(|hook| hook.enabled);
-    let runnable: Vec<HookDefinition> = enabled.map(project_lines::runnable).collect();
-    let parsed = serde_json::to_string(&runnable).map_err(|error| error.to_string())?;
-    let content_hash = butler_turn::btcc::digest_identity(&format!(
-        "project-hooks\0{}\0{}\0{parsed}",
-        folder.path, folder.identity
-    ));
-    let lines = runnable.iter().map(project_lines::line);
-    let lines = lines.collect::<Result<Vec<_>, _>>()?;
-    let last_allowed = store.last_allowed(&folder.path, &folder.identity);
-    let request = ProjectHookRequest {
-        content_hash,
-        folder: folder.name,
-        file: PROJECT_HOOK_FILE.into(),
-        location: folder.location,
-        changed: !last_allowed.is_empty(),
-        unsandboxed: false,
-        off: None,
-        hooks: project_lines::with_changes(lines, last_allowed),
-        project_identity: folder.identity,
-        project_path: folder.path,
-    };
-    let hooks = runnable
-        .into_iter()
-        .map(|hook| HookDefinition {
-            id: format!("{PROJECT_HOOK_ID_PREFIX}{}", hook.id),
-            ..hook
-        })
+/// The exact action: environment additions first, as a shell would read them. Argv
+/// is always quoted, so it never reads like the same text given to a shell.
+fn action(hook: &HookDefinition) -> String {
+    let mut parts: Vec<String> = hook
+        .env
+        .iter()
+        .map(|(key, value)| format!("{}={}", quoted(key), quoted(value)))
         .collect();
-    Ok(Found::File(Box::new(ProjectFile { request, hooks }), store))
+    match (&hook.command, &hook.args) {
+        (Some(command), _) => parts.push(command.clone()),
+        (None, Some(args)) => parts.extend(
+            args.iter()
+                .map(|argument| format!("'{}'", argument.replace('\'', "'\\''"))),
+        ),
+        (None, None) => {}
+    }
+    parts.join(" ")
 }
 
-/// What a read of the folder means, and the reason if the file had to be refused.
-fn load(root: &Path, user_hooks: &Path, data: &Path) -> Result<(Found, Option<String>), String> {
+/// The folder's hooks that could run, with the user's answer about it.
+fn load(
+    root: &Path,
+    user_hooks: &Path,
+    data: &Path,
+) -> Result<Option<(ProjectFile, Option<bool>)>, String> {
     let resolved = match secure_fs::canonicalize(root) {
         Ok(resolved) => resolved,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok((Found::Nothing, None)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
-    let file = resolved.join(PROJECT_HOOK_FILE);
-    if secure_fs::canonicalize(&file).is_ok_and(|file| {
+    if secure_fs::canonicalize(resolved.join(PROJECT_HOOK_FILE)).is_ok_and(|file| {
         secure_fs::canonicalize(user_hooks).is_ok_and(|user_file| user_file == file)
     }) {
-        return Ok((Found::Nothing, None)); // The user's own file, in its parent folder.
+        return Ok(None); // The user's own file, in its parent folder.
     }
-    let identity = folder_identity(&resolved)?;
-    let config = read_config(&resolved);
-    if folder_identity(&resolved)? != identity {
+    let before = folder_identity(&resolved);
+    let Some(config) = read_config(&resolved)? else {
+        return Ok(None);
+    };
+    let project_identity = before?;
+    if folder_identity(&resolved)? != project_identity {
         return Err("Project folder changed while it was read".into());
     }
-    let folder = Folder {
-        path: resolved.to_string_lossy().into_owned(),
-        identity,
-        location: project_lines::visible(&file.to_string_lossy()),
-        name: project_lines::folder_name(&resolved),
+    let enabled = config.hooks.into_iter().filter(|hook| hook.enabled);
+    let enabled: Vec<HookDefinition> = enabled.collect();
+    if enabled.is_empty() {
+        return Ok(None);
+    }
+    let project_path = resolved.to_string_lossy().into_owned();
+    let answer = trust::read(data).answer(&project_path, &project_identity);
+    let lines = enabled.iter().map(|hook| ProjectHookLine {
+        event: hook.event,
+        tools: hook.matcher.tools.clone(),
+        command: action(hook),
+    });
+    let request = ProjectHookRequest {
+        project_path,
+        project_identity,
+        unsandboxed: false,
+        hooks: lines.collect(),
     };
-    let store = trust::read(data);
-    Ok(match config {
-        Err(reason) => (
-            hooks_off(folder, ProjectHooksOff::Refused, store),
-            Some(reason),
-        ),
-        Ok(None) => (hooks_off(folder, ProjectHooksOff::Missing, store), None),
-        Ok(Some(config)) if !config.hooks.iter().any(|hook| hook.enabled) => {
-            (hooks_off(folder, ProjectHooksOff::Disabled, store), None)
-        }
-        Ok(Some(config)) => (hooks_on(folder, &config, store)?, None),
-    })
+    let hooks = enabled.into_iter().map(|hook| HookDefinition {
+        id: format!("{PROJECT_HOOK_ID_PREFIX}{}", hook.id),
+        name: None,
+        ..hook
+    });
+    let hooks = hooks.collect();
+    Ok(Some((ProjectFile { request, hooks }, answer)))
 }
 
 /// A refused file runs nothing, and says why in Settings' run log, once per reason.
 fn report_refused(hooks: &Hooks, reason: &str) {
-    let reason = project_lines::safe_reason(reason);
+    // A parser's text may quote the file: bounded and spelled out before anyone sees it.
+    let reason: String = reason.chars().take(MAX_REASON_CHARS).collect();
+    let reason = reason.escape_debug().to_string();
     let hook_id = format!("{PROJECT_HOOK_ID_PREFIX}{PROJECT_HOOK_FILE}");
     let repeated = hooks
         .state
@@ -225,18 +195,16 @@ pub(super) async fn review(
     let found = tokio::task::spawn_blocking(move || load(Path::new(&root), &user_hooks, &data))
         .await
         .map_err(|error| error.to_string())?;
-    let (found, refused) = match found {
-        Ok(found) => found,
-        Err(reason) => (Found::Nothing, Some(reason)),
+    let (file, answer) = match found {
+        Ok(Some(found)) => found,
+        Ok(None) => return Ok(ProjectHookReview::None),
+        Err(reason) => {
+            report_refused(hooks, &reason);
+            return Ok(ProjectHookReview::None);
+        }
     };
-    if let Some(reason) = refused {
-        report_refused(hooks, &reason);
-    }
-    let Found::File(file, store) = found else {
-        return Ok(ProjectHookReview::None);
-    };
-    Ok(match store.answer(&file.request) {
-        Some(true) => ProjectHookReview::Trusted(Arc::new(Scoped::new(hooks, *file))),
+    Ok(match answer {
+        Some(true) => ProjectHookReview::Trusted(Arc::new(Scoped::new(hooks, file))),
         Some(false) => ProjectHookReview::Denied,
         None => ProjectHookReview::Undecided(Box::new(file.request)),
     })
@@ -262,7 +230,7 @@ fn record_dropped(hooks: &Hooks, session_id: &str, context: &[HookContext]) {
     }
 }
 
-/// The dispatcher plus the hooks one review read; those never change afterwards.
+/// The dispatcher plus the hooks one review read.
 struct Scoped {
     inner: Dispatcher,
     hooks: Vec<HookDefinition>,

@@ -31,13 +31,7 @@ export interface ApprovalRequestView {
   conversationScope?: string;
   /** Picks the icon; `other` for unknown kinds and agents without `approval`. */
   actionKind: ApprovalActionKind;
-  /** What the card says about a hook line beyond its text, so a command can never imitate it. */
-  hookTags?: ReadonlyMap<string, readonly HookTag[]>;
-  /** Hooks the user allowed can no longer run: the answer is to go on, or to stop. */
-  hooksOff?: boolean;
 }
-
-export interface HookTag { label: string; tone: "primary" | "warning" }
 
 const MAX_EXAMPLES = 3;
 /** Target kinds that say what a request without examples acts on. */
@@ -96,17 +90,13 @@ function normalizeBrowserSteps(value: unknown): BrowserStep[] | undefined {
 }
 
 function normalizeProjectHooks(value: unknown): ApprovalSummary["projectHooks"] {
-  if (!isRecord(value) || typeof value.file !== "string" || !Array.isArray(value.hooks)) return undefined;
+  if (!isRecord(value) || typeof value.folder !== "string" || !Array.isArray(value.hooks)) return undefined;
   const hooks = value.hooks.flatMap((hook): ProjectHookLine[] => {
     if (!isRecord(hook) || typeof hook.event !== "string" || typeof hook.command !== "string") return [];
     const tools = Array.isArray(hook.tools) ? hook.tools.filter((tool): tool is string => typeof tool === "string") : [];
-    const change = hook.change === "changed" || hook.change === "added" || hook.change === "removed" ? hook.change : undefined;
-    return [{ event: hook.event, tools, command: hook.command, ...(change ? { change } : {}),
-      ...(typeof hook.timeout_ms === "number" ? { timeoutMs: hook.timeout_ms } : {}),
-      ...(hook.asynchronous === true ? { asynchronous: true } : {}), ...(hook.fail_closed === true ? { failClosed: true } : {}) }];
+    return [{ event: hook.event, tools, command: hook.command }];
   });
-  const off = value.off === "missing" || value.off === "disabled" || value.off === "refused" ? value.off : undefined;
-  return { file: value.file, changed: value.changed === true, ...(value.unsandboxed === true ? { unsandboxed: true } : {}), ...(off ? { off } : {}), hooks };
+  return { folder: value.folder, ...(value.unsandboxed === true ? { unsandboxed: true } : {}), hooks };
 }
 
 function normalizeSchedule(value: unknown): ApprovalSummary["schedule"] {
@@ -182,7 +172,6 @@ export function approvalRequestView(
       : COMMAND_KINDS.has(actionKind) ? copy.covers.command(workspace)
         : copy.covers.other,
     actionKind,
-    ...(approval.projectHooks ? { hookTags: projectHookTags(approval.projectHooks.hooks, copy), hooksOff: Boolean(approval.projectHooks.off) } : {}),
   };
 }
 
@@ -204,8 +193,8 @@ function knownActionKind(approval: ApprovalSummary): ApprovalActionKind {
 function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
   card: Pick<AuthorityApprovalCard, "scope" | "reason">, copy: ApprovalRequestCopy): string[] {
   const { schedule, operation, projectHooks } = approval;
-  if (projectHooks) return [projectHooks.file, projectHooks.off ? copy.projectHooks.off[projectHooks.off] : copy.projectHooks.receives,
-    ...(projectHooks.unsandboxed && !projectHooks.off ? [copy.projectHooks.unsandboxed] : []), ...projectHooks.hooks.map(projectHookText)];
+  if (projectHooks) return [projectHooks.folder, copy.projectHooks.receives,
+    ...(projectHooks.unsandboxed ? [copy.projectHooks.unsandboxed] : []), ...projectHooks.hooks.map(projectHookText)];
   if (schedule) return [schedule.title,
     ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)]
       : !schedule.accessMode && typeof schedule.browserSignin !== "boolean" && typeof schedule.browserPayment !== "boolean" ? [copy.scheduleUnavailable] : []),
@@ -218,28 +207,10 @@ function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
   return operation ? [...new Set([...operationDetails(operation, copy), ...examples])] : details(approval, kind, card, copy);
 }
 
-/** "Event (tools) · exact command". Everything else about the hook is a tag beside this text. */
+/** "Event (tools) · exact command". */
 function projectHookText(hook: ProjectHookLine): string {
   const tools = hook.tools.length ? ` (${hook.tools.join(", ")})` : "";
   return `${hook.event}${tools} · ${hook.command}`;
-}
-
-/** Tags by line text. Identical lines share all their tags, so none can hide another's. */
-function projectHookTags(hooks: readonly ProjectHookLine[], copy: ApprovalRequestCopy): ReadonlyMap<string, readonly HookTag[]> {
-  const tags = new Map<string, HookTag[]>();
-  for (const hook of hooks) {
-    const own: HookTag[] = [
-      ...(hook.failClosed ? [{ label: copy.projectHooks.failClosed, tone: "primary" as const }] : []),
-      ...(hook.asynchronous ? [{ label: copy.projectHooks.background, tone: "primary" as const }] : []),
-      ...(hook.timeoutMs !== undefined ? [{ label: copy.projectHooks.timeout(Math.round(hook.timeoutMs / 100) / 10), tone: "primary" as const }] : []),
-      ...(hook.change ? [{ label: copy.projectHooks.change[hook.change], tone: hook.change === "removed" ? "primary" as const : "warning" as const }] : []),
-    ];
-    const line = projectHookText(hook);
-    const merged = tags.get(line) ?? [];
-    for (const tag of own) if (!merged.some(known => known.label === tag.label)) merged.push(tag);
-    tags.set(line, merged);
-  }
-  return tags;
 }
 
 /** Kinds whose own sentence names the action better than a tool label. */
@@ -281,8 +252,7 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace
     case "restart_service": return copy.restartService;
     case "create_worktree": return copy.createWorktree;
     case "switch_folder": return copy.switchFolder;
-    case "project_hooks": return approval.projectHooks?.off ? copy.projectHooks.offTitle(workspace)
-      : approval.projectHooks?.changed ? copy.projectHooks.changedTitle(workspace) : copy.projectHooks.title(workspace);
+    case "project_hooks": return copy.projectHooks.title;
     case "other": return copy.generic;
   }
 }

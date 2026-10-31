@@ -3,7 +3,6 @@ mod context;
 mod decision;
 mod execute;
 mod project;
-mod project_lines;
 mod registry;
 mod trust;
 use butler_core::hooks::*;
@@ -32,7 +31,7 @@ struct Hooks {
     data: PathBuf,
     /// Which folder each session works in.
     bindings: butler_turn::workspace::SessionBindingStore,
-    /// One read-modify-write of the project hook answers at a time.
+    /// One read-modify-write of the project folder answers at a time.
     trust_writer: tokio::sync::Mutex<()>,
     /// SessionStart events whose project hooks wait for an answer, by session.
     held_starts: parking_lot::Mutex<HashMap<String, HookEnvelope>>,

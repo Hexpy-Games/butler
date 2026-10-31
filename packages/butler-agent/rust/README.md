@@ -207,40 +207,44 @@ success. Stdin is streamed in full.
 ### Project-folder hooks
 
 A project folder can define command hooks in `.butler/hooks.json`, in the same
-format. They run only after you allow their exact content, on a card that lists the
-file's full path and each hook's event, tools, command and environment additions,
-plus any failure rule, background run or time limit that differs from the default.
-You are asked once, and again only when what would run changes; a card about changed
-content marks what changed since you last allowed it. Formatting, display names and
-disabled hooks are not content. Allow and deny both apply to that content in that
-folder, so moving or replacing the folder asks again, and a denied file stays silent
-until it changes.
+format. Butler asks once per folder whether to trust its contents, on one card however
+many hooks there are, listing the folder's full path and each hook's event, tools and
+command with its environment additions. The card appears before the first model round
+of the first turn that reaches a folder with hooks. A folder with no hooks is never
+asked about.
 
-Project hooks run inside the session's sandbox, whichever event raised them: in
-`auto`, `ask_first` and `ask_except_reads` they may write only inside the project and
-scratch folders, and in `read_only` nowhere. Neither has network access or can read
-credential stores. Only `full_access` is exempt, and its card says so. A host that
-cannot apply the sandbox does not run the hook.
+After you trust a folder its hooks run, including ones added or changed later, with no
+further question. If you don't, nothing from that file runs, whatever it says later.
+The answer covers that folder: a replaced or renamed one asks again. Answers are kept
+in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write. A
+scheduled run has nobody to answer, so without an answer its hooks do not run and the
+run continues.
 
-Hooks read for a turn are the hooks that turn runs: changing the file mid-turn has
-no effect until the next turn asks. The commands themselves are not hashed, so an
-allowed hook that runs a script in the project runs the script's current content.
+Trust is not the boundary, and neither are hooks: the sandbox and the permission mode
+are. A guard hook can be removed or changed with no question, and a script an allowed
+hook runs can change, for example through `git pull`.
+
+Project hooks run inside the sandbox of the session, or of the message or schedule
+that raised them if it has its own mode: in `auto`, `ask_first` and `ask_except_reads`
+they may write only inside the project and scratch folders, and in `read_only` nowhere.
+Neither has network access or can read credential stores. A hook's `env` is set inside
+the sandbox too, so a variable that acts on a program's startup (`LD_PRELOAD`, say)
+never reaches what starts the sandbox. Only `full_access` is exempt, and its card says
+so. A host that cannot apply the sandbox does not run the hook.
 
 A project hook adds text to the model's context only through
 `hookSpecificOutput.additionalContext`; its plain stdout is not added, and the run log
-says so. The text is labelled `scope=project`. Because scripts are not hashed, a script
-that changes after its one approval, for example through `git pull`, can still emit
-that JSON and reach the model with no new card.
+says so. The text is labelled `scope=project`. A guard's `reason` and the stderr of an
+exit 2 still reach the model, because that is how a guard says why it refused. Either
+kind of text marks the turn as having read outside content: in `auto`, what would send
+something out then asks first.
 
-The card appears before the turn's first model round. If the file you allowed is
-deleted, loses all its enabled hooks or stops being usable, the next turn asks whether
-to continue without them. A scheduled run has nobody to answer, so unanswered hooks
-do not run and the run continues; if hooks you had allowed are affected, the run
-reports it. SessionStart held back by a card runs after you allow it, and any text it
-adds is dropped and noted in the run log; UserPromptSubmit starts with your next message. A symlink at `.butler/hooks.json` or `.butler` and an
-invalid file are refused: nothing runs, and the reason is in the run log. Project hooks receive `hook: {id: "project:<id>", scope: "project"}`,
-with `cwd` and `project_dir` set to the folder they were reviewed in. Answers are kept
-in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write.
+SessionStart held back by the card runs after you trust the folder, and any text it
+adds is dropped and noted in the run log; UserPromptSubmit starts with your next
+message. A symlink at `.butler/hooks.json` or `.butler` and an invalid file are
+refused: nothing runs, and the reason is in the run log. Project hooks receive
+`hook: {id: "project:<id>", scope: "project"}`, with `cwd` and `project_dir` set to the
+folder they were read from.
 
 Windows `command` uses `cmd.exe /d /s /c`. For PowerShell use
 `args: ["pwsh", "-NoProfile", "-File", "C:\\path\\hook.ps1"]`. PowerShell 5

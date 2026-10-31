@@ -72,7 +72,9 @@ pub(super) async fn run_handlers(
         .map(|h| execute(hooks, h, &payload, cancel.clone(), root.as_deref()));
     let mut reasons = Vec::new();
     let mut context = Vec::new();
+    let mut project_denied = false;
     for done in join_all(sync).await {
+        project_denied |= done.project_denied;
         reasons.extend(done.deny);
         context.extend(done.context);
     }
@@ -96,6 +98,7 @@ pub(super) async fn run_handlers(
     HookDispatched {
         deny: (!reasons.is_empty()).then(|| reasons.join("\n")),
         context,
+        project_denied,
     }
 }
 /// One handler's run and what it means for its event.
@@ -103,6 +106,8 @@ struct Executed {
     run: HookRun,
     deny: Option<String>,
     context: Option<HookContext>,
+    /// `deny` carries words from the project folder.
+    project_denied: bool,
 }
 async fn execute(
     hooks: &Hooks,
@@ -177,6 +182,7 @@ async fn execute(
     hooks.record(record.clone());
     Executed {
         run: record,
+        project_denied: reason.is_some() && scope(hook) == "project",
         deny: reason,
         context: added.context,
     }
@@ -210,13 +216,9 @@ async fn run_process(
         () = hooks.shutdown.cancelled() => { cancel.cancel(); future.await },
     }
 }
-fn environment(
-    hooks: &Hooks,
-    hook: &HookDefinition,
-    payload: &HookEnvelope,
-) -> HashMap<String, String> {
-    let mut env = hooks.environment.clone();
-    env.extend(hook.env.clone());
+/// What a hook's own process gets: what its file names, then who it is.
+fn own_environment(hook: &HookDefinition, payload: &HookEnvelope) -> HashMap<String, String> {
+    let mut env: HashMap<String, String> = hook.env.clone().into_iter().collect();
     env.insert("BUTLER_HOOK".into(), "1".into());
     env.insert("BUTLER_HOOK_ID".into(), hook.id.clone());
     env.insert("BUTLER_HOOK_EVENT".into(), format!("{:?}", hook.event));
@@ -316,14 +318,24 @@ fn input(
             })
             .collect()
     });
+    let sandbox = sandbox(hooks, hook, payload);
+    let own = own_environment(hook, payload);
+    let mut environment = hooks.environment.clone();
+    let sandbox_environment = if matches!(sandbox, HookSandbox::None) {
+        environment.extend(own);
+        HashMap::new()
+    } else {
+        own
+    };
     Ok(HookProcess {
         command: hook.command.clone(),
         args,
-        environment: environment(hooks, hook, payload),
+        environment,
+        sandbox_environment,
         cwd: PathBuf::from(&payload.cwd),
         stdin,
         timeout: Duration::from_millis(hook.timeout_ms),
-        sandbox: sandbox(hooks, hook, payload),
+        sandbox,
         stdout_limit: if super::context::can_add(hook) {
             CONTEXT_OUTPUT_LIMIT
         } else {
@@ -342,6 +354,11 @@ fn sandbox(hooks: &Hooks, hook: &HookDefinition, payload: &HookEnvelope) -> Hook
     policy_environment.insert(
         "BUTLER_DATA".into(),
         hooks.data.to_string_lossy().into_owned(),
+    );
+    // The Windows sandbox refuses a command without its deadline.
+    policy_environment.insert(
+        "BUTLER_COMMAND_TIMEOUT_MS".into(),
+        hook.timeout_ms.to_string(),
     );
     let containment = HookContainment {
         policy_environment,

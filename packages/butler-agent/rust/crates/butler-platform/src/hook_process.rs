@@ -18,8 +18,11 @@ pub struct HookProcess {
     pub command: Option<String>,
     /// Executable plus literal arguments.
     pub args: Option<Vec<String>>,
-    /// Sanitized environment plus explicit user additions.
+    /// What the process starts with: sanitized, plus explicit user additions when
+    /// nothing wraps it.
     pub environment: HashMap<String, String>,
+    /// What a contained hook gets inside its sandbox, and whatever starts the sandbox never.
+    pub sandbox_environment: HashMap<String, String>,
     /// Project root or home.
     pub cwd: PathBuf,
     /// Full UTF-8 envelope, never truncated.
@@ -111,6 +114,7 @@ fn prepare_contained(
         input.command.as_deref(),
         input.args.as_deref(),
         &input.environment,
+        &input.sandbox_environment,
     )
     .map_err(error)?;
     let contained = command_sandbox::contain_hook(base, &input.sandbox).map_err(error)?;

@@ -53,7 +53,7 @@ pub struct AuthorityApproval {
     /// What a reviewed schedule create sets up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedule: Option<schedule::ApprovalSchedule>,
-    /// Every hook a project folder would run.
+    /// The project folder a card asks about.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_hooks: Option<project_hooks::ApprovalProjectHooks>,
 }
@@ -86,7 +86,7 @@ pub enum ApprovalActionKind {
     CreateWorktree,
     /// Move the conversation's working folder outside its current folder.
     SwitchFolder,
-    /// Run the hooks a project folder defines.
+    /// Trust a project folder, and run the hooks it defines.
     ProjectHooks,
     /// Any other reviewed operation.
     Other,

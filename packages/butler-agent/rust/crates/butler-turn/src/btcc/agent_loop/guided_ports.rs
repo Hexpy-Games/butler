@@ -153,6 +153,8 @@ pub trait ToolPort: Send + Sync {
     ) -> &'a serde_json::Map<String, serde_json::Value> {
         &call.arguments
     }
+    /// A project folder's hook wrote something the model is about to read.
+    fn project_hook_spoke(&self) {}
 
     /// The tools offered for the next round; the final-report phase offers none.
     fn surface<'a>(

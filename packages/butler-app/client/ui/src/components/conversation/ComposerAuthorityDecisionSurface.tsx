@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ApprovalActionKind } from "@/app/approvalRequest.ts";
@@ -34,12 +33,6 @@ function approvalText(text: string) {
   return <bdi dir="ltr">{shown}</bdi>;
 }
 
-/** A hook line's text, then what the card says about it: its own element in its own tone, which a command's text never has. */
-function hookLine(text: string, decision: ComposerAuthorityDecision) {
-  const tags = decision.hookTags?.get(text);
-  return <>{approvalText(text)}{tags?.map(tag => <Fragment key={tag.label}>{" "}<Typo.Caption tone={tag.tone}>({tag.label})</Typo.Caption></Fragment>)}</>;
-}
-
 export function ComposerAuthorityDecisionSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision }) {
   useAppLocale();
   const { handoff } = decision;
@@ -52,7 +45,7 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     eyebrow={appCopy.composer.permission}
     title={decision.title}
     details={decision.details}
-    renderText={(text) => decision.hookTags ? hookLine(text, decision) : approvalText(text)}
+    renderText={approvalText}
     // No clamp: a long card scrolls in the details area, so Allow never sits over hidden text.
     onOpen={decision.onOpenSource}
     error={decision.error}
@@ -64,8 +57,8 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     </>}
     data-test-class="composer-authority-decision"
     actions={(complete) => decision.actionKind === "project_hooks" ? <ButtonContainer size="sm" justify="end">
-      <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.hooksOff ? decision.onStopTurn ?? decision.onDeny : decision.onDeny)}>{decision.hooksOff ? hookCopy().stop : hookCopy().deny}</Button>
-      <Button type="button" size="sm" disabled={decision.pending} onClick={() => complete(decision.onAllow)}>{decision.hooksOff ? hookCopy().proceed : hookCopy().allow}</Button>
+      <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{hookCopy().deny}</Button>
+      <Button type="button" size="sm" disabled={decision.pending} onClick={() => complete(decision.onAllow)}>{hookCopy().allow}</Button>
     </ButtonContainer> : <ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{appCopy.interfaceDetails.deny}</Button>
       <SplitButton size="sm" text={decision.allowSite ? appCopy.interfaceDetails.allowInChat : appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}

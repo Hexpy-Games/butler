@@ -64,8 +64,8 @@ impl GuidedTurnFactoryAdapter {
         }))
     }
 
-    /// Applies an answered card, reads the project's hook file once and decides what
-    /// this execution does: run that content, run none of it, or wait for a card.
+    /// Applies an answered card, reads the project's hook file and decides what this
+    /// execution does: run what it says, run none of it, or wait for a card.
     async fn project_hooks(
         &self,
         port: Arc<dyn HookPort>,
@@ -104,20 +104,12 @@ impl GuidedTurnFactoryAdapter {
             {
                 (port, None)
             }
+            // Nobody can answer an unattended run, so its hooks do not run.
+            ProjectHookReview::Undecided(_) if self.unattended(turn).await? => (port, None),
             ProjectHookReview::Undecided(mut request) => {
-                let changed = request.changed;
                 request.unsandboxed = *access_mode == butler_turn::btcc::AccessMode::FullAccess;
-                let facts = card_facts(&request, project_dir, semantic, turn, tools)?;
-                let card = if !self.unattended(turn).await? {
-                    self.admit_card(facts).await?
-                } else if changed {
-                    // Hooks the user relied on did not run, and nobody could be asked.
-                    tools.report_unattended(facts).await;
-                    None
-                } else {
-                    None
-                };
-                (port, card)
+                let facts = card_facts(&request, semantic, turn, tools)?;
+                (port, self.admit_card(facts).await?)
             }
         })
     }
@@ -143,8 +135,8 @@ impl GuidedTurnFactoryAdapter {
             .map_err(BtccError::from)?;
         let request = ProjectHookRequest::deserialize(&stored.normalized_input)
             .map_err(|_| error("authority_request_corrupt"))?;
-        let allowed = stored.decision == RequestDecision::Allowed;
-        if let Err(failure) = port.decide_project(request, allowed).await {
+        let trusted = stored.decision == RequestDecision::Allowed;
+        if let Err(failure) = port.decide_project(request, trusted).await {
             // Nothing is remembered, so nothing runs: the next turn asks again.
             tracing::warn!(event = "project_hook_answer_not_saved", error = %failure);
         }
@@ -185,20 +177,19 @@ impl GuidedTurnFactoryAdapter {
     }
 }
 
-/// One card per turn and content: slots ignore the session, so another turn or chat
+/// One card per turn and folder: slots ignore the session, so another turn or chat
 /// on the same folder must not share this one.
 fn card_facts(
     request: &ProjectHookRequest,
-    project_dir: &str,
     semantic: &SemanticTurn,
     turn: &butler_turn::btcc::TurnRecord,
     tools: &GuidedTools,
 ) -> Result<AuthorityAdmissionInput, BtccError> {
     let call_id = format!(
         "{PROJECT_HOOKS_CAPABILITY}:{}:{}",
-        turn.turn_id, request.content_hash
+        turn.turn_id, request.project_identity
     );
-    let target = request.file.clone();
+    let target = request.project_path.clone();
     let normalized_input =
         serde_json::to_value(request).map_err(|_| error("project_hooks_card_invalid"))?;
     Ok(AuthorityAdmissionInput {
@@ -208,7 +199,7 @@ fn card_facts(
         source_turn_id: turn.turn_id.clone(),
         operation_occurrence_id: Some(call_id.clone()),
         source_work_id: String::new(),
-        workspace_path: project_dir.to_owned(),
+        workspace_path: target.clone(),
         plan_revision_id: String::new(),
         action_key: call_id,
         authority_generation: 1,

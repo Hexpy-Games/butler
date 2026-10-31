@@ -46,8 +46,10 @@ async fn project_hooks_follow_the_session_into_its_worktree() -> Result<(), Harn
         assert!(Instant::now() < deadline, "no card");
         tokio::time::sleep(Duration::from_millis(25)).await;
     };
-    let location = asked["approval"]["project_hooks"]["file"].as_str().unwrap();
-    assert!(location.contains("wt-hooks"), "{location}");
+    let folder = asked["approval"]["project_hooks"]["folder"]
+        .as_str()
+        .unwrap();
+    assert!(folder.contains("wt-hooks"), "{folder}");
     let reference = asked["request_ref"].as_str().unwrap();
     let allowed =
         s.gw.post(

@@ -1,24 +1,19 @@
-//! The approval card of a project folder's hooks.
+//! The card that asks whether to trust a project folder.
 use super::{
     ApprovalActionKind, ApprovalFacts, ApprovalRisk, ApprovalTargetKind, AuthorityApproval,
     FALLBACK_LABEL, single,
 };
-use butler_core::hooks::{ProjectHookLine, ProjectHookRequest, ProjectHooksOff};
+use butler_core::hooks::{ProjectHookLine, ProjectHookRequest};
 use serde::{Deserialize, Serialize};
 
-/// The exact hooks a project hook card asks about.
+/// The folder a card asks about and the hooks it holds.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApprovalProjectHooks {
-    /// The hook file's full path.
-    pub file: String,
-    /// Whether the user allowed another version of this file before.
-    pub changed: bool,
+    /// The folder's full path.
+    pub folder: String,
     /// This session's access mode runs hooks outside any sandbox.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unsandboxed: bool,
-    /// Set when allowed hooks can no longer run.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub off: Option<ProjectHooksOff>,
     pub hooks: Vec<ProjectHookLine>,
 }
 
@@ -30,7 +25,7 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         ApprovalTargetKind::Folder,
         request
             .as_ref()
-            .map_or(FALLBACK_LABEL, |r| r.folder.as_str()),
+            .map_or(FALLBACK_LABEL, |r| r.project_path.as_str()),
         ApprovalRisk::High,
     );
     approval.examples.clear();
@@ -39,10 +34,8 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         .as_ref()
         .map_or(0, |r| u32::try_from(r.hooks.len()).unwrap_or(u32::MAX));
     approval.project_hooks = request.map(|request| ApprovalProjectHooks {
-        file: request.location,
-        changed: request.changed,
+        folder: request.project_path,
         unsandboxed: request.unsandboxed,
-        off: request.off,
         hooks: request.hooks,
     });
     approval

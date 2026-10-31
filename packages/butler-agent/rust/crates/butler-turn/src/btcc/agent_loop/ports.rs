@@ -204,6 +204,8 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
     fn hooks(&self) -> Option<&super::guided_ports::GuidedHookBinding> {
         None
     }
+    /// A project folder's hook wrote something the model is about to read.
+    fn project_hook_spoke(&self) {}
 
     fn prepare<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, PreparedPolicy>;
 

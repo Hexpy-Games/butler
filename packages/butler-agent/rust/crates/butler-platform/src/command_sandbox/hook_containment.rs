@@ -51,45 +51,88 @@ fn io_failure(error: std::io::Error) -> SandboxError {
     SandboxError::Filesystem(error)
 }
 
-/// The hook as a program and arguments, before any sandbox wraps it.
+/// `own` as sorted pairs: the invocation does not depend on a map's order.
+fn sorted(own: &HashMap<String, String>) -> Vec<(&String, &String)> {
+    let mut pairs: Vec<_> = own.iter().collect();
+    pairs.sort();
+    pairs
+}
+
+/// The hook as a program and arguments, before any sandbox wraps it. `own` is the
+/// environment its file names. It is set by the first thing started inside the sandbox,
+/// because what starts the sandbox would act on it first: a helper's loader runs
+/// `LD_PRELOAD` from the project before the helper can install anything.
+#[cfg(unix)]
 pub fn hook_invocation(
     command: Option<&str>,
     args: Option<&[String]>,
     environment: &HashMap<String, String>,
+    own: &HashMap<String, String>,
 ) -> Result<Invocation, SandboxError> {
-    if let Some(text) = command {
-        return command_sandbox::login_shell(text, ShellAccess::Full, environment);
+    let base = match command {
+        Some(text) => command_sandbox::login_shell(text, ShellAccess::Full, environment)?,
+        None => {
+            let args = args.unwrap_or_default();
+            Invocation {
+                program: args
+                    .first()
+                    .ok_or(SandboxError::ProjectWriteUnavailable)?
+                    .clone(),
+                arguments: args.get(1..).unwrap_or_default().to_vec(),
+                ..Invocation::default()
+            }
+        }
+    };
+    if base.program.contains('=') {
+        // `env` would read it as one more assignment.
+        return Err(io_failure(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "A sandboxed hook's program path can't contain =",
+        )));
     }
-    let args = args.unwrap_or_default();
-    let program = args.first().ok_or(SandboxError::ProjectWriteUnavailable)?;
-    argv(program, args.get(1..).unwrap_or_default(), environment)
-}
-
-#[cfg(unix)]
-fn argv(
-    program: &str,
-    arguments: &[String],
-    _environment: &HashMap<String, String>,
-) -> Result<Invocation, SandboxError> {
+    let mut arguments = vec!["--".to_owned()];
+    arguments.extend(
+        sorted(own)
+            .into_iter()
+            .map(|(key, value)| format!("{key}={value}")),
+    );
+    arguments.push(base.program);
+    arguments.extend(base.arguments);
     Ok(Invocation {
-        program: program.to_owned(),
-        arguments: arguments.to_vec(),
+        program: "/usr/bin/env".into(),
+        arguments,
         ..Invocation::default()
     })
 }
 
-/// The Windows sandbox launches shell scripts, so argv becomes one with literal words.
+/// The Windows sandbox builds its own environment and launches shell scripts, so the
+/// script sets `own` first, and argv becomes literal words.
 #[cfg(windows)]
-fn argv(
-    program: &str,
-    arguments: &[String],
+pub fn hook_invocation(
+    command: Option<&str>,
+    args: Option<&[String]>,
     environment: &HashMap<String, String>,
+    own: &HashMap<String, String>,
 ) -> Result<Invocation, SandboxError> {
     let literal = |word: &str| format!("'{}'", word.replace('\'', "''"));
-    let mut script = format!("& {}", literal(program));
-    for argument in arguments {
-        script.push(' ');
-        script.push_str(&literal(argument));
+    let mut script = String::new();
+    for (key, value) in sorted(own) {
+        script.push_str(&format!(
+            "Set-Item -LiteralPath {} -Value {}\n",
+            literal(&format!("env:{key}")),
+            literal(value)
+        ));
+    }
+    if let Some(text) = command {
+        script.push_str(text);
+    } else {
+        let args = args.unwrap_or_default();
+        let program = args.first().ok_or(SandboxError::ProjectWriteUnavailable)?;
+        script.push_str(&format!("& {}", literal(program)));
+        for argument in args.get(1..).unwrap_or_default() {
+            script.push(' ');
+            script.push_str(&literal(argument));
+        }
     }
     command_sandbox::login_shell(&script, ShellAccess::Full, environment)
 }

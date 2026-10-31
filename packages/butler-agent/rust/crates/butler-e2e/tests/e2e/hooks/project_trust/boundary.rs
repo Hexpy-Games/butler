@@ -1,92 +1,6 @@
-//! The trust boundary: swaps, replaced folders, model edits, nobody to answer, and
-//! the forms a project file may not take.
+//! The trust boundary: replaced folders, model edits, nobody to answer, and the forms
+//! a project file may not take.
 use super::*;
-
-#[tokio::test]
-async fn project_hooks_swap_before_the_answer_runs_only_what_was_approved()
--> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (s, project) = start("HOOK-PROJECT-SWAP").await?;
-    let chat = project.chat.clone();
-    project.write(&[project.observer("guard", "PreToolUse", "shown.jsonl")])?;
-    let turn = s.gw.say_turn(&chat, "Check.").await?;
-    let shown = card(&s, &chat).await?;
-    assert!(
-        lines(&shown)[0]["command"]
-            .as_str()
-            .unwrap()
-            .contains("shown.jsonl")
-    );
-
-    // Swapped after the card went up: allowing it must not run the new content.
-    project.write(&[project.observer("guard", "PreToolUse", "swapped.jsonl")])?;
-    answer(&s, &chat, &shown, "allow").await?;
-    let again = {
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            let next = card(&s, &chat).await?;
-            if next["request_ref"] != shown["request_ref"] {
-                break next;
-            }
-            assert!(Instant::now() < deadline, "{}", s.agent.logs());
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
-    };
-    let line = &lines(&again)[0];
-    assert!(line["command"].as_str().unwrap().contains("swapped.jsonl"));
-    assert_eq!(line["change"], "changed");
-    assert_eq!(project.ran("shown.jsonl").len(), 0);
-    assert_eq!(project.ran("swapped.jsonl").len(), 0);
-    answer(&s, &chat, &again, "allow").await?;
-    delivered(&s, &chat, &turn).await?;
-    assert_eq!(project.ran("swapped.jsonl").len(), 1);
-    assert_eq!(project.ran("shown.jsonl").len(), 0);
-
-    s.finish().await
-}
-
-#[tokio::test]
-async fn project_hooks_a_swap_mid_turn_does_not_reach_the_running_turn() -> Result<(), HarnessError>
-{
-    butler_e2e::gate!();
-    let (s, project) = start("HOOK-PROJECT-MIDTURN").await?;
-    let chat = project.chat.clone();
-    let approved = [
-        project.observer("post", "PostToolUse", "post.jsonl"),
-        project.observer("stop", "Stop", "stop.jsonl"),
-    ];
-    project.write(&approved)?;
-    let turn = s.gw.say_turn(&chat, "Allow first.").await?;
-    answer(&s, &chat, &card(&s, &chat).await?, "allow").await?;
-    delivered(&s, &chat, &turn).await?;
-
-    // The turn is between its tool and its answer when the file is swapped.
-    let gate = s.provider()?.hold_after_tool("In the middle.");
-    let turn = s.gw.say_turn(&chat, "In the middle.").await?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while project.ran("post.jsonl").len() < 2 {
-        assert!(Instant::now() < deadline, "{}", s.agent.logs());
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    project.write(&[project.observer("stop", "Stop", "swapped.jsonl")])?;
-    gate.release();
-    delivered(&s, &chat, &turn).await?;
-    assert_eq!(
-        project.ran("stop.jsonl").len(),
-        2,
-        "the running turn kept what it read"
-    );
-    assert_eq!(project.ran("swapped.jsonl").len(), 0);
-
-    // The next turn asks about what is there now.
-    let turn = s.gw.say_turn(&chat, "Next.").await?;
-    let asked = card(&s, &chat).await?;
-    assert_eq!(asked["approval"]["project_hooks"]["changed"], true);
-    answer(&s, &chat, &asked, "deny").await?;
-    delivered(&s, &chat, &turn).await?;
-    assert_eq!(project.ran("swapped.jsonl").len(), 0);
-    s.finish().await
-}
 
 #[tokio::test]
 async fn project_hooks_answer_covers_one_folder_not_its_path() -> Result<(), HarnessError> {
@@ -108,7 +22,6 @@ async fn project_hooks_answer_covers_one_folder_not_its_path() -> Result<(), Har
     project.write(&hooks)?;
     let turn = s.gw.say_turn(&chat, "Replaced.").await?;
     let asked = card(&s, &chat).await?;
-    assert_eq!(asked["approval"]["project_hooks"]["changed"], false);
     assert_eq!(project.ran("ran.jsonl").len(), 1);
     answer(&s, &chat, &asked, "deny").await?;
     delivered(&s, &chat, &turn).await?;
@@ -117,7 +30,7 @@ async fn project_hooks_answer_covers_one_folder_not_its_path() -> Result<(), Har
 }
 
 #[tokio::test]
-async fn project_hooks_model_edit_asks_again_and_cannot_forge_trust() -> Result<(), HarnessError> {
+async fn project_hooks_model_edit_runs_later_and_cannot_forge_trust() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, project) = start("HOOK-PROJECT-MODEL").await?;
     let chat = project.chat.clone();
@@ -125,9 +38,8 @@ async fn project_hooks_model_edit_asks_again_and_cannot_forge_trust() -> Result<
     let turn = s.gw.say_turn(&chat, "First.").await?;
     answer(&s, &chat, &card(&s, &chat).await?, "allow").await?;
     delivered(&s, &chat, &turn).await?;
-    let before = project.ran("ran.jsonl").len();
 
-    // A real model tool rewrites the file: this turn keeps what it read.
+    // A real model tool rewrites the file: hooks are not a boundary, and it runs.
     s.provider()?.set_chat_responder(stub::edit_project_hooks);
     let turn = s.gw.say_turn(&chat, "Rewrite the hooks.").await?;
     delivered(&s, &chat, &turn).await?;
@@ -137,26 +49,9 @@ async fn project_hooks_model_edit_asks_again_and_cannot_forge_trust() -> Result<
         "{written}\n{}",
         s.agent.logs()
     );
-    assert_eq!(project.ran("ran.jsonl").len(), before + 1);
-    assert!(!project.root.join("model-hook-ran").exists());
-
-    // The next turn asks, and shows exactly what the model wrote.
     s.provider()?.set_chat_responder(stub::read_input);
-    let turn = s.gw.say_turn(&chat, "Next.").await?;
-    let asked = card(&s, &chat).await?;
-    let shown = lines(&asked);
-    let written = shown.iter().find(|line| line["id"] == "written").unwrap();
-    assert_eq!(written["change"], "added");
-    assert!(
-        written["command"]
-            .as_str()
-            .unwrap()
-            .contains("model-hook-ran")
-    );
-    assert!(!project.root.join("model-hook-ran").exists());
-    answer(&s, &chat, &asked, "deny").await?;
-    delivered(&s, &chat, &turn).await?;
-    assert!(!project.root.join("model-hook-ran").exists());
+    quiet_turn(&s, &chat, "Next.").await?;
+    assert!(project.root.join("model-hook-ran").exists());
 
     // No file tool reaches the record of the user's answers, whatever the mode.
     let store = s.sandbox.data.join("auth/project-hook-trust.json");
@@ -172,6 +67,21 @@ async fn project_hooks_model_edit_asks_again_and_cannot_forge_trust() -> Result<
         .find(|r| r["tool_call_id"] == "call_hooks")
         .unwrap();
     assert_eq!(row["state"], "failed", "{rows:?}");
+
+    // The refusal says what to do instead, for the model and whoever it tells.
+    let env = s.sandbox.data.join(".env");
+    let before = fs::read(&env).ok();
+    let prompt = format!("Write {{}} to <path>{}</path>", env.display());
+    let turn = s.gw.say_turn(&chat, &prompt).await?;
+    delivered(&s, &chat, &turn).await?;
+    assert_eq!(fs::read(&env).ok(), before, "a file tool wrote the .env");
+    let told = s.provider()?.requests();
+    let told = told.last().unwrap()["input"].to_string();
+    assert!(told.contains("credential_store_blocked"), "{told}");
+    assert!(
+        told.contains("Ask the user to change this in Settings"),
+        "{told}"
+    );
     s.finish().await
 }
 

@@ -140,3 +140,90 @@ async fn project_hooks_under_full_access_are_exempt_and_say_so() -> Result<(), H
     assert!(reached(&probing.listener), "full access is exempt");
     s.finish().await
 }
+
+/// What the dynamic loader logged because of a hook's environment, anywhere in the home.
+fn loader_logs(s: &Scenario) -> Vec<std::path::PathBuf> {
+    fs::read_dir(&s.sandbox.home)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("loader.")
+        })
+        .collect()
+}
+
+/// A hook's `env` can name what a program's loader runs at startup. Whatever starts the
+/// sandbox is such a program, so the hook's `env` must reach only what starts inside it.
+/// `LD_DEBUG` shows this with nothing to compile: the loader opens a file before `main`.
+#[tokio::test]
+async fn project_hook_environment_is_set_inside_the_sandbox() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if !command_sandbox::POSIX_SHELL || !command_sandbox::project_write_available() {
+        return Ok(());
+    }
+    let (s, project) = start("HOOK-PROJECT-SANDBOX-ENV").await?;
+    s.patch_settings(json!({"access_mode":"auto"}), "mode")
+        .await?;
+    let hook = json!({"id":"env","event":"Stop","type":"command","timeout_ms":15000,
+        "env":{"PROBE_VALUE":"reached","LD_DEBUG":"statistics",
+            "LD_DEBUG_OUTPUT":s.sandbox.home.join("loader")},
+        "args":["/bin/sh","-c","printf '%s\\n' \"$PROBE_VALUE\" >> inside.txt"]});
+    project.write(&[hook])?;
+    let chat = project.new_chat(&s).await?;
+    let turn = s.gw.say_turn(&chat, "First.").await?;
+    answer(&s, &chat, &card(&s, &chat).await?, "allow").await?;
+    delivered(&s, &chat, &turn).await?;
+    assert_eq!(inside(&project), ["reached"]);
+    assert_eq!(
+        loader_logs(&s),
+        Vec::<std::path::PathBuf>::new(),
+        "the hook's environment acted outside the sandbox"
+    );
+
+    // The same hook unsandboxed: this loader does act on it, so the check above means something.
+    s.patch_settings(json!({"access_mode":"full_access"}), "mode")
+        .await?;
+    let chat = project.new_chat(&s).await?;
+    quiet_turn(&s, &chat, "Second.").await?;
+    assert_eq!(inside(&project), ["reached", "reached"]);
+    if command_sandbox::project_write_mechanism() == "landlock" {
+        assert!(!loader_logs(&s).is_empty(), "the loader ignored LD_DEBUG");
+    }
+    s.finish().await
+}
+
+/// A message's own mode decides, not its chat's: a schedule set to `auto` on a chat in
+/// full access runs its hooks in `auto`'s sandbox, from the event its send raises on.
+#[tokio::test]
+async fn project_hooks_run_in_the_mode_of_the_schedule_not_of_its_chat() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    if !command_sandbox::POSIX_SHELL || !command_sandbox::project_write_available() {
+        return Ok(());
+    }
+    let (s, project) = start("HOOK-PROJECT-SANDBOX-SCHEDULE").await?;
+    let outside = s.sandbox.home.join("outside.txt");
+    let reach = |id: &str, event: &str| {
+        let command = format!(
+            "printf '%s\\n' \"$BUTLER_HOOK_EVENT\" >> inside.txt; printf x >> '{}'; exit 0",
+            outside.display()
+        );
+        json!({"id":id,"event":event,"type":"command","command":command,"timeout_ms":15000})
+    };
+    project.write(&[reach("prompt", "UserPromptSubmit"), reach("stop", "Stop")])?;
+    let chat = project.new_chat(&s).await?;
+    let turn = s.gw.say_turn(&chat, "First.").await?;
+    answer(&s, &chat, &card(&s, &chat).await?, "allow").await?;
+    delivered(&s, &chat, &turn).await?;
+    assert!(outside.exists(), "this chat is in full access");
+    fs::remove_file(&outside)?;
+
+    let ran = inside(&project).len();
+    boundary::scheduled_run_in(&s, &chat, "In auto", "auto").await?;
+    assert_eq!(inside(&project)[ran..], ["UserPromptSubmit", "Stop"]);
+    assert!(!outside.exists(), "a schedule in auto wrote outside");
+    s.finish().await
+}

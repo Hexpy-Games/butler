@@ -90,6 +90,11 @@ impl GuardResult {
             Some(candidate.replace('\\', "/"))
         }
     }
+    /// What the rejection means, and what to do instead.
+    pub fn explained(&self) -> (&'static str, &'static str) {
+        super::path_messages::explanation(self.reason.unwrap_or("path_rejected"))
+    }
+
     /// The model-facing rejection of a refused path.
     pub fn public_rejection(&self) -> Value {
         let mut result = serde_json::Map::new();
@@ -278,7 +283,7 @@ pub(crate) fn resolve_workspace_mutation_guard(
         return Ok(out);
     }
     if butler_credential_store(&resolved.absolute, input.butler_data) {
-        out.reason = Some("sensitive_path_blocked");
+        out.reason = Some("credential_store_blocked");
         return Ok(out);
     }
     if !admit_contained(
