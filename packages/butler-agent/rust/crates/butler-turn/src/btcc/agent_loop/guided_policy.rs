@@ -80,8 +80,9 @@ impl GuidedPolicyPort for GuidedPolicy {
     fn before_model_round<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
-        self.dependencies.context.steering(invocation)
+        self.dependencies.context.steering(invocation, phase)
     }
 
     fn resolve_tools<'a>(

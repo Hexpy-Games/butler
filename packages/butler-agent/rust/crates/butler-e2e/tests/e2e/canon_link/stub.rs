@@ -1,4 +1,4 @@
-mod delegated;
+pub(super) mod delegated;
 use super::*;
 use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
 use std::sync::{
@@ -26,6 +26,10 @@ pub(crate) struct Script {
     pub(super) steward_held: Semaphore,
     pub(super) steward_release: Semaphore,
     pub(crate) delegate: AtomicBool,
+    pub(super) steer_relation: Mutex<String>,
+    pub(super) direction_blocked: AtomicBool,
+    /// A direction's turn delegates to a Worker instead of working directly.
+    pub(super) direction_worker: AtomicBool,
     pub(crate) hold_report: AtomicBool,
     reporting: Semaphore,
     report_release: Semaphore,
@@ -60,6 +64,10 @@ impl Script {
         self.released.store(true, Ordering::SeqCst);
         self.release.add_permits(1);
     }
+    /// The next Worker to start holds at its first model call again.
+    pub(super) fn hold_workers_again(&self) {
+        self.released.store(false, Ordering::SeqCst);
+    }
 }
 pub(super) async fn start(
     rejects: bool,
@@ -83,6 +91,9 @@ pub(super) async fn start(
         steward_held: Semaphore::new(0),
         steward_release: Semaphore::new(0),
         delegate: AtomicBool::new(false),
+        steer_relation: Mutex::new(String::new()),
+        direction_blocked: AtomicBool::new(false),
+        direction_worker: AtomicBool::new(false),
         hold_report: AtomicBool::new(false),
         reporting: Semaphore::new(0),
         report_release: Semaphore::new(0),

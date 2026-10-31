@@ -350,15 +350,6 @@ impl SqliteSubsessionRepository {
             }).optional().map_err(StorageError::sqlite)).await
     }
 
-    pub(crate) async fn relation_by_work(
-        &self,
-        work: String,
-    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
-        self.storage
-            .execute(move |db| read(db, "d.root_work_id=?1", &work))
-            .await
-    }
-
     pub(crate) async fn open_relation_by_work(
         &self,
         work: String,

@@ -6,10 +6,12 @@
     reason = "test assertions"
 )]
 mod delegation;
+mod direction_workers;
 #[path = "canon_mcp/running.rs"]
 mod mcp_running;
 mod plans;
 mod recovery;
+mod requires_e2e_fixtures;
 pub(super) mod stub;
 mod window;
 use butler_e2e::e2e::{
@@ -28,26 +30,40 @@ fn data(reply: butler_e2e::e2e::gateway::Reply, status: u16) -> Value {
     let mut body = reply.body;
     body["data"].take()
 }
+type Started = (
+    Scenario,
+    Arc<stub::Script>,
+    tokio::task::JoinHandle<()>,
+    String,
+    String,
+);
+
 pub(super) async fn setup_at(
     name: &str,
     rejects: bool,
     revise: bool,
     now: Option<&str>,
-) -> Result<
-    (
-        Scenario,
-        Arc<stub::Script>,
-        tokio::task::JoinHandle<()>,
-        String,
-        String,
-    ),
-    HarnessError,
-> {
+) -> Result<Started, HarnessError> {
+    setup_env(name, rejects, revise, now, None).await
+}
+
+async fn setup_env(
+    name: &str,
+    rejects: bool,
+    revise: bool,
+    now: Option<&str>,
+    extra: Option<(&str, String)>,
+) -> Result<Started, HarnessError> {
     let (url, script, server) = stub::start(rejects, revise).await?;
     let setup = Setup::new(name)?
         .data_folder_token()
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", &url);
+    let setup = if let Some((key, value)) = extra {
+        setup.env(key, value)
+    } else {
+        setup
+    };
     let setup = if let Some(now) = now {
         setup.env("BUTLER_E2E_APP_NOW", now)
     } else {

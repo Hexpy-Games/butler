@@ -21,7 +21,7 @@ mod locking;
 mod ordering;
 mod queries;
 mod replay_errors;
-mod stop_paths;
+pub(crate) mod stop_paths;
 mod take_recovery;
 mod taking;
 mod visibility;

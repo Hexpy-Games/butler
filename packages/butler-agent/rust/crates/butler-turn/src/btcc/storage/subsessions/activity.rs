@@ -163,8 +163,9 @@ impl SqliteSubsessionRepository {
             .await
     }
 
-    /// Open delegations below a conversation as (parent, relation): nearest first,
-    /// newest siblings first. Bounded by the open subtree through the parent index.
+    /// Delegations below a conversation with anything left to stop, as (parent,
+    /// relation): nearest first, newest siblings first. A direction continues a
+    /// child whose activity already ended, so its latest Turn and directions count.
     pub async fn open_delegations_below(
         &self,
         root: String,
@@ -174,16 +175,20 @@ impl SqliteSubsessionRepository {
                 db.prepare_cached(
                     r"WITH RECURSIVE below(parent,session,relation,depth,created) AS (
                     SELECT r.parent_session_id,r.child_session_id,r.relation_id,0,r.created_at
-                    FROM btcc_session_relations r INDEXED BY idx_btcc_activity_parent_open_page
-                    WHERE r.parent_session_id=?1 AND r.activity_terminal=0
-                        AND r.activity_role IN ('steward','worker')
+                    FROM btcc_session_relations r
+                    WHERE r.parent_session_id=?1 AND r.activity_role IN ('steward','worker')
                     UNION ALL
                     SELECT r.parent_session_id,r.child_session_id,r.relation_id,b.depth+1,r.created_at
-                    FROM below b
-                    JOIN btcc_session_relations r INDEXED BY idx_btcc_activity_parent_open_page
-                        ON r.parent_session_id=b.session
-                    WHERE r.activity_terminal=0 AND r.activity_role IN ('steward','worker'))
-                SELECT parent,relation FROM below ORDER BY depth,created DESC",
+                    FROM below b JOIN btcc_session_relations r ON r.parent_session_id=b.session
+                    WHERE r.activity_role IN ('steward','worker'))
+                SELECT b.parent,b.relation FROM below b
+                JOIN btcc_session_relations r ON r.relation_id=b.relation
+                WHERE r.activity_terminal=0
+                    OR (SELECT t.semantic_state FROM btcc_turns t WHERE t.session_id=b.session
+                        ORDER BY t.rowid DESC LIMIT 1) IN ('admitted','delivery_committed')
+                    OR EXISTS (SELECT 1 FROM btcc_subsession_directions i
+                        WHERE i.relation_id=b.relation AND i.status='pending')
+                ORDER BY b.depth,b.created DESC",
                 )
                 .map_err(StorageError::sqlite)?
                 .query_map([root], |row| Ok((row.get(0)?, row.get(1)?)))

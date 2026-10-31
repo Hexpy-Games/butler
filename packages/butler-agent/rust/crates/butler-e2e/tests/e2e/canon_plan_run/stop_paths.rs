@@ -7,12 +7,14 @@ use std::time::{Duration, Instant};
 
 /// Nothing further can reach the model once no Turn or relation is open and no
 /// direction or inbound event is waiting, so this state is the negative proof.
-async fn wait_nothing_runs(s: &Scenario) -> Result<(), HarnessError> {
+pub(crate) async fn wait_nothing_runs(s: &Scenario) -> Result<(), HarnessError> {
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let open: (i64, i64, i64) = db.query_row(
-            "SELECT (SELECT count(*) FROM btcc_turns WHERE semantic_state IN ('admitted','delivery_committed')),
+            // A suspended Turn stays admitted behind the Turn that continued it.
+            "SELECT (SELECT count(*) FROM btcc_turns t WHERE t.semantic_state IN ('admitted','delivery_committed')
+                        AND t.rowid=(SELECT max(u.rowid) FROM btcc_turns u WHERE u.session_id=t.session_id)),
                     (SELECT count(*) FROM btcc_session_relations WHERE activity_terminal=0),
                     (SELECT count(*) FROM btcc_subsession_directions WHERE status='pending')",
             [],

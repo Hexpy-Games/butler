@@ -246,7 +246,7 @@ async fn run_iteration(
 async fn observe_steering(input: &Invocation<'_>, state: &mut State) -> Result<(), AgentLoopError> {
     let observations = input
         .policy
-        .before_model_round(GuidedInvocation::from(input))
+        .before_model_round(GuidedInvocation::from(input), state.phase)
         .await
         .map_err(propagated)?;
     append_observations(state, observations);

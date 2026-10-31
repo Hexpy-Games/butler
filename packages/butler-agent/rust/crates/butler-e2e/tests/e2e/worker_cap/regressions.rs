@@ -2,6 +2,113 @@
 use super::*;
 use std::sync::atomic::Ordering;
 
+/// A settled Worker turn keeps a direction for the turn that can act on it.
+#[tokio::test]
+async fn cb_11_direction_during_a_workers_final_report_opens_its_own_turn()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server) = setup("CB-11-WORKER-REPORT", 3).await?;
+    script.steer.store(true, Ordering::SeqCst);
+    script.followup.store(true, Ordering::SeqCst);
+    script.hold_worker_report.store(true, Ordering::SeqCst);
+    s.gw.say("general", "Verify batch red").await?;
+    let (_, rows) = workers(&s, "general", 3).await?;
+    started(&script, 2).await;
+    script.release("red-0");
+    tokio::time::timeout(Duration::from_secs(30), script.worker_reporting.wait())
+        .await
+        .expect("the Worker reached its final report");
+    script.direction.add_permits(1);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !script.steered.load(Ordering::SeqCst) {
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_pending_direction(&s, &rows[0])?;
+    script.worker_report_release.add_permits(1);
+    script.release("red-1");
+    tokio::time::timeout(Duration::from_secs(30), script.continued.wait())
+        .await
+        .expect("the direction opened its own Worker turn");
+    let relation = rows[0]["relation"]["relation_id"].as_str().unwrap();
+    let database = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let applied: String = loop {
+        use rusqlite::OptionalExtension;
+        let applied = database
+            .query_row(
+                "SELECT applied_child_turn_id FROM btcc_subsession_directions WHERE relation_id=?1 AND status='applied'",
+                [relation],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(applied) = applied {
+            break applied;
+        }
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert!(
+        applied.starts_with("subsession-direction-turn-"),
+        "the settled turn swallowed the direction: {applied}"
+    );
+    script.release("red-2");
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+/// Only a direction starts a new Work: a Worker result that arrives after its
+/// Steward closed fails visibly instead of reopening the session.
+#[tokio::test]
+async fn cb_11_late_worker_result_on_a_closed_steward_work_fails_visibly()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server) = setup("CB-11-LATE-WORKER", 1).await?;
+    script.close_before_worker.store(true, Ordering::SeqCst);
+    s.gw.say("general", "Verify batch red").await?;
+    let (steward, _) = workers(&s, "general", 1).await?;
+    started(&script, 1).await;
+    let database = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let saved =
+        |database: &rusqlite::Connection| -> Result<Vec<(String, String)>, rusqlite::Error> {
+            database
+            .prepare("SELECT child_turn_id,status FROM btcc_steward_results WHERE child_session_id=?1 ORDER BY rowid")?
+            .query_map([&steward], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect()
+        };
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while saved(&database)?.is_empty() {
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(saved(&database)?[0].1, "success", "{:?}", saved(&database)?);
+    script.release("red-0");
+    while saved(&database)?.len() < 2 {
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let rows = saved(&database)?;
+    assert!(rows[1].0.starts_with("worker-result-turn-"), "{rows:?}");
+    assert_eq!(rows[1].1, "failed", "{rows:?}");
+    assert!(
+        s.agent
+            .logs()
+            .contains("code=subsession_root_work_identity_mismatch"),
+        "{}",
+        s.agent.logs()
+    );
+    let works: i64 = database.query_row(
+        "SELECT count(*) FROM btcc_guided_works WHERE session_id=?1",
+        [&steward],
+        |row| row.get(0),
+    )?;
+    assert_eq!(works, 1, "a late Worker result starts no Work");
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 #[tokio::test]
 async fn cb_11_cancel_finished_workers_waiting_continuation() -> Result<(), HarnessError> {
     butler_e2e::gate!();

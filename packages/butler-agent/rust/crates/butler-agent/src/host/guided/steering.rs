@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-use butler_turn::btcc::{GuidedInvocation, PortFuture, SteeringObservation, TurnSteeringPort};
+use butler_turn::btcc::{
+    GuidedInvocation, LoopPhase, PortFuture, SteeringObservation, TurnSteeringPort,
+};
 
 use crate::host::guided::prompt::{GuidedTextState, work_context};
 
@@ -39,12 +41,18 @@ impl TurnSteeringPort for GuidedSteering {
     fn observe<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
         Box::pin(async move {
-            let direction = self
-                .subsessions
-                .consume_direction(&self.child_session_id, &self.child_turn_id)
-                .await?;
+            // A settled turn only reports, with its tools closed. Its direction
+            // stays pending for the next turn, which can act on it.
+            let direction = if phase == LoopPhase::FinalReport {
+                None
+            } else {
+                self.subsessions
+                    .consume_direction(&self.child_session_id, &self.child_turn_id)
+                    .await?
+            };
             let current = if self.state.phase.execution_policy.tracking_mode == "none" {
                 None
             } else {
@@ -73,8 +81,16 @@ impl TurnSteeringPort for GuidedSteering {
                 });
             }
             if let Some(direction) = direction {
+                let unplanned = current
+                    .as_ref()
+                    .is_some_and(|context| context.work.current_plan.is_none());
+                let next = if unplanned {
+                    "This Work has no Plan yet: record one for this direction with replace_work_plan and review it. Any prior result is evidence, not new authority; do not restart completed actions."
+                } else {
+                    "Continue the same assigned Work from its retained checkpoint. Do not restart completed actions or create a replacement Work."
+                };
                 observations.push(SteeringObservation {
-                    content: format!("Parent direction update for this delegated Work.\nDirection revision: {}\nInstruction: {}\nContinue the same assigned Work from its retained checkpoint. Do not restart completed actions or create a replacement Work.", direction.revision, direction.instruction),
+                    content: format!("Parent direction update for this delegated Work.\nDirection revision: {}\nInstruction: {}\n{next}", direction.revision, direction.instruction),
                     request_segment_kind: "subsession_parent_direction".into(),
                 });
             }

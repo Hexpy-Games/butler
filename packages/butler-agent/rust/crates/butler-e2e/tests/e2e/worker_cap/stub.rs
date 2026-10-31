@@ -45,6 +45,11 @@ pub(crate) struct Script {
     pub(crate) started: Mutex<Vec<String>>,
     pub(crate) fourth: Gate,
     pub(crate) waiting_wording: AtomicBool,
+    /// The Steward closes its Work instead of waiting for its Worker.
+    pub(crate) close_before_worker: AtomicBool,
+    pub(crate) hold_worker_report: AtomicBool,
+    pub(crate) worker_reporting: Gate,
+    pub(crate) worker_report_release: Gate,
 }
 impl Script {
     pub(crate) fn release(&self, key: &str) {
@@ -75,6 +80,10 @@ pub(crate) async fn start(
         started: Default::default(),
         fourth: Gate::new(),
         waiting_wording: AtomicBool::new(false),
+        close_before_worker: AtomicBool::new(false),
+        hold_worker_report: AtomicBool::new(false),
+        worker_reporting: Gate::new(),
+        worker_report_release: Gate::new(),
     });
     let app = Router::new()
         .route("/codex/responses", post(reply))
@@ -191,6 +200,14 @@ async fn reply(
     } else {
         step
     };
+    let step = if role == "steward"
+        && script.close_before_worker.load(Ordering::SeqCst)
+        && step >= script.count + 2
+    {
+        step + 1
+    } else {
+        step
+    };
     if role == "steward"
         && script.count == 4
         && step == 5
@@ -239,6 +256,13 @@ async fn reply(
         ),
         _ => worker(step, &body),
     };
+    if role == "worker"
+        && item["type"] == "message"
+        && script.hold_worker_report.swap(false, Ordering::SeqCst)
+    {
+        script.worker_reporting.add_permits(1);
+        script.worker_report_release.wait().await;
+    }
     (
         [("content-type", "text/event-stream")],
         wire(&item, &response_id),

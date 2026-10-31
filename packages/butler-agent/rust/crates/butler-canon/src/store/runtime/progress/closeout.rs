@@ -12,17 +12,32 @@ pub(super) enum Closeout {
     Reported,
 }
 
+/// How a closed Work's Steward stands, when its plan delegated at all.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Delegation {
+    /// The Work did its own work.
+    None,
+    /// The Steward is running or has a direction still to take up.
+    Open,
+    /// The Steward ended without finishing.
+    Failed,
+    Finished,
+}
+
 pub(super) fn read(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Closeout> {
     let closing = disposition(db, work, views)?;
     if closing["disposition"] != "completed" || !delivered(db, &closing)? {
         return Ok(Closeout::Pending);
     }
-    let delegated = delegated_completion(db, work, views)?;
-    if !reviews_accept(db, work, views)? || (!delegated && nothing_done(db, work, views)?) {
+    if !reviews_accept(db, work, views)? {
         return Ok(Closeout::Refused);
     }
-    if !delegated {
-        return Ok(Closeout::Reported);
+    match delegation(db, work, views)? {
+        Delegation::Open => return Ok(Closeout::Pending),
+        Delegation::Failed => return Ok(Closeout::Refused),
+        Delegation::None if nothing_done(db, work, views)? => return Ok(Closeout::Refused),
+        Delegation::None => return Ok(Closeout::Reported),
+        Delegation::Finished => {}
     }
     // A Steward closes a delegated parent early: Butler's report is its reporting checkpoint.
     let id = text(work, "work_id")?;
@@ -96,7 +111,7 @@ fn nothing_done(db: &Connection, work: &Value, views: &ProjectViews) -> Result<b
 }
 
 /// A delegated parent's closeout belongs to its Steward's terminal result.
-fn delegated_completion(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
+fn delegation(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Delegation> {
     let id = text(work, "work_id")?;
     let plan = if work["scope_kind"] == "project" {
         views
@@ -107,7 +122,7 @@ fn delegated_completion(db: &Connection, work: &Value, views: &ProjectViews) -> 
         latest(db, Query::Plan, id)?
     };
     let Some(plan) = plan else {
-        return Ok(false);
+        return Ok(Delegation::None);
     };
     if plan
         .get("executionMode")
@@ -115,19 +130,30 @@ fn delegated_completion(db: &Connection, work: &Value, views: &ProjectViews) -> 
         .and_then(Value::as_str)
         != Some("steward")
     {
-        return Ok(false);
+        return Ok(Delegation::None);
     }
     let plan_id = plan
         .get("planRevisionId")
         .or_else(|| plan.get("plan_revision_id"))
         .and_then(Value::as_str)
         .ok_or(Error::Invalid("delegated plan id"))?;
-    Ok(db
-        .query_row(
-            Query::DelegatedCompletion.sql(),
-            params![id, plan_id],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some())
+    let exists = |query: Query, args: &[&dyn rusqlite::ToSql]| -> Result<bool> {
+        Ok(db
+            .query_row(query.sql(), args, |_| Ok(()))
+            .optional()?
+            .is_some())
+    };
+    if exists(Query::DelegatedCompletion, params![id, plan_id])? {
+        return Ok(Delegation::Finished);
+    }
+    if exists(Query::DelegatedActive, params![id])?
+        || exists(Query::DelegatedDirectionPending, params![id])?
+    {
+        return Ok(Delegation::Open);
+    }
+    Ok(if exists(Query::DelegatedAny, params![id, plan_id])? {
+        Delegation::Failed
+    } else {
+        Delegation::None
+    })
 }

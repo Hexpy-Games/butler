@@ -207,6 +207,7 @@ impl GuidedPolicyPort for Fixture {
     fn before_model_round<'a>(
         &'a self,
         _invocation: GuidedInvocation<'a>,
+        _phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
         Box::pin(async move {
             Ok(self
