@@ -56,6 +56,16 @@ pub struct GuidedHookBinding {
     pub access_mode: String,
     /// Delegation parent, if this is a child turn.
     pub parent_session_id: Option<String>,
+    /// A card about the project's hooks that this execution waits for before anything else.
+    pub project_hooks_card: Option<ProjectHooksCard>,
+}
+
+/// The pending approval a turn parks on before its first model round.
+pub struct ProjectHooksCard {
+    /// The admitted authority request.
+    pub request_ref: String,
+    /// Its source call identity; no tool call exists.
+    pub call_id: String,
 }
 
 /// The ports a guided policy is composed of.
@@ -143,6 +153,8 @@ pub trait ToolPort: Send + Sync {
     ) -> &'a serde_json::Map<String, serde_json::Value> {
         &call.arguments
     }
+    /// A project folder's hook wrote something the model is about to read.
+    fn project_hook_spoke(&self) {}
 
     /// The tools offered for the next round; the final-report phase offers none.
     fn surface<'a>(

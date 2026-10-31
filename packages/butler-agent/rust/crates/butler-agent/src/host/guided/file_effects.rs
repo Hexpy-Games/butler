@@ -94,7 +94,7 @@ impl GuidedFileEffects {
         let scope = self.scope();
         if let Some(path) = args.get("path").and_then(Value::as_str)
             && let Err(error) = butler_turn::workspace::guard_effect_file(&scope, path).await
-            && error.code() == "protected_path"
+            && matches!(error.code(), "protected_path" | "credential_store_blocked")
         {
             // Refuse protected data before asking for approval. Other boundary
             // failures retain the file adapter's durable effect outcome.

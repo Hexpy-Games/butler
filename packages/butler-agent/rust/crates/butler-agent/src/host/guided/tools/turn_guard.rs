@@ -34,7 +34,8 @@ impl TurnGuard {
 }
 
 /// The taint a turn starts with: restored from its authority continuation,
-/// or external when the user message carries attachments.
+/// or external when the user message carries attachments or a project folder's
+/// hook added text: that text can ask the model to send something out.
 fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) -> TurnTaint {
     let resumed = restored
         .and_then(|continuation| continuation.extensions.get(TAINT_KEY))
@@ -49,7 +50,7 @@ fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) 
         .get("attachments")
         .and_then(Value::as_array)
         .is_some_and(|items| !items.is_empty());
-    if resumed == Some("external") || attached {
+    if resumed == Some("external") || attached || context["hookContextProject"] == true {
         TurnTaint::External
     } else {
         TurnTaint::Clean

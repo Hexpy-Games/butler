@@ -641,6 +641,13 @@ export const enUsCopy: AppCopy = {
       manageSchedule: { create: "Create a schedule?", delete: "Delete a schedule?", run: "Run due schedules?", change: "Change a schedule?" },
       updateProject: "Update the project records?",
       startConversation: "Start a new conversation?",
+      projectHooks: {
+        title: "Trust this folder's contents?",
+        receives: "Receives your prompts and tool results; output can reach the model",
+        unsandboxed: "Runs without a sandbox",
+        deny: "Don't trust",
+        allow: "Trust",
+      },
       restartService: "Restart Butler?",
       createWorktree: "Create a worktree for this conversation?",
       switchFolder: "Move the working folder?",

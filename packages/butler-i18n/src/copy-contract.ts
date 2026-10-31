@@ -203,6 +203,13 @@ export interface ApprovalRequestCopy {
   restartService: string;
   createWorktree: string;
   switchFolder: string;
+  projectHooks: {
+    title: string;
+    receives: string;
+    unsandboxed: string;
+    deny: string;
+    allow: string;
+  };
   /** Any kind this App does not know yet. */
   generic: string;
   /** The line after the examples. */
