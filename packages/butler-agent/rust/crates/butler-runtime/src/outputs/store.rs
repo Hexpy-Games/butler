@@ -233,6 +233,7 @@ impl OutputStore {
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
         let mut output = self.read(id)?;
+        let index = self.root.join("index.sqlite");
         if output.session_id != session {
             let old = self
                 .root
@@ -246,8 +247,12 @@ impl OutputStore {
             if old.exists() {
                 std::fs::remove_file(old)?;
             }
+        } else if !super::index::owner_matches(&index, id, session)? {
+            // Replay a manifest replacement interrupted before its index save.
+            // Already-correct owners retain their existing metadata/references.
+            super::index::save(&index, &output)?;
         }
-        super::index::reference(&self.root.join("index.sqlite"), id, session, turn, message)
+        super::index::reference(&index, id, session, turn, message)
     }
     fn publication_id(&self, session: &str, source: &str) -> std::io::Result<String> {
         let generation = self.root.join("generations").join(hash(session.as_bytes()));

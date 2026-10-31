@@ -47,6 +47,22 @@ pub(super) fn save(path: &Path, output: &Output) -> std::io::Result<()> {
     .map_err(std::io::Error::other)?;
     db.commit().map_err(std::io::Error::other)
 }
+pub(super) fn owner_matches(path: &Path, id: &str, session: &str) -> std::io::Result<bool> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(std::io::Error::other)?;
+    if !ready(&db)? {
+        return Ok(false);
+    }
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM outputs WHERE id=?1 AND session=?2)",
+        params![id, session],
+        |row| row.get(0),
+    )
+    .map_err(std::io::Error::other)
+}
 pub(super) fn summaries(path: &Path, session: &str) -> std::io::Result<Vec<OutputSummary>> {
     if !path.exists() {
         return Ok(Vec::new());
@@ -81,6 +97,10 @@ pub(super) fn remove(path: &Path, session: &str, ids: &[String]) -> std::io::Res
     let db = connection.transaction().map_err(std::io::Error::other)?;
     super::blobs::remove(&db, ids)?;
     if ready(&db)? {
+        for id in ids {
+            db.execute("DELETE FROM outputs WHERE id=?1", [id])
+                .map_err(std::io::Error::other)?;
+        }
         db.execute("DELETE FROM output_refs WHERE session=?1", [session])
             .map_err(std::io::Error::other)?;
         db.execute("DELETE FROM outputs WHERE session=?1", [session])
