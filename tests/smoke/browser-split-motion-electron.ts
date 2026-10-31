@@ -86,14 +86,16 @@ async function toggleWatched(): Promise<MotionRun> {
 
 /** While the page area is on screen and the native view is not, the frame must show a still of the page. */
 function blankFrames(run: MotionRun, painted: "page" | "green" = "page") {
-  return run.frames.filter((frame) => frame.visible > 24 && !frame.onScreen && frame[painted] < 0.5);
+  // No gap in the row and no page either: the pane is not in this painted frame yet, whatever the slot already says.
+  return run.frames.filter((frame) => frame.visible > 24 && !frame.onScreen && frame[painted] < 0.5 && frame.gap !== null);
 }
 
 /** While the pane travels the native view stays off screen, the painted gap holds and the title group ends with the chat. */
 function assertTogether(run: MotionRun, label: string, restGap: number, restX: number) {
   const seenOnPage = run.frames.filter((frame) => frame.visible > 24 && frame.onScreen && Math.abs((frame.slotX ?? restX) - restX) > 1);
   assert.deepEqual(seenOnPage, [], `${label}: the native view is off screen while the pane travels`);
-  const apart = run.frames.filter((frame) => frame.seenVisible > 24 && (frame.gap === null || Math.abs(frame.gap - restGap) > 1.5));
+  // A page in the row with no gap before it is the pane over the chat; no page and no gap is a pane not painted yet.
+  const apart = run.frames.filter((frame) => frame.seenVisible > 24 && (frame.gap === null ? frame.page + frame.green >= 0.5 : Math.abs(frame.gap - restGap) > 1.5));
   assert.deepEqual(apart.map((frame) => [frame.slotX, frame.gap]), [], `${label}: the painted gap stays at ${restGap}`);
   const [from, to] = [run.dom.edges[0]!, run.dom.edges.at(-1)!];
   for (const [chat, title] of run.dom.edges as number[][]) {
