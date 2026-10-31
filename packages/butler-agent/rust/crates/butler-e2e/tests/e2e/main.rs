@@ -143,6 +143,7 @@ mod onboarding;
 mod onboarding_form;
 mod outbox_identity;
 mod output_blob_index;
+mod output_owner_crash;
 mod pending_asks;
 mod perf_ask_user;
 mod perf_turn;
