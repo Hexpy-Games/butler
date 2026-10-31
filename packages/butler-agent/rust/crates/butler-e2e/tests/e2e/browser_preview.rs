@@ -12,14 +12,14 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod failures;
 
-fn port() -> u16 {
+pub(super) fn port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
         .local_addr()
         .unwrap()
         .port()
 }
-async fn call(
+pub(super) async fn call(
     admin: &AdminClient,
     session: &str,
     op: &str,

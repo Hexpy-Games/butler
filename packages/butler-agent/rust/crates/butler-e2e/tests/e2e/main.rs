@@ -285,6 +285,7 @@ mod task_graphs;
 mod acceptance_payload_perf;
 mod storage_correction;
 
+mod session_delete_cleanup;
 mod session_titles;
 mod smart_groups;
 #[path = "storage_correction/seed.rs"]
