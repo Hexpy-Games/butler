@@ -27,7 +27,8 @@ export async function captureDeleteCards(page: Page, server: NativeAppServerHand
   const plan = await server.api<{ id: string }>(`/projects/${project}/canon/plans`, post({ title: "교체 계획" }));
   const deletion = { op: "epic.delete", id: epic.id, expected_revision: epic.revision };
   arm({ name: "canon_propose", arguments: { project_id: project, summary: "과제 교체", changes: [{ op: "epic.create", title: "새로 등록할 과제", plan_id: plan.id }, deletion] } });
-  await page.evaluate(id => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({ schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), active_session_id: id, left_open: false, right_open: false })), chat.session.id);
+  // Written before the app boots: its debounced UI-state save can overwrite a value set on the running page.
+  await page.addInitScript(id => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({ schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), active_session_id: id, left_open: false, right_open: false })), chat.session.id);
   await page.reload();
   const compact = page.locator('[data-slot="composer-compact-preview"]');
   if (await compact.isVisible()) await compact.click();

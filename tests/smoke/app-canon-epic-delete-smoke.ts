@@ -70,7 +70,7 @@ try {
       await openMenu();
       const action = page.getByRole("menuitem", { name: "과제 삭제", exact: true });
       assert.equal(await action.getAttribute("aria-disabled"), "true");
-      await action.hover({ force: true });
+      await action.hover();
       await page.getByRole("tooltip").filter({ hasText: "진행 중에는 삭제할 수 없습니다" }).waitFor();
       await captureDeleteMenu(page, shots, `${name}-disabled-tooltip`);
       await page.screenshot({ path: join(shots, `${name}-disabled-tooltip.png`), animations: "disabled" });
@@ -80,7 +80,7 @@ try {
       const overview = page.locator('[data-test-class="canon-plan-overview"]');
       await overview.getByRole("button", { name: `${epic.title} 메뉴`, exact: true }).click();
       assert.equal(await action.getAttribute("aria-disabled"), "true");
-      await action.hover({ force: true });
+      await action.hover();
       await page.getByRole("tooltip").filter({ hasText: "진행 중에는 삭제할 수 없습니다" }).waitFor();
       await captureDeleteMenu(page, shots, `${name}-plan-disabled-tooltip`);
       await page.screenshot({ path: join(shots, `${name}-plan-disabled-tooltip.png`), animations: "disabled" });

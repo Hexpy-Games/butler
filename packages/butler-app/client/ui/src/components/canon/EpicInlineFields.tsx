@@ -49,7 +49,7 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
       guard.blur();
     }}>
       {(["title", "description"] as const).map(field => <Stack gap="sm" key={field}>
-        <Stack align="row" cross="start" gap="sm">
+        <Stack align="row" cross="start" gap="lg">
           <Box grow minWidth="0">{edit.draft?.field === field
           ? <EpicFieldInput epic={epic} field={field} value={edit.draft.value} busy={busy} valid={edit.valid}
             current={edit.draft.current} base={edit.draft.base} onChange={edit.change} onSave={guard.save} onCancel={guard.cancel} />
