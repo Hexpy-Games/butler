@@ -120,9 +120,15 @@ async fn idle(s: &Scenario, kind: &str) -> Result<(), HarnessError> {
             .map(|(a, b)| a - b),
         cpu.map(|time| time.as_millis())
     );
+    assert_eq!(writes, 0, "physical writes while gated");
     assert!(
-        writes <= 1_000_000,
-        "idle disk writes exceeded 1 MB: {writes}"
+        after
+            .write_chars
+            .zip(before.write_chars)
+            .is_none_or(|(a, b)| a == b),
+        "buffered writes while gated: before={:?} after={:?}",
+        before.write_chars,
+        after.write_chars
     );
     // More than one CPU second in a minute is sustained work for an idle agent.
     if let Some(cpu) = cpu {

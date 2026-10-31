@@ -107,7 +107,7 @@ pub(in crate::gateway::application) fn due(
     now: &str,
 ) -> Result<Vec<AutomationRow>, AppStorageError> {
     let sql = format!(
-        "SELECT {COLUMNS} FROM app_automations a LEFT JOIN chats c ON c.id=a.target_session_id WHERE a.state='enabled' AND a.next_run_at IS NOT NULL AND a.next_run_at<=?1 AND NOT EXISTS(SELECT 1 FROM app_automation_runs r WHERE r.automation_id=a.id AND r.state='queued') ORDER BY a.next_run_at LIMIT 20"
+        "SELECT {COLUMNS} FROM app_automations a LEFT JOIN chats c ON c.id=a.target_session_id WHERE a.state='enabled' AND a.next_run_at IS NOT NULL AND a.next_run_at<=?1 AND NOT EXISTS(SELECT 1 FROM app_session_context_gate g WHERE g.session_id=a.target_session_id AND g.owner_kind='relocate') ORDER BY a.next_run_at LIMIT 20"
     );
     let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
     statement
@@ -121,7 +121,7 @@ pub(in crate::gateway::application) fn next_due(
     db: &Connection,
 ) -> Result<Option<String>, AppStorageError> {
     db.query_row(
-        "SELECT a.next_run_at FROM app_automations a WHERE a.state='enabled' AND a.next_run_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_automation_runs r WHERE r.automation_id=a.id AND r.state='queued') ORDER BY a.next_run_at LIMIT 1",
+        "SELECT a.next_run_at FROM app_automations a WHERE a.state='enabled' AND a.next_run_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_session_context_gate g WHERE g.session_id=a.target_session_id AND g.owner_kind='relocate') ORDER BY a.next_run_at LIMIT 1",
         [], |row| row.get(0),
     ).optional().map_err(AppStorageError::sqlite)
 }

@@ -200,14 +200,13 @@ impl AppApplication {
             result.state = "skipped_target_unavailable";
         }
         let completed = self.dependencies.identity_clock.now_iso();
-        let next = next_run(&queued.automation, &queued.trigger, &completed).await?;
         let subscribers = self.subscribers.clone();
         self.storage.execute(move|db|{
             record_run(db,&queued.run_id,&result,&completed)?;
             if let Some(message_id) = queued.placeholder_id.as_deref() {
                 remove_placeholder(db, &subscribers, message_id, &completed)?;
             }
-            db.execute("UPDATE app_automations SET last_run_at=?1,last_run_state=?2,last_safe_error_code=COALESCE(?3,(SELECT safe_error_code FROM app_automation_runs WHERE id=?5)),consecutive_failure_count=CASE WHEN ?2='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?1,next_run_at=?6,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?4",params![completed,result.state,result.safe_error,queued.automation.id,queued.run_id,next]).map_err(AppStorageError::sqlite)?;
+            db.execute("UPDATE app_automations SET last_run_at=?1,last_run_state=?2,last_safe_error_code=COALESCE(?3,(SELECT safe_error_code FROM app_automation_runs WHERE id=?5)),consecutive_failure_count=CASE WHEN ?2='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?1 WHERE id=?4",params![completed,result.state,result.safe_error,queued.automation.id,queued.run_id]).map_err(AppStorageError::sqlite)?;
             let run=records::run(db,&queued.run_id)?;
             publish(
                 db,
@@ -304,16 +303,44 @@ impl AppApplication {
         result: DispatchResult,
     ) -> Result<AutomationRunResult, GatewayApplicationError> {
         let completed = self.dependencies.identity_clock.now_iso();
-        // A queued occurrence still owns its due time until it actually dispatches.
-        let next = if result.state == "queued" {
-            row.next.clone()
+        let next = if row.schedule_type == "once" {
+            None
+        } else if row.state == "enabled" && row.schedule.is_some() {
+            let rule = row.schedule.clone();
+            let now = completed.clone();
+            Some(
+                tokio::task::spawn_blocking(move || {
+                    super::timing::next(rule.as_ref().ok_or_else(super::timing::invalid)?, &now)
+                })
+                .await
+                .map_err(GatewayApplicationError::internal_from)?
+                .map_err(app_error)?,
+            )
+        } else if row.state == "enabled" {
+            Some(
+                super::timing::interval_next(
+                    row.start_at
+                        .as_deref()
+                        .or(row.next.as_deref())
+                        .ok_or_else(super::timing::invalid)
+                        .map_err(app_error)?,
+                    row.interval,
+                    &completed,
+                    if trigger == "scheduled" {
+                        row.next.as_deref()
+                    } else {
+                        None
+                    },
+                )
+                .map_err(app_error)?,
+            )
         } else {
-            next_run(&row, trigger, &completed).await?
+            row.next.clone()
         };
         let subscribers = self.subscribers.clone();
         self.storage.execute(move|db|{
             record_run(db,&run_id,&result,&completed)?;
-            db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=COALESCE(?4,(SELECT safe_error_code FROM app_automation_runs WHERE id=?6)),run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' AND ?3<>'queued' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id,run_id]).map_err(AppStorageError::sqlite)?;
+            db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=COALESCE(?4,(SELECT safe_error_code FROM app_automation_runs WHERE id=?6)),run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id,run_id]).map_err(AppStorageError::sqlite)?;
             let run=records::run(db,&run_id)?;
             publish(
                 db,
@@ -382,45 +409,4 @@ fn record_run(
     // recorded; the schedule's last code then follows the run's.
     db.execute("UPDATE app_automation_runs SET state=?1,completed_at=?2,safe_error_code=COALESCE(?3,safe_error_code),turn_id=?4 WHERE id=?5",params![result.state,completed,result.safe_error,turn,run_id]).map_err(AppStorageError::sqlite)?;
     Ok(())
-}
-
-async fn next_run(
-    row: &AutomationRow,
-    trigger: &str,
-    completed: &str,
-) -> Result<Option<String>, GatewayApplicationError> {
-    Ok(if row.schedule_type == "once" {
-        None
-    } else if row.state == "enabled" && row.schedule.is_some() {
-        let rule = row.schedule.clone();
-        let now = completed.to_owned();
-        Some(
-            tokio::task::spawn_blocking(move || {
-                super::timing::next(rule.as_ref().ok_or_else(super::timing::invalid)?, &now)
-            })
-            .await
-            .map_err(GatewayApplicationError::internal_from)?
-            .map_err(app_error)?,
-        )
-    } else if row.state == "enabled" {
-        Some(
-            super::timing::interval_next(
-                row.start_at
-                    .as_deref()
-                    .or(row.next.as_deref())
-                    .ok_or_else(super::timing::invalid)
-                    .map_err(app_error)?,
-                row.interval,
-                completed,
-                if trigger == "scheduled" {
-                    row.next.as_deref()
-                } else {
-                    None
-                },
-            )
-            .map_err(app_error)?,
-        )
-    } else {
-        row.next.clone()
-    })
 }

@@ -242,7 +242,9 @@ impl AppApplication {
             tx.execute("DELETE FROM app_session_context_gate WHERE session_id='general' AND owner_kind='relocate' AND owner_id=?1", [&archive])
                 .map_err(super::AppStorageError::sqlite)?;
             tx.commit().map_err(super::AppStorageError::sqlite)
-        }).await.map_err(app_error)
+        }).await.map_err(app_error)?;
+        self.automation_wake.notify_one();
+        Ok(())
     }
     pub(super) async fn collect_session_outputs(
         &self,
