@@ -63,6 +63,8 @@ enum Route {
     Post,
     Patch,
     Project,
+    ProjectPlain,
+    ProjectArchive,
 }
 async fn request(
     s: &Scenario,
@@ -75,13 +77,17 @@ async fn request(
         Route::Plain => s.gw.delete(&path).await,
         Route::Post => s.gw.post(&format!("{path}/archive"), json!({})).await,
         Route::Patch => s.gw.patch(&path, json!({"archived":true})).await,
-        Route::Project => {
+        Route::Project | Route::ProjectPlain | Route::ProjectArchive => {
             let project: String =
                 app(s)?.query_row("SELECT project_id FROM chats WHERE id=?1", [archive], |r| {
                     r.get(0)
                 })?;
-            s.gw.delete(&format!("/projects/{project}?permanent=true"))
-                .await
+            let path = format!("/projects/{project}");
+            match route {
+                Route::ProjectPlain => s.gw.delete(&path).await,
+                Route::ProjectArchive => s.gw.post(&format!("{path}/archive"), json!({})).await,
+                _ => s.gw.delete(&format!("{path}?permanent=true")).await,
+            }
         }
     }
 }
@@ -91,7 +97,10 @@ async fn refuses(route: Route) -> Result<(), HarnessError> {
     let mut s = setup.start().await?;
     let (id, bytes, obstacle) = blocked(&mut s).await?;
     let archive = pending(&s)?;
-    if matches!(route, Route::Project) {
+    if matches!(
+        route,
+        Route::Project | Route::ProjectPlain | Route::ProjectArchive
+    ) {
         // Archived chats can be unarchived then relocated into a project.
         let r =
             s.gw.patch(&format!("/sessions/{archive}"), json!({"archived":false}))
@@ -121,6 +130,11 @@ async fn refuses(route: Route) -> Result<(), HarnessError> {
     }
     seed_authority(&s, &archive)?;
     let before: String = app(&s)?.query_row("SELECT json_array(id,title,archived,updated_at,runtime_session_hint,project_id) FROM chats WHERE id=?1", [&archive], |r| r.get(0))?;
+    let projects: String = app(&s)?.query_row(
+        "SELECT json_group_array(json_array(id,archived,updated_at)) FROM projects",
+        [],
+        |r| r.get(0),
+    )?;
     let r = request(&s, &archive, route).await?;
     assert_eq!(r.status, 409, "{route:?}: {r:?}");
     assert_eq!(r.body["error"]["code"], "output_transfer_pending", "{r:?}");
@@ -131,6 +145,12 @@ async fn refuses(route: Route) -> Result<(), HarnessError> {
     assert_pending(&s, &archive)?;
     let after: String = app(&s)?.query_row("SELECT json_array(id,title,archived,updated_at,runtime_session_hint,project_id) FROM chats WHERE id=?1", [&archive], |r| r.get(0))?;
     assert_eq!(after, before);
+    let projects_after: String = app(&s)?.query_row(
+        "SELECT json_group_array(json_array(id,archived,updated_at)) FROM projects",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(projects_after, projects);
     assert_eq!(count(&s, "app_session_delete_cleanups")?, 0);
     assert_eq!(count(&s, "app_canon_session_deletes")?, 0);
     let closed: bool = authority(&s)?.query_row(
@@ -161,7 +181,16 @@ async fn refuses(route: Route) -> Result<(), HarnessError> {
     let r = request(&s, &archive, route).await?;
     assert_eq!(r.status, 200, "{route:?}: {r:?}");
     assert_finished(&s)?;
-    collected(&s, &archive, &[&id], &[b"Retained output"])?;
+    if matches!(route, Route::ProjectPlain | Route::ProjectArchive) {
+        owned(&s, &id, &archive)?;
+        content(&s, &id, "Retained output").await?;
+        let archived: bool = app(&s)?.query_row(
+            "SELECT c.archived=1 AND p.archived=1 FROM chats c JOIN projects p ON p.id=c.project_id WHERE c.id=?1",
+            [&archive], |r| r.get(0))?;
+        assert!(archived);
+    } else {
+        collected(&s, &archive, &[&id], &[b"Retained output"])?;
+    }
     let closed: bool = authority(&s)?.query_row(
         "SELECT close_reason IS NOT NULL FROM btcc_authority_requests WHERE request_id='retained'",
         [],
@@ -194,4 +223,15 @@ async fn patch_archive_refuses_pending_before_any_mutation() -> Result<(), Harne
 async fn project_delete_refuses_pending_before_any_mutation() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     refuses(Route::Project).await
+}
+
+#[tokio::test]
+async fn project_plain_delete_refuses_pending_before_any_mutation() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    refuses(Route::ProjectPlain).await
+}
+#[tokio::test]
+async fn project_archive_refuses_pending_before_any_mutation() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    refuses(Route::ProjectArchive).await
 }

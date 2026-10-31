@@ -1,6 +1,7 @@
 //! Pending output transfers preserve admission and ownership across real restarts.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod deletion;
+mod schedules;
 use super::output_blob_index::{Unreadable, chat, content, db, hash, scalar, schema, seed, setup};
 use butler_e2e::e2e::{HarnessError, scenario::Scenario};
 use butler_platform::sqlite;
@@ -140,6 +141,7 @@ async fn first_pending_failure_does_not_prevent_later_transfer() -> Result<(), H
     // The first target cannot create its marker directory; the later target can.
     std::fs::write(markers(&s.sandbox.data, &first), b"obstacle")?;
     app(&s)?.execute("UPDATE chats SET archived=1 WHERE id=?1", [&second])?;
+    // Pin the recovery loop, not a state reachable through clear.
     app(&s)?.execute("INSERT INTO app_output_transfers VALUES(?1)", [&second])?;
     s.gw = s.agent.start_again().await?;
     assert_pending(&s, &first)?;
@@ -189,5 +191,77 @@ async fn corrupt_manifest_does_not_jam_general_and_archive_delete_collects_it()
             .await?;
     assert_eq!(r.status, 200, "{r:?}");
     deletion::collected(&s, archive, &[&bad, &good], &[b"Unservable", b"Servable"])?;
+    s.finish().await
+}
+
+#[tokio::test]
+async fn invalid_index_id_moves_without_leaving_general_gated() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("TRANSFER-INVALID")?;
+    schema(&setup.sandbox.data, true)?;
+    let mut s = setup.start().await?;
+    s.agent.terminate().await?;
+    db(&s.sandbox.data)?.execute_batch(
+        "INSERT INTO outputs VALUES('../invalid','general','m','t','Invalid',0,'2026-01-01');
+         INSERT INTO output_refs VALUES('../invalid','general','t','m');",
+    )?;
+    s.gw = s.agent.start_again().await?;
+    let result = clear(&s, 200).await?;
+    let archive = result["archived_session"]["id"].as_str().unwrap();
+    assert_finished(&s)?;
+    for table in ["outputs", "output_refs"] {
+        let owner: String = db(&s.sandbox.data)?.query_row(
+            &format!("SELECT session FROM {table} WHERE id='../invalid'"),
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(owner, archive);
+    }
+    assert!(
+        s.agent
+            .logs()
+            .contains("[outputs] ignoring invalid indexed output id")
+    );
+    let (_, turn) = s.turn("general", "Tools").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    s.finish().await
+}
+
+#[tokio::test]
+async fn corrupt_manifest_archive_delete_preserves_shared_live_blob() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("TRANSFER-SHARED")?;
+    schema(&setup.sandbox.data, true)?;
+    let mut s = setup.start().await?;
+    let live = chat(&s).await?;
+    s.agent.terminate().await?;
+    let bad = seed(&s.sandbox.data, "general", "bad", b"Shared", true)?;
+    let good = seed(&s.sandbox.data, &live, "live", b"Shared", true)?;
+    std::fs::write(manifest(&s.sandbox.data, &bad), b"{")?;
+    s.gw = s.agent.start_again().await?;
+    let result = clear(&s, 200).await?;
+    let archive = result["archived_session"]["id"].as_str().unwrap();
+    assert_finished(&s)?;
+    let r =
+        s.gw.delete(&format!("/sessions/{archive}?permanent=true"))
+            .await?;
+    assert_eq!(r.status, 200, "{r:?}");
+    assert!(!manifest(&s.sandbox.data, &bad).exists());
+    assert_eq!(scalar(&s.sandbox.data, "SELECT count(*) FROM outputs")?, 1);
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_refs")?,
+        1
+    );
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blobs")?,
+        1
+    );
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blob_sweep")?,
+        0
+    );
+    assert_eq!(count(&s, "app_session_delete_cleanups")?, 0);
+    owned(&s, &good, &live)?;
+    content(&s, &good, "Shared").await?;
     s.finish().await
 }
