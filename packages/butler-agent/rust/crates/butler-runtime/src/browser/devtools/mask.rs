@@ -9,8 +9,23 @@ pub(crate) const MASK: &str = "[masked]";
 const TEXT_LIMIT: usize = 2000;
 const URL_LIMIT: usize = 2000;
 
-static SET_COOKIE: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(r"(?i)\b(set-cookie|cookie)\s*[:=][^\n]*").ok());
+/// Headers whose whole value is the credential, whatever scheme it names.
+static SET_COOKIE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(set-cookie|cookie|(?:proxy-)?authorization)\s*[:=][^\n]*").ok()
+});
+static PEM: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(
+        r"(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\z)",
+    )
+    .ok()
+});
+/// The userinfo of a URL of any scheme: `postgres://admin:secret@db`.
+static USERINFO: LazyLock<Option<Regex>> =
+    LazyLock::new(|| Regex::new(r#"(?i)\b([a-z][a-z0-9+.\-]*://)[^\s"'<>/?#]*@"#).ok());
+/// Digits a card number could be, plain or in the groups cards print in.
+static CARD: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"\b(?:[0-9]{13,19}|[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}[ -][0-9]{1,7}|[0-9]{4}[ -][0-9]{6}[ -][0-9]{4,5})\b").ok()
+});
 static BEARER: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}").ok());
 static JWT: LazyLock<Option<Regex>> = LazyLock::new(|| {
@@ -29,6 +44,13 @@ static PHRASE: LazyLock<Option<Regex>> = LazyLock::new(|| {
 static RAW_KEY: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(r"\b(?:gh[pousr]_[A-Za-z0-9]{10,}|github_pat_\w{10,}|sk-[A-Za-z0-9_-]{10,}|[sr]k_(?:live|test)_\w{8,}|xox[abeoprs]-[\w-]{8,}|(?:AKIA|ASIA)[A-Z0-9]{12,}|AIza[\w-]{20,}|glpat-[\w-]{10,}|npm_[A-Za-z0-9]{20,})").ok()
 });
+/// `{"name":"password","value":"x"}`: a value named by the field beside it.
+static VALUE_AFTER: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r#"(?i)(\b(?:name|key)\\?["']?\s*[:=]\s*\\?["']?)([^"'\\\n,}]{1,80})(\\?["']?\s*,\s*\\?["']?value\\?["']?\s*[:=]\s*)(\\"(?:[^"\\\n]|\\[^"\n])*(?:\\")?|"[^"\n]*"?|'[^'\n]*'?|[^\s"'&;,\\}]+)"#).ok()
+});
+static VALUE_BEFORE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r#"(?i)(\bvalue\\?["']?\s*[:=]\s*)(\\"(?:[^"\\\n]|\\[^"\n])*(?:\\")?|"[^"\n]*"?|'[^'\n]*'?|[^\s"'&;,\\}]+)(\s*,\s*\\?["']?(?:name|key)\\?["']?\s*[:=]\s*\\?["']?)([^"'\\\n,}]{1,80})"#).ok()
+});
 static URLS: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r#"https?://[^\s"'<>)\]]+"#).ok());
 
@@ -40,9 +62,54 @@ fn secret_value(value: &str) -> bool {
         .map(|(_, decoded)| decoded.into_owned())
         .unwrap_or_default();
     named(&decoded) != decoded
-        || [&BEARER, &JWT, &RAW_KEY]
+        || cards(&decoded) != decoded
+        || [&BEARER, &JWT, &RAW_KEY, &USERINFO]
             .iter()
             .any(|regex| regex.as_ref().is_none_or(|regex| regex.is_match(&decoded)))
+}
+
+fn luhn(number: &str) -> bool {
+    let sum: u32 = number
+        .chars()
+        .rev()
+        .filter_map(|ch| ch.to_digit(10))
+        .enumerate()
+        .map(|(index, digit)| match (index % 2 == 1, digit * 2) {
+            (false, _) => digit,
+            (true, doubled) if doubled > 9 => doubled - 9,
+            (true, doubled) => doubled,
+        })
+        .sum();
+    sum.is_multiple_of(10)
+}
+
+/// Text without what passes for a card number; other long numbers stay.
+fn cards(text: &str) -> String {
+    replaced(&CARD, text, |c| {
+        if luhn(&c[0]) {
+            MASK.to_owned()
+        } else {
+            c[0].to_owned()
+        }
+    })
+}
+
+/// Masks a `value` whose neighbouring `name` or `key` names a credential.
+fn named_neighbours(text: &str) -> String {
+    let text = replaced(&VALUE_AFTER, text, |c| {
+        if credential_name(c[2].trim()) {
+            format!("{}{}{}{MASK}", &c[1], &c[2], &c[3])
+        } else {
+            c[0].to_owned()
+        }
+    });
+    replaced(&VALUE_BEFORE, &text, |c| {
+        if credential_name(c[4].trim()) {
+            format!("{}{MASK}{}{}", &c[1], &c[3], &c[4])
+        } else {
+            c[0].to_owned()
+        }
+    })
 }
 
 fn parameter(pair: &str) -> String {
@@ -103,7 +170,10 @@ pub(crate) fn mask_url(raw: &str) -> String {
             let joined = url::Url::parse("http://relative.invalid/")
                 .ok()
                 .and_then(|base| base.join(raw).ok());
-            return joined.map_or_else(|| MASK.to_owned(), |url| capped(location(&url), URL_LIMIT));
+            return joined.map_or_else(
+                || MASK.to_owned(),
+                |url| capped(cards(&location(&url)), URL_LIMIT),
+            );
         }
         Err(_) => return MASK.to_owned(),
     };
@@ -111,7 +181,7 @@ pub(crate) fn mask_url(raw: &str) -> String {
         return format!("{}:[{} chars]", url.scheme(), raw.len());
     }
     let origin = url.origin().ascii_serialization();
-    capped(format!("{origin}{}", location(&url)), URL_LIMIT)
+    capped(cards(&format!("{origin}{}", location(&url))), URL_LIMIT)
 }
 
 fn replaced(
@@ -158,13 +228,16 @@ fn named(text: &str) -> String {
 /// Page text with anything shaped like a credential removed, bounded and
 /// saying how much it left out.
 pub(crate) fn mask_text(text: &str) -> String {
-    let text = replaced(&SET_COOKIE, text, |c| format!("{}: {MASK}", &c[1]));
+    let text = replaced(&PEM, text, |_| MASK.to_owned());
+    let text = replaced(&SET_COOKIE, &text, |c| format!("{}: {MASK}", &c[1]));
+    let text = replaced(&USERINFO, &text, |c| format!("{}{MASK}@", &c[1]));
     let text = replaced(&BEARER, &text, |c| format!("{} {MASK}", &c[1]));
     let text = replaced(&JWT, &text, |_| MASK.to_owned());
     let text = replaced(&RAW_KEY, &text, |_| MASK.to_owned());
     let text = replaced(&URLS, &text, |c| mask_url(&c[0]));
     let text = replaced(&PHRASE, &text, |c| format!("{}{}{MASK}", &c[1], &c[2]));
-    capped(named(&text), TEXT_LIMIT)
+    let text = named_neighbours(&text);
+    capped(cards(&named(&text)), TEXT_LIMIT)
 }
 
 /// Headers as the model may see them: never a credential's value.

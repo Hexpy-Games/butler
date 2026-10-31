@@ -30,6 +30,10 @@ pub(super) const SECRETS: &[&str] = &[
     "ghp_SECRET",
     "sk-SECRET",
     "AKIASECRET",
+    "424242424242",
+    "4242 4242",
+    "4242-4242",
+    "cs_live_SECRET",
 ];
 
 #[derive(Clone, Default)]
@@ -73,7 +77,10 @@ fn raw_rows() -> Value {
         {"method":"GET","url":"https://matrix.example.test/p?a=1;token=SECRET-URL;b=2","type":"Fetch","status":200},
         {"method":"GET","url":"https://a.example.test/in?next=https%3A%2F%2Fy.test%3Ftoken%3DSECRET-URL&go=https%3A%2F%2Fy.test%2Fhome","type":"Document","status":200},
         {"method":"GET","url":"https://a.example.test/in?pass=SECRET-URL&pw=SECRET-URL&passcode=SECRET-URL&hmac=SECRET-URL&lasso=keep","type":"Document","status":200},
-        {"method":"GET","url":"https://a.example.test/in?card=SECRET-URL&cvc=SECRET-URL&cvv=SECRET-URL&pan=SECRET-URL&company=keep","type":"Document","status":200}])
+        {"method":"GET","url":"https://a.example.test/in?card=SECRET-URL&cvc=SECRET-URL&cvv=SECRET-URL&pan=SECRET-URL&company=keep","type":"Document","status":200},
+        {"method":"GET","url":"https://a.example.test/card/4242424242424242?number=4242424242424242&spaced=4242%204242%204242%204242&order=1234567890123","type":"Fetch","status":200},
+        {"method":"GET","url":"https://CHECKOUT.stripe.com/c/pay/cs_live_SECRET#fragment","type":"Fetch","status":200},
+        {"method":"GET","url":"https://a.example.test/in?db=postgres%3A%2F%2Fadmin%3ASECRET-URL%40db&keep=1","type":"Document","status":200}])
 }
 
 fn raw_nodes() -> Value {
@@ -119,7 +126,14 @@ fn read_reply(tab: &str, page: &Value, read: &str) -> Value {
                 {"level":"error","text":"오류: 비밀번호: SECRET-TEXT 토큰=SECRET-TEXT"},
                 {"level":"error","text":"card: SECRET-TEXT cvv=SECRET-TEXT pan=SECRET-TEXT panel=plain-panel"},
                 {"level":"error","text":"TokenExpiredError: jwt expired"},
-                {"level":"error","text":"AuthError: login failed"}]);
+                {"level":"error","text":"AuthError: login failed"},
+                {"level":"error","text":"DATABASE_URL=postgres://admin:SECRET-TEXT@db:5432/app failed"},
+                {"level":"error","text":"mongodb+srv://u:SECRET-TEXT@m.example.test redis://:SECRET-TEXT@r.example.test amqp://u:SECRET-TEXT@q.example.test"},
+                {"level":"error","text":"Authorization: Token SECRET-TEXT and SECRET-PHRASE\nsent to api"},
+                {"level":"error","text":"-----BEGIN RSA PRIVATE KEY-----\nSECRET-KEY\n-----END RSA PRIVATE KEY----- in config"},
+                {"level":"error","text":"-----BEGIN PRIVATE KEY-----\nSECRET-KEY cut short"},
+                {"level":"error","text":"card 4242424242424242, 4242 4242 4242 4242 and 4242-4242-4242-4242; order 1234567890123"},
+                {"level":"error","text":"{\"name\":\"password\",\"value\":\"SECRET-TEXT\"} {\"value\":\"SECRET-TEXT\",\"key\":\"api_key\"} {\\\"name\\\":\\\"token\\\",\\\"value\\\":\\\"SECRET-TEXT\\\"} {\"name\":\"color\",\"value\":\"plain-color\"}"}]);
         }
         "network" => reply["entries"] = raw_rows(),
         "dom" => {

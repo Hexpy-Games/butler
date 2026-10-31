@@ -18,19 +18,30 @@ export function watchDevtools(tab) {
   const contents = tab.view.webContents;
   tab.devtools = { console: [], rows: [], pending: new Map(), droppedConsole: 0, droppedRows: 0, fromLoad: tab.agent === true };
   trackRequests(tab);
+  // A same-site frame shares the main frame's process, and Electron reports it as that frame.
   contents.on("console-message", event => {
-    if (event.level !== "error") return;
+    if (event.level !== "error" || event.frame !== contents.mainFrame) return;
     const tools = tab.devtools;
     if (tools.console.length >= MAX_CONSOLE) { tools.console.shift(); tools.droppedConsole++; }
     tools.console.push({ level: "error", text: event.message.slice(0, MAX_TEXT), source: event.sourceId?.slice(0, MAX_TEXT), line: event.lineNumber });
   });
   contents.on("did-navigate", (_event, url) => {
     const tools = tab.devtools;
+    tab.readsClosed = null;
     tools.console = []; tools.droppedConsole = 0; tools.droppedRows = 0; tools.fromLoad = true;
     // The new document's own request stays; what the old one still had going is not its data.
     const own = row => row.type === "mainFrame" && row.url === url.split("#")[0].slice(0, MAX_TEXT);
     tools.rows = tools.rows.filter(own);
     for (const [id, row] of tools.pending) if (!own(row)) tools.pending.delete(id);
+  });
+  // A sign-in that moves on within its document: what the page logged or sent
+  // while the password sat in it stays unread, and capture starts again.
+  contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+    const movedFrom = tab.readsClosed?.inPage;
+    if (!isMainFrame || !movedFrom || url === movedFrom) return;
+    tab.readsClosed = null;
+    Object.assign(tab.devtools, { console: [], rows: [], droppedConsole: 0, droppedRows: 0, fromLoad: false });
+    tab.devtools.pending.clear();
   });
 }
 
@@ -95,20 +106,23 @@ function network(tab, args) {
   return { ...pageOf([...tools.rows, ...running], args), dropped: tools.droppedRows, from_load: tools.fromLoad };
 }
 
+const secretFilled = { status: "not_dispatched", reason: "secret_filled", recovery: "Butler filled a saved secret into this page. It can be read once the page changes." };
+
 /** One read. The URL is read live, before and after, so a reply is never
  * reported against a page it did not come from. A document Butler filled a
- * saved secret into isn't read: its console and DOM could repeat the secret. */
+ * saved secret into isn't read: its console, DOM and requests could repeat it. */
 export async function devtoolsRead(tab, args) {
   if (!tab.view || tab.status === "crashed") return { status: "unknown", reason: "tab_crashed" };
   watchDevtools(tab);
   const before = liveUrl(tab);
   if (!before) return { status: "not_dispatched", reason: "navigation_denied" };
+  if (tab.readsClosed) return secretFilled;
   let read;
   if (args.read === "console") read = { ...pageOf(tab.devtools.console, args), dropped: tab.devtools.droppedConsole, from_load: tab.devtools.fromLoad };
   else if (args.read === "network") read = network(tab, args);
   else if (args.read === "dom") read = await document(tab, args).catch(() => ({ unavailable: true }));
   else return { status: "not_dispatched", reason: "invalid_read" };
-  if (tab.vaultFilled && args.read !== "network") return { status: "not_dispatched", reason: "secret_filled", recovery: "Butler filled a saved secret into this page. Its console and DOM can be read once the page changes." };
+  if (tab.readsClosed) return secretFilled;
   if (read.unavailable) return { status: "unknown", reason: "frame_unavailable" };
   if (read.invalid_selector) return { status: "not_dispatched", reason: "invalid_selector" };
   if (liveUrl(tab) !== before || read.href && webUrl(read.href) !== before) return { status: "not_dispatched", reason: "devtools_page_changed", recovery: "The tab moved during this read. Call browser_devtools again." };

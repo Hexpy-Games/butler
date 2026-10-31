@@ -63,13 +63,18 @@ const COMPARABLE_ATTRIBUTES: &[&str] = &[
 
 /// Whether a selector may be run: matching `[value^="a"]` would reveal a masked
 /// value one character at a time, so an attribute value may only be compared
-/// where the read shows it as written. An escape could spell any name.
+/// where the read shows it as written. An escape could spell any name, a
+/// comment could hide a bracket, and so could a quote outside the brackets.
 pub fn selector_allowed(selector: &str) -> bool {
-    if selector.contains('\\') {
+    if selector.contains('\\') || selector.contains("/*") {
         return false;
     }
+    let quoted = |part: &str| part.contains(['"', '\'']);
     let mut rest = selector;
     while let Some(open) = rest.find('[') {
+        if quoted(&rest[..open]) {
+            return false;
+        }
         rest = &rest[open + 1..];
         let mut quote = None;
         let mut end = rest.len();
@@ -99,7 +104,7 @@ pub fn selector_allowed(selector: &str) -> bool {
         }
         rest = rest.get(end + 1..).unwrap_or("");
     }
-    true
+    !quoted(rest)
 }
 
 fn attribute<'a>(node: &'a Value, name: &str) -> &'a str {

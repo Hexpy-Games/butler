@@ -97,13 +97,26 @@ fn console(report: &Value) -> Value {
     paged(report, &entries)
 }
 
+/// A payment provider's URLs carry the checkout itself: a row says only where.
+fn row_url(raw: &str) -> String {
+    match url::Url::parse(raw) {
+        Ok(url)
+            if matches!(url.scheme(), "http" | "https")
+                && url.host_str().is_some_and(super::payment_host) =>
+        {
+            url.origin().ascii_serialization()
+        }
+        _ => mask_url(raw),
+    }
+}
+
 /// A request as a row: allow-listed facts only, so whatever else a host
 /// reports (cookies, bodies, request headers) stops here.
 fn network_row(entry: &Value) -> Value {
     let mut row = Map::new();
     row.insert(
         "url".into(),
-        json!(mask_url(entry["url"].as_str().unwrap_or(""))),
+        json!(row_url(entry["url"].as_str().unwrap_or(""))),
     );
     for field in [
         "method", "type", "status", "mime", "bytes", "ms", "cached", "state",

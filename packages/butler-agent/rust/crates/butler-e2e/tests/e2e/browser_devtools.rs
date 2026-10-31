@@ -10,6 +10,7 @@
 )]
 mod host;
 mod masking;
+mod schedule;
 
 use super::browser_approval::host::{call, cassette};
 use butler_e2e::e2e::{

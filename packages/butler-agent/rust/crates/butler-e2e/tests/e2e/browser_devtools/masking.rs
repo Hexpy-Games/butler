@@ -57,6 +57,16 @@ async fn secrets_stay_masked_whatever_shape_they_come_in() -> Result<(), Harness
         "an unreadable URL is not shown: {lines}"
     );
     assert!(lines.contains("javascript:["), "{lines}");
+    assert!(
+        lines.contains("postgres://[masked]@db:5432/app failed"),
+        "{lines}"
+    );
+    assert!(lines.contains("redis://[masked]@r.example.test"), "{lines}");
+    assert!(lines.contains("Authorization: [masked]"), "{lines}");
+    assert!(lines.contains("sent to api"), "{lines}");
+    assert!(lines.contains("[masked] in config"), "{lines}");
+    assert!(lines.contains("order 1234567890123"), "{lines}");
+    assert!(lines.contains("plain-color"), "{lines}");
 
     let rows = &read_of("network")["untrusted_content"]["entries"];
     let row = |index: usize| rows[index]["url"].as_str().unwrap();
@@ -74,7 +84,7 @@ async fn secrets_stay_masked_whatever_shape_they_come_in() -> Result<(), Harness
         "https://app.example.test/r/abcdefghijklmnopqrstuvwx1234?q=coat#top",
         "{rows}"
     );
-    assert_eq!(row(3), "https://checkout.stripe.com/pay/cs?x=1", "{rows}");
+    assert_eq!(row(3), "https://checkout.stripe.com", "{rows}");
     assert_eq!(
         row(4),
         "https://sso.example.test/in?ticket=[masked]&sso=[masked]&magic=[masked]&keep=1",
@@ -98,6 +108,17 @@ async fn secrets_stay_masked_whatever_shape_they_come_in() -> Result<(), Harness
     assert_eq!(
         row(8),
         "https://a.example.test/in?card=[masked]&cvc=[masked]&cvv=[masked]&pan=[masked]&company=keep",
+        "{rows}"
+    );
+    assert_eq!(
+        row(9),
+        "https://a.example.test/card/[masked]?number=[masked]&spaced=[masked]&order=1234567890123",
+        "{rows}"
+    );
+    assert_eq!(row(10), "https://checkout.stripe.com", "{rows}");
+    assert_eq!(
+        row(11),
+        "https://a.example.test/in?db=[masked]&keep=1",
         "{rows}"
     );
     let headers = &rows[0]["response_headers"];
@@ -162,6 +183,11 @@ async fn selectors_are_checked_first() -> Result<(), HarnessError> {
                     dom("[*|value=a]"),
                     dom("meta[content^=a]"),
                     dom(r#"a[href*="token=abc"]"#),
+                    dom(r#"input/*[id=*/[value^="42"]"#),
+                    dom(r#"input/*[id=*/[name=csrf][value^="abc"]"#),
+                    dom(r#":not(:lang("[id="))[value^="42"]"#),
+                    dom(r#"a:lang("en")"#),
+                    dom("input[id=a]:lang('en')"),
                 ],
             ),
             turn("Good selector", vec![dom(good)]),
@@ -175,7 +201,7 @@ async fn selectors_are_checked_first() -> Result<(), HarnessError> {
         .iter()
         .filter(|value| value["reason"] == "invalid_selector")
         .count();
-    assert_eq!(refused, 9);
+    assert_eq!(refused, 14);
     assert_eq!(
         host.reads().len(),
         1,

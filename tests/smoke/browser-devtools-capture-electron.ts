@@ -38,14 +38,39 @@ assert.equal(out.dom.walked_all, false, "and says it stopped");
 assert.equal(out.dom.href, out.dom.url);
 assert.equal(out.selector.reason, "invalid_selector");
 
+assert(out.frames.loaded, JSON.stringify(out.frames));
+assert.deepEqual(out.frames.texts, ["MAIN_FRAME"], "a frame's console is not the page's");
+
+const closed = { console: "secret_filled", dom: "secret_filled", network: "secret_filled" };
+const open = { console: "ok", dom: "ok", network: "ok" };
+
 for (const name of ["sign-in", "card"]) {
   const fill = out.fills[name];
   assert.deepEqual(fill.before, { console: "ok", dom: "ok" }, `${name}: read before the fill: ${JSON.stringify(fill)}`);
-  assert.equal(fill.console, "secret_filled", `${name}: ${JSON.stringify(fill)}`);
-  assert.equal(fill.dom, "secret_filled", `${name}: ${JSON.stringify(fill)}`);
-  assert.equal(fill.network, "ok", `${name}: the summary stays: ${JSON.stringify(fill)}`);
+  assert.equal(fill.filled, "filled", `${name}: ${JSON.stringify(fill)}`);
+  assert.equal(fill.sent, true, `${name}: the page sent the value on: ${JSON.stringify(fill)}`);
+  assert.equal(fill.closedWhenTyped, true, `${name}: closed before typing: ${JSON.stringify(fill)}`);
+  assert.deepEqual(fill.refused, closed, `${name}: ${JSON.stringify(fill)}`);
   assert.equal(fill.after, "ok", `${name}: readable once the page changes: ${JSON.stringify(fill)}`);
+  assert(!fill.rowsAfter.some((url: string) => /SECRET|4242/u.test(url)), `${name}: ${JSON.stringify(fill)}`);
+  assert.equal(fill.vaultAfter, false, `${name}: ${JSON.stringify(fill)}`);
 }
+
+const within = out.signInWithin;
+assert.equal(within.filled, "filled", JSON.stringify(within));
+assert.equal(within.sent, true, JSON.stringify(within));
+assert.equal(within.vault, false, `password fields already show dots: ${JSON.stringify(within)}`);
+assert.deepEqual(within.refused, closed, JSON.stringify(within));
+assert.deepEqual(within.sameUrl, closed, `the same URL is not a move: ${JSON.stringify(within)}`);
+assert.deepEqual(within.moved, open, `readable once it moves on: ${JSON.stringify(within)}`);
+assert(!within.rows.some((url: string) => /SECRET/u.test(url)), `what it sent meanwhile stays unread: ${JSON.stringify(within)}`);
+assert.equal(within.console, 0, JSON.stringify(within));
+assert.equal(within.fromLoad, false, `and the reply says it is partial: ${JSON.stringify(within)}`);
+
+assert.equal(out.cardWithin.vault, true, JSON.stringify(out.cardWithin));
+assert.deepEqual(out.cardWithin.moved, closed, `a card stays closed within its document: ${JSON.stringify(out.cardWithin)}`);
+assert.equal(out.cardBroken.closedWhenTyped, true, JSON.stringify(out.cardBroken));
+assert.deepEqual(out.cardBroken.refused, closed, `a fill that broke partway: ${JSON.stringify(out.cardBroken)}`);
 
 rmSync(work, { recursive: true, force: true });
 console.log(JSON.stringify({ ok: true, ms: Date.now() - started }));

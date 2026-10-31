@@ -110,7 +110,7 @@ async function typePulled(browser, tab, field, token, origin) {
   if (typeof pulled?.password !== "string") return { status: "not_dispatched", reason: "credential_unavailable", tab: tab.id };
   if (new URL(tab.view.webContents.getURL()).origin !== origin || !await evaluate(tab, focusSource(field, true))) return { status: "origin_mismatch", tab: tab.id };
   tab.expectedInputs = [];
+  tab.readsClosed ??= { inPage: tab.view.webContents.getURL() };
   await tab.view.webContents.insertText(pulled.password);
-  tab.vaultFilled = true;
   return true;
 }
