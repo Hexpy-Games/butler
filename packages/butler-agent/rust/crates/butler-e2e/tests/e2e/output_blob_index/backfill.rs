@@ -13,8 +13,15 @@ async fn shared_blob_survives_delete_before_backfill() -> Result<(), HarnessErro
     s.agent.terminate().await?;
     let old_id = seed(&s.sandbox.data, &old, "old", b"Shared", false)?;
     db(&s.sandbox.data)?
-        .execute_batch("DELETE FROM output_blobs; DELETE FROM output_blob_backfill;")?;
+        .execute_batch("DELETE FROM output_blobs; DELETE FROM output_blob_backfill; DROP INDEX IF EXISTS output_blobs_sha;")?;
     s.gw = s.agent.start_again().await?;
+    assert_eq!(
+        scalar(
+            &s.sandbox.data,
+            "SELECT count(*) FROM sqlite_master WHERE name='output_blobs_sha'"
+        )?,
+        0
+    );
     // Publish through the public tool path while the old output has no rows.
     std::fs::create_dir_all(s.sandbox.data.join("site"))?;
     std::fs::write(s.sandbox.data.join("site/index.html"), b"Shared")?;
@@ -36,6 +43,13 @@ async fn shared_blob_survives_delete_before_backfill() -> Result<(), HarnessErro
         .execute_batch("DROP TRIGGER block_complete; DROP TRIGGER block_cursor;")?;
     s.restart().await?;
     completed(&s).await?;
+    assert_eq!(
+        scalar(
+            &s.sandbox.data,
+            "SELECT count(*) FROM sqlite_master WHERE name='output_blobs_sha'"
+        )?,
+        1
+    );
     content(&s, &old_id, "Shared").await?;
     delete(&s, &old).await?;
     assert!(!path.exists());

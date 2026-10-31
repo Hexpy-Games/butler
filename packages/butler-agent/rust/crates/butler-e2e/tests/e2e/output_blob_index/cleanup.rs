@@ -71,15 +71,19 @@ async fn stuck_record_does_not_walk_per_delete() -> Result<(), HarnessError> {
         ("SELECT id FROM outputs WHERE session=?1", "outputs_session"),
         (
             "SELECT sha FROM output_blobs WHERE output_id=?1",
-            "output_blobs_output",
+            "PRIMARY KEY",
         ),
         (
             "SELECT 1 FROM output_blobs WHERE sha=?1 LIMIT 1",
-            "sqlite_autoindex_output_blobs_1",
+            "output_blobs_sha",
+        ),
+        (
+            "SELECT EXISTS(SELECT 1 FROM output_blobs WHERE sha=?1)",
+            "output_blobs_sha",
         ),
         (
             "SELECT sha FROM output_blob_sweep WHERE sha>?1 ORDER BY sha LIMIT 128",
-            "sqlite_autoindex_output_blob_sweep_1",
+            "PRIMARY KEY",
         ),
     ] {
         let plan = db
@@ -89,7 +93,7 @@ async fn stuck_record_does_not_walk_per_delete() -> Result<(), HarnessError> {
             .join("\n");
         assert!(plan.contains(index), "{query}: {plan}");
         assert!(
-            !plan.contains("SCAN ") && !plan.contains("TEMP B-TREE"),
+            !plan.contains("SCAN output_") && !plan.contains("TEMP B-TREE"),
             "{plan}"
         );
         eprintln!("BLOB-QUERY-PLAN {query}: {plan}");

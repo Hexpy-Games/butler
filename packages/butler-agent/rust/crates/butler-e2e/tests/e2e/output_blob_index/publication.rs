@@ -50,6 +50,16 @@ async fn manifest_is_never_persisted_before_blob_rows() -> Result<(), HarnessErr
     std::fs::create_dir_all(s.sandbox.data.join("site"))?;
     std::fs::write(s.sandbox.data.join("site/index.html"), b"New")?;
     s.turn("general", "Again").await?;
+    let sha = hash(b"New");
+    assert!(
+        s.sandbox
+            .data
+            .join("outputs/blobs")
+            .join(&sha[..2])
+            .join(&sha)
+            .is_file(),
+        "publish did not stage the New blob"
+    );
     let id = hash(b"general\0site");
     assert!(
         !s.sandbox
@@ -83,5 +93,36 @@ async fn completed_backfill_is_idle_for_sixty_seconds() -> Result<(), HarnessErr
     content(&s, &id, "Live").await?;
     eprintln!("BLOB-IDLE 60 seconds: 0 App/index commits, 0 file writes");
     drop(index);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn fresh_store_creates_clustered_schema_and_sha_index() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = setup("BLOB-SCHEMA")?.start().await?;
+    s.turn("general", "Publish").await?;
+    let db = db(&s.sandbox.data)?;
+    for table in ["output_blobs", "output_blob_sweep"] {
+        let sql: String = db.query_row(
+            "SELECT sql FROM sqlite_master WHERE name=?1",
+            [table],
+            |r| r.get(0),
+        )?;
+        assert!(sql.contains("WITHOUT ROWID"), "{sql}");
+    }
+    let key: Vec<(String, i64)> = db
+        .prepare("PRAGMA table_info(output_blobs)")?
+        .query_map([], |r| Ok((r.get(1)?, r.get(5)?)))?
+        .collect::<Result<_, _>>()?;
+    assert!(key.contains(&("output_id".into(), 1)), "{key:?}");
+    assert!(key.contains(&("sha".into(), 2)), "{key:?}");
+    assert_eq!(
+        scalar(
+            &s.sandbox.data,
+            "SELECT count(*) FROM sqlite_master WHERE name='output_blobs_sha'"
+        )?,
+        1
+    );
+    drop(db);
     s.finish().await
 }

@@ -3,6 +3,9 @@
 mod backfill;
 mod cleanup;
 mod publication;
+mod recovery;
+mod shutdown;
+mod strays;
 
 use butler_e2e::e2e::{
     HarnessError,
@@ -36,11 +39,13 @@ fn schema(data: &Path, complete: bool) -> Result<(), HarnessError> {
         CREATE INDEX outputs_session ON outputs(session);
         CREATE TABLE output_refs(id TEXT NOT NULL, session TEXT NOT NULL, turn TEXT NOT NULL, message TEXT NOT NULL, PRIMARY KEY(id,turn));
         CREATE INDEX output_refs_turn ON output_refs(session,turn);
-        CREATE TABLE output_blobs(sha TEXT NOT NULL, output_id TEXT NOT NULL, PRIMARY KEY(sha,output_id));
-        CREATE INDEX output_blobs_output ON output_blobs(output_id);
-        CREATE TABLE output_blob_sweep(sha TEXT PRIMARY KEY);
+        CREATE TABLE output_blobs(sha TEXT NOT NULL, output_id TEXT NOT NULL, PRIMARY KEY(output_id,sha)) WITHOUT ROWID;
+        CREATE TABLE output_blob_sweep(sha TEXT PRIMARY KEY) WITHOUT ROWID;
         CREATE TABLE output_blob_backfill(id INTEGER PRIMARY KEY CHECK(id=1), cursor TEXT NOT NULL, complete INTEGER NOT NULL, indexed INTEGER NOT NULL, queued INTEGER NOT NULL);
         INSERT INTO output_blob_backfill VALUES(1,'',{},0,0);", i32::from(complete)))?;
+    if complete {
+        db(data)?.execute_batch("CREATE INDEX output_blobs_sha ON output_blobs(sha);")?;
+    }
     Ok(())
 }
 fn blob(data: &Path, body: &[u8]) -> Result<PathBuf, HarnessError> {
@@ -84,7 +89,10 @@ fn seed(
         params![id, session, slot],
     )?;
     if indexed {
-        db.execute("INSERT INTO output_blobs VALUES(?1,?2)", params![sha, id])?;
+        db.execute(
+            "INSERT INTO output_blobs(sha,output_id) VALUES(?1,?2)",
+            params![sha, id],
+        )?;
     }
     Ok(id)
 }
