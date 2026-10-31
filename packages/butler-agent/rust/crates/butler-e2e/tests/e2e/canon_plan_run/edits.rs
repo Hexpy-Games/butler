@@ -46,3 +46,47 @@ async fn queue_edits_cas_and_running_pin() -> Result<(), HarnessError> {
     server.abort();
     Ok(())
 }
+#[tokio::test]
+async fn cn_20_queue_delete_keeps_the_epic_in_its_plan() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, chat) = crate::canon_link::setup("CN-20", false, false).await?;
+    let (plan, epics) = plan(&s, &script, &first).await?;
+    script.quick.store(true, Ordering::SeqCst);
+    let view = data(
+        s.gw.post(
+            &format!("/sessions/{chat}/canon/queue"),
+            json!({"op":"plan_run","plan_id":plan}),
+        )
+        .await?,
+        200,
+    );
+    let before = data(s.gw.get(&format!("/canon/epics/{}", epics[2])).await?, 200);
+    data(
+        s.gw.post(
+            &format!("/sessions/{chat}/canon/queue/edits"),
+            json!({"expected_graph_revision":view["graph_revision"],"op":"delete","epic_id":epics[2]}),
+        )
+        .await?,
+        200,
+    );
+    let view = data(
+        s.gw.get(&format!("/sessions/{chat}/canon/queue")).await?,
+        200,
+    );
+    assert!(!view.to_string().contains(&epics[2]), "{view}");
+    let after = data(s.gw.get(&format!("/canon/epics/{}", epics[2])).await?, 200);
+    assert_eq!(after["plan_id"], plan);
+    assert_eq!(after["canon_status"], before["canon_status"]);
+    assert_eq!(after["title"], before["title"]);
+    let overview = data(s.gw.get(&format!("/canon/plans/{plan}")).await?, 200);
+    let works: Vec<_> = overview["works"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(works, epics);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
