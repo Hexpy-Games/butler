@@ -149,6 +149,12 @@ impl SubsessionService {
         if !terminal {
             return Ok(true);
         }
+        // A Steward's saved result ends one turn, not a direction still running.
+        if candidate.packet.child_role == crate::btcc::ChildRole::Steward
+            && self.steward_continuing(candidate).await?
+        {
+            return Ok(true);
+        }
         if query.purpose == RelationPurpose::Cancel
             && candidate.packet.child_role == crate::btcc::ChildRole::Worker
         {

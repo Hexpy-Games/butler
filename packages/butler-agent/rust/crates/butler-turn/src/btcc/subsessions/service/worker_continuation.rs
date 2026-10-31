@@ -7,9 +7,12 @@ impl SubsessionService {
         stored: &crate::btcc::StoredSubsessionDelegation,
         scope: WorkTurnScope,
     ) -> Result<(), BtccError> {
+        let steward = stored.packet.child_role == ChildRole::Steward;
+        // A Steward's turn joins only the Work its relation currently follows.
+        let expected = steward.then(|| stored.root_work_id.clone());
         if self
             .work
-            .bind_open_work(scope.clone(), None)
+            .bind_open_work(scope.clone(), expected)
             .await?
             .is_some()
         {
@@ -22,9 +25,9 @@ impl SubsessionService {
             .pending_direction(stored.relation_id.clone())
             .await
             .map_err(BtccError::from)?;
-        // A Steward owns one Work, so only a direction it took before the close
-        // starts another. Any other late turn has nothing to continue.
-        if stored.packet.child_role == ChildRole::Steward
+        // Only a direction starts another Work for a Steward. Any other late
+        // turn has nothing to continue.
+        if steward
             && !direction.as_ref().is_some_and(|direction| {
                 crate::btcc::storage::direction_turn_id(&direction.instruction_id) == scope.turn_id
             })
@@ -34,17 +37,31 @@ impl SubsessionService {
         let objective = direction
             .map(|direction| direction.instruction)
             .unwrap_or_else(|| stored.packet.objective.clone());
-        self.work
+        let mutation_call_id = format!(
+            "subsession-continuation-work:{}:{}",
+            stored.delegation_id, scope.turn_id
+        );
+        let work_id = delegation::work_id_of_call(&mutation_call_id);
+        // The relation moves first: a crash before the Work exists leaves it
+        // closed, never an open Work no relation can reach.
+        if steward {
+            self.repository
+                .follow_work(stored.relation_id.clone(), work_id.clone())
+                .await
+                .map_err(BtccError::from)?;
+        }
+        let work = self
+            .work
             .start_work(StartWorkInput {
-                mutation_call_id: format!(
-                    "subsession-continuation-work:{}:{}",
-                    stored.delegation_id, scope.turn_id
-                ),
+                mutation_call_id,
                 scope,
                 objective,
                 backfill_tool_call_ids: None,
             })
             .await?;
+        if steward && work.work_id != work_id {
+            return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
+        }
         Ok(())
     }
 }

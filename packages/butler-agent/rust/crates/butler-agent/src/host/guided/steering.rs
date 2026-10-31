@@ -81,8 +81,16 @@ impl TurnSteeringPort for GuidedSteering {
                 });
             }
             if let Some(direction) = direction {
+                let unplanned = current
+                    .as_ref()
+                    .is_some_and(|context| context.work.current_plan.is_none());
+                let next = if unplanned {
+                    "This Work has no Plan yet: record one for this direction with replace_work_plan and review it. Any prior result is evidence, not new authority; do not restart completed actions."
+                } else {
+                    "Continue the same assigned Work from its retained checkpoint. Do not restart completed actions or create a replacement Work."
+                };
                 observations.push(SteeringObservation {
-                    content: format!("Parent direction update for this delegated Work.\nDirection revision: {}\nInstruction: {}\nContinue the same assigned Work from its retained checkpoint. Do not restart completed actions or create a replacement Work.", direction.revision, direction.instruction),
+                    content: format!("Parent direction update for this delegated Work.\nDirection revision: {}\nInstruction: {}\n{next}", direction.revision, direction.instruction),
                     request_segment_kind: "subsession_parent_direction".into(),
                 });
             }

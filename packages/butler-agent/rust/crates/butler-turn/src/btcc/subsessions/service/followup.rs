@@ -75,7 +75,15 @@ impl SubsessionService {
         else {
             return Ok(None);
         };
-        if self.outlived_its_work(&relation).await? {
+        // A direction's new Work has this child's own first result behind it.
+        let first_work = super::delegation::work_id_of_call(&super::delegation::root_mutation(
+            &relation.delegation_id,
+            &relation.task_id,
+            child_session,
+        ));
+        if relation.packet.child_role == crate::btcc::ChildRole::Steward
+            && relation.root_work_id != first_work
+        {
             return Ok(Some(self.prior_context(&relation).await?.to_string()));
         }
         Ok(relation.packet.prior_context)

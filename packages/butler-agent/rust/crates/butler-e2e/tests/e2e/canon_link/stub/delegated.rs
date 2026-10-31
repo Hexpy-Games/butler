@@ -1,5 +1,8 @@
 use super::*;
 
+pub(crate) const STEER: &str = "Steer the evidence check";
+pub(crate) const DIRECTION: &str = "Also verify the rollback notes";
+
 pub(super) fn sequence(
     script: &Script,
     body: &Value,
@@ -37,6 +40,14 @@ pub(super) fn sequence(
         .strip_prefix("canon:epic/")
         .filter(|id| epics.iter().any(|e| e == id))
         .unwrap_or(&epics[0]);
+    if !worker && !steward && key.user_request == STEER {
+        return vec![(
+            "steer_steward",
+            json!({"relation_id":*script.steer_relation.lock().unwrap(),"instruction":DIRECTION}),
+        )];
+    }
+    // A direction's own turn runs its fresh Work directly, without a Worker.
+    let direct = worker || (steward && key.user_request.starts_with(DIRECTION));
     if !worker && !steward {
         return if returning {
             vec![]
@@ -53,7 +64,7 @@ pub(super) fn sequence(
     }
     let mut calls = Vec::new();
     if !returning {
-        let mode = if worker {
+        let mode = if direct {
             "direct"
         } else if steward {
             "workers"
@@ -67,7 +78,7 @@ pub(super) fn sequence(
         };
         calls.push(("replace_work_plan",json!({"objective":"Verify release evidence","execution_mode":mode,"governing_refs":refs,"actions":[{"action_key":"verify","description":"Verify release evidence"}],"checks":["Evidence verified"]})));
         calls.push(review("plan"));
-        if worker {
+        if direct {
             calls.push(("read_file", json!({"path":*script.path.lock().unwrap()})));
         } else {
             calls.push(("delegate_to_worker",json!({"action_key":"verify","objective":"Verify release evidence","implementation_brief":"Read the evidence and report it","acceptance_criteria":["Evidence verified"],"safe_title":"Evidence check"})));

@@ -15,9 +15,29 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// A direction's own turn plans, changes a file and closes its fresh Work.
-pub(super) fn continuation_item(step: usize, body: &serde_json::Value) -> serde_json::Value {
-    match step {
+fn close(work: &str) -> serde_json::Value {
+    stub::call(
+        "direction-close",
+        "record_work_disposition",
+        &json!({"work_id":work,"disposition":"completed","summary":"Direction applied","action_updates":[{"action_key":"read","status":"done"},{"action_key":"compare","status":"done"}],"remaining_actions":[],"followups":[]}),
+    )
+}
+
+/// A direction's own turn plans, changes a file and closes its fresh Work. A
+/// second direction's turn only closes the Work the first one left blocked.
+pub(super) fn continuation_item(
+    script: &stub::Script,
+    request: &str,
+    body: &serde_json::Value,
+) -> serde_json::Value {
+    if request.starts_with(stub::DIRECTION_2) {
+        let work = script.continuation_work.lock().unwrap().clone();
+        return match script.second_direction_step.fetch_add(1, Ordering::SeqCst) {
+            0 => close(&work),
+            _ => stub::message("Second direction applied."),
+        };
+    }
+    match script.continuation_step.fetch_add(1, Ordering::SeqCst) {
         0 => stub::call(
             "direction-plan",
             "replace_work_plan",
@@ -30,15 +50,31 @@ pub(super) fn continuation_item(step: usize, body: &serde_json::Value) -> serde_
             &json!({"path":"direction.html","content":"<!doctype html>\n<title>Direction</title>\n"}),
         ),
         3 => stub::call(
-            "direction-close",
-            "record_work_disposition",
-            &json!({"work_id":stub::work_id(body),"disposition":"completed","summary":"Direction applied","action_updates":[{"action_key":"read","status":"done"},{"action_key":"compare","status":"done"}],"remaining_actions":[],"followups":[]}),
+            "direction-checkpoint",
+            "record_work_checkpoint",
+            &json!({"public_summary":"Applying the direction","next_step":"Compare the direction","action_updates":[{"action_key":"read","status":"done"},{"action_key":"compare","status":"active"}]}),
         ),
+        4 => {
+            let work = stub::work_id(body);
+            work.clone_into(&mut script.continuation_work.lock().unwrap());
+            if script.continuation_blocked.load(Ordering::SeqCst) {
+                return stub::call(
+                    "direction-blocked",
+                    "record_work_disposition",
+                    &json!({"work_id":work,"disposition":"blocked","summary":"Direction needs follow-up","action_updates":[],"remaining_actions":["compare"],"next_condition":"Owner follow-up","followups":[]}),
+                );
+            }
+            close(&work)
+        }
         _ => stub::message("Direction applied."),
     }
 }
 
-async fn started(id: &str, url: &str, script: &stub::Script) -> Result<Scenario, HarnessError> {
+pub(super) async fn started(
+    id: &str,
+    url: &str,
+    script: &stub::Script,
+) -> Result<Scenario, HarnessError> {
     let setup = steward_presentation::setup(id, url)?;
     for name in ["a.txt", "b.txt"] {
         std::fs::write(setup.sandbox.data.join(name), name)?;
@@ -50,7 +86,7 @@ async fn started(id: &str, url: &str, script: &stub::Script) -> Result<Scenario,
 }
 
 /// Steers the only child and returns its relation, session and first turn.
-async fn steer(
+pub(super) async fn steer(
     s: &Scenario,
     script: &stub::Script,
 ) -> Result<(String, String, String), HarnessError> {
@@ -128,6 +164,11 @@ async fn direction_near_the_end(id: &str, held: &'static str) -> Result<(), Harn
         assert!(
             opening.to_string().contains("Approach B verified"),
             "the direction's turn lost what the child already did: {opening}"
+        );
+        let opening = opening.to_string();
+        assert!(
+            opening.contains("has no Plan yet") && !opening.contains("retained checkpoint"),
+            "a fresh Work has no checkpoint to continue: {opening}"
         );
         let written = requests
             .iter()

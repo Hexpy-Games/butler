@@ -38,7 +38,8 @@ impl SubsessionService {
         let scope = child_work_scope(&stored, &binding, turn)?;
         let existing = self.work.bound_work_for_turn(turn.into()).await?;
         if let Some(existing) = existing {
-            if (existing.work_id != stored.root_work_id && turn == stored.child_turn_id)
+            if (existing.work_id != stored.root_work_id
+                && !(stored.packet.child_role == ChildRole::Worker && turn != stored.child_turn_id))
                 || existing.session_id != session
                 || !work_matches_scope(&existing, &scope)
             {
@@ -49,10 +50,7 @@ impl SubsessionService {
         if turn != stored.child_turn_id {
             return self.bind_continuation(&stored, scope).await;
         }
-        let mutation = format!(
-            "subsession-root-work:{}:{}:{}",
-            stored.delegation_id, stored.task_id, stored.child_session_id
-        );
+        let mutation = delegation::root_mutation(&stored.delegation_id, &stored.task_id, session);
         let work = self
             .work
             .start_work(StartWorkInput {

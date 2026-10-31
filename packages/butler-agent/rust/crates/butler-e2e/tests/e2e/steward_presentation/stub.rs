@@ -38,13 +38,18 @@ pub(crate) struct Script {
     pub release: Notify,
     pub hold_direction: AtomicBool,
     pub direction_held: Notify,
-    /// Holds the first child round replying with this tool name or `message`.
+    /// Holds the first child round replying with this tool name, call id or `message`.
     pub hold_child_item: Mutex<Option<&'static str>>,
     pub item_held: Notify,
     pub item_release: Notify,
     /// A direction's own turn plans and closes the fresh Work it runs on.
     pub plan_continuation: AtomicBool,
-    continuation_step: AtomicUsize,
+    pub continuation_blocked: AtomicBool,
+    pub continuation_step: AtomicUsize,
+    pub second_direction_step: AtomicUsize,
+    pub continuation_work: Mutex<String>,
+    /// The closing round also reads the prior delegation in the same batch.
+    pub read_prior_after_close: AtomicBool,
 }
 
 pub(crate) async fn start()
@@ -73,8 +78,9 @@ async fn reply(
     script.requests.lock().unwrap().push(body.clone());
     // A direction's turn on a fresh Work no longer restates the delegated packet.
     let continuation = script.plan_continuation.load(Ordering::SeqCst)
-        && key.user_request.starts_with(DIRECTION)
-        && key.user_request != DIRECTION;
+        && [DIRECTION, DIRECTION_2]
+            .iter()
+            .any(|text| key.user_request.starts_with(text) && key.user_request != *text);
     let child = child_lane(&body) || continuation;
     if !child && crate::connectors::stub::find_spec(&body["input"]).is_some() {
         let response = crate::connectors::stub::run(&body).unwrap();
@@ -124,10 +130,7 @@ async fn reply(
         script.release.notified().await;
     }
     let item = if continuation {
-        super::super::steward_direction_finish::continuation_item(
-            script.continuation_step.fetch_add(1, Ordering::SeqCst),
-            &body,
-        )
+        super::super::steward_direction_finish::continuation_item(&script, &key.user_request, &body)
     } else if child {
         child_item(step, &body, &script)
     } else if key.user_request == DIRECTION || key.user_request == DIRECTION_2 {
@@ -165,6 +168,14 @@ async fn reply(
         script.item_held.notify_one();
         script.item_release.notified().await;
     }
+    if item["call_id"] == "close" && script.read_prior_after_close.load(Ordering::SeqCst) {
+        let read = call("read-prior", "read_prior_delegation", &json!({}));
+        return (
+            [("content-type", "text/event-stream")],
+            wire_items(&[item, read]),
+        )
+            .into_response();
+    }
     ([("content-type", "text/event-stream")], wire(item)).into_response()
 }
 
@@ -174,7 +185,7 @@ fn take_hold(script: &Script, item: &Value) -> bool {
         .hold_child_item
         .lock()
         .unwrap()
-        .take_if(|held| *held == kind)
+        .take_if(|held| *held == kind || item["call_id"] == *held)
         .is_some()
 }
 

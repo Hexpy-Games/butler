@@ -66,6 +66,20 @@ impl SubsessionService {
             .map_err(BtccError::from)?)
     }
 
+    /// Whether a direction is still waiting for or running on this child.
+    pub(super) async fn steward_continuing(
+        &self,
+        relation: &StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        Ok(self
+            .repository
+            .pending_direction(relation.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?
+            .is_some()
+            || self.child_turn_running(&relation.child_session_id).await?)
+    }
+
     /// Enqueues the child's pending direction once its latest turn has ended.
     pub(super) async fn release_pending_direction(
         &self,
@@ -312,8 +326,15 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .is_some()
+            && !self.child_turn_running(&relation.child_session_id).await?
         {
-            return Err(error(BtccCode::ActiveStewardRelationNotFound));
+            // Nothing runs yet: stopping retires the directions still waiting.
+            return self
+                .repository
+                .retire_pending_directions(relation.relation_id.clone(), (self.now)())
+                .await
+                .map_err(BtccError::from)?
+                .ok_or_else(|| error(BtccCode::ActiveStewardRelationNotFound));
         }
         Ok(self
             .repository
