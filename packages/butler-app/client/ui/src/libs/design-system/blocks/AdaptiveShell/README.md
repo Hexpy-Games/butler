@@ -64,6 +64,18 @@ block. Do not use it as a generic card or nested panel.
   or keyboard (`onChatWidthChange`, clamped). Pass `splitOpen` to
   `AdaptiveShell` while the pane is open: the inspector then stays closed;
   `toggleConversationSidePanel` keeps the two mutually exclusive.
+- The pane opens and closes on one motion, whatever it holds (`--motion-slow`,
+  `--motion-ease-emphasized`): the pane keeps its final size and travels on a
+  transform, the chat card's edge and the title row's chat group follow it. A
+  closing pane stays mounted, with the node it last had, until the motion ends.
+  A pane with a native view on screen waits for its still before it travels
+  (NativeViewSlot hold, at most one motion's length): opening, the whole motion
+  waits; closing, the chat starts at once under the pane.
+  A toggle mid-motion continues from the frame on screen. A resize settles any
+  running motion and is immediate. The first mount, a new `contextKey` (another
+  conversation) and reduced motion place everything at once; reduced motion
+  fades an opening pane in. Render the split whether or not the pane is open,
+  so the chat stays mounted through the motion.
 - `leftPeek` with `AdaptiveShellPeekEdge`: the collapsed sidebar floats over
   the workspace as a card; the track stays collapsed, nothing reflows. Drive
   it with `useSidebarPeek(shellRef, { enabled, open?, onOpenChange? })`

@@ -145,6 +145,11 @@
 
 /* The split's handle takes the gap between the chat card and the pane card. */
 .root[data-frame="cards"][data-panel-layout="docked"]
+  [data-slot="adaptive-shell-split"] {
+  --split-gap: var(--shell-card-gap);
+}
+
+.root[data-frame="cards"][data-panel-layout="docked"]
   [data-slot="adaptive-shell-split"]
   > [role="separator"] {
   width: var(--shell-card-gap);

@@ -8,8 +8,11 @@ import styles from "./NativeViewSlot.module.css";
 export interface NativeViewSlotProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "children"> {
   /** Where to put the native view; called at most once per frame, only on change. */
   onBoundsChange: (bounds: NativeViewBounds) => void;
-  /** Reports initial and changed coverage: true while a DS overlay overlaps or a panel animates. */
-  onOcclusion?: (occluded: boolean) => void;
+  /**
+   * Reports initial and changed coverage: true while a DS overlay overlaps or a panel animates. A returned
+   * promise settles once the still has replaced the native view; a held motion waits for it.
+   */
+  onOcclusion?: (occluded: boolean) => void | Promise<unknown>;
   /** No native view right now (no tab, crashed page): reports visible=false and shows `children`. */
   hidden?: boolean;
   /** Forces the covered state for occluders the DOM cannot see (a native menu). */
@@ -56,8 +59,10 @@ export function NativeViewSlot({
       onOcclusion: (next) => {
         // The attribute flips in the same frame as the decision; the state renders the still.
         root.toggleAttribute("data-occluded", next);
+        root.removeAttribute("data-stand-in");
         setOccluded(next);
-        callbacks.current.onOcclusion?.(next);
+        const standIn = Promise.resolve(callbacks.current.onOcclusion?.(next));
+        if (next) void standIn.catch(() => undefined).then(() => { if (root.hasAttribute("data-occluded")) root.setAttribute("data-stand-in", ""); });
       },
     });
     tracker.current = instance;
