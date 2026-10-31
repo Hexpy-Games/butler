@@ -97,3 +97,62 @@ async fn cb_02_15_one_call_parent_settles_from_steward_result() -> Result<(), Ha
     server.abort();
     Ok(())
 }
+
+async fn refused_while_running(s: &Scenario, id: &str) -> Result<(), HarnessError> {
+    for status in ["done", "cancelled"] {
+        let epic = data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);
+        let reply =
+            s.gw.patch(
+                &format!("/canon/epics/{id}"),
+                json!({"expected_revision":epic["revision"],"status":status}),
+            )
+            .await?;
+        assert_eq!(reply.status, 409, "{status}: {}", reply.text);
+        assert_eq!(reply.error_code(), Some("running"), "{status}");
+        let after = data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);
+        assert_eq!(after["canon_status"], epic["canon_status"], "{status}");
+        assert_eq!(after["revision"], epic["revision"], "{status}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn cb_15_done_and_cancelled_stay_refused_until_steward_ends() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, id, chat) = setup("CB-15", false, false).await?;
+    script
+        .delegate
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let accepted = s.gw.say(&chat, "Delegate the release verification").await?;
+    tokio::time::timeout(Duration::from_secs(30), script.wait_held())
+        .await
+        .expect("Worker reached its first model round");
+    s.gw.wait_terminal(
+        &chat,
+        &s.gw.accepted_turn(&accepted).await?,
+        Duration::from_secs(30),
+    )
+    .await?;
+    assert_eq!(progress(&s, &id).await?["running"], true);
+    refused_while_running(&s, &id).await?;
+    script
+        .hold_steward
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    script.release();
+    tokio::time::timeout(Duration::from_secs(30), script.steward_held.acquire())
+        .await
+        .expect("Steward result review Turn started")
+        .unwrap()
+        .forget();
+    assert_eq!(progress(&s, &id).await?["running"], true);
+    refused_while_running(&s, &id).await?;
+    script.steward_release.add_permits(1);
+    wait_label(&s, &id, "in_review").await?;
+    assert_eq!(progress(&s, &id).await?["running"], false);
+    label(&s, &id, "done").await?;
+    let epic = data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);
+    assert_eq!(epic["canon_status"], "done");
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

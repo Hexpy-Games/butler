@@ -24,6 +24,10 @@ impl Holds {
         ReplyGate(Some(send))
     }
 
+    pub(super) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub(super) fn take(&mut self, key: &MatchKey) -> Option<oneshot::Receiver<()>> {
         let index = self.0.iter().position(|(user, after_tool, _)| {
             key.user_request.contains(user)

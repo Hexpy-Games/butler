@@ -149,3 +149,44 @@ async fn wma_02_stale_epic_edit_returns_winning_revision() -> Result<(), Harness
     assert_eq!(missing.error_code(), Some("project_not_found"));
     s.finish().await
 }
+
+#[tokio::test]
+async fn cn_01_dialog_epic_needs_a_title_and_lands_in_backlog_and_sidebar()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CN-01")?.start().await?;
+    let project = project(&s).await?;
+    let path = format!("/projects/{project}/canon/epics");
+    for body in [json!({}), json!({"title":""}), json!({"title":"  \n"})] {
+        let refused = s.gw.post(&path, body.clone()).await?;
+        assert_eq!(refused.status, 400, "{body}: {}", refused.text);
+    }
+    assert_eq!(overview(&s, &project).await?["backlog"], json!([]));
+    let created = data(
+        s.gw.post(
+            &path,
+            json!({"title":"캐논","description":"계획과 과제","assignee":"app-user"}),
+        )
+        .await?,
+        201,
+    );
+    let id = created["id"].as_str().unwrap();
+    assert_eq!(created["origin"], "dialog");
+    assert_eq!(created["canon_status"], "planned");
+    assert_eq!(created["assignee"], "app-user");
+    assert!(created["plan_id"].is_null());
+    let board = overview(&s, &project).await?;
+    assert_eq!(ids(&board["backlog"]), vec![id]);
+    assert_eq!(board["backlog"][0]["title"], "캐논");
+    let sidebar = data(
+        s.gw.get(&format!("/projects/{project}/canon/sidebar"))
+            .await?,
+        200,
+    );
+    assert_eq!(sidebar["groups"][0]["kind"], "backlog");
+    assert_eq!(ids(&sidebar["groups"][0]["rows"]), vec![id]);
+    let detail = data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);
+    assert_eq!(detail["title"], "캐논");
+    assert_eq!(detail["description"], "계획과 과제");
+    s.finish().await
+}

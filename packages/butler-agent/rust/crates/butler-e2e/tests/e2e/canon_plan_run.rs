@@ -127,3 +127,83 @@ async fn cb_07_plan_run_three_epics_in_canon_order() -> Result<(), HarnessError>
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn cn_17_completed_epic_never_starts_the_next_in_plan() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (mut s, script, server, first, chat) =
+        crate::canon_link::setup("CN-17", false, false).await?;
+    let (plan, mut epics) = plan(&s, &script, &first).await?;
+    let project = data(s.gw.get(&format!("/canon/epics/{first}")).await?, 200)["project_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for title in ["Image tools", "Crate split"] {
+        let epic = data(
+            s.gw.post(
+                &format!("/projects/{project}/canon/epics"),
+                json!({"title":title,"plan_id":plan}),
+            )
+            .await?,
+            201,
+        );
+        epics.push(epic["id"].as_str().unwrap().to_owned());
+    }
+    let overview = data(s.gw.get(&format!("/canon/plans/{plan}")).await?, 200);
+    assert_eq!(overview["works"].as_array().unwrap().len(), 5);
+    script.release();
+    let turn = s.gw.say(&chat, "Process the release epic").await?;
+    s.gw.wait_terminal(
+        &chat,
+        &s.gw.accepted_turn(&turn).await?,
+        std::time::Duration::from_secs(60),
+    )
+    .await?;
+    let epic = data(s.gw.get(&format!("/canon/epics/{first}")).await?, 200);
+    assert_eq!(epic["canon_status"], "in_review", "{epic}");
+    data(
+        s.gw.patch(
+            &format!("/canon/epics/{first}"),
+            json!({"expected_revision":epic["revision"],"status":"done"}),
+        )
+        .await?,
+        200,
+    );
+    let assert_idle = |s: &butler_e2e::e2e::scenario::Scenario| -> Result<(), HarnessError> {
+        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        for (query, expected) in [
+            ("SELECT count(*) FROM canon_session_queue", 0),
+            (
+                "SELECT count(*) FROM canon_intents WHERE kind='canon_step'",
+                0,
+            ),
+            ("SELECT count(*) FROM canon_epic_work_links", 1),
+        ] {
+            assert_eq!(
+                db.query_row::<i64, _, _>(query, [], |r| r.get(0))?,
+                expected,
+                "{query}"
+            );
+        }
+        Ok(())
+    };
+    assert_idle(&s)?;
+    s.restart().await?;
+    assert_idle(&s)?;
+    assert_eq!(s.gw.turns(&chat).await?.len(), 1);
+    let overview = data(s.gw.get(&format!("/canon/plans/{plan}")).await?, 200);
+    assert_eq!(overview["progress"], json!({"total":5,"done":1}));
+    for epic in &epics[1..] {
+        let row = data(s.gw.get(&format!("/canon/epics/{epic}")).await?, 200);
+        assert_eq!(row["canon_status"], "planned", "{row}");
+        let progress = data(
+            s.gw.get(&format!("/canon/epics/{epic}/progress")).await?,
+            200,
+        );
+        assert_eq!(progress["running"], false);
+        assert_eq!(progress["counts"]["total"], 0);
+    }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
