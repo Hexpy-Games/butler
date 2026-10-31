@@ -63,6 +63,7 @@ fn validate_op(op: &str) -> Result<(), HttpError> {
             | "tab.observe"
             | "tab.read"
             | "tab.selection"
+            | "tab.devtools"
             | "tab.zoom"
             | "tab.screenshot"
             | "tab.image_collect"

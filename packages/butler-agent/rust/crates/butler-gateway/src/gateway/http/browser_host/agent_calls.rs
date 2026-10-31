@@ -196,10 +196,9 @@ fn dispatch(
                 .tabs
                 .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
                 .map_err(|_| error(403, "not_your_tab"))?;
-            if tab["url"]
-                .as_str()
-                .is_some_and(|url| !permitted_url(state, &session, url))
-            {
+            if tab["url"].as_str().is_some_and(|url| {
+                !permitted_url(state, &session, url) && !super::devtools::local_read(&op, url)
+            }) {
                 return response(
                     count,
                     json!({"status":"not_dispatched","reason":"navigation_denied"}),
@@ -242,6 +241,7 @@ fn page_op(op: &str) -> bool {
             | "tab.zoom"
             | "tab.screenshot"
             | "tab.image_collect"
+            | "tab.devtools"
             | "tab.prepare"
             | "tab.act"
             | "tab.dialog"
@@ -463,6 +463,10 @@ async fn finish_result(
     sent: &Value,
     result: &mut Value,
 ) -> Result<(), HttpError> {
+    if op == butler_runtime::browser::DEVTOOLS_OP {
+        super::devtools::finish(state, session, result);
+        return Ok(());
+    }
     enforce_result_policy(state, session, op, result);
     if op == "tab.wait" {
         result["site"] = json!(super::hand_back::tab_site(state, &sent["tab"]));

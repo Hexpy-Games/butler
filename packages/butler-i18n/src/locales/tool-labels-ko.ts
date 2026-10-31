@@ -80,6 +80,7 @@ export const additionalToolLabels = {
   output_publish: "결과물 게시",
   output_check: "결과물 확인",
   browser_selection: "선택한 요소 읽기",
+  browser_devtools: "개발자 도구 읽기",
   image_collect: "이미지 수집",
   browser_screenshot: "화면 캡처",
   preview_start: "미리보기 시작",

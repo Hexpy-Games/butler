@@ -170,6 +170,17 @@ fn facts(step: &Value) -> Value {
         return json!({"keyboard":true,"deferred":true,"hit":{"role":"focus","name":"","frame":""},
             "payment":false,"upload":false,"submit":false,"frame_payment":false,"addons":[]});
     }
+    // A frame's host, however the page wrote it: only that says it is a payment widget.
+    let framed = match step["ref"].as_str().unwrap_or("") {
+        "e10" => Some("checkout.stripe.com."),
+        "e11" => Some("CHECKOUT.Stripe.COM"),
+        "e12" => Some("checkout.notstripe.com."),
+        _ => None,
+    };
+    if let Some(frame) = framed {
+        return json!({"hit":{"role":"button","name":"Continue","frame":frame,"ref":step["ref"]},
+            "payment":false,"upload":false,"submit":false,"frame_payment":false,"form_post":false,"addons":[]});
+    }
     let (role, name, payment, submit, form_post) = match step["ref"].as_str().unwrap_or("") {
         "e1" => ("button", "Reject all", false, false, false),
         "e2" => ("searchbox", "Search", false, false, false),
@@ -188,7 +199,7 @@ fn facts(step: &Value) -> Value {
 
 /// One scripted model turn per request: describe the browser tools, run each
 /// call through `tool_call`, then answer.
-pub(super) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, HarnessError> {
+pub(crate) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
@@ -232,7 +243,7 @@ pub(super) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, Harne
 }
 
 /// A `tool_call` of `name` with `arguments`.
-pub(super) fn call(name: &str, arguments: Value) -> Value {
+pub(crate) fn call(name: &str, arguments: Value) -> Value {
     let mut call = json!({ "id": format!("native:{name}") });
     call["arguments"] = arguments;
     call
