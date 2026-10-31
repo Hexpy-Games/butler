@@ -6,13 +6,15 @@ import { EpicMarkdown } from "./EpicMarkdown.tsx";
 import { CanonProposalFact } from "./CanonProposalFact.tsx";
 /** Only actionable fields appear; revisions remain concurrency tokens at the boundary. */
 export function CanonProposalChanges({ changes, ko }: { changes: CanonProposal["changes"]; ko: boolean }) {
+  const deletion = canonProposalCopy(ko);
   const labels: Record<string, string> = ko ? {
-    "epic.edit": "과제 변경", "epic.move": "과제 이동", "plan.create": "계획 등록", "plan.edit": "계획 변경", "plan.reorder": "순서 변경", "spec.edit": "명세 변경",
-  } : { "epic.edit": "Edit Epic", "epic.move": "Move Epic", "plan.create": "Add plan", "plan.edit": "Edit plan", "plan.reorder": "Reorder", "spec.edit": "Edit spec" };
+    "epic.delete": deletion.deleteEpic, "epic.edit": "과제 변경", "epic.move": "과제 이동", "plan.create": "계획 등록", "plan.edit": "계획 변경", "plan.reorder": "순서 변경", "spec.edit": "명세 변경",
+  } : { "epic.delete": deletion.deleteEpic, "epic.edit": "Edit Epic", "epic.move": "Move Epic", "plan.create": "Add plan", "plan.edit": "Edit plan", "plan.reorder": "Reorder", "spec.edit": "Edit spec" };
   const visible = changes.filter(change => labels[change.op]);
   if (visible.length === 0) return null;
   return <Stack gap="lg">{visible.map((change, index) => <Stack gap="md" key={index}>
     {change.op !== "epic.move" && <Typo.Caption tone="secondary">{labels[change.op]}</Typo.Caption>}
+    {change.op === "epic.delete" && <Typo.Caption>{deletion.deleteDetail}</Typo.Caption>}
     {!change.op.startsWith("epic.") && change.title && <Typo.PanelTitle wrap="anywhere">{change.title}</Typo.PanelTitle>}
     {!change.op.startsWith("epic.") && (change.body ?? change.description) && <EpicMarkdown epicId="" description={change.body ?? change.description ?? ""} density="compact" />}
     {(change.op === "epic.move" || change.status || change.assignee !== undefined || change.due_on !== undefined || change.order_titles) && <Stack gap="lg">

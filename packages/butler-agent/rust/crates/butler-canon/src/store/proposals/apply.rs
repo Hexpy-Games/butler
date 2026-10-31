@@ -41,6 +41,12 @@ pub fn apply(
                 transition(tx, ctx, id, "stale", by)?;
                 return Ok(conflict_result(&current));
             }
+            if matches!(error, Error::NotFound) {
+                transition(tx, ctx, id, "stale", by)?;
+                return Ok(
+                    json!({"ok":false,"error":{"code":"canon_not_found","message":"The target was deleted. Nothing was applied."}}),
+                );
+            }
             return Err(error);
         }
     };
@@ -74,9 +80,12 @@ fn batch(
         }
         applied.push(result);
     }
-    Ok(
-        json!({"ok":true,"state":"applied","applied":applied,"bound":bound,"message":APPLIED_MESSAGE}),
-    )
+    let message = if bound.is_empty() {
+        "Applied. Confirm briefly."
+    } else {
+        APPLIED_MESSAGE
+    };
+    Ok(json!({"ok":true,"state":"applied","applied":applied,"bound":bound,"message":message}))
 }
 
 /// Validate a draft against the same writers without retaining any mutations.

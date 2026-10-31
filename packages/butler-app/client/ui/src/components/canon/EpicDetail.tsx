@@ -1,3 +1,4 @@
+import { EpicDetailActions } from "./EpicDetailActions.tsx";
 import { EpicActivity } from "./EpicActivity.tsx";
 import { EpicMcpProposals } from "./EpicMcpProposals.tsx";
 import { useCanonPersonName } from "./useCanonPersonName.ts";
@@ -47,6 +48,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, onRefresh, title
         onChange={tags => void onWrite({ tags: tags.map(tag => tag.id) })} />} />
     </Stack>;
   return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
+    <Stack align="row" justify="end"><EpicDetailActions epic={epic} busy={busy} running={Boolean(tasks?.running || epic.running)} /></Stack>
     <CanonInlineDraftProvider><EpicInlineFields epic={epic} busy={busy} onWrite={onWrite} titleRef={titleRef} compact={compact}
       summary={<Stack align="row" cross="center" gap="xs"><CanonAvatar person={epic.assignee} agent={epic.agent} /><Typo.Caption tone="secondary">{copy.statuses[epic.canon_status]} · {plan?.title ?? copy.backlog}</Typo.Caption></Stack>} /></CanonInlineDraftProvider>
     {properties}

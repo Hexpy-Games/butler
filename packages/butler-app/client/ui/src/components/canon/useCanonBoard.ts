@@ -25,7 +25,9 @@ export function useCanonBoard(projectId: string) {
     const epoch = ++generation.current;
     const id = selectedRef.current;
     try {
-      const [board, epic, queue] = await Promise.all([getCanon(projectId), id ? getCanonEpic(id) : null, id ? readCanonProgress(id) : null]);
+      const board = await getCanon(projectId);
+      const exists = id && (board.backlog.some(epic => epic.id === id) || board.plans.some(plan => plan.works.some(epic => epic.id === id)));
+      const [epic, queue] = await Promise.all([exists ? getCanonEpic(id) : null, exists ? readCanonProgress(id) : null]);
       if (!mounted.current || epoch !== generation.current) return;
       useCanonSidebarState.getState().rememberCanon(board);
       setCanon(board); setDetail(epic); setTasks(queue); setError(null);

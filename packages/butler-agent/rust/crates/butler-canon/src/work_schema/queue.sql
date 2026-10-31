@@ -46,3 +46,8 @@ CREATE TABLE IF NOT EXISTS canon_step_cancellations (
 );
 CREATE INDEX IF NOT EXISTS canon_cancellations_epic ON canon_step_cancellations(epic_id);
 CREATE INDEX IF NOT EXISTS canon_cancellations_source ON canon_step_cancellations(source_session_id);
+
+CREATE INDEX IF NOT EXISTS canon_queue_epic ON canon_session_queue(epic_id);
+CREATE INDEX IF NOT EXISTS canon_intents_epic ON canon_intents(json_extract(payload_json,'$.epic_id'));
+CREATE INDEX IF NOT EXISTS canon_intents_work ON canon_intents(json_extract(payload_json,'$.work_id'));
+CREATE INDEX IF NOT EXISTS canon_queue_held_by ON canon_session_queue(held_by_epic_id);

@@ -7772,10 +7772,12 @@
                 "properties": {
                   "op": {
                     "type": "string",
+                    "description": "epic.delete requires separate approval to delete a local Epic by id and expected_revision; linked conversations and Work history stay.",
                     "enum": [
                       "epic.create",
                       "epic.edit",
                       "epic.move",
+                      "epic.delete",
                       "plan.create",
                       "plan.edit",
                       "plan.reorder",
@@ -13939,10 +13941,12 @@
               "properties": {
                 "op": {
                   "type": "string",
+                  "description": "epic.delete requires separate approval to delete a local Epic by id and expected_revision; linked conversations and Work history stay.",
                   "enum": [
                     "epic.create",
                     "epic.edit",
                     "epic.move",
+                    "epic.delete",
                     "plan.create",
                     "plan.edit",
                     "plan.reorder",

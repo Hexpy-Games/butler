@@ -184,8 +184,8 @@ fn error(error: StorageError) -> GatewayApplicationError {
 fn store_resource(resource: AppCanonResource) -> store::api::Resource {
     use AppCanonResource::{
         Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
-        CreateTag, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants,
-        List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+        CreateTag, DeleteEpic, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic,
+        EpicProgress, Grants, List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
     };
     match resource {
         List => store::api::Resource::List,
@@ -209,6 +209,7 @@ fn store_resource(resource: AppCanonResource) -> store::api::Resource {
         EditPlan => store::api::Resource::EditPlan,
         CreateEpic => store::api::Resource::CreateEpic,
         EditEpic => store::api::Resource::EditEpic,
+        DeleteEpic => store::api::Resource::DeleteEpic,
         PlanOrder => store::api::Resource::PlanOrder,
         BacklogOrder => store::api::Resource::BacklogOrder,
     }

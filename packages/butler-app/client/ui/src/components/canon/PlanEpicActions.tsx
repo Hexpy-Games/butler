@@ -1,14 +1,16 @@
+import { useEpicDelete } from "./useEpicDelete.tsx";
 import { canonStatusInput } from "./canonProgressSource.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Stack, ButtonContainer, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, IconButton, MoreHorizontal } from "@/butler-ds";
+import { Tooltip, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Stack, ButtonContainer, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, IconButton, MoreHorizontal } from "@/butler-ds";
 import type { EpicCard, EpicInput, CanonPlan, CanonStatus } from "@/app/canonApi.ts";
 export function PlanEpicActions({ epic, plans, busy, onWrite, onOpen }: {
   onOpen: () => void; epic: EpicCard; plans: CanonPlan[]; busy: boolean;
   onWrite: (epic: EpicCard, input: EpicInput, message: string) => void;
 }) {
   const copy = appCopy.canon;
+  const deletion = useEpicDelete(epic);
   const options = [{ id: null, title: copy.backlog }, ...plans];
-  return <ButtonContainer size="sm" wrap={false}>
+  return <><ButtonContainer size="sm" wrap={false}>
     <Stack shrink={false}><Select value={epic.canon_status} disabled={busy}
       onValueChange={value => {
         const status = value as CanonStatus;
@@ -25,6 +27,7 @@ export function PlanEpicActions({ epic, plans, busy, onWrite, onOpen }: {
         {options.map(plan => <DropdownMenuItem key={plan.id ?? "backlog"} disabled={epic.plan_id === plan.id}
           onSelect={() => onWrite(epic, { plan_id: plan.id }, copy.moved(plan.title))}>{plan.title}</DropdownMenuItem>)}
       </DropdownMenuSubContent></DropdownMenuSub>
+      <Tooltip wrap label={epic.running ? copy.deletion.running : undefined}><Stack><DropdownMenuItem variant="destructive" disabled={busy || epic.running} onSelect={deletion.request}>{copy.deletion.action}</DropdownMenuItem></Stack></Tooltip>
     </DropdownMenuContent></DropdownMenu>
-  </ButtonContainer>;
+  </ButtonContainer>{deletion.dialog}</>;
 }

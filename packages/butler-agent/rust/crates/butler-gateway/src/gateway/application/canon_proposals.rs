@@ -42,6 +42,7 @@ async fn propose(app: &AppApplication, input: Value) -> Result<Value, GatewayApp
     if let Some(name) = &new_name {
         super::projects::validate_branch_name(name)?;
     }
+    let requires_confirmation = changes.iter().any(|change| change["op"] == "epic.delete");
     args["changes"] = json!(changes);
     args["new_name"] = json!(new_name);
     let id = app.dependencies.identity_clock.new_uuid();
@@ -55,7 +56,7 @@ async fn propose(app: &AppApplication, input: Value) -> Result<Value, GatewayApp
         "summary":summary,"document":args,"created_at":app.dependencies.identity_clock.now_iso()}),
         )
         .await?;
-    if input["apply"] == true && result["ok"] == true {
+    if input["apply"] == true && !requires_confirmation && result["ok"] == true {
         drop(files);
         return resolve(app, json!({"id":id,"outcome":"accepted","by":null})).await;
     }
