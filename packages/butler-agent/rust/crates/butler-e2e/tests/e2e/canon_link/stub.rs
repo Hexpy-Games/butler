@@ -15,6 +15,7 @@ pub(crate) struct Script {
     pub context_seen: AtomicBool,
     pub(crate) step_seen: AtomicBool,
     pub(crate) quick: AtomicBool,
+    pub(crate) plan_review_only: AtomicBool,
     pub(super) hold_steward: AtomicBool,
     pub(super) steward_held: Semaphore,
     pub(super) steward_release: Semaphore,
@@ -68,6 +69,7 @@ pub(super) async fn start(
         context_seen: AtomicBool::new(false),
         step_seen: AtomicBool::new(false),
         quick: AtomicBool::new(false),
+        plan_review_only: AtomicBool::new(false),
         hold_steward: AtomicBool::new(false),
         steward_held: Semaphore::new(0),
         steward_release: Semaphore::new(0),
@@ -227,14 +229,16 @@ fn sequence(script: &Script, outputs: &[Value], request: &str) -> Vec<(&'static 
             json!({"action_updates":done,"public_summary":"Rechecked","next_step":"Review"}),
         ));
     }
-    calls.push((
-        "record_work_review",
-        json!({"subject":"result","verdict":"accept","summary":"Evidence verified"}),
-    ));
-    calls.push((
-        "record_work_review",
-        json!({"subject":"completion","verdict":"accept","summary":"Checks complete"}),
-    ));
+    if !script.plan_review_only.load(Ordering::SeqCst) {
+        calls.push((
+            "record_work_review",
+            json!({"subject":"result","verdict":"accept","summary":"Evidence verified"}),
+        ));
+        calls.push((
+            "record_work_review",
+            json!({"subject":"completion","verdict":"accept","summary":"Checks complete"}),
+        ));
+    }
     let work = outputs
         .iter()
         .rev()

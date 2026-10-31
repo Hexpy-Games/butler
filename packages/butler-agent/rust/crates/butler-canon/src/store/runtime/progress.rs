@@ -122,30 +122,13 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
     Ok(())
 }
 
+/// BTCC decides which reviews a Work needs before it may close, so its completed
+/// closeout is final here and only the Turn that reports it remains. A Steward
+/// closes a delegated parent earlier: Butler's report is its reporting checkpoint.
 pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
     let id = text(work, "work_id")?;
     let disposition = disposition(db, work, views)?;
-    let (review, checkpoint) = if work["scope_kind"] == "project" {
-        let Some(view) = views.get(id) else {
-            return Ok(false);
-        };
-        (
-            view["latestCompletionValidation"].clone(),
-            view["latestCheckpoint"].clone(),
-        )
-    } else {
-        (
-            latest(db, Query::Review, id)?.unwrap_or(Value::Null),
-            rows(db, Query::Checkpoints.sql(), [id])?
-                .pop()
-                .unwrap_or(Value::Null),
-        )
-    };
-    let reviewed = review["subject"] == "completion" && review["verdict"] == "accept";
-    if disposition["disposition"] != "completed"
-        || checkpoint["stage"] != "reporting"
-        || !(reviewed || delegated_completion(db, work, views)?)
-    {
+    if disposition["disposition"] != "completed" {
         return Ok(false);
     }
     let finished = |value: &Value| -> Result<bool> {
@@ -159,7 +142,19 @@ pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> R
             .optional()?;
         Ok(state.as_deref() == Some("delivered"))
     };
-    Ok(finished(&checkpoint)? && finished(&disposition)?)
+    if !delegated_completion(db, work, views)? {
+        return finished(&disposition);
+    }
+    let checkpoint = if work["scope_kind"] == "project" {
+        views
+            .get(id)
+            .map_or(Value::Null, |view| view["latestCheckpoint"].clone())
+    } else {
+        rows(db, Query::Checkpoints.sql(), [id])?
+            .pop()
+            .unwrap_or(Value::Null)
+    };
+    Ok(checkpoint["stage"] == "reporting" && finished(&checkpoint)? && finished(&disposition)?)
 }
 
 /// A delegated parent's closeout belongs to its Steward's terminal result.

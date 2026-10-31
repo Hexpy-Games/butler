@@ -32,10 +32,17 @@ pub(super) async fn apply(
             })
             .await
             .map_err(app_error)?;
+        let running = panel["other_running"] == true;
         if language.starts_with("ko") {
-            format!("‘{epic}’는 ‘{title}’ 대화에서 진행 중입니다(예정입니다). 여기서 할까요?")
+            let state = if running {
+                "진행 중입니다"
+            } else {
+                "예정입니다"
+            };
+            format!("‘{epic}’는 ‘{title}’ 대화에서 {state}. 여기서 할까요?")
         } else {
-            format!("‘{epic}’ is running or queued in ‘{title}’. Do it here?")
+            let state = if running { "running" } else { "queued" };
+            format!("‘{epic}’ is {state} in ‘{title}’. Do it here?")
         }
     };
     let source = panel["source_key"].as_str().unwrap_or(op).to_owned();

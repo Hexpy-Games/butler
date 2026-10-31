@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
+import type { CanonQueueView } from "../../packages/butler-app/client/shared/canon-queue-contracts.ts";
 import { apiOrderEdit, orderChat, orderShape, postOrder, readOrder, requestOrder, seedOrderPlan, stopOrderTurn, waitOrder } from "./session-order-fixtures.ts";
 
 /** Includes accessible names, titles and the hidden text referenced by descriptions. */
@@ -58,6 +59,56 @@ export async function completedPrefixDrop(host: NativeAppServerHandle, open: (id
     assert.equal(requests, 0, "the three-step chain offers no drop before its running step");
     assert.deepEqual(orderShape(await readOrder(host, id)), [[[epics[0]!.id], [epics[1]!.id], [epics[3]!.id]]]);
     await assertNoCanonInstructions(page);
+  } finally {
+    await page.unrouteAll({ behavior: "wait" }); await page.close();
+    await stopOrderTurn(host, id);
+    await waitOrder(host, id, view => view.counts.failed === 1);
+  }
+}
+
+/** Found driving the real app: every surface follows the step actually being worked on. */
+export async function liveStepSurfaces(host: NativeAppServerHandle, open: (id: string) => Promise<Page>, info: (page: Page) => Promise<void>,
+  shot: (page: Page, name: string) => Promise<void>) {
+  const id = await orderChat(host, "실제 앱 표시");
+  const { plan, epics } = await seedOrderPlan(host, 3);
+  const page = await open(id);
+  try {
+    const show = page.getByRole("button", { name: /^(사이드바 보기|Show sidebar)$/u });
+    if (await show.isVisible()) await show.click();
+    const reading = new Map<string, number>();
+    let mostReading = 0;
+    const sidebarRead = (url: string) => { const { pathname } = new URL(url); return pathname.endsWith("/canon/sidebar") ? pathname : null; };
+    page.on("request", request => {
+      const path = sidebarRead(request.url());
+      if (path) { reading.set(path, (reading.get(path) ?? 0) + 1); mostReading = Math.max(mostReading, reading.get(path)!); }
+    });
+    const settled = (request: { url(): string }) => { const path = sidebarRead(request.url()); if (path) reading.set(path, reading.get(path)! - 1); };
+    page.on("requestfinished", settled); page.on("requestfailed", settled);
+    await requestOrder(host, id, { op: "plan_run", plan_id: plan.id });
+    await waitOrder(host, id, view => view.counts.running === 1);
+    // The model stream stays open here, so only the queue change itself can bring these rows.
+    const row = (epic: { id: string }) => page.locator(`[data-canon-epic="${epic.id}"]`);
+    await row(epics[1]!).waitFor();
+    await row(epics[2]!).waitFor();
+    assert.equal(await row(epics[1]!).locator('[role="status"]').count() + await row(epics[2]!).locator('[role="status"]').count(), 0, "waiting 과제 do not wear the shared chat's activity");
+    await apiOrderEdit(host, id, { op: "join_stack", epic_id: epics[2]!.id, target_epic_id: epics[1]!.id });
+    assert.equal(mostReading, 1, "an event burst runs one sidebar read per project at a time");
+    await page.route(`**/sessions/${id}/canon/queue`, async route => {
+      const response = await route.fetch({ headers: { ...await route.request().allHeaders(), origin: new URL(route.request().url()).origin } });
+      const body = await response.json() as { data: CanonQueueView };
+      const [head, stack] = body.data.chains[0]!.steps;
+      head!.items[0]!.state = "done";
+      stack!.items[0]!.state = "done";
+      stack!.items[1]!.state = "running";
+      await route.fulfill({ response, json: body });
+    });
+    await page.reload();
+    await info(page);
+    const section = page.locator('[data-session-section="order"]');
+    await section.locator(`[data-step-item="${epics[2]!.id}"]`).waitFor();
+    assert.equal(await section.locator('[data-activity="running"]').count() > 0, true, "a collapsed 묶음 shows its running item, not its finished one");
+    await page.locator('[data-session-section="task"]').getByText(epics[2]!.title, { exact: true }).first().waitFor();
+    await shot(page, "live-step-surfaces");
   } finally {
     await page.unrouteAll({ behavior: "wait" }); await page.close();
     await stopOrderTurn(host, id);

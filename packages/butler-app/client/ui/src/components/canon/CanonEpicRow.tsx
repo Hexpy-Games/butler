@@ -2,6 +2,7 @@ import { CanonBoundChats } from "./CanonBoundChats.tsx";
 import { spaceActivity } from "@/app/space/activity.ts";
 import { useState } from "react";
 import { NavDropTarget, NavRow, Notebook, IconSlot, Stack, Typo } from "@/butler-ds";
+import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { projectSpace } from "@/app/space/projection.ts";
 import { useSessionUnread } from "@/app/space/unread.ts";
@@ -21,8 +22,11 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
 }) {
   const row = useButlerStore(state => epic.home_session_id ? projectSpace(state.navigation).get(`s:${epic.home_session_id}`) : undefined);
   const active = useButlerStore(state => state.activeChatId === epic.home_session_id && state.view.kind === "session");
-  const unread = useSessionUnread(row?.session);
-  const running = spaceActivity(row?.session) === "working";
+  // A plan run binds several 과제 to one conversation; its live state marks only those being worked on.
+  const shared = useCanonSidebarState(state => (state.sessions[epic.home_session_id ?? ""]?.length ?? 0) > 1);
+  const quiet = shared && !epic.running;
+  const unread = useSessionUnread(quiet ? undefined : row?.session);
+  const running = !quiet && spaceActivity(row?.session) === "working";
   const [menuOpen, setMenuOpen] = useState(false);
   const longPress = useLongPressAction(() => { if (row) setMenuOpen(true); });
   const [drop, setDrop] = useState<"before" | "after">();
@@ -55,7 +59,7 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
       label={<Stack as="span" align="row" cross="center" gap="sm" minWidth="0">
         <Typo.Text data-test-class="canon-epic-title" as="span" truncate shrink minWidth="0">{epic.title}</Typo.Text><Stack as="span" shrink={false}><CanonAvatar agent={epic.agent} person={epic.assignee} /></Stack>
       </Stack>}
-      actions={row ? <SpaceRowMenu row={row} running={running} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={running} />}
+      actions={row ? <SpaceRowMenu row={row} running={running} quiet={quiet} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={running} />}
       onContextMenu={row ? event => { event.preventDefault(); event.stopPropagation(); setMenuOpen(true); } : undefined}
       onClick={() => void openEpicConversation(projectId, epic)} />
   </NavDropTarget><CanonBoundChats epic={epic} /></>;

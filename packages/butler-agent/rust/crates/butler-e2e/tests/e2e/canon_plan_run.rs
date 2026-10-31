@@ -8,6 +8,7 @@
 mod batch_edits;
 mod boundaries;
 mod bundle;
+mod closeout;
 mod delete_replay;
 mod deletion;
 mod edits;
