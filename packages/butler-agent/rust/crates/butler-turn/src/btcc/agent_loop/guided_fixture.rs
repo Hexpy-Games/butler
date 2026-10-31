@@ -61,6 +61,7 @@ impl ContextPort for Fixture {
     fn steering<'a>(
         &'a self,
         _invocation: GuidedInvocation<'a>,
+        _phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
         Box::pin(async move {
             Ok(self
