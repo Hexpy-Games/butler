@@ -1,5 +1,5 @@
 //! Durable, keyed blob ownership and replayable collection. Callers hold CHANGES.
-use super::store::{Output, OutputStore, error, hash};
+use super::store::{Output, OutputStore, error};
 use butler_platform::sqlite;
 use rusqlite::{Connection, params};
 use std::{collections::BTreeSet, path::Path};
@@ -147,17 +147,7 @@ pub(super) fn queue_session(
     session: &str,
 ) -> std::io::Result<(Vec<String>, BTreeSet<String>)> {
     let root = &store.root;
-    let markers = root.join("sessions").join(hash(session.as_bytes()));
-    let mut ids = BTreeSet::new();
-    match std::fs::read_dir(markers) {
-        Ok(entries) => {
-            for entry in entries {
-                ids.insert(entry?.file_name().to_string_lossy().into_owned());
-            }
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e),
-    }
+    let mut ids = store.marker_ids(session)?;
     if ids.is_empty() && !root.join("index.sqlite").exists() {
         return Ok((Vec::new(), BTreeSet::new()));
     }
@@ -173,26 +163,35 @@ pub(super) fn queue_session(
     }
     let migrated = complete(&tx)?;
     let mut candidates = BTreeSet::new();
-    for id in &ids {
-        if !migrated {
-            match store.read(id) {
-                Ok(output) => {
+    let mut owned = Vec::new();
+    for id in ids {
+        match store.read(&id) {
+            Ok(output) if output.session_id != session => {
+                super::index::correct_owner(&tx, &id, session, &output.session_id)?;
+                continue;
+            }
+            Ok(output) => {
+                if !migrated {
                     for sha in shas(&output) {
                         candidates.insert(sha.to_owned());
                         queue(&tx, sha)?;
                     }
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e),
             }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            // Migrated deletion previously used only blob rows, even when the
+            // manifest could not be read. Preserve that recovery behavior.
+            Err(_) if migrated => {}
+            Err(e) => return Err(e),
         }
-        for sha in strings(&tx, "SELECT sha FROM output_blobs WHERE output_id=?1", id)? {
+        for sha in strings(&tx, "SELECT sha FROM output_blobs WHERE output_id=?1", &id)? {
             queue(&tx, &sha)?;
             candidates.insert(sha);
         }
+        owned.push(id);
     }
     tx.commit().map_err(std::io::Error::other)?;
-    Ok((ids.into_iter().collect(), candidates))
+    Ok((owned, candidates))
 }
 
 pub(super) fn remove(db: &Connection, ids: &[String]) -> std::io::Result<()> {

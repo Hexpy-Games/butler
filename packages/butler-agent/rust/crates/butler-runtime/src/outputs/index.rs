@@ -1,5 +1,5 @@
 //! Small indexed projections; rendering a session never scans manifests or blobs.
-use super::store::{Output, error};
+use super::store::{Output, OutputStore, error};
 use rusqlite::{OpenFlags, params};
 use std::path::Path;
 
@@ -138,14 +138,54 @@ pub(super) fn ready(db: &rusqlite::Connection) -> std::io::Result<bool> {
     .map_err(std::io::Error::other)
 }
 
-pub(super) fn transfer(path: &Path, source: &str, target: &str) -> std::io::Result<()> {
+/// Correct only the keyed projection and references belonging to the departing
+/// session. Other sessions' references survive. The caller owns the transaction.
+pub(super) fn correct_owner(
+    db: &rusqlite::Connection,
+    id: &str,
+    source: &str,
+    owner: &str,
+) -> std::io::Result<()> {
+    if !ready(db)? {
+        return Ok(());
+    }
+    db.execute(
+        "UPDATE outputs SET session=?2 WHERE id=?1 AND session<>?2",
+        params![id, owner],
+    )
+    .map_err(std::io::Error::other)?;
+    db.execute(
+        "UPDATE output_refs SET session=?3 WHERE id=?1 AND session=?2",
+        params![id, source, owner],
+    )
+    .map_err(std::io::Error::other)?;
+    Ok(())
+}
+
+pub(super) fn transfer(store: &OutputStore, source: &str, target: &str) -> std::io::Result<()> {
+    let path = store.root.join("index.sqlite");
     if !path.exists() {
         return Ok(());
     }
-    let mut db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    let mut db = butler_platform::sqlite::open(&path).map_err(std::io::Error::other)?;
     let tx = db.transaction().map_err(std::io::Error::other)?;
     if !ready(&tx)? {
         return Ok(());
+    }
+    let ids = tx.prepare("SELECT id FROM outputs WHERE session=?1 UNION SELECT id FROM output_refs WHERE session=?1")
+        .map_err(std::io::Error::other)?
+        .query_map([source], |r| r.get::<_, String>(0))
+        .map_err(std::io::Error::other)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(std::io::Error::other)?;
+    for id in ids {
+        // Missing/unreadable row-only manifests previously transferred without
+        // parsing. Marker-backed parse errors still fail in OutputStore::list.
+        if let Ok(output) = store.read(&id)
+            && output.session_id != source
+        {
+            correct_owner(&tx, &id, source, &output.session_id)?;
+        }
     }
     for table in ["outputs", "output_refs"] {
         tx.execute(

@@ -2,7 +2,7 @@ use butler_platform::secure_fs;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -93,16 +93,32 @@ impl OutputStore {
         serde_json::from_reader(secure_fs::open_read_no_follow(&self.manifest(id)?)?)
             .map_err(std::io::Error::other)
     }
-    fn list(&self, session: &str) -> std::io::Result<Vec<Output>> {
+    /// Session directories are lookup hints; interrupted replacements can leave
+    /// staging names and markers for manifests that have already moved.
+    pub(super) fn marker_ids(&self, session: &str) -> std::io::Result<BTreeSet<String>> {
         let dir = self.root.join("sessions").join(hash(session.as_bytes()));
-        if !dir.exists() {
-            return Ok(Vec::new());
-        }
-        let mut outputs = Vec::new();
-        for entry in std::fs::read_dir(dir)? {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeSet::new()),
+            Err(e) => return Err(e),
+        };
+        let mut ids = BTreeSet::new();
+        for entry in entries {
             let id = entry?.file_name().to_string_lossy().into_owned();
+            if self.manifest(&id).is_err() {
+                butler_core::diagnostic!("[outputs] ignoring invalid session marker {id:?}");
+                continue;
+            }
+            ids.insert(id);
+        }
+        Ok(ids)
+    }
+    fn list(&self, session: &str) -> std::io::Result<Vec<Output>> {
+        let mut outputs = Vec::new();
+        for id in self.marker_ids(session)? {
             match self.read(&id) {
-                Ok(output) => outputs.push(output),
+                Ok(output) if output.session_id == session => outputs.push(output),
+                Ok(_) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => return Err(e),
             }
@@ -292,8 +308,8 @@ impl OutputStore {
             .ok_or_else(|| error("output_file_not_found"))?;
         secure_fs::open_read_no_follow(&self.blob(sha)?)
     }
-    /// Replayable ownership transfer. Keep source markers until every manifest and
-    /// index reference has moved, so a crash at any write can replay the same set.
+    /// Keep source markers until manifests and index references have moved.
+    /// Replays reconcile these hints with each manifest's current owner.
     pub fn transfer_session(&self, source: &str, target: &str) -> std::io::Result<()> {
         let _lock = CHANGES
             .lock()
@@ -303,7 +319,7 @@ impl OutputStore {
             output.session_id = target.to_owned();
             self.persist(&self.manifest(&output.output_id)?, &output)?;
         }
-        super::index::transfer(&self.root.join("index.sqlite"), source, target)?;
+        super::index::transfer(self, source, target)?;
         if source_dir.exists() {
             std::fs::remove_dir_all(source_dir)?;
         }
