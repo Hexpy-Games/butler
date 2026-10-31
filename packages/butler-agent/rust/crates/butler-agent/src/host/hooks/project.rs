@@ -196,6 +196,7 @@ fn report_refused(hooks: &Hooks, reason: &str) {
         reason: Some(reason),
         exit_code: None,
         duration_ms: 0,
+        context_bytes: None,
         stdout: String::new(),
         stderr: String::new(),
     });
