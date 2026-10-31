@@ -23,19 +23,19 @@ use std::{
     time::Duration,
 };
 
-fn hash(bytes: &[u8]) -> String {
+pub(super) fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
-fn setup(name: &str) -> Result<Setup, HarnessError> {
+pub(super) fn setup(name: &str) -> Result<Setup, HarnessError> {
     let setup = Setup::new(name)?.stub_cassette(super::browser_outputs::stub::cassette()?);
     crate::memory_fixture::initialize_empty(&setup.sandbox.data)?;
     Ok(setup)
 }
-fn db(data: &Path) -> Result<sqlite::Connection, HarnessError> {
+pub(super) fn db(data: &Path) -> Result<sqlite::Connection, HarnessError> {
     Ok(sqlite::open(data.join("outputs/index.sqlite"))?)
 }
 // Legacy schema plus the approved migration schema, so triggers also work on main.
-fn schema(data: &Path, complete: bool) -> Result<(), HarnessError> {
+pub(super) fn schema(data: &Path, complete: bool) -> Result<(), HarnessError> {
     secure_fs::create_private_dir_all(&data.join("outputs"))?;
     db(data)?.execute_batch(&format!("
         CREATE TABLE outputs(id TEXT PRIMARY KEY, session TEXT NOT NULL, message TEXT NOT NULL, turn TEXT NOT NULL, title TEXT NOT NULL, bytes INTEGER NOT NULL, created TEXT NOT NULL);
@@ -51,14 +51,14 @@ fn schema(data: &Path, complete: bool) -> Result<(), HarnessError> {
     }
     Ok(())
 }
-fn blob(data: &Path, body: &[u8]) -> Result<PathBuf, HarnessError> {
+pub(super) fn blob(data: &Path, body: &[u8]) -> Result<PathBuf, HarnessError> {
     let sha = hash(body);
     let path = data.join("outputs/blobs").join(&sha[..2]).join(sha);
     secure_fs::create_private_dir_all(path.parent().unwrap())?;
     std::fs::write(&path, body)?;
     Ok(path)
 }
-fn seed(
+pub(super) fn seed(
     data: &Path,
     session: &str,
     slot: &str,
@@ -99,7 +99,7 @@ fn seed(
     }
     Ok(id)
 }
-fn scalar(data: &Path, sql: &str) -> Result<i64, HarnessError> {
+pub(super) fn scalar(data: &Path, sql: &str) -> Result<i64, HarnessError> {
     Ok(db(data)?.query_row(sql, [], |r| r.get(0))?)
 }
 async fn observe_scalar(data: &Path, sql: &str) -> Result<Option<i64>, HarnessError> {
@@ -158,22 +158,22 @@ async fn wait_for_completion(s: &Scenario, deadline: Duration) -> Result<(), Har
         ))
     })?
 }
-async fn completed(s: &Scenario) -> Result<(), HarnessError> {
+pub(super) async fn completed(s: &Scenario) -> Result<(), HarnessError> {
     wait_for_completion(s, Duration::from_secs(10)).await
 }
-async fn chat(s: &Scenario) -> Result<String, HarnessError> {
+pub(super) async fn chat(s: &Scenario) -> Result<String, HarnessError> {
     let r = s.gw.post("/sessions", json!({"kind":"chat"})).await?;
     assert_eq!(r.status, 201, "{r:?}");
     Ok(r.data()["session"]["id"].as_str().unwrap().to_owned())
 }
-async fn delete(s: &Scenario, session: &str) -> Result<(), HarnessError> {
+pub(super) async fn delete(s: &Scenario, session: &str) -> Result<(), HarnessError> {
     let r =
         s.gw.delete(&format!("/sessions/{session}?permanent=true"))
             .await?;
     assert_eq!(r.status, 200, "{r:?}");
     Ok(())
 }
-async fn content(s: &Scenario, id: &str, expected: &str) -> Result<(), HarnessError> {
+pub(super) async fn content(s: &Scenario, id: &str, expected: &str) -> Result<(), HarnessError> {
     let view = s.gw.get(&format!("/outputs/{id}/view")).await?;
     assert_eq!(view.status, 200, "{view:?}");
     assert_eq!(
@@ -185,7 +185,7 @@ async fn content(s: &Scenario, id: &str, expected: &str) -> Result<(), HarnessEr
     );
     Ok(())
 }
-fn block_completion(data: &Path) -> Result<(), HarnessError> {
+pub(super) fn block_completion(data: &Path) -> Result<(), HarnessError> {
     db(data)?.execute_batch("CREATE TRIGGER block_complete BEFORE UPDATE OF complete ON output_blob_backfill WHEN NEW.complete=1 BEGIN SELECT RAISE(ABORT,'hold backfill'); END;")?;
     Ok(())
 }
