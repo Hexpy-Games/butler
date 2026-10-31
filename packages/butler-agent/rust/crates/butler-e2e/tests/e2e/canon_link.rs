@@ -355,6 +355,73 @@ async fn auto_labels_respect_person_rank_and_reporting_finish() -> Result<(), Ha
     Ok(())
 }
 
+async fn card(s: &Scenario, id: &str) -> Result<Value, HarnessError> {
+    let epic = data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);
+    let project = epic["project_id"].as_str().unwrap();
+    let board = data(s.gw.get(&format!("/projects/{project}/canon")).await?, 200);
+    Ok(board["backlog"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == id)
+        .cloned()
+        .unwrap())
+}
+
+#[tokio::test]
+async fn cn_22_board_card_and_progress_show_the_same_read_only_work() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, id, chat) = setup("CN-22", false, false).await?;
+    let turn = s.gw.say(&chat, "Process the release epic").await?;
+    script.wait_held().await;
+    for phase in ["running", "done"] {
+        if phase == "done" {
+            script.release();
+            s.gw.wait_terminal(
+                &chat,
+                &s.gw.accepted_turn(&turn).await?,
+                Duration::from_secs(60),
+            )
+            .await?;
+            wait_label(&s, &id, "in_review").await?;
+        }
+        let progress = progress(&s, &id).await?;
+        let keys: std::collections::BTreeSet<_> = progress
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            keys,
+            std::collections::BTreeSet::from([
+                "actions",
+                "counts",
+                "disposition",
+                "epic_id",
+                "running",
+                "stage",
+                "stage_history"
+            ]),
+            "{progress}"
+        );
+        let actions = progress["actions"].as_array().unwrap();
+        assert_eq!(actions.len(), 1, "{progress}");
+        let done = actions.iter().filter(|a| a["status"] == "done").count();
+        assert_eq!(progress["counts"]["completed"], done, "{progress}");
+        assert_eq!(progress["running"], phase == "running", "{progress}");
+        let card = card(&s, &id).await?;
+        assert_eq!(card["task_counts"], progress["counts"], "{phase}: {card}");
+        assert_eq!(card["running"], progress["running"], "{phase}: {card}");
+        let detail = data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);
+        assert_eq!(detail["task_counts"], progress["counts"], "{phase}");
+        assert_eq!(detail["running"], progress["running"], "{phase}");
+    }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 fn work_records(
     db: &rusqlite::Connection,
 ) -> Result<Vec<Vec<Vec<rusqlite::types::Value>>>, HarnessError> {
