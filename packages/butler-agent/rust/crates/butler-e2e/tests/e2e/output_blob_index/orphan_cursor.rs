@@ -78,13 +78,15 @@ async fn stop_during_orphan_pass_keeps_committed_shard_cursor() -> Result<(), Ha
     schema(&setup.sandbox.data, false)?;
     let id = seed(&setup.sandbox.data, "general", "live", b"Live", false)?;
     let mut orphans = Vec::new();
-    for shard in 0..256 {
+    // Keep all 8,192 candidates, using full queue pages rather than one
+    // undersized transaction per shard on the restart path.
+    for shard in (0..=255).step_by(17) {
         let dir = setup
             .sandbox
             .data
             .join(format!("outputs/blobs/{shard:02x}"));
         std::fs::create_dir_all(&dir)?;
-        for n in 0..32 {
+        for n in 0..512 {
             let path = dir.join(format!("{shard:02x}{n:062x}"));
             std::fs::write(&path, [])?;
             orphans.push(path);
