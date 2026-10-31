@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { createContext, useContext, useId, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { cn } from "../../lib/utils";
 import { BROWSER_CHAT_WIDTH, clampBrowserChatWidth } from "./conversationFrame";
@@ -26,6 +26,19 @@ export interface AdaptiveShellSplitProps extends Omit<DsBaseProps<HTMLAttributes
 }
 
 const KEY_STEP = 16;
+
+const PaneLeavingContext = createContext(false);
+
+/**
+ * What a pane reads from a store while it leaves: the value from before it started leaving. A close often empties the
+ * store the pane renders from (the last file closed), and the pane stays on screen until its motion ends.
+ */
+export function useHeldWhilePaneLeaves<T>(value: T): T {
+  const leaving = useContext(PaneLeavingContext);
+  const held = useRef(value);
+  useLayoutEffect(() => { if (!leaving) held.current = value; });
+  return leaving ? held.current : value;
+}
 
 /**
  * The conversation frame's split slot inside AdaptiveShellWorkspace (below the titlebar): chat | browser
@@ -88,7 +101,7 @@ export function AdaptiveShellSplit({
             onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
             <ResizeGrip id={hintId} title={resizeLabel} hint={resizeHint} side="start" />
           </div>
-          <div inert={shown.leaving} className={styles.pane} data-slot="adaptive-shell-split-pane">{paneOpen ? pane : lastPane.current}</div>
+          <div inert={shown.leaving} className={styles.pane} data-slot="adaptive-shell-split-pane"><PaneLeavingContext.Provider value={shown.leaving}>{paneOpen ? pane : lastPane.current}</PaneLeavingContext.Provider></div>
         </>
       ) : null}
       <SplitPaneMotion ref={motion} split={split} open={paneOpen} contextKey={contextKey} leaving={shown.leaving}

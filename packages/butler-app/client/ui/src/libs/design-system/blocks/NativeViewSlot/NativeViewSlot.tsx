@@ -40,6 +40,7 @@ export function NativeViewSlot({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const tracker = useRef<NativeViewTracker | null>(null);
+  const coverings = useRef(0);
   const callbacks = useRef({ onBoundsChange, onOcclusion });
   const [occluded, setOccluded] = useState(false);
   const viewportWidth = viewport?.width;
@@ -61,8 +62,10 @@ export function NativeViewSlot({
         root.toggleAttribute("data-occluded", next);
         root.removeAttribute("data-stand-in");
         setOccluded(next);
+        // Only the newest covering's still counts: an older capture settling says nothing about this one.
+        const covering = ++coverings.current;
         const standIn = Promise.resolve(callbacks.current.onOcclusion?.(next));
-        if (next) void standIn.catch(() => undefined).then(() => { if (root.hasAttribute("data-occluded")) root.setAttribute("data-stand-in", ""); });
+        if (next) void standIn.catch(() => undefined).then(() => { if (covering === coverings.current) root.setAttribute("data-stand-in", ""); });
       },
     });
     tracker.current = instance;

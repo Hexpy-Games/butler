@@ -1,8 +1,6 @@
 /* Conversation frame (AdaptiveShellSplit) and sidebar peek. The split sits
    in the workspace's second grid row, under a titlebar that spans it. */
 .split {
-  --split-gap: 0px;
-
   display: flex;
   min-width: 0;
   height: 100%;
@@ -67,9 +65,10 @@
   outline-offset: -2px;
 }
 
-/* The pane moves on SplitPaneMotion; the native view inside tracks it (the
-   NativeViewSlot tracker shows the still while ancestors move). */
+/* The pane moves on SplitPaneMotion, by its offset; the native view inside
+   tracks it (the NativeViewSlot tracker shows the still while ancestors move). */
 .pane {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;

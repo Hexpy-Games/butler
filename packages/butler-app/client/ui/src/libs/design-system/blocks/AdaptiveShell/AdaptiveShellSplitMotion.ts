@@ -3,9 +3,9 @@ import { animateMotion, motionDuration, prefersReducedMotion, type MotionOptions
 import { NATIVE_VIEW_HOLD } from "../NativeViewSlot/nativeViewGeometry";
 
 const MOTION: MotionOptions = { duration: "slow", easing: "emphasized" };
-/** Parked just past the split's end: the pane's own width plus the gap before it. */
-const OFF_EDGE = "translateX(calc(100% + var(--split-gap)))";
 const CHAT_WIDTH = "var(--browser-chat-width)";
+/** Parked just past the split's end: as far from its place as the chat's edge is when the chat fills the split. */
+const OFF_EDGE = `calc(100% - ${CHAT_WIDTH})`;
 
 interface SplitPaneMotionProps {
   split: HTMLElement | null;
@@ -36,13 +36,11 @@ function readGeometry(split: HTMLElement): Geometry | null {
   return {
     chat: getComputedStyle(chat).width,
     title: title ? getComputedStyle(title).width : null,
-    pane: pane ? `translateX(${new DOMMatrix(getComputedStyle(pane).transform).m41}px)` : null,
+    pane: pane ? `${parseFloat(getComputedStyle(pane).left) || 0}px` : null,
   };
 }
 
-function chatFrame(width: string): Keyframe {
-  return { width, marginInlineEnd: `calc(${CHAT_WIDTH} - ${width})` };
-}
+const chatFrame = (width: string): Keyframe => ({ width, marginInlineEnd: `calc(${CHAT_WIDTH} - ${width})` });
 
 function titleFrame(width: string): Keyframe {
   return { flexBasis: width, flexGrow: 0, flexShrink: 0 };
@@ -55,7 +53,7 @@ function titleFrame(width: string): Keyframe {
  */
 function afterStandIn(pane: HTMLElement | null, start: () => void): () => void {
   const slot = pane?.querySelector<HTMLElement>('[data-slot="native-view-slot"]:not([data-hidden])');
-  if (!pane || !slot) { start(); return () => undefined; }
+  if (!pane || !slot || slot.hasAttribute("data-stand-in")) { start(); return () => undefined; }
   pane.setAttribute(NATIVE_VIEW_HOLD, "");
   const finish = () => { cancel(); start(); };
   const observer = new MutationObserver(() => { if (slot.hasAttribute("data-stand-in")) finish(); });
@@ -68,9 +66,10 @@ function afterStandIn(pane: HTMLElement | null, start: () => void): () => void {
 /**
  * The right pane opening or closing beside the chat. Every pane in the split takes this one path. The flow keeps
  * the open layout while it moves, so the pane holds its final size and only travels (its content never reflows). The
- * chat card's edge follows it on the same tokens: its width animates over a negative margin that keeps the flow still.
- * The title row's chat group ends with the card. A pane holding a native view waits for its still (afterStandIn):
- * the whole motion waits, in either direction, so the chat's edge and the pane never overlap.
+ * chat card's edge follows it: its width animates over a negative margin that keeps the flow still. The title row's
+ * chat group ends with the card. All of them run on the main thread, started at one timeline time, so every painted
+ * frame has them together. (A transform would run on the compositor, ahead of a busy main thread and the chat's width.)
+ * A pane holding a native view waits for its still (afterStandIn); the whole motion waits, in either direction.
  * A new toggle starts from the frame on screen (mid-motion included). A first mount, another conversation and
  * reduced motion place everything at once; reduced motion fades an opening pane in.
  */
@@ -125,7 +124,10 @@ export class SplitPaneMotion extends Component<SplitPaneMotionProps> {
     const held = animations.filter((animation): animation is Animation => Boolean(animation));
     for (const animation of held) animation.pause();
     this.motion.push(...held);
-    this.cancelHold = afterStandIn(pane, () => { for (const animation of held) animation.play(); });
+    this.cancelHold = afterStandIn(pane, () => {
+      const now = held[0]?.timeline?.currentTime ?? null;
+      for (const animation of held) animation.startTime = now;
+    });
   }
 
   private enter(split: HTMLElement, from: Geometry) {
@@ -133,7 +135,7 @@ export class SplitPaneMotion extends Component<SplitPaneMotionProps> {
     this.holdUntilStandIn(pane, [
       chat && animateMotion(chat, [chatFrame(from.chat), chatFrame(CHAT_WIDTH)], MOTION),
       title && from.title ? animateMotion(title, [titleFrame(from.title), titleFrame(getComputedStyle(title).width)], MOTION) : null,
-      pane && animateMotion(pane, [{ transform: from.pane ?? OFF_EDGE }, { transform: "translateX(0px)" }], MOTION),
+      pane && animateMotion(pane, [{ left: from.pane ?? OFF_EDGE }, { left: "0px" }], MOTION),
     ]);
   }
 
@@ -142,7 +144,7 @@ export class SplitPaneMotion extends Component<SplitPaneMotionProps> {
     const { chat, pane, title } = parts(split);
     const hold: MotionOptions = { ...MOTION, fill: "forwards" };
     const chatMotion = chat && animateMotion(chat, [chatFrame(from.chat), chatFrame("100%")], hold);
-    const paneMotion = pane && animateMotion(pane, [{ transform: from.pane ?? "translateX(0px)" }, { transform: OFF_EDGE }], hold);
+    const paneMotion = pane && animateMotion(pane, [{ left: from.pane ?? "0px" }, { left: OFF_EDGE }], hold);
     this.holdUntilStandIn(pane, [
       title && from.title ? animateMotion(title, [titleFrame(from.title), titleFrame(getComputedStyle(title).width)], MOTION) : null,
       chatMotion,
