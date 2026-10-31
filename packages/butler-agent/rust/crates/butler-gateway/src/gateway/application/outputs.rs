@@ -156,6 +156,51 @@ impl AppApplication {
         .map_err(GatewayApplicationError::internal_from)?
         .map_err(GatewayApplicationError::internal_from)
     }
+    pub(super) async fn recover_output_transfers_for_open(&self) {
+        if let Err(error) = self.recover_output_transfers().await {
+            butler_core::diagnostic!("[outputs] recovery pending: {error:?}");
+        }
+    }
+    pub(super) async fn ensure_output_transfer_complete(
+        &self,
+        session: &str,
+    ) -> Result<(), GatewayApplicationError> {
+        if self.output_transfer_pending(session).await? {
+            // Serialize with clear and other lifecycle recovery before rereading receipts.
+            let _guard = self.space_mutations.lock_relocation("general").await?;
+            if !self.output_transfer_pending(session).await? {
+                return Ok(());
+            }
+            // Recovery logs I/O failures. A durable receipt is the refusal criterion.
+            let _ = self.recover_output_transfers().await;
+            if self.output_transfer_pending(session).await? {
+                return Err(GatewayApplicationError::Public {
+                    status: 409,
+                    code: "output_transfer_pending".into(),
+                    message: "결과물을 옮기는 중입니다. 잠시 후 다시 시도해 주세요.".into(),
+                    source: None,
+                });
+            }
+        }
+        Ok(())
+    }
+    async fn output_transfer_pending(
+        &self,
+        session: &str,
+    ) -> Result<bool, GatewayApplicationError> {
+        let session = session.to_owned();
+        self.storage
+            .read(move |db| {
+                db.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM app_output_transfers WHERE archive_id=?1)",
+                    [session],
+                    |row| row.get(0),
+                )
+                .map_err(super::AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)
+    }
     pub(super) async fn recover_output_transfers(&self) -> Result<(), GatewayApplicationError> {
         let pending = self
             .storage
@@ -171,23 +216,33 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
+        let mut first_failure = None;
         for archive in pending {
-            let store = OutputStore::new(&self.butler_data);
-            let target = archive.clone();
-            tokio::task::spawn_blocking(move || store.transfer_session("general", &target))
-                .await
-                .map_err(GatewayApplicationError::internal_from)?
-                .map_err(GatewayApplicationError::internal_from)?;
-            self.storage.execute(move |db| {
-                let tx = db.savepoint().map_err(super::AppStorageError::sqlite)?;
-                tx.execute("DELETE FROM app_output_transfers WHERE archive_id=?1", [&archive])
-                    .map_err(super::AppStorageError::sqlite)?;
-                tx.execute("DELETE FROM app_session_context_gate WHERE session_id='general' AND owner_kind='relocate' AND owner_id=?1", [&archive])
-                    .map_err(super::AppStorageError::sqlite)?;
-                tx.commit().map_err(super::AppStorageError::sqlite)
-            }).await.map_err(app_error)?;
+            if let Err(error) = self.recover_output_transfer(archive.clone()).await {
+                butler_core::diagnostic!("[outputs] transfer pending archive={archive}: {error:?}");
+                first_failure.get_or_insert(error);
+            }
         }
-        Ok(())
+        first_failure.map_or(Ok(()), Err)
+    }
+    async fn recover_output_transfer(
+        &self,
+        archive: String,
+    ) -> Result<(), GatewayApplicationError> {
+        let store = OutputStore::new(&self.butler_data);
+        let target = archive.clone();
+        tokio::task::spawn_blocking(move || store.transfer_session("general", &target))
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+            .map_err(GatewayApplicationError::internal_from)?;
+        self.storage.execute(move |db| {
+            let tx = db.savepoint().map_err(super::AppStorageError::sqlite)?;
+            tx.execute("DELETE FROM app_output_transfers WHERE archive_id=?1", [&archive])
+                .map_err(super::AppStorageError::sqlite)?;
+            tx.execute("DELETE FROM app_session_context_gate WHERE session_id='general' AND owner_kind='relocate' AND owner_id=?1", [&archive])
+                .map_err(super::AppStorageError::sqlite)?;
+            tx.commit().map_err(super::AppStorageError::sqlite)
+        }).await.map_err(app_error)
     }
     pub(super) async fn collect_session_outputs(
         &self,

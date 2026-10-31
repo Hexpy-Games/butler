@@ -342,7 +342,7 @@ impl AppApplication {
     }
 
     async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
-        self.recover_output_transfers().await?;
+        self.recover_output_transfers_for_open().await;
         self.surface_work_failures(None).await?;
         self.connect_update_progress().await;
         if let Err(error) = self.recover_session_relocation_owned().await {

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    io::Read,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -93,6 +94,30 @@ impl OutputStore {
         serde_json::from_reader(secure_fs::open_read_no_follow(&self.manifest(id)?)?)
             .map_err(std::io::Error::other)
     }
+    /// Read I/O separately from parsing: unservable manifests can be skipped when
+    /// transferring, or collected from indexed references after blob migration.
+    pub(super) fn read_optional(
+        &self,
+        id: &str,
+        skip_unparseable: bool,
+    ) -> std::io::Result<Option<Output>> {
+        let mut bytes = Vec::new();
+        let read = secure_fs::open_read_no_follow(&self.manifest(id)?)
+            .and_then(|mut file| file.read_to_end(&mut bytes));
+        match read {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
+        }
+        match serde_json::from_slice(&bytes) {
+            Ok(output) => Ok(Some(output)),
+            Err(e) if skip_unparseable => {
+                butler_core::diagnostic!("[outputs] ignoring unparseable manifest {id}: {e}");
+                Ok(None)
+            }
+            Err(e) => Err(std::io::Error::other(e)),
+        }
+    }
     /// Session directories are lookup hints; interrupted replacements can leave
     /// staging names and markers for manifests that have already moved.
     pub(super) fn marker_ids(&self, session: &str) -> std::io::Result<BTreeSet<String>> {
@@ -116,11 +141,10 @@ impl OutputStore {
     fn list(&self, session: &str) -> std::io::Result<Vec<Output>> {
         let mut outputs = Vec::new();
         for id in self.marker_ids(session)? {
-            match self.read(&id) {
-                Ok(output) if output.session_id == session => outputs.push(output),
-                Ok(_) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e),
+            if let Some(output) = self.read_optional(&id, true)?
+                && output.session_id == session
+            {
+                outputs.push(output);
             }
         }
         outputs.sort_by(|a, b| a.output_id.cmp(&b.output_id));
