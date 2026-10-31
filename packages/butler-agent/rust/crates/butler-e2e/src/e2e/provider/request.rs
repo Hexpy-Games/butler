@@ -55,8 +55,19 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
         if memory {
             return replay(&state, &memory::response(), None);
         }
+        // A registered hold applies here too: the request is visible while it waits.
+        let hold = take_hold(&state, &path, &json);
+        let held = hold.is_some();
+        if held {
+            lock(&state.requests).push(json.clone());
+        }
+        if let Some(hold) = hold {
+            let _ = hold.await;
+        }
         let response = synthetic.respond(&json, bytes.len(), arrived);
-        lock(&state.requests).push(json);
+        if !held {
+            lock(&state.requests).push(json);
+        }
         return response;
     }
     if memory && matches!(&state.mode, Mode::Replay(_)) {
@@ -114,6 +125,20 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
             .await
         }
     }
+}
+
+/// The hold registered for this request, if any; the match key is only built
+/// when a hold is waiting, so unheld traffic pays nothing for it.
+fn take_hold(
+    state: &State,
+    path: &str,
+    json: &Value,
+) -> Option<tokio::sync::oneshot::Receiver<()>> {
+    if lock(&state.holds).is_empty() {
+        return None;
+    }
+    let key = matching::key(path, json, &lock(&state.placeholders));
+    lock(&state.holds).take(&key)
 }
 
 fn replay_request(
