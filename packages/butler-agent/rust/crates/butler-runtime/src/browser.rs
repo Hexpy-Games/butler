@@ -205,6 +205,8 @@ pub fn site_scope(value: &str) -> Result<String, &'static str> {
 
 /// Payment widgets remain per-act authority targets even on signed-out tabs.
 pub fn payment_host(host: &str) -> bool {
+    // A trailing dot and letter case name the same host.
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
     PAYMENT_SITES
         .iter()
         .any(|site| host == *site || host.ends_with(&format!(".{site}")))
