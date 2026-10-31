@@ -1,5 +1,4 @@
 use super::*;
-use std::sync::atomic::Ordering;
 
 #[tokio::test]
 async fn plan_run_restart_active_step_with_queued_steps() -> Result<(), HarnessError> {

@@ -15,7 +15,7 @@ pub(super) async fn apply(
     let language = super::super::canon_proposals::language(app).await?;
     let epic = field(&panel, "epic_title")?;
     let text = if kind == "canon_hold" {
-        hold_text(&language, &epic, panel["hold_reason"].as_str())
+        hold_text(language, &epic, panel["hold_reason"].as_str())
     } else {
         let other = field(&panel, "other_session_id")?;
         let title = app
