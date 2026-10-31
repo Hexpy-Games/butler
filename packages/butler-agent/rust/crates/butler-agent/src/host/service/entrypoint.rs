@@ -241,7 +241,7 @@ async fn serve(
     }
     startup.phase("dispatch_recovery_and_instance_ready");
     log_effective_model(&gateway, logs).await?;
-    let _ = ready.send(());
+    finish_startup(&config.data_root, ready);
     let result = storage_health::while_serving(
         &config.data_root,
         poll_service(
@@ -266,6 +266,17 @@ async fn serve(
     let close = close_serving(control, &gateway, &dispatcher, &progress).await;
     admission::cancel_reset_queue(&runtime, &queue).await?;
     result.and(close).map(|()| session_id)
+}
+
+/// Signal readiness before starting one-time output recovery off the critical path.
+fn finish_startup(data: &std::path::Path, ready: tokio::sync::oneshot::Sender<()>) {
+    let _ = ready.send(());
+    let outputs = butler_runtime::outputs::OutputStore::new(data);
+    tokio::task::spawn_blocking(move || {
+        if let Err(error) = outputs.backfill_blobs() {
+            butler_core::diagnostic!("[outputs] output blob backfill failed: {error}");
+        }
+    });
 }
 
 /// Recover durable dispatches before publishing the ready instance.

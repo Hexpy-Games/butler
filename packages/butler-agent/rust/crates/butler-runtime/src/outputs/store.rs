@@ -7,7 +7,7 @@ use std::{
     sync::Mutex,
 };
 
-static CHANGES: Mutex<()> = Mutex::new(());
+pub(super) static CHANGES: Mutex<()> = Mutex::new(());
 pub(super) fn error(message: &str) -> std::io::Error {
     std::io::Error::other(message)
 }
@@ -17,7 +17,7 @@ pub(super) fn hash(bytes: &[u8]) -> String {
 
 #[derive(Clone)]
 pub struct OutputStore {
-    root: PathBuf,
+    pub(super) root: PathBuf,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Revision {
@@ -82,6 +82,10 @@ impl OutputStore {
         }
         Ok(self.root.join("manifests").join(format!("{id}.json")))
     }
+    /// One-time ownership migration, called after readiness on a blocking worker.
+    pub fn backfill_blobs(&self) -> std::io::Result<()> {
+        super::blobs::run(self)
+    }
     pub fn read(&self, id: &str) -> std::io::Result<Output> {
         serde_json::from_reader(secure_fs::open_read_no_follow(&self.manifest(id)?)?)
             .map_err(std::io::Error::other)
@@ -136,6 +140,7 @@ impl OutputStore {
         if snapshot.files.is_empty() {
             return Ok((refused(request, snapshot, id), 0));
         }
+        super::blobs::initialize(&self.root)?;
         let path = self.manifest(&id)?;
         let mut output = if path.exists() {
             self.read(&id)?
@@ -171,6 +176,8 @@ impl OutputStore {
             hashes.insert(name, sha);
         }
         if output.revisions.last().is_some_and(|r| r.files == hashes) {
+            super::blobs::protect(&self.root, &output)?;
+            super::index::save(&self.root.join("index.sqlite"), &output)?;
             super::index::reference(
                 &self.root.join("index.sqlite"),
                 &output.output_id,
@@ -234,9 +241,8 @@ impl OutputStore {
         Ok(hash(identity.as_bytes()))
     }
     fn persist(&self, path: &Path, output: &Output) -> std::io::Result<()> {
+        super::blobs::protect(&self.root, output)?;
         secure_fs::create_private_dir_all(path.parent().ok_or_else(|| error("manifest_parent"))?)?;
-        let bytes = serde_json::to_vec(output).map_err(std::io::Error::other)?;
-        secure_fs::replace_private(path, |file| std::io::Write::write_all(file, &bytes), |e| e)?;
         let index = self
             .root
             .join("sessions")
@@ -249,10 +255,12 @@ impl OutputStore {
                 |e: std::io::Error| e,
             )?;
         }
+        let bytes = serde_json::to_vec(output).map_err(std::io::Error::other)?;
+        secure_fs::replace_private(path, |file| std::io::Write::write_all(file, &bytes), |e| e)?;
         super::index::save(&self.root.join("index.sqlite"), output)?;
         Ok(())
     }
-    fn blob(&self, sha: &str) -> std::io::Result<PathBuf> {
+    pub(super) fn blob(&self, sha: &str) -> std::io::Result<PathBuf> {
         if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(error("invalid_blob"));
         }
@@ -303,56 +311,23 @@ impl OutputStore {
         )?;
         Ok(())
     }
-    /// Only session archive/delete runs GC; request paths never scan blobs.
+    /// Collect only durable cleanup candidates, never the whole output store.
     pub fn remove_session(&self, session: &str) -> std::io::Result<()> {
         let _lock = CHANGES
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
-        let index = self.root.join("sessions").join(hash(session.as_bytes()));
-        // Directory markers survive until the index is removed. A retry must
-        // not read manifests that an earlier attempt already removed.
-        match std::fs::read_dir(&index) {
-            Ok(entries) => {
-                for entry in entries {
-                    let id = entry?.file_name().to_string_lossy().into_owned();
-                    ignore_missing(std::fs::remove_file(self.manifest(&id)?))?;
-                }
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
+        let ids = super::blobs::queue_session(self, session)?;
+        for id in &ids {
+            ignore_missing(std::fs::remove_file(self.manifest(id)?))?;
         }
-        super::index::remove(&self.root.join("index.sqlite"), session)?;
-        ignore_missing(std::fs::remove_dir_all(index))?;
-        let manifests = self.root.join("manifests");
-        if !manifests.exists() {
-            return Ok(());
-        }
-        let mut live = std::collections::HashSet::new();
-        for entry in std::fs::read_dir(manifests)? {
-            let output: Output =
-                serde_json::from_reader(secure_fs::open_read_no_follow(&entry?.path())?)
-                    .map_err(std::io::Error::other)?;
-            for rev in output.revisions {
-                live.extend(rev.files.into_values());
-            }
-        }
-        let blobs = self.root.join("blobs");
-        if !blobs.exists() {
-            return Ok(());
-        }
-        for shard in std::fs::read_dir(blobs)? {
-            for blob in std::fs::read_dir(shard?.path())? {
-                let blob = blob?;
-                if !live.contains(&blob.file_name().to_string_lossy().into_owned()) {
-                    std::fs::remove_file(blob.path())?;
-                }
-            }
-        }
-        Ok(())
+        super::index::remove(&self.root.join("index.sqlite"), session, &ids)?;
+        let markers = self.root.join("sessions").join(hash(session.as_bytes()));
+        ignore_missing(std::fs::remove_dir_all(markers))?;
+        super::blobs::drain(self)
     }
 }
 
-fn ignore_missing(result: std::io::Result<()>) -> std::io::Result<()> {
+pub(super) fn ignore_missing(result: std::io::Result<()>) -> std::io::Result<()> {
     match result {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         result => result,
