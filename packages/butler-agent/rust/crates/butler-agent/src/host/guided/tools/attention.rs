@@ -90,10 +90,13 @@ async fn skipped(owner: &GuidedTools, facts: AuthorityAdmissionInput, code: &str
 async fn notify(
     owner: &GuidedTools,
     capability: &str,
-    approval: butler_turn::btcc::AuthorityApproval,
+    mut approval: butler_turn::btcc::AuthorityApproval,
     action_identity: &str,
     code: &str,
 ) {
+    // The notice names the action by its operation; the examples carry raw call arguments and are not stored.
+    approval.examples.clear();
+    approval.examples_truncated.clear();
     let Some(run) = owner
         .inherited_run()
         .filter(|r| !r.automation_id.is_empty() && !r.run_id.is_empty())

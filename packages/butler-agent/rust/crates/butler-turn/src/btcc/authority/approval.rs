@@ -209,11 +209,11 @@ fn mcp(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         .filter(|a| !a.is_empty())
     {
         // Show the exact operation's arguments, independent of any connector or tool vocabulary.
+        // Never redacted: a pattern over compact JSON hides the call's real data (the recipient,
+        // the payload) and misses plain keys, and the approver must see what the call sends.
         approval
             .examples
-            .push(butler_core::public_text::sanitize_public_delta(
-                &Value::Object(arguments.clone()).to_string(),
-            ));
+            .push(Value::Object(arguments.clone()).to_string());
     }
     approval
 }

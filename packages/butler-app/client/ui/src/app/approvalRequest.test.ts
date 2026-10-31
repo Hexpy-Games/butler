@@ -213,6 +213,20 @@ test("outside paths stay absolute and inside paths remain project-relative", () 
       operation: { tool: "exec_command", access: "change", targets: [], command } })!;
     for (const copy of [en, ko]) expect(approvalActionView(noticed, copy, {}).target).toBe("");
   }
+  // A command over the 16 KiB example cap: the operation carries it whole, so its capped example is not shown again.
+  const huge = `./build.sh ${"--option=value ".repeat(1500)}--tail`;
+  const capped = normalizeApprovalSummary({ action_kind: "run_command", examples: [huge.slice(0, 16 * 1024)], examples_truncated: [true],
+    operation: { tool: "exec_command", access: "change", targets: [], command: huge } })!;
+  for (const copy of [en, ko]) expect(approvalRequestView(card(capped), copy).details).toEqual([huge]);
+  // The notice line never carries a command: by action kind, and for any operation that has a command.
+  for (const fields of [
+    { action_kind: "run_command", examples: ["ls"] }, { action_kind: "network_command", examples: ["curl x"] },
+    { action_kind: "other", examples: ["x"], operation: { tool: "exec_command", access: "change", targets: ["t"], command: "ls" } },
+  ]) for (const copy of [en, ko]) expect(approvalActionView(normalizeApprovalSummary(fields)!, copy, {}).target).toBe("");
+  // Other kinds keep a masked first line.
+  for (const copy of [en, ko]) {
+    expect(approvalActionView(normalizeApprovalSummary({ action_kind: "other", targets: [{ kind: "other", path: "token=abc" }] })!, copy, {}).target).toBe("token=••••");
+  }
   // A cut-short example is marked with an ellipsis.
   for (const copy of [en, ko]) {
     expect(approvalRequestView(card(summary("run_command", { examples: ["curl --token=abc"], examples_truncated: [true] })), copy).details)
