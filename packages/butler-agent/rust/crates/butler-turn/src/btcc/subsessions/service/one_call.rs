@@ -38,7 +38,7 @@ impl SubsessionService {
         };
         let work = self.work.bound_work_for_turn(turn.into()).await?;
         Ok(Some(work.as_ref().is_some_and(|work| {
-            work.work_id == relation.root_work_id
+            (work.work_id == relation.root_work_id || turn != relation.child_turn_id)
                 && work.current_plan.as_ref().is_some_and(|plan| {
                     work.latest_plan_review.as_ref().is_some_and(|review| {
                         review.verdict == crate::btcc::ReviewVerdict::Accept

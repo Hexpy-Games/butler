@@ -38,8 +38,7 @@ impl SubsessionService {
         let scope = child_work_scope(&stored, &binding, turn)?;
         let existing = self.work.bound_work_for_turn(turn.into()).await?;
         if let Some(existing) = existing {
-            if (existing.work_id != stored.root_work_id
-                && !(stored.packet.child_role == ChildRole::Worker && turn != stored.child_turn_id))
+            if (existing.work_id != stored.root_work_id && turn == stored.child_turn_id)
                 || existing.session_id != session
                 || !work_matches_scope(&existing, &scope)
             {
@@ -47,22 +46,8 @@ impl SubsessionService {
             }
             return Ok(());
         }
-        if turn != stored.child_turn_id && stored.packet.child_role == ChildRole::Worker {
-            return self.bind_worker_continuation(&stored, scope).await;
-        }
         if turn != stored.child_turn_id {
-            let bound = self
-                .work
-                .bind_open_work(scope.clone(), Some(stored.root_work_id.clone()))
-                .await?
-                .ok_or_else(|| error(BtccCode::SubsessionRootWorkIdentityMismatch))?;
-            if bound.work_id != stored.root_work_id
-                || bound.session_id != session
-                || !work_matches_scope(&bound, &scope)
-            {
-                return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
-            }
-            return Ok(());
+            return self.bind_continuation(&stored, scope).await;
         }
         let mutation = format!(
             "subsession-root-work:{}:{}:{}",

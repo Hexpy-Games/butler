@@ -38,6 +38,13 @@ pub(crate) struct Script {
     pub release: Notify,
     pub hold_direction: AtomicBool,
     pub direction_held: Notify,
+    /// Holds the first child round replying with this tool name or `message`.
+    pub hold_child_item: Mutex<Option<&'static str>>,
+    pub item_held: Notify,
+    pub item_release: Notify,
+    /// A direction's own turn plans and closes the fresh Work it runs on.
+    pub plan_continuation: AtomicBool,
+    continuation_step: AtomicUsize,
 }
 
 pub(crate) async fn start()
@@ -64,7 +71,11 @@ async fn reply(
     use axum::response::IntoResponse;
     let key = matching::key("/v1/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
-    let child = child_lane(&body);
+    // A direction's turn on a fresh Work no longer restates the delegated packet.
+    let continuation = script.plan_continuation.load(Ordering::SeqCst)
+        && key.user_request.starts_with(DIRECTION)
+        && key.user_request != DIRECTION;
+    let child = child_lane(&body) || continuation;
     if !child && crate::connectors::stub::find_spec(&body["input"]).is_some() {
         let response = crate::connectors::stub::run(&body).unwrap();
         let wire = response
@@ -112,7 +123,12 @@ async fn reply(
         script.held.notify_one();
         script.release.notified().await;
     }
-    let item = if child {
+    let item = if continuation {
+        super::super::steward_direction_finish::continuation_item(
+            script.continuation_step.fetch_add(1, Ordering::SeqCst),
+            &body,
+        )
+    } else if child {
         child_item(step, &body, &script)
     } else if key.user_request == DIRECTION || key.user_request == DIRECTION_2 {
         if key.round.is_empty() {
@@ -145,7 +161,21 @@ async fn reply(
     } else {
         parent_item(step, script.answer_blocks.load(Ordering::SeqCst))
     };
+    if child && take_hold(&script, &item) {
+        script.item_held.notify_one();
+        script.item_release.notified().await;
+    }
     ([("content-type", "text/event-stream")], wire(item)).into_response()
+}
+
+fn take_hold(script: &Script, item: &Value) -> bool {
+    let kind = item["name"].as_str().unwrap_or("message");
+    script
+        .hold_child_item
+        .lock()
+        .unwrap()
+        .take_if(|held| *held == kind)
+        .is_some()
 }
 
 pub(crate) fn user_text(item: &Value) -> String {
@@ -398,7 +428,7 @@ pub(crate) fn work_id(body: &Value) -> String {
         .unwrap()
 }
 
-fn plan(start_new: bool, mode: &str) -> Value {
+pub(crate) fn plan(start_new: bool, mode: &str) -> Value {
     json!({"start_new":start_new,"objective":OWNER,"execution_mode":mode,"governing_refs":[],"actions":[{"action_key":"read","description":"Read source","dependency_keys":[]},{"action_key":"compare","description":"Compare approaches","dependency_keys":["read"]}],"checks":["Approach verified"]})
 }
 pub(crate) const REVISED_CHECK: &str = "Comparison names its deciding criterion";

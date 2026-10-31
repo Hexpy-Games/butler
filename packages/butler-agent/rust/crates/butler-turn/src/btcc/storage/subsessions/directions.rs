@@ -38,6 +38,22 @@ pub(super) fn settle_continued_direction(
     Ok(())
 }
 
+/// Stopping a Steward also stops what it was still told to do: nothing takes
+/// these directions up again, even after a restart.
+pub(super) fn retire_with_stop(
+    tx: &rusqlite::Transaction<'_>,
+    relation: &str,
+    turn: &str,
+    now: &str,
+) -> Result<(), StorageError> {
+    tx.execute(
+        "UPDATE btcc_subsession_directions SET status='applied',applied_at=?2,applied_child_turn_id=?3 WHERE relation_id=?1 AND status='pending'",
+        params![relation, now, turn],
+    )
+    .map_err(StorageError::sqlite)?;
+    Ok(())
+}
+
 impl SqliteSubsessionRepository {
     /// Settles a pending direction whose continuation turn already has a saved
     /// result (left by a closeout saved before directions settled with their

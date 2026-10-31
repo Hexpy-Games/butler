@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-use butler_turn::btcc::{GuidedInvocation, PortFuture, SteeringObservation, TurnSteeringPort};
+use butler_turn::btcc::{
+    GuidedInvocation, LoopPhase, PortFuture, SteeringObservation, TurnSteeringPort,
+};
 
 use crate::host::guided::prompt::{GuidedTextState, work_context};
 
@@ -39,12 +41,18 @@ impl TurnSteeringPort for GuidedSteering {
     fn observe<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
         Box::pin(async move {
-            let direction = self
-                .subsessions
-                .consume_direction(&self.child_session_id, &self.child_turn_id)
-                .await?;
+            // A settled turn only reports, with its tools closed. Its direction
+            // stays pending for the next turn, which can act on it.
+            let direction = if phase == LoopPhase::FinalReport {
+                None
+            } else {
+                self.subsessions
+                    .consume_direction(&self.child_session_id, &self.child_turn_id)
+                    .await?
+            };
             let current = if self.state.phase.execution_policy.tracking_mode == "none" {
                 None
             } else {
