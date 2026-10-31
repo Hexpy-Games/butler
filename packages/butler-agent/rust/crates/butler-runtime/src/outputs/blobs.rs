@@ -1,8 +1,8 @@
 //! Durable, keyed blob ownership and replayable collection. Callers hold CHANGES.
-use super::store::{Output, OutputStore, error, hash};
+use super::store::{Output, OutputStore, error};
 use butler_platform::sqlite;
 use rusqlite::{Connection, params};
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::BTreeSet, io::Read, path::Path};
 
 mod backfill;
 pub(super) use backfill::run;
@@ -140,6 +140,28 @@ fn queue(db: &Connection, sha: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+/// A missing manifest or unparseable migrated manifest can be collected from
+/// indexed references. An I/O failure leaves ownership unknown and must replay.
+fn deletion_manifest(
+    store: &OutputStore,
+    id: &str,
+    migrated: bool,
+) -> std::io::Result<Option<Output>> {
+    let mut bytes = Vec::new();
+    let read = butler_platform::secure_fs::open_read_no_follow(&store.manifest(id)?)
+        .and_then(|mut file| file.read_to_end(&mut bytes));
+    match read {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    }
+    match serde_json::from_slice(&bytes) {
+        Ok(output) => Ok(Some(output)),
+        Err(_) if migrated => Ok(None),
+        Err(e) => Err(std::io::Error::other(e)),
+    }
+}
+
 /// Persist candidates before deleting any manifest. Until migration completes,
 /// the session's own marker directory supplies references absent from the index.
 pub(super) fn queue_session(
@@ -147,17 +169,7 @@ pub(super) fn queue_session(
     session: &str,
 ) -> std::io::Result<(Vec<String>, BTreeSet<String>)> {
     let root = &store.root;
-    let markers = root.join("sessions").join(hash(session.as_bytes()));
-    let mut ids = BTreeSet::new();
-    match std::fs::read_dir(markers) {
-        Ok(entries) => {
-            for entry in entries {
-                ids.insert(entry?.file_name().to_string_lossy().into_owned());
-            }
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e),
-    }
+    let mut ids = store.marker_ids(session)?;
     if ids.is_empty() && !root.join("index.sqlite").exists() {
         return Ok((Vec::new(), BTreeSet::new()));
     }
@@ -173,26 +185,29 @@ pub(super) fn queue_session(
     }
     let migrated = complete(&tx)?;
     let mut candidates = BTreeSet::new();
-    for id in &ids {
-        if !migrated {
-            match store.read(id) {
-                Ok(output) => {
-                    for sha in shas(&output) {
-                        candidates.insert(sha.to_owned());
-                        queue(&tx, sha)?;
-                    }
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e),
+    let mut owned = Vec::new();
+    for id in ids {
+        match deletion_manifest(store, &id, migrated)? {
+            Some(output) if output.session_id != session => {
+                super::index::correct_owner(&tx, &id, &output.session_id)?;
+                continue;
             }
+            Some(output) if !migrated => {
+                for sha in shas(&output) {
+                    candidates.insert(sha.to_owned());
+                    queue(&tx, sha)?;
+                }
+            }
+            _ => {}
         }
-        for sha in strings(&tx, "SELECT sha FROM output_blobs WHERE output_id=?1", id)? {
+        for sha in strings(&tx, "SELECT sha FROM output_blobs WHERE output_id=?1", &id)? {
             queue(&tx, &sha)?;
             candidates.insert(sha);
         }
+        owned.push(id);
     }
     tx.commit().map_err(std::io::Error::other)?;
-    Ok((ids.into_iter().collect(), candidates))
+    Ok((owned, candidates))
 }
 
 pub(super) fn remove(db: &Connection, ids: &[String]) -> std::io::Result<()> {
