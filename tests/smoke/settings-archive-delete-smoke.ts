@@ -18,11 +18,9 @@ if (output) mkdirSync(output, { recursive: true });
 async function capture(page: Page, name: string) {
   if (!output) return;
   await page.evaluate(() => document.fonts.ready);
-  const section = await page.locator('[data-settings-section-id="archives"]').boundingBox();
-  assert(section);
-  // Narrow real settings screen, from its archive heading through the toast region.
+  // Keep the heading, archive rows and the top-positioned toast together at 2x.
   await page.screenshot({ path: join(output, `${phase}-${name}.png`), animations: "disabled",
-    clip: { x: 0, y: Math.max(0, section.y - 70), width: 430, height: 700 - Math.max(0, section.y - 70) } });
+    clip: { x: 0, y: 0, width: 430, height: 350 } });
 }
 
 const browser = await launchSmokeBrowser();
