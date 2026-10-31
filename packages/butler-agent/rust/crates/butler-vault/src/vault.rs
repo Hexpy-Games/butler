@@ -33,7 +33,7 @@ mod store;
 mod transfer;
 mod unlock;
 
-pub use cipher::MIN_PASSWORD_CHARS;
+pub use cipher::{MIN_PASSWORD_CHARS, MIN_PASSWORD_DISTINCT_CHARS};
 pub use error::VaultError;
 pub use format::{FORMAT, Item, ItemKind, Payload, SecretValue, TOMBSTONE_RETENTION_MS, Tombstone};
 pub use keychain::{KEYCHAIN_SERVICE, KeychainSlot};

@@ -134,6 +134,86 @@ fn a_changed_key_file_refuses_and_short_passwords_are_refused() -> Outcome {
     Ok(())
 }
 
+// test-category: security
+#[test]
+fn a_key_that_cannot_open_the_vault_stays_locked() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    fixture.vault.put(item("site", "the-secret"))?;
+    let other = Fixture::new()?;
+    let real = std::fs::read(fixture.paths.key_file())?;
+    std::fs::copy(other.paths.key_file(), fixture.paths.key_file())?;
+    let second = Vault::new(fixture.paths.clone());
+    assert!(matches!(
+        second.unlock_with_password(&password()),
+        Err(VaultError::Refused)
+    ));
+    assert_eq!(second.state()?, VaultState::Locked);
+    assert!(matches!(second.read(), Err(VaultError::Locked)));
+
+    // A damaged vault still unlocks through its previous copy, to restore it.
+    std::fs::write(fixture.paths.key_file(), &real)?;
+    let mut damaged = std::fs::read(fixture.paths.file())?;
+    damaged[40] ^= 1;
+    std::fs::write(fixture.paths.file(), &damaged)?;
+    second.unlock_with_password(&password())?;
+    assert!(matches!(second.read(), Err(VaultError::Refused)));
+    second.restore_previous()?;
+    assert_eq!(second.state()?, VaultState::Unlocked);
+    second.read()?;
+
+    // With nothing left that the key opens, it stays locked.
+    std::fs::write(fixture.paths.file(), &damaged)?;
+    std::fs::remove_file(fixture.paths.previous())?;
+    let third = Vault::new(fixture.paths.clone());
+    assert!(matches!(
+        third.unlock_with_password(&password()),
+        Err(VaultError::Refused)
+    ));
+    Ok(())
+}
+
+// test-category: security
+#[test]
+fn changing_the_password_sweeps_leftover_key_files() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    let folder = fixture.paths.key_file().parent().unwrap().to_path_buf();
+    let leftover = folder.join(".vault-key.age.1.1.1.tmp");
+    let unrelated = folder.join(".vault.age.1.1.1.tmp");
+    std::fs::write(&leftover, b"an old wrap")?;
+    std::fs::write(&unrelated, b"not a key")?;
+    fixture
+        .vault
+        .set_password(&secret("a different long password"))?;
+    assert!(!leftover.exists());
+    assert!(unrelated.exists());
+    Ok(())
+}
+
+// test-category: pure-logic
+#[test]
+fn a_new_password_needs_length_and_variety() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    for weak in [
+        "aaaaaaaaaaaa",
+        "abababababab",
+        "abcdeabcdeab",
+        "            ",
+    ] {
+        assert!(
+            matches!(
+                fixture.vault.set_password(&secret(weak)),
+                Err(VaultError::WeakPassword)
+            ),
+            "{weak}"
+        );
+    }
+    fixture.vault.set_password(&secret("abcdefabcdef"))?;
+    Ok(())
+}
+
 // test-category: format-pin
 #[test]
 fn age_refuses_a_password_recipient_next_to_x25519() -> Outcome {
@@ -234,9 +314,9 @@ fn keychain_steps(run: &Step<'_>, home: &Path, data: &Path, key: &SecretKey) -> 
     assert!(isolated_system_secret_present_for_test(home, key)?);
     run("keychain-reopen")?;
     run("keychain-last-path")?;
-    // No key file was ever left beside the ciphertext in keychain mode.
-    let paths = VaultPaths::in_data_root(data);
-    assert!(!paths.key_file().exists());
+    run("keychain-race")?;
+    run("keychain-stale")?;
+    // The keychain's key never reached a file beside the ciphertext.
     for (path, bytes) in files_under(data)? {
         assert!(!contains(&bytes, b"AGE-SECRET-KEY"), "{}", path.display());
     }

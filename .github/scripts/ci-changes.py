@@ -59,6 +59,10 @@ WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions
            '.github/actions/release-python/**', '.github/actions/rust-agent-setup/**', '.github/scripts/**windows**',
            'windows**', '**/windows**', '**/windows**/**',
            'packages/butler-agent/rust/crates/butler-platform/**',
+           'packages/butler-agent/rust/crates/butler-vault/**',
+           'packages/butler-agent/rust/crates/butler-e2e/src/bin/e2e-vault.rs',
+           'packages/butler-agent/rust/crates/butler-e2e/tests/vault.rs',
+           'packages/butler-agent/rust/crates/butler-e2e/tests/vault/**',
            'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_**') + WINDOWS_BROWSER_INPUTS
 
 # Lint-only inputs have no product consumer. Matching consumer rules below also

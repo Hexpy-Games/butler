@@ -1,5 +1,13 @@
 //! Password-protected export and import.
-use super::{Fixture, Outcome, PASSWORD, contains, item, open_with_password, password, secret};
+use super::{
+    Fixture, Outcome, PASSWORD, contains, item, open_with_password, password, secret,
+    without_hanging,
+};
+use age::secrecy::SecretString;
+use serde_json::json;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use butler_vault::vault::VaultError;
 use serde_json::Value;
 
@@ -135,5 +143,120 @@ fn a_file_demanding_excessive_work_is_refused_before_doing_it() -> Outcome {
         fixture.vault.import(&export, &password()),
         Err(VaultError::Refused)
     ));
+    Ok(())
+}
+
+/// An export written directly, at a low work factor to keep the scenario fast.
+fn write_export(payload: &Value, path: &Path) -> Outcome {
+    let mut recipient = age::scrypt::Recipient::new(SecretString::from(PASSWORD.to_owned()));
+    recipient.set_work_factor(10);
+    let sealed = age::encrypt(&recipient, serde_json::to_vec(payload)?.as_slice())?;
+    std::fs::write(path, sealed)?;
+    Ok(())
+}
+
+fn now_ms() -> u64 {
+    u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    )
+    .unwrap()
+}
+
+// test-category: security
+#[test]
+fn an_import_with_times_over_a_day_ahead_is_refused() -> Outcome {
+    butler_e2e::gate!();
+    const DAY: u64 = 86_400_000;
+    let fixture = Fixture::new()?;
+    fixture.vault.put(item("site", "local"))?;
+    let before = fixture.vault.read()?;
+    let file = fixture.folder.path().join("export.age");
+    let ahead = now_ms() + 2 * DAY;
+    let edit = |time: u64| json!({"id": "site", "kind": "card", "updated_at": time, "device": "z", "value": "export"});
+    let export = |items: Value, tombstones: Value| {
+        json!({"format": 1, "vault_id": "x", "seq": u64::MAX, "recipients": [],
+               "items": items, "tombstones": tombstones})
+    };
+    for bad in [
+        export(json!([edit(ahead)]), json!([])),
+        export(json!([edit(u64::MAX)]), json!([])),
+        export(json!([]), json!([{"id": "site", "deleted_at": ahead}])),
+    ] {
+        write_export(&bad, &file)?;
+        assert!(matches!(
+            fixture.vault.import(&file, &password()),
+            Err(VaultError::TimeAhead)
+        ));
+        assert_eq!(fixture.vault.read()?, before);
+    }
+    // A clock a little ahead is ordinary.
+    write_export(&export(json!([edit(now_ms() + DAY / 2)]), json!([])), &file)?;
+    assert!(fixture.vault.import(&file, &password())?);
+    assert_eq!(fixture.vault.get("site")?.unwrap().expose(), "export");
+    Ok(())
+}
+
+#[test]
+fn repeating_an_import_with_expired_tombstones_changes_nothing() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    fixture.vault.put(item("site", "1"))?;
+    let file = fixture.folder.path().join("export.age");
+    write_export(
+        &json!({"format": 1, "vault_id": "x", "seq": 1, "recipients": [], "items": [],
+                "tombstones": [{"id": "old", "deleted_at": 1000}]}),
+        &file,
+    )?;
+    let seq = fixture.vault.read()?.seq;
+    assert!(!fixture.vault.import(&file, &password())?);
+    assert!(!fixture.vault.import(&file, &password())?);
+    assert_eq!(fixture.vault.read()?.seq, seq);
+    Ok(())
+}
+
+// test-category: security
+#[test]
+fn an_import_reads_only_ordinary_files() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    assert!(matches!(
+        fixture.vault.import(fixture.folder.path(), &password()),
+        Err(VaultError::Refused)
+    ));
+    // Where the host has FIFOs: reading one would wait for a writer forever.
+    let fifo = fixture.folder.path().join("pipe.age");
+    let made = std::process::Command::new("mkfifo").arg(&fifo).status();
+    if made.is_ok_and(|status| status.success()) {
+        let answer = without_hanging(move || fixture.vault.import(&fifo, &password()));
+        assert!(matches!(answer, Err(VaultError::Refused)), "{answer:?}");
+    }
+    Ok(())
+}
+
+// test-category: security
+#[test]
+fn an_export_into_the_vault_folder_is_refused() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    fixture.vault.put(item("site", "1"))?;
+    let folder = fixture.paths.file().parent().unwrap().to_path_buf();
+    let before = std::fs::read(fixture.paths.file())?;
+    for destination in [
+        fixture.paths.file().to_path_buf(),
+        fixture.paths.previous().to_path_buf(),
+        fixture.paths.key_file().to_path_buf(),
+        folder.join("export.age"),
+    ] {
+        assert!(matches!(
+            fixture.vault.export(&destination, &password()),
+            Err(VaultError::ExportInsideVault)
+        ));
+    }
+    assert_eq!(std::fs::read(fixture.paths.file())?, before);
+    assert!(!folder.join("export.age").exists());
+    fixture.vault.read()?;
     Ok(())
 }

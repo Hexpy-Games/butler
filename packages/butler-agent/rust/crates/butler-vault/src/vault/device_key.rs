@@ -65,7 +65,10 @@ impl DeviceKey {
     /// This identity as a file only `password` opens: what `age -p` makes from
     /// an identity file, so the standard CLI can read it too.
     pub(super) fn wrap(&self, password: &SecretText) -> Result<Vec<u8>, VaultError> {
-        let mut line = Zeroizing::new(self.text().expose().to_owned());
+        let text = self.text();
+        // Sized up front: growing would leave an unwiped copy behind.
+        let mut line = Zeroizing::new(String::with_capacity(text.expose().len() + 1));
+        line.push_str(text.expose());
         line.push('\n');
         cipher::seal_with_password(password, line.as_bytes())
     }

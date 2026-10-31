@@ -24,6 +24,8 @@ fn main() {
         "keychain-create" => keychain_create(path),
         "keychain-reopen" => keychain_reopen(path),
         "keychain-last-path" => keychain_last_path(path),
+        "keychain-race" => keychain_race(path),
+        "keychain-stale" => keychain_stale(path),
         other => panic!("unknown step {other}"),
     }
 }
@@ -62,6 +64,11 @@ fn vault_in(data: &Path) -> Vault {
 }
 
 fn keychain_create(data: &Path) {
+    // A folder that does not exist yet has no stable slot name.
+    assert!(matches!(
+        KeychainSlot::new(SecretStore::system().unwrap(), &data.join("not-yet")),
+        Err(VaultError::Io(_))
+    ));
     let slot = slot(data);
     let vault = vault_in(data);
     assert_eq!(vault.state().unwrap(), VaultState::Absent);
@@ -122,5 +129,73 @@ fn keychain_last_path(data: &Path) {
     assert!(!vault.has_password().unwrap());
     let reopened = vault_in(data);
     reopened.unlock_with_keychain(&slot).unwrap();
+    assert_eq!(reopened.get("site").unwrap().unwrap().expose(), CANARY);
+}
+
+/// Removing each unlock path at once from two handles must leave one standing.
+fn keychain_race(data: &Path) {
+    let password = SecretText::new(PASSWORD.to_owned());
+    for round in 0..3 {
+        let vault = vault_in(data);
+        match vault.unlock_with_keychain(&slot(data)) {
+            Ok(()) => vault.set_password(&password).unwrap(),
+            Err(VaultError::NoKey) => {
+                vault.unlock_with_password(&password).unwrap();
+                vault.add_to_keychain(&slot(data)).unwrap();
+            }
+            Err(error) => panic!("round {round}: {error}"),
+        }
+        let other = vault_in(data);
+        other.unlock_with_password(&password).unwrap();
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                let _ = vault.remove_from_keychain(&slot(data), &password);
+            });
+            scope.spawn(|| {
+                // Lands inside the first call's password check.
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                let _ = other.remove_password(&slot(data));
+            });
+        });
+        let by_keychain = vault_in(data).unlock_with_keychain(&slot(data)).is_ok();
+        let by_password = vault_in(data).unlock_with_password(&password).is_ok();
+        assert!(
+            by_keychain || by_password,
+            "round {round} left no unlock path"
+        );
+    }
+    let vault = vault_in(data);
+    vault
+        .unlock_with_keychain(&slot(data))
+        .or_else(|_| vault.unlock_with_password(&password))
+        .unwrap();
+    vault.add_to_keychain(&slot(data)).unwrap();
+    vault.remove_password(&slot(data)).unwrap();
+}
+
+/// A keychain item left from an earlier vault must neither unlock this one nor
+/// count as a second way in.
+fn keychain_stale(data: &Path) {
+    let password = SecretText::new(PASSWORD.to_owned());
+    let paths = VaultPaths::in_data_root(data);
+    std::fs::remove_file(paths.file()).unwrap();
+    std::fs::remove_file(paths.previous()).unwrap();
+    let vault = Vault::new(paths.clone());
+    vault.create_with_password(&password).unwrap();
+    vault.put(item("site")).unwrap();
+
+    let stale = Vault::new(paths.clone());
+    assert!(matches!(
+        stale.unlock_with_keychain(&slot(data)),
+        Err(VaultError::Refused)
+    ));
+    assert_eq!(stale.state().unwrap(), VaultState::Locked);
+    assert!(matches!(
+        vault.remove_password(&slot(data)),
+        Err(VaultError::LastUnlockPath)
+    ));
+    assert!(vault.has_password().unwrap());
+    let reopened = Vault::new(paths);
+    reopened.unlock_with_password(&password).unwrap();
     assert_eq!(reopened.get("site").unwrap().unwrap().expose(), CANARY);
 }

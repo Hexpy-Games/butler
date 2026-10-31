@@ -138,8 +138,8 @@ impl Vault {
     }
 
     /// This device's public key, for another device to add as a recipient.
-    /// Whoever holds it can write a valid vault file, so only hand it to a
-    /// device of this vault's owner.
+    /// Whoever holds it can write a valid vault file, so it must not be shown
+    /// in the product until sync has signing.
     pub fn device_recipient(&self) -> Result<String, VaultError> {
         self.with_key(|key| Ok(key.recipient().to_owned()))
     }
@@ -202,6 +202,9 @@ impl Vault {
             payload.prune_tombstones(now);
             payload.seq = payload.seq.saturating_add(1);
             let sealed = seal(&payload)?;
+            // The recipients come from the file, so a forged list could lock
+            // this device out. Nothing is written unless this key can read it.
+            decode(key, &sealed)?;
             write_private(&self.paths.previous, &current)?;
             write_private(&self.paths.file, &sealed)?;
             Ok(true)
@@ -233,6 +236,29 @@ impl Vault {
             }
             result => result,
         }
+    }
+
+    /// Refuses a key that opens neither `vault.age` nor its previous copy, when
+    /// either exists. Only the encryption is checked: a file in a newer format
+    /// still belongs to this key.
+    pub(super) fn require_key_opens(&self, key: &DeviceKey) -> Result<(), VaultError> {
+        let mut found = false;
+        for path in [&self.paths.file, &self.paths.previous] {
+            match read_file(path, VaultError::Absent) {
+                Ok(sealed) => {
+                    if cipher::open_with(key.identity(), &sealed).is_ok() {
+                        return Ok(());
+                    }
+                    found = true;
+                }
+                Err(VaultError::Absent) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        if found {
+            return Err(VaultError::Refused);
+        }
+        Ok(())
     }
 
     pub(super) fn exists(&self) -> Result<bool, VaultError> {

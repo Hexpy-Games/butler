@@ -1,10 +1,10 @@
 //! The vault file: format, tampering, saving, crashes and idle behaviour.
-use super::{Fixture, Outcome, PASSWORD, contains, files_under, item, secret};
+use super::{Fixture, Outcome, PASSWORD, contains, files_under, item, password, secret};
 use butler_e2e::e2e::binary::fixture_binary;
 use butler_platform::secure_fs;
-use butler_vault::vault::{ItemKind, VaultError};
+use butler_vault::vault::{ItemKind, Vault, VaultError};
 use serde_json::{Value, json};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::Instant;
@@ -166,6 +166,86 @@ fn unknown_format_refuses_and_a_public_key_can_forge() -> Outcome {
     Ok(())
 }
 
+// test-category: security
+#[test]
+fn a_save_that_would_lock_this_device_out_writes_nothing() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    fixture.vault.put(item("site", "1"))?;
+    let device: age::x25519::Recipient = fixture.vault.device_recipient()?.parse()?;
+    let attacker = age::x25519::Identity::generate().to_public().to_string();
+    let forged = json!({
+        "format": 1, "vault_id": "v", "seq": 9, "recipients": [attacker],
+        "items": [], "tombstones": [],
+    });
+    let sealed = age::encrypt(&device, serde_json::to_vec(&forged)?.as_slice())?;
+    std::fs::write(fixture.paths.file(), &sealed)?;
+    let previous = std::fs::read(fixture.paths.previous())?;
+
+    assert!(matches!(
+        fixture.vault.put(item("new", "x")),
+        Err(VaultError::Refused)
+    ));
+    assert_eq!(std::fs::read(fixture.paths.file())?, sealed);
+    assert_eq!(std::fs::read(fixture.paths.previous())?, previous);
+    assert_eq!(fixture.vault.read()?.seq, 9);
+    Ok(())
+}
+
+// test-category: security
+#[test]
+fn a_huge_header_is_refused_without_parsing_it() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    let mut hostile = b"age-encryption.org/v1\n".to_vec();
+    while hostile.len() < 1024 * 1024 {
+        hostile.extend_from_slice(b"-> a\n\n");
+    }
+    let import = fixture.folder.path().join("hostile.age");
+    std::fs::write(&import, &hostile)?;
+    std::fs::write(fixture.paths.file(), &hostile)?;
+    std::fs::write(fixture.paths.key_file(), &hostile)?;
+    let answers = super::without_hanging(move || {
+        let second = Vault::new(fixture.paths.clone());
+        [
+            fixture.vault.read().map(|_| ()),
+            fixture.vault.put(item("new", "x")),
+            fixture.vault.import(&import, &password()).map(|_| ()),
+            second.unlock_with_password(&password()),
+        ]
+    });
+    for answer in answers {
+        assert!(matches!(answer, Err(VaultError::Refused)), "{answer:?}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_vault_with_many_recipients_still_opens() -> Outcome {
+    butler_e2e::gate!();
+    let fixture = Fixture::new()?;
+    let device = fixture.vault.device_recipient()?;
+    let mut recipients = vec![device.parse::<age::x25519::Recipient>()?];
+    recipients.extend((0..99).map(|_| age::x25519::Identity::generate().to_public()));
+    let names: Vec<String> = recipients.iter().map(ToString::to_string).collect();
+    let payload = json!({
+        "format": 1, "vault_id": "v", "seq": 9, "recipients": names,
+        "items": [], "tombstones": [],
+    });
+    let encryptor = age::Encryptor::with_recipients(
+        recipients
+            .iter()
+            .map(|recipient| recipient as &dyn age::Recipient),
+    )?;
+    let mut sealed = Vec::new();
+    let mut writer = encryptor.wrap_output(&mut sealed)?;
+    writer.write_all(&serde_json::to_vec(&payload)?)?;
+    writer.finish()?;
+    std::fs::write(fixture.paths.file(), &sealed)?;
+    assert_eq!(fixture.vault.read()?.recipients.len(), 100);
+    Ok(())
+}
+
 #[test]
 fn a_save_keeps_the_previous_file_and_restoring_is_explicit() -> Outcome {
     butler_e2e::gate!();
@@ -248,11 +328,16 @@ fn no_plaintext_reaches_disk() -> Outcome {
                 path.display()
             );
         }
-        let metadata = std::fs::metadata(&path)?;
-        assert_ne!(secure_fs::is_owner_only(&metadata), Some(false));
+        assert_eq!(
+            secure_fs::is_private(&path),
+            Some(true),
+            "{}",
+            path.display()
+        );
     }
     let printed = format!("{:?}", fixture.vault.read()?);
     assert!(!printed.contains("canary-secret-value"));
+    assert!(!printed.contains(public_key.as_str()));
     Ok(())
 }
 

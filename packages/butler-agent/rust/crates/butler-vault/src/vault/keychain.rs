@@ -20,12 +20,14 @@ pub struct KeychainSlot {
 
 impl KeychainSlot {
     /// Refuses a store that is not the operating system's: the key must never
-    /// sit unwrapped in a file beside the ciphertext.
+    /// sit unwrapped in a file beside the ciphertext. The data folder must
+    /// exist: the item's name comes from its real path, so that it stays the
+    /// same however the folder is reached.
     pub fn new(store: SecretStore, data_root: &Path) -> Result<Self, VaultError> {
         if !store.backend().is_system() {
             return Err(VaultError::NotSystemStore);
         }
-        let key = SecretKey::new(&service(data_root), ACCOUNT).map_err(VaultError::Store)?;
+        let key = SecretKey::new(&service(data_root)?, ACCOUNT).map_err(VaultError::Store)?;
         Ok(Self { store, key })
     }
 
@@ -59,18 +61,16 @@ impl KeychainSlot {
     }
 }
 
-fn service(root: &Path) -> String {
-    let resolve = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let default = user_dirs::home_dir().map(|home| home.join(".butler"));
-    if default
-        .as_deref()
-        .is_some_and(|home| resolve(home) == resolve(root))
-    {
-        return KEYCHAIN_SERVICE.to_owned();
+fn service(root: &Path) -> Result<String, VaultError> {
+    let root = std::fs::canonicalize(root).map_err(VaultError::Io)?;
+    let default =
+        user_dirs::home_dir().and_then(|home| std::fs::canonicalize(home.join(".butler")).ok());
+    if default.as_ref() == Some(&root) {
+        return Ok(KEYCHAIN_SERVICE.to_owned());
     }
-    let digest = format!(
-        "{:x}",
-        Sha256::digest(resolve(root).to_string_lossy().as_bytes())
-    );
-    format!("{KEYCHAIN_SERVICE}.{}", digest.get(..12).unwrap_or(&digest))
+    let digest = format!("{:x}", Sha256::digest(root.to_string_lossy().as_bytes()));
+    Ok(format!(
+        "{KEYCHAIN_SERVICE}.{}",
+        digest.get(..12).unwrap_or(&digest)
+    ))
 }

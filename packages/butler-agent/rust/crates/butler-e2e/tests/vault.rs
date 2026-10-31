@@ -126,6 +126,18 @@ fn files_under(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, std::io::Error> {
     Ok(found)
 }
 
+/// Runs `work` on its own thread and returns its answer, failing if it hangs.
+/// An abandoned thread ends with the test process.
+fn without_hanging<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = sender.send(work());
+    });
+    receiver
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the call hung")
+}
+
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|part| part == needle)
 }

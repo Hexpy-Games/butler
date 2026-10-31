@@ -12,6 +12,16 @@ use zeroize::Zeroizing;
 /// attacked offline, slowed only by scrypt.
 pub const MIN_PASSWORD_CHARS: usize = 12;
 
+/// How many different characters a new password needs, so that length alone
+/// cannot be met by repeating a few.
+pub const MIN_PASSWORD_DISTINCT_CHARS: usize = 6;
+
+/// How far into a file age's header must end. age's header parser is quadratic
+/// in its length (64 KiB takes seconds in a release build) and runs while the
+/// change lock is held, so a small file could otherwise hang the process. This
+/// allows well over a hundred recipients.
+const MAX_HEADER_BYTES: usize = 16 * 1024;
+
 /// scrypt `N = 2^18` (256 MiB), the age reference CLI's work factor. Fixed
 /// rather than timed on this machine, so a file written on a fast computer
 /// still opens quickly on a slow one.
@@ -22,7 +32,17 @@ const PASSWORD_WORK_FACTOR: u8 = 18;
 const MAX_WORK_FACTOR: u8 = 20;
 
 pub(super) fn check_new_password(password: &SecretText) -> Result<(), VaultError> {
-    if password.expose().chars().count() < MIN_PASSWORD_CHARS {
+    // A fixed array: this holds the password's characters and is never reallocated.
+    let mut distinct = Zeroizing::new(['\0'; MIN_PASSWORD_DISTINCT_CHARS]);
+    let (mut count, mut found) = (0, 0);
+    for character in password.expose().chars() {
+        count += 1;
+        if found < MIN_PASSWORD_DISTINCT_CHARS && !distinct[..found].contains(&character) {
+            distinct[found] = character;
+            found += 1;
+        }
+    }
+    if count < MIN_PASSWORD_CHARS || found < MIN_PASSWORD_DISTINCT_CHARS {
         return Err(VaultError::WeakPassword);
     }
     Ok(())
@@ -65,11 +85,10 @@ pub(super) fn open_with(
     identity: &x25519::Identity,
     sealed: &[u8],
 ) -> Result<Zeroizing<Vec<u8>>, VaultError> {
-    let decryptor = Decryptor::new_buffered(sealed).map_err(|_| VaultError::Refused)?;
-    let reader = decryptor
+    let reader = decryptor(sealed)?
         .decrypt(iter::once(identity as &dyn Identity))
         .map_err(|_| VaultError::Refused)?;
-    read_all(reader)
+    read_all(reader, sealed.len())
 }
 
 /// Opens a password-protected file. A file for recipients, or one with changed
@@ -80,7 +99,7 @@ pub(super) fn open_with_password(
     password: &SecretText,
     sealed: &[u8],
 ) -> Result<Zeroizing<Vec<u8>>, VaultError> {
-    let decryptor = Decryptor::new_buffered(sealed).map_err(|_| VaultError::Refused)?;
+    let decryptor = decryptor(sealed)?;
     if !decryptor.is_scrypt() {
         return Err(VaultError::Refused);
     }
@@ -92,11 +111,22 @@ pub(super) fn open_with_password(
             DecryptError::DecryptionFailed => VaultError::WrongPassword,
             _ => VaultError::Refused,
         })?;
-    read_all(reader)
+    read_all(reader, sealed.len())
 }
 
-fn read_all(mut reader: impl Read) -> Result<Zeroizing<Vec<u8>>, VaultError> {
-    let mut plaintext = Zeroizing::new(Vec::new());
+/// Parses a file's header, refusing first one that does not end early.
+fn decryptor(sealed: &[u8]) -> Result<Decryptor<&[u8]>, VaultError> {
+    let start = sealed.get(..MAX_HEADER_BYTES).unwrap_or(sealed);
+    if !start.windows(5).any(|part| part == b"\n--- ") {
+        return Err(VaultError::Refused);
+    }
+    Decryptor::new_buffered(sealed).map_err(|_| VaultError::Refused)
+}
+
+/// Plaintext is shorter than its file, so `capacity` never needs to grow, which
+/// would leave an unwiped copy behind.
+fn read_all(mut reader: impl Read, capacity: usize) -> Result<Zeroizing<Vec<u8>>, VaultError> {
+    let mut plaintext = Zeroizing::new(Vec::with_capacity(capacity));
     reader
         .read_to_end(&mut plaintext)
         .map_err(|_| VaultError::Refused)?;

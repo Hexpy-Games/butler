@@ -5,6 +5,7 @@ use butler_platform::secrets::SecretText;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
 use std::fmt;
+use std::io::{self, Write};
 use zeroize::Zeroizing;
 
 /// The payload format this build reads and writes. A new field needs a new
@@ -85,7 +86,7 @@ pub struct Tombstone {
     pub deleted_at: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Payload {
     pub format: u32,
@@ -100,6 +101,20 @@ pub struct Payload {
     pub items: Vec<Item>,
     /// Sorted by id.
     pub tombstones: Vec<Tombstone>,
+}
+
+/// Leaves out the recipients: whoever holds one can write a valid vault file.
+impl fmt::Debug for Payload {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Payload")
+            .field("format", &self.format)
+            .field("vault_id", &self.vault_id)
+            .field("seq", &self.seq)
+            .field("items", &self.items)
+            .field("tombstones", &self.tombstones)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Payload {
@@ -175,9 +190,26 @@ impl Payload {
         Ok(payload)
     }
 
+    /// Measures first, so the buffer never grows, which would leave an unwiped
+    /// copy behind.
     pub(super) fn to_json(&self) -> Result<Zeroizing<Vec<u8>>, VaultError> {
-        serde_json::to_vec(self)
-            .map(Zeroizing::new)
-            .map_err(|_| VaultError::Format)
+        let mut size = ByteCount(0);
+        serde_json::to_writer(&mut size, self).map_err(|_| VaultError::Format)?;
+        let mut json = Zeroizing::new(Vec::with_capacity(size.0));
+        serde_json::to_writer(&mut *json, self).map_err(|_| VaultError::Format)?;
+        Ok(json)
+    }
+}
+
+struct ByteCount(usize);
+
+impl Write for ByteCount {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0 += bytes.len();
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }

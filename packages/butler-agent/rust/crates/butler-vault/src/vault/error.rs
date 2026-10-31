@@ -27,8 +27,9 @@ pub enum VaultError {
     NoKey,
     #[error("the password is wrong")]
     WrongPassword,
-    /// A new password is shorter than [`super::MIN_PASSWORD_CHARS`].
-    #[error("the password is too short")]
+    /// A new password is shorter than [`super::MIN_PASSWORD_CHARS`], or has fewer
+    /// than [`super::MIN_PASSWORD_DISTINCT_CHARS`] different characters.
+    #[error("the password is too weak")]
     WeakPassword,
     /// The store is not an OS credential store. The key would otherwise sit
     /// unwrapped in a file beside the ciphertext.
@@ -45,6 +46,13 @@ pub enum VaultError {
     /// Restoring is only for a vault that refuses to open.
     #[error("the vault file opens normally")]
     NotDamaged,
+    /// An export holds times too far ahead of this clock. Merging would let
+    /// them beat every later local change.
+    #[error("the file has times too far in the future")]
+    TimeAhead,
+    /// An export would sit among the vault's own files, or replace one.
+    #[error("an export cannot go in the vault's folder")]
+    ExportInsideVault,
     #[error("the credential store failed")]
     Store(#[source] SecretError),
     #[error("the vault file could not be read or written")]
