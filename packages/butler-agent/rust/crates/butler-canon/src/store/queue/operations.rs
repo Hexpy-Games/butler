@@ -5,6 +5,14 @@ pub fn request(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value
     if op == "remove" {
         return remove_request(tx, ctx, session, input);
     }
+    if op == "set_order" {
+        return edit(
+            tx,
+            ctx,
+            session,
+            &json!({"op":"set_order","steps":input["steps"],"expected_graph_revision":input["expected_revision"]}),
+        );
+    }
     let epics = if op == "plan_run" {
         let plan = text(input, "plan_id")?;
         read_plan(tx, plan)?;

@@ -106,10 +106,17 @@ async fn validate(
         )
         .await?;
     }
+    let ordered = args["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+        .flatten();
     for id in args["epic_ids"]
         .as_array()
         .into_iter()
         .flatten()
+        .chain(ordered)
         .filter_map(Value::as_str)
     {
         canon::execute(

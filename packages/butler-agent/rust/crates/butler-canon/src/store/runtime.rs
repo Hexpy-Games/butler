@@ -5,7 +5,7 @@ pub mod queries;
 use super::*;
 pub use feed::{catch_up, prepare};
 pub use progress::{enrich, progress, project_works};
-pub(crate) use progress::{queue_outcome, step_unfinished};
+pub(crate) use progress::{closing_summary, queue_outcome, step_unfinished};
 pub fn epic_running(db: &Connection, epic: &str) -> Result<bool> {
     for work in rows(db, Query::Works.sql(), [epic])? {
         if progress::running(db, &work)? {
@@ -93,6 +93,44 @@ pub fn context(db: &Connection, session: &str) -> Result<Vec<Value>> {
         crate::work_queries::Query::ConversationWork.sql(),
         [session],
     )?;
+    epic_context(db, epics)
+}
+
+/// The 과제 a delegated Steward serves, reached through its parent Work: the link, or the
+/// parent's plan when the feed has not linked it yet. No tool, no bind, no project id.
+pub fn steward_context(db: &Connection, session: &str) -> Result<Vec<Value>> {
+    let Some(parent) = rows(db, Query::StewardParentWork.sql(), [session])?
+        .into_iter()
+        .next()
+        .and_then(|row| row["work_id"].as_str().map(str::to_owned))
+    else {
+        return Ok(Vec::new());
+    };
+    let mut epics: Vec<String> = rows(db, Query::Link.sql(), [&parent])?
+        .iter()
+        .filter_map(|row| row["epic_id"].as_str().map(str::to_owned))
+        .collect();
+    if epics.is_empty() {
+        for turn in rows(db, Query::HistoryTurns.sql(), [&parent])? {
+            for call in rows(db, Query::HistoryCalls.sql(), [text(&turn, "turn_id")?])? {
+                if call["tool_name"] == "replace_work_plan" {
+                    let args: Value = serde_json::from_str(text(&call, "arguments_json")?)?;
+                    let refs: Vec<String> = serde_json::from_value(
+                        args.get("governing_refs").cloned().unwrap_or(json!([])),
+                    )?;
+                    epics = epic_refs(&refs).into_iter().map(str::to_owned).collect();
+                }
+            }
+        }
+    }
+    let works = epics
+        .iter()
+        .map(|id| read_work(db, id))
+        .collect::<Result<Vec<_>>>()?;
+    epic_context(db, works)
+}
+
+fn epic_context(db: &Connection, epics: Vec<Value>) -> Result<Vec<Value>> {
     epics.into_iter().map(|epic| {
         let id = text(&epic,"id")?;
         let nodes = rows(db, crate::work_queries::Query::WorkSpecNodes.sql(), [id])?;

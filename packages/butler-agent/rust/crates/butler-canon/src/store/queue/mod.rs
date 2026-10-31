@@ -1,6 +1,7 @@
 //! Session-local epic chains. Caller owns the canon write transaction.
 mod edits;
 pub mod engine;
+mod note;
 mod operations;
 pub mod sql;
 mod view;
@@ -11,6 +12,7 @@ pub use edits::edit;
 pub use operations::{bound_sessions, decide_hold, owner, request, session_deleted, take_here};
 use rusqlite::params;
 use std::collections::{BTreeMap, BTreeSet};
+pub use note::note;
 pub use view::view;
 
 fn revision(db: &Connection, session: &str) -> Result<i64> {

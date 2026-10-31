@@ -31,7 +31,7 @@ pub mod runtime;
 pub use api::{mark_outbox_published, read as read_api, write as write_api};
 pub use runtime::{
     context as session_epic_context, link as link_work, precheck as precheck_epic_link,
-    runtime_context,
+    runtime_context, steward_context,
 };
 mod entities;
 mod intents;

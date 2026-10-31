@@ -93,6 +93,30 @@ impl Chain {
         }
         Ok(next)
     }
+    /// The whole new order of the unfinished steps, after the steps already done.
+    /// It must name every unfinished Task exactly once; running Tasks stay pinned.
+    pub fn with_order(
+        &self,
+        unfinished: Vec<Vec<EpicId>>,
+        done: &BTreeSet<EpicId>,
+        running: &BTreeSet<EpicId>,
+    ) -> Result<Self, ChainError> {
+        let finished = self
+            .steps
+            .iter()
+            .take_while(|step| step.tasks.iter().all(|task| done.contains(task)));
+        let mut steps: Vec<Step> = finished.cloned().collect();
+        let named: BTreeSet<&EpicId> = unfinished.iter().flatten().collect();
+        let open: BTreeSet<&EpicId> = self.steps[steps.len()..]
+            .iter()
+            .flat_map(|step| &step.tasks)
+            .collect();
+        if named != open {
+            return Err(ChainError::Membership);
+        }
+        steps.extend(unfinished.into_iter().map(|tasks| Step { index: 0, tasks }));
+        self.finish(Self { steps }, running)
+    }
     /// Index is interpreted in the chain after removing the selected Task.
     pub fn move_to_new_step(
         &self,

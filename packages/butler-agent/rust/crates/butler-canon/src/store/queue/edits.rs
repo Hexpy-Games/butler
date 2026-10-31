@@ -13,7 +13,13 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
     }
     let items = items(tx, session)?;
     let mut chains = chains(&items)?;
-    let ids = selection(input, &items)?;
+    let order = (input["op"] == "set_order")
+        .then(|| new_order(input))
+        .transpose()?;
+    let ids = match &order {
+        Some(order) => order.first().cloned().unwrap_or_default(),
+        None => selection(input, &items)?,
+    };
     let id = ids
         .first()
         .ok_or(Error::Invalid("epic_ids must be nonempty"))?
@@ -36,6 +42,15 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
         }
         "join_stack" => chain.move_many(&ids, Placement::Stack(target()?), &running)?,
         "split_stack" => chain.split_stack(index(item, "step_index")?, &running)?,
+        "set_order" => {
+            let order = order.ok_or(Error::Invalid("steps"))?;
+            let done = items
+                .iter()
+                .filter(|i| i["chain_id"] == source && i["state"] == "done")
+                .map(|i| text(i, "epic_id").map(|s| EpicId(s.to_owned())))
+                .collect::<Result<BTreeSet<_>>>()?;
+            chain.with_order(order, &done, &running)?
+        }
         "delete" => {
             let next = chain.delete(&id, &running)?;
             tx.execute(sql::REMOVE, params![session, id.as_str()])?;
@@ -75,6 +90,29 @@ pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -
     engine::after_edit(tx, ctx, session)?;
     changed(tx, ctx, session)?;
     view(tx, session, &runtime::ProjectViews::new())
+}
+
+/// The unfinished steps of one chain, in their new order.
+fn new_order(input: &Value) -> Result<Vec<Vec<EpicId>>> {
+    let steps = input["steps"]
+        .as_array()
+        .filter(|steps| !steps.is_empty())
+        .ok_or(Error::Invalid("steps must be a nonempty array"))?;
+    steps
+        .iter()
+        .map(|step| {
+            step.as_array()
+                .ok_or(Error::Invalid("each step must be an array of epic ids"))?
+                .iter()
+                .map(|id| {
+                    id.as_str()
+                        .filter(|id| !id.is_empty())
+                        .map(|id| EpicId(id.to_owned()))
+                        .ok_or(Error::Invalid("steps must contain epic ids"))
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// Validate the whole selection before changing any chain or persistent row.

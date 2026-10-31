@@ -234,6 +234,34 @@ pub fn project_works(db: &Connection, value: &Value) -> Result<Vec<Value>> {
     Ok(works)
 }
 
+/// What a Work said when it closed, for the steps after it. A delegated parent's
+/// closing is its Steward's result.
+pub(crate) fn closing_summary(db: &Connection, work: &str) -> Result<Option<String>> {
+    let mut summary = None;
+    for turn in rows(db, Query::HistoryTurns.sql(), [work])? {
+        for call in rows(db, Query::HistoryCalls.sql(), [text(&turn, "turn_id")?])? {
+            if call["tool_name"] != "record_work_disposition" {
+                continue;
+            }
+            let result: Value = serde_json::from_str(text(&call, "result_json")?)?;
+            let result = result.get("output").unwrap_or(&result);
+            let args: Value = serde_json::from_str(text(&call, "arguments_json")?)?;
+            if result["ok"] == true && result["work"]["work_id"] == work {
+                let rank = call["rowid"].as_i64();
+                if summary.as_ref().is_none_or(|(at, _)| *at < rank) {
+                    summary = args["summary"].as_str().map(|s| (rank, s.to_owned()));
+                }
+            }
+        }
+    }
+    if summary.is_some() {
+        return Ok(summary.map(|(_, text)| text));
+    }
+    Ok(db
+        .query_row(Query::DelegatedSummary.sql(), [work], |r| r.get(0))
+        .optional()?)
+}
+
 /// A step's Turn ended: it stays unfinished when no Work closed and nothing delegated
 /// can still close one. A closed Work settles through its closeout instead.
 pub(crate) fn step_unfinished(
