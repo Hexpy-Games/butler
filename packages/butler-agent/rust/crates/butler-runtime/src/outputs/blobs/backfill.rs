@@ -233,17 +233,27 @@ fn queue_orphans(
     db: &mut sqlite::Connection,
     stop: &tokio_util::sync::CancellationToken,
 ) -> std::io::Result<()> {
-    let shards = match std::fs::read_dir(store.root.join("blobs")) {
-        Ok(entries) => entries,
+    let mut shards = match std::fs::read_dir(store.root.join("blobs")) {
+        Ok(entries) => entries.collect::<Result<Vec<_>, _>>()?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e),
     };
-    let mut batch = Vec::with_capacity(PAGE);
+    shards.sort_by_key(|entry| entry.file_name());
+    let cursor: String = db
+        .query_row(
+            "SELECT orphan_cursor FROM output_blob_backfill WHERE id=1",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(std::io::Error::other)?;
     for shard in shards {
         if stop.is_cancelled() {
             return Ok(());
         }
-        let shard = shard?;
+        let name = shard.file_name().to_string_lossy().into_owned();
+        if name <= cursor {
+            continue;
+        }
         if !shard.file_type()?.is_dir() {
             butler_core::diagnostic!(
                 "[outputs] skipping non-directory blob shard {}",
@@ -251,19 +261,27 @@ fn queue_orphans(
             );
             continue;
         }
-        for blob in std::fs::read_dir(shard.path())? {
-            batch.push(blob?.path());
+        let mut entries = std::fs::read_dir(shard.path())?.peekable();
+        loop {
+            let batch = entries
+                .by_ref()
+                .take(PAGE)
+                .map(|entry| entry.map(|entry| entry.path()))
+                .collect::<Result<Vec<_>, _>>()?;
+            let done = entries.peek().is_none();
+            queue_batch(store, db, &batch, done.then_some(name.as_str()))?;
+            if stop.is_cancelled() {
+                return Ok(());
+            }
             if batch.len() == PAGE {
-                queue_batch(store, db, &batch)?;
-                batch.clear();
-                if stop.is_cancelled() {
-                    return Ok(());
-                }
                 std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            if done {
+                break;
             }
         }
     }
-    queue_batch(store, db, &batch)
+    Ok(())
 }
 
 fn orphan_sha(store: &OutputStore, path: &Path) -> std::io::Result<Option<String>> {
@@ -305,8 +323,9 @@ fn queue_batch(
     store: &OutputStore,
     db: &mut sqlite::Connection,
     batch: &[std::path::PathBuf],
+    completed_shard: Option<&str>,
 ) -> std::io::Result<()> {
-    if batch.is_empty() {
+    if batch.is_empty() && completed_shard.is_none() {
         return Ok(());
     }
     let _lock = CHANGES
@@ -324,6 +343,13 @@ fn queue_batch(
         tx.execute(
             "UPDATE output_blob_backfill SET queued=queued+?1 WHERE id=1",
             [queued],
+        )
+        .map_err(std::io::Error::other)?;
+    }
+    if let Some(shard) = completed_shard {
+        tx.execute(
+            "UPDATE output_blob_backfill SET orphan_cursor=?1 WHERE id=1",
+            [shard],
         )
         .map_err(std::io::Error::other)?;
     }
