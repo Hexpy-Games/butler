@@ -16,7 +16,6 @@ export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
 
 /** Kinds whose example is the command line, shown as sent. */
 const COMMAND_KINDS: ReadonlySet<string> = new Set(["run_command", "network_command"]);
-export const isCommandKind = (kind: string): boolean => COMMAND_KINDS.has(kind);
 
 /** The approval card's content in the app language. */
 export interface ApprovalRequestView {
@@ -189,7 +188,9 @@ function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
     ...(typeof schedule.browserSignin === "boolean" ? [copy.scheduleSignin(schedule.browserSignin)] : []),
     ...(typeof schedule.browserPayment === "boolean" ? [copy.schedulePayment(schedule.browserPayment)] : []), ...approval.examples].filter(Boolean);
   if (kind === "manage_schedule") return [copy.scheduleUnavailable];
-  return operation ? [...new Set([...operationDetails(operation, copy), ...approval.examples])] : details(approval, kind, card, copy);
+  // An example is a capped copy of the command: when the operation carries the whole command, a prefix of it is a duplicate.
+  const examples = approval.examples.filter(example => !operation?.command || example === operation.command || !operation.command.startsWith(example));
+  return operation ? [...new Set([...operationDetails(operation, copy), ...examples])] : details(approval, kind, card, copy);
 }
 
 /** Kinds whose own sentence names the action better than a tool label. */

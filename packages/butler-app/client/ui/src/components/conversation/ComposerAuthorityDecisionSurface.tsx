@@ -1,7 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { isAbsolutePath } from "@/app/approvalTargets.ts";
-import { isCommandKind, type ApprovalActionKind } from "@/app/approvalRequest.ts";
+import type { ApprovalActionKind } from "@/app/approvalRequest.ts";
 import { visibleText } from "@/app/visibleText.ts";
 import type { ApprovalRisk } from "@/app/types.ts";
 import {
@@ -19,15 +19,19 @@ const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
 
-/** Display only: retain the original path in the DS title and accessible label. */
-function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
+/**
+ * Display only. A detail line is the exact action: never shortened, only made unambiguous. Hidden and
+ * reflowing characters show as escapes, each line is its own left-to-right isolate, and runs of spaces
+ * keep their width. A long path in the title is cut in the middle; its full text stays in the title attribute.
+ */
+function approvalText(text: string, decision: ComposerAuthorityDecision) {
   const shorten = (path: string) => isAbsolutePath(path) && path.length > 64
     ? `${path.slice(0, 30)}…${path.slice(-25)}` : path;
   const isTitle = text === decision.title;
-  const shown = isTitle ? text : visibleText(text);
-  const display = decision.pathDetails?.includes(text) ? shorten(shown)
-    : isTitle ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : shown;
-  return display === text ? text : <span title={text} aria-label={text}>{display}</span>;
+  const escaped = visibleText(isTitle ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : text);
+  // A run of spaces collapses under normal wrapping; a no-break space keeps each one's width (a real one is escaped above).
+  const shown = escaped.replace(/ (?= )|^ | $/gu, "\u00A0");
+  return <bdi dir="ltr" {...(escaped === text ? {} : isTitle ? { title: text, "aria-label": text } : {})}>{shown}</bdi>;
 }
 
 export function ComposerAuthorityDecisionSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision }) {
@@ -35,8 +39,6 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
   const { handoff } = decision;
   if (handoff) return <ComposerBrowserHandoffSurface placement={placement} decision={{ ...decision, handoff }} />;
   const Icon = KIND_ICONS[decision.actionKind];
-  // Commands and schedules stay whole in the scroll area; a clamp would hide part of them while Allow is active.
-  const unclamped = isCommandKind(decision.actionKind) || ["manage_schedule", "generate_image", "edit_image"].includes(decision.actionKind);
   return <ComposerDecisionPanel
     placement={placement}
     media={decision.media}
@@ -44,9 +46,8 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     eyebrow={appCopy.composer.permission}
     title={decision.title}
     details={decision.details}
-    renderText={(text) => approvalPathText(text, decision)}
-    detailsShowMoreLabel={unclamped ? undefined : appCopy.conversation.messageActions.showMore}
-    detailsShowLessLabel={unclamped ? undefined : appCopy.conversation.messageActions.showLess}
+    renderText={(text) => approvalText(text, decision)}
+    // No clamp: a long card scrolls in the details area, so Allow never sits over hidden text.
     onOpen={decision.onOpenSource}
     error={decision.error}
     aside={<>

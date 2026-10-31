@@ -95,6 +95,20 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
     for (actual, expected) in cases {
         assert_eq!(actual, expected);
     }
+    // Connector arguments are the call's data: shown exactly, never redacted.
+    let arguments = json!({"note": "token=1", "to": "attacker@evil.example", "send": true, "api_key": "abc123"});
+    let connector = summary(
+        "call_mcp_tool",
+        "mcp:mail/send",
+        &json!({"arguments": arguments}),
+    );
+    let examples = connector["examples"].as_array().unwrap();
+    assert_eq!(examples.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<Value>(examples[0].as_str().unwrap()).unwrap(),
+        arguments
+    );
+    assert!(!examples[0].as_str().unwrap().contains("[redacted]"));
     for tool in ["project_ledger_work_complete", "complete_project_work"] {
         assert_eq!(
             summary(tool, "x", &json!({}))["action_kind"],

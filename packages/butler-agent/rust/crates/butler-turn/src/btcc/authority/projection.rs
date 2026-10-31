@@ -116,11 +116,8 @@ fn exact_approval(
             && crate::btcc::CapabilityKind::of_call(&record.capability, arguments, false)
                 .persists_beyond_turn()
         {
-            approval
-                .examples
-                .push(butler_core::public_text::sanitize_public_delta(
-                    &input.to_string(),
-                ));
+            // The exact call input, never redacted: the approver must see what will persist.
+            approval.examples.push(input.to_string());
             approval.examples_truncated.push(false);
         }
     }
@@ -160,4 +157,67 @@ pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDec
             })
             .flatten(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::btcc::authority::contracts::{RequestDecision, RequestOutcome};
+
+    fn record(capability: &str, reason: &str, input: &str) -> AuthorityRecord {
+        let text = |value: &str| value.to_owned();
+        AuthorityRecord {
+            request_id: text("id"),
+            request_ref: text("ref"),
+            identity_sha256: text("sha"),
+            owner_session_id: text("owner"),
+            source_session_id: text("source"),
+            source_turn_id: text("turn"),
+            source_call_id: None,
+            source_work_id: text("work"),
+            workspace_path: text("/work/garden"),
+            plan_revision_id: text("plan"),
+            action_key: text("action"),
+            authority_generation: 1,
+            capability: text(capability),
+            normalized_target: text("a.txt"),
+            normalized_input_json: text(input),
+            model_ref: text("model"),
+            reasoning_effort: text("none"),
+            category: text("reviewed_effect"),
+            reason: text(reason),
+            executable: text(capability),
+            command_count: 1,
+            decision: RequestDecision::Pending,
+            allow_scope: text("once"),
+            schedule_client_message_id: text("message"),
+            schedule_input_text: text("allow"),
+            private_alternative_input: None,
+            outcome: RequestOutcome::Pending,
+            outcome_receipt_json: None,
+            close_reason: None,
+            close_scope: None,
+            closed_at: None,
+            created_at: text("now"),
+            updated_at: text("now"),
+        }
+    }
+
+    /// A tainted call that persists shows its exact input, with no redaction of compact JSON.
+    // test-category: security
+    #[test]
+    fn tainted_persistent_call_shows_its_exact_input() {
+        let input = serde_json::json!({"api_key": "abc123", "note": "token=1", "path": "a.txt",
+            "send": true, "to": "attacker@evil.example"});
+        let record = record("write_file", "authority.taintReason", &input.to_string());
+        let approval = exact_approval(&record, &input);
+        assert_eq!(approval.examples.last(), Some(&input.to_string()));
+        assert!(
+            !approval
+                .examples
+                .iter()
+                .any(|example| example.contains("[redacted]"))
+        );
+        assert_eq!(approval.examples.len(), approval.examples_truncated.len());
+    }
 }
