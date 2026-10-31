@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod archive;
 mod canon;
+mod project_canon;
 mod project_delete_owners;
 mod project_handoffs;
 mod project_owner;
