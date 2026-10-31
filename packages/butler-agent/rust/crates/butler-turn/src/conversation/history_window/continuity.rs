@@ -10,6 +10,8 @@ pub struct ContinuityTurn {
     pub number: u64,
     pub status: String,
     pub user: String,
+    /// The turn's labelled hook output, empty without one.
+    pub hook_context: String,
     pub answer: String,
     pub tools: Vec<String>,
 }
@@ -123,6 +125,12 @@ fn project(turn: &ConversationTurn, material: &PromptMaterial) -> ContinuityTurn
         .map(|m| text_for_message(m, ToolParts::Exclude))
         .collect::<Vec<_>>()
         .join("\n");
+    let hook_context = messages
+        .iter()
+        .filter(|m| m.message.role == ConversationRole::Developer)
+        .map(|m| text_for_message(m, ToolParts::Exclude))
+        .collect::<Vec<_>>()
+        .join("\n");
     let final_id = material
         .outcomes
         .iter()
@@ -159,6 +167,7 @@ fn project(turn: &ConversationTurn, material: &PromptMaterial) -> ContinuityTurn
             other => other.into(),
         },
         user,
+        hook_context,
         answer,
         tools: tools.into_iter().collect(),
     }

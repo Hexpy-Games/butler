@@ -9,6 +9,7 @@ mod git;
 mod git_support;
 mod git_timeout;
 mod growth;
+mod hook_context;
 mod idle;
 mod inspection;
 mod lifecycle;

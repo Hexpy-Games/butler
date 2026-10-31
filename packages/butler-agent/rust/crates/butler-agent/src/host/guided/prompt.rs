@@ -121,6 +121,9 @@ fn source_prompt(
     if let Some(text) = state.open_asks.lock().render()? {
         entries.push("open-asks", text);
     }
+    if let Some(text) = turn.context.get("hookContext").and_then(Value::as_str) {
+        entries.push("hook-context", text.to_owned());
+    }
     entries.current_request(turn);
     Ok(entries.finish())
 }

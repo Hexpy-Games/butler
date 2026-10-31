@@ -8,3 +8,4 @@ while [ ! -f "$HOOK_RELEASE" ]; do
     [ "$(date +%s)" -lt "$deadline" ] || exit 1
     sleep 0.02
 done
+printf '%s' "$HOOK_TEXT"

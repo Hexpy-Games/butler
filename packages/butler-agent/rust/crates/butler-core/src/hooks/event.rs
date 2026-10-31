@@ -25,6 +25,10 @@ impl HookEvent {
             Self::UserPromptSubmit | Self::PreToolUse | Self::Stop | Self::SubagentStop
         )
     }
+    /// Whether a handler's output can add to its turn's context.
+    pub fn adds_context(self) -> bool {
+        matches!(self, Self::SessionStart | Self::UserPromptSubmit)
+    }
     /// Whether a tool matcher is valid.
     pub fn tool_event(self) -> bool {
         matches!(self, Self::PreToolUse | Self::PostToolUse)

@@ -116,7 +116,7 @@ change nothing else. Each is off unless set to `1`.
 | `BUTLER_SHUTDOWN_TRACE` | Shutdown phase begin/end markers (the desktop App sets it) |
 | `BUTLER_MEMORY_SYNC_TRACE` | Memory sync wakes, source revisions and vector scheduling |
 
-## User command and HTTP hooks
+## User command hooks
 
 Settings → Hooks manages `$BUTLER_DATA/hooks.json`. No hooks are installed by
 default. Hooks run with your privileges and receive full prompt and tool content.
@@ -160,9 +160,37 @@ Exit 2 or `{"decision":"deny","reason":"..."}` denies a pre-event. `block` and
 Claude Code's `hookSpecificOutput.permissionDecision: "deny"` are also accepted.
 Exit 0 with empty/non-JSON stdout continues. Other exits, crashes, invalid JSON,
 spawn failures, timeout and output overflow are logged and continue by default;
-`failClosed: true` blocks on these failures. `allow` and `ask` are logged as
-`approval_ignored`; normal permission checks still run. Input rewriting and
-context injection are ignored. Reasons are limited to 16 KiB.
+`failClosed: true` blocks on these failures. A `UserPromptSubmit` or `SessionStart`
+hook's non-JSON stdout counts as text even when it starts with `[` or `{`, unless
+that hook sets `failClosed: true`. `allow` and `ask` are logged as
+`approval_ignored`; normal permission checks still run. Input rewriting is
+ignored. Reasons are limited to 16 KiB.
+
+A `UserPromptSubmit` or `SessionStart` hook can add text to the model's context.
+On exit 0, the text is `hookSpecificOutput.additionalContext` from JSON stdout, or
+the whole stdout when it is not JSON. **Any plain stdout from these two events now
+reaches the model:** print nothing or `{}` from a hook that only observes. Other
+events, `async: true` hooks and failed hooks add nothing.
+
+This text is sent to the model provider and stored in the conversation's history.
+Butler removes a plugin's own secrets from its hook's text. Text from your own
+hooks is not redacted, so do not print anything you would not send to the provider.
+
+The text goes with the turn it belongs to: `UserPromptSubmit` with its message,
+`SessionStart` with the first turn admitted after the hook finishes. A message sent
+during a slow hook therefore runs without it. The model reads it right before the
+request, in a labelled section with each hook's text fenced by a marker derived
+from that text, so the text cannot pass for a heading or a message. It then
+stays in that turn's history like the rest of the turn. Hooks do not change the
+stable part of the prompt, and a retry or resume uses the admitted text without
+running the hook again. Nothing the text says grants permission, answers an
+approval or changes the permission mode.
+
+Up to 8,000 tokens per hook stay exact. Longer output becomes the same preview as
+tool output, with the full text readable through `read_tool_output_artifact`
+(read-only sessions do not offer that tool, so they get the preview alone), and
+the run log names the artifact. Past 10 MiB the hook fails as an output overflow:
+nothing is added, and the model and the run log are told.
 
 A tool denial becomes model feedback with code `hook_denied`. A Stop denial uses
 the existing continuation budget. A rejected send returns `422 hook_blocked` and
@@ -172,50 +200,9 @@ Sync timeout defaults to 30 seconds, capped at 120; observe-only `async: true`
 defaults to 60 seconds, capped at 600. Matching sync handlers run concurrently,
 then background handlers use a pool of eight. Identical handlers deduplicate.
 Timeout and cancellation terminate the process tree, allow two seconds of grace,
-then force termination and reap. Each output stream is capped at 64 KiB; overflow
-is an error, never truncated success. Stdin is streamed in full.
-
-`type: "http"` hooks POST the same envelope as JSON (`Content-Type:
-application/json`) to `url` instead of running a process:
-
-```json
-{"id":"audit","event":"PostToolUse","type":"http",
- "url":"https://hooks.example.com/butler","timeout_ms":5000}
-```
-
-Only `https` URLs without a user name or password are accepted, plus plain
-`http` to a loopback host (`localhost`, `127.0.0.0/8`, `[::1]`); this is checked
-when the configuration loads and again before each request. Plain `http` never
-goes through a proxy and `localhost` always means this machine; `https` honors the
-environment's proxies. `command`, `args` and `env` are rejected, and plugin hooks
-stay command-only.
-
-Every request is signed. `X-Butler-Timestamp` is the Unix time in seconds and
-`X-Butler-Signature` is `sha256=<hex>`, the HMAC-SHA256 of `<timestamp>.<raw
-body>` under the hook's secret. Receivers should recompute it over the raw bytes,
-compare in constant time and refuse old timestamps.
-
-Saving a hook through `PUT /hooks` creates a secret when it has none and returns
-it once in `generated_secrets`. Set your own (16 to 1024 characters) with
-`"secrets": {"<hook id>": "<secret>"}` next to `config`. Secrets are kept in the
-same credential store as provider API keys, never in `hooks.json`, and no other
-response, run record, log or error contains them.
-
-A secret belongs to one URL origin (scheme, host and port). Changing a hook's
-origin through `PUT /hooks` issues a new secret, unless you set one. A hook written
-into the file signs only if a secret was already saved for that id and origin;
-otherwise it fails without sending anything until it is saved once through `PUT
-/hooks`. A `secret` field in the file is invalid.
-
-Redirects are not followed. A 2xx response body is read like
-command stdout: the same decision JSON denies a pre-event, and an empty or
-non-JSON body continues. There is no exit-2 equivalent. Non-2xx statuses
-(redirects included), unreachable hosts, timeouts, cancellation and bodies over
-64 KiB or not UTF-8 are failures with the same `failClosed` rule. Runs record the
-response status as `http_status` and up to 4 KiB of the body; errors never
-include the URL, and Butler's HTTP log records only the scheme and host of a hook
-request, never its path, query or bodies. Timeouts, `async` and limits are the
-same as for commands.
+then force termination and reap. Each output stream is capped at 64 KiB, except
+stdout of hooks that can add context (above); overflow is an error, never truncated
+success. Stdin is streamed in full.
 
 Windows `command` uses `cmd.exe /d /s /c`. For PowerShell use
 `args: ["pwsh", "-NoProfile", "-File", "C:\\path\\hook.ps1"]`. PowerShell 5

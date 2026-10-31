@@ -146,6 +146,7 @@ tool_names! {
     BrowserAct = "browser_act",
     BrowserTabs = "browser_tabs",
     BrowserSelection = "browser_selection",
+    BrowserDevtools = "browser_devtools",
     BrowserScreenshot = "browser_screenshot",
     BrowserClose = "browser_close",
     BrowserWaitForUser = "browser_wait_for_user",

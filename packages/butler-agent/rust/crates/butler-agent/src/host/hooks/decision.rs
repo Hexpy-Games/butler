@@ -14,6 +14,8 @@ struct Specific {
     decision: Option<String>,
     #[serde(rename = "permissionDecisionReason")]
     reason: Option<String>,
+    #[serde(rename = "additionalContext")]
+    context: Option<String>,
 }
 pub(super) fn resolve(
     hook: &HookDefinition,
@@ -43,14 +45,15 @@ pub(super) fn resolve(
             &format!("Hook '{}' exited with {:?}", hook.label(), out.exit_code),
         );
     }
-    decide(hook, &out.stdout)
-}
-/// Decision JSON shared by command stdout and HTTP response bodies.
-pub(super) fn decide(hook: &HookDefinition, raw: &str) -> (String, Option<String>) {
-    let raw = raw.trim();
+    let raw = out.stdout.trim();
     let decision = match serde_json::from_str::<Decision>(raw) {
         Ok(decision) => decision,
         Err(_) if !raw.starts_with('{') && !raw.starts_with('[') => {
+            return ("continue".into(), None);
+        }
+        // Text may start with a bracket; only a hook that asked for strict
+        // failure has its stdout judged as a decision first.
+        Err(_) if super::context::can_add(hook) && !hook.fail_closed => {
             return ("continue".into(), None);
         }
         Err(_) => return failure(hook, "error", "Invalid hook decision JSON"),
@@ -74,6 +77,24 @@ pub(super) fn decide(hook: &HookDefinition, raw: &str) -> (String, Option<String
         Some(_) => failure(hook, "error", "Invalid hook decision"),
     }
 }
+/// Text a successful handler's stdout adds: `additionalContext` of a decision,
+/// otherwise the whole of a non-JSON stdout. Stdout that failed as a decision
+/// never gets here.
+pub(super) fn added_context(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    let text = match serde_json::from_str::<Decision>(raw) {
+        Ok(decision) => decision.specific?.context?,
+        Err(_) => raw.to_owned(),
+    };
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_owned())
+}
+/// Whether stdout looked like a decision but could only be read as text. A
+/// broken guard hook looks like this, so the run log says it.
+pub(super) fn fell_back_to_text(raw: &str) -> bool {
+    let raw = raw.trim();
+    (raw.starts_with('{') || raw.starts_with('[')) && serde_json::from_str::<Decision>(raw).is_err()
+}
 fn deny(hook: &HookDefinition, reason: String) -> (String, Option<String>) {
     if reason.len() > 16 * 1024 {
         return failure(hook, "error", "Hook reason exceeds 16 KiB");
@@ -88,11 +109,7 @@ fn deny(hook: &HookDefinition, reason: String) -> (String, Option<String>) {
     };
     ("deny".into(), Some(format!("{}: {reason}", hook.label())))
 }
-pub(super) fn failure(
-    hook: &HookDefinition,
-    outcome: &str,
-    reason: &str,
-) -> (String, Option<String>) {
+fn failure(hook: &HookDefinition, outcome: &str, reason: &str) -> (String, Option<String>) {
     let blocked = hook.fail_closed && hook.event.blocks();
     (
         outcome.into(),

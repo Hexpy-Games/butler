@@ -1,5 +1,7 @@
 use super::*;
-use butler_platform::hook_process::{HookProcess, run};
+use butler_platform::hook_process::{
+    CONTEXT_OUTPUT_LIMIT, HookOutput, HookProcess, HookProcessError, OUTPUT_LIMIT, run,
+};
 use futures_util::future::join_all;
 use std::{
     collections::HashSet,
@@ -23,7 +25,6 @@ fn matched(hooks: &Hooks, payload: &HookEnvelope) -> Vec<HookDefinition> {
                 h.id.split_once('/').map(|(plugin, _)| plugin.to_owned()),
                 h.command.clone(),
                 h.args.clone(),
-                h.url.clone(),
                 h.env.clone(),
                 h.timeout_ms,
                 h.fail_closed,
@@ -37,17 +38,18 @@ pub(super) async fn dispatch(
     hooks: &Arc<Hooks>,
     payload: HookEnvelope,
     cancel: CancellationToken,
-) -> Result<Option<String>, String> {
+) -> Result<HookDispatched, String> {
     let handlers = matched(hooks, &payload);
     let sync = handlers
         .iter()
         .filter(|h| !h.asynchronous)
         .map(|h| execute(hooks, h, &payload, cancel.clone()));
-    let reasons: Vec<String> = join_all(sync)
-        .await
-        .into_iter()
-        .filter_map(|r| r.reason)
-        .collect();
+    let mut reasons = Vec::new();
+    let mut context = Vec::new();
+    for done in join_all(sync).await {
+        reasons.extend(done.deny);
+        context.extend(done.context);
+    }
     for hook in handlers.into_iter().filter(|h| h.asynchronous) {
         let hooks = hooks.clone();
         let payload = payload.clone();
@@ -64,93 +66,109 @@ pub(super) async fn dispatch(
             Box::pin(execute(&hooks, &hook, &payload, cancel)).await;
         });
     }
-    Ok((!reasons.is_empty()).then(|| reasons.join("\n")))
+    Ok(HookDispatched {
+        deny: (!reasons.is_empty()).then(|| reasons.join("\n")),
+        context,
+    })
 }
-/// Transport result before the run record is assembled.
-pub(super) struct Finished {
-    pub(super) outcome: String,
-    pub(super) reason: Option<String>,
-    pub(super) exit_code: Option<i32>,
-    pub(super) http_status: Option<u16>,
-    pub(super) stdout: String,
-    pub(super) stderr: String,
+/// One handler's run and what it means for its event.
+struct Executed {
+    run: HookRun,
+    deny: Option<String>,
+    context: Option<HookContext>,
 }
 async fn execute(
     hooks: &Hooks,
     hook: &HookDefinition,
     payload: &HookEnvelope,
     cancel: CancellationToken,
-) -> HookRun {
+) -> Executed {
     let start = Instant::now();
-    let finished = if hook.kind == "http" {
-        super::http::run(hooks, hook, payload, cancel).await
-    } else {
-        command(hooks, hook, payload, cancel).await
-    };
-    if finished.outcome == "approval_ignored" {
-        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = if hook.id.contains('/') { "plugin" } else { "user" });
-    }
-    let record = HookRun {
-        time: chrono::Utc::now().to_rfc3339(),
-        hook_id: hook.id.clone(),
-        event: hook.event,
-        session_id: payload.session_id.clone(),
-        outcome: finished.outcome,
-        reason: finished.reason,
-        exit_code: finished.exit_code,
-        http_status: finished.http_status,
-        duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
-        stdout: excerpt(&finished.stdout),
-        stderr: excerpt(&finished.stderr),
-    };
-    hooks.record(record.clone());
-    record
-}
-async fn command(
-    hooks: &Hooks,
-    hook: &HookDefinition,
-    payload: &HookEnvelope,
-    cancel: CancellationToken,
-) -> Finished {
     let prepared = prepare_input(hooks, hook, payload).await;
     let (input, redact) = match prepared {
         Ok((i, r)) => (Ok(i), r),
         Err(e) => (Err(e), Vec::new()),
     };
     let result = match input {
-        Ok(input) => {
-            let mut future = Box::pin(run(input, cancel.clone()));
-            tokio::select! {
-                result = &mut future => result,
-                () = hooks.shutdown.cancelled() => { cancel.cancel(); future.await },
-            }
-        }
+        Ok(input) => run_process(hooks, input, cancel).await,
         Err(error) => Err(error),
     };
     let (outcome, reason) = super::decision::resolve(hook, &result);
-    let clean = |text: &str| {
-        let mut text = text.to_owned();
-        for value in &redact {
-            if !value.is_empty() {
-                text = text.replace(value, "[redacted]");
-            }
-        }
-        text
+    if outcome == "approval_ignored" {
+        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
+    }
+    let reason = reason.map(|s| clean(&s, &redact));
+    let exit_code = result.as_ref().ok().and_then(|o| o.exit_code);
+    let stdout = result
+        .as_ref()
+        .ok()
+        .map(|o| clean(&o.stdout, &redact))
+        .unwrap_or_default();
+    let overflow = match &result {
+        Err(error @ HookProcessError::OutputLimit(_)) => Some(error.to_string()),
+        _ => None,
     };
-    Finished {
+    let added = super::context::added(
+        hooks,
+        hook,
+        payload,
+        super::context::Finished {
+            outcome: &outcome,
+            exit_code,
+            stdout: &stdout,
+            redact: &redact,
+            overflow,
+        },
+    )
+    .await;
+    let record = HookRun {
+        time: chrono::Utc::now().to_rfc3339(),
+        hook_id: hook.id.clone(),
+        event: hook.event,
+        session_id: payload.session_id.clone(),
         outcome,
-        reason: reason.map(|s| clean(&s)),
-        exit_code: result.as_ref().ok().and_then(|o| o.exit_code),
-        http_status: None,
-        stdout: result
-            .as_ref()
-            .ok()
-            .map(|o| clean(&o.stdout))
-            .unwrap_or_default(),
+        reason: reason.clone().or(added.note),
+        exit_code,
+        duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
+        context_bytes: added.bytes,
+        stdout: excerpt(&stdout),
         stderr: result
             .as_ref()
-            .map(|o| clean(&o.stderr))
+            .map(|o| excerpt(&clean(&o.stderr, &redact)))
             .unwrap_or_else(ToString::to_string),
+    };
+    hooks.record(record.clone());
+    Executed {
+        run: record,
+        deny: reason,
+        context: added.context,
+    }
+}
+pub(super) fn clean(text: &str, redact: &[String]) -> String {
+    let mut text = text.to_owned();
+    for value in redact {
+        if !value.is_empty() {
+            text = text.replace(value, "[redacted]");
+        }
+    }
+    text
+}
+pub(super) fn scope(hook: &HookDefinition) -> &'static str {
+    if hook.id.contains('/') {
+        "plugin"
+    } else {
+        "user"
+    }
+}
+async fn run_process(
+    hooks: &Hooks,
+    input: HookProcess,
+    cancel: CancellationToken,
+) -> Result<HookOutput, HookProcessError> {
+    let mut future = Box::pin(run(input, cancel.clone()));
+    tokio::select! {
+        result = &mut future => result,
+        () = hooks.shutdown.cancelled() => { cancel.cancel(); future.await },
     }
 }
 fn environment(
@@ -220,11 +238,14 @@ pub(super) async fn test(
             ..HookPayload::default()
         },
     };
-    Ok(Box::pin(execute(hooks, &hook, &payload, cancel)).await)
+    Ok(Box::pin(execute(hooks, &hook, &payload, cancel)).await.run)
 }
 
-/// The JSON envelope plus hook identity: command stdin and HTTP request body.
-pub(super) fn body(hook: &HookDefinition, payload: &HookEnvelope) -> serde_json::Result<Vec<u8>> {
+fn input(
+    hooks: &Hooks,
+    hook: &HookDefinition,
+    payload: &HookEnvelope,
+) -> Result<HookProcess, HookProcessError> {
     #[derive(serde::Serialize)]
     struct Identity<'a> {
         id: &'a str,
@@ -236,26 +257,14 @@ pub(super) fn body(hook: &HookDefinition, payload: &HookEnvelope) -> serde_json:
         envelope: &'a HookEnvelope,
         hook: Identity<'a>,
     }
-    serde_json::to_vec(&Body {
+    let stdin = serde_json::to_vec(&Body {
         envelope: payload,
         hook: Identity {
             id: &hook.id,
-            scope: if hook.id.contains('/') {
-                "plugin"
-            } else {
-                "user"
-            },
+            scope: scope(hook),
         },
     })
-}
-
-fn input(
-    hooks: &Hooks,
-    hook: &HookDefinition,
-    payload: &HookEnvelope,
-) -> Result<HookProcess, butler_platform::hook_process::HookProcessError> {
-    let stdin = body(hook, payload)
-        .map_err(|e| butler_platform::hook_process::HookProcessError::Process(e.to_string()))?;
+    .map_err(|e| HookProcessError::Process(e.to_string()))?;
     let args = hook.args.as_ref().map(|args| {
         args.iter()
             .map(|arg| {
@@ -273,6 +282,11 @@ fn input(
         cwd: PathBuf::from(&payload.cwd),
         stdin,
         timeout: Duration::from_millis(hook.timeout_ms),
+        stdout_limit: if super::context::can_add(hook) {
+            CONTEXT_OUTPUT_LIMIT
+        } else {
+            OUTPUT_LIMIT
+        },
     })
 }
 
@@ -280,7 +294,7 @@ async fn prepare_input(
     hooks: &Hooks,
     hook: &HookDefinition,
     payload: &HookEnvelope,
-) -> Result<(HookProcess, Vec<String>), butler_platform::hook_process::HookProcessError> {
+) -> Result<(HookProcess, Vec<String>), HookProcessError> {
     if !hook.id.contains('/') {
         return input(hooks, hook, payload).map(|i| (i, Vec::new()));
     }
@@ -291,10 +305,8 @@ async fn prepare_input(
         Ok::<_, butler_core::plugins::PluginError>((hook, cwd, redact))
     })
     .await
-    .map_err(|_| {
-        butler_platform::hook_process::HookProcessError::Process("plugin_task_failed".into())
-    })?
-    .map_err(|e| butler_platform::hook_process::HookProcessError::Process(e.code.into()))?;
+    .map_err(|_| HookProcessError::Process("plugin_task_failed".into()))?
+    .map_err(|e| HookProcessError::Process(e.code.into()))?;
     let mut payload = payload.clone();
     payload.cwd = cwd.to_string_lossy().into_owned();
     Ok((input(hooks, &hook, &payload)?, redact))

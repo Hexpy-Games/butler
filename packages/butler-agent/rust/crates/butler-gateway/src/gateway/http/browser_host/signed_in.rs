@@ -17,6 +17,7 @@ const READS: &[&str] = &[
     "tab.zoom",
     "tab.screenshot",
     "tab.image_collect",
+    "tab.devtools",
 ];
 
 /// The signed-in sites a conversation's turn may use.
@@ -86,6 +87,9 @@ pub(super) async fn admit(
     }
     if let Some(refusal) = schedule_refusal(frame) {
         return Ok(Some(refusal));
+    }
+    if super::devtools::local_read(op, tab["url"].as_str().unwrap_or("")) {
+        return Ok(None);
     }
     let url = tab["url"].as_str().unwrap_or("");
     let sites = granted_sites(state, session, turn.as_deref(), &frame["schedule_browser"]).await?;

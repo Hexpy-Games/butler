@@ -87,6 +87,7 @@ fn reads_external(name: &str, args: &Value) -> bool {
                 | "browser_observe"
                 | "browser_act"
                 | "browser_selection"
+                | "browser_devtools"
                 | "browser_screenshot"
                 | "browser_tabs"
         )

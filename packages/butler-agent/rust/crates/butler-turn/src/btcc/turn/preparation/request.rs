@@ -274,6 +274,12 @@ pub(super) fn conversation_envelope(request: &TurnRequest) -> ConversationEnvelo
         event_id: request.event_id.clone(),
         message_text: request.message.content.clone(),
         content_parts: message_content(request).cloned(),
+        hook_context: request
+            .app_turn_context
+            .as_ref()
+            .and_then(|context| context.get("hookContext"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         resume: request.resume,
     }
 }
@@ -299,6 +305,7 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
             ("defaultProjectFolder", "defaultProjectFolder"),
             ("contentParts", "messageContent"),
             ("documentEdits", "documentEdits"),
+            ("hookContext", "hookContext"),
         ] {
             if let Some(value) = app.get(source).filter(|value| js_truthy(value)) {
                 fields.insert(target.into(), value.clone());

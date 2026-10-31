@@ -108,6 +108,7 @@ function usageMonitor(url: URL): UsageMonitorView {
     requests: view.model.requestCount, lastUsedMs: now }];
   if (!session) {
     delete view.model.byRole;
+    delete view.model.subtasks;
     view.timeline.slots = view.timeline.slots.map(([start, requests, prompt, cached, output]) => [start, requests, prompt, cached, output]);
   }
   return view;
