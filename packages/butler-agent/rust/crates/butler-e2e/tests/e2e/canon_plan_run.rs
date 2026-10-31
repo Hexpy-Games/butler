@@ -8,6 +8,8 @@
 mod batch_edits;
 mod boundaries;
 mod bundle;
+mod closeout;
+mod closeout_gate;
 mod delete_replay;
 mod deletion;
 mod edits;
@@ -19,6 +21,7 @@ mod locking;
 mod ordering;
 mod queries;
 mod replay_errors;
+pub(crate) mod stop_paths;
 mod take_recovery;
 mod taking;
 mod visibility;

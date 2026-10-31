@@ -72,6 +72,7 @@ fn write(
             input,
         } => match action.as_str() {
             "request" => store::queue::request(tx, ctx, &session_id, &input),
+            "stop_running" => store::queue::engine::stop_running(tx, ctx, &session_id),
             "hold" => store::queue::decide_hold(
                 tx,
                 ctx,

@@ -134,6 +134,15 @@ pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) 
     }
     Ok(json!({"ok":true}))
 }
+/// The conversation's work was stopped from outside, so nothing can finish these steps.
+pub fn stop_running(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<Value> {
+    for item in items(tx, session)? {
+        if item["state"] == "running" && item["hold_reason"].is_null() {
+            fail(tx, ctx, &item, "cancelled")?;
+        }
+    }
+    Ok(json!({"ok":true}))
+}
 fn fail(tx: &Transaction<'_>, ctx: &Context, item: &Value, reason: &str) -> Result<()> {
     let session = text(item, "session_id")?;
     let epic = text(item, "epic_id")?;
