@@ -119,8 +119,9 @@ impl TurnSteeringPort for Steering {
     fn observe<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: butler_turn::btcc::LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
-        self.0.steering(invocation)
+        self.0.steering(invocation, phase)
     }
 }
 

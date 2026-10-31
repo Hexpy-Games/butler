@@ -38,36 +38,34 @@ impl SubsessionService {
         let scope = child_work_scope(&stored, &binding, turn)?;
         let existing = self.work.bound_work_for_turn(turn.into()).await?;
         if let Some(existing) = existing {
+            // A crash can land between starting a direction's Work and following it.
+            let unfollowed = stored.packet.child_role == ChildRole::Steward
+                && existing.work_id != stored.root_work_id
+                && existing.work_id
+                    == delegation::work_id_of_call(&delegation::continuation_mutation(
+                        &stored.delegation_id,
+                        turn,
+                    ));
             if (existing.work_id != stored.root_work_id
+                && !unfollowed
                 && !(stored.packet.child_role == ChildRole::Worker && turn != stored.child_turn_id))
                 || existing.session_id != session
                 || !work_matches_scope(&existing, &scope)
             {
                 return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
             }
-            return Ok(());
-        }
-        if turn != stored.child_turn_id && stored.packet.child_role == ChildRole::Worker {
-            return self.bind_worker_continuation(&stored, scope).await;
-        }
-        if turn != stored.child_turn_id {
-            let bound = self
-                .work
-                .bind_open_work(scope.clone(), Some(stored.root_work_id.clone()))
-                .await?
-                .ok_or_else(|| error(BtccCode::SubsessionRootWorkIdentityMismatch))?;
-            if bound.work_id != stored.root_work_id
-                || bound.session_id != session
-                || !work_matches_scope(&bound, &scope)
-            {
-                return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
+            if unfollowed {
+                self.repository
+                    .follow_work(stored.relation_id.clone(), existing.work_id)
+                    .await
+                    .map_err(BtccError::from)?;
             }
             return Ok(());
         }
-        let mutation = format!(
-            "subsession-root-work:{}:{}:{}",
-            stored.delegation_id, stored.task_id, stored.child_session_id
-        );
+        if turn != stored.child_turn_id {
+            return self.bind_continuation(&stored, scope).await;
+        }
+        let mutation = delegation::root_mutation(&stored.delegation_id, &stored.task_id, session);
         let work = self
             .work
             .start_work(StartWorkInput {
