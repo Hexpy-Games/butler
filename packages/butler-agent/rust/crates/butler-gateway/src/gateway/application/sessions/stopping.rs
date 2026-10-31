@@ -7,7 +7,12 @@ use crate::gateway::application::AppCancellation;
 impl AppApplication {
     /// Nothing can answer or watch a removed conversation, so its Turns and whole
     /// delegated subtree stop with it. A failed stop never blocks the removal.
-    pub(in crate::gateway::application) async fn stop_session_work(&self, session_id: &str) {
+    /// A chat that survives, archived, also holds its steps; a deleted chat's steps go with it.
+    pub(in crate::gateway::application) async fn stop_session_work(
+        &self,
+        session_id: &str,
+        chat_survives: bool,
+    ) {
         let stopped = self.stop_app_turns(session_id).await;
         let runtime = match self.runtime_hint(session_id).await {
             Ok(runtime) => runtime,
@@ -26,6 +31,9 @@ impl AppApplication {
             .await
         {
             tracing::warn!(%error, "Subtasks of a removed conversation were not stopped");
+        }
+        if !chat_survives {
+            return;
         }
         // A step that only waited on delegated work has no App Turn to report its end.
         if let Err(error) = self
