@@ -114,12 +114,13 @@ async function lastStepUnread(host: NativeAppServerHandle, open: (id: string) =>
   }
   const page = await open(await orderChat(host, "다른 대화"));
   try {
+    let queueOf = (index: number) => ({ state: "done", hold: false, finished_at: index + 1 });
     await page.route("**/canon/sidebar", async route => {
       const response = await route.fetch({ headers: { ...await route.request().allHeaders(), origin: new URL(route.request().url()).origin } });
       const body = await response.json() as { data: { groups: { rows: { id: string; queue?: unknown }[] }[] } };
       for (const row of body.data.groups.flatMap(group => group.rows)) {
         const index = epics.findIndex(epic => epic.id === row.id);
-        if (index >= 0) row.queue = { state: "done", hold: false, finished_at: index + 1 };
+        if (index >= 0) row.queue = queueOf(index);
       }
       await route.fulfill({ response, json: body });
     });
@@ -127,6 +128,12 @@ async function lastStepUnread(host: NativeAppServerHandle, open: (id: string) =>
     await revealRow(page, epics[2]!);
     await expectMarks(page, epics, attention, ["none", "none", "unread"], "last step", problems);
     await crop(page, "sidebar-last-step-unread");
+    // A step whose Turn ended without closing, such as one asking a question, is not working.
+    queueOf = index => ({ state: index === 0 ? "running" : "waiting", hold: false, finished_at: 0 });
+    await page.reload();
+    await revealRow(page, epics[0]!);
+    await expectMarks(page, epics, attention, ["unread", "none", "none"], "step waiting on a reply", problems);
+    await crop(page, "sidebar-step-waiting-on-reply");
   } finally {
     await page.unrouteAll({ behavior: "wait" }); await page.close();
     await host.api(`/sessions/${encodeURIComponent(id)}?permanent=true`, { method: "DELETE" });

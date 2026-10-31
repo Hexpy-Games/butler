@@ -25,9 +25,8 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
   const carries = useCanonSidebarState(state => carriesSessionState(state.sessions[epic.home_session_id ?? ""], epic.id));
   const session = carries ? row?.session : undefined;
   const unread = useSessionUnread(session);
-  const step = epic.queue?.state === "running" ? epic.queue : undefined;
-  const activity = spaceActivity(session);
-  const running = step && !step.hold ? activity !== "attention" : activity === "working";
+  const held = epic.queue?.state === "running" && epic.queue.hold;
+  const running = spaceActivity(session) === "working";
   const [menuOpen, setMenuOpen] = useState(false);
   const longPress = useLongPressAction(() => { if (row) setMenuOpen(true); });
   const [drop, setDrop] = useState<"before" | "after">();
@@ -60,7 +59,7 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
       label={<Stack as="span" align="row" cross="center" gap="sm" minWidth="0">
         <Typo.Text data-test-class="canon-epic-title" as="span" truncate shrink minWidth="0">{epic.title}</Typo.Text><Stack as="span" shrink={false}><CanonAvatar agent={epic.agent} person={epic.assignee} /></Stack>
       </Stack>}
-      actions={row ? <SpaceRowMenu row={row} running={running} attention={step?.hold} quiet={!carries} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={running} attention={step?.hold} />}
+      actions={row ? <SpaceRowMenu row={row} running={running} attention={held} quiet={!carries} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={running} attention={held} />}
       onContextMenu={row ? event => { event.preventDefault(); event.stopPropagation(); setMenuOpen(true); } : undefined}
       onClick={() => void openEpicConversation(projectId, epic)} />
   </NavDropTarget><CanonBoundChats epic={epic} /></>;
