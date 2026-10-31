@@ -90,6 +90,14 @@ async fn stop_during_orphan_pass_keeps_committed_shard_cursor() -> Result<(), Ha
             orphans.push(path);
         }
     }
+    // Keep the pass observable even when every fixture file lives on tmpfs.
+    db(&setup.sandbox.data)?.execute_batch(
+        "CREATE TRIGGER slow_orphans BEFORE INSERT ON output_blob_sweep BEGIN
+           SELECT (WITH RECURSIVE burn(n) AS (
+             VALUES(0) UNION ALL SELECT n+1 FROM burn WHERE n<10000
+           ) SELECT sum(n) FROM burn);
+         END;",
+    )?;
     let mut s = setup.start().await?;
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
@@ -112,7 +120,8 @@ async fn stop_during_orphan_pass_keeps_committed_shard_cursor() -> Result<(), Ha
         |r| r.get(0),
     )?;
     assert!(!cursor.is_empty() && cursor.as_str() < "ff", "{cursor}");
-    db(&s.sandbox.data)?.execute_batch(&format!("CREATE TRIGGER no_rewind BEFORE UPDATE OF orphan_cursor ON output_blob_backfill WHEN NEW.orphan_cursor<='{cursor}' BEGIN SELECT RAISE(ABORT,'orphan cursor rewound'); END;"))?;
+    db(&s.sandbox.data)?.execute_batch(&format!("DROP TRIGGER slow_orphans;
+        CREATE TRIGGER no_rewind BEFORE UPDATE OF orphan_cursor ON output_blob_backfill WHEN NEW.orphan_cursor<='{cursor}' BEGIN SELECT RAISE(ABORT,'orphan cursor rewound'); END;"))?;
     s.gw = s.agent.start_again().await?;
     completed(&s).await?;
     let next: String = db(&s.sandbox.data)?.query_row(
