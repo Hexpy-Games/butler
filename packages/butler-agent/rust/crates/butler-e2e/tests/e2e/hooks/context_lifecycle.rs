@@ -76,6 +76,18 @@ async fn hooks_context_full_queue_survives_shutdown_and_restart() -> Result<(), 
     assert!(!current.contains(ACTIVE), "{current}");
     assert_eq!(runs_of(&s, "changing").await?, 0, "restart reran the hook");
 
+    // A retry waits its turn behind the queue, so let the follow-up finish first.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !s
+        .gw
+        .turns("general")
+        .await?
+        .iter()
+        .any(|turn| turn["id"] != running.as_str() && turn["state"] == "delivered")
+    {
+        assert!(Instant::now() < deadline, "the follow-up never finished");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     // Shutdown may leave the active turn to rerun or to fail as retryable.
     let turn =
         s.gw.wait_terminal("general", &running, Duration::from_secs(30))
