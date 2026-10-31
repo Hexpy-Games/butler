@@ -325,6 +325,7 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)??;
+        self.automation_wake.notify_one();
         if let Some(encoded) = current.prepared_json.as_deref()
             && let Ok(plan) = serde_json::from_str(encoded)
         {

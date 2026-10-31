@@ -20,11 +20,26 @@ pub(crate) struct Watch {
     changes: Arc<Mutex<Vec<String>>>,
     barrier: PathBuf,
     barrier_removed: Arc<tokio::sync::Notify>,
-    _watcher: RecommendedWatcher,
+    watcher: RecommendedWatcher,
 }
 impl Watch {
     pub(crate) async fn open_after_quiet(data: &Path) -> Result<Self, HarnessError> {
         let mut watch = Self::open(data)?;
+        watch.wait_until_quiet().await?;
+        Ok(watch)
+    }
+
+    pub(crate) async fn open_after_quiet_with_paths(
+        data: &Path,
+        paths: &[&Path],
+    ) -> Result<Self, HarnessError> {
+        let mut watch = Self::open(data)?;
+        for path in paths {
+            watch
+                .watcher
+                .watch(path, RecursiveMode::Recursive)
+                .map_err(std::io::Error::other)?;
+        }
         watch.wait_until_quiet().await?;
         Ok(watch)
     }
@@ -92,7 +107,7 @@ impl Watch {
             changes,
             barrier,
             barrier_removed,
-            _watcher: watcher,
+            watcher,
         })
     }
 
