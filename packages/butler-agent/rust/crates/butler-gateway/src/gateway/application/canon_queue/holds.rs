@@ -33,7 +33,7 @@ pub(super) async fn apply(
             .await
             .map_err(app_error)?;
         // Offers stored before the state was recorded still read correctly.
-        offer_text(&language, &epic, &title, panel["other_running"].as_bool())
+        offer_text(language, &epic, &title, panel["other_running"].as_bool())
     };
     let source = panel["source_key"].as_str().unwrap_or(op).to_owned();
     panel

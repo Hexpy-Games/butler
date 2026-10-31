@@ -2,6 +2,17 @@
 use super::*;
 use butler_turn::btcc::SubsessionCancelRequest;
 
+pub(super) async fn waiting_turns(
+    service: std::sync::Arc<SubsessionService>,
+    parent: String,
+) -> Result<Vec<String>, GatewayApplicationError> {
+    service
+        .repository()
+        .turns_waiting_on_delegation(parent)
+        .await
+        .map_err(GatewayApplicationError::internal_from)
+}
+
 /// Stops the conversation's own delegations; each one stops its own when it ends.
 pub(super) async fn cancel_subtree(
     service: &SubsessionService,
