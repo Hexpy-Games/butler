@@ -172,15 +172,25 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
-        if permanent {
+        // Each owner clears its own receipt, regardless of the other's result.
+        let canon = async {
+            if !permanent {
+                return Ok(());
+            }
             #[cfg(feature = "e2e-fixtures")]
             super::super::canon::hold(self, "canon_session_delete").await?;
             super::super::canon_queue::complete_delete(self, format!("session-delete:{session}"))
-                .await?;
+                .await
         }
-        super::cleanup::complete_locked(self, session, &cleanup_guard)
-            .await
-            .map_err(GatewayApplicationError::after_commit)?;
+        .await;
+        let cleanup = super::cleanup::complete_locked(self, session, &cleanup_guard).await;
+        cleanup::combine_failures(
+            [("canon", canon), ("cleanup", cleanup)]
+                .into_iter()
+                .filter_map(|(step, result)| result.err().map(|error| (step.to_owned(), error)))
+                .collect(),
+        )
+        .map_err(GatewayApplicationError::after_commit)?;
         if !permanent {
             self.assets_owned(super::super::AppAssetCommand::Sweep)
                 .await

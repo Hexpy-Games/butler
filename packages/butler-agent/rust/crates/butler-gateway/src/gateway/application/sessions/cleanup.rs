@@ -74,7 +74,7 @@ pub(super) async fn complete_locked(
     clear_record(app, session_id, kind, generation).await
 }
 
-fn combine_failures(
+pub(super) fn combine_failures(
     failures: Vec<(String, GatewayApplicationError)>,
 ) -> Result<(), GatewayApplicationError> {
     if let Some((_, first)) = failures.first() {
