@@ -200,6 +200,8 @@ mod skills_disclosure;
 mod startup_port;
 mod startup_readiness;
 mod steward_direction_failure;
+mod steward_direction_finish;
+mod steward_direction_followup;
 mod steward_interrupted_queue;
 mod steward_presentation;
 mod steward_results;
