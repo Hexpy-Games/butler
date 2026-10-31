@@ -6,8 +6,8 @@ following third-party works.
 
 1. gpui-ce (Butler fork)
 ------------------------
-Source: https://github.com/Hexpy-Games/gpui-ce, tag butler-lens-2
-(rev 0ca21f5eed86555f622767db68049164125172f6), a fork of
+Source: https://github.com/Hexpy-Games/gpui-ce, tag butler-lens-3
+(rev d15253366449d5931f6bae9c95190198fd7c23e2), a fork of
 https://github.com/gpui-ce/gpui-ce, which derives from GPUI by Zed Industries.
 License: Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0;
 the text is LICENSE.md in that repository). Its NOTICE file reads:
@@ -41,6 +41,10 @@ the text is LICENSE.md in that repository). Its NOTICE file reads:
       display refresh rate and the app's light/dark override (gpui
       platform.rs and window.rs; gpui_windows window, platform, events,
       util and display).
+    - Native window buttons: whether the platform draws the window's own
+      minimize, zoom and close buttons (gpui platform.rs and window.rs;
+      gpui_macos window.rs), and Acrylic drawn as the macOS sidebar
+      vibrancy (gpui_macos window.rs).
     - Headless tests: a configurable window scale factor (gpui test
       platform and window, HeadlessAppContext).
 

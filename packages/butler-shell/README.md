@@ -5,9 +5,9 @@ Electron app and is not shipped.
 
 - Its own Cargo workspace (not part of `packages/butler-agent/rust`), with the same
   toolchain and lints.
-- gpui comes from the Butler fork of gpui-ce, pinned to tag `butler-lens-2`
+- gpui comes from the Butler fork of gpui-ce, pinned to tag `butler-lens-3`
   (`https://github.com/Hexpy-Games/gpui-ce`). The fork adds the Liquid Glass lens and
-  the Windows Acrylic window material.
+  the Acrylic window material (Windows Acrylic, the macOS sidebar vibrancy).
 - The UI reads data through `source::Source`, backed by `butler-shell-client`.
   It attaches to the instance in `--data`, `BUTLER_DATA`, or the platform data directory,
   and watches instance changes while disconnected. It never starts an agent.
