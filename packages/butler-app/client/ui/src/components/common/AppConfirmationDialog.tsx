@@ -67,7 +67,7 @@ function ConfirmationDialog({ pending }: { pending: ConfirmationRequest }) {
         </Stack></ScrollArea>}
         <DialogFooter>
           <ButtonContainer size="sm">
-            <Button ref={cancelRef} size="sm" variant="ghost" onClick={() => pending.resolve(false)}>{appCopy.common.cancel}</Button>
+            <Button ref={cancelRef} size="sm" variant="ghost" onClick={pending.decline}>{pending.cancelLabel ?? appCopy.common.cancel}</Button>
             <Tooltip label={matched ? undefined : typed?.mismatchTooltip}>
               <Button size="sm" variant={pending.destructive ? "destructive" : "default"} aria-disabled={!matched || undefined}
                 onClick={confirm}>{pending.confirmLabel ?? appCopy.common.confirm}</Button>

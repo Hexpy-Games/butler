@@ -209,13 +209,13 @@ success. Stdin is streamed in full.
 A project folder can define command hooks in `.butler/hooks.json`, in the same
 format. Butler asks once per folder whether to trust its contents, on one card however
 many hooks there are, listing the folder's full path and each hook's event, tools and
-command with its environment additions. The card appears before the first model round
-of the first turn that reaches a folder with hooks. A folder with no hooks is never
-asked about.
+command with its environment additions. Adding a project asks in a dialog; closing it
+is no answer. A folder that still has no answer asks on a card, before the first model
+round of the first turn that reaches it. A folder with no hooks is never asked about.
 
 After you trust a folder its hooks run, including ones added or changed later, with no
-further question. If the file changed while the card waited, the answer saves nothing
-and a new card lists what is there now. If you don't trust it, nothing from that file
+further question. If the file changed while the question waited, the answer saves
+nothing and a new card lists what is there now. If you don't trust it, nothing from that file
 runs, whatever it says later.
 The answer covers that folder: a replaced or renamed one asks again. Answers are kept
 in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write. A

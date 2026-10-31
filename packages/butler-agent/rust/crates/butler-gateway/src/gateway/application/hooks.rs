@@ -2,7 +2,8 @@
 use super::*;
 use crate::gateway::MessageSendRequest;
 use butler_core::hooks::{
-    HookAttachment, HookContext, HookEnvelope, HookEvent, HookPayload, HookPort, ProjectHookReview,
+    HookAttachment, HookContext, HookEnvelope, HookEvent, HookPayload, HookPort, ProjectHookLine,
+    ProjectHookRequest, ProjectHookReview,
 };
 use rusqlite::params;
 impl AppApplication {
@@ -138,6 +139,48 @@ impl AppApplication {
         }
         stringify(&dispatched.context).map(Some)
     }
+    /// What adding a project asks: the hooks of its folder, if nobody answered for it.
+    /// An unusable file, a saved answer or no hooks at all ask nothing.
+    pub(super) async fn project_folder_question(
+        &self,
+        project_id: String,
+    ) -> Result<Option<ProjectHookRequest>, GatewayApplicationError> {
+        let project_dir = self
+            .project_workspace_path(Some(project_id))
+            .await
+            .map_err(|_| public(404, "project_not_found", "Project not found."))?;
+        let (Some(port), Some(project_dir)) = (&self.dependencies.hooks, project_dir) else {
+            return Ok(None);
+        };
+        Ok(match port.review_project(project_dir, None).await {
+            Ok(ProjectHookReview::Undecided(request)) => Some(*request),
+            _ => None,
+        })
+    }
+
+    /// Answers that question for the project's own folder. Only an open question can
+    /// be answered, and the list goes through the same comparison as a card's: a file
+    /// that changed saves nothing, and the first message asks about what is there.
+    pub(super) async fn answer_project_folder(
+        &self,
+        project_id: String,
+        hooks: Vec<ProjectHookLine>,
+        trusted: bool,
+    ) -> Result<(), GatewayApplicationError> {
+        let Some(mut request) = self.project_folder_question(project_id).await? else {
+            return Ok(());
+        };
+        let Some(port) = &self.dependencies.hooks else {
+            return Ok(());
+        };
+        request.hooks = hooks;
+        if let Err(failure) = port.decide_project(request, trusted).await {
+            // Nothing is remembered, so nothing runs: the first message asks.
+            tracing::warn!(event = "project_hook_answer_not_saved", error = %failure);
+        }
+        Ok(())
+    }
+
     /// What the session's project folder holds right now. A failed lookup means
     /// its hooks do not run, and does not stop the send that asked.
     async fn project_review(&self, chat: &str, port: &Arc<dyn HookPort>) -> ProjectHookReview {

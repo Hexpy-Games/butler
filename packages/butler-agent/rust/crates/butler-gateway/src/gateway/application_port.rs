@@ -68,6 +68,22 @@ pub trait GatewayApplication:
         request: AppCreateProjectRequest,
     ) -> ApplicationFuture<AppCreateProjectResult>;
     fn list_projects(&self, include_sessions: bool) -> ApplicationFuture<AppProjectList>;
+    /// The hooks of a project's folder, if nobody answered for it yet.
+    fn project_folder_question(
+        &self,
+        _project_id: String,
+    ) -> ApplicationFuture<Option<butler_core::hooks::ProjectHookRequest>> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Answers that question, for the list of hooks the person saw.
+    fn answer_project_folder(
+        &self,
+        _project_id: String,
+        _hooks: Vec<butler_core::hooks::ProjectHookLine>,
+        _trusted: bool,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn new_chat_briefing(
         &self,
         date: Option<String>,

@@ -179,7 +179,8 @@ impl GuidedTurnFactoryAdapter {
 
 /// One card per turn, folder and list of hooks: slots ignore the session, so another
 /// turn or chat on the same folder must not share this one, and a file that changed
-/// while its card waited gets a card of its own. Nothing keeps this digest afterwards.
+/// while its card waited gets a card of its own. The digest stays in the request's
+/// `action_key`; the record of the answer keeps only the folder and yes or no.
 fn card_facts(
     request: &ProjectHookRequest,
     semantic: &SemanticTurn,

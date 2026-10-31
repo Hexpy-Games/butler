@@ -208,7 +208,7 @@ function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
 }
 
 /** "Event (tools) · exact command". */
-function projectHookText(hook: ProjectHookLine): string {
+export function projectHookText(hook: ProjectHookLine): string {
   const tools = hook.tools.length ? ` (${hook.tools.join(", ")})` : "";
   return `${hook.event}${tools} · ${hook.command}`;
 }

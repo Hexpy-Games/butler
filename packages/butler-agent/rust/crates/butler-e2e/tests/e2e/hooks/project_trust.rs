@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 #[path = "project_trust/added_text.rs"]
 mod added_text;
+#[path = "project_trust/at_add.rs"]
+mod at_add;
 #[path = "project_trust/boundary.rs"]
 mod boundary;
 #[path = "project_trust/modes.rs"]
@@ -18,7 +20,7 @@ mod stale_card;
 
 pub(super) struct Project {
     pub(super) root: PathBuf,
-    id: String,
+    pub(super) id: String,
     /// The first chat, created before any hook file exists.
     pub(super) chat: String,
     observe: Vec<String>,
