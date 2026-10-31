@@ -81,6 +81,9 @@ pub(super) fn migrate(
          DROP INDEX IF EXISTS staged_outbounds_chat_idx;
          DROP INDEX IF EXISTS terminal_projection_chat_idx;
          CREATE TABLE IF NOT EXISTS app_output_transfers(archive_id TEXT PRIMARY KEY);
+         CREATE TABLE IF NOT EXISTS app_session_delete_cleanups(
+           session_id TEXT PRIMARY KEY,kind TEXT NOT NULL CHECK(kind IN ('delete','archive')),
+           session_hint TEXT,generation INTEGER NOT NULL DEFAULT 0);
          CREATE INDEX IF NOT EXISTS automation_runs_target_idx ON app_automation_runs(target_session_id)",
     ).map_err(AppStorageError::sqlite)?;
     // Existing App databases also need the actual-column index. Historical
@@ -193,6 +196,12 @@ fn migrate_app_features(
     connection: &mut Connection,
     butler_data: Option<&Path>,
 ) -> Result<(), AppStorageError> {
+    migration::ensure_column(
+        connection,
+        "app_session_delete_cleanups",
+        "generation",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;

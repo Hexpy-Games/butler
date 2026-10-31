@@ -17,6 +17,14 @@ pub enum FailureClass {
 #[error("permanent request failure")]
 struct PermanentFailure(#[source] GatewayApplicationError);
 
+#[derive(Debug, thiserror::Error)]
+#[error("request committed before cleanup failed")]
+struct CommittedFailure {
+    #[source]
+    error: GatewayApplicationError,
+    sessions: Vec<String>,
+}
+
 /// A gateway application failure as the HTTP layer reports it.
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum GatewayApplicationError {
@@ -65,6 +73,37 @@ impl GatewayApplicationError {
             Self::Public { source, .. } | Self::Internal { source } => *source = Some(cause),
         }
         self
+    }
+
+    /// Marks failures from work performed after a durable lifecycle commit.
+    pub(crate) fn after_commit(self) -> Self {
+        self.after_commit_with_sessions(Vec::new())
+    }
+
+    pub(crate) fn after_commit_with_sessions(mut self, sessions: Vec<String>) -> Self {
+        let cause = Arc::new(CommittedFailure {
+            error: self.clone(),
+            sessions,
+        });
+        match &mut self {
+            Self::Public { source, .. } | Self::Internal { source } => *source = Some(cause),
+        }
+        self
+    }
+
+    pub(crate) fn committed(&self) -> bool {
+        let (Self::Public { source, .. } | Self::Internal { source }) = self;
+        source
+            .as_ref()
+            .is_some_and(|cause| cause.is::<CommittedFailure>())
+    }
+
+    pub(crate) fn committed_sessions(&self) -> &[String] {
+        let (Self::Public { source, .. } | Self::Internal { source }) = self;
+        source
+            .as_ref()
+            .and_then(|cause| cause.downcast_ref::<CommittedFailure>())
+            .map_or(&[], |cause| cause.sessions.as_slice())
     }
 
     /// A failure shown to the client.
