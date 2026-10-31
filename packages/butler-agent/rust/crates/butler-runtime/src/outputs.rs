@@ -1,4 +1,5 @@
-//! Immutable workspace snapshots. No timers or background writes.
+//! Immutable workspace snapshots and one-time blob ownership recovery.
+mod blobs;
 mod index;
 mod snapshot;
 pub use index::OutputSummary;
