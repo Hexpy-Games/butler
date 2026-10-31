@@ -47,11 +47,12 @@ async fn stop_during_backfill_preserves_cursor_and_resumes() -> Result<(), Harne
     .map_err(|_| HarnessError("backfill never started".into()))??;
     let stop = Instant::now();
     s.agent.terminate().await?;
-    assert!(
-        stop.elapsed() < Duration::from_secs(8),
-        "normal stop exceeded its deadline"
-    );
     let stop_elapsed = stop.elapsed();
+    butler_e2e::assert_wall_clock_budget!(
+        stop_elapsed,
+        Duration::from_secs(8),
+        "normal stop deadline"
+    );
     assert_eq!(
         scalar(&s.sandbox.data, "SELECT complete FROM output_blob_backfill")?,
         0

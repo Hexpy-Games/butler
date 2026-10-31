@@ -64,12 +64,10 @@ async fn pending_transfer(dangling: bool) -> Result<(), HarnessError> {
         assert_eq!(listing.data()["artifacts"], json!([]));
         // First successful publication still creates the projection normally.
         s.turn("general", "Publish").await?;
-        assert!(
-            !s.gw.get("/artifacts?session_id=general").await?.data()["artifacts"]
-                .as_array()
-                .unwrap()
-                .is_empty()
-        );
+        let published = s.gw.get("/artifacts?session_id=general").await?;
+        let artifacts = published.data()["artifacts"].as_array().unwrap();
+        let empty: &[serde_json::Value] = &[];
+        assert_ne!(artifacts.as_slice(), empty);
     }
     drop(app);
     s.finish().await
