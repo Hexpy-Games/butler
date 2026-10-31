@@ -133,6 +133,8 @@ export async function fillPay(browser, tab, args, controlTab) {
       if (step.parts?.some(part => part.keypad || part.readOnly)) { keypads.push(step.field); continue; }
       const list = texts(step, pulled.values, args.meta ?? {});
       if (!list || list.some(item => item === null || item === undefined)) { missing.push(step.field); continue; }
+      // Closed before the first keystroke, and stays closed however this ends.
+      tab.readsClosed = { inPage: null };
       if (await put(tab, step, list)) filled.push(step); else missing.push(step.field);
     }
   } finally {

@@ -9,6 +9,7 @@
 )]
 mod assets;
 mod backend;
+mod devtools;
 mod downloads;
 mod guard;
 mod hidden;

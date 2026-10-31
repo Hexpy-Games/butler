@@ -277,6 +277,36 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
                 json!({"path":"identity-site","title":"Identity fixture"}),
             ),
         ],
+        "Publish devtools" => vec![
+            (
+                "write_file",
+                json!({"path":"devtools-site/index.html","content":super::devtools::PAGE,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"devtools-site","title":"DevTools fixture"}),
+            ),
+        ],
+        "Publish devtools hung" => vec![
+            (
+                "write_file",
+                json!({"path":"devtools-hung/index.html","content":super::devtools::HUNG_PAGE,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"devtools-hung","title":"hung fixture"}),
+            ),
+        ],
+        "Publish devtools long" => vec![
+            (
+                "write_file",
+                json!({"path":"devtools-long/index.html","content":super::devtools::LONG_PAGE,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"devtools-long","title":"Long DevTools fixture"}),
+            ),
+        ],
         "Publish broken" => vec![
             (
                 "write_file",
@@ -340,6 +370,9 @@ fn cassette() -> Result<Cassette, HarnessError> {
             "Publish images",
             "Publish identity",
             "Publish broken",
+            "Publish devtools",
+            "Publish devtools long",
+            "Publish devtools hung",
             "Publish fixture",
             "Publish shop",
             "Publish parallel",

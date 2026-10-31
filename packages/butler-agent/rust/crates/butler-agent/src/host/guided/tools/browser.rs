@@ -5,6 +5,7 @@ pub(super) use compact::TabView;
 mod authority;
 pub(super) use assets::lookup_assets;
 pub(super) mod client;
+mod devtools;
 mod dialog;
 mod effect;
 mod grant;
@@ -43,6 +44,7 @@ pub(super) fn supports(name: &str) -> bool {
             | "browser_act"
             | "browser_tabs"
             | "browser_selection"
+            | "browser_devtools"
             | "browser_screenshot"
             | "image_collect"
             | "browser_close"
@@ -104,6 +106,9 @@ async fn execute_client(
     }
     if call.name == "browser_wait_for_user" {
         return wait(owner, invocation, call, occurrence, client, args).await;
+    }
+    if call.name == "browser_devtools" {
+        return devtools::execute(owner, invocation, call, occurrence, client, args).await;
     }
     if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
         return pay::execute(owner, invocation, call, occurrence, client, args).await;

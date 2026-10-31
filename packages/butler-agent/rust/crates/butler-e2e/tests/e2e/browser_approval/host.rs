@@ -199,7 +199,7 @@ fn facts(step: &Value) -> Value {
 
 /// One scripted model turn per request: describe the browser tools, run each
 /// call through `tool_call`, then answer.
-pub(super) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, HarnessError> {
+pub(crate) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
@@ -243,7 +243,7 @@ pub(super) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, Harne
 }
 
 /// A `tool_call` of `name` with `arguments`.
-pub(super) fn call(name: &str, arguments: Value) -> Value {
+pub(crate) fn call(name: &str, arguments: Value) -> Value {
     let mut call = json!({ "id": format!("native:{name}") });
     call["arguments"] = arguments;
     call
