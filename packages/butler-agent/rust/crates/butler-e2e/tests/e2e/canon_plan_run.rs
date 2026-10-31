@@ -24,6 +24,7 @@ mod replay_errors;
 pub(crate) mod stop_paths;
 mod take_recovery;
 mod taking;
+mod unfinished;
 mod visibility;
 use butler_e2e::e2e::HarnessError;
 use fixture::*;

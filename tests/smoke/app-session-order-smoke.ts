@@ -2,7 +2,7 @@
 // Stub-only native gateway smoke; four light/dark × desktop/phone cells.
 // BUTLER_SMOKE_BASELINE=1 captures the same screens before the UI change.
 import assert from "node:assert/strict";
-import { assertNoCanonInstructions, assertStepActivity, completedPrefixDrop, liveStepSurfaces } from "../support/session-order-regressions.ts";
+import { assertNoCanonInstructions, assertStepActivity, completedPrefixDrop, liveStepSurfaces, unfinishedStepCard } from "../support/session-order-regressions.ts";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -44,6 +44,7 @@ try {
   await singleStep();
   if (!baseline) await completedPrefixDrop(host, open, info, keyboardEdit, shot);
   if (!baseline && device === "desktop") await liveStepSurfaces(host, id => open(id, 2), info, shot, crop, copy.space.attention, UNGATED_REPLY);
+  if (!baseline && device === "desktop") await unfinishedStepCard(host, id => open(id, 2), shot, UNGATED_REPLY);
   const plain = await orderChat(host, "진행 순서 확인");
   await scenario(plain, "plain");
   await scenario("general", "bubble");

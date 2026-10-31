@@ -15,11 +15,7 @@ pub(super) async fn apply(
     let language = super::super::canon_proposals::language(app).await?;
     let epic = field(&panel, "epic_title")?;
     let text = if kind == "canon_hold" {
-        if language.starts_with("ko") {
-            format!("‘{epic}’가 막혀 다음 과제를 멈췄습니다.")
-        } else {
-            format!("‘{epic}’ is blocked. Later tasks are on hold.")
-        }
+        hold_text(&language, &epic, panel["hold_reason"].as_str())
     } else {
         let other = field(&panel, "other_session_id")?;
         let title = app
@@ -75,6 +71,22 @@ pub(super) async fn apply(
         .map_err(app_error)?;
     app.automation_wake.notify_one();
     Ok(())
+}
+
+fn hold_text(language: &str, epic: &str, reason: Option<&str>) -> String {
+    match (
+        language.starts_with("ko"),
+        reason == Some("step_unfinished"),
+    ) {
+        (true, true) => {
+            format!("‘{epic}’가 끝나지 않아 다음 과제를 멈췄습니다. 답하면 이어서 합니다.")
+        }
+        (true, false) => format!("‘{epic}’가 막혀 다음 과제를 멈췄습니다."),
+        (false, true) => {
+            format!("‘{epic}’ isn't finished. Later tasks are on hold. Reply to continue.")
+        }
+        (false, false) => format!("‘{epic}’ is blocked. Later tasks are on hold."),
+    }
 }
 
 fn offer_text(language: &str, epic: &str, title: &str, running: Option<bool>) -> String {

@@ -1,5 +1,8 @@
 use super::*;
 
+/// The step's Turn ended with nothing closed; a reply can still finish it.
+const UNFINISHED: &str = "step_unfinished";
+
 /// Called only for sessions named by changed epics or an explicit queue act.
 pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
     ready_inner(tx, ctx, session, true)
@@ -92,13 +95,18 @@ pub fn reconcile(
     let active = rows(tx, sql::OWNER, [epic])?;
     for item in active {
         let session = text(&item, "session_id")?;
-        if item["state"] == "running" && item["hold_reason"].is_null() {
+        let unfinished = item["hold_reason"] == UNFINISHED && item["decision"].is_null();
+        if item["state"] == "running" && (item["hold_reason"].is_null() || unfinished) {
             let started = item["started_at"]
                 .as_i64()
                 .ok_or(Error::Invalid("started_at"))?;
             if let Some(work) = runtime::queue_outcome(tx, epic, session, started, views)? {
                 let id = text(&work, "work_id")?;
-                if work["failed"] == true {
+                if work["reported"] == true && unfinished {
+                    resolve(tx, ctx, &item, id)?;
+                } else if unfinished {
+                    // Its card already stands; a blocked reply needs no second one.
+                } else if work["failed"] == true {
                     fail(tx, ctx, &item, "work_blocked")?;
                 } else if work["reported"] == true {
                     tx.execute(sql::DONE, params![session, epic, id, ctx.now])?;
@@ -108,6 +116,23 @@ pub fn reconcile(
         }
         ready(tx, ctx, session)?;
     }
+    Ok(())
+}
+/// The reply to a step that stopped unfinished closed its Work: the run goes on.
+fn resolve(tx: &Transaction<'_>, ctx: &Context, item: &Value, work: &str) -> Result<()> {
+    let session = text(item, "session_id")?;
+    let epic = text(item, "epic_id")?;
+    tx.execute(sql::RESOLVE, params![session, epic, work, ctx.now])?;
+    tx.execute(sql::UNHOLD, params![session, epic])?;
+    let op = text(item, "question_message_id")?;
+    record_intent(
+        tx,
+        ctx,
+        &format!("{op}:resolved"),
+        "canon_hold",
+        &json!({"session_id":session,"epic_id":epic,"epic_title":read_work(tx,epic)?["title"],"source_key":op,"state":"resolved"}),
+    )?;
+    changed(tx, ctx, session)?;
     Ok(())
 }
 pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) -> Result<Value> {
@@ -128,9 +153,21 @@ pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) 
     if let Some(item) = item
         && item["state"] == "running"
         && item["hold_reason"].is_null()
-        && matches!(outcome, "cancelled" | "failed" | "turn_interrupted")
     {
-        fail(tx, ctx, &item, outcome)?;
+        if matches!(outcome, "cancelled" | "failed" | "turn_interrupted") {
+            fail(tx, ctx, &item, outcome)?;
+        } else if outcome == "delivered"
+            && runtime::step_unfinished(
+                tx,
+                text(&item, "epic_id")?,
+                text(&item, "session_id")?,
+                item["started_at"]
+                    .as_i64()
+                    .ok_or(Error::Invalid("started_at"))?,
+            )?
+        {
+            fail(tx, ctx, &item, UNFINISHED)?;
+        }
     }
     Ok(json!({"ok":true}))
 }
@@ -162,7 +199,7 @@ fn fail(tx: &Transaction<'_>, ctx: &Context, item: &Value, reason: &str) -> Resu
         ctx,
         &op,
         "canon_hold",
-        &json!({"session_id":session,"epic_id":epic,"epic_title":read_work(tx,epic)?["title"],"state":"pending"}),
+        &json!({"session_id":session,"epic_id":epic,"epic_title":read_work(tx,epic)?["title"],"hold_reason":reason,"state":"pending"}),
     )?;
     changed(tx, ctx, session)?;
     Ok(())

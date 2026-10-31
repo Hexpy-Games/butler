@@ -234,6 +234,28 @@ pub fn project_works(db: &Connection, value: &Value) -> Result<Vec<Value>> {
     Ok(works)
 }
 
+/// A step's Turn ended: it stays unfinished when no Work closed and nothing delegated
+/// can still close one. A closed Work settles through its closeout instead.
+pub(crate) fn step_unfinished(
+    db: &Connection,
+    epic: &str,
+    session: &str,
+    started: i64,
+) -> Result<bool> {
+    let works = rows(
+        db,
+        crate::store::queue::sql::LINKED_WORK,
+        params![epic, session, started],
+    )?;
+    if works.first().is_some_and(|work| work["status"] != "open") {
+        return Ok(false);
+    }
+    Ok(db
+        .query_row(Query::SessionDelegationOpen.sql(), [session], |_| Ok(()))
+        .optional()?
+        .is_none())
+}
+
 /// Only links created in this run and this exact runtime session can settle it.
 pub(crate) fn queue_outcome(
     db: &Connection,

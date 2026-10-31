@@ -204,3 +204,24 @@ export async function liveStepSurfaces(host: NativeAppServerHandle, open: (id: s
   await lastStepUnread(host, open, crop, attention, reply, problems);
   assert.deepEqual(problems, [], "each sidebar row shows only its own queue item's state");
 }
+
+/** A step whose Turn just replied, with no Work: it stops and asks, with the plain card. */
+export async function unfinishedStepCard(host: NativeAppServerHandle, open: (id: string) => Promise<Page>, shot: (page: Page, name: string) => Promise<void>,
+  reply: string) {
+  const id = await orderChat(host, "답을 기다리는 과제");
+  const { plan, epics } = await seedOrderPlan(host, 2);
+  const first = await host.api<{ revision: number }>(`/canon/epics/${epics[0]!.id}`);
+  await host.api(`/canon/epics/${epics[0]!.id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: first.revision, description: reply }) });
+  const page = await open(id);
+  try {
+    await requestOrder(host, id, { op: "plan_run", plan_id: plan.id });
+    await waitOrder(host, id, view => view.counts.failed === 1 && view.counts.held === 1);
+    await page.locator('[data-test-class="canon-hold"]').waitFor();
+    await shot(page, "unfinished-step-card");
+    const text = await page.locator('[data-test-class~="conversation"]').first().innerText();
+    assert.match(text, /답하면 이어서 합니다|Reply to continue/u, "the card says how to go on");
+  } finally {
+    await page.unrouteAll({ behavior: "wait" }); await page.close();
+    await host.api(`/sessions/${encodeURIComponent(id)}?permanent=true`, { method: "DELETE" });
+  }
+}
