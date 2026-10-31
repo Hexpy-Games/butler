@@ -70,7 +70,7 @@ function afterStandIn(pane: HTMLElement | null, start: () => void): () => void {
  * the open layout while it moves, so the pane holds its final size and only travels (its content never reflows). The
  * chat card's edge follows it on the same tokens: its width animates over a negative margin that keeps the flow still.
  * The title row's chat group ends with the card. A pane holding a native view waits for its still (afterStandIn):
- * opening, the whole motion waits; closing, the chat starts at once under the pane, which leaves as soon as it can.
+ * the whole motion waits, in either direction, so the chat's edge and the pane never overlap.
  * A new toggle starts from the frame on screen (mid-motion included). A first mount, another conversation and
  * reduced motion place everything at once; reduced motion fades an opening pane in.
  */
@@ -141,14 +141,14 @@ export class SplitPaneMotion extends Component<SplitPaneMotionProps> {
   private leave(split: HTMLElement, from: Geometry) {
     const { chat, pane, title } = parts(split);
     const hold: MotionOptions = { ...MOTION, fill: "forwards" };
-    const moving = [
-      title && from.title ? animateMotion(title, [titleFrame(from.title), titleFrame(getComputedStyle(title).width)], MOTION) : null,
-      chat && animateMotion(chat, [chatFrame(from.chat), chatFrame("100%")], hold),
-    ].filter((animation): animation is Animation => Boolean(animation));
-    this.motion = moving;
+    const chatMotion = chat && animateMotion(chat, [chatFrame(from.chat), chatFrame("100%")], hold);
     const paneMotion = pane && animateMotion(pane, [{ transform: from.pane ?? "translateX(0px)" }, { transform: OFF_EDGE }], hold);
-    this.holdUntilStandIn(pane, [paneMotion]);
-    return paneMotion ?? moving.at(-1) ?? null;
+    this.holdUntilStandIn(pane, [
+      title && from.title ? animateMotion(title, [titleFrame(from.title), titleFrame(getComputedStyle(title).width)], MOTION) : null,
+      chatMotion,
+      paneMotion,
+    ]);
+    return paneMotion ?? chatMotion ?? null;
   }
 
   render() {

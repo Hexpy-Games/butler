@@ -69,8 +69,8 @@ block. Do not use it as a generic card or nested panel.
   transform, the chat card's edge and the title row's chat group follow it. A
   closing pane stays mounted, with the node it last had, until the motion ends.
   A pane with a native view on screen waits for its still before it travels
-  (NativeViewSlot hold, at most one motion's length): opening, the whole motion
-  waits; closing, the chat starts at once under the pane.
+  (NativeViewSlot hold, at most one motion's length); the whole motion waits, in
+  either direction.
   A toggle mid-motion continues from the frame on screen. A resize settles any
   running motion and is immediate. The first mount, a new `contextKey` (another
   conversation) and reduced motion place everything at once; reduced motion
