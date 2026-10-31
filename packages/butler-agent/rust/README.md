@@ -160,7 +160,9 @@ Exit 2 or `{"decision":"deny","reason":"..."}` denies a pre-event. `block` and
 Claude Code's `hookSpecificOutput.permissionDecision: "deny"` are also accepted.
 Exit 0 with empty/non-JSON stdout continues. Other exits, crashes, invalid JSON,
 spawn failures, timeout and output overflow are logged and continue by default;
-`failClosed: true` blocks on these failures. `allow` and `ask` are logged as
+`failClosed: true` blocks on these failures. A `UserPromptSubmit` or `SessionStart`
+hook's non-JSON stdout counts as text even when it starts with `[` or `{`, unless
+that hook sets `failClosed: true`. `allow` and `ask` are logged as
 `approval_ignored`; normal permission checks still run. Input rewriting is
 ignored. Reasons are limited to 16 KiB.
 
@@ -170,9 +172,15 @@ the whole stdout when it is not JSON. **Any plain stdout from these two events n
 reaches the model:** print nothing or `{}` from a hook that only observes. Other
 events, `async: true` hooks and failed hooks add nothing.
 
+This text is sent to the model provider and stored in the conversation's history.
+Butler removes a plugin's own secrets from its hook's text. Text from your own
+hooks is not redacted, so do not print anything you would not send to the provider.
+
 The text goes with the turn it belongs to: `UserPromptSubmit` with its message,
-`SessionStart` with the session's first turn. The model reads it in a section
-labelled as hook output, not the user's words, right before the request. It then
+`SessionStart` with the first turn admitted after the hook finishes. A message sent
+during a slow hook therefore runs without it. The model reads it right before the
+request, in a labelled section with each hook's text fenced by a marker derived
+from that text, so the text cannot pass for a heading or a message. It then
 stays in that turn's history like the rest of the turn. Hooks do not change the
 stable part of the prompt, and a retry or resume uses the admitted text without
 running the hook again. Nothing the text says grants permission, answers an
@@ -181,8 +189,7 @@ approval or changes the permission mode.
 Up to 8,000 tokens per hook stay exact. Longer output becomes the same preview as
 tool output, with the full text readable through `read_tool_output_artifact`, and
 the run log names the artifact. Past 10 MiB the hook fails as an output overflow:
-nothing is added, and the model and the run log are told. Read-only sessions do not
-offer that tool, so the model gets only the preview there.
+nothing is added, and the model and the run log are told.
 
 A tool denial becomes model feedback with code `hook_denied`. A Stop denial uses
 the existing continuation budget. A rejected send returns `422 hook_blocked` and

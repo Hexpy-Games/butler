@@ -3,7 +3,7 @@ mod config;
 mod context;
 mod event;
 pub use config::{HookConfig, HookDefinition, HookMatcher};
-pub use context::{HookContext, HookDispatched, render_hook_context};
+pub use context::{HookContext, HookDispatched};
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
 use serde::{Deserialize, Serialize};
 use std::{future::Future, pin::Pin};

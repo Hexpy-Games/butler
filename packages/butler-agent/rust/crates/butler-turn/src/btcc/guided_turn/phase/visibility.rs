@@ -221,6 +221,8 @@ fn apply_access_mode(
         names.insert("call_mcp_tool".into());
         return;
     }
+    // Reading kept output changes nothing, and any tier can be handed a preview of it.
+    names.insert("read_tool_output_artifact".into());
     let ask_first = policy.access_mode.reviews_effects();
     if ask_first {
         names.extend(
@@ -305,7 +307,9 @@ pub(super) fn legacy_visible<'a>(
         ]);
     }
     match policy.access_mode {
-        AccessMode::ReadOnly => {}
+        AccessMode::ReadOnly => {
+            names.insert("read_tool_output_artifact");
+        }
         AccessMode::AskAlways | AccessMode::AskExceptReads | AccessMode::Auto => {
             names.extend(WRITE_TOOLS);
             names.extend(

@@ -23,7 +23,7 @@ impl AppApplication {
                 .execute(move |db| {
                     let (snapshot, access, folder, edits) =
                         claimed_input(db, &queued_id, &claim_id)?;
-                    let hook = super::hooks::claimed_context(db, &snapshot.chat_id, &queued_id)?;
+                    let hook = super::hook_context::claimed(db, &snapshot.chat_id, &queued_id)?;
                     Ok((
                         snapshot,
                         access,

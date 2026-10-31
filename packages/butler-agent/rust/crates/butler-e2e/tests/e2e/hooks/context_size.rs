@@ -59,7 +59,8 @@ async fn hooks_context_large_output_is_previewed_and_stays_readable() -> Result<
 
     let all = prompts(&s)?;
     let (_, current) = split(&all[0]);
-    assert!(current.contains(HEAD) && current.contains("from: hook \"large\""));
+    assert!(current.contains(HEAD) && current.contains("hook=\"large\""));
+    assert!(current.contains("[This hook printed"), "{current}");
     assert!(
         !current.contains(TAIL),
         "the preview holds the whole output"
@@ -140,7 +141,7 @@ async fn hooks_context_over_the_read_bound_tells_model_and_run_log() -> Result<(
         "over-bound output reached the model"
     );
     assert!(
-        prompt.contains("from: hook \"flood\"")
+        prompt.contains("hook=\"flood\"")
             && prompt.contains("added none of this hook's output: Hook output exceeds 10240 KiB"),
         "{prompt}"
     );
@@ -155,5 +156,86 @@ async fn hooks_context_over_the_read_bound_tells_model_and_run_log() -> Result<(
         "{run}"
     );
     assert!(run["context_bytes"].is_null(), "{run}");
+    s.finish().await
+}
+
+/// A read-only session can read the rest of a preview too: the tool only reads.
+#[tokio::test]
+async fn hooks_context_oversized_output_stays_readable_in_read_only() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("HOOK-CONTEXT-RO")?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
+    let body = format!(
+        "{HEAD}\n{}{TAIL}\n",
+        "a varied line of context 한글 number\n".repeat(6000)
+    );
+    configure(&setup, &[from_file(&setup, "large", &body)?])?;
+    let s = setup.start().await?;
+    s.provider()?.set_chat_responder(read_rest);
+    s.patch_settings(json!({"access_mode":"read_only"}), "access")
+        .await?;
+    let (_, turn) = s.turn("general", "Use the hook output.").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let all = prompts(&s)?;
+    assert!(all[0].contains("- access: read_only"), "{}", all[0]);
+    assert!(!split(&all[0]).1.contains(TAIL), "not a preview");
+    let requests = s.provider()?.requests();
+    let output = requests
+        .iter()
+        .filter_map(|request| request["input"].as_array())
+        .flatten()
+        .find(|item| item["type"] == "function_call_output" && item["call_id"] == "call_hooks")
+        .unwrap();
+    let read: Value = serde_json::from_str(output["output"].as_str().unwrap())?;
+    assert_eq!(read["output"]["stdout"]["search"]["found"], true, "{read}");
+    s.finish().await
+}
+
+/// Background handlers add nothing, so they keep the 64 KiB bound; the other
+/// event of the pair cannot be a background handler at all.
+#[tokio::test]
+async fn hooks_context_async_handlers_keep_the_decision_bound() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("HOOK-CONTEXT-ASYNC")?.env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
+    let limit = butler_platform::hook_process::OUTPUT_LIMIT;
+    let mut flood = from_file(&setup, "flood", &"x".repeat(limit + 1))?;
+    flood["event"] = json!("SessionStart");
+    flood["async"] = json!(true);
+    let mut pre_event = flood.clone();
+    pre_event["event"] = json!("UserPromptSubmit");
+    configure(&setup, &[flood])?;
+    let s = setup.start().await?;
+    let created =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Flood"}))
+            .await?;
+    assert_eq!(created.status, 201, "{created:?}");
+    let chat = created.data()["session"]["id"].as_str().unwrap().to_owned();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let run = loop {
+        let runs = api(&s, Method::GET, "/hooks/runs", None).await?;
+        if let Some(run) = runs.data().as_array().unwrap().first() {
+            break run.clone();
+        }
+        assert!(Instant::now() < deadline, "the background hook never ended");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(run["outcome"], "error", "{run}");
+    assert!(
+        run["stderr"].as_str().unwrap().contains("exceeds 64 KiB"),
+        "{run}"
+    );
+    assert_eq!(s.turn(&chat, "Goes on.").await?.1["state"], "delivered");
+    assert!(!prompts(&s)?.pop().unwrap().contains("## Hook context"));
+
+    let current = api(&s, Method::GET, "/hooks", None).await?;
+    let refused = api(
+        &s,
+        Method::PUT,
+        "/hooks",
+        Some(json!({"revision":current.data()["revision"],"config":{"version":1,"hooks":[pre_event]}})),
+    )
+    .await?;
+    assert_ne!(refused.status, 200, "{refused:?}");
     s.finish().await
 }

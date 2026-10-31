@@ -51,6 +51,11 @@ pub(super) fn resolve(
         Err(_) if !raw.starts_with('{') && !raw.starts_with('[') => {
             return ("continue".into(), None);
         }
+        // Text may start with a bracket; only a hook that asked for strict
+        // failure has its stdout judged as a decision first.
+        Err(_) if super::context::can_add(hook) && !hook.fail_closed => {
+            return ("continue".into(), None);
+        }
         Err(_) => return failure(hook, "error", "Invalid hook decision JSON"),
     };
     let specific = decision.specific;
@@ -73,8 +78,8 @@ pub(super) fn resolve(
     }
 }
 /// Text a successful handler's stdout adds: `additionalContext` of a decision,
-/// otherwise the whole of a non-JSON stdout. Invalid JSON never gets here: it
-/// already failed as a decision.
+/// otherwise the whole of a non-JSON stdout. Stdout that failed as a decision
+/// never gets here.
 pub(super) fn added_context(raw: &str) -> Option<String> {
     let raw = raw.trim();
     let text = match serde_json::from_str::<Decision>(raw) {

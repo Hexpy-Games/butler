@@ -9,6 +9,8 @@
 mod cancellation;
 #[path = "hooks/context.rs"]
 mod context;
+#[path = "hooks/context_lifecycle.rs"]
+mod context_lifecycle;
 #[path = "hooks/context_resume.rs"]
 mod context_resume;
 #[path = "hooks/context_size.rs"]

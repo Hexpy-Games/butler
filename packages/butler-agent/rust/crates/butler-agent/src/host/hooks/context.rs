@@ -21,6 +21,8 @@ pub(super) struct Finished<'a> {
     pub(super) exit_code: Option<i32>,
     /// Redacted stdout.
     pub(super) stdout: &'a str,
+    /// Values that must not reach the model, as plain text.
+    pub(super) redact: &'a [String],
     /// Why a stream's read bound ended the process.
     pub(super) overflow: Option<String>,
 }
@@ -56,6 +58,8 @@ pub(super) async fn added(
     let Some(text) = super::decision::added_context(finished.stdout) else {
         return Added::default();
     };
+    // JSON can spell a value differently, so only the decoded text can be checked.
+    let text = super::execute::clean(&text, finished.redact);
     let bytes = Some(text.len() as u64);
     let (text, note) = budgeted(hooks, hook, text).await;
     Added {
@@ -68,6 +72,7 @@ pub(super) async fn added(
 fn item(hook: &HookDefinition, text: String) -> HookContext {
     HookContext {
         hook: hook.label().to_owned(),
+        scope: super::execute::scope(hook).to_owned(),
         event: hook.event,
         text,
     }
@@ -84,7 +89,7 @@ async fn budgeted(hooks: &Hooks, hook: &HookDefinition, text: String) -> (String
     let bytes = text.len();
     match budget(hooks, text).await {
         Ok((text, Some(artifact))) => (
-            text,
+            format!("[This hook printed {bytes} bytes. Butler kept them as an artifact.]\n{text}"),
             Some(format!(
                 "{bytes} bytes of output: the model got a preview; the full text is in artifact {artifact}"
             )),

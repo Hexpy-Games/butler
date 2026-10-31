@@ -95,23 +95,14 @@ async fn execute(
     };
     let (outcome, reason) = super::decision::resolve(hook, &result);
     if outcome == "approval_ignored" {
-        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = if hook.id.contains('/') { "plugin" } else { "user" });
+        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
     }
-    let clean = |text: &str| {
-        let mut text = text.to_owned();
-        for value in &redact {
-            if !value.is_empty() {
-                text = text.replace(value, "[redacted]");
-            }
-        }
-        text
-    };
-    let reason = reason.map(|s| clean(&s));
+    let reason = reason.map(|s| clean(&s, &redact));
     let exit_code = result.as_ref().ok().and_then(|o| o.exit_code);
     let stdout = result
         .as_ref()
         .ok()
-        .map(|o| clean(&o.stdout))
+        .map(|o| clean(&o.stdout, &redact))
         .unwrap_or_default();
     let overflow = match &result {
         Err(error @ HookProcessError::OutputLimit(_)) => Some(error.to_string()),
@@ -125,6 +116,7 @@ async fn execute(
             outcome: &outcome,
             exit_code,
             stdout: &stdout,
+            redact: &redact,
             overflow,
         },
     )
@@ -142,7 +134,7 @@ async fn execute(
         stdout: excerpt(&stdout),
         stderr: result
             .as_ref()
-            .map(|o| excerpt(&clean(&o.stderr)))
+            .map(|o| excerpt(&clean(&o.stderr, &redact)))
             .unwrap_or_else(ToString::to_string),
     };
     hooks.record(record.clone());
@@ -150,6 +142,22 @@ async fn execute(
         run: record,
         deny: reason,
         context: added.context,
+    }
+}
+pub(super) fn clean(text: &str, redact: &[String]) -> String {
+    let mut text = text.to_owned();
+    for value in redact {
+        if !value.is_empty() {
+            text = text.replace(value, "[redacted]");
+        }
+    }
+    text
+}
+pub(super) fn scope(hook: &HookDefinition) -> &'static str {
+    if hook.id.contains('/') {
+        "plugin"
+    } else {
+        "user"
     }
 }
 async fn run_process(
@@ -253,11 +261,7 @@ fn input(
         envelope: payload,
         hook: Identity {
             id: &hook.id,
-            scope: if hook.id.contains('/') {
-                "plugin"
-            } else {
-                "user"
-            },
+            scope: scope(hook),
         },
     })
     .map_err(|e| HookProcessError::Process(e.to_string()))?;
