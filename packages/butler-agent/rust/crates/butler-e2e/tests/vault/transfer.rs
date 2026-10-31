@@ -227,9 +227,10 @@ fn an_import_reads_only_ordinary_files() -> Outcome {
         Err(VaultError::Refused)
     ));
     // Where the host has FIFOs: reading one would wait for a writer forever.
+    // Git for Windows has a `mkfifo` too, whose result native programs can't see.
     let fifo = fixture.folder.path().join("pipe.age");
-    let made = std::process::Command::new("mkfifo").arg(&fifo).status();
-    if made.is_ok_and(|status| status.success()) {
+    let _ = std::process::Command::new("mkfifo").arg(&fifo).status();
+    if fifo.exists() {
         let answer = without_hanging(move || fixture.vault.import(&fifo, &password()));
         assert!(matches!(answer, Err(VaultError::Refused)), "{answer:?}");
     }
