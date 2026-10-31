@@ -2,6 +2,8 @@ use super::*;
 
 /// The step's Turn ended with nothing closed; a reply can still finish it.
 const UNFINISHED: &str = "step_unfinished";
+/// The step's Work closed as blocked, or as completed against its own record.
+const BLOCKED: &str = "work_blocked";
 
 /// Called only for sessions named by changed epics or an explicit queue act.
 pub fn ready(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
@@ -95,7 +97,9 @@ pub fn reconcile(
     let active = rows(tx, sql::OWNER, [epic])?;
     for item in active {
         let session = text(&item, "session_id")?;
-        let unfinished = item["hold_reason"] == UNFINISHED && item["decision"].is_null();
+        // Asking and waiting can look either way: both clear when the reply finishes the Work.
+        let unfinished = matches!(item["hold_reason"].as_str(), Some(UNFINISHED | BLOCKED))
+            && item["decision"].is_null();
         if item["state"] == "running" && (item["hold_reason"].is_null() || unfinished) {
             let started = item["started_at"]
                 .as_i64()
@@ -107,7 +111,7 @@ pub fn reconcile(
                 } else if unfinished {
                     // Its card already stands; a blocked reply needs no second one.
                 } else if work["failed"] == true {
-                    fail(tx, ctx, &item, "work_blocked")?;
+                    fail(tx, ctx, &item, BLOCKED)?;
                 } else if work["reported"] == true {
                     tx.execute(sql::DONE, params![session, epic, id, ctx.now])?;
                     changed(tx, ctx, session)?;
@@ -118,7 +122,7 @@ pub fn reconcile(
     }
     Ok(())
 }
-/// The reply to a step that stopped unfinished closed its Work: the run goes on.
+/// The reply to a step that stopped closed its Work: the run goes on.
 fn resolve(tx: &Transaction<'_>, ctx: &Context, item: &Value, work: &str) -> Result<()> {
     let session = text(item, "session_id")?;
     let epic = text(item, "epic_id")?;

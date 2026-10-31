@@ -148,6 +148,29 @@ async fn step_turn_ending_on_an_open_work_holds_until_the_reply_finishes_it()
     Ok(())
 }
 
+/// Found live: a model that asks may record the Work as blocked until it hears back.
+#[tokio::test]
+async fn blocked_step_clears_when_the_reply_finishes_its_work() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, chat) =
+        crate::canon_link::setup("CB-UNFINISHED-BLOCKED", false, false).await?;
+    let (plan, epics) = plan(&s, &script, &first).await?;
+    script.blocked.lock().unwrap().push(epics[0].clone());
+    script.release();
+    run_plan(&s, &chat, &plan).await?;
+    wait_state(&s, &chat, &epics[1], "held").await?;
+    let shown = wait_card(&s, "pending").await?;
+    assert_eq!(shown.len(), 1, "{shown:?}");
+    script.blocked.lock().unwrap().clear();
+    s.gw.say(&chat, &format!("Process canon:epic/{} now", epics[0]))
+        .await?;
+    wait_done(&s, &chat, 3).await?;
+    assert_eq!(wait_card(&s, "resolved").await?.len(), 1);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 /// Found live: a plan already in review, queued again, got a plain reply and no card.
 #[tokio::test]
 async fn requeued_plan_in_review_reaches_the_card() -> Result<(), HarnessError> {
