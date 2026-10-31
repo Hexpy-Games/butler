@@ -4,7 +4,10 @@ use butler_platform::secure_fs;
 use std::{io::Read, time::Instant};
 
 /// One startup task, invoked on a blocking worker only after agent readiness.
-pub(in crate::outputs) fn run(store: &OutputStore) -> std::io::Result<()> {
+pub(in crate::outputs) fn run(
+    store: &OutputStore,
+    stop: &tokio_util::sync::CancellationToken,
+) -> std::io::Result<()> {
     let started = Instant::now();
     let root = &store.root;
     if root.join("index.sqlite").exists() {
@@ -16,7 +19,7 @@ pub(in crate::outputs) fn run(store: &OutputStore) -> std::io::Result<()> {
             complete(&db)?
         };
         if migrated {
-            return drain_background(store);
+            return drain_background(store, stop);
         }
     }
     let mut names = match std::fs::read_dir(root.join("manifests")) {
@@ -41,10 +44,33 @@ pub(in crate::outputs) fn run(store: &OutputStore) -> std::io::Result<()> {
         migrated
     };
     if migrated {
-        return drain_background(store);
+        return drain_background(store, stop);
     }
     names.sort();
     let mut db = open(root)?;
+    index_remaining(store, &mut db, names, stop)?;
+    if stop.is_cancelled() {
+        return Ok(());
+    }
+    {
+        let _lock = CHANGES
+            .lock()
+            .map_err(|_| error("output_store_unavailable"))?;
+        sha_index(&db)?;
+    }
+    queue_orphans(store, &mut db, stop)?;
+    if stop.is_cancelled() {
+        return Ok(());
+    }
+    finish(store, &db, started, stop)
+}
+
+fn index_remaining(
+    store: &OutputStore,
+    db: &mut sqlite::Connection,
+    names: Vec<std::ffi::OsString>,
+    stop: &tokio_util::sync::CancellationToken,
+) -> std::io::Result<()> {
     let cursor: String = db
         .query_row(
             "SELECT cursor FROM output_blob_backfill WHERE id=1",
@@ -57,11 +83,13 @@ pub(in crate::outputs) fn run(store: &OutputStore) -> std::io::Result<()> {
         .filter(|n| n.to_string_lossy().as_ref() > cursor.as_str())
         .collect::<Vec<_>>();
     for batch in names.chunks(PAGE) {
-        index_batch(store, &mut db, batch)?;
-        std::thread::yield_now();
+        if stop.is_cancelled() {
+            return Ok(());
+        }
+        index_batch(store, db, batch)?;
+        std::thread::sleep(std::time::Duration::from_millis(2));
     }
-    queue_orphans(store, &mut db)?;
-    finish(store, &db, started)
+    Ok(())
 }
 
 fn index_batch(
@@ -93,7 +121,12 @@ fn index_batch(
     Ok(())
 }
 
-fn finish(store: &OutputStore, db: &Connection, started: Instant) -> std::io::Result<()> {
+fn finish(
+    store: &OutputStore,
+    db: &Connection,
+    started: Instant,
+    stop: &tokio_util::sync::CancellationToken,
+) -> std::io::Result<()> {
     let (indexed, queued): (u64, u64) = {
         let _lock = CHANGES
             .lock()
@@ -107,7 +140,7 @@ fn finish(store: &OutputStore, db: &Connection, started: Instant) -> std::io::Re
         )
         .map_err(std::io::Error::other)?
     };
-    drain_background(store)?;
+    drain_background(store, stop)?;
     butler_core::diagnostic!(
         "[outputs] output blob backfill finished: outputs_indexed={indexed} blobs_queued={queued} elapsed_ms={}",
         started.elapsed().as_millis()
@@ -131,9 +164,13 @@ fn read(path: &Path) -> std::io::Result<Option<Output>> {
     }
 }
 
-/// Enumerate shards once, outside CHANGES; each commit checks ownership under
-/// the same lock as publication. No file is removed before the final marker.
-fn queue_orphans(store: &OutputStore, db: &mut sqlite::Connection) -> std::io::Result<()> {
+/// Enumerate shards once, outside CHANGES; inspect each bounded batch under
+/// the publication lock, so any observed replacement temp file is stale.
+fn queue_orphans(
+    store: &OutputStore,
+    db: &mut sqlite::Connection,
+    stop: &tokio_util::sync::CancellationToken,
+) -> std::io::Result<()> {
     let shards = match std::fs::read_dir(store.root.join("blobs")) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -141,18 +178,72 @@ fn queue_orphans(store: &OutputStore, db: &mut sqlite::Connection) -> std::io::R
     };
     let mut batch = Vec::with_capacity(PAGE);
     for shard in shards {
-        for blob in std::fs::read_dir(shard?.path())? {
-            batch.push(blob?.file_name().to_string_lossy().into_owned());
+        if stop.is_cancelled() {
+            return Ok(());
+        }
+        let shard = shard?;
+        if !shard.file_type()?.is_dir() {
+            butler_core::diagnostic!(
+                "[outputs] skipping non-directory blob shard {}",
+                shard.path().display()
+            );
+            continue;
+        }
+        for blob in std::fs::read_dir(shard.path())? {
+            batch.push(blob?.path());
             if batch.len() == PAGE {
-                queue_batch(db, &batch)?;
+                queue_batch(store, db, &batch)?;
                 batch.clear();
+                if stop.is_cancelled() {
+                    return Ok(());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
             }
         }
     }
-    queue_batch(db, &batch)
+    queue_batch(store, db, &batch)
 }
 
-fn queue_batch(db: &mut sqlite::Connection, batch: &[String]) -> std::io::Result<()> {
+fn orphan_sha(store: &OutputStore, path: &Path) -> std::io::Result<Option<String>> {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    if meta.is_dir() {
+        butler_core::diagnostic!(
+            "[outputs] skipping directory inside blob shard {}",
+            path.display()
+        );
+        return Ok(None);
+    }
+    let name = path
+        .file_name()
+        .ok_or_else(|| error("blob_name_missing"))?
+        .to_string_lossy();
+    if store.blob(&name).is_ok() {
+        return Ok(Some(name.into_owned()));
+    }
+    if name.starts_with('.') && name.ends_with(".tmp") {
+        if let Err(e) = std::fs::remove_file(path)
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            butler_core::diagnostic!(
+                "[outputs] stale blob temp unlink failed {}: {e}",
+                path.display()
+            );
+        }
+    } else {
+        butler_core::diagnostic!("[outputs] skipping invalid blob name {}", path.display());
+    }
+    Ok(None)
+}
+
+fn queue_batch(
+    store: &OutputStore,
+    db: &mut sqlite::Connection,
+    batch: &[std::path::PathBuf],
+) -> std::io::Result<()> {
     if batch.is_empty() {
         return Ok(());
     }
@@ -161,9 +252,11 @@ fn queue_batch(db: &mut sqlite::Connection, batch: &[String]) -> std::io::Result
         .map_err(|_| error("output_store_unavailable"))?;
     let tx = db.transaction().map_err(std::io::Error::other)?;
     let mut queued = 0;
-    for sha in batch {
-        queued += tx.execute("INSERT OR IGNORE INTO output_blob_sweep SELECT ?1 WHERE NOT EXISTS(SELECT 1 FROM output_blobs WHERE sha=?1)", [sha])
-            .map_err(std::io::Error::other)?;
+    for path in batch {
+        if let Some(sha) = orphan_sha(store, path)? {
+            queued += tx.execute("INSERT OR IGNORE INTO output_blob_sweep SELECT ?1 WHERE NOT EXISTS(SELECT 1 FROM output_blobs WHERE sha=?1)", [sha])
+                .map_err(std::io::Error::other)?;
+        }
     }
     if queued > 0 {
         tx.execute(

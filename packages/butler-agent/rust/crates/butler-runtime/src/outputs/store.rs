@@ -83,8 +83,11 @@ impl OutputStore {
         Ok(self.root.join("manifests").join(format!("{id}.json")))
     }
     /// One-time ownership migration, called after readiness on a blocking worker.
-    pub fn backfill_blobs(&self) -> std::io::Result<()> {
-        super::blobs::run(self)
+    pub fn backfill_blobs(
+        &self,
+        stop: &tokio_util::sync::CancellationToken,
+    ) -> std::io::Result<()> {
+        super::blobs::run(self, stop)
     }
     pub fn read(&self, id: &str) -> std::io::Result<Output> {
         serde_json::from_reader(secure_fs::open_read_no_follow(&self.manifest(id)?)?)
@@ -98,7 +101,11 @@ impl OutputStore {
         let mut outputs = Vec::new();
         for entry in std::fs::read_dir(dir)? {
             let id = entry?.file_name().to_string_lossy().into_owned();
-            outputs.push(self.read(&id)?);
+            match self.read(&id) {
+                Ok(output) => outputs.push(output),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
+            }
         }
         outputs.sort_by(|a, b| a.output_id.cmp(&b.output_id));
         Ok(outputs)
@@ -316,14 +323,14 @@ impl OutputStore {
         let _lock = CHANGES
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
-        let ids = super::blobs::queue_session(self, session)?;
+        let (ids, candidates) = super::blobs::queue_session(self, session)?;
         for id in &ids {
             ignore_missing(std::fs::remove_file(self.manifest(id)?))?;
         }
         super::index::remove(&self.root.join("index.sqlite"), session, &ids)?;
         let markers = self.root.join("sessions").join(hash(session.as_bytes()));
         ignore_missing(std::fs::remove_dir_all(markers))?;
-        super::blobs::drain(self)
+        super::blobs::drain(self, &candidates)
     }
 }
 

@@ -144,6 +144,9 @@ pub(super) fn transfer(path: &Path, source: &str, target: &str) -> std::io::Resu
     }
     let mut db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
     let tx = db.transaction().map_err(std::io::Error::other)?;
+    if !ready(&tx)? {
+        return Ok(());
+    }
     for table in ["outputs", "output_refs"] {
         tx.execute(
             &format!("UPDATE {table} SET session=?2 WHERE session=?1"),
@@ -190,7 +193,13 @@ pub(super) fn reference(
     turn: &str,
     message: &str,
 ) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
     let db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    if !ready(&db)? {
+        return Ok(());
+    }
     db.execute(
         "INSERT OR REPLACE INTO output_refs(id,session,turn,message) VALUES(?1,?2,?3,?4)",
         params![id, session, turn, message],
