@@ -171,8 +171,11 @@ async fn unreadable_manifest_keeps_marker_unset_and_all_blobs() -> Result<(), Ha
     schema(&setup.sandbox.data, false)?;
     seed(&setup.sandbox.data, "general", "live", b"Live", false)?;
     let orphan = blob(&setup.sandbox.data, b"Orphan")?;
-    let unreadable =
-        Unreadable::directory(setup.sandbox.data.join("outputs/manifests/unreadable.json"))?;
+    let path = setup
+        .sandbox
+        .data
+        .join(format!("outputs/manifests/{}.json", hash(b"unreadable")));
+    let unreadable = Unreadable::directory(path.clone())?;
     let mut s = setup.start().await?;
     // Wait for an observable production failure rather than racing the worker.
     tokio::time::timeout(Duration::from_secs(10), async {
@@ -188,7 +191,7 @@ async fn unreadable_manifest_keeps_marker_unset_and_all_blobs() -> Result<(), Ha
     );
     assert!(orphan.exists());
     drop(unreadable);
-    std::fs::remove_dir(s.sandbox.data.join("outputs/manifests/unreadable.json"))?;
+    std::fs::remove_dir(path)?;
     s.restart().await?;
     completed(&s).await?;
     assert!(!orphan.exists());
