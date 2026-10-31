@@ -70,7 +70,10 @@ async fn unparseable_manifests_skip_orphans_and_log_paths() -> Result<(), Harnes
     let logs = s.agent.logs();
     for path in manifests {
         assert!(
-            logs.contains(path.to_str().unwrap()),
+            logs.contains(&format!(
+                "outputs/manifests/{}",
+                path.file_name().unwrap().to_str().unwrap()
+            )),
             "missing diagnostic: {logs}"
         );
     }

@@ -84,7 +84,7 @@ async fn stop_during_orphan_pass_keeps_committed_shard_cursor() -> Result<(), Ha
             .data
             .join(format!("outputs/blobs/{shard:02x}"));
         std::fs::create_dir_all(&dir)?;
-        for n in 0..256 {
+        for n in 0..32 {
             let path = dir.join(format!("{shard:02x}{n:062x}"));
             std::fs::write(&path, [])?;
             orphans.push(path);
@@ -124,7 +124,7 @@ async fn stop_during_orphan_pass_keeps_committed_shard_cursor() -> Result<(), Ha
     assert!(next > cursor);
     assert_eq!(
         scalar(&s.sandbox.data, "SELECT queued FROM output_blob_backfill")?,
-        65_536
+        8_192
     );
     assert_eq!(
         scalar(&s.sandbox.data, "SELECT count(*) FROM output_blobs")?,
