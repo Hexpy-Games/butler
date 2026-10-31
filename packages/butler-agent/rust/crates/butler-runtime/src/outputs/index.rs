@@ -16,6 +16,8 @@ pub(super) fn save(path: &Path, output: &Output) -> std::io::Result<()> {
     let mut connection = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
     let db = connection.transaction().map_err(std::io::Error::other)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS outputs(id TEXT PRIMARY KEY, session TEXT NOT NULL, message TEXT NOT NULL, turn TEXT NOT NULL, title TEXT NOT NULL, bytes INTEGER NOT NULL, created TEXT NOT NULL); CREATE INDEX IF NOT EXISTS outputs_session ON outputs(session); CREATE TABLE IF NOT EXISTS output_refs(id TEXT NOT NULL, session TEXT NOT NULL, turn TEXT NOT NULL, message TEXT NOT NULL, PRIMARY KEY(id,turn)); CREATE INDEX IF NOT EXISTS output_refs_turn ON output_refs(session,turn);").map_err(std::io::Error::other)?;
+    super::blobs::schema(&db, false)?;
+    super::blobs::reconcile(&db, output)?;
     let r = output
         .revisions
         .last()
@@ -71,15 +73,20 @@ pub(super) fn summaries(path: &Path, session: &str) -> std::io::Result<Vec<Outpu
         .collect::<Result<Vec<_>, _>>()
         .map_err(std::io::Error::other)
 }
-pub(super) fn remove(path: &Path, session: &str) -> std::io::Result<()> {
-    if path.exists() {
-        let db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+pub(super) fn remove(path: &Path, session: &str, ids: &[String]) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut connection = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    let db = connection.transaction().map_err(std::io::Error::other)?;
+    super::blobs::remove(&db, ids)?;
+    if ready(&db)? {
         db.execute("DELETE FROM output_refs WHERE session=?1", [session])
             .map_err(std::io::Error::other)?;
         db.execute("DELETE FROM outputs WHERE session=?1", [session])
             .map_err(std::io::Error::other)?;
     }
-    Ok(())
+    db.commit().map_err(std::io::Error::other)
 }
 
 pub(super) fn messages(
@@ -122,7 +129,7 @@ pub(super) fn messages(
 
 // First publication creates both tables in one transaction. Until it commits,
 // the file may exist while the index is still logically empty.
-fn ready(db: &rusqlite::Connection) -> std::io::Result<bool> {
+pub(super) fn ready(db: &rusqlite::Connection) -> std::io::Result<bool> {
     db.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='output_refs')",
         [],
@@ -137,6 +144,9 @@ pub(super) fn transfer(path: &Path, source: &str, target: &str) -> std::io::Resu
     }
     let mut db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
     let tx = db.transaction().map_err(std::io::Error::other)?;
+    if !ready(&tx)? {
+        return Ok(());
+    }
     for table in ["outputs", "output_refs"] {
         tx.execute(
             &format!("UPDATE {table} SET session=?2 WHERE session=?1"),
@@ -183,7 +193,13 @@ pub(super) fn reference(
     turn: &str,
     message: &str,
 ) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
     let db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    if !ready(&db)? {
+        return Ok(());
+    }
     db.execute(
         "INSERT OR REPLACE INTO output_refs(id,session,turn,message) VALUES(?1,?2,?3,?4)",
         params![id, session, turn, message],
