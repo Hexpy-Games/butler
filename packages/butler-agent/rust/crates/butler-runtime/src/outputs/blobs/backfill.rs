@@ -3,6 +3,8 @@ use super::*;
 use butler_platform::secure_fs;
 use std::{io::Read, time::Instant};
 
+const INDEX_BATCH: usize = 512;
+
 /// One startup task, invoked on a blocking worker only after agent readiness.
 pub(in crate::outputs) fn run(
     store: &OutputStore,
@@ -56,6 +58,9 @@ pub(in crate::outputs) fn run(
         let _lock = CHANGES
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
+        // Bound the one-time sort cache, avoiding temporary runs for small indexes.
+        db.execute_batch("PRAGMA cache_size=-65536")
+            .map_err(std::io::Error::other)?;
         sha_index(&db)?;
     }
     queue_orphans(store, &mut db, stop)?;
@@ -82,7 +87,7 @@ fn index_remaining(
         .into_iter()
         .filter(|n| n.to_string_lossy().as_ref() > cursor.as_str())
         .collect::<Vec<_>>();
-    for batch in names.chunks(PAGE) {
+    for batch in names.chunks(INDEX_BATCH) {
         if stop.is_cancelled() {
             return Ok(());
         }
