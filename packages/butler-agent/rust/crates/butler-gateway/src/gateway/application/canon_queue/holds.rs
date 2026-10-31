@@ -58,6 +58,12 @@ pub(super) async fn apply(
                 &payload,
                 &now,
             )?;
+            // These answer a run the owner started; waiting for morning would be a silent stall.
+            db.execute(
+                "UPDATE app_initiated_messages SET bypass_quiet_hours=1 WHERE id=?1",
+                [&id],
+            )
+            .map_err(AppStorageError::sqlite)?;
             if let Some(event) =
                 super::super::initiated::update_canon_payload(db, &source, &payload, &now)?
             {
