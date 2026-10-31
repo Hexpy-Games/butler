@@ -152,7 +152,7 @@ export function approvalRequestView(
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
-      ...actionDetails(approval, actionKind, card, copy)].map(maskActionSecrets),
+      ...actionDetails(approval, actionKind, card, copy)],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -168,8 +168,8 @@ export function approvalActionView(approval: ApprovalSummary, copy: ApprovalRequ
   const kind = knownActionKind(approval);
   return {
     label: (approval.operation && toolLabels[approval.operation.tool]) || toolLabels[approval.actionKind] || toolLabels.fallback,
-    target: maskActionSecrets((COMMAND_KINDS.has(kind) ? approval.operation?.command ?? approval.examples[0] : undefined)
-      ?? actionDetails(approval, kind, { reason: "" }, copy)[0] ?? ""),
+    // The notice is not the decision card. No command appears in it, so it cannot mislead or leak.
+    target: COMMAND_KINDS.has(kind) || approval.operation?.command ? "" : maskActionSecrets(actionDetails(approval, kind, { reason: "" }, copy)[0] ?? ""),
   };
 }
 
@@ -188,7 +188,9 @@ function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
     ...(typeof schedule.browserSignin === "boolean" ? [copy.scheduleSignin(schedule.browserSignin)] : []),
     ...(typeof schedule.browserPayment === "boolean" ? [copy.schedulePayment(schedule.browserPayment)] : []), ...approval.examples].filter(Boolean);
   if (kind === "manage_schedule") return [copy.scheduleUnavailable];
-  return operation ? [...new Set([...operationDetails(operation, copy), ...approval.examples])] : details(approval, kind, card, copy);
+  // An example is a capped copy of the command: when the operation carries the whole command, a prefix of it is a duplicate.
+  const examples = approval.examples.filter(example => !operation?.command || example === operation.command || !operation.command.startsWith(example));
+  return operation ? [...new Set([...operationDetails(operation, copy), ...examples])] : details(approval, kind, card, copy);
 }
 
 /** Kinds whose own sentence names the action better than a tool label. */

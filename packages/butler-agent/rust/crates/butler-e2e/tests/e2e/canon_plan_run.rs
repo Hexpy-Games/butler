@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod batch_edits;
 mod boundaries;
 mod bundle;
 mod delete_replay;
@@ -20,6 +21,7 @@ mod queries;
 mod replay_errors;
 mod take_recovery;
 mod taking;
+mod visibility;
 use butler_e2e::e2e::HarnessError;
 use fixture::*;
 use serde_json::json;

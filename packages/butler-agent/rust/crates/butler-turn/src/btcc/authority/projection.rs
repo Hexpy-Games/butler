@@ -98,7 +98,7 @@ pub(super) fn request(
     })
 }
 /// Fresh approval must show the complete public action, not only its target.
-fn exact_approval(
+pub(in crate::btcc::authority) fn exact_approval(
     record: &AuthorityRecord,
     input: &serde_json::Value,
 ) -> approval::AuthorityApproval {
@@ -116,11 +116,8 @@ fn exact_approval(
             && crate::btcc::CapabilityKind::of_call(&record.capability, arguments, false)
                 .persists_beyond_turn()
         {
-            approval
-                .examples
-                .push(butler_core::public_text::sanitize_public_delta(
-                    &input.to_string(),
-                ));
+            // The exact call input, never redacted: the approver must see what will persist.
+            approval.examples.push(input.to_string());
             approval.examples_truncated.push(false);
         }
     }

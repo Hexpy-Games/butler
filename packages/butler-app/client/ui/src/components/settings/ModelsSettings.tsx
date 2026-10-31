@@ -53,6 +53,7 @@ function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: bool
         <DisclosureRow
           data-test-class="settings-models-advanced"
           title={settingsCopy.modelsAdvanced.contents}
+          reveals
           open={advancedOpen}
           onToggle={onToggleAdvanced}
         />

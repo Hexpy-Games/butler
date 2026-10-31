@@ -313,6 +313,7 @@ impl From<crate::conversation::ConversationError> for BtccError {
 mod tests {
     use super::BtccCode;
     use crate::btcc::storage::StorageCode;
+    use crate::context_ports::ContextCode;
     use crate::conversation::ConversationCode;
     use crate::workspace::{CommandCode, WorkspaceCode};
 
@@ -321,8 +322,8 @@ mod tests {
     }
 
     /// Format pin: every wire code table of the turn engine (BTCC, its store,
-    /// Conversation, workspace and commands) keeps its pinned spelling and
-    /// order; journals, receipts and the App read these strings.
+    /// Conversation, workspace, commands and Context ports) keeps its pinned
+    /// spelling and order; journals, receipts and the App read these strings.
     // test-category: format-pin
     #[test]
     fn wire_codes_are_stable() {
@@ -351,6 +352,11 @@ mod tests {
                 "commands",
                 spelled(CommandCode::ALL, CommandCode::as_str),
                 include_str!("../workspace/commands/wire_codes.txt"),
+            ),
+            (
+                "context",
+                spelled(ContextCode::ALL, ContextCode::as_str),
+                include_str!("../context_ports/wire_codes.txt"),
             ),
         ] {
             let expected: Vec<&str> = pinned.lines().collect();

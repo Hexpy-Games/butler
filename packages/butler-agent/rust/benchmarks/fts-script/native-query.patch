@@ -1,7 +1,7 @@
-diff --git a/packages/butler-agent/rust/crates/butler-memory/src/cognition/graph/episode_fts/tokenize.rs b/packages/butler-agent/rust/crates/butler-memory/src/cognition/graph/episode_fts/tokenize.rs
+diff --git a/packages/butler-agent/rust/crates/butler-core/src/search_text/tokenize.rs b/packages/butler-agent/rust/crates/butler-core/src/search_text/tokenize.rs
 index 915ba0b88..dbffdeb1e 100644
---- a/packages/butler-agent/rust/crates/butler-memory/src/cognition/graph/episode_fts/tokenize.rs
-+++ b/packages/butler-agent/rust/crates/butler-memory/src/cognition/graph/episode_fts/tokenize.rs
+--- a/packages/butler-agent/rust/crates/butler-core/src/search_text/tokenize.rs
++++ b/packages/butler-agent/rust/crates/butler-core/src/search_text/tokenize.rs
 @@ -60,0 +61,9 @@ pub(super) fn field(text: &str) -> String {
 +// Offline experiment bridge: removed before any product adoption.
 +fn experiment_query(text: &str) -> Option<String> {

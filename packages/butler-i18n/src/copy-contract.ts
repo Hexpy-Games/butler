@@ -662,8 +662,6 @@ export interface AppCopy {
     grantedItems: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;
-    reportPreparing: (title: string) => string;
-    progressDetails: (title: string, activity: string, progress: string | null) => string;
     viewActivity: (title: string) => string;
     more: (title: string, count: number) => string;
     deleteItem: (title: string) => string;
@@ -700,7 +698,6 @@ export interface AppCopy {
     userSkills: string;
     projectSkills: string;
     noSkills: string;
-    activeWork: string;
     allowedConversation: string;
     grantScopeTag: string;
     grantCommandScope: string;
@@ -1027,6 +1024,9 @@ export interface AppCopy {
     workspaceLocal: string;
     workspaceWorktree: string;
     messageComposer: string;
+    /** The `@` mention list: its accessible name and the muted label on project rows. */
+    mentionList: string;
+    mentionProject: string;
     placeholder: string;
     placeholderFollowUp: string;
     attachedFiles: string;
@@ -1979,6 +1979,9 @@ export interface AppCopy {
       modelId: string;
       displayName: string;
       maxContext: string;
+      responseTimeout: string;
+      responseTimeoutDescription: (defaultSeconds: number | undefined) => string;
+      responseTimeoutError: (range: { min: number; max: number } | undefined) => string;
       imageInput: string;
       registeredLocalModels: string;
       customOpenAiCompatible: string;

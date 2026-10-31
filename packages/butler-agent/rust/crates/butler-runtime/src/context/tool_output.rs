@@ -82,6 +82,16 @@ pub struct BudgetedToolOutput {
     pub butler_tool_artifact: Option<ToolOutputArtifact>,
 }
 
+impl BudgetedToolOutput {
+    /// The stdout the model is given, preview notice included.
+    pub fn stdout_text(&self) -> String {
+        match &self.stdout {
+            ExactText::Plain(text) => text.clone(),
+            ExactText::Units(units) => String::from_utf16_lossy(units),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArtifactStream {
     Stdout,

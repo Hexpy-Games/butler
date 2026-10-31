@@ -14,6 +14,7 @@ export type {
   MessageContentPart,
   ProgressDetailRow,
   ProgressSummaryRow,
+  ProjectReferenceContentPart,
   ProjectSourceContentPart,
   ProjectSourceReference,
   ProjectStatus,

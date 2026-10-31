@@ -18,6 +18,7 @@ fn summary(capability: &str, target: &str, input: &Value) -> Value {
 pub(in crate::btcc::authority) fn assert_approval_summaries() {
     assert_sign_in_wait_summary();
     assert_wait_for_user_summary();
+    assert_tainted_call_input_is_exact();
     let edits = json!({"edits": [
         {"path": "/Users/someone/work/garden/a.txt"}, {"path": "b.txt"}, {"path": "./a.txt"},
         {"path": "notes/../c.txt"}, {"path": "/etc/passwd"}]});
@@ -95,6 +96,20 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
     for (actual, expected) in cases {
         assert_eq!(actual, expected);
     }
+    // Connector arguments are the call's data: shown exactly, never redacted.
+    let arguments = json!({"note": "token=1", "to": "attacker@evil.example", "send": true, "api_key": "abc123"});
+    let connector = summary(
+        "call_mcp_tool",
+        "mcp:mail/send",
+        &json!({"arguments": arguments}),
+    );
+    let examples = connector["examples"].as_array().unwrap();
+    assert_eq!(examples.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<Value>(examples[0].as_str().unwrap()).unwrap(),
+        arguments
+    );
+    assert!(!examples[0].as_str().unwrap().contains("[redacted]"));
     for tool in ["project_ledger_work_complete", "complete_project_work"] {
         assert_eq!(
             summary(tool, "x", &json!({}))["action_kind"],
@@ -220,4 +235,56 @@ fn assert_wait_for_user_summary() {
         let stored = summary("browser_wait_for_user", "private-tab-id", &input);
         assert_eq!(stored["targets"][0]["path"], "private-tab-id");
     }
+}
+
+/// A tainted call that persists shows its exact input: compact JSON is never cut or redacted.
+fn assert_tainted_call_input_is_exact() {
+    use crate::btcc::authority::contracts::{AuthorityRecord, RequestDecision, RequestOutcome};
+    let input = json!({"api_key": "abc123", "note": "token=1", "path": "a.txt",
+        "send": true, "to": "attacker@evil.example"});
+    let text = |value: &str| value.to_owned();
+    let record = AuthorityRecord {
+        request_id: text("id"),
+        request_ref: text("ref"),
+        identity_sha256: text("sha"),
+        owner_session_id: text("owner"),
+        source_session_id: text("source"),
+        source_turn_id: text("turn"),
+        source_call_id: None,
+        source_work_id: text("work"),
+        workspace_path: text(WORKSPACE),
+        plan_revision_id: text("plan"),
+        action_key: text("action"),
+        authority_generation: 1,
+        capability: text("write_file"),
+        normalized_target: text("a.txt"),
+        normalized_input_json: input.to_string(),
+        model_ref: text("model"),
+        reasoning_effort: text("none"),
+        category: text("reviewed_effect"),
+        reason: text("authority.taintReason"),
+        executable: text("write_file"),
+        command_count: 1,
+        decision: RequestDecision::Pending,
+        allow_scope: text("once"),
+        schedule_client_message_id: text("message"),
+        schedule_input_text: text("allow"),
+        private_alternative_input: None,
+        outcome: RequestOutcome::Pending,
+        outcome_receipt_json: None,
+        close_reason: None,
+        close_scope: None,
+        closed_at: None,
+        created_at: text("now"),
+        updated_at: text("now"),
+    };
+    let approval = crate::btcc::authority::projection::exact_approval(&record, &input);
+    assert_eq!(approval.examples.last(), Some(&input.to_string()));
+    assert!(
+        !approval
+            .examples
+            .iter()
+            .any(|example| example.contains("[redacted]"))
+    );
+    assert_eq!(approval.examples.len(), approval.examples_truncated.len());
 }

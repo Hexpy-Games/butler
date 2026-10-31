@@ -334,3 +334,6 @@ async fn source_view(
     assert!(ids.contains(&answer), "answer missing from {ids:?}");
     Ok(view)
 }
+
+#[path = "session_branches_hooks.rs"]
+mod hooks;

@@ -143,6 +143,7 @@ fn unavailable(parsed: ParsedModelRef, reason: &str) -> ModelProviderMetadata {
 /// Metadata with every optional fact unset, for struct-update construction.
 pub(super) fn blank_metadata() -> ModelProviderMetadata {
     ModelProviderMetadata {
+        chat_wire_policy: Default::default(),
         output_modalities: None,
         image_output: None,
         provider_id: String::new(),
@@ -168,6 +169,7 @@ pub(super) fn blank_metadata() -> ModelProviderMetadata {
         server_url: None,
         source: None,
         local_reasoning_budget_ratio: None,
+        response_timeout_ms: None,
         registered: None,
         enabled: None,
         auth_type: None,
@@ -303,6 +305,9 @@ pub(crate) fn provider_auth_methods(provider_id: &str) -> Vec<ProviderAuthMethod
 pub fn default_hosted_provider_api_base_url(provider_id: &str) -> Option<&'static str> {
     match provider_id {
         "xai" => Some("https://api.x.ai/v1"),
+        "deepseek" => Some("https://api.deepseek.com"),
+        "upstage" => Some("https://api.upstage.ai/v1"),
+        "motif" => Some("https://api-cbt.morphfactory.io/v1"),
         "qwen" => Some("https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
         "kimi" => Some("https://api.moonshot.ai/v1"),
         "zai" => Some("https://api.z.ai/api/coding/paas/v4"),

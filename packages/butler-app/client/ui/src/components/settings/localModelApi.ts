@@ -8,6 +8,7 @@ import type {
   LocalModelDiscoveryRequest,
   LocalModelRegistrationRequest,
   LocalModelRegistrationResult,
+  ResponseTimeoutLimits,
 } from "@/app/types.ts";
 
 const API_TYPE = "openai_compatible" as const;
@@ -22,6 +23,7 @@ export function localModelPayload(
   reasoningBudgetRatio?: number,
   apiKey?: string,
   imageInput?: boolean,
+  responseTimeoutMs?: number | null,
 ): LocalModelRegistrationRequest {
   return {
     api_key: apiKey,
@@ -37,7 +39,26 @@ export function localModelPayload(
     reasoning_budget_ratio: reasoningBudgetRatio,
     source: sourceModel ? "discovered" : "manual",
     image_input: imageInput,
+    response_timeout_ms: responseTimeoutMs,
   };
+}
+
+/**
+ * Milliseconds for a seconds entry: null when empty, NaN when outside the
+ * agent's `limits` (or not positive while the catalog has not said).
+ */
+export function responseTimeoutMs(seconds: string, limits?: ResponseTimeoutLimits): number | null {
+  const text = seconds.trim();
+  if (!text) return null;
+  const value = Number(text);
+  const ms = Math.round(value * 1000);
+  const inRange = limits ? ms >= limits.min_ms && ms <= limits.max_ms : ms > 0;
+  return Number.isFinite(value) && inRange ? ms : Number.NaN;
+}
+
+/** A stored limit as the seconds the field shows; empty when unset. */
+export function responseTimeoutSeconds(milliseconds?: number): string {
+  return milliseconds ? String(milliseconds / 1000) : "";
 }
 
 /** The image input declaration to send: only a switch value that differs from where it started. */

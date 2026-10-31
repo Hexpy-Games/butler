@@ -2,7 +2,7 @@
 // Focus rings are never clipped. The built app's real shell (VisualHarness:
 // product Sidebar, Conversation with answer cards and the agent tab rail, new
 // chat, browser, command palette, menus, Settings, plus the drag-enabled
-// KanbanBoard, editable Tag and FilteredSelectPopover row-actions stories of
+// KanbanBoard, StackDeck, StepSortableList, editable Tag and FilteredSelectPopover row-actions stories of
 // the DS viewer) over an offline gateway
 // stub, plus real session/dashboard inline-edit panes through an isolated
 // native App; no model calls. Run `npm --prefix
@@ -19,6 +19,8 @@
 //
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
 import { historyFixture } from "../support/usage-insights-fixtures";
+import { auditSessionOrderFocus } from "../support/session-order-focus.ts";
+import { sessionOrderFocusResponse } from "../support/session-order-fixtures.ts";
 import { canonFocusResponse } from "../support/canon-sidebar-fixture.ts";
 import { auditInlinePanes } from "../support/session-pane-focus.ts";
 import assert from "node:assert/strict";
@@ -106,6 +108,7 @@ function usageMonitor(url: URL): UsageMonitorView {
     requests: view.model.requestCount, lastUsedMs: now }];
   if (!session) {
     delete view.model.byRole;
+    delete view.model.subtasks;
     view.timeline.slots = view.timeline.slots.map(([start, requests, prompt, cached, output]) => [start, requests, prompt, cached, output]);
   }
   return view;
@@ -270,6 +273,7 @@ async function auditCell(page: Page, cell: Cell) {
   // Conversation: answer cards' buttons, the agent tab rail and the composer.
   if (cell.width < 768) await page.keyboard.press("Escape");
   await auditScope(page, cell, "conversation", '[data-test-class~="conversation"]', 160);
+  await auditSessionOrderFocus(page, (screen, scope) => auditScope(page, cell, screen, scope, 40), (screen, steps) => auditArrows(page, cell, screen, steps));
   await page.locator('[data-test-class="message-artifact-list"]').getByText("Focus document", { exact: true }).click();
   await page.getByRole("textbox", { name: copy.documents.title, exact: true }).waitFor();
   await auditScope(page, cell, "document-page", '[data-test-class="editable-document"]', 30);
@@ -332,6 +336,16 @@ async function auditCell(page: Page, cell: Cell) {
   await page.goto(`${base}?visual=design-system&page=blocks/KanbanBoard&theme=${cell.theme}&locale=ko`);
   await page.locator('[data-slot="kanban-drag-scope"] [data-kanban-item]').first().waitFor();
   await auditScope(page, cell, "kanban-drag-board", '[data-slot="kanban-drag-scope"]', 40);
+  // StackDeck (DS viewer story): open decks of two, four and six cards, each card a toggle in one column.
+  await page.goto(`${base}?visual=design-system&page=blocks/StackDeck&theme=${cell.theme}&locale=ko`);
+  const deckStory = '[data-ds-story="Expanded"]';
+  await page.locator(`${deckStory} [data-slot="stack-deck-list"]`).first().waitFor();
+  await auditScope(page, cell, "stack-deck-open", deckStory, 40);
+  // StepSortableList (DS viewer story): grips, a collapsed 묶음 (the deck toggle) and ⋯ menus in two chains.
+  await page.goto(`${base}?visual=design-system&page=blocks/StepSortableList&theme=${cell.theme}&locale=ko`);
+  const stepStory = '[data-ds-story="Multiple chains"]';
+  await page.locator(`${stepStory} [data-step-grip]`).first().waitFor();
+  await auditScope(page, cell, "step-sortable-list", stepStory, 40);
   // Folded titles and each open pill's + are part of the strip's arrow order.
   await page.goto(`${base}?visual=design-system&page=blocks/TabStrip&theme=${cell.theme}&locale=ko`);
   const stripStory = '[data-ds-story="Folded group: three favicons and +N beside an open group"]';
@@ -425,7 +439,7 @@ try {
     }
     const file = distFile(url.pathname);
     if (file) return route.fulfill({ contentType: types[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
-    const canon = canonFocusResponse(url.pathname);
+    const canon = canonFocusResponse(url.pathname) ?? sessionOrderFocusResponse(url.pathname);
     if (canon !== undefined) return route.fulfill({ json: { ok: true, data: canon } });
     // The gateway: just what the harness reads, offline.
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client",

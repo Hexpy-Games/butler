@@ -1503,6 +1503,10 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);
   },
+  getCanonQueue: ({ sessionId }) => requestBridgeResult(`/sessions/${encodeURIComponent(sessionId)}/canon/queue`),
+  editCanonQueue: ({ sessionId, body }) => requestCanonWrite(`/sessions/${encodeURIComponent(sessionId)}/canon/queue/edits`, "POST", body),
+  decideCanonHold: ({ sessionId, epicId, body }) => requestCanonWrite(`/sessions/${encodeURIComponent(sessionId)}/canon/queue/holds/${encodeURIComponent(epicId)}`, "POST", body),
+  takeCanonHere: ({ sessionId, epicId, body }) => requestCanonWrite(`/sessions/${encodeURIComponent(sessionId)}/canon/queue/take/${encodeURIComponent(epicId)}`, "POST", body),
   getCanonGrants: ({ state }) => requestBridgeResult(`/canon/mcp-grants${state === "pending" ? "?state=pending" : ""}`),
   decideCanonGrant: ({ id, action }) => {
     if (!["allow", "deny", "revoke"].includes(action)) throw new Error("Invalid grant action");

@@ -1,4 +1,5 @@
 //! Process-owned user hook registry; no workers, watchers or idle timers.
+mod context;
 mod decision;
 mod execute;
 mod registry;
@@ -29,6 +30,8 @@ struct Hooks {
     state: RwLock<State>,
     mutation: tokio::sync::Mutex<()>,
     pool: Arc<tokio::sync::Semaphore>,
+    /// Budgets output too large for one turn's context.
+    output: butler_runtime::context::ToolOutput,
     shutdown: CancellationToken,
 }
 impl Dispatcher {
@@ -36,6 +39,7 @@ impl Dispatcher {
         plugins: Arc<super::plugins::Plugins>,
         data: PathBuf,
         environment: &HashMap<String, String>,
+        output: butler_runtime::context::ToolOutput,
         shutdown: CancellationToken,
     ) -> Self {
         let hooks = Arc::new(Hooks {
@@ -58,6 +62,7 @@ impl Dispatcher {
             }),
             mutation: tokio::sync::Mutex::new(()),
             pool: Arc::new(tokio::sync::Semaphore::new(8)),
+            output,
             shutdown,
         });
         let _ = registry::reload(&hooks).await;
@@ -130,7 +135,7 @@ impl HookPort for Dispatcher {
         &self,
         payload: HookEnvelope,
         cancel: CancellationToken,
-    ) -> HookFuture<'_, Option<String>> {
+    ) -> HookFuture<'_, HookDispatched> {
         Box::pin(execute::dispatch(&self.0, payload, cancel))
     }
     fn test(&self, id: String, cancel: CancellationToken) -> HookFuture<'_, HookRun> {

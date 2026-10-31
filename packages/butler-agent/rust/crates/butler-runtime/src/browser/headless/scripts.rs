@@ -19,6 +19,8 @@ const POINT: &str =
     include_str!("../../../../../../../butler-app/client/electron/browser/page/point.mjs");
 const FOCUS: &str =
     include_str!("../../../../../../../butler-app/client/electron/browser/page/focus.mjs");
+const DEVTOOLS_DOM: &str =
+    include_str!("../../../../../../../butler-app/client/electron/browser/page/devtools-dom.mjs");
 
 pub(crate) struct Scripts {
     implementation: String,
@@ -27,6 +29,7 @@ pub(crate) struct Scripts {
     select_value: String,
     point_hit: String,
     focus_target: String,
+    devtools_dom: String,
 }
 
 /// An ES module as plain declarations: imports dropped, `export` removed.
@@ -68,6 +71,7 @@ static SCRIPTS: LazyLock<Option<Scripts>> = LazyLock::new(|| {
         select_value: function(REFS, "selectValue")?,
         point_hit: function(POINT, "pointHit")?,
         focus_target: function(FOCUS, "focusTarget")?,
+        devtools_dom: function(DEVTOOLS_DOM, "devtoolsDom")?,
     })
 });
 
@@ -103,6 +107,9 @@ impl Scripts {
     }
     pub(crate) fn point(&self, input: &Value) -> String {
         format!("({})({input})", self.point_hit)
+    }
+    pub(crate) fn devtools_dom(&self, input: &Value) -> String {
+        format!("({})({input})", self.devtools_dom)
     }
     pub(crate) fn focus(&self, input: &Value) -> String {
         format!("({})({input})", self.focus_target)

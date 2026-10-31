@@ -458,11 +458,7 @@ fn project_execution_model(
     }) {
         value.insert(
             "provider_reported_model_ref".into(),
-            Value::String(if reported.contains('/') {
-                reported.into()
-            } else {
-                format!("{provider}/{reported}")
-            }),
+            Value::String(format!("{provider}/{reported}")),
         );
     }
     connection.execute("UPDATE turns SET execution_model_json=?1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?2",params![stringify(&Value::Object(value))?,turn_id]).map_err(StorageError::sqlite)?;

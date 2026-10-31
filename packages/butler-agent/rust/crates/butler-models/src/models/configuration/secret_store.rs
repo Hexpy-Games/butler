@@ -137,7 +137,10 @@ impl ProviderSecrets {
 
     /// Where a new key goes (see the module documentation for the fallback).
     pub(super) async fn target(&self, root: &Path) -> Result<TargetStore, CredentialStoreError> {
-        let choice = self.choice(root);
+        let (facts, config) = (self.facts, root.join("butler.config.json"));
+        let choice = tokio::task::spawn_blocking(move || choose(facts, &read_object_sync(&config)))
+            .await
+            .map_err(CredentialStoreError::Interrupted)?;
         if choice.mode == SecretStoreMode::File {
             return Ok(TargetStore {
                 store: fallback_file(root),

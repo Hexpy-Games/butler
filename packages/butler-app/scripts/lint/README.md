@@ -25,7 +25,11 @@ boundaries.
   `switch-field-layout` (`butler-ds/switch-rules.ts`: a `Switch` beside a
   `Label`, `FieldLabel` or `Typo` in a `Stack align="row"` or `Inline`; a
   switch field stacks like an input in `Field`, and the row layout allowed on
-  a phone or for a list item in a card is `Field orientation="horizontal"`).
+  a phone or for a list item in a card is `Field orientation="horizontal"`),
+  `no-leading-disclosure-chevron` (`butler-ds/disclosure-rules.ts`: an
+  element with `aria-expanded` whose first child is, or starts with, a
+  `ChevronRight`/`ChevronDown`, or that gets one in a start-icon prop such as
+  `icon` or `leading`; a disclosure chevron sits right after the title).
 - Stylelint rules (`butler-ds/stylelint-plugin.ts`): `token-only-values`,
   `no-ds-internal-selector`, `no-ds-custom-prop-override`.
 - `no-new-css-module`: product `*.module.css` files are frozen to the

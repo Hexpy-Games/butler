@@ -55,6 +55,7 @@ impl From<&DiscoveredLocalModel> for ModelProviderMetadata {
             reasoning_budget_ratio: model.reasoning_budget_ratio,
             image_input: None,
             image_discovery: model.image_discovery.clone(),
+            response_timeout_ms: None,
             token_estimator: TokenEstimatorKind::CharacterEstimate,
             source: LocalModelSource::Discovered,
             source_url: model.source_url.into(),

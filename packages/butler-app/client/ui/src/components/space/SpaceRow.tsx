@@ -15,6 +15,7 @@ import { SpaceRowActions } from "./SpaceRowActions";
 import { SpaceDragRow } from "./SpaceDragRow";
 import { routeActiveChatId } from "@/app/space/routeActive";
 import { useSessionUnread } from "@/app/space/unread";
+import { SubtaskLines } from "./SubtaskLine";
 
 export const SpaceRow = memo(function SpaceRow({ rowKey, flat = false, shortcut = false, depth = 0 }: {
   rowKey: string;
@@ -39,12 +40,15 @@ export const SpaceRow = memo(function SpaceRow({ rowKey, flat = false, shortcut 
   const [menuOpen, setMenuOpen] = useState(false);
   const longPress = useLongPressAction(() => setMenuOpen(true));
   if (!row) return null;
+  // The tree nests a chat's unfinished subtasks under it; lists and shortcuts stay one line per chat.
+  const subtasks = !flat && !shortcut && row.node.kind === "session" ? row.session?.subtasks ?? [] : [];
   const actions = (
     <SpaceRowActions row={row} collapsible={row.node.kind !== "session" && !shortcut}
-      menuOpen={menuOpen} onMenuChange={setMenuOpen} />
+      menuOpen={menuOpen} onMenuChange={setMenuOpen} nested={subtasks.length > 0} />
   );
   const label = <SpaceRowLabel row={row} flat={flat} />;
   return (
+    <>
     <SpaceDragRow row={row} enabled={!flat && !shortcut}>
       <div
         ref={rowRef}
@@ -85,5 +89,7 @@ export const SpaceRow = memo(function SpaceRow({ rowKey, flat = false, shortcut 
         )}
       </div>
     </SpaceDragRow>
+    <SubtaskLines parentId={row.node.entityId} subtasks={subtasks} />
+    </>
   );
 });

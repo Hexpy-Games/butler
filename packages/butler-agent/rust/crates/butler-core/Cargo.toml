@@ -24,6 +24,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
+unicode-script.workspace = true
 unicode-segmentation.workspace = true
 
 [dev-dependencies]

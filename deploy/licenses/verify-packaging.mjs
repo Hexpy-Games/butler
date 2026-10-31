@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, cpSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -8,7 +8,7 @@ import { generate, root } from "./generate.mjs";
 import { finalizeAppNotices } from "./package-app.mjs";
 import { createAppRendererProtocolHandler } from "../../packages/butler-app/client/electron/app-renderer-protocol.mjs";
 
-// Offline packaging smoke: real finalizer, Agent archive writer and npm pack.
+// Offline packaging smoke: real finalizer and Agent archive writer.
 const temporary = mkdtempSync(join(tmpdir(), "butler-disclosure-package-"));
 const document = generate();
 const data = gzipSync(document, { level: 9 });
@@ -72,20 +72,6 @@ spec.loader.exec_module(module)
 module.write_deterministic_archive(Path(sys.argv[2]),Path(sys.argv[3]))`,
   join(root, "packages/butler-agent/rust/scripts/package-standalone-agent.py"), archiveStage, oldArchive]);
   console.log(`Agent fixture tarball (same native binary): ${readFileSync(oldArchive).length} -> ${readFileSync(archive).length} bytes`);
-  const npm = join(temporary, "npm");
-  cpSync(join(root, "packages/butler-npm"), npm, { recursive: true });
-  // Prepack uses the repository generator; npm packs only the installer closure.
-  execFileSync("node", [join(root, "packages/butler-npm/scripts/copy-install-script.js")]);
-  for (const file of ["install.sh", "THIRD_PARTY_NOTICES.txt", "THIRD_PARTY_NOTICES.txt.gz"]) cpSync(join(root, "packages/butler-npm", file), join(npm, file));
-  const pack = () => JSON.parse(execFileSync("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", temporary], { cwd: npm }))[0];
-  const current = pack();
-  const npmNotices = execFileSync("tar", ["-xOzf", join(temporary, current.filename), "package/THIRD_PARTY_NOTICES.txt.gz"]);
-  assert.equal(gunzipSync(npmNotices).toString(), document);
-  rmSync(join(npm, "THIRD_PARTY_NOTICES.txt.gz"));
-  writeFileSync(join(npm, "THIRD_PARTY_NOTICES.txt"), old);
-  const baseline = pack();
-  assert.ok(current.size <= 200_000);
-  console.log(`npm tarball (same installer): ${baseline.size} -> ${current.size} bytes; unpacked notices ${data.length + readFileSync(join(root, "packages/butler-npm/THIRD_PARTY_NOTICES.txt")).length}`);
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }

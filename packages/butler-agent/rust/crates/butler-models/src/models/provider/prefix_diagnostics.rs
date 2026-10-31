@@ -330,6 +330,7 @@ fn hash(value: impl AsRef<[u8]>) -> String {
 pub(super) fn cached_tokens(response: &Value) -> Value {
     [
         "/usage/prompt_tokens_details/cached_tokens",
+        "/usage/prompt_cache_hit_tokens",
         "/usage/input_tokens_details/cached_tokens",
         "/usage/cache_read_input_tokens",
         "/usageMetadata/cachedContentTokenCount",
@@ -348,6 +349,7 @@ pub(super) fn cached_tokens_present(response: &Value) -> Value {
             Value::Bool(
                 [
                     "/usage/prompt_tokens_details/cached_tokens",
+                    "/usage/prompt_cache_hit_tokens",
                     "/usage/input_tokens_details/cached_tokens",
                     "/usage/cache_read_input_tokens",
                     "/usageMetadata/cachedContentTokenCount",

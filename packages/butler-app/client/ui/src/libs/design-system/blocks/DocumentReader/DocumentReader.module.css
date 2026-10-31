@@ -27,8 +27,13 @@
   min-height: 0;
 }
 
+/* ScrollArea's frame bleeds its ring room past the inline start; the
+   content pads it back before the reader inset, so the body lines up with
+   the header and a plain DisclosureRow's bleed (details) stays inside the
+   clip with its focus ring. */
 .scrollContent {
-  padding-inline: var(--space-sm);
+  padding-inline: calc(var(--scroll-area-ring-room) + var(--space-sm))
+    var(--space-sm);
 }
 
 .facts {

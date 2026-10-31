@@ -125,7 +125,8 @@ impl AppApplication {
         settings_facts: Arc<AppSettingsFacts>,
         retry_source_turn: Option<String>,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        self.prompt_hook(&chat_id, &client_id, &request, &inspected)
+        let hook_context_json = self
+            .prompt_hook(&chat_id, &client_id, &request, &inspected)
             .await?;
         let mut prepared = inspected.prepared;
         let has_project_refs = request.content_parts.as_ref().is_some_and(|content| {
@@ -159,6 +160,7 @@ impl AppApplication {
             attachments_json: stringify(&prepared.attachments)?,
             content_parts_json: serialize_optional(request.content_parts.as_ref())?,
             project_source_refs_json: stringify(&prepared.project_sources)?,
+            hook_context_json,
             created_at: created_at.clone(),
         };
         let (inserted, resolved) = self

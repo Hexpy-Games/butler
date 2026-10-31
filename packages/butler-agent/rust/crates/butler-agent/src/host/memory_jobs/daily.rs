@@ -18,7 +18,7 @@ use butler_runtime::operations::{CycleMetrics, MetricFiles};
 use butler_turn::workspace::SessionBindingStore;
 
 use crate::host::memory_jobs::briefing::BriefingGeneration;
-use crate::host::memory_jobs::consolidation_phase::CyclePhases;
+use crate::host::memory_jobs::consolidation_phase::{CycleEvents, CyclePhases};
 use crate::host::memory_jobs::maintain_phase::ConfiguredPhases;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
 use crate::host::memory_jobs::transcript_sync::LegacySessionSync;
@@ -259,7 +259,7 @@ impl DailyCognitionJobs {
             self.coordinator.clone(),
             Arc::new(SystemIdentity),
             Arc::new(phases),
-            self.phases.metrics.clone(),
+            Arc::new(CycleEvents(self.phases.metrics.clone())),
         ))
     }
 

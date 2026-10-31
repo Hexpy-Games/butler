@@ -19,6 +19,7 @@ mod cdp;
 mod check;
 mod collect;
 mod collect_crop;
+mod devtools;
 mod dialogs;
 pub mod downloads;
 mod events;
@@ -404,6 +405,7 @@ impl Headless {
         let outcome = match op {
             "tab.observe" => observe::observe(&page, args).await,
             "tab.read" => render::read_tab(&page).await,
+            "tab.devtools" => devtools::call(&page, args).await,
             "tab.image_collect" => collect::collect(&page, args).await,
             "tab.screenshot" => capture::screenshot(&page, args).await,
             "tab.zoom" => capture::zoom(&page, args).await,

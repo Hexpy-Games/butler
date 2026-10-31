@@ -1,6 +1,6 @@
 //! Reuse this transaction's latest visit analysis; older visits use indexed lookups.
 use super::AppStorageError;
-use butler_memory::cognition::analyze_search_field;
+use butler_core::search_text::analyze_search_field;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use std::collections::BTreeMap;
 const SQL: fn(rusqlite::Error) -> AppStorageError = AppStorageError::sqlite;

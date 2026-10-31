@@ -13,7 +13,7 @@ pub(crate) struct StaticCatalog {
 
 impl StaticCatalog {
     pub(crate) fn load() -> Result<Self, ModelCatalogError> {
-        let catalog: Self = serde_json::from_str(include_str!("static-catalog.json"))
+        let mut catalog: Self = serde_json::from_str(include_str!("static-catalog.json"))
             .map_err(ModelCatalogError::Catalog)?;
         for model in &catalog.models {
             if let Some(capability) = &model.image_output {
@@ -31,6 +31,15 @@ impl StaticCatalog {
             return Err(ModelCatalogError::rejected(
                 "Catalog default routine model is unavailable.",
             ));
+        }
+        for model in &mut catalog.models {
+            if let Some(provider) = catalog
+                .providers
+                .iter()
+                .find(|p| p.provider_id == model.provider_id)
+            {
+                model.chat_wire_policy = provider.chat_wire_policy;
+            }
         }
         Ok(catalog)
     }

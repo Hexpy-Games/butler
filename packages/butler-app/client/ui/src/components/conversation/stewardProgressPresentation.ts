@@ -1,5 +1,4 @@
 import { appCopy, interfaceProgressLabel, interfaceText } from "@/app/copy.ts";
-import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import type {
   ProgressRow,
   StewardSessionSummaryView,
@@ -31,22 +30,6 @@ export function effectiveStewardStatus(
     case "failed": return "failed";
     default: return "delivered";
   }
-}
-
-export function activeStewardChildren(
-  children: StewardSessionSummaryView[] = [],
-): StewardSessionSummaryView[] {
-  return children.filter((child) => {
-    // The native gateway drops `active_turn` once the child's BTCC turn leaves
-    // `admitted` (e.g. it is streaming its answer); until a result is
-    // committed the child is still working, so its latest turn stands in.
-    const turn = child.active_turn ?? (child.terminal ? null : child.latest_turn);
-    return Boolean(
-      child.waiting_for_children ||
-      (turn && ACTIVE_TURN_STATES.has(turn.state)),
-    ) &&
-      !TERMINAL_STEWARD_STATES.has(effectiveStewardStatus(child));
-  });
 }
 
 export function stewardProgressStatus(

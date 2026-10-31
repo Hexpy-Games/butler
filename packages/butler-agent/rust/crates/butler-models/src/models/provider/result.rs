@@ -324,6 +324,7 @@ fn chat(value: &Value, model: &str) -> Fields {
                 .or_else(|| number(value.pointer("/usage/input_tokens"))),
             number(value.pointer("/usage/prompt_tokens_details/cached_tokens"))
                 .or_else(|| number(value.pointer("/usage/input_tokens_details/cached_tokens")))
+                .or_else(|| number(value.pointer("/usage/prompt_cache_hit_tokens")))
                 .unwrap_or(0.0),
             number(value.pointer("/usage/completion_tokens"))
                 .or_else(|| number(value.pointer("/usage/output_tokens")))
@@ -379,6 +380,7 @@ pub(super) fn reasoning_tokens(response: &Value) -> Option<f64> {
 /// `cache_creation_input_tokens`, OpenAI `*_tokens_details.cache_write_tokens`.
 pub(super) fn cache_write_tokens(response: &Value) -> Option<f64> {
     number(response.pointer("/usage/cache_creation_input_tokens"))
+        .or_else(|| number(response.pointer("/usage/prompt_tokens_details/created_cache_tokens")))
         .or_else(|| number(response.pointer("/usage/input_tokens_details/cache_write_tokens")))
         .or_else(|| number(response.pointer("/usage/prompt_tokens_details/cache_write_tokens")))
 }
@@ -432,7 +434,8 @@ fn openai_usage(value: &Value, model: &str, round: u32) -> Option<Value> {
         .or_else(|| number(value.pointer("/usage/prompt_tokens")));
     let total = number(value.pointer("/usage/total_tokens"));
     let cached = number(value.pointer("/usage/prompt_tokens_details/cached_tokens"))
-        .or_else(|| number(value.pointer("/usage/input_tokens_details/cached_tokens")));
+        .or_else(|| number(value.pointer("/usage/input_tokens_details/cached_tokens")))
+        .or_else(|| number(value.pointer("/usage/prompt_cache_hit_tokens")));
     let cache_write = number(value.pointer("/usage/prompt_tokens_details/cache_write_tokens"))
         .or_else(|| number(value.pointer("/usage/input_tokens_details/cache_write_tokens")));
     if prompt.is_none() && total.is_none() && cached.is_none() && cache_write.is_none() {

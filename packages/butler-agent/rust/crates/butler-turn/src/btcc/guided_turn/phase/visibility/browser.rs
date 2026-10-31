@@ -22,6 +22,7 @@ pub(super) fn authorize(
         "browser_act",
         "browser_tabs",
         "browser_selection",
+        "browser_devtools",
         "browser_screenshot",
         "image_collect",
         "browser_close",

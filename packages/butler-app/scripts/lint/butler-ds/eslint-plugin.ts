@@ -1,4 +1,5 @@
 import type { Rule } from "eslint";
+import { disclosureEslintRules } from "./disclosure-rules.ts";
 import { settingsEslintRules } from "./settings-rules.ts";
 import { switchEslintRules } from "./switch-rules.ts";
 
@@ -170,5 +171,6 @@ export const butlerDsEslintPlugin = {
     "unsafe-style-allowlist": unsafeStyleAllowlist,
     ...settingsEslintRules,
     ...switchEslintRules,
+    ...disclosureEslintRules,
   },
 };

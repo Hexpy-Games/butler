@@ -79,6 +79,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   accessibility: [
     "Groups expose aria-expanded; output is text, never raw terminal control sequences.",
+    "A tool row with details puts its chevron directly after the title, never at the row's far edge; only the title truncates.",
     "WorkActivityDisclosure: the status line and tail are one button with aria-expanded and aria-controls; its label names the status, the latest activity and the earlier record count, because the tail itself is aria-hidden.",
     "Collapsed the toggle is the status plus tail (66px desktop, 74px phone); expanded its hit strip stays at --control-hit-target. The text focus ring sits 4px off the text, inside the card padding.",
     "The live pulse stops under reduced motion (--motion-loop-count 0); the dot stays filled.",

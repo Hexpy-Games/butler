@@ -3,6 +3,9 @@ import { appCopy, getAppLocale } from "@/app/copy";
 import type { UsageMonitorView } from "@/app/types";
 import { bucketUsageSlots, type UsageBarsEmphasis, type UsageBarsSegment, type UsageBarsSeries } from "@/butler-ds";
 
+/** Values after the start of a slot that carries its subtask requests, cached and output; shorter slots have no per-type split. */
+const SPLIT_SLOT_VALUES = 8;
+
 export function usageSeries(): UsageBarsSeries[] {
   const copy = appCopy.composer.usage;
   return [
@@ -40,7 +43,7 @@ export function usageTimeline(view: UsageMonitorView | null, maxBars: number) {
   const scoped = Boolean(view?.filters.sessionId);
   const buckets = grouped.buckets.map((bucket) => {
     const [requests = 0, prompt = 0, cached = 0, output = 0, delegated = 0, dRequests = 0, dCached = 0, dOutput = 0] = bucket.values;
-    const split = scoped && delegated > 0;
+    const split = scoped && delegated > 0 && bucket.values.length >= SPLIT_SLOT_VALUES;
     const segment = (id: string, value: number, subtask: number): UsageBarsSegment => split ? { id, value, subtask } : { id, value };
     return {
       ...bucket, requests, prompt, cached, output, delegated, dRequests, total: prompt + output,
@@ -77,20 +80,19 @@ export function usageShare(value: number): string {
 }
 
 /**
- * The chat total split into its own calls and its delegated work; `null` when nothing was delegated.
- * `requests` adds each part's request count: byRole for the whole chat, the slots' delegated requests for a bar.
+ * The chat total split into its own calls and its delegated work; `null` when nothing was delegated,
+ * or when the response lacks the values for an honest split.
+ * `requests` adds each part's request count: the view's subtask totals for the whole chat, the slots' delegated requests for a bar.
  * `emphasis` is the chart emphasis the part's legend row links to.
  */
 export function usageParts(view: UsageMonitorView | null, bucket?: ReturnType<typeof usageTimeline>["buckets"][number], requests = false) {
-  const roles = view?.model.byRole;
-  if (!view || !roles) return null;
-  const sum = (field: "totalTokens" | "requestCount") =>
-    Object.entries(roles).reduce((total, [role, part]) => role === "main" ? total : total + part[field], 0);
-  const delegatedAll = sum("totalTokens");
-  if (delegatedAll <= 0) return null;
-  // Both parts share one basis: byRole totals for the chat, the slot's prompt + output for a bar.
-  const [main, delegated] = bucket ? [bucket.total - bucket.delegated, bucket.delegated] : [roles.main?.totalTokens ?? 0, delegatedAll];
-  const counts = !requests ? null : bucket ? [bucket.requests - bucket.dRequests, bucket.dRequests] : [roles.main?.requestCount ?? 0, sum("requestCount")];
+  const subtasks = view?.model.subtasks;
+  if (!view || !subtasks || !(subtasks.totalTokens > 0)) return null;
+  if (bucket && bucket.values.length < SPLIT_SLOT_VALUES) return null;
+  // Both parts share one basis: the view's totals for the chat, the slot's prompt + output for a bar.
+  const [whole, delegated] = bucket ? [bucket.total, bucket.delegated] : [view.model.totalTokens, subtasks.totalTokens];
+  const main = Math.max(0, whole - delegated);
+  const counts = !requests ? null : bucket ? [bucket.requests - bucket.dRequests, bucket.dRequests] : [view.model.requestCount - subtasks.requestCount, subtasks.requestCount];
   const total = main + delegated;
   const copy = appCopy.composer.usage;
   const count = new Intl.NumberFormat(getAppLocale());

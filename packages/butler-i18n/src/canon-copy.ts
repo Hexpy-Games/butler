@@ -1,6 +1,32 @@
+/** `word` never truncates; `name` (what it waits for) takes the rest of the line. */
+export interface CanonAfterCaption { word: string; name: string }
+export interface CanonOrderCopy {
+  chain: Record<"user_message" | "schedule" | "detach", string>;
+  /** Status words; a waiting step, or one held under a blocked step, shows none (its caption says what it waits for). */
+  status: Record<"running" | "failed" | "done", string>;
+  /** What a step waits for, word first. */
+  after: (title: string) => CanonAfterCaption;
+  afterStack: (title: string, count: number) => CanonAfterCaption;
+  heldBy: string; join: string; newStep: string;
+  more: (count: number) => string; menu: (title: string) => string;
+  startNow: string; unstack: string; remove: string; failed: string; changed: string;
+  drag: {
+    instructions: string; roleDescription: string; grip: (item: string) => string;
+    stack: (front: string, count: number) => string;
+    lifted: (item: string, chain: string, step: number) => string;
+    newStep: (item: string, chain: string, step: number) => string;
+    join: (item: string, chain: string, step: number) => string;
+    dropped: (item: string, chain: string, step: number) => string;
+    cancelled: (item: string) => string; unchanged: (item: string) => string;
+  };
+  deck: { expand: (count: number, front: string) => string; fold: (item: string) => string };
+}
 export interface CanonCopy {
+  order: CanonOrderCopy;
   queue: {
     step: (plan: string, epic: string) => string;
+    stepEpic: (epic: string) => string;
+    removed: string; continued: string; taken: string;
     hold: (epic: string) => string;
     takeHere: (epic: string, conversation: string) => string;
     remove: string; proceed: string; openOther: string; take: string;
