@@ -76,7 +76,7 @@ impl OutputStore {
             root: data.join(butler_platform::data_paths::OUTPUTS),
         }
     }
-    fn manifest(&self, id: &str) -> std::io::Result<PathBuf> {
+    pub(super) fn manifest(&self, id: &str) -> std::io::Result<PathBuf> {
         if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(error("invalid_output_id"));
         }
