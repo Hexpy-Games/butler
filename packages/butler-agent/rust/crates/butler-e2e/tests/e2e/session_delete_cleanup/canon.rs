@@ -2,7 +2,10 @@ use super::*;
 use butler_e2e::e2e::{config, provider::Provider, sanitize::Placeholders};
 use std::time::Instant;
 
-async fn artifacts(s: &mut Scenario, chat: String) -> Result<(Deleted, Provider), HarnessError> {
+pub(super) async fn artifacts(
+    s: &mut Scenario,
+    chat: String,
+) -> Result<(Deleted, Provider), HarnessError> {
     let cassette = crate::browser_outputs::stub::cassette()?;
     let provider_name = cassette.meta.provider.clone();
     let provider = Provider::replay(cassette, Placeholders::default()).await?;

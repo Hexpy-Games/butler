@@ -74,6 +74,9 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "gateway" | "host" | "structured_logging" => &[],
         // Outbound transport produces records through the structured logging facade.
         "http" => &["structured_logging"],
+        // butler-vault: one domain; credential stores and private files cross
+        // the crate boundary declared in Cargo.toml.
+        "vault" => &[],
         // butler-shell-client: one connection domain; platform dependencies
         // cross the crate boundary declared in Cargo.toml.
         "shell_connection" => &[],

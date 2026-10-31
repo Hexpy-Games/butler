@@ -20,6 +20,7 @@ butler-mail-connector = { path = "../butler-mail-connector" }
 butler-core = { path = "../butler-core" }
 butler-models = { path = "../butler-models" }
 butler-turn = { path = "../butler-turn", features = ["test-support"] }
+butler-vault = { path = "../butler-vault" }
 tokio-util.workspace = true
 url.workspace = true
 butler-platform = { path = "../butler-platform", features = ["test-support"] }
@@ -53,6 +54,7 @@ zip.workspace = true
 zstd = "0.13.3"
 
 [dev-dependencies]
+age.workspace = true
 anyhow = "1"
 butler-shell-client = { path = "../butler-shell-client" }
 butler-memory = { path = "../butler-memory" }
