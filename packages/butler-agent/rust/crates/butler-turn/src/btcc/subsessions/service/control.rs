@@ -77,6 +77,21 @@ impl SubsessionService {
                 .map_err(BtccError::from)?)
     }
 
+    /// Stopped, not merely finished: a late Worker result on a child that closed by
+    /// itself still fails visibly, but nothing can use what a stopped child's Workers report.
+    pub(super) async fn child_stopped(
+        &self,
+        relation: &StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        let latest = self
+            .repository
+            .latest_turn(relation.child_session_id.clone())
+            .await
+            .map_err(BtccError::from)?;
+        Ok(latest.is_some_and(|(_, state)| state == "cancelled")
+            && self.child_ended(relation).await?)
+    }
+
     async fn child_turn_running(&self, child_session: &str) -> Result<bool, BtccError> {
         let Some((turn, state)) = self
             .repository
