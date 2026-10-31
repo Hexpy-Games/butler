@@ -36,6 +36,7 @@ impl AppApplication {
             canon_file_lifetimes: self.canon_file_lifetimes.clone(),
             canon_projection_locks: self.canon_projection_locks.clone(),
             plan_decision_locks: self.plan_decision_locks.clone(),
+            session_cleanup_locks: self.session_cleanup_locks.clone(),
             // Only the dispatching application relays readiness events.
             setup_readiness: super::setup::ReadinessRelay::default(),
             chatgpt_events: super::setup_events::AccountRelay::default(),

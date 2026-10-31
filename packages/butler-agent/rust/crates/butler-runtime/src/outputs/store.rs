@@ -308,14 +308,21 @@ impl OutputStore {
         let _lock = CHANGES
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
-        for output in self.list(session)? {
-            std::fs::remove_file(self.manifest(&output.output_id)?)?;
+        let index = self.root.join("sessions").join(hash(session.as_bytes()));
+        // Directory markers survive until the index is removed. A retry must
+        // not read manifests that an earlier attempt already removed.
+        match std::fs::read_dir(&index) {
+            Ok(entries) => {
+                for entry in entries {
+                    let id = entry?.file_name().to_string_lossy().into_owned();
+                    ignore_missing(std::fs::remove_file(self.manifest(&id)?))?;
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
         }
         super::index::remove(&self.root.join("index.sqlite"), session)?;
-        let index = self.root.join("sessions").join(hash(session.as_bytes()));
-        if index.exists() {
-            std::fs::remove_dir_all(index)?;
-        }
+        ignore_missing(std::fs::remove_dir_all(index))?;
         let manifests = self.root.join("manifests");
         if !manifests.exists() {
             return Ok(());
@@ -342,5 +349,12 @@ impl OutputStore {
             }
         }
         Ok(())
+    }
+}
+
+fn ignore_missing(result: std::io::Result<()>) -> std::io::Result<()> {
+    match result {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
     }
 }
