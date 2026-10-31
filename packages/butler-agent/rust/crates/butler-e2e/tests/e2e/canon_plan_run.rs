@@ -17,6 +17,7 @@ mod idle;
 mod lifecycle;
 mod locking;
 mod ordering;
+mod panel_history;
 mod queries;
 mod replay_errors;
 mod take_recovery;

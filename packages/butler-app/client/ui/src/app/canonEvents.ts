@@ -1,3 +1,5 @@
+import { useCanonSidebarState } from "./canonSidebarState.ts";
+import { useButlerStore } from "./store.ts";
 import type { TimelineEvent } from "./types.ts";
 import type { CanonChanged, CanonProgressChanged } from "./canonApi.ts";
 type Listener = (event: CanonChanged | CanonProgressChanged | null) => void;
@@ -10,6 +12,11 @@ export function subscribeCanonChanges(listener: Listener, options: Subscription)
 }
 export function publishCanonEvent(event: TimelineEvent): void {
   const payload = event.payload as Record<string, unknown> | undefined;
+  if (event.type === "canon.changed" && payload?.deleted === true && typeof payload.id === "string" && typeof payload.project_id === "string") {
+    useCanonSidebarState.getState().forgetEpic(payload.project_id, payload.id);
+    const app = useButlerStore.getState();
+    if (app.view.kind === "project-dashboard" && app.view.epicId === payload.id) app.setView({ ...app.view, epicId: undefined });
+  }
   if (event.type === "stream.reconcile_required") {
     for (const listener of listeners.keys()) listener(null);
   } else if (event.type === "space.changed" || event.type === "canon.changed" || event.type === "canon.progress_changed") {

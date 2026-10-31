@@ -111,6 +111,7 @@ pub fn reconcile(
     Ok(())
 }
 pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) -> Result<Value> {
+    let mut changed_epics = BTreeSet::new();
     if let Some(epic) = tx
         .query_row(
             "SELECT epic_id FROM canon_step_cancellations WHERE op_id=?1",
@@ -120,8 +121,21 @@ pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) 
         .optional()?
     {
         tx.execute("DELETE FROM canon_step_cancellations WHERE op_id=?1", [op])?;
+        changed_epics.insert(epic.clone());
         for owner in rows(tx, sql::OWNER, [&epic])? {
             ready(tx, ctx, text(&owner, "session_id")?)?;
+        }
+    }
+    if matches!(
+        outcome,
+        "delivered" | "cancelled" | "failed" | "turn_interrupted"
+    ) {
+        for row in rows(
+            tx,
+            "UPDATE canon_session_queue SET turn_ended_at=?2 WHERE step_op_id=?1 AND turn_ended_at IS NULL RETURNING epic_id",
+            params![op, ctx.now],
+        )? {
+            changed_epics.insert(text(&row, "epic_id")?.to_owned());
         }
     }
     let item = rows(tx, sql::STEP, [op])?.into_iter().next();
@@ -131,6 +145,9 @@ pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) 
         && matches!(outcome, "cancelled" | "failed" | "turn_interrupted")
     {
         fail(tx, ctx, &item, outcome)?;
+    }
+    for epic in changed_epics {
+        runtime::progress_event(tx, ctx, &epic)?;
     }
     Ok(json!({"ok":true}))
 }

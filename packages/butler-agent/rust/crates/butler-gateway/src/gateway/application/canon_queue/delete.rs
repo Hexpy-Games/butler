@@ -44,13 +44,32 @@ pub(in crate::gateway::application) async fn reconcile(
         })
         .await?;
     for item in running.as_array().into_iter().flatten() {
-        let op = field(item, "step_op_id")?;
-        let turn = app.storage.read(move |db| db.query_row(
-            "SELECT t.id FROM app_initiated_messages i JOIN turns t ON t.user_message_id=i.message_id WHERE i.source_key=?1 AND i.kind='canon_step'",
-            [op], |r|r.get::<_,String>(0)).optional().map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
-        if let Some(turn) = turn {
+        reconcile_step(app, field(item, "step_op_id")?).await?;
+    }
+    Ok(())
+}
+
+/// Read only identities belonging to the existing indexed running-step list.
+async fn reconcile_step(app: &AppApplication, op: String) -> Result<(), GatewayApplicationError> {
+    let key = op.clone();
+    let row = app.storage.read(move |db| db.query_row(
+        "SELECT i.state='failed' OR EXISTS(SELECT 1 FROM session_queued_messages q WHERE q.chat_id=i.chat_id AND q.client_message_id=i.message_id AND q.state='failed'),t.id FROM app_initiated_messages i LEFT JOIN turns t ON t.user_message_id=i.message_id WHERE i.source_key=?1 AND i.kind='canon_step'",
+        [key], |r| Ok((r.get::<_,bool>(0)?,r.get::<_,Option<String>>(1)?)))
+        .optional().map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
+    match row {
+        Some((true, _)) => {
+            app.dependencies
+                .canon
+                .canon_operation(AppCanonOperation::StepTurnEnded {
+                    op_id: op,
+                    outcome: "failed".into(),
+                })
+                .await?;
+        }
+        Some((false, Some(turn))) => {
             steps::turn_ended(&app.storage, &app.dependencies.canon, turn).await?;
         }
+        _ => {}
     }
     Ok(())
 }

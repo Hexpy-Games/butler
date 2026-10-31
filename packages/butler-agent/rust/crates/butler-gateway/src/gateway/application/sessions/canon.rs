@@ -52,26 +52,7 @@ pub(in crate::gateway::application) fn project(
         ],
     )
     .map_err(AppStorageError::sqlite)?;
-    db.execute(
-        "UPDATE app_space_state SET revision=revision+1 WHERE singleton=1",
-        [],
-    )
-    .map_err(AppStorageError::sqlite)?;
-    let revision: i64 = db
-        .query_row(
-            "SELECT revision FROM app_space_state WHERE singleton=1",
-            [],
-            |r| r.get(0),
-        )
-        .map_err(AppStorageError::sqlite)?;
-    super::super::events::append(
-        db,
-        subscribers,
-        "space.changed",
-        None,
-        butler_core::json::json_object!({"revision":revision}),
-        &clock.now_iso(),
-    )?;
+    changed(db, subscribers, &clock.now_iso())?;
     Ok(created)
 }
 
@@ -111,4 +92,55 @@ impl AppApplication {
         }
         Ok(())
     }
+}
+
+/// Applied with the existing outbox receipt, so an interrupted projection replays.
+pub(in crate::gateway::application) fn epic_deleted(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    now: &str,
+    payload: &serde_json::Value,
+) -> Result<(), AppStorageError> {
+    if payload["kind"] != "work" || payload["deleted"] != true {
+        return Ok(());
+    }
+    let id = payload["id"]
+        .as_str()
+        .ok_or_else(|| AppStorageError::sqlite(rusqlite::Error::InvalidQuery))?;
+    let links = db
+        .execute("DELETE FROM app_canon_conversations WHERE epic_id=?1", [id])
+        .map_err(AppStorageError::sqlite)?;
+    db.execute("DELETE FROM app_canon_sidebar_order WHERE work_id=?1", [id])
+        .map_err(AppStorageError::sqlite)?;
+    if links > 0 {
+        changed(db, subscribers, now)?;
+    }
+    Ok(())
+}
+fn changed(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    db.execute(
+        "UPDATE app_space_state SET revision=revision+1 WHERE singleton=1",
+        [],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    let revision: i64 = db
+        .query_row(
+            "SELECT revision FROM app_space_state WHERE singleton=1",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    super::super::events::append(
+        db,
+        subscribers,
+        "space.changed",
+        None,
+        butler_core::json::json_object!({"revision":revision}),
+        now,
+    )?;
+    Ok(())
 }

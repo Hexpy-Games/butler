@@ -26,7 +26,12 @@ pub fn get(db: &Connection, id: &str) -> Result<Value> {
 pub fn create(tx: &Transaction<'_>, ctx: &Context, row: &Value) -> Result<Value> {
     let id = text(row, "id")?;
     let session = text(row, "session_id")?;
-    let document = &row["document"];
+    let mut document = row["document"].clone();
+    if let Some(changes) = document["changes"].as_array_mut() {
+        for change in changes.iter_mut().filter(|c| c["op"] == "epic.delete") {
+            change["title"] = read_work(tx, text(change, "id")?)?["title"].clone();
+        }
+    }
     let changes = document["changes"]
         .as_array()
         .ok_or(Error::Invalid("changes required"))?;

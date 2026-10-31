@@ -1,5 +1,7 @@
 //! Session-local epic chains. Caller owns the canon write transaction.
 mod edits;
+mod epic_delete;
+pub(crate) use epic_delete::epic_deleted;
 pub mod engine;
 mod operations;
 pub mod sql;

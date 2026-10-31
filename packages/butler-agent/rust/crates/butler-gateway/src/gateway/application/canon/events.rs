@@ -109,6 +109,20 @@ async fn drain(
             *files_ready = true;
             return Ok(());
         }
+        // Serialize deletion receipts with conversation validation + projection.
+        let deleted = rows
+            .iter()
+            .filter(|row| row.topic == "canon.changed" && row.payload["deleted"] == true)
+            .filter_map(|row| row.payload["id"].as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut projections = Vec::new();
+        for id in deleted {
+            projections.push(
+                app.canon_projection_locks
+                    .acquire(format!("canon-epic-projection:{id}"))
+                    .await,
+            );
+        }
         let last = rows.last().map(|r| r.seq).unwrap_or(cursor.after);
         let seqs = rows.iter().map(|r| r.seq).collect();
         let subs = subscribers.clone();
@@ -117,6 +131,7 @@ async fn drain(
             .execute(move |db| append_rows(db, &subs, &now, rows))
             .await
             .map_err(app_error)?;
+        drop(projections);
         port.published(seqs).await?;
         // App append + receipt commit together. Keep receipts until BTCC has
         // durably acknowledged: replay after a crash cannot append twice.
@@ -158,6 +173,7 @@ fn append_rows(
         }
         let mut payload = row.payload;
         super::public_sessions(db, &mut payload)?;
+        super::super::sessions::canon::epic_deleted(db, subscribers, now, &payload)?;
         super::files::replace(db, &payload)?;
         if row.topic == "canon.changed" {
             let seq: i64 = db

@@ -43,7 +43,7 @@ export interface CanonWork {
   origin: "chat" | "dialog" | "board" | "mcp";
   revision: number;
 }
-export interface EpicCard extends CanonWork { task_counts: TaskCounts; running?: boolean }
+export interface EpicCard extends CanonWork { task_counts: TaskCounts; running?: boolean; delete_blocked?: boolean }
 export interface CanonPlan {
   updated_at?: number;
   id: string;

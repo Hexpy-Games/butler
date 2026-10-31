@@ -22,6 +22,7 @@ export interface CanonOrderCopy {
   deck: { expand: (count: number, front: string) => string; fold: (item: string) => string };
 }
 export interface CanonCopy {
+  deletion: { changeDelete: string; changed: string; addDelete: string; action: string; title: (title: string) => string; detail: string; running: string; deleted: string; missing: string };
   order: CanonOrderCopy;
   queue: {
     step: (plan: string, epic: string) => string;

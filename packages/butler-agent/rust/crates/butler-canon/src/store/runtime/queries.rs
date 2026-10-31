@@ -10,6 +10,7 @@ macro_rules! queries {
     };
 }
 queries! {
+    DeleteRunning => "SELECT EXISTS(SELECT 1 FROM canon_session_queue WHERE epic_id=?1 AND state='running' AND hold_reason IS NULL AND turn_ended_at IS NULL) OR EXISTS(SELECT 1 FROM canon_step_cancellations WHERE epic_id=?1) OR EXISTS(SELECT 1 FROM canon_session_epics e JOIN btcc_turns t INDEXED BY idx_btcc_worker_live_turns ON t.session_id=e.session_id WHERE e.epic_id=?1 AND t.semantic_state IN ('admitted','delivery_committed'))",
     InsertLink => "INSERT INTO canon_epic_work_links(epic_id,btcc_work_id,session_id,linked_at,linked_by) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(btcc_work_id) DO NOTHING",
     AdvanceLabel => "UPDATE canon_epics SET canon_status=?2,canon_status_source='runtime',revision=revision+1,updated_at=?3 WHERE id=?1",
     AdvanceCursor => "INSERT INTO canon_cursors(name,value) VALUES(?1,?2) ON CONFLICT(name) DO UPDATE SET value=excluded.value",

@@ -5,6 +5,7 @@ type SessionEpic = { projectId: string; group: string; epic: EpicCard };
 interface CanonSidebarState {
   projects: Record<string, CanonSidebar>;
   sessions: Record<string, SessionEpic[]>;
+  forgetEpic: (projectId: string, epicId: string) => void;
   rememberSidebar: (sidebar: CanonSidebar) => void;
   rememberCanon: (canon: CanonOverview) => void;
 }
@@ -20,6 +21,13 @@ function sessionIndex(projectId: string, groups: Array<{ title: string; rows: Ep
 /** Indexed at read completion; conversation renders never scan the project's works. */
 export const useCanonSidebarState = create<CanonSidebarState>(set => ({
   projects: {}, sessions: {},
+  forgetEpic: (projectId, epicId) => set(state => {
+    const sidebar = state.projects[projectId];
+    return {
+      projects: sidebar ? { ...state.projects, [projectId]: { ...sidebar, groups: sidebar.groups.map(group => ({ ...group, rows: group.rows.filter(epic => epic.id !== epicId) })) } } : state.projects,
+      sessions: Object.fromEntries(Object.entries(state.sessions).map(([id, matches]): [string, SessionEpic[]] => [id, matches.filter(match => match.epic.id !== epicId)]).filter(([, matches]) => matches.length > 0)),
+    };
+  }),
   rememberSidebar: sidebar => set(state => ({
     projects: { ...state.projects, [sidebar.project_id]: sidebar },
     sessions: sessionIndex(sidebar.project_id, sidebar.groups.map(group => ({ ...group, title: group.kind === "backlog" ? "" : group.title })), state.sessions),
