@@ -1,5 +1,7 @@
 use super::*;
+mod closeout;
 mod project_history;
+use closeout::Closeout;
 
 fn latest(db: &Connection, query: Query, work: &str) -> Result<Option<Value>> {
     Ok(rows(db, query.sql(), [work])?.into_iter().next())
@@ -9,12 +11,21 @@ pub(super) fn running(db: &Connection, work: &Value) -> Result<bool> {
     if work["status"] != "open" {
         return Ok(false);
     }
-    let own = db
-        .query_row(Query::OwnActive.sql(), [text(work, "session_id")?], |_| {
-            Ok(())
-        })
+    let session = text(work, "session_id")?;
+    // 그래도 진행 leaves the stopped step's Work open; later Turns belong to other steps.
+    let continued = db
+        .query_row(
+            Query::QueueContinued.sql(),
+            params![session, text(work, "epic_id")?],
+            |_| Ok(()),
+        )
         .optional()?
         .is_some();
+    let own = !continued
+        && db
+            .query_row(Query::OwnActive.sql(), [session], |_| Ok(()))
+            .optional()?
+            .is_some();
     let child = db
         .query_row(
             Query::DelegatedActive.sql(),
@@ -64,18 +75,25 @@ pub fn progress(db: &Connection, epic: &str, views: &ProjectViews) -> Result<Val
     let mut current_actions = Vec::new();
     let mut history = Vec::new();
     let mut active = None;
-    for work in &works {
+    for (index, work) in works.iter().enumerate() {
         let id = text(work, "work_id")?;
-        if running(db, work)? {
+        // A later Work in the same conversation replaced this one, even if it was left open.
+        let current = !works[index + 1..]
+            .iter()
+            .any(|later| later["session_id"] == work["session_id"]);
+        if current && running(db, work)? {
             result["running"] = json!(true);
         }
         let checkpoints = checkpoints(db, work, views)?;
-        let stage = checkpoints
-            .last()
-            .map(|c| c["stage"].clone())
-            .unwrap_or(json!("conception"));
-        if active.is_none() || work["status"] == "open" || active == Some(false) {
-            result["stage"] = stage;
+        if current && (active.is_none() || work["status"] == "open" || active == Some(false)) {
+            result["stage"] = if closeout::read(db, work, views)? == Closeout::Reported {
+                json!("reporting")
+            } else {
+                checkpoints
+                    .last()
+                    .map(|c| c["stage"].clone())
+                    .unwrap_or(json!("conception"))
+            };
             active = Some(work["status"] == "open");
             current_actions = work_actions(db, work, views)?;
             result["disposition"] = disposition(db, work, views)?["disposition"].clone();
@@ -107,6 +125,8 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
             if object.contains_key("epic_id") {
                 object.insert("progress".into(), progress);
             } else {
+                let queue = queue_item(db, id, object.get("home_session_id"))?;
+                object.insert("queue".into(), queue);
                 object.insert("task_counts".into(), progress["counts"].clone());
                 object.insert("running".into(), progress["running"].clone());
             }
@@ -122,76 +142,20 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
     Ok(())
 }
 
-/// BTCC decides which reviews a Work needs before it may close, so its completed
-/// closeout is final here and only the Turn that reports it remains. A Steward
-/// closes a delegated parent earlier: Butler's report is its reporting checkpoint.
-pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
-    let id = text(work, "work_id")?;
-    let disposition = disposition(db, work, views)?;
-    if disposition["disposition"] != "completed" {
-        return Ok(false);
-    }
-    let finished = |value: &Value| -> Result<bool> {
-        let turn = value
-            .get("originTurnId")
-            .or_else(|| value.get("origin_turn_id"))
-            .and_then(Value::as_str)
-            .ok_or(Error::Invalid("origin turn"))?;
-        let state: Option<String> = db
-            .query_row(Query::Turn.sql(), [turn], |r| r.get(0))
-            .optional()?;
-        Ok(state.as_deref() == Some("delivered"))
+/// The 과제's place in its home conversation's queue, which says who shows that chat's state.
+fn queue_item(db: &Connection, epic: &str, home: Option<&Value>) -> Result<Value> {
+    let Some(home) = home.and_then(Value::as_str) else {
+        return Ok(Value::Null);
     };
-    if !delegated_completion(db, work, views)? {
-        return finished(&disposition);
-    }
-    let checkpoint = if work["scope_kind"] == "project" {
-        views
-            .get(id)
-            .map_or(Value::Null, |view| view["latestCheckpoint"].clone())
-    } else {
-        rows(db, Query::Checkpoints.sql(), [id])?
-            .pop()
-            .unwrap_or(Value::Null)
-    };
-    Ok(checkpoint["stage"] == "reporting" && finished(&checkpoint)? && finished(&disposition)?)
+    Ok(rows(db, Query::QueueItem.sql(), params![home, epic])?
+        .first()
+        .map_or(Value::Null, |item| {
+            json!({"state":item["state"],"hold":!item["hold_reason"].is_null(),"finished_at":item["finished_at"]})
+        }))
 }
 
-/// A delegated parent's closeout belongs to its Steward's terminal result.
-fn delegated_completion(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
-    let id = text(work, "work_id")?;
-    let plan = if work["scope_kind"] == "project" {
-        views
-            .get(id)
-            .and_then(|view| view.get("currentPlan"))
-            .cloned()
-    } else {
-        latest(db, Query::Plan, id)?
-    };
-    let Some(plan) = plan else {
-        return Ok(false);
-    };
-    if plan
-        .get("executionMode")
-        .or_else(|| plan.get("execution_mode"))
-        .and_then(Value::as_str)
-        != Some("steward")
-    {
-        return Ok(false);
-    }
-    let plan_id = plan
-        .get("planRevisionId")
-        .or_else(|| plan.get("plan_revision_id"))
-        .and_then(Value::as_str)
-        .ok_or(Error::Invalid("delegated plan id"))?;
-    Ok(db
-        .query_row(
-            Query::DelegatedCompletion.sql(),
-            params![id, plan_id],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some())
+pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
+    Ok(closeout::read(db, work, views)? == Closeout::Reported)
 }
 
 fn disposition(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Value> {
@@ -283,5 +247,14 @@ pub(crate) fn queue_outcome(
         crate::store::queue::sql::LINKED_WORK,
         params![epic, session, started],
     )?;
-    works.first().map(|work|Ok(json!({"work_id":work["work_id"],"reported":reported(db,work,views)?,"failed":matches!(work["status"].as_str(),Some("blocked"|"abandoned")) || disposition(db,work,views)?["disposition"]=="blocked"}))).transpose()
+    works
+        .first()
+        .map(|work| {
+            let closeout = closeout::read(db, work, views)?;
+            let failed = matches!(work["status"].as_str(), Some("blocked" | "abandoned"))
+                || disposition(db, work, views)?["disposition"] == "blocked"
+                || closeout == Closeout::Refused;
+            Ok(json!({"work_id":work["work_id"],"reported":closeout == Closeout::Reported,"failed":failed}))
+        })
+        .transpose()
 }

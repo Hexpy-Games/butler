@@ -82,6 +82,22 @@ impl AppSubsessionPort for AppSubsessions {
         })
     }
 
+    fn turns_waiting_on_delegation(&self, parent: String) -> ApplicationFuture<Vec<String>> {
+        let repository = self.service.repository();
+        Box::pin(async move {
+            repository
+                .turns_waiting_on_delegation(parent)
+                .await
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
+    fn cancel_subtree(&self, parent: String) -> ApplicationFuture<()> {
+        let service = self.service.clone();
+        let btcc = self.btcc.clone();
+        Box::pin(async move { control::cancel_subtree(&service, &btcc, parent).await })
+    }
+
     fn user_work_present(&self) -> ApplicationFuture<bool> {
         let repository = self.service.repository();
         Box::pin(async move {

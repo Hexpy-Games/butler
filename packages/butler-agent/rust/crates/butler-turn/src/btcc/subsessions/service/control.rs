@@ -244,6 +244,35 @@ impl SubsessionService {
         )
     }
 
+    /// Cancels the delegation under the role it was created with.
+    pub(super) async fn cancel_by_relation(
+        &self,
+        parent: String,
+        relation: String,
+        source: &str,
+    ) -> Result<Value, BtccError> {
+        let child_role = self
+            .repository
+            .relation_by_id(relation.clone())
+            .await
+            .map_err(BtccError::from)?
+            .ok_or_else(|| error(BtccCode::ActiveStewardRelationNotFound))?
+            .packet
+            .child_role;
+        self.cancel(SubsessionCancelRequest {
+            parent_session_id: parent,
+            parent_turn_id: "subsession-stopped-parent".into(),
+            source_message_id: format!("subsession-stopped:{source}:{relation}"),
+            relation_id: Some(relation),
+            safe_title: None,
+            child_role: match child_role {
+                crate::btcc::ChildRole::Worker => SessionRole::Worker,
+                crate::btcc::ChildRole::Steward => SessionRole::Steward,
+            },
+        })
+        .await
+    }
+
     /// Cancels an unfinished subsession.
     pub async fn cancel(&self, request: SubsessionCancelRequest) -> Result<Value, BtccError> {
         let relation = self

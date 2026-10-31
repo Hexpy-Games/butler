@@ -51,6 +51,7 @@ impl AppApplication {
                     "일반 채널은 보관하거나 삭제할 수 없습니다.",
                 ));
             }
+            self.stop_session_work(&session_id).await;
             self.close_session_authority(&session_id, "session_archived")
                 .await?;
         }
@@ -102,6 +103,7 @@ impl AppApplication {
                 "Session title is required.",
             ));
         }
+        self.stop_session_work(&session_id).await;
         self.close_session_authority(&session_id, "session_archived")
             .await?;
         let clock = self.dependencies.identity_clock.clone();
@@ -142,9 +144,7 @@ impl AppApplication {
                 "일반 채널은 보관하거나 삭제할 수 없습니다.",
             ));
         }
-        if permanent {
-            self.stop_session_turns(&session_id).await?;
-        }
+        self.stop_session_work(&session_id).await;
         self.close_session_authority(
             &session_id,
             if permanent {
@@ -200,51 +200,6 @@ impl AppApplication {
                 .map_err(GatewayApplicationError::after_commit)?;
         }
         Ok(result)
-    }
-
-    /// Nothing can answer or watch a deleted conversation, so its Turns and
-    /// delegated subtasks stop with it.
-    async fn stop_session_turns(&self, session_id: &str) -> Result<(), GatewayApplicationError> {
-        let parent = self.runtime_hint(session_id).await?;
-        let subtasks = self
-            .dependencies
-            .subsessions
-            .open_subtasks(vec![parent.clone()])
-            .await?;
-        for subtask in subtasks {
-            if let Err(error) = self
-                .dependencies
-                .subsessions
-                .cancel(parent.clone(), subtask.relation_id)
-                .await
-            {
-                tracing::warn!(%error, "Subtask of a deleted conversation was not stopped");
-            }
-        }
-        let chat = session_id.to_owned();
-        let turns = self
-            .storage
-            .read(move |db| {
-                let mut statement = db
-                    .prepare_cached(
-                        "SELECT id FROM turns WHERE chat_id=?1 AND state NOT IN ('delivered','cancelled','failed','runtime_fault')",
-                    )
-                    .map_err(AppStorageError::sqlite)?;
-                let rows = statement
-                    .query_map([chat], |row| row.get::<_, String>(0))
-                    .map_err(AppStorageError::sqlite)?;
-                rows.collect::<Result<Vec<_>, _>>()
-                    .map_err(AppStorageError::sqlite)
-            })
-            .await
-            .map_err(app_error)?;
-        for turn in turns {
-            // A Turn that is past stopping finishes on its own; the delete still proceeds.
-            if let Err(error) = self.cancel_turn_owned(turn).await {
-                tracing::warn!(%error, "Turn of a deleted conversation was not stopped");
-            }
-        }
-        Ok(())
     }
 
     async fn read_session_row(

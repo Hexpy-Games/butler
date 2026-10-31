@@ -18,7 +18,7 @@ pub(super) async fn apply(
         if language.starts_with("ko") {
             format!("‘{epic}’가 막혀 다음 과제를 멈췄습니다.")
         } else {
-            format!("‘{epic}’ is blocked. Later epics are on hold.")
+            format!("‘{epic}’ is blocked. Later tasks are on hold.")
         }
     } else {
         let other = field(&panel, "other_session_id")?;
@@ -32,18 +32,8 @@ pub(super) async fn apply(
             })
             .await
             .map_err(app_error)?;
-        let running = panel["other_running"] == true;
-        if language.starts_with("ko") {
-            let state = if running {
-                "진행 중입니다"
-            } else {
-                "예정입니다"
-            };
-            format!("‘{epic}’는 ‘{title}’ 대화에서 {state}. 여기서 할까요?")
-        } else {
-            let state = if running { "running" } else { "queued" };
-            format!("‘{epic}’ is {state} in ‘{title}’. Do it here?")
-        }
+        // Offers stored before the state was recorded still read correctly.
+        offer_text(&language, &epic, &title, panel["other_running"].as_bool())
     };
     let source = panel["source_key"].as_str().unwrap_or(op).to_owned();
     panel
@@ -79,4 +69,22 @@ pub(super) async fn apply(
         .map_err(app_error)?;
     app.automation_wake.notify_one();
     Ok(())
+}
+
+fn offer_text(language: &str, epic: &str, title: &str, running: Option<bool>) -> String {
+    if language.starts_with("ko") {
+        let state = match running {
+            Some(true) => "에서 진행 중입니다",
+            Some(false) => "에서 예정입니다",
+            None => "에 있습니다",
+        };
+        format!("‘{epic}’는 ‘{title}’ 대화{state}. 여기서 할까요?")
+    } else {
+        let state = match running {
+            Some(true) => "running in",
+            Some(false) => "queued in",
+            None => "in",
+        };
+        format!("‘{epic}’ is {state} ‘{title}’. Do it here?")
+    }
 }

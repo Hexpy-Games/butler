@@ -16,11 +16,17 @@ pub(crate) struct Script {
     pub(crate) step_seen: AtomicBool,
     pub(crate) quick: AtomicBool,
     pub(crate) plan_review_only: AtomicBool,
+    /// Closes as completed right after a result review that asked for changes.
+    pub(crate) reject_result: AtomicBool,
+    /// Skips every action and closes as completed without using a tool.
+    pub(crate) skip_all: AtomicBool,
+    /// Does the work in prose: its action is done, but no tool result exists.
+    pub(crate) prose_only: AtomicBool,
     pub(super) hold_steward: AtomicBool,
     pub(super) steward_held: Semaphore,
     pub(super) steward_release: Semaphore,
     pub(crate) delegate: AtomicBool,
-    pub(super) hold_report: AtomicBool,
+    pub(crate) hold_report: AtomicBool,
     reporting: Semaphore,
     report_release: Semaphore,
     pub(crate) blocked: Mutex<Vec<String>>,
@@ -32,14 +38,14 @@ pub(crate) struct Script {
     released: AtomicBool,
 }
 impl Script {
-    pub(super) async fn wait_reporting(&self) {
+    pub(crate) async fn wait_reporting(&self) {
         tokio::time::timeout(Duration::from_secs(30), self.reporting.acquire())
             .await
             .expect("reporting round reached")
             .unwrap()
             .forget();
     }
-    pub(super) fn finish_report(&self) {
+    pub(crate) fn finish_report(&self) {
         self.report_release.add_permits(1);
     }
 
@@ -70,6 +76,9 @@ pub(super) async fn start(
         step_seen: AtomicBool::new(false),
         quick: AtomicBool::new(false),
         plan_review_only: AtomicBool::new(false),
+        reject_result: AtomicBool::new(false),
+        skip_all: AtomicBool::new(false),
+        prose_only: AtomicBool::new(false),
         hold_steward: AtomicBool::new(false),
         steward_held: Semaphore::new(0),
         steward_release: Semaphore::new(0),
@@ -212,12 +221,22 @@ fn sequence(script: &Script, outputs: &[Value], request: &str) -> Vec<(&'static 
         "record_work_review",
         json!({"subject":"plan","verdict":"accept","summary":"Covers the evidence"}),
     ));
-    calls.push((
-        "read_file",
-        json!({"requests":[{"path":*script.path.lock().unwrap()}]}),
-    ));
-    let done = json!([{"action_key":"verify","status":"done"}]);
-    calls.push(("record_work_checkpoint",json!({"action_updates":done,"public_summary":"Evidence checked","next_step":"Review evidence"})));
+    let skip_all = script.skip_all.load(Ordering::SeqCst);
+    let prose_only = script.prose_only.load(Ordering::SeqCst);
+    if !skip_all && !prose_only {
+        calls.push((
+            "read_file",
+            json!({"requests":[{"path":*script.path.lock().unwrap()}]}),
+        ));
+    }
+    let done = if skip_all {
+        json!([{"action_key":"verify","status":"skipped","note":"Nothing to verify"}])
+    } else {
+        json!([{"action_key":"verify","status":"done"}])
+    };
+    if !skip_all {
+        calls.push(("record_work_checkpoint",json!({"action_updates":done,"public_summary":"Evidence checked","next_step":"Review evidence"})));
+    }
     if script.revise {
         calls.push(("record_work_review",json!({"subject":"result","verdict":"revise","summary":"Check again","corrections":["Verify once more"],"correction_scope":"execution","action_updates":[{"action_key":"verify","status":"active"}]})));
         calls.push((
@@ -229,7 +248,12 @@ fn sequence(script: &Script, outputs: &[Value], request: &str) -> Vec<(&'static 
             json!({"action_updates":done,"public_summary":"Rechecked","next_step":"Review"}),
         ));
     }
-    if !script.plan_review_only.load(Ordering::SeqCst) {
+    if script.reject_result.load(Ordering::SeqCst) {
+        calls.push((
+            "record_work_review",
+            json!({"subject":"result","verdict":"revise","summary":"Evidence is wrong","corrections":["Verify again"],"correction_scope":"execution"}),
+        ));
+    } else if !skip_all && !prose_only && !script.plan_review_only.load(Ordering::SeqCst) {
         calls.push((
             "record_work_review",
             json!({"subject":"result","verdict":"accept","summary":"Evidence verified"}),

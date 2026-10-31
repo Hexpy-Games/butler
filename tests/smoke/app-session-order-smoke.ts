@@ -23,10 +23,12 @@ const c = copy.canon.order;
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(tmpdir(), "butler-session-order-shots"));
 mkdirSync(shots, { recursive: true });
+/** Only this message's stream ends on its own; every step stream stays open until teardown. */
+const UNGATED_REPLY = "지금 끝내고 보고해 주세요.";
 let release!: () => void;
 const gate = new Promise<void>(done => { release = done; });
 const host = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist"),
-  stubTextStream: async function* () { yield "확인하고 있습니다."; await gate; },
+  stubTextStream: async function* (request) { yield "확인하고 있습니다."; if (!JSON.stringify(request).includes(UNGATED_REPLY)) await gate; },
 });
 const browser = await launchSmokeBrowser();
 const errors: string[] = [];
@@ -41,7 +43,7 @@ try {
     wallpaper: { source: { kind: "none" } } }) });
   await singleStep();
   if (!baseline) await completedPrefixDrop(host, open, info, keyboardEdit, shot);
-  if (!baseline && device === "desktop") await liveStepSurfaces(host, open, info, shot);
+  if (!baseline && device === "desktop") await liveStepSurfaces(host, id => open(id, 2), info, shot, crop, copy.space.attention, UNGATED_REPLY);
   const plain = await orderChat(host, "진행 순서 확인");
   await scenario(plain, "plain");
   await scenario("general", "bubble");
@@ -55,8 +57,12 @@ try {
   throw error;
 } finally { release(); await browser.close(); await host.stop(); }
 
-async function open(id: string) {
-  const page = await browser.newPage({ viewport: device === "phone" ? { width: 390, height: 844 } : { width: 1440, height: 1000 } });
+/** One sidebar state, sharp enough to read on a phone. */
+async function crop(page: Page, name: string) {
+  await page.locator('[data-test-class="app-sidebar"]').screenshot({ path: join(shots, `${process.env.BUTLER_SMOKE_CROP_PREFIX ?? "after"}-${theme}-${device}-${name}.png`), animations: "disabled", caret: "hide" });
+}
+async function open(id: string, deviceScaleFactor = 1) {
+  const page = await browser.newPage({ deviceScaleFactor, viewport: device === "phone" ? { width: 390, height: 844 } : { width: 1440, height: 1000 } });
   page.on("pageerror", error => errors.push(error.message));
   await installOrderPage(page, id, lang);
   await host.signIn(page);

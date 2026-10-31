@@ -28,7 +28,6 @@ export interface CanonCopy {
     stepEpic: (epic: string) => string;
     removed: string; continued: string; taken: string;
     hold: (epic: string) => string;
-    takeHere: (epic: string, conversation: string, running: boolean) => string;
     remove: string; proceed: string; openOther: string; take: string;
   };
   criteriaCount: (confirmed: number, total: number) => string;

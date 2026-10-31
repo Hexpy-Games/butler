@@ -113,6 +113,7 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         for session_id in sessions {
+            self.stop_session_work(&session_id).await;
             let runtime_session_id = self.runtime_hint(&session_id).await?;
             self.dependencies
                 .authority_handoff
