@@ -18,7 +18,8 @@ mod worker;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Scenario, Setup, accepted_turn_id, turn_timeout},
+    gateway::immediate_turn_id,
+    scenario::{Scenario, Setup, turn_timeout},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -99,9 +100,9 @@ async fn children(s: &Scenario) -> Result<Vec<Value>, HarnessError> {
 async fn followup_turn(s: &Scenario) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(turn_timeout());
     let accepted = s.gw.say("general", stub::FOLLOWUP).await?;
-    let turn_id = match accepted_turn_id(&accepted) {
-        Ok(id) => id,
-        Err(_) => {
+    let turn_id = match immediate_turn_id(&accepted) {
+        Some(id) => id,
+        None => {
             assert_eq!(accepted["queued"]["text"], stub::FOLLOWUP, "{accepted}");
             assert!(accepted["queued"]["id"].as_str().is_some(), "{accepted}");
             loop {

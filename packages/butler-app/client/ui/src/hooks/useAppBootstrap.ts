@@ -19,6 +19,7 @@ import { notifyError } from "@/app/notifications.ts";
 import { isDraftChatId } from "@/app/utils.ts";
 import { turnProgressOf } from "@/app/turnProgress.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
+import { settleSessionViewLoad, startSessionViewLoad } from "@/app/sessionViewLoad.ts";
 import {
   selectActiveSessionView,
   useButlerStore,
@@ -212,6 +213,7 @@ export function useAppBootstrap() {
         return;
       }
       if (!isServerBackedSessionId(activeChatId)) return;
+      startSessionViewLoad();
       let cached: MessageListView | null = null;
       try {
         try {
@@ -245,12 +247,14 @@ export function useAppBootstrap() {
               : {}),
           };
           setSessionView(data);
+          settleSessionViewLoad(activeChatId);
           startupResourceReady("messages");
           setStatus({ label: "ready", tone: "ok" });
           void writeCachedMessageList(activeChatId, next);
         }
       } catch (error) {
         if (!cancelled) {
+          settleSessionViewLoad(activeChatId);
           if (!cached) {
             notifyError(error, "Message load failed", {
               id: `message-load-${activeChatId}`,

@@ -5,7 +5,7 @@
 // a collapse animates back to the clamped height and re-applies the clamp at the end. Line breaks never
 // change (the clamp wraps normally), so the first line stays put and rows below slide. Reduced motion:
 // instant. Optional `meta` is a caption line above the text, so the text column has one width in every row.
-// The open cue follows the DS trailing disclosure chevron (DisclosureRow affordance="trailing",
+// The open cue follows the DS disclosure chevron (the DisclosureRow chevron after the title,
 // DisclosureRow.module.css .turn): ChevronRight sm, --text-tertiary, a line-high slot, turns 90° to point
 // down when open over --motion-fast standard easing, no travel under reduced motion. The slot is kept in
 // every row, empty when the text fits.

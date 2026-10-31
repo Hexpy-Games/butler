@@ -43,10 +43,7 @@ class WindowsCommandCoverage(unittest.TestCase):
         self.assertIn('release = ' + installed, gate)
         self.assertIn("'cli_remote','windows_commands','project_workspace'", gate)
         parts = (ROOT / '.github/scripts/ci_parts.py').read_text()
-        self.assertIn("dict(shard='basics', tests='windows_commands')", parts)
-        install = (repository / '.github/workflows/install-smoke.yml').read_text()
-        tarball = install.split('      - name: Keep the tarball for the smoke', 1)[1].split('  smoke:', 1)[0]
-        self.assertIn("retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 7 }}", tarball)
+        self.assertIn("dict(shard='basics', tests='windows_commands,local_zone')", parts)
 
 
 if __name__ == '__main__':

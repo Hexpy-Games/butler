@@ -74,10 +74,11 @@ label (default "0s" / "412ms" / "2s"), `inset` and `maxDepth`. 0 and the total a
 always shown. Tick density follows the axis width (about one label per
 64px): an interior tick too close to its neighbour or to the total is
 dropped, so labels never collide at compact widths.
-- `inset="row"`: the bar line of a DisclosureRow with a trailing or no
-  chevron (text-indent traces); `maxDepth` does not apply.
-- `inset="disclosure"`: a leading-chevron DisclosureRow's description column
-  (row-indent traces), with the trace's `maxDepth`.
+- `inset="row"`: the `bar` line of a DisclosureRow (text-indent traces);
+  `maxDepth` does not apply.
+- `inset="disclosure"`: a DisclosureRow's description (row-indent traces),
+  with the trace's `maxDepth`. A DisclosureRow has no chevron column (its
+  chevron follows the title), so this is the row inset plus the shift.
 
 ### SpanRow
 `depth` (0 for a root span) and `indent`:
@@ -87,10 +88,10 @@ dropped, so labels never collide at compact widths.
   than 3 levels shows `depthLabel(depth)` after its description ("+6.13초 ·
   깊이 5") instead of indenting further.
 - `indent="row"` (default): the whole row indents 16px per level; a SpanBar
-  in the description reaches back to the shared axis. Pass the trace's
-  deepest level as `maxDepth` to every SpanRow and to the SpanAxis; when the
-  deepest indent passes the row's inner inset (`--space-sm` plus the chevron
-  line), the whole axis shifts right by the difference.
+  in the description lines up with the shared axis. Pass the trace's
+  deepest level as `maxDepth` to every SpanRow and to the SpanAxis; the
+  whole axis shifts right by the deepest indent, so every bar starts where
+  the deepest row's description starts, `--space-sm` inside its fill.
 
 Rows are spaced like adjacent DisclosureRows.
 

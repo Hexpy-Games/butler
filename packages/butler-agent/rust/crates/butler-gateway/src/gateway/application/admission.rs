@@ -327,6 +327,7 @@ fn message_text(request: &MessageSendRequest) -> String {
             match part {
                 MessageContentPart::Text { text: value, .. } => text.push_str(value),
                 MessageContentPart::SessionRef { title_snapshot, .. }
+                | MessageContentPart::ProjectRef { title_snapshot, .. }
                 | MessageContentPart::ProjectSourceRef { title_snapshot, .. } => {
                     text.push('@');
                     text.push_str(title_snapshot);

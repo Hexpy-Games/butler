@@ -11,6 +11,7 @@ mod handoff;
 mod instruction_context;
 mod parents;
 mod records;
+mod subtasks;
 mod worker_admission;
 mod worker_cancel;
 mod worker_failure;
@@ -23,6 +24,7 @@ pub use worker_admission::{
 pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
+pub use subtasks::OPEN_SUBTASKS_SQL;
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;

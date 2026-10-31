@@ -24,7 +24,7 @@ async fn cancelled_and_delivered_handoffs_return_to_baseline() -> Result<(), Har
             call("tool_call", json!({"id":"native:browser_act","arguments":{"tab":"pub","observation":"obs-1","steps":[{"action":"click","ref":"e9"}]}})), done()
         ].into();
     let accepted = s.gw.say("general", &prompt).await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     wait_state(&s, &turn, "waiting_for_form").await?;
     let cards = s.gw.approval_requests("general").await?;
     assert_eq!(cards.len(), 1);
@@ -41,7 +41,7 @@ async fn cancelled_and_delivered_handoffs_return_to_baseline() -> Result<(), Har
     *script.prompt.lock().unwrap() = "Deliver successfully".into();
     *script.steps.lock().unwrap() = [deliver("report.md", "Report"), done()].into();
     let accepted = s.gw.say("general", "Deliver successfully").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     wait_state(&s, &turn, "delivered").await?;
     let view = s.gw.get("/session-view?session_id=general").await?;
     let message = view.data()["messages"]
@@ -97,7 +97,7 @@ async fn cancellation_during_handoff_promotion_finishes_and_reclaims() -> Result
     let s = setup.start().await?;
     let host = Host::attach(&s).await?;
     let accepted = s.gw.say("general", "Deliver then pause").await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     wait_for(|| release.with_extension("held").exists()).await;
     let stop =
         s.gw.post(&format!("/turns/{turn}/cancel"), json!({}))
@@ -241,10 +241,11 @@ async fn handoff_lifetime_follows_final_or_resumable_parent_state() -> Result<()
             [parent],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )?;
-        let client = format!(
+        // Seed the admission row the way admission stores it: by canonical client identity.
+        let client = butler_gateway::gateway::admission_client_id(&format!(
             "subsession-result:{}",
             butler_turn::btcc::digest_identity(&format!("{relation}\0{result}"))
-        );
+        ));
         db.execute("INSERT INTO session_queued_messages(id,chat_id,text,client_message_id,controls_json,attachments_json,state,turn_id,created_at,updated_at) VALUES(?1,'general','Result',?2,'{}','[]','dispatched',?3,'2026-01-01','2026-01-01')", rusqlite::params![state, client, consumer])?;
         for (name, turn, session) in [
             ("root", parent.as_str(), None),

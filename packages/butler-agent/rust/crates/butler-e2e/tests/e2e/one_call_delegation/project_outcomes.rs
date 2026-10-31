@@ -1,6 +1,6 @@
 //! A project handoff preserves earlier owners and maps non-success results.
 use super::*;
-use butler_e2e::e2e::scenario::{Scenario, accepted_turn_id};
+use butler_e2e::e2e::scenario::Scenario;
 use std::sync::{Arc, atomic::Ordering};
 
 #[tokio::test]
@@ -26,7 +26,7 @@ async fn outcome(cancelled: bool, twice: bool) -> Result<(), HarnessError> {
     let (s, script, server, project, chat) = setup().await?;
     script.blocked.store(!cancelled && !twice, Ordering::SeqCst);
     let accepted = s.gw.say(&chat, stub::REQUEST).await?;
-    let turn = accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     tokio::time::timeout(Duration::from_secs(30), script.held.acquire())
         .await
         .unwrap()

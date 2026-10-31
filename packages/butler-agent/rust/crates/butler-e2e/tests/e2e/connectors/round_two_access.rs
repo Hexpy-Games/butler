@@ -18,7 +18,7 @@ pub(super) async fn attended_with(
     drop(connection);
     s.provider()?.set_chat_responder(responder);
     let accepted = s.gw.send_message(json!({"chat_id":"general","text":format!("fixture-call:{spec}"),"client_message_id":"attended-event"})).await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     s.gw.wait_turn(
         "general",
         &turn,

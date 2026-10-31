@@ -258,6 +258,7 @@ pub struct AppApplicationDependencies {
     pub model_catalog: Arc<dyn super::AppModelCatalogPort>,
     pub memory_management: Arc<dyn super::AppMemoryPort>,
     pub personalization: Arc<dyn super::AppPersonalizationPort>,
+    pub new_chat_briefing: Arc<dyn AppNewChatBriefingPort>,
     pub monitoring: Arc<dyn super::AppMonitoringPort>,
     pub project_dashboard_ledger: Arc<dyn super::AppProjectDashboardLedgerPort>,
     pub plan_decision_ledger: Arc<dyn super::AppPlanDecisionLedgerPort>,
@@ -327,6 +328,12 @@ pub trait AppContextReadPort: Send + Sync {
     fn read(&self, query: AppContextReadQuery) -> ApplicationFuture<AppContextReadFacts>;
 }
 
+mod new_chat_briefing;
+#[cfg(test)]
+pub(crate) use new_chat_briefing::TestNewChatBriefing;
+pub use new_chat_briefing::{
+    AppBriefingProject, AppNewChatBriefingPort, AppNewChatBriefingRequest,
+};
 mod session_titles;
 pub use session_titles::{AppSessionTitleGenerator, AppSessionTitleInput};
 mod session_topics;
@@ -410,6 +417,8 @@ pub struct ClaimedNativeSnapshot {
     pub attached_files: Vec<AppMessageFileSnapshot>,
     pub queue_attachments: Value,
     pub reference_chats: Vec<AppReferencedChatSnapshot>,
+    /// The projects the message references (`project_ref` parts), resolved when claimed.
+    pub project_references: Value,
 }
 
 #[derive(Clone, Debug)]

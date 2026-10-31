@@ -1,11 +1,11 @@
 //! Flat ordered steps: membership is the only source of prerequisite edges.
-use crate::work_types::TaskId;
+use crate::work_types::EpicId;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step {
     pub index: usize,
-    pub tasks: Vec<TaskId>,
+    pub tasks: Vec<EpicId>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chain {
@@ -26,7 +26,7 @@ pub enum ChainError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Placement {
     NewStep(usize),
-    Stack(TaskId),
+    Stack(EpicId),
 }
 
 impl Chain {
@@ -45,7 +45,7 @@ impl Chain {
         }
         Ok(())
     }
-    pub fn edges(&self) -> Result<Vec<(TaskId, TaskId)>, ChainError> {
+    pub fn edges(&self) -> Result<Vec<(EpicId, EpicId)>, ChainError> {
         self.validate()?;
         Ok(self
             .steps
@@ -60,14 +60,14 @@ impl Chain {
             })
             .collect())
     }
-    fn locate(&self, id: &TaskId) -> Result<(usize, usize), ChainError> {
+    fn locate(&self, id: &EpicId) -> Result<(usize, usize), ChainError> {
         self.steps
             .iter()
             .enumerate()
             .find_map(|(i, s)| s.tasks.iter().position(|w| w == id).map(|j| (i, j)))
             .ok_or(ChainError::Unknown)
     }
-    fn remove(&mut self, id: &TaskId) -> Result<(), ChainError> {
+    fn remove(&mut self, id: &EpicId) -> Result<(), ChainError> {
         let (i, j) = self.locate(id)?;
         self.steps[i].tasks.remove(j);
         if self.steps[i].tasks.is_empty() {
@@ -75,12 +75,12 @@ impl Chain {
         }
         Ok(())
     }
-    fn pin(&self, id: &TaskId) -> Option<(usize, BTreeSet<TaskId>)> {
+    fn pin(&self, id: &EpicId) -> Option<(usize, BTreeSet<EpicId>)> {
         let (index, _) = self.locate(id).ok()?;
         let predecessors = index.checked_sub(1).map(|i| &self.steps[i].tasks);
         Some((index, predecessors.into_iter().flatten().cloned().collect()))
     }
-    fn finish(&self, mut next: Self, running: &BTreeSet<TaskId>) -> Result<Self, ChainError> {
+    fn finish(&self, mut next: Self, running: &BTreeSet<EpicId>) -> Result<Self, ChainError> {
         self.validate()?;
         for (i, step) in next.steps.iter_mut().enumerate() {
             step.index = i;
@@ -96,40 +96,70 @@ impl Chain {
     /// Index is interpreted in the chain after removing the selected Task.
     pub fn move_to_new_step(
         &self,
-        id: &TaskId,
+        id: &EpicId,
         index: usize,
-        running: &BTreeSet<TaskId>,
+        running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
-        let mut next = self.clone();
-        next.remove(id)?;
-        if index > next.steps.len() {
-            return Err(ChainError::Unknown);
-        }
-        next.steps.insert(
-            index,
-            Step {
-                index,
-                tasks: vec![id.clone()],
-            },
-        );
-        self.finish(next, running)
+        self.move_many(std::slice::from_ref(id), Placement::NewStep(index), running)
     }
     pub fn join_stack(
         &self,
-        id: &TaskId,
-        target: &TaskId,
-        running: &BTreeSet<TaskId>,
+        id: &EpicId,
+        target: &EpicId,
+        running: &BTreeSet<EpicId>,
+    ) -> Result<Self, ChainError> {
+        self.move_many(
+            std::slice::from_ref(id),
+            Placement::Stack(target.clone()),
+            running,
+        )
+    }
+    /// Remove the entire ordered selection before interpreting the destination.
+    pub fn move_many(
+        &self,
+        ids: &[EpicId],
+        placement: Placement,
+        running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
         let mut next = self.clone();
-        next.remove(id)?;
-        let (i, _) = next.locate(target)?;
-        next.steps[i].tasks.push(id.clone());
+        next.remove_many(ids)?;
+        next.place_many(ids, placement)?;
         self.finish(next, running)
+    }
+    fn remove_many(&mut self, ids: &[EpicId]) -> Result<(), ChainError> {
+        if ids.is_empty() || ids.iter().collect::<BTreeSet<_>>().len() != ids.len() {
+            return Err(ChainError::Membership);
+        }
+        for id in ids {
+            self.remove(id)?;
+        }
+        Ok(())
+    }
+    fn place_many(&mut self, ids: &[EpicId], placement: Placement) -> Result<(), ChainError> {
+        match placement {
+            Placement::NewStep(index) => {
+                if index > self.steps.len() {
+                    return Err(ChainError::Unknown);
+                }
+                self.steps.insert(
+                    index,
+                    Step {
+                        index,
+                        tasks: ids.to_vec(),
+                    },
+                );
+            }
+            Placement::Stack(target) => {
+                let (index, _) = self.locate(&target)?;
+                self.steps[index].tasks.extend_from_slice(ids);
+            }
+        }
+        Ok(())
     }
     pub fn split_stack(
         &self,
         index: usize,
-        running: &BTreeSet<TaskId>,
+        running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
         let mut next = self.clone();
         let step = next.steps.get(index).ok_or(ChainError::Unknown)?.clone();
@@ -142,10 +172,10 @@ impl Chain {
         );
         self.finish(next, running)
     }
-    pub fn detach(&self, id: &TaskId, running: &BTreeSet<TaskId>) -> Result<Self, ChainError> {
+    pub fn detach(&self, id: &EpicId, running: &BTreeSet<EpicId>) -> Result<Self, ChainError> {
         self.delete(id, running)
     }
-    pub fn delete(&self, id: &TaskId, running: &BTreeSet<TaskId>) -> Result<Self, ChainError> {
+    pub fn delete(&self, id: &EpicId, running: &BTreeSet<EpicId>) -> Result<Self, ChainError> {
         let mut next = self.clone();
         next.remove(id)?;
         self.finish(next, running)
@@ -153,9 +183,9 @@ impl Chain {
     /// Join the next step's stack, or append a last step if the target is last.
     pub fn place_after(
         &self,
-        id: TaskId,
-        target: &TaskId,
-        running: &BTreeSet<TaskId>,
+        id: EpicId,
+        target: &EpicId,
+        running: &BTreeSet<EpicId>,
     ) -> Result<Self, ChainError> {
         if self.locate(&id).is_ok() {
             return Err(ChainError::Membership);
@@ -177,9 +207,19 @@ impl Chain {
     pub fn move_between(
         &self,
         target: &Self,
-        id: &TaskId,
+        id: &EpicId,
         placement: Placement,
-        running: &BTreeSet<TaskId>,
+        running: &BTreeSet<EpicId>,
+    ) -> Result<(Self, Self), ChainError> {
+        self.move_many_between(target, std::slice::from_ref(id), placement, running)
+    }
+    /// Pins are checked against the final chains, never intermediate membership.
+    pub fn move_many_between(
+        &self,
+        target: &Self,
+        ids: &[EpicId],
+        placement: Placement,
+        running: &BTreeSet<EpicId>,
     ) -> Result<(Self, Self), ChainError> {
         self.validate()?;
         target.validate()?;
@@ -191,27 +231,11 @@ impl Chain {
         {
             return Err(ChainError::Membership);
         }
-        let source = self.delete(id, running)?;
+        let mut source = self.clone();
+        source.remove_many(ids)?;
         let mut next = target.clone();
-        match placement {
-            Placement::NewStep(index) => {
-                if index > next.steps.len() {
-                    return Err(ChainError::Unknown);
-                }
-                next.steps.insert(
-                    index,
-                    Step {
-                        index,
-                        tasks: vec![id.clone()],
-                    },
-                );
-            }
-            Placement::Stack(work) => {
-                let (index, _) = next.locate(&work)?;
-                next.steps[index].tasks.push(id.clone());
-            }
-        }
-        Ok((source, target.finish(next, running)?))
+        next.place_many(ids, placement)?;
+        Ok((self.finish(source, running)?, target.finish(next, running)?))
     }
 }
 

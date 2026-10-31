@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 import tomllib
 import urllib.error
 import urllib.request
@@ -29,32 +30,67 @@ TARGETS = {
     "x86_64-pc-windows-msvc": "Unsigned Windows x64 Agent preview",
 }
 SIBLING_LICENSES = {}
+FETCHES = {}
+FETCHES_LOCK = threading.Lock()
 
 
 def run(*args):
-    return subprocess.check_output(args, cwd=ROOT, text=True)
+    return subprocess.check_output(args, cwd=ROOT, text=True, encoding="utf-8")
 
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def cache_text(destination, text):
+    # Readers must only observe complete entries, including concurrent fetches
+    # of the same URL. Use a unique sibling so replacement stays atomic.
+    with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as output:
+        temporary = Path(output.name)
+    try:
+        temporary.write_text(text, encoding="utf-8", newline="\n")
+        try:
+            temporary.replace(destination)
+        except (PermissionError, FileExistsError):
+            # Another process may have published an atomic entry while we fetched.
+            # An empty entry is complete too: it records a 404 response.
+            if not destination.is_file():
+                raise
+            return destination.read_text(encoding="utf-8")
+        return text
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def fetch(url):
+    with FETCHES_LOCK:
+        pending = FETCHES.get(url)
+        owner = pending is None
+        if owner:
+            pending = concurrent.futures.Future()
+            FETCHES[url] = pending
+    if owner:
+        try:
+            pending.set_result(fetch_text(url))
+        except BaseException as error:
+            pending.set_exception(error)
+    return pending.result()
+
+
+def fetch_text(url):
     cache = Path(tempfile.gettempdir()) / "butler-license-evidence"
     cache.mkdir(parents=True, exist_ok=True)
     saved = cache / digest(url.encode())
     if saved.exists():
-        value = saved.read_text()
+        value = saved.read_text(encoding="utf-8")
         return value or None
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
             text = response.read().decode("utf-8")
-            saved.write_text(text)
-            return text
+            return cache_text(saved, text) or None
     except urllib.error.HTTPError as error:
         if error.code == 404:
-            saved.write_text("")
-            return None
+            return cache_text(saved, "") or None
         raise RuntimeError(f"License evidence fetch failed: {url}: HTTP {error.code}") from error
 
 
@@ -95,7 +131,7 @@ def crate_evidence(package):
         files = SIBLING_LICENSES.get(source.rstrip("/"), [])
     vcs = directory / ".cargo_vcs_info.json"
     if source.startswith("https://github.com/"):
-        revision = json.loads(vcs.read_text())["git"]["sha1"] if vcs.exists() else package["version"]
+        revision = json.loads(vcs.read_text(encoding="utf-8"))["git"]["sha1"] if vcs.exists() else package["version"]
         # Git checkouts do not contain Cargo's packaged VCS metadata. Use the
         # resolved source commit, never a crate version as a repository ref.
         cargo_source = package.get("source") or ""
@@ -125,7 +161,7 @@ def crate_evidence(package):
                 files.append((f"{source}/NOTICE", notice))
     # Generated Lance client has no repository metadata but belongs to Lance namespace.
     if not files and package["name"] == "lance-namespace-reqwest-client":
-        revision = json.loads(vcs.read_text())["git"]["sha1"]
+        revision = json.loads(vcs.read_text(encoding="utf-8"))["git"]["sha1"]
         source = f"https://github.com/lance-format/lance-namespace/tree/{revision}"
         text = fetch(f"https://raw.githubusercontent.com/lance-format/lance-namespace/{revision}/LICENSE")
         if text:
@@ -137,18 +173,18 @@ def crate_evidence(package):
         source = "https://crates.io/crates/htmlescape/0.3.1"
         text = fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/Apache-2.0.txt")
         files = [("Apache-2.0 (elected from upstream Apache-2.0 / MIT / MPL-2.0)", text),
-                 ("Upstream package declaration", (directory / "Cargo.toml").read_text())]
+                 ("Upstream package declaration", (directory / "Cargo.toml").read_text(encoding="utf-8"))]
     if package["name"] == "random_word":
         base = "https://raw.githubusercontent.com/MitchellRhysHall/random_word/dc1cab8d7951ff4285ea9158c8954d663fdd6fbf"
         files = [(f"{base}/src/license/en.txt", fetch(f"{base}/src/license/en.txt")),
-                 ("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml").read_text()),
+                 ("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml").read_text(encoding="utf-8")),
                  ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
     if not files and package["name"] == "windows-permissions" and package["version"] == "0.2.4" and license_id == "MIT":
         # The published package and pinned upstream both declare MIT but omit
         # its text and copyright notice. Preserve that declaration verbatim;
         # provide the standard text without inventing a copyright attribution.
         source = "https://crates.io/crates/windows-permissions/0.2.4"
-        files = [("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text()),
+        files = [("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text(encoding="utf-8")),
                  ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
     if (package.get("source") or "").startswith("git+"):
         checkout = next((parent for parent in directory.parents if (parent / ".git").exists()), None)
@@ -195,19 +231,19 @@ def js_components():
             directories.append(ROOT / f"packages/butler-app/client/{workspace}/node_modules" / name)
         directories.extend((ROOT / "node_modules/.bun").glob(f"{name.replace('/', '+')}@{version}*/node_modules/{name}"))
         directory = next((p.resolve() for p in directories if (p / "package.json").is_file()
-                          and json.loads((p / "package.json").read_text())["version"] == version), None)
+                          and json.loads((p / "package.json").read_text(encoding="utf-8"))["version"] == version), None)
         if not directory:
             raise ValueError(f"Install bun.lock first: {name}@{version}")
-        manifest = json.loads((directory / "package.json").read_text())
+        manifest = json.loads((directory / "package.json").read_text(encoding="utf-8"))
         files = license_files(directory)
         if name == "@hugeicons/core-free-icons" and not files:
-            revision = json.loads(fetch("https://api.github.com/repos/hugeicons/hugeicons/commits/main"))["sha"]
+            revision = "4fd1c2d5572f832eb908d401ca95a18013069abf"
             base = f"https://raw.githubusercontent.com/hugeicons/hugeicons/{revision}"
             files = [(f"{base}/LICENSE.md", fetch(f"{base}/LICENSE.md")),
                      (f"{base}/README.md (free icons MIT declaration)", fetch(f"{base}/README.md"))]
         if name.startswith("@radix-ui/") and not files:
             sibling = ROOT / "packages/butler-app/client/ui/node_modules/@radix-ui/react-dialog"
-            sibling_version = json.loads((sibling / "package.json").read_text())["version"]
+            sibling_version = json.loads((sibling / "package.json").read_text(encoding="utf-8"))["version"]
             files = [(f"Radix repository MIT license from react-dialog {sibling_version}/{label}", text)
                      for label, text in license_files(sibling)]
         if name == "react-remove-scroll-bar" and not files:
@@ -217,15 +253,15 @@ def js_components():
         if name == "woff2sfnt-sfnt2woff" and version == "1.0.0" and not files:
             # The pinned distribution declares MIT and its copyright in source,
             # but omits the license body. Keep both declarations and link MIT.
-            header = (directory / "index.js").read_text().split("*/", 1)[0] + "*/"
+            header = (directory / "index.js").read_text(encoding="utf-8").split("*/", 1)[0] + "*/"
             files = [("index.js (upstream MIT copyright declaration)", header),
-                     ("package.json (upstream MIT declaration)", (directory / "package.json").read_text()),
+                     ("package.json (upstream MIT declaration)", (directory / "package.json").read_text(encoding="utf-8")),
                      ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
         if not files:
             raise ValueError(f"Missing npm license evidence: {name} {version}")
         if name == "electron":
             # Runtime includes Node's complete third-party notices in LICENSE.
-            files = [("Electron LICENSE", (directory / "LICENSE").read_text())]
+            files = [("Electron LICENSE", (directory / "LICENSE").read_text(encoding="utf-8"))]
         components.append(record("npm", name, version, manifest.get("license"),
                                  f"https://registry.npmjs.org/{name}/-/{name.split('/')[-1]}-{version}.tgz",
                                  ["App/Agent browser renderer" if name != "electron" else "App runtime"],
@@ -234,7 +270,7 @@ def js_components():
 
 
 def native_components():
-    lock = json.loads((RUST / "scripts/static-ort.lock.json").read_text())
+    lock = json.loads((RUST / "scripts/static-ort.lock.json").read_text(encoding="utf-8"))
     components = []
     for name, repository, license_id in (
         ("onnxruntime", "microsoft/onnxruntime", "MIT"),
@@ -256,12 +292,12 @@ def native_components():
     metadata = json.loads(run("cargo", "metadata", "--locked", "--format-version", "1", "--manifest-path", str(RUST / "Cargo.toml")))
     package = next(p for p in metadata["packages"] if p["name"] == "libsqlite3-sys")
     sqlite = Path(package["manifest_path"]).parent / "sqlite3/sqlite3.c"
-    text = sqlite.read_text()
+    text = sqlite.read_text(encoding="utf-8")
     version = re.search(r'#define SQLITE_VERSION\s+"([^"]+)"', text).group(1)
     blessing = re.search(r"/\*\n\*\* 2001 September 15.*?\*/", text, re.S).group(0)
     components.append(record("native", "SQLite", version, "blessing", "libsqlite3-sys 0.35.0/sqlite3/sqlite3.c",
                              list(TARGETS.values()), [("SQLite copyright disclaimer and blessing", blessing)]))
-    rust_version = tomllib.loads((RUST / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
+    rust_version = tomllib.loads((RUST / "rust-toolchain.toml").read_text(encoding="utf-8"))["toolchain"]["channel"]
     base = f"https://raw.githubusercontent.com/rust-lang/rust/{rust_version}"
     files = [(f"{base}/{file}", fetch(f"{base}/{file}")) for file in ("COPYRIGHT", "LICENSE-MIT", "LICENSE-APACHE")]
     components.append(record("native", "Rust standard library", rust_version, "MIT OR Apache-2.0", base,
@@ -301,8 +337,8 @@ class CreditsParser(HTMLParser):
 
 def runtime_components():
     directory = ROOT / "packages/butler-app/client/electron/node_modules/electron/dist"
-    version = json.loads((directory.parent / "package.json").read_text())["version"]
-    checksums = json.loads((directory.parent / "checksums.json").read_text())
+    version = json.loads((directory.parent / "package.json").read_text(encoding="utf-8"))["version"]
+    checksums = json.loads((directory.parent / "checksums.json").read_text(encoding="utf-8"))
     files = []
     # Credits vary by platform. Include all three official release runtime lists.
     for target in ("linux-x64", "linux-arm64", "darwin-arm64"):
@@ -330,7 +366,7 @@ def runtime_components():
 
 
 def model_components():
-    assets = (RUST / "crates/butler-agent/src/host/embedding/worker/assets.rs").read_text()
+    assets = (RUST / "crates/butler-agent/src/host/embedding/worker/assets.rs").read_text(encoding="utf-8")
     revision = re.search(r'const REVISION: &str = "([a-f0-9]+)";', assets).group(1)
     base = f"https://huggingface.co/Xenova/bge-m3/resolve/{revision}"
     license_source = "https://raw.githubusercontent.com/FlagOpen/FlagEmbedding/fd1a2bdf69488ffebe0327999d4400d8c8058a0b/LICENSE"
@@ -347,11 +383,11 @@ def vendored_components():
         ("IBM Plex Mono", "2.5.0", "OFL-1.1", "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt"),
         ("LobeHub provider logos", "1.95.1", "MIT", "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE"),
         ("JavaScriptCore V8 Date.parse adaptation", "2026-09-19", "BSD-2-Clause", "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt"),
-        ("Unicode CLDR timezone names", "ICU 78.1 / TZ 2026c", "Unicode-3.0", "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt"),
+        ("Unicode CLDR timezone names", "ICU 78.1 / TZ 2026e", "Unicode-3.0", "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt"),
     ]
     return [record("vendored", name, version, license_id, path,
                    [TARGETS["x86_64-pc-windows-msvc"]] if name == "notify Windows ledger backend" else list(TARGETS.values()),
-                   [(path, (ROOT / path).read_text())]) for name, version, license_id, path in entries]
+                   [(path, (ROOT / path).read_text(encoding="utf-8"))]) for name, version, license_id, path in entries]
 
 
 def main():
@@ -360,7 +396,7 @@ def main():
     fingerprints = json.loads(run("node", "--input-type=module", "-e", code))
     catalog = dict(inputs=fingerprints,
                    components=sorted(components, key=lambda c: c["id"]))
-    (ROOT / "deploy/licenses/catalog.json").write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n")
+    (ROOT / "deploy/licenses/catalog.json").write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"Collected {len(components)} components; run generate.mjs to validate license policy")
 
 

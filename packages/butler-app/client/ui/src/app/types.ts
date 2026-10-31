@@ -111,6 +111,8 @@ export interface AppModelSummary {
   server_url?: string;
   source?: "discovered" | "manual";
   local_reasoning_budget_ratio?: number;
+  /** A Custom model's own response time limit, in milliseconds. */
+  response_timeout_ms?: number;
   registered?: boolean;
   enabled?: boolean;
   auth_type?: ProviderAuthMethod;
@@ -126,6 +128,13 @@ export interface AppModelSummary {
 }
 
 export type ChatGptSignInKind = "default" | "new_account" | "enable_plan";
+
+export interface ChatGptAccountView {
+  status: "signed_out" | "legacy_sign_in_required" | "sign_in_required" | "plan_off" | "signed_in";
+  label: string | null;
+  plan_notice_pending: boolean;
+  legacy_prompt_pending: boolean;
+}
 
 export type ProviderAuthMethod = "api_key" | "chatgpt_oauth";
 
@@ -201,6 +210,14 @@ export interface ModelCatalogView {
   registered_models?: AppModelSummary[];
   provider_credentials?: ProviderCredentialView[];
   worker_model_presets: WorkerModelPreset[];
+  /** A Custom model's response time limit: allowed range and the default an empty one uses. */
+  response_timeout?: ResponseTimeoutLimits;
+}
+
+export interface ResponseTimeoutLimits {
+  default_ms: number;
+  min_ms: number;
+  max_ms: number;
 }
 
 export interface LocalModelDiscoveryRequest {
@@ -229,6 +246,8 @@ export interface LocalModelRegistrationRequest extends LocalModelDiscoveryReques
   source?: "discovered" | "manual";
   /** The user's image input declaration; absent keeps the stored one. */
   image_input?: boolean;
+  /** Milliseconds; null clears it, absent keeps the stored one. */
+  response_timeout_ms?: number | null;
 }
 
 export interface LocalModelRegistrationResult {
@@ -775,6 +794,10 @@ export interface SessionSummary {
   active_turn_state?: string;
   running_delegated_work?: boolean;
   attention_required?: boolean;
+  /** Where the attention comes from; `subtask` when only open subtasks wait. */
+  attention_source?: "self" | "subtask" | "both";
+  /** Unfinished delegated subtasks, in start order. */
+  subtasks?: SubtaskView[];
   pinned: boolean;
   archived: boolean;
   last_message_preview?: string;
@@ -1168,6 +1191,19 @@ export interface StewardResultView {
   created_at: string;
 }
 
+export type SubtaskState = "working" | "paused" | "needs_approval";
+
+/** One unfinished delegated subtask (a steward child) of a conversation. */
+export interface SubtaskView {
+  session_id: string;
+  relation_id: string;
+  title: string;
+  state: SubtaskState;
+  plan_completed?: number;
+  plan_total?: number;
+  started_at: string;
+}
+
 export interface StewardSessionSummaryView {
   relation: SessionRelationView;
   session_id: string;
@@ -1220,6 +1256,7 @@ export interface SessionView {
   parent_session_id?: string;
   relation?: SessionRelationView;
   steward_children?: StewardSessionSummaryView[];
+  subtasks?: SubtaskView[];
   generated_at: string;
   updated_at: string;
 }
@@ -1403,6 +1440,8 @@ export interface UsageMonitorView {
     bySection: Record<string, UsageSectionBucketView>;
     /** Session views only: the chat's calls by role ("main" = the chat itself; any other role is delegated work), included in the totals above. */
     byRole?: Record<string, UsageTokenBucketView>;
+    /** Session views only: every role other than "main" summed per token type; zero when nothing was delegated. The chat's own part is the totals above minus this. */
+    subtasks?: UsageTokenBucketView;
   };
   webSearch: {
     requestCount: number;
@@ -1701,6 +1740,7 @@ export interface SessionSummaryView {
   worker_activity?: WorkerActivitySummary[];
   work_streams?: WorkStreamSummary[];
   steward_children?: StewardSessionSummaryView[];
+  subtasks?: SubtaskView[];
 }
 
 export interface TimelineEvent {

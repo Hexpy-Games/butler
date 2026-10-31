@@ -6,6 +6,7 @@
 
 use std::io;
 
+mod baseline;
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
@@ -18,7 +19,7 @@ use windows as sys;
 /// The baseline zone archive (`BTZ2`: a count, then per zone its name,
 /// canonical name and TZif bytes, sorted by lower-case name), frozen from ICU
 /// and embedded in the executable.
-pub const BASELINE_ARCHIVE: &[u8] = include_bytes!("../data/source-2026c.btz");
+pub const BASELINE_ARCHIVE: &[u8] = include_bytes!("../data/source-2026e.btz");
 
 /// The compiled (TZif) rules of the IANA zone `name` (such as
 /// `Asia/Seoul`). The caller checks that `name` is a relative path without
@@ -26,6 +27,41 @@ pub const BASELINE_ARCHIVE: &[u8] = include_bytes!("../data/source-2026c.btz");
 /// [`io::ErrorKind::NotFound`] error.
 pub fn zone_rules(name: &str) -> io::Result<Vec<u8>> {
     sys::zone_rules(name)
+}
+
+/// The compiled (TZif) rules of the IANA zone `name` in
+/// [`BASELINE_ARCHIVE`], on every host: what [`zone_rules`] reads on
+/// Windows. A zone the archive does not hold is a
+/// [`io::ErrorKind::NotFound`] error.
+pub fn baseline_zone_rules(name: &str) -> io::Result<Vec<u8>> {
+    baseline::lookup(BASELINE_ARCHIVE, name).ok_or_else(|| io::ErrorKind::NotFound.into())
+}
+
+/// One record of [`BASELINE_ARCHIVE`].
+pub struct BaselineZone {
+    /// IANA or ICU name, aliases included.
+    pub name: &'static str,
+    /// The canonical IANA name `name` resolves to.
+    pub canonical: &'static str,
+    /// The compiled (TZif) rules.
+    pub rules: &'static [u8],
+}
+
+/// Every record of [`BASELINE_ARCHIVE`], sorted by lower-case name.
+pub fn baseline_zones() -> io::Result<Vec<BaselineZone>> {
+    let text =
+        |bytes: &'static [u8]| std::str::from_utf8(bytes).map_err(|_| io::ErrorKind::InvalidData);
+    baseline::entries(BASELINE_ARCHIVE)
+        .ok_or(io::ErrorKind::InvalidData)?
+        .into_iter()
+        .map(|(name, canonical, rules)| -> io::Result<BaselineZone> {
+            Ok(BaselineZone {
+                name: text(name)?,
+                canonical: text(canonical)?,
+                rules,
+            })
+        })
+        .collect()
 }
 
 /// Cheap identity of the process-local rules; inspect on a blocking thread.

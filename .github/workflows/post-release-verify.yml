@@ -46,6 +46,10 @@ jobs:
     with:
       tag: ${{ inputs.tag }}
       from-tag: ${{ inputs.baseline-tag }}
+    # The key lives only in the live-e2e environment. A called workflow still
+    # gets environment secrets only when the caller passes them by name.
+    secrets:
+      BUTLER_E2E_API_KEY: ${{ secrets.BUTLER_E2E_API_KEY }}
   linux:
     needs: validate
     name: Published Agent install (${{ matrix.platform }})
@@ -68,7 +72,7 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/isolated.py bash deploy/npm/verify-release.sh "$TAG"
+          python3 .github/scripts/isolated.py bash deploy/verify-release.sh "$TAG"
           mkdir -p "$RUNNER_TEMP/released-agent"
           gh release download "$TAG" --dir "$RUNNER_TEMP/released-agent" --pattern "butler-agent-*-$PLATFORM.tar.gz" --pattern 'butler-*-SHA256SUMS'
           cd "$RUNNER_TEMP/released-agent"

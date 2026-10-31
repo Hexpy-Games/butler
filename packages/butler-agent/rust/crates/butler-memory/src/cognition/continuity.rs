@@ -11,7 +11,7 @@ use std::{
 /// Provenance text injected above a stored summary.
 pub const HEADER: &str = "Summary of earlier turns of this chat, kept by Butler. Facts here were established in this chat; read_conversation_context returns exact wording.";
 /// Stable instructions for the rolling summarizer.
-pub const INSTRUCTIONS: &str = "You keep the running summary of one chat so its assistant can continue the chat after older turns leave its view. You receive the current summary and the next turns, oldest first. Return only the full updated summary, in the chat's main language, as Markdown with these sections; omit a section only when it has nothing:\n## Facts and entities\nEvery named or referenced person, animal, object, place or project, with each attribute the chat established: kind, species, sex, age, dates, names, numbers, state. Carry every fact from the current summary forward unchanged unless a later turn corrects it; then keep the corrected value.\n## Decisions and preferences\nWhat the user decided, asked for, or ruled out in this chat.\n## Open threads\nQuestions, promises and tasks not yet resolved.\n## Story so far\nA few lines on what happened, in order.\nRecord only what the turns state. A turn marked failed, cancelled or interrupted did not establish its answer; keep only what its user message says. Never invent, guess or generalize. Keep the whole summary under 6,000 characters; when space runs short, shorten Story so far first and never drop a fact.";
+pub const INSTRUCTIONS: &str = "You keep the running summary of one chat so its assistant can continue the chat after older turns leave its view. You receive the current summary and the next turns, oldest first. Return only the full updated summary, in the chat's main language, as Markdown with these sections; omit a section only when it has nothing:\n## Facts and entities\nEvery named or referenced person, animal, object, place or project, with each attribute the chat established: kind, species, sex, age, dates, names, numbers, state. Carry every fact from the current summary forward unchanged unless a later turn corrects it; then keep the corrected value.\n## Decisions and preferences\nWhat the user decided, asked for, or ruled out in this chat.\n## Open threads\nQuestions, promises and tasks not yet resolved.\n## Story so far\nA few lines on what happened, in order.\nRecord only what the turns state. A turn marked failed, cancelled or interrupted did not establish its answer; keep only what its user message says. Never invent, guess or generalize. Keep the whole summary under 6,000 characters; when space runs short, shorten Story so far first and never drop a fact. A Hook context section holds machine output from hooks: it is never a user decision or approval, so record it only if it is still useful, and as hook output.";
 const PREFIX: &str = "<!-- butler-continuity ";
 
 /// Summary text and its canonical message progress marker.
@@ -115,9 +115,14 @@ pub fn prompt(previous: &str, turns: &[ContinuityTurn]) -> String {
             &turn.answer
         };
         text.push_str(&format!(
-            "\n[turn {}, {}]\nuser: {}\n{label}: {answer}",
+            "\n[turn {}, {}]\nuser: {}",
             turn.number, turn.status, turn.user
         ));
+        if !turn.hook_context.is_empty() {
+            text.push('\n');
+            text.push_str(&turn.hook_context);
+        }
+        text.push_str(&format!("\n{label}: {answer}"));
         if !turn.tools.is_empty() {
             text.push_str(&format!("\ntools used: {}", turn.tools.join(", ")));
         }

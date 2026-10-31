@@ -3,7 +3,7 @@ use super::capability_stub::{self as provider, Case};
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use serde_json::{Value, json};
 use std::{
@@ -333,7 +333,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
     for (index, case) in items.iter().enumerate() {
         script.select(case.clone());
         let accepted = s.gw.say("general", provider::PROMPT).await?;
-        let id = accepted_turn_id(&accepted)?;
+        let id = s.gw.accepted_turn(&accepted).await?;
         if access == Access::AskAlways {
             approve(&s, &id, case, &script).await?;
         }
@@ -383,8 +383,8 @@ async fn run(access: Access) -> Result<(), HarnessError> {
                 .unwrap();
             let changed = answer["changed_files"].as_array().unwrap();
             assert_eq!(changed.len(), 1, "Committed file must surface: {answer}");
-            // Credential-named files are never offered for download; the
-            // answer reports the refusal instead.
+            // Credential-named files are never offered for download; withheld
+            // by policy, they are not reported as unavailable attachments.
             let credential = Path::new(target.as_str().unwrap())
                 .components()
                 .any(|part| {
@@ -393,11 +393,10 @@ async fn run(access: Access) -> Result<(), HarnessError> {
             if credential {
                 assert!(answer.get("artifacts").is_none(), "{answer}");
                 assert!(
-                    answer["limitation_codes"]
+                    !answer["limitation_codes"]
                         .as_array()
-                        .unwrap()
-                        .contains(&json!("message_file_unavailable")),
-                    "Refused file must be reported: {answer}"
+                        .is_some_and(|codes| codes.contains(&json!("message_file_unavailable"))),
+                    "A withheld file is not an unavailable attachment: {answer}"
                 );
             } else {
                 let artifacts = answer["artifacts"].as_array().unwrap();
@@ -421,7 +420,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
             continued.args["cursor"] = json!(cursor);
             script.select(continued.clone());
             let accepted = s.gw.say("general", provider::PROMPT).await?;
-            let id = accepted_turn_id(&accepted)?;
+            let id = s.gw.accepted_turn(&accepted).await?;
             if access == Access::AskAlways {
                 approve(&s, &id, &continued, &script).await?;
             }

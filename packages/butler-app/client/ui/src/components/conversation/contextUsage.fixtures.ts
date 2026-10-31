@@ -47,7 +47,7 @@ export function usageView(fields: { quota?: ProviderQuotaResultView; reasoning?:
   };
 }
 
-/** A chat whose delegated work ran 8 more calls: totals include it, byRole splits it. */
+/** A chat whose delegated work ran 8 more calls: totals include it, byRole and subtasks split it. */
 export function delegatedUsageView(fields: Parameters<typeof usageView>[0] = {}): UsageMonitorView {
   const view = usageView(fields);
   const role = (requestCount: number, promptTokens: number, cachedTokens: number, outputTokens: number) => ({
@@ -56,8 +56,9 @@ export function delegatedUsageView(fields: Parameters<typeof usageView>[0] = {})
   const main = role(3, 48_200, 31_900, 3_420);
   const steward = role(2, 9_800, 6_100, 900);
   const worker = role(6, 31_400, 22_000, 2_600);
+  const subtasks = role(8, 41_200, 28_100, 3_500);
   const total = role(11, 89_400, 60_000, 6_920);
-  view.model = { ...view.model, ...total, cacheHitRatio: 0.67, byRole: { main, steward, worker } };
+  view.model = { ...view.model, ...total, cacheHitRatio: 0.67, byRole: { main, steward, worker }, subtasks };
   // The slot appends the delegated total, then that work's requests, cached and output.
   view.timeline.slots = [[Date.parse("2026-09-28T05:00:00Z"), 11, 89_400, 60_000, 6_920, 44_700, 8, 28_100, 3_500]];
   return view;

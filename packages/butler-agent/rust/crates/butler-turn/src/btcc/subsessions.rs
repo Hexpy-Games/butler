@@ -8,7 +8,7 @@ pub(crate) use service::tests::delegation_identities_are_byte_stable;
 
 pub(super) use scope::{SubsessionExecutionMode, SubsessionMetadata, read_subsession_metadata};
 pub use service::{
-    InterruptedSubsessionEvent, StewardDelegationRequest, SubsessionCancelRequest,
+    InterruptedSubsessionEvent, OpenSubtask, StewardDelegationRequest, SubsessionCancelRequest,
     SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue, SubsessionResumeRequest,
-    SubsessionService, WorkerDelegationRequest, WorkerProfile, WorkerProfileReader,
+    SubsessionService, SubtaskState, WorkerDelegationRequest, WorkerProfile, WorkerProfileReader,
 };

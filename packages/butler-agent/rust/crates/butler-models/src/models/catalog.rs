@@ -28,8 +28,8 @@ pub use defaults::{
 };
 pub use facts::{ImageLimitField, ImageLimitSources, ModelTier};
 pub use local::{
-    LocalImageDiscovery, LocalModelConfig, LocalModelPlatform, LocalModelSource,
-    normalize_local_model_config,
+    LOCAL_RESPONSE_TIMEOUT_MS, LocalImageDiscovery, LocalModelConfig, LocalModelPlatform,
+    LocalModelSource, local_response_timeout_ms, normalize_local_model_config,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use lookup::model_identity_key;
@@ -99,6 +99,8 @@ pub enum TokenEstimatorKind {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ModelProviderMetadata {
+    #[serde(default)]
+    pub chat_wire_policy: ChatWirePolicy,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_modalities: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,6 +140,8 @@ pub struct ModelProviderMetadata {
     pub source: Option<LocalModelSource>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_reasoning_budget_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_timeout_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registered: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -392,7 +396,7 @@ impl ModelCatalogSnapshot {
         let lookup = &self.lookup_models;
         let runs = |model_ref: &str, effort: ReasoningEffort| {
             lookup::find_model_metadata(Some(model_ref), lookup).is_some_and(|model| {
-                model.runtime_supported && model.reasoning_efforts.contains(&effort)
+                model.runtime_supported && model.supports_preset_effort(effort)
             })
         };
         Some(upgrade_routine_preset(

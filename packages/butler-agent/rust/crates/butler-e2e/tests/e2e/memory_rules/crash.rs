@@ -2,7 +2,7 @@
 use super::{forget, support};
 use butler_e2e::e2e::{
     HarnessError,
-    scenario::{Fixture, Scenario, Setup, accepted_turn_id},
+    scenario::{Fixture, Scenario, Setup},
 };
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::json;
@@ -63,7 +63,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             // checkpoint. Keep the App turn active in either drain ordering.
             let reply = s.provider()?.hold_after_tool(user);
             let accepted = s.gw.say("general", user).await?;
-            let active_turn = accepted_turn_id(&accepted)?;
+            let active_turn = s.gw.accepted_turn(&accepted).await?;
             support::until(|| {
                 support::read_json(&state.join("rule-crash-reached.json"))
                     .is_some_and(|value| value["stage"] == stage)
@@ -290,12 +290,12 @@ async fn rules_contended_and_cancelled_lease_waiters_write_nothing() -> Result<(
     let other = support::new_chat(&s, "Cancelled lease waiter").await?;
     let gate = s.provider()?.hold_next_reply(forget::FORGET);
     let request_count = s.provider()?.requests().len();
-    let waiter = accepted_turn_id(&s.gw.say(&other, forget::FORGET).await?)?;
+    let waiter = s.gw.say_turn(&other, forget::FORGET).await?;
     support::until(|| s.provider().unwrap().requests().len() > request_count).await;
     let busy_chat = support::new_chat(&s, "Contended lease waiter").await?;
     let busy_gate = s.provider()?.hold_next_reply(forget::FORGET);
     let request_count = s.provider()?.requests().len();
-    let busy_turn = accepted_turn_id(&s.gw.say(&busy_chat, forget::FORGET).await?)?;
+    let busy_turn = s.gw.say_turn(&busy_chat, forget::FORGET).await?;
     support::until(|| s.provider().unwrap().requests().len() > request_count).await;
     let state = s.sandbox.data.join("state");
     std::fs::write(

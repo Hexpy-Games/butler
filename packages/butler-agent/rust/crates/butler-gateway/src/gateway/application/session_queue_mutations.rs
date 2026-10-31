@@ -82,6 +82,19 @@ impl AppApplication {
         Ok(sources)
     }
 
+    async fn inspect_queue_add(
+        &self,
+        chat: &str,
+        client: &str,
+        request: &MessageSendRequest,
+    ) -> Result<admission::Inspected, GatewayApplicationError> {
+        let (chat, client, request) = (chat.to_owned(), client.to_owned(), request.clone());
+        self.storage
+            .execute(move |db| admission::inspect(db, &chat, &client, &request))
+            .await
+            .map_err(app_error)
+    }
+
     async fn create_session_queue_inner(
         &self,
         request: MessageSendRequest,
@@ -93,16 +106,9 @@ impl AppApplication {
             request.client_message_id.as_ref(),
             &*self.dependencies.identity_clock,
         )?;
-        let inspect_chat = chat_id.clone();
-        let inspect_client = client_id.clone();
-        let inspect_request = request.clone();
         let inspected = self
-            .storage
-            .execute(move |db| {
-                admission::inspect(db, &inspect_chat, &inspect_client, &inspect_request)
-            })
-            .await
-            .map_err(app_error)?;
+            .inspect_queue_add(&chat_id, &client_id, &request)
+            .await?;
         if let Some(replay) = inspected.replay.as_ref() {
             if !replay.matches(&request, &inspected.prepared)? {
                 return Err(identity_conflict());
@@ -110,7 +116,8 @@ impl AppApplication {
             return self.queue_page(chat_id).await;
         }
 
-        self.prompt_hook(&chat_id, &client_id, &request, &inspected)
+        let hook_context_json = self
+            .prompt_hook(&chat_id, &client_id, &request, &inspected)
             .await?;
         let mut prepared = inspected.prepared;
         prepared.project_sources = self
@@ -132,6 +139,7 @@ impl AppApplication {
                 request.content_parts.as_ref(),
             )?,
             project_source_refs_json: json_string(&prepared.project_sources)?,
+            hook_context_json,
             created_at: created_at.clone(),
         };
         let expected = request.expected_project_id.clone();

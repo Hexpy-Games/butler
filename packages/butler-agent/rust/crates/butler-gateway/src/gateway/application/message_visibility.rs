@@ -1,5 +1,10 @@
 //! Which stored messages the owner may see.
 //!
+//! Canon step inputs use the same owner-visible predicate as internal steward
+//! inputs: only the initiated user row is hidden. Its assistant messages retain
+//! their canon_step origin, so the step titles remain available in every layout.
+//! The queue tray applies the same initiated-message identity filter.
+//!
 //! A steward's delegated result reaches the parent chat as model input for a
 //! turn: it is stored as a `user` message so the turn can read it, but it is
 //! shown only through the steward projections, never as a chat bubble.
@@ -29,6 +34,7 @@ macro_rules! owner_visible {
          (m.text GLOB 'Subsession result'||char(10)||'*' \
           AND m.text GLOB '*'||char(10)||'Relation ref: relation-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*' \
           AND m.text GLOB '*'||char(10)||'Result ref: steward-result-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*') \
+         OR EXISTS (SELECT 1 FROM app_initiated_messages ci WHERE ci.message_id=m.id AND ci.kind='canon_step') \
          OR EXISTS (SELECT 1 FROM turns dt WHERE dt.user_message_id=m.id AND \
          CASE WHEN json_valid(dt.execution_controls_json) \
          THEN json_extract(dt.execution_controls_json,'$.subsession_result') END IS NOT NULL) \

@@ -1,3 +1,5 @@
+export type { CanonQueueView, CanonQueueItem, CanonQueueEdit, CanonQueueChanged, CanonQueueConflict, CanonHoldDecision, CanonHoldPanel, CanonTakeHerePanel, CanonStepOrigin } from "./canon-queue-contracts";
+
 /** Canon gateway wire contracts. Entity revisions are numeric CAS tokens. */
 export type CanonStatus = "planned" | "in_progress" | "in_review" | "blocked" | "done" | "cancelled";
 export type WorkTaskStatus = "draft" | "waiting" | "pending" | "running" | "in_review" | "held" | "failed" | "completed" | "blocked" | "paused" | "stopped" | "cancelled";
@@ -154,3 +156,8 @@ export interface CanonSidebarOrderInput { group_key: string; work_ids: string[] 
 export interface CanonConversation { session_id: string; work: EpicDetail }
 
 export interface CanonConversationInput { sessionId?: string }
+
+/** Ordered selection for an atomic queue move; supply exactly one form. */
+export type CanonQueueMoveSelection =
+  | { epic_id: string; epic_ids?: never }
+  | { epic_ids: string[]; epic_id?: never };

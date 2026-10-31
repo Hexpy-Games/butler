@@ -125,6 +125,8 @@ pub(crate) struct Tab {
     /// Butler's own page (output check, reader render), never a conversation's.
     pub hidden: Option<super::hidden::Purpose>,
     pub diagnostics: Option<super::hidden::Diagnostics>,
+    /// What a DevTools read of this tab answers from.
+    pub devtools: super::devtools::Devtools,
     /// The registered preview this tab shows (its own context and proxy).
     pub preview: Option<String>,
     pub history_transition: Option<String>,
@@ -158,6 +160,7 @@ impl Tab {
             pending_batch: None,
             observation: None,
             observation_seq: 0,
+            devtools: super::devtools::Devtools::default(),
             progress: Progress::default(),
             busy: false,
             cancelled: false,

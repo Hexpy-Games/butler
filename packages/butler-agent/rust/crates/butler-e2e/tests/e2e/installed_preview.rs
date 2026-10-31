@@ -12,7 +12,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::{Cassette, Chunk, Exchange, MatchKey, Meta, RequestRecord, ResponseRecord},
     gateway::turn_state,
-    scenario::{Access, Setup, accepted_turn_id},
+    scenario::{Access, Setup},
 };
 use serde_json::{Value, json};
 
@@ -49,7 +49,7 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
         )
         .await?;
     assert_eq!(sent.status, 202);
-    let id = accepted_turn_id(sent.data())?;
+    let id = s.gw.accepted_turn(sent.data()).await?;
     let terminal =
         s.gw.wait_terminal("general", &id, Duration::from_secs(60))
             .await?;

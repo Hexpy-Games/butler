@@ -100,13 +100,20 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
         if object.contains_key("canon_status") {
             let id = object
                 .get("id")
+                .or_else(|| object.get("epic_id"))
                 .and_then(Value::as_str)
                 .ok_or(Error::Invalid("epic id"))?;
             let progress = progress(db, id, views)?;
-            object.insert("task_counts".into(), progress["counts"].clone());
-            object.insert("running".into(), progress["running"].clone());
+            if object.contains_key("epic_id") {
+                object.insert("progress".into(), progress);
+            } else {
+                object.insert("task_counts".into(), progress["counts"].clone());
+                object.insert("running".into(), progress["running"].clone());
+            }
         }
-        for key in ["backlog", "plans", "works", "groups", "rows", "work"] {
+        for key in [
+            "backlog", "plans", "works", "groups", "rows", "work", "chains", "steps", "items",
+        ] {
             if let Some(child) = object.get_mut(key) {
                 enrich(db, child, views)?;
             }
@@ -257,11 +264,29 @@ pub fn project_works(db: &Connection, value: &Value) -> Result<Vec<Value>> {
         if let Some(id) = id.and_then(Value::as_str) {
             works.extend(rows(db, Query::Works.sql(), [id])?);
         }
-        for key in ["backlog", "plans", "works", "groups", "rows", "work"] {
+        for key in [
+            "backlog", "plans", "works", "groups", "rows", "work", "chains", "steps", "items",
+        ] {
             if let Some(child) = object.get(key) {
                 works.extend(project_works(db, child)?);
             }
         }
     }
     Ok(works)
+}
+
+/// Only links created in this run and this exact runtime session can settle it.
+pub(crate) fn queue_outcome(
+    db: &Connection,
+    epic: &str,
+    session: &str,
+    started: i64,
+    views: &ProjectViews,
+) -> Result<Option<Value>> {
+    let works = rows(
+        db,
+        crate::store::queue::sql::LINKED_WORK,
+        params![epic, session, started],
+    )?;
+    works.first().map(|work|Ok(json!({"work_id":work["work_id"],"reported":reported(db,work,views)?,"failed":matches!(work["status"].as_str(),Some("blocked"|"abandoned")) || disposition(db,work,views)?["disposition"]=="blocked"}))).transpose()
 }

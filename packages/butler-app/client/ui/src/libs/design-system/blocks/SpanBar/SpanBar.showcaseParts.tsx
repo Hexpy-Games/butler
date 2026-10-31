@@ -93,7 +93,7 @@ export function GeminiTrace({ locale }: { locale: Locale }) {
   );
 }
 
-/** Row indent (leading chevrons): the whole row indents and its bar reaches back to the shared axis. */
+/** Row indent (chevron after the title): the whole row indents and its bar lines up with the shared axis. */
 export function RowIndentTrace({ locale }: { locale: Locale }) {
   const steps = GEMINI_STEPS.filter((step) => ["turn", "req-2", "http-2", "stream"].includes(step.id));
   const maxDepth = Math.max(...steps.map(stepDepth));

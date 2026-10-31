@@ -292,6 +292,7 @@ fn valid_content_part(value: &Value) -> bool {
                 .is_some_and(|id| !id.trim().is_empty())
                 && part.get("titleSnapshot").is_some_and(Value::is_string)
         }
+        Some("project_ref") => crate::gateway::message_validation::valid_project_reference(part),
         Some("project_source_ref") => valid_project_source(part),
         _ => false,
     }
@@ -351,6 +352,7 @@ fn content_text(content: &MessageContent) -> String {
         .map(|part| match part {
             MessageContentPart::Text { text, .. } => text.clone(),
             MessageContentPart::SessionRef { title_snapshot, .. }
+            | MessageContentPart::ProjectRef { title_snapshot, .. }
             | MessageContentPart::ProjectSourceRef { title_snapshot, .. } => {
                 format!("@{title_snapshot}")
             }

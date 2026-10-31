@@ -1,12 +1,12 @@
 import { $getSelection, $isRangeSelection, $isNodeSelection, $insertNodes, COPY_COMMAND, CUT_COMMAND, PASTE_COMMAND, COMMAND_PRIORITY_HIGH, type LexicalEditor } from "lexical";
 import { $generateJSONFromSelectedNodes } from "@lexical/clipboard";
-import { isMessageContent, messageContentText } from "@/app/messageContent";
+import { isMessageContent, messageContentText, type MessageContentPart } from "@/app/messageContent";
 import { $nodesForContent, contentFromSerializedNodes } from "./serialization";
 
 export const BUTLER_CONTENT_MIME = "application/x-butler-message-content";
 export function registerComposerClipboard(
   editor: LexicalEditor,
-  knownSession: (id: string) => boolean,
+  known: (part: MessageContentPart) => boolean,
   onFiles: (files: FileList) => void = () => {},
 ): () => void {
   function copy(event: ClipboardEvent | KeyboardEvent | null, cut: boolean): boolean {
@@ -34,7 +34,7 @@ export function registerComposerClipboard(
       if (raw) {
         try {
           const content: unknown = JSON.parse(raw);
-          if (isMessageContent(content) && content.parts.every(part => part.type !== "session_ref" || knownSession(part.sessionId))) {
+          if (isMessageContent(content) && content.parts.every(known)) {
             event.preventDefault(); $insertNodes($nodesForContent(content)); return true;
           }
         } catch { /* Foreign clipboard falls through to plain text. */ }

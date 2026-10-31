@@ -172,6 +172,12 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
+        if permanent {
+            #[cfg(feature = "e2e-fixtures")]
+            super::super::canon::hold(self, "canon_session_delete").await?;
+            super::super::canon_queue::complete_delete(self, format!("session-delete:{session}"))
+                .await?;
+        }
         super::cleanup::complete_locked(self, session, &cleanup_guard)
             .await
             .map_err(GatewayApplicationError::after_commit)?;
@@ -271,6 +277,16 @@ fn delete_permanently(
         ));
     }
     cleanup::record_delete(&tx, session_id, &session.session_hint)?;
+    tx.execute(
+        "DELETE FROM app_initiated_messages WHERE chat_id=?1",
+        [session_id],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    tx.execute(
+        "INSERT INTO app_canon_session_deletes(op_id,session_hint) VALUES(?1,?2)",
+        params![format!("session-delete:{session_id}"), session.session_hint],
+    )
+    .map_err(AppStorageError::sqlite)?;
     tx.execute("DELETE FROM chats WHERE id=?", [session_id])
         .map_err(AppStorageError::sqlite)?;
     let event = events::append_unpublished(

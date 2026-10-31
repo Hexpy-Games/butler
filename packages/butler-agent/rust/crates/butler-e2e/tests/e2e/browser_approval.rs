@@ -15,7 +15,7 @@ mod upload;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Scenario, Setup, accepted_turn_id},
+    scenario::{Access, Scenario, Setup},
 };
 use host::{Host, call};
 use serde_json::{Value, json};
@@ -150,6 +150,44 @@ async fn full_access_asks_only_at_payment() -> Result<(), HarnessError> {
     s.finish().await
 }
 
+/// A payment widget's frame asks however its host is written, on the tier that
+/// asks for nothing else; a host that only looks alike does not.
+#[tokio::test]
+async fn a_payment_frame_asks_with_a_trailing_dot_or_other_case() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let click = |text: &str, target: &str| -> Turn {
+        (
+            text.into(),
+            vec![act("pub", vec![step("click", target, "")])],
+        )
+    };
+    let s = Setup::new("BROWSER-APPROVAL-PAYMENT-HOST")?
+        .stub_cassette(host::cassette(&[
+            click("Pay on the dotted host", "e10"),
+            click("Pay on the upper-case host", "e11"),
+            click("Click on the lookalike host", "e12"),
+        ])?)
+        .start()
+        .await?;
+    let host = Host::attach(&s).await?;
+    for text in ["Pay on the dotted host", "Pay on the upper-case host"] {
+        let before = host.acts().len();
+        let (id, card) = ask(&s, text).await?;
+        let card = card.unwrap_or_else(|| panic!("{text}: slipped past the payment gate"));
+        assert_eq!(card["approval"]["risk"], "high", "{card}");
+        assert_eq!(
+            host.acts().len(),
+            before,
+            "{text}: nothing runs before the answer"
+        );
+        allow(&s, &id, &card).await?;
+        assert_eq!(host.acts().len(), before + 1, "{text}");
+    }
+    let (_, card) = ask(&s, "Click on the lookalike host").await?;
+    assert!(card.is_none(), "{card:?}");
+    s.finish().await
+}
+
 type Turn = (String, Vec<Value>);
 
 fn act(tab: &str, steps: Vec<Value>) -> Value {
@@ -223,7 +261,7 @@ fn pay() -> Turn {
 /// Sends `text`; returns the turn and the approval card it raised, or None
 /// when the turn delivered without asking.
 async fn ask(s: &Scenario, text: &str) -> Result<(String, Option<Value>), HarnessError> {
-    let id = accepted_turn_id(&s.gw.say("general", text).await?)?;
+    let id = s.gw.say_turn("general", text).await?;
     let states = ["waiting_for_form", "delivered", "failed"];
     for _ in 0..100 {
         let turn =

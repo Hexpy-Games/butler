@@ -18,11 +18,13 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
     )?;
     let held = setup.sandbox.home.join("hook-held");
     let release = setup.sandbox.home.join("hook-release");
+    let added = "HOOK-PROGRESS-TEXT";
     configure(
         &setup,
         &[
             json!({"id":"hold","event":"PostToolUse","type":"command","args":fixture(&setup,"hold"),
         "timeout_ms":60000,"env":{"HOOK_HELD":held,"HOOK_RELEASE":release}}),
+            super::context::printing(&setup, "added", "UserPromptSubmit", added),
         ],
     )?;
     let s = setup.start().await?;
@@ -32,7 +34,7 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
     let accepted =
         s.gw.say("general", "Read progress-input.txt, then finish.")
             .await?;
-    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn_id = s.gw.accepted_turn(&accepted).await?;
     let deadline = Instant::now() + Duration::from_secs(20);
     while !held.exists() {
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
@@ -78,6 +80,10 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
     assert_eq!(retry.status, 202, "{}", retry.text);
     s.gw.wait_turn("general", &turn_id, &["delivered"], Duration::from_secs(30))
         .await?;
+    // The interrupted turn is finished when it resumes: its own hook output is
+    // in the request once, as the current turn's, not again as its history.
+    let resumed = super::context::prompts(&s)?.pop().unwrap();
+    assert_eq!(resumed.matches(added).count(), 1, "{resumed}");
     s.finish().await
 }
 

@@ -46,6 +46,15 @@ fn legacy_app(db: &Connection) -> rusqlite::Result<()> {
         CREATE TABLE app_canon_conversations(session_id TEXT PRIMARY KEY,work_id TEXT NOT NULL UNIQUE,project_id TEXT NOT NULL,op_id TEXT NOT NULL UNIQUE);
         INSERT INTO app_canon_conversations VALUES('old-chat','wk_canon','butler','old-op');")
 }
+fn backing_chats(app: &Connection, legacy: &Connection) -> rusqlite::Result<()> {
+    let mut statement=legacy.prepare("SELECT DISTINCT home_session_id FROM wm_works WHERE visibility='canon' AND home_session_id IS NOT NULL")?;
+    for session in statement.query_map([], |r| r.get::<_, String>(0))? {
+        let session = session?;
+        app.execute("INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES(?1,?1,'chat','2026-09-27T00:00:00Z','2026-09-27T00:00:00Z')",[session])?;
+    }
+    Ok(())
+}
+
 fn migrated_app(db: &Connection) -> rusqlite::Result<()> {
     assert_eq!(
         rows(
@@ -90,10 +99,14 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
             "canon_plans",
             "canon_proposals",
             "canon_session_epics",
+            "canon_session_queue",
+            "canon_session_queue_chains",
+            "canon_session_queue_heads",
             "canon_spec_bodies",
             "canon_spec_criteria",
             "canon_spec_nodes",
             "canon_spec_revisions",
+            "canon_step_cancellations",
             "canon_tags",
         ]
     );
@@ -103,7 +116,10 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
         "../../fixtures/work-model-p14/separation-values.sql"
     ))?;
     let app_path = s.sandbox.data.join("app-server/butler-client.sqlite");
-    legacy_app(&Connection::open(&app_path)?)?;
+    let app = Connection::open(&app_path)?;
+    backing_chats(&app, &db)?;
+    legacy_app(&app)?;
+    drop(app);
     drop(db);
     s.restart().await?;
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
@@ -170,6 +186,10 @@ async fn cb_12_downgraded_dev_rows_merge_with_existing_canon_ids_winning()
     db.execute_batch("INSERT INTO canon_audit(entity_kind,entity_id,revision,actor_json,op,at,payload_json) VALUES('plan','pl_p14',99,'{}','create',2,'{}');")?;
     seed(&db)?;
     db.execute_batch("INSERT INTO wm_audit VALUES(1,'plan','pl_p14',1,'{}','create',1,'{}'),(2,'work','wk_canon',1,'{}','create',1,'{}');")?;
+    backing_chats(
+        &Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?,
+        &db,
+    )?;
     drop(db);
     s.restart().await?;
     s.agent.terminate().await?;
@@ -233,6 +253,10 @@ async fn cb_12_reupgrade_discards_colliding_history_and_outpaces_stale_receipts(
     db.execute_batch(include_str!(
         "../../fixtures/work-model-p14/separation-values.sql"
     ))?;
+    backing_chats(
+        &Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?,
+        &db,
+    )?;
     drop(db);
     s.restart().await?;
     s.agent.terminate().await?;

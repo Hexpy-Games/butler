@@ -200,12 +200,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Build the exact npm release asset without registry publication
-        run: python3 .github/scripts/isolated.py python3 deploy/npm/pack-release.py "$GITHUB_REF_NAME" dist/release/npm
-
       # install.sh refuses an archive whose Agent version is not the release's.
       - name: Check the tag against the Agent version
         run: |
@@ -213,7 +207,7 @@ jobs:
           agent_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml | head -n 1)"
           tag_version="${GITHUB_REF_NAME#v}"
           # Preview tags share the base Cargo Agent version; keep the full tag
-          # for release URLs and the npm next dist-tag.
+          # for release URLs.
           release_version="${tag_version%%-*}"
           if [ "$release_version" != "$agent_version" ]; then
             printf 'Tag %s does not match the Agent version %s in crates/butler-agent-cli/Cargo.toml\n' "$GITHUB_REF_NAME" "$agent_version" >&2
@@ -253,8 +247,6 @@ jobs:
             dist/agent/merged/agent-update-manifest.json
             deploy/install.sh
             deploy/install.ps1
-            dist/release/npm/*.tgz
-            dist/release/npm/*.tgz.sha256
           )
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --notes "Butler release $GITHUB_REF_NAME"
@@ -353,23 +345,6 @@ jobs:
           case "$GITHUB_REF_NAME" in *-*) prerelease=true ;; esac
           gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease="$prerelease"
 
-  # After the release is public, so `npx @hexpygames/butler install` works the
-  # moment the package is visible. Tag runs only; PRs get the pack dry run in
-  # install-smoke.yml.
-  npm-publish:
-    name: Publish the npm package
-    # Preview packages are published by the owner after desktop verification.
-    if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
-    needs: publish-release
-    permissions:
-      actions: write
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/npm-publish.yml
-    with:
-      tag: ${{ github.ref_name }}
-      forward_dispatch: true
-
   recover-release:
     name: Recover publication from immutable build artifacts
     if: inputs.reuse_run_id != ''
@@ -377,8 +352,6 @@ jobs:
     concurrency:
       group: release-publication-recovery
       cancel-in-progress: false
-    outputs:
-      tag: ${{ steps.source.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate the source run, tag, commit and required artifacts
@@ -396,9 +369,6 @@ jobs:
           ref: ${{ steps.source.outputs.sha }}
           path: release-source
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - name: Download immutable artifacts from the original run
         uses: actions/download-artifact@v4
         with:
@@ -406,24 +376,10 @@ jobs:
           github-token: ${{ github.token }}
           pattern: ${{ steps.source.outputs.pattern }}
           path: release-source/dist/recovery
-      - name: Merge, pack, checksum and publish
+      - name: Merge, checksum and publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ steps.source.outputs.tag }}
         working-directory: release-source
         run: python3 ../.github/scripts/isolated.py python3 ../.github/scripts/recover-release.py publish dist/recovery
-
-  recover-npm:
-    name: Recover stable npm publication
-    needs: recover-release
-    if: ${{ !contains(needs.recover-release.outputs.tag, '-') }}
-    permissions:
-      actions: write
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/npm-publish.yml
-    with:
-      tag: ${{ needs.recover-release.outputs.tag }}
-      skip_if_published: true
-      forward_dispatch: true

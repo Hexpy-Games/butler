@@ -20,7 +20,7 @@ async fn create_chat_send_and_read_its_session() -> Result<(), TestError> {
     let sent = client
         .post_message(session, "first-message", "Reply briefly")
         .await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&sent)?;
+    let turn = s.gw.accepted_turn(&sent).await?;
     tokio::time::timeout(Duration::from_secs(30), async {
         while let Some(event) = live.next().await {
             if delivered(&event?.raw, &turn) {

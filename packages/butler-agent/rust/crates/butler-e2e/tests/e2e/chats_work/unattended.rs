@@ -256,7 +256,9 @@ async fn skipped_browser_approval_matches_the_interactive_card() -> Result<(), H
     )
     .await?;
     let _host = crate::browser_approval::host::Host::attach(&s).await?;
-    let id = accepted_turn_id(&s.gw.say("general", "Review this browser action.").await?)?;
+    let id =
+        s.gw.say_turn("general", "Review this browser action.")
+            .await?;
     s.gw.wait_turn(
         "general",
         &id,

@@ -274,6 +274,12 @@ pub(super) fn conversation_envelope(request: &TurnRequest) -> ConversationEnvelo
         event_id: request.event_id.clone(),
         message_text: request.message.content.clone(),
         content_parts: message_content(request).cloned(),
+        hook_context: request
+            .app_turn_context
+            .as_ref()
+            .and_then(|context| context.get("hookContext"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         resume: request.resume,
     }
 }
@@ -294,10 +300,12 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
         }
         for (source, target) in [
             ("branchSeed", "branchSeed"),
+            ("initiatedOrigin", "initiatedOrigin"),
             ("language", "language"),
             ("defaultProjectFolder", "defaultProjectFolder"),
             ("contentParts", "messageContent"),
             ("documentEdits", "documentEdits"),
+            ("hookContext", "hookContext"),
         ] {
             if let Some(value) = app.get(source).filter(|value| js_truthy(value)) {
                 fields.insert(target.into(), value.clone());
@@ -318,6 +326,12 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
                 fields.insert(target.into(), Value::Array(values.clone()));
                 append_required_tool(fields, tool);
             }
+        }
+        if let Some(Value::Array(values)) = app
+            .get("projectReferences")
+            .filter(|value| value.as_array().is_some_and(|v| !v.is_empty()))
+        {
+            fields.insert("projectReferences".into(), Value::Array(values.clone()));
         }
     }
     if let Some(policy) = request

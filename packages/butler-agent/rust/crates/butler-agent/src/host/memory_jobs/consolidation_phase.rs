@@ -6,13 +6,23 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use butler_memory::cognition::{
-    KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService, Phase, PhaseError,
-    PhaseExecutor,
+    CycleEventSink, KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService, Phase,
+    PhaseError, PhaseExecutor,
 };
 use butler_runtime::operations::CycleMetrics;
 
 use crate::host::memory_jobs::briefing::BriefingGeneration;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
+
+/// Consolidation events land in the operations cycle metrics.
+pub(in crate::host) struct CycleEvents(pub(in crate::host) Arc<CycleMetrics>);
+
+impl CycleEventSink for CycleEvents {
+    /// Passthrough: the dimensions go to the cycle metrics unchanged.
+    fn record(&self, name: &str, status: &str, dimensions: Value) {
+        self.0.record(name, status, &dimensions);
+    }
+}
 
 #[derive(Clone)]
 pub(in crate::host) struct CyclePhases {

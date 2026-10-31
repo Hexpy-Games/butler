@@ -12,7 +12,7 @@ fn summary_instructions_and_header_are_pinned() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     assert_eq!(
         format!("{:x}", Sha256::digest(INSTRUCTIONS)),
-        "ba7e132dafc4d67fff099d7c20b2ae8959cc43c51ca3f0541d8dfdfe9afdc3c5"
+        "c8d7396966684c2fbb948778b4ee1bc2cd4a7496060bb165de05f610c43a4119"
     );
     assert_eq!(
         HEADER,
@@ -30,6 +30,7 @@ fn summary_input_keeps_the_full_previous_summary_and_terminal_status() -> Result
             number: 7,
             status: "complete".into(),
             user: "A fact".into(),
+            hook_context: String::new(),
             answer: "An answer".into(),
             tools: vec!["read_file".into()],
         },
@@ -37,6 +38,7 @@ fn summary_input_keeps_the_full_previous_summary_and_terminal_status() -> Result
             number: 8,
             status: "cancelled".into(),
             user: "A correction".into(),
+            hook_context: String::new(),
             answer: String::new(),
             tools: vec![],
         },
@@ -54,6 +56,7 @@ fn summary_input_keeps_the_full_previous_summary_and_terminal_status() -> Result
             number: 1,
             status: status.into(),
             user: "Request".into(),
+            hook_context: String::new(),
             answer: "Unestablished answer".into(),
             tools: vec![],
         };

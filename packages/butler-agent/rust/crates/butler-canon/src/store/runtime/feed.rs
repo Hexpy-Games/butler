@@ -164,6 +164,7 @@ pub fn catch_up(
                     tx.execute(Query::Applied.sql(), [id])?;
                 }
             }
+            crate::store::queue::engine::reconcile(tx, ctx, epic, views)?;
             progress_event(tx, ctx, epic)
         })? {
             diagnostics.push((json!(epic), error));

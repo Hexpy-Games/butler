@@ -261,12 +261,22 @@ async function smoke() {
   await page.expression(`document.querySelector("[data-setting-id='update-previews'] [role='switch']").click()`);
   if (discovery) {
     await page.waitForFunction(() => document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.getAttribute("aria-checked") === "true" && !document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.hasAttribute("disabled"));
-    console.log(`BEFORE SETTINGS CHECK: ${JSON.stringify(await page.expression("window.butlerApp.getUpdates()"))}`);
+    const beforeCheck = await page.expression<{ progress: { revision: number } }>("window.butlerApp.getUpdates()");
+    console.log(`BEFORE SETTINGS CHECK: ${JSON.stringify(beforeCheck)}`);
     await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some(button => button.textContent?.trim() === "Check" && !button.hasAttribute("disabled")));
     await clickNamed(page, "Check");
+    // The row was already enabled before Check; wait for this check's own result.
+    await page.waitForFunction(async (after: number) => {
+      const { progress } = await (window.butlerApp as { getUpdates(): Promise<{ progress: { revision: number; stage: string } }> }).getUpdates();
+      return progress.revision > after && progress.stage !== "checking";
+    }, beforeCheck.progress.revision);
     console.log("REFRESH: Settings Check, default published feed");
   }
-  await page.waitForFunction(() => !document.querySelector("[data-test-id='update-component-app'] button")?.hasAttribute("disabled"));
+  // While checking, the row shows status text instead of a button.
+  await page.waitForFunction(() => {
+    const button = document.querySelector("[data-test-id='update-component-app'] button");
+    return button && !button.hasAttribute("disabled");
+  });
   assert.ok((await rowText()).includes(to), "Settings shows the exact candidate version");
   console.log(`ON: ${await rowText()}`);
   if (mode === "now" || mode === "defer") await work.start(page, session.id);

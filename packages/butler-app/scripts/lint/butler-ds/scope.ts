@@ -12,6 +12,7 @@ export const DS_ESLINT_RULES = [
   "unsafe-style-allowlist",
   "settings-field-grouping",
   "switch-field-layout",
+  "no-leading-disclosure-chevron",
 ] as const;
 
 export const DS_STYLELINT_RULES = [

@@ -63,7 +63,8 @@ async fn hooks_revision_invalid_reload_and_output_caps() -> Result<(), HarnessEr
     } else {
         "powershell -NoProfile -Command \"[Console]::Write(('x' * 65537))\""
     };
-    replace(&s, vec![hook("flood", "UserPromptSubmit", flood)]).await?;
+    // Events without added context keep the decision bound; see context_size for the others.
+    replace(&s, vec![hook("flood", "Stop", flood)]).await?;
     assert_eq!(
         s.turn("general", "Output cap fails open.").await?.1["state"],
         "delivered"
@@ -73,6 +74,58 @@ async fn hooks_revision_invalid_reload_and_output_caps() -> Result<(), HarnessEr
         runs.data().as_array().unwrap().last().unwrap()["outcome"],
         "error"
     );
+    s.finish().await
+}
+#[tokio::test]
+async fn hooks_unsupported_type_is_refused_and_never_stops_the_agent() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("HOOK-UNSUPPORTED-TYPE")?;
+    let with_url = json!({"id":"web","event":"Stop","type":"http",
+        "url":"https://hooks.invalid/private-path","timeout_ms":1000});
+    configure(&setup, std::slice::from_ref(&with_url))?;
+    let s = setup.start().await?;
+    let settings = api(&s, Method::GET, "/hooks", None).await?;
+    assert_eq!(settings.status, 200, "{settings:?}");
+    let error = settings.data()["error"].as_str().unwrap();
+    assert!(error.contains("unknown field `url`"), "{error}");
+    assert!(!error.contains("hooks.invalid"), "{error}");
+    assert_eq!(settings.data()["config"]["hooks"], json!([]));
+    assert_eq!(
+        s.turn("general", "Runs without the hook.").await?.1["state"],
+        "delivered"
+    );
+    let bare = json!({"id":"web","event":"Stop","type":"http","timeout_ms":1000});
+    fs::write(
+        s.sandbox.data.join("hooks.json"),
+        json!({"version":1,"hooks":[bare]}).to_string(),
+    )?;
+    let settings = api(&s, Method::GET, "/hooks", None).await?;
+    assert_eq!(
+        settings.data()["error"],
+        "Only command hooks accepting schema 1 are supported"
+    );
+    let revision = settings.data()["revision"].clone();
+    let config = |hook: &Value| json!({"version":1,"hooks":[hook]});
+    let saved = api(
+        &s,
+        Method::PUT,
+        "/hooks",
+        Some(json!({"revision":revision,"config":config(&bare)})),
+    )
+    .await?;
+    assert_eq!(saved.status, 400, "{saved:?}");
+    assert_eq!(saved.error_code(), Some("hook_invalid"));
+    for body in [
+        json!({"revision":revision,"config":config(&with_url)}),
+        json!({"revision":revision,"config":{"version":1,"hooks":[]},"secrets":{"web":"0123456789abcdef"}}),
+    ] {
+        let saved = api(&s, Method::PUT, "/hooks", Some(body)).await?;
+        assert_eq!(saved.status, 400, "{saved:?}");
+    }
+    replace(&s, vec![hook("ok", "Stop", "exit 0")]).await?;
+    let settings = api(&s, Method::GET, "/hooks", None).await?;
+    assert!(settings.data()["error"].is_null(), "{settings:?}");
+    assert_eq!(settings.data()["config"]["hooks"][0]["id"], "ok");
     s.finish().await
 }
 #[tokio::test]
@@ -107,7 +160,7 @@ async fn hooks_allow_cannot_bypass_permission_and_resume_preserves_id() -> Resul
             "Change my App wallpaper to the Silk live wallpaper, app-wide.",
         )
         .await?;
-    let id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let id = s.gw.accepted_turn(&accepted).await?;
     let turn =
         s.gw.wait_turn(
             "general",

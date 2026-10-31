@@ -224,7 +224,7 @@ impl ModelProvider {
             .header("content-type", "application/json");
         if matches!(
             mode,
-            transport::ResponseMode::HostedChatSse
+            transport::ResponseMode::HostedChatSse(_)
                 | transport::ResponseMode::ResponsesSse
                 | transport::ResponseMode::AnthropicSse
                 | transport::ResponseMode::GeminiSse { .. }

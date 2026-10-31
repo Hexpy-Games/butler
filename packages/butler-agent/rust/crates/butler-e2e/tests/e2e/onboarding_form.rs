@@ -10,7 +10,7 @@ mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
-    scenario::{Access, Fixture, Setup, accepted_turn_id},
+    scenario::{Access, Fixture, Setup},
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -36,7 +36,7 @@ async fn onboarding_form_replays_questions_and_persists_profile() -> Result<(), 
             .status,
         200
     );
-    let turn = accepted_turn_id(&s.gw.say("general", stub::PROMPT).await?)?;
+    let turn = s.gw.say_turn("general", stub::PROMPT).await?;
     for (id, answer) in [("principal_name", "민수"), ("preferred_address", "민수님")] {
         let parked =
             s.gw.wait_turn(
@@ -203,5 +203,38 @@ async fn onboarding_entry_precedes_generated_cards_until_profile_completion()
         "heuristic_fallback"
     );
     assert_eq!(fallback.data()["suggestions"].as_array().unwrap().len(), 4);
+    s.finish().await
+}
+
+/// The project fallback briefing names the project exactly as its owner did,
+/// whatever its case.
+#[tokio::test]
+async fn project_fallback_briefing_keeps_the_display_name_as_given() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BRIEFING-PROJECT-NAME")?
+        .fixture(Fixture::Ready)
+        .start()
+        .await?;
+    for name in ["orchard notes", "Harbor-Lights"] {
+        let created =
+            s.gw.post("/projects", json!({"source":"scratch","display_name":name}))
+                .await?;
+        assert_eq!(created.status, 201, "{}", created.text);
+        let id = created.data()["project"]["id"].as_str().unwrap().to_owned();
+        let briefing =
+            s.gw.get(&format!(
+                "/new-chat-briefing?date=2026-09-26&project_id={id}"
+            ))
+            .await?;
+        assert_eq!(briefing.status, 200, "{}", briefing.text);
+        let view = briefing.data();
+        assert_eq!(view["source"]["content_origin"], "heuristic_fallback");
+        assert_eq!(view["source"]["project_name"], name);
+        assert_eq!(view["title"], format!("What should we continue in {name}?"));
+        assert_eq!(
+            view["description"],
+            format!("A few {name} starting points are ready.")
+        );
+    }
     s.finish().await
 }

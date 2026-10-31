@@ -11,6 +11,11 @@ impl BtccStorage {
         self.inner.changes.subscribe()
     }
 
+    /// Wake change-driven consumers when pending work becomes runnable without a write.
+    pub fn notify_changes(&self) {
+        self.inner.changes.send_replace(());
+    }
+
     pub(super) fn execute_with_owner<T, F>(
         &self,
         operation: F,

@@ -303,6 +303,12 @@ async fn actual_canonical_writer_registers_and_replays_exact_durable_projection(
         strasse, 0,
         "index terms are graphemes and 2/3-grams, not whole words"
     );
+    assert_eq!(
+        crate::cognition::lexical::terms("a🙂b")
+            .into_iter()
+            .collect::<Vec<_>>(),
+        ["a", "🙂", "b", "a🙂", "🙂b", "a🙂b"]
+    );
     drop(db);
 
     let ConversationRegistrationOutcome::Replayed(replay) = service

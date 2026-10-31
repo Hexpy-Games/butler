@@ -2,7 +2,6 @@
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
 src/gateway/application/admission.rs	inspect_with_attachment_source	141
-src/gateway/application/new_chat_briefing.rs	AppApplication::new_chat_briefing_view	85
 src/gateway/application/plan_decisions/workflow.rs	AppApplication::decide_session_plan_owned	146
 src/gateway/application/progress_view.rs	read	106
 src/gateway/application/project_sources.rs	AppApplication::resolve_project_sources	132
@@ -20,9 +19,9 @@ src/gateway/application/projects/dashboard/source.rs	get	153
 src/gateway/application/projects/dashboard/statistics/app.rs	read_turns	120
 src/gateway/application/projects/dashboard/statistics/ledger.rs	apply_history	135
 src/gateway/application/retry.rs	AppApplication::retry_turn_owned	100
-src/gateway/application/retry/source.rs	retry_snapshot	112
+src/gateway/application/retry/source.rs	retry_snapshot	106
 src/gateway/application/session_branches/reservation.rs	AppApplication::reserve_branch	126
-src/gateway/application/session_queue_mutations.rs	AppApplication::create_session_queue_inner	119
+src/gateway/application/session_queue_mutations.rs	AppApplication::create_session_queue_inner	114
 src/gateway/application/session_queue_mutations.rs	AppApplication::update_session_queue_inner	214
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	81

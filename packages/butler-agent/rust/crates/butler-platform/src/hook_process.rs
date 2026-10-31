@@ -6,6 +6,10 @@ use crate::{
 use std::{collections::HashMap, path::PathBuf, process::Stdio, time::Duration};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
+/// Bound of each stream a handler's decision is read from.
+pub const OUTPUT_LIMIT: usize = 65_536;
+/// Bound of stdout that can become turn context; longer text is budgeted, not cut.
+pub const CONTEXT_OUTPUT_LIMIT: usize = 10 * 1024 * 1024;
 /// A command invocation; argv and shell forms are mutually exclusive.
 pub struct HookProcess {
     /// Shell command, run with the platform login shell.
@@ -20,6 +24,8 @@ pub struct HookProcess {
     pub stdin: Vec<u8>,
     /// Hard deadline.
     pub timeout: Duration,
+    /// Stdout bound in bytes; stderr always uses `OUTPUT_LIMIT`.
+    pub stdout_limit: usize,
 }
 /// Complete bounded output; failure never becomes truncated success.
 pub struct HookOutput {
@@ -39,9 +45,9 @@ pub enum HookProcessError {
     /// Turn cancellation or service shutdown.
     #[error("Hook cancelled")]
     Cancelled,
-    /// Stream exceeds the 64 KiB cap.
-    #[error("Hook output exceeds 64 KiB")]
-    OutputLimit,
+    /// Stream exceeds its bound, given in bytes.
+    #[error("Hook output exceeds {} KiB", .0 / 1024)]
+    OutputLimit(usize),
     /// Spawn, pipe or UTF-8 failure.
     #[error("Hook process: {0}")]
     Process(String),
@@ -92,6 +98,7 @@ pub async fn run(
     cancel: CancellationToken,
 ) -> Result<HookOutput, HookProcessError> {
     let timeout = input.timeout;
+    let stdout_limit = input.stdout_limit;
     let (command, payload) =
         tokio::task::spawn_blocking(move || prepare(&input).map(|command| (command, input.stdin)))
             .await
@@ -128,8 +135,12 @@ pub async fn run(
                 result
             };
             let wait = async { child.wait().await.map_err(error) };
-            let ((), out, err, status) =
-                tokio::try_join!(write, read(stdout, true), read(stderr, false), wait)?;
+            let ((), out, err, status) = tokio::try_join!(
+                write,
+                read(stdout, true, stdout_limit),
+                read(stderr, false, OUTPUT_LIMIT),
+                wait
+            )?;
             Ok(HookOutput {
                 exit_code: status.code(),
                 stdout: out,
@@ -153,6 +164,7 @@ pub async fn run(
 async fn read(
     mut stream: impl AsyncRead + Unpin,
     strict: bool,
+    limit: usize,
 ) -> Result<String, HookProcessError> {
     let mut bytes = Vec::new();
     let mut buffer = [0; 8192];
@@ -161,8 +173,8 @@ async fn read(
         if n == 0 {
             break;
         }
-        if bytes.len() + n > 65_536 {
-            return Err(HookProcessError::OutputLimit);
+        if bytes.len() + n > limit {
+            return Err(HookProcessError::OutputLimit(limit));
         }
         bytes.extend(buffer.iter().take(n));
     }
@@ -173,8 +185,8 @@ async fn read(
     let mut text = String::new();
     decoder.write(&bytes, &mut text);
     decoder.end(&mut text);
-    if text.len() > 65_536 {
-        return Err(HookProcessError::OutputLimit);
+    if text.len() > limit {
+        return Err(HookProcessError::OutputLimit(limit));
     }
     Ok(text)
 }

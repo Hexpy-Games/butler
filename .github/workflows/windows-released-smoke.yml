@@ -8,6 +8,9 @@ on:
       from-tag:
         type: string
         default: ''
+    secrets:
+      BUTLER_E2E_API_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       tag:

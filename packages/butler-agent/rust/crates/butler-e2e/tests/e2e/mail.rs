@@ -154,7 +154,7 @@ async fn invoke(s: &Scenario, name: &str, args: Value) -> Result<(), HarnessErro
 async fn card(s: &Scenario, tool: &str, args: Value) -> Result<String, HarnessError> {
     s.provider()?.set_chat_responder(stub::run);
     let accepted=s.gw.say("general",&format!("fixture-call:{}",json!({"name":"call_mcp_tool","arguments":{"server_id":"mail/mail","tool_name":tool,"arguments":args}}))).await?;
-    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     let state =
         s.gw.wait_turn(
             "general",

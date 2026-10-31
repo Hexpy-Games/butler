@@ -148,6 +148,7 @@ pub(super) async fn headless_call(
                 | "tab.zoom"
                 | "tab.screenshot"
                 | "tab.image_collect"
+                | "tab.devtools"
                 | "tab.prepare"
                 | "tab.act"
                 | "tab.dialog"
@@ -183,6 +184,10 @@ pub(super) async fn headless_call(
             result.unwrap_or_else(|_| json!({"status":"unknown","reason":"timeout"}))
         }
     };
+    if op == butler_runtime::browser::DEVTOOLS_OP {
+        super::devtools::finish(&state, session, &mut result);
+        return response(count, result);
+    }
     enforce_result_policy(&state, session, op, &mut result);
     super::assets::finish(&state, session, op, &mut result).await?;
     super::shots::keep(&state, session, &mut result).await?;

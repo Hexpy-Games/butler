@@ -10,6 +10,7 @@ use super::super::{diagnostics, request_guard::RequestProgress};
 mod chat;
 pub(super) mod frame_size;
 pub(super) mod native;
+mod output_event;
 pub(super) use chat::hosted_chat;
 
 pub(super) async fn chatgpt_plan(
@@ -25,7 +26,7 @@ pub(super) async fn chatgpt_plan(
         let Ok(event) = serde_json::from_str::<Value>(frame) else {
             return Ok(None);
         };
-        progress.record_progress();
+        progress.record_event(output_event::responses(&event));
         state.event(&event, observer, provider, api)
     })
     .await?;

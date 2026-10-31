@@ -14,6 +14,8 @@ struct Specific {
     decision: Option<String>,
     #[serde(rename = "permissionDecisionReason")]
     reason: Option<String>,
+    #[serde(rename = "additionalContext")]
+    context: Option<String>,
 }
 pub(super) fn resolve(
     hook: &HookDefinition,
@@ -49,6 +51,11 @@ pub(super) fn resolve(
         Err(_) if !raw.starts_with('{') && !raw.starts_with('[') => {
             return ("continue".into(), None);
         }
+        // Text may start with a bracket; only a hook that asked for strict
+        // failure has its stdout judged as a decision first.
+        Err(_) if super::context::can_add(hook) && !hook.fail_closed => {
+            return ("continue".into(), None);
+        }
         Err(_) => return failure(hook, "error", "Invalid hook decision JSON"),
     };
     let specific = decision.specific;
@@ -69,6 +76,24 @@ pub(super) fn resolve(
         None | Some("continue") => ("continue".into(), None),
         Some(_) => failure(hook, "error", "Invalid hook decision"),
     }
+}
+/// Text a successful handler's stdout adds: `additionalContext` of a decision,
+/// otherwise the whole of a non-JSON stdout. Stdout that failed as a decision
+/// never gets here.
+pub(super) fn added_context(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    let text = match serde_json::from_str::<Decision>(raw) {
+        Ok(decision) => decision.specific?.context?,
+        Err(_) => raw.to_owned(),
+    };
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_owned())
+}
+/// Whether stdout looked like a decision but could only be read as text. A
+/// broken guard hook looks like this, so the run log says it.
+pub(super) fn fell_back_to_text(raw: &str) -> bool {
+    let raw = raw.trim();
+    (raw.starts_with('{') || raw.starts_with('[')) && serde_json::from_str::<Decision>(raw).is_err()
 }
 fn deny(hook: &HookDefinition, reason: String) -> (String, Option<String>) {
     if reason.len() > 16 * 1024 {

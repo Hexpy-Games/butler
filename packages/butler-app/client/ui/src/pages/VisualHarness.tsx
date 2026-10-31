@@ -222,6 +222,11 @@ export function VisualHarness() {
     harnessNavigation,
     ss03Surface,
   ]);
+  // The harness stands in for the session load: reopening its session brings its summary back.
+  const summaryMissing = useButlerStore((state) => state.summary === null);
+  useEffect(() => {
+    if (!fixture?.sessionView && summaryMissing && activeChatId === harnessSummary.session_id) setSummary(harnessSummary);
+  }, [activeChatId, fixture?.sessionView, harnessSummary, setSummary, summaryMissing]);
   useSessionAttentionNotifications();
   // The desktop bridge, when present, feeds the browser and the agent tab rail (as the app bootstrap does).
   useEffect(() => {

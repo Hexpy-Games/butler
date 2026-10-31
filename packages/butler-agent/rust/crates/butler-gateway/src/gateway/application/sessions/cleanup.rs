@@ -22,7 +22,7 @@ async fn complete(app: &AppApplication, session_id: String) -> Result<(), Gatewa
 pub(super) async fn complete_locked(
     app: &AppApplication,
     session_id: String,
-    _guard: &tokio::sync::OwnedMutexGuard<()>,
+    _guard: &super::super::keyed_locks::KeyedGuard,
 ) -> Result<(), GatewayApplicationError> {
     let id = session_id.clone();
     let record = app

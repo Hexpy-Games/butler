@@ -3,7 +3,8 @@
 ## What is this component
 `TaskGraphPanel`: the Tasks tab body (inset Section header with summary, empty
 state, sections xs apart). `TaskGraphSection`: one plan graph as a
-`DisclosureRow` (default selection surface, no children) with the graph below.
+`DisclosureRow` (default selection surface, no children, `reveals`) with the
+graph below.
 
 ## When to use this component
 Whenever a conversation has task graphs; with one graph pass

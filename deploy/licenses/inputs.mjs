@@ -66,12 +66,6 @@ export function modelConstants(content, names) {
 export function inputDigest(file, base = root) {
   const content = readFileSync(join(base, file));
   if (modelInputs[file]) return sha256(JSON.stringify(modelConstants(content.toString(), modelInputs[file])));
-  // Publishing stamps the wrapper version without changing its dependency closure.
-  if (file === "packages/butler-npm/package.json") {
-    const manifest = JSON.parse(content);
-    delete manifest.version;
-    return sha256(JSON.stringify(Object.fromEntries(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b, "en")))));
-  }
   return sha256(content);
 }
 
@@ -92,7 +86,7 @@ export function inputFiles(base = root) {
     "packages/butler-agent/rust/scripts/static-ort.lock.json",
     "deploy/licenses/generate.mjs", "deploy/licenses/inputs.mjs",
     "deploy/licenses/refresh.py", "deploy/licenses/disclosure.py",
-    "packages/butler-npm/package.json", "packages/butler-app/client/ui/package.json",
+    "packages/butler-app/client/ui/package.json",
     "packages/butler-app/client/electron/package.json", ...Object.keys(modelInputs)];
   files.push(...collectFiles(base, "packages/butler-agent/rust", (name) => name === "Cargo.toml"));
   for (const directory of noticeDirectories) {

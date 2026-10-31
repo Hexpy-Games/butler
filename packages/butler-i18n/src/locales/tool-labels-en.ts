@@ -80,6 +80,7 @@ export const additionalToolLabels = {
   output_publish: "Publish output",
   output_check: "Check output",
   browser_selection: "Read selection",
+  browser_devtools: "Read DevTools",
   image_collect: "Collect image",
   browser_screenshot: "Capture screen",
   preview_start: "Start preview",
