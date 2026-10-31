@@ -11,6 +11,7 @@ import type { DocumentPageRenderer } from "../file-viewer/FileViewerDocument";
 import { FileViewerPane } from "../file-viewer/FileViewerPane";
 import type { RightSlotPane } from "../file-viewer/useRightSlot";
 import { BrowserArea } from "./BrowserArea";
+import { useBrowserState } from "./browserBridge";
 import { useBrowserShellState } from "./browserShellState";
 
 /**
@@ -28,15 +29,18 @@ export function ConversationBrowserFrame({ sessionId, pane, chatWidth, notice }:
   const editing = target?.session === sessionId ? target : undefined;
   const editor = editing ? <ImageEditor key={`${editing.session}:${editing.asset.id}`} session={sessionId} initial={editing.asset} /> : undefined;
   const drawer = useAdaptiveDrawer(chromeEnvironment());
+  // A saved open pane comes up when the bridge first reports it enabled: that restores it, it does not open it.
+  const bridgeEnabled = useBrowserState((state) => state.enabled);
   if (editor && mobile) return <AdaptiveShellCard>{editor}</AdaptiveShellCard>;
-  if (!pane && !drawer && !editor) return <AdaptiveShellCard><Stack fill gap="none">{notice}<Conversation /></Stack></AdaptiveShellCard>;
   // A phone has no room beside the chat: the viewer takes the workspace, and its back button returns to the chat
   // (the files stay open behind '파일 보기').
   if (!editor && drawer && pane === "viewer") return <FileViewerPane documentPage={renderDocument} sessionId={sessionId} notice={notice}
     onBack={() => useFileViewerState.getState().setShown(sessionId, false)} />;
-  return <Stack fill gap="none">{notice}<AdaptiveShellSplit paneOpen={pane !== null || Boolean(editor)} chatWidth={chatWidth}
+  // One tree open or closed: the conversation stays mounted, so it keeps its scroll and the pane can move beside it.
+  const open = pane !== null || Boolean(editor);
+  return <Stack fill gap="none">{open || drawer ? notice : null}<AdaptiveShellSplit paneOpen={open} contextKey={`${sessionId}:${bridgeEnabled}`} chatWidth={chatWidth}
     onChatWidthChange={useBrowserShellState.getState().setChatWidth} resizeLabel={appCopy.browser.resizeChat} resizeHint={appCopy.titlebar.dragToResize}
-    chat={<Conversation />} pane={editor ?? (pane === "browser" ? <BrowserArea sessionId={sessionId} />
+    chat={<Stack fill gap="none">{open || drawer ? null : notice}<Conversation /></Stack>} pane={editor ?? (pane === "browser" ? <BrowserArea sessionId={sessionId} />
       : pane === "viewer" ? <FileViewerPane documentPage={renderDocument} sessionId={sessionId} /> : undefined)} /></Stack>;
 }
 

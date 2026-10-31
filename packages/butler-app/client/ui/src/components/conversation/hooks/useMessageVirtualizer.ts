@@ -1,5 +1,5 @@
-import { useCallback, useState, type RefObject } from "react";
-import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useRef, useState, type RefObject } from "react";
+import { observeElementRect, useVirtualizer, type VirtualItem, type Virtualizer } from "@tanstack/react-virtual";
 import type { MessageRecord } from "@/app/types.ts";
 import { MESSAGE_LIST_TOP_PADDING } from "../conversationUtils";
 
@@ -55,8 +55,9 @@ export function useMessageVirtualizer({
     overscan: 8,
     paddingStart: headerHeight,
   });
-  rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
-    keepScrollOffsetOnSizeChange;
+  const columnWidth = useRef({ width: 0, changedAt: Number.NEGATIVE_INFINITY });
+  rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
+    keepReaderOnWidthChange(item, instance, columnWidth.current);
 
   const virtualContentHeight = Math.max(headerHeight, rowVirtualizer.getTotalSize());
   const viewportHeight =
@@ -92,8 +93,22 @@ const NO_QUEUED_KEYS: readonly string[] = [];
 /** Status line, one-line bubble and controls row of a QueuedMessage. */
 const QUEUED_ROW_ESTIMATE = 112;
 
-function keepScrollOffsetOnSizeChange() {
-  return false;
+/** How long after the column's width last changed row resizes still count as its rewrap. */
+const REWRAP_SETTLE_MS = 200;
+
+/**
+ * Rows above the reader re-measured because the column's width changed (the window, a pane beside the chat) rewrapped:
+ * the scroll offset follows them, so the reader keeps their place. Any other row resize (streaming, a block opening)
+ * leaves the offset alone.
+ */
+function keepReaderOnWidthChange(item: VirtualItem, instance: Virtualizer<HTMLDivElement, Element>, column: { width: number; changedAt: number }) {
+  const width = instance.scrollElement?.clientWidth ?? 0;
+  const now = performance.now();
+  if (width !== column.width) {
+    if (column.width) column.changedAt = now;
+    column.width = width;
+  }
+  return now - column.changedAt < REWRAP_SETTLE_MS && item.start < (instance.scrollOffset ?? 0);
 }
 
 function estimateMessageRowSize(

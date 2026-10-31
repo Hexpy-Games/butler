@@ -96,7 +96,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
       band={<AgentControl tab={tab} />} reserveBand
       overlay={tab?.dialog && <BrowserDialog key={tab.dialog.id} tab={tab} container={dialogContainer} />}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}
-      onOcclusion={(value) => { if (tab) void covered(value); }}>
+      onOcclusion={(value) => tab ? covered(value) : undefined}>
       {(crashed || disabled) && <EmptyLine
         message={disabled ? (state.blocked ? copy.restartRequired : copy.updateRequired) : copy.crashed}
         action={!disabled ? <Button size="sm" variant="outline" onClick={() => void call("reload")}>{copy.reload}</Button> : undefined}
