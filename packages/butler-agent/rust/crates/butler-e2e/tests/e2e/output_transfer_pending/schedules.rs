@@ -133,10 +133,11 @@ async fn idle(s: &Scenario, kind: &str) -> Result<(), HarnessError> {
         before.write_chars,
         after.write_chars
     );
+    // CPU consumption is a resource counter, enforced in every tier, not wall-clock latency.
     // More than one CPU second in a minute is sustained work for an idle agent.
     if let Some(cpu) = cpu {
         assert!(
-            cpu <= Duration::from_secs(1),
+            cpu.as_secs_f64() <= 1.0,
             "scheduler spun while gated: {cpu:?}"
         );
     }
