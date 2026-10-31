@@ -70,3 +70,69 @@ async fn orphan_pass_resumes_after_last_completed_shard() -> Result<(), HarnessE
     content(&s, &id, "Live").await?;
     s.finish().await
 }
+
+#[tokio::test]
+async fn stop_during_orphan_pass_keeps_committed_shard_cursor() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BLOB-ORPHAN-STOP")?;
+    schema(&setup.sandbox.data, false)?;
+    let id = seed(&setup.sandbox.data, "general", "live", b"Live", false)?;
+    let mut orphans = Vec::new();
+    for shard in 0..256 {
+        let dir = setup
+            .sandbox
+            .data
+            .join(format!("outputs/blobs/{shard:02x}"));
+        std::fs::create_dir_all(&dir)?;
+        for n in 0..256 {
+            let path = dir.join(format!("{shard:02x}{n:062x}"));
+            std::fs::write(&path, [])?;
+            orphans.push(path);
+        }
+    }
+    let mut s = setup.start().await?;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if observe_scalar(&s.sandbox.data,
+                "SELECT complete=0 AND orphan_cursor<>'' AND queued>=512 FROM output_blob_backfill WHERE id=1").await? == Some(1) {
+                return Ok::<_, HarnessError>(());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }).await.map_err(|_| HarnessError("no active orphan pass observed".into()))??;
+    s.agent.terminate().await?;
+    assert!(!s.agent.logs().contains("stop deadline reached"));
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT complete FROM output_blob_backfill")?,
+        0
+    );
+    let cursor: String = db(&s.sandbox.data)?.query_row(
+        "SELECT orphan_cursor FROM output_blob_backfill",
+        [],
+        |r| r.get(0),
+    )?;
+    assert!(!cursor.is_empty() && cursor.as_str() < "ff", "{cursor}");
+    db(&s.sandbox.data)?.execute_batch(&format!("CREATE TRIGGER no_rewind BEFORE UPDATE OF orphan_cursor ON output_blob_backfill WHEN NEW.orphan_cursor<='{cursor}' BEGIN SELECT RAISE(ABORT,'orphan cursor rewound'); END;"))?;
+    s.gw = s.agent.start_again().await?;
+    completed(&s).await?;
+    let next: String = db(&s.sandbox.data)?.query_row(
+        "SELECT orphan_cursor FROM output_blob_backfill",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(next, "ff");
+    assert!(next > cursor);
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT queued FROM output_blob_backfill")?,
+        65_536
+    );
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blobs")?,
+        1
+    );
+    for path in orphans {
+        assert!(!path.exists(), "{}", path.display());
+    }
+    content(&s, &id, "Live").await?;
+    s.finish().await
+}
