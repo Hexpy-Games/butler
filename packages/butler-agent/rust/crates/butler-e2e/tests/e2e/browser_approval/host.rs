@@ -170,6 +170,17 @@ fn facts(step: &Value) -> Value {
         return json!({"keyboard":true,"deferred":true,"hit":{"role":"focus","name":"","frame":""},
             "payment":false,"upload":false,"submit":false,"frame_payment":false,"addons":[]});
     }
+    // A frame's host, however the page wrote it: only that says it is a payment widget.
+    let framed = match step["ref"].as_str().unwrap_or("") {
+        "e10" => Some("checkout.stripe.com."),
+        "e11" => Some("CHECKOUT.Stripe.COM"),
+        "e12" => Some("checkout.notstripe.com."),
+        _ => None,
+    };
+    if let Some(frame) = framed {
+        return json!({"hit":{"role":"button","name":"Continue","frame":frame,"ref":step["ref"]},
+            "payment":false,"upload":false,"submit":false,"frame_payment":false,"form_post":false,"addons":[]});
+    }
     let (role, name, payment, submit, form_post) = match step["ref"].as_str().unwrap_or("") {
         "e1" => ("button", "Reject all", false, false, false),
         "e2" => ("searchbox", "Search", false, false, false),
