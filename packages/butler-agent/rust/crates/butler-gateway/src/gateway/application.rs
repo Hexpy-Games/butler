@@ -245,6 +245,7 @@ pub struct AppApplication {
     canon_file_lifetimes: Arc<tokio::sync::Mutex<bool>>,
     canon_projection_locks: KeyedLocks,
     plan_decision_locks: KeyedLocks,
+    session_cleanup_locks: KeyedLocks,
     setup_readiness: setup::ReadinessRelay,
     chatgpt_events: setup_events::AccountRelay,
     quota_events: Arc<quota_events::QuotaEventForwarder>,
@@ -330,6 +331,7 @@ impl AppApplication {
             canon_file_lifetimes: Arc::new(tokio::sync::Mutex::new(false)),
             canon_projection_locks: KeyedLocks::default(),
             plan_decision_locks: KeyedLocks::default(),
+            session_cleanup_locks: KeyedLocks::default(),
             setup_readiness: setup::ReadinessRelay::default(),
             chatgpt_events: setup_events::AccountRelay::default(),
             quota_events: Arc::default(),
@@ -369,6 +371,7 @@ impl AppApplication {
         automation_scheduler.initialize(self.clone_handle())?;
         self.watch_wallpaper_modules().await;
         authority_recovery::retry(self).await;
+        sessions::cleanup::replay(self).await;
         setup_events::start(self);
         self.quota_events.start(self.clone_handle());
         subsession_events::start(self);
