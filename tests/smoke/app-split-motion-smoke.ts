@@ -265,7 +265,7 @@ try {
     const row = document.querySelector(`[data-index="${index}"]`)?.getBoundingClientRect();
     return Boolean(row && row.top >= document.querySelector(scroll)!.getBoundingClientRect().top);
   }, { scroll: SCROLL, index });
-  for (let step = 0; step < 90 && !await rowInView(12); step += 1) {
+  for (let step = 0; step < 90 && !await rowInView(4); step += 1) {
     const line = await readingText(page);
     assert(line, "a paragraph is on screen while scrolling up");
     await page.mouse.wheel(0, -WHEEL);
@@ -273,7 +273,7 @@ try {
     const place = await placeOf(page, line.text);
     if (place !== null) shifts.push(Math.round(place - line.top));
   }
-  assert(await rowInView(12), "scrolling up reached the rows last measured at the wide width");
+  assert(await rowInView(4), "scrolling up reached the rows last measured at the wide width");
   const WHEEL_LIMIT = 4;
   assert(shifts.length >= 8, `scrolling up keeps paragraphs in view (${shifts.length})`);
   const pushed = shifts.filter((shift) => Math.abs(shift - WHEEL) > WHEEL_LIMIT);
