@@ -10,6 +10,7 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+age = "=0.12.1"
 ring = "=0.17.14"
 tracing = "0.1.44"
 semver = "1.0.27"
@@ -133,6 +134,13 @@ debug = false
 opt-level = 2
 
 [profile.dev.package.sha2]
+opt-level = 3
+# The vault's password checks: scrypt at opt-level 0 takes many seconds each.
+[profile.dev.package.scrypt]
+opt-level = 3
+[profile.dev.package.salsa20]
+opt-level = 3
+[profile.dev.package.pbkdf2]
 opt-level = 3
 [profile.dev.package.flate2]
 opt-level = 3

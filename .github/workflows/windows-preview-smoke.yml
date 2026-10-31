@@ -329,6 +329,17 @@ jobs:
             & "$env:GITHUB_WORKSPACE/deploy/windows-test-log.ps1" -Log "$env:PREVIEW_ROOT/logs/harness-compile.log"
             exit $testCode
           }
+      - name: Vault scenarios on Windows
+        env:
+          BUTLER_E2E_TIER: stub
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $ErrorActionPreference = 'Continue'
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test vault
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build debug agent for the harness
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
