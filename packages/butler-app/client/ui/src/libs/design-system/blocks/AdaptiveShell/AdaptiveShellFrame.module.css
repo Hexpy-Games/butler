@@ -1,6 +1,8 @@
 /* Conversation frame (AdaptiveShellSplit) and sidebar peek. The split sits
    in the workspace's second grid row, under a titlebar that spans it. */
 .split {
+  --split-gap: 0px;
+
   display: flex;
   min-width: 0;
   height: 100%;
@@ -65,16 +67,14 @@
   outline-offset: -2px;
 }
 
-/* The pane enters from its side; the native view inside tracks it (the
-   NativeViewSlot tracker shows the still while ancestors move). Reduced
-   motion zeroes the distance token, leaving the fade. */
+/* The pane moves on SplitPaneMotion; the native view inside tracks it (the
+   NativeViewSlot tracker shows the still while ancestors move). */
 .pane {
   display: flex;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  animation: pane-in var(--motion-slow) var(--motion-ease-emphasized);
 }
 
 /* Whatever the pane holds (the browser sheet, a file viewer card) fills its
@@ -82,13 +82,6 @@
 .pane > * {
   min-height: 0;
   flex: 1 1 auto;
-}
-
-@keyframes pane-in {
-  from {
-    opacity: 0;
-    transform: translateX(var(--motion-distance-lg));
-  }
 }
 
 /* Sidebar peek: the collapsed sidebar floats over the workspace as a card
@@ -140,7 +133,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pane,
   [data-panel-layout="docked"][data-left-peek="true"]
     > .peekable.peekable[data-open="false"] {
     animation-name: fade-in;

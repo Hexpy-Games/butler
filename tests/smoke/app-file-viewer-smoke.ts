@@ -68,9 +68,10 @@ try {
   await infoToggle.click();
   await aside.waitFor();
   assert.equal(await aside.getAttribute("data-layout"), "docked");
+  const slid = slotMotion(page);
   await aside.locator('[data-slot="document-tile"]').getByText(FILES.markdown, { exact: true }).click();
   await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
-  assert.match(await split.evaluate((node) => getComputedStyle(node).animationName), /pane-in/u, "the slot slides in");
+  assert((await slid).includes("transform"), "the slot slides in");
   await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
   assert.equal(await aside.locator('[data-test-class="artifact-viewer"]').count(), 0, "nothing renders in the 세션 정보 pane");
   assert.equal(await page.locator('[data-test-class="browser-area"]').count(), 0, "the browser stays closed");
@@ -172,10 +173,11 @@ try {
   // Reduced motion: the slot fades in without travel.
   await page.emulateMedia({ reducedMotion: "reduce" });
   await infoToggle.click();
+  const faded = slotMotion(page);
   await aside.locator('[data-slot="document-tile"]').getByText(FILES.code, { exact: true }).click();
   await viewer.locator("pre").waitFor();
-  const reduced = await split.evaluate((node) => getComputedStyle(node).animationName);
-  assert.match(reduced, /fade-in/u, `reduced motion fades the slot in: ${reduced}`);
+  const reduced = await faded;
+  assert(reduced.includes("opacity") && !reduced.includes("transform"), `reduced motion fades the slot in: ${reduced}`);
   await viewer.locator('[data-test-class="file-viewer-close"]').click();
   await split.waitFor({ state: "detached" });
 
@@ -207,6 +209,18 @@ try {
 } finally {
   await browser?.close();
   await server.stop();
+}
+
+/** The properties the right slot animates on its first frame, as it mounts. */
+function slotMotion(page: Page) {
+  return page.evaluate(() => new Promise<string[]>((resolve) => {
+    const tick = () => {
+      const slot = document.querySelector('[data-slot="adaptive-shell-split-pane"]');
+      if (!slot) { requestAnimationFrame(tick); return; }
+      resolve(slot.getAnimations().flatMap((animation) => (animation.effect as KeyframeEffect).getKeyframes().flatMap((frame) => Object.keys(frame))));
+    };
+    tick();
+  }));
 }
 
 async function verifyGeometry(viewer: Locator, name: string) {
