@@ -7,7 +7,7 @@ async fn restart_at(s: &mut Scenario, now: &str) -> Result<(), HarnessError> {
 fn daily(time: &str) -> Value {
     json!({"schedule":{"kind":"daily","time":time,"tz":"UTC"}})
 }
-async fn patch(s: &Scenario, id: &str, body: Value) -> Result<Value, HarnessError> {
+pub(super) async fn patch(s: &Scenario, id: &str, body: Value) -> Result<Value, HarnessError> {
     let r = s.gw.patch(&format!("/automations/{id}"), body).await?;
     assert_eq!(r.status, 200, "{}", r.text);
     Ok(r.data()["automation"].clone())
@@ -193,35 +193,50 @@ async fn retarget_keeps_the_original_run_target_and_future_schedule_visible()
     patch(&s, "retarget", json!({"target_session_id":chat})).await?;
     clock(&address, "2026-10-27T06:30:00.000Z").await?;
     dispatch(&s).await?;
-    let merged = runs(&s, "retarget").await?;
-    assert_eq!(merged.len(), 1, "{merged:?}");
-    assert_eq!(merged[0]["state"], "queued");
-    assert_eq!(merged[0]["scheduled_at"], "2026-10-27T06:30:00.000Z");
-    assert_eq!(s.gw.messages(&chat).await?, [] as [Value; 0]);
-    clock(&address, "2026-10-27T07:00:00.000Z").await?;
-    let records = delivered(&s, "retarget").await?;
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0]["id"], queued["id"]);
-    assert_eq!(records[0]["target_session_id"], "general");
-    assert_eq!(reports(&s, "general", "retarget").await?.len(), 1);
-    assert_eq!(s.gw.messages(&chat).await?, [] as [Value; 0]);
-    assert_eq!(schedule(&s, "retarget").await?["target_session_id"], chat);
+    let records = runs(&s, "retarget").await?;
     assert_eq!(
-        schedule(&s, "retarget").await?["next_run_at"],
-        "2026-10-27T07:30:00.000Z"
+        records.len(),
+        2,
+        "new target absorbed by old run: {records:?}"
     );
-    clock(&address, "2026-10-27T07:30:00.000Z").await?;
-    tokio::time::timeout(Duration::from_secs(90), async {
-        while runs(&s, "retarget").await?.len() < 2 {
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
-        Ok::<_, HarnessError>(())
-    })
-    .await
-    .expect("retargeted occurrence not hidden")?;
-    let records = delivered(&s, "retarget").await?;
-    assert_eq!(records.len(), 2);
+    assert_eq!(records[1], queued);
     assert_eq!(records[0]["target_session_id"], chat);
+    assert_eq!(records[0]["state"], "succeeded");
+    s.gw.wait_terminal(
+        &chat,
+        records[0]["turn_id"].as_str().unwrap(),
+        Duration::from_secs(90),
+    )
+    .await?;
+    assert_eq!(reports(&s, &chat, "retarget").await?.len(), 1);
+    assert_eq!(reports(&s, "general", "retarget").await?.len(), 0);
+    clock(&address, "2026-10-27T07:00:00.000Z").await?;
+    assert_eq!(delivered(&s, "retarget").await?.len(), 2);
+    assert_eq!(reports(&s, "general", "retarget").await?.len(), 1);
+    let held = s.provider()?.hold_next_reply("Keep new target busy.");
+    let turn = s.gw.say_turn(&chat, "Keep new target busy.").await?;
+    s.gw.wait_turn(
+        &chat,
+        &turn,
+        &["thinking", "streaming"],
+        Duration::from_secs(30),
+    )
+    .await?;
+    for hour in [7, 8] {
+        clock(&address, &format!("2026-10-27T{hour:02}:30:00.000Z")).await?;
+        dispatch(&s).await?;
+    }
+    let merged = runs(&s, "retarget").await?;
+    assert_eq!(merged.len(), 3, "{merged:?}");
+    assert_eq!(merged.iter().filter(|r| r["state"] == "queued").count(), 1);
+    assert_eq!(merged[0]["target_session_id"], chat);
+    assert_eq!(merged[0]["scheduled_at"], "2026-10-27T08:30:00.000Z");
+    assert_eq!(merged[2]["id"], queued["id"]);
+    assert_eq!(merged[2]["scheduled_at"], queued["scheduled_at"]);
+    held.release();
+    assert_eq!(delivered(&s, "retarget").await?.len(), 3);
+    assert_eq!(reports(&s, &chat, "retarget").await?.len(), 2);
+    assert_eq!(reports(&s, "general", "retarget").await?.len(), 1);
     s.finish().await
 }
 

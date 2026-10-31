@@ -14,6 +14,8 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 use std::time::Duration;
 
+mod boundary;
+mod edits;
 mod lifecycle;
 mod manual;
 
