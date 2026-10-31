@@ -1,6 +1,6 @@
 //! Post-commit cleanup debt, recovered only at startup or a deletion/archive.
 use super::super::{
-    AppApplication, AppAssetCommand, GatewayApplicationError, app_error, canon,
+    AppApplication, AppAssetCommand, GatewayApplicationError, app_error, canon, canon_queue,
     storage::AppStorageError,
 };
 use rusqlite::OptionalExtension;
@@ -93,11 +93,20 @@ pub(in crate::gateway::application) async fn complete_all(
     sessions: Vec<String>,
 ) -> Result<(), GatewayApplicationError> {
     let mut failures = Vec::new();
+    let mut cleanup_failures = Vec::new();
     for session in sessions {
+        // Each store owns its receipt. Neither failure skips the other store
+        // or a later chat; canon errors retain priority in the HTTP mapping.
+        if let Err(error) =
+            canon_queue::complete_delete(app, format!("session-delete:{session}")).await
+        {
+            failures.push((format!("canon:{session}"), error));
+        }
         if let Err(error) = complete(app, session.clone()).await {
-            failures.push((session, error));
+            cleanup_failures.push((format!("cleanup:{session}"), error));
         }
     }
+    failures.extend(cleanup_failures);
     combine_failures(failures)
 }
 
