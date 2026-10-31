@@ -22,6 +22,8 @@ pub(crate) struct Script {
     pub(crate) skip_all: AtomicBool,
     /// Does the work in prose: its action is done, but no tool result exists.
     pub(crate) prose_only: AtomicBool,
+    /// Records the Work blocked to ask; the reply closes that same Work without a new plan.
+    pub(crate) ask_blocked: AtomicBool,
     pub(super) hold_steward: AtomicBool,
     pub(super) steward_held: Semaphore,
     pub(super) steward_release: Semaphore,
@@ -87,6 +89,7 @@ pub(super) async fn start(
         reject_result: AtomicBool::new(false),
         skip_all: AtomicBool::new(false),
         prose_only: AtomicBool::new(false),
+        ask_blocked: AtomicBool::new(false),
         hold_steward: AtomicBool::new(false),
         steward_held: Semaphore::new(0),
         steward_release: Semaphore::new(0),
@@ -203,6 +206,55 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         crate::token_cache::wire(&item),
     )
 }
+/// What a model did live: it asks by blocking its Work, then finishes on the reply.
+fn ask_blocked(request: &str, selected: &str, outputs: &[Value]) -> Vec<(&'static str, Value)> {
+    let work = outputs
+        .iter()
+        .rev()
+        .find_map(|v| {
+            v.pointer("/output/work/work_id")
+                .or_else(|| v.pointer("/work/work_id"))
+        })
+        .cloned()
+        .unwrap_or(Value::Null);
+    if request.starts_with("canon:epic/") {
+        let waiting =
+            json!([{"action_key":"ask","status":"blocked","note":"Waiting for the answer"}]);
+        return vec![
+            (
+                "replace_work_plan",
+                json!({"objective":"Answer the question","execution_mode":"direct","start_new":true,"governing_refs":[format!("canon:epic/{selected}")],"actions":[{"action_key":"ask","description":"Ask, then answer"}],"checks":["The answer is written"]}),
+            ),
+            (
+                "record_work_review",
+                json!({"subject":"plan","verdict":"accept","summary":"Asks first","action_updates":[{"action_key":"ask","status":"active"}]}),
+            ),
+            (
+                "record_work_disposition",
+                json!({"work_id":work,"disposition":"blocked","summary":"Needs the answer","action_updates":waiting,"remaining_actions":["Write the answer"],"next_condition":"The answer arrives","followups":[]}),
+            ),
+        ];
+    }
+    let done = json!([{"action_key":"ask","status":"done","note":"Answered"}]);
+    vec![
+        (
+            "canon_read",
+            json!({"bind":true,"id":selected,"view":"epic"}),
+        ),
+        (
+            "record_work_review",
+            json!({"subject":"result","verdict":"accept","summary":"Answered","action_updates":done}),
+        ),
+        (
+            "record_work_review",
+            json!({"subject":"completion","verdict":"accept","summary":"Finished"}),
+        ),
+        (
+            "record_work_disposition",
+            json!({"work_id":work,"disposition":"completed","summary":"Answered","action_updates":done,"remaining_actions":[],"followups":[]}),
+        ),
+    ]
+}
 fn sequence(script: &Script, outputs: &[Value], request: &str) -> Vec<(&'static str, Value)> {
     let epics = script.epics.lock().unwrap();
     let selected = request
@@ -214,6 +266,9 @@ fn sequence(script: &Script, outputs: &[Value], request: &str) -> Vec<(&'static 
         })
         .filter(|id| epics.iter().any(|e| e == id))
         .unwrap_or(&epics[0]);
+    if script.ask_blocked.load(Ordering::SeqCst) {
+        return ask_blocked(request, selected, outputs);
+    }
     let a = format!("canon:epic/{selected}");
     let b = format!("canon:epic/{}", epics[1]);
     let mut calls = Vec::new();

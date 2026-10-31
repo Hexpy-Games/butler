@@ -171,6 +171,27 @@ async fn blocked_step_clears_when_the_reply_finishes_its_work() -> Result<(), Ha
     Ok(())
 }
 
+/// Found live twice: the reply's first review on a Work blocked to ask failed the Turn.
+#[tokio::test]
+async fn work_blocked_to_ask_finishes_on_the_reply() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, chat) =
+        crate::canon_link::setup("CB-UNFINISHED-ASK", false, false).await?;
+    let (plan, epics) = plan(&s, &script, &first).await?;
+    script.ask_blocked.store(true, Ordering::SeqCst);
+    script.release();
+    run_plan(&s, &chat, &plan).await?;
+    wait_state(&s, &chat, &epics[1], "held").await?;
+    wait_card(&s, "pending").await?;
+    s.turn(&chat, &format!("Process canon:epic/{} now", epics[0]))
+        .await?;
+    wait_state(&s, &chat, &epics[0], "done").await?;
+    assert_eq!(wait_card(&s, "resolved").await?.len(), 1);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 /// Found live: a plan already in review, queued again, got a plain reply and no card.
 #[tokio::test]
 async fn requeued_plan_in_review_reaches_the_card() -> Result<(), HarnessError> {
