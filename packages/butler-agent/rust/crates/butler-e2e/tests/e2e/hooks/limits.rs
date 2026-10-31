@@ -63,7 +63,8 @@ async fn hooks_revision_invalid_reload_and_output_caps() -> Result<(), HarnessEr
     } else {
         "powershell -NoProfile -Command \"[Console]::Write(('x' * 65537))\""
     };
-    replace(&s, vec![hook("flood", "UserPromptSubmit", flood)]).await?;
+    // Events without added context keep the decision bound; see context_size for the others.
+    replace(&s, vec![hook("flood", "Stop", flood)]).await?;
     assert_eq!(
         s.turn("general", "Output cap fails open.").await?.1["state"],
         "delivered"

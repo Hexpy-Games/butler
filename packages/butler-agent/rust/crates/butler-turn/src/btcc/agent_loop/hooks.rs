@@ -31,7 +31,7 @@ async fn emit(
         .dispatch(envelope, input.cancellation.child_token())
         .await
         .ok()
-        .flatten()
+        .and_then(|dispatched| dispatched.deny)
 }
 fn tool_payload(
     policy: &dyn GuidedPolicyPort,

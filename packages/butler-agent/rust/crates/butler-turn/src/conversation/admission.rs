@@ -97,6 +97,8 @@ pub struct ConversationEnvelope {
     pub message_text: String,
     // Passthrough: App turn context relayed from the App.
     pub content_parts: Option<Value>,
+    /// Labelled hook output of this turn, kept beside its user message.
+    pub hook_context: Option<String>,
     /// The turn resumes an admitted turn: its stored user message is accepted
     /// whatever content parts it carries, as this envelope only names it.
     pub resume: bool,
@@ -174,7 +176,7 @@ impl ConversationAdmissionTurn {
         })
     }
 
-    /// Admits the inbound user message.
+    /// Admits the inbound user message and the hook output that came with it.
     pub async fn admit_inbound(&self) -> ConversationResult<()> {
         self.apply(ConversationAdmissionInput {
             source: AdmissionSource::Gateway,
@@ -187,7 +189,8 @@ impl ConversationAdmissionTurn {
             visibility: None,
             known_tool_call_ids: HashSet::new(),
         })
-        .await
+        .await?;
+        self.admit_hook_context().await
     }
 
     pub(crate) async fn record_event(

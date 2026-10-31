@@ -36,6 +36,15 @@ impl AgentConversationStore {
         self.append_message(input).await
     }
 
+    /// Appends a turn's labelled hook output.
+    pub(crate) async fn append_hook_context_message(
+        &self,
+        mut input: AppendMessageInput,
+    ) -> ConversationResult<ConversationMessageWithParts> {
+        input.role = ConversationRole::Developer;
+        self.append_message(input).await
+    }
+
     async fn append_message(
         &self,
         input: AppendMessageInput,
