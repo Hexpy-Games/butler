@@ -9,7 +9,7 @@ import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { captureDeleteCards, captureDeleteMenu, type DeleteTool } from "../support/canon-delete-card-crops.ts";
 import { closeCanonAside } from "../support/canon-board-aside.ts";
 import { openPlan, showCanonSidebar } from "../support/canon-sidebar-scenarios.ts";
-import type { CanonOverview, EpicDetail, EpicProgressSnapshot } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonOverview, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const shots = process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/canon-epic-delete-screenshots";
@@ -17,7 +17,16 @@ mkdirSync(shots, { recursive: true });
 const cases = [1440, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "wallpaper"].map(surface => `${width}-${theme}-${surface}`)));
 if (await runSmokeCases(cases, "BUTLER_EPIC_DELETE_CASE", import.meta.path, { isolate: true })) process.exit(0);
 let tool: DeleteTool | null = null;
-const server = await createNativeAppServer({ stubToolCall: request => {
+let holdStep = false;
+let releaseStep: (() => void) | undefined;
+let enteredStep: (() => void) | undefined;
+const server = await createNativeAppServer({ stubReply: async request => {
+  if (holdStep && request.stream) {
+    holdStep = false;
+    await new Promise<void>(resolve => { releaseStep = resolve; enteredStep?.(); });
+  }
+  return "Stub reply from the isolated smoke model.";
+}, stubToolCall: request => {
   if (!request.stream || !Array.isArray(request.body.tools)) return null;
   const next = tool; tool = null; return next;
 }, uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
@@ -36,32 +45,17 @@ try {
     try {
       await server.signIn(context);
       const page = await context.newPage();
-      let running = true;
-      await page.route(`**/projects/${projectId}/canon`, async route => {
-        const response = await route.fetch({ headers: { ...route.request().headers(), origin: new URL(server.url).origin } });
-        const body = await response.json();
-        if (!response.ok()) return route.fulfill({ response });
-        const canon = body.data as CanonOverview;
-        for (const row of [...canon.backlog, ...canon.plans.flatMap(plan => plan.works)]) if (row.id === epic.id)  { row.delete_blocked = running; row.running = process.env.BUTLER_R3_BASELINE === "1" ? running : false; }
-        await route.fulfill({ response, json: body });
-      });
-      await page.route(`**/canon/epics/${epic.id}`, async route => {
-        if (route.request().method() !== "GET") return route.continue();
-        const response = await route.fetch({ headers: { ...route.request().headers(), origin: new URL(server.url).origin } });
-        if (!response.ok()) return route.fulfill({ response });
-        const body = await response.json();
-        body.data.delete_blocked = running; body.data.running = process.env.BUTLER_R3_BASELINE === "1" ? running : false; await route.fulfill({ response, json: body });
-      });
-      await page.route(`**/canon/epics/${epic.id}/progress`, route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: {
-        epic_id: epic.id, stage: null, stage_history: [], actions: [], counts: { completed: 0, total: 0 }, running: false, disposition: null,
-      } satisfies EpicProgressSnapshot } }));
+      const entered = new Promise<void>(resolve => { enteredStep = resolve; });
+      holdStep = true;
+      await server.api(`/sessions/${chat}/canon/queue`, { method: "POST", body: JSON.stringify({ op: "start_now", epic_id: epic.id }) });
+      await entered;
       await page.goto(server.url, { waitUntil: "load" });
       await showCanonSidebar(page);
       await openCanonBoard(page);
       await page.screenshot({ path: join(shots, `${name}-before.png`), animations: "disabled" });
       const epicCard = page.locator(`[data-kanban-item="${epic.id}"]`);
-      assert.equal(await epicCard.locator('[data-slot="spinner"]').count(), process.env.BUTLER_R3_BASELINE === "1" ? 1 : 0);
-      await epicCard.screenshot({ path: join(shots, `${name}-bound-unrelated-turn.png`), animations: "disabled" });
+      assert.equal(await epicCard.locator('[data-slot="spinner"]').count(), process.env.BUTLER_EPIC_DELETE_BASELINE === "1" ? 1 : 0);
+      await epicCard.screenshot({ path: join(shots, `${name}-unlinked-step.png`), animations: "disabled" });
       const card = page.locator(`[data-kanban-item="${epic.id}"]`).getByRole("button").first();
       await card.click();
       const detail = page.locator('[data-test-class="canon-epic-detail"]');
@@ -91,10 +85,16 @@ try {
       await captureDeleteMenu(page, shots, `${name}-plan-disabled-tooltip`);
       await page.screenshot({ path: join(shots, `${name}-plan-disabled-tooltip.png`), animations: "disabled" });
       await page.keyboard.press("Escape");
-      running = false;
-      await page.reload({ waitUntil: "load" });
-      await openPlan(page, planId);
+      const refreshed = page.waitForResponse(async response => {
+        if (!response.ok() || new URL(response.url()).pathname !== `/projects/${projectId}/canon`) return false;
+        const canon = (await response.json()).data as CanonOverview;
+        return [...canon.backlog, ...canon.plans.flatMap(plan => plan.works)]
+          .some(row => row.id === epic.id && row.delete_blocked === false);
+      });
+      releaseStep?.();
+      await refreshed;
       await overview.getByRole("button", { name: `${epic.title} 메뉴`, exact: true }).click();
+      assert.notEqual(await action.getAttribute("aria-disabled"), "true");
       await page.screenshot({ path: join(shots, `${name}-plan-menu.png`), animations: "disabled" });
       await action.click();
       await page.getByRole("dialog").getByRole("button", { name: "취소", exact: true }).click();
@@ -122,4 +122,4 @@ try {
     } finally { await context.close(); }
   }
   console.log(JSON.stringify({ result: "PASS", case: process.env.BUTLER_EPIC_DELETE_CASE, screenshots: shots, stubModelCalls: server.stubModelCalls.length }));
-} finally { await browser?.close(); await server.stop(); }
+} finally { releaseStep?.(); await browser?.close(); await server.stop(); }

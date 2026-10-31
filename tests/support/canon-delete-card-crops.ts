@@ -39,7 +39,7 @@ export async function captureDeleteCards(page: Page, server: NativeAppServerHand
   await mixed.getByText("새로 등록할 과제", { exact: true }).waitFor();
   await settleCrop(page, mixed);
   await mixed.screenshot({ path: join(shots, `${name}-mixed-card.png`), animations: "disabled" });
-  if (process.env.BUTLER_R3_BASELINE !== "1") await mixed.getByText("‘교체 계획’에 과제 등록", { exact: true }).waitFor();
+  if (process.env.BUTLER_EPIC_DELETE_BASELINE !== "1") await mixed.getByText("‘교체 계획’에 과제 등록", { exact: true }).waitFor();
   await captureEnglishCard(page, server, mixed, shots, name, "mixed-card", "Add and delete Epics");
   const pending = await server.api<{ asks: Array<{ ask_id: string; source_turn_id: string }> }>(`/sessions/${chat.session.id}/pending-asks`);
   const anchor = pending.asks[0]!; assert(anchor);
@@ -48,10 +48,10 @@ export async function captureDeleteCards(page: Page, server: NativeAppServerHand
   const mixedEditId = await draft([{ op: "epic.edit", id: editTarget.id, expected_revision: editTarget.revision, description: "변경된 내용" }, deletion]);
   await page.reload();
   const mixedEdit = page.locator(`[data-proposal-id="${mixedEditId}"]`);
-  await mixedEdit.getByRole("button", { name: process.env.BUTLER_R3_BASELINE === "1" ? "과제 삭제" : "과제 변경 및 삭제", exact: true }).waitFor();
+  await mixedEdit.getByRole("button", { name: process.env.BUTLER_EPIC_DELETE_BASELINE === "1" ? "과제 삭제" : "과제 변경 및 삭제", exact: true }).waitFor();
   await settleCrop(page, mixedEdit);
   await mixedEdit.screenshot({ path: join(shots, `${name}-edit-delete-card.png`), animations: "disabled" });
-  await captureEnglishCard(page, server, mixedEdit, shots, name, "edit-delete-card", process.env.BUTLER_R3_BASELINE === "1" ? "Delete Epic" : "Change and delete Epics");
+  await captureEnglishCard(page, server, mixedEdit, shots, name, "edit-delete-card", process.env.BUTLER_EPIC_DELETE_BASELINE === "1" ? "Delete Epic" : "Change and delete Epics");
   const onlyId = await draft([deletion]);
   await page.reload();
   const only = page.locator(`[data-proposal-id="${onlyId}"]`);

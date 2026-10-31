@@ -149,7 +149,7 @@ fn advance_label(tx: &Transaction<'_>, ctx: &Context, id: &str, target: &str) ->
     )
 }
 
-fn progress_event(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
+pub(super) fn progress_event(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
     let epic = read_work(tx, id)?;
     tx.execute(
         super::sql::OUTBOX,

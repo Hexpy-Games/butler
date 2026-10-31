@@ -248,6 +248,7 @@ mod requires_e2e_fixtures {
             s.gw.wait_terminal(&chat, turn["id"].as_str().unwrap(), Duration::from_secs(60))
                 .await?;
         }
+        wait_receipt(&s, id).await?;
         assert_eq!(delete(&s, &epic, &epic["revision"]).await?.status, 200);
         server.abort();
         s.finish().await

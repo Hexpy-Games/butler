@@ -76,6 +76,7 @@ fn settle_panels(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
         // Earlier decisions are history; only unanswered panels become deleted.
         if payload["state"].is_null() || payload["state"] == "pending" {
             payload["state"] = json!("deleted");
+            payload["epic_deleted"] = json!(true);
         }
         record_intent(tx, ctx, &format!("{source}:epic-deleted"), &kind, &payload)?;
     }

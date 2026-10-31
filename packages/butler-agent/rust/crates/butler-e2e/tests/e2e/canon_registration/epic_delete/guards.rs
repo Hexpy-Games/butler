@@ -79,6 +79,7 @@ async fn epic_delete_refuses_started_unlinked_moved_and_live_bound_turns()
             s.gw.wait_terminal(&home, &turn, Duration::from_secs(60))
                 .await?;
         }
+        wait_receipt(&s, id).await?;
         // A finished turn needs no artificial hold to become deletable.
         if kind == "moved" {
             canon.execute_batch("DROP TRIGGER hold_cancellation")?;

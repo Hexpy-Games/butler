@@ -19,6 +19,7 @@ pub(super) async fn apply(
         Err(GatewayApplicationError::Public { status: 404, .. }) => {
             if pending {
                 panel["state"] = json!("deleted");
+                panel["epic_deleted"] = json!(true);
             }
         }
         Err(error) => return Err(error),
@@ -50,7 +51,7 @@ async fn post_panel(
     if let Some(other) = panel["other_session_id"].as_str() {
         let other = match existing_chat(app, other.to_owned()).await? {
             Some(chat) => chat,
-            None if panel["state"] == "deleted" => app.owner_chat(other.to_owned()).await?,
+            None if panel["epic_deleted"] == true => app.owner_chat(other.to_owned()).await?,
             None => return Ok(()),
         };
         panel["other_session_id"] = json!(other);
@@ -85,7 +86,7 @@ async fn post_panel(
             if pending && db.query_row("SELECT COALESCE(json_extract(payload_json,'$.panel.state'),'pending')<>'pending' FROM app_initiated_messages WHERE source_key=?1", [&source], |r|r.get::<_,bool>(0)).map_err(AppStorageError::sqlite)? {
                 return Ok(());
             }
-            let terminal_text = (payload["panel"]["state"] == "deleted").then_some(text.as_str());
+            let terminal_text = (payload["panel"]["epic_deleted"] == true).then_some(text.as_str());
             if let Some(event) =
                 super::super::initiated::update_canon_payload(db, &source, &payload, terminal_text, &now)?
             {
@@ -106,7 +107,7 @@ async fn panel_text(
 ) -> Result<String, GatewayApplicationError> {
     let language = super::super::canon_proposals::language(app).await?;
     let epic = field(panel, "epic_title")?;
-    let text = if panel["state"] == "deleted" {
+    let text = if panel["epic_deleted"] == true {
         if language.starts_with("ko") {
             format!("‘{epic}’ 과제를 삭제했습니다.")
         } else {

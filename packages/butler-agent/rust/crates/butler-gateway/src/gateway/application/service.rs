@@ -220,6 +220,7 @@ impl AppApplication {
         queued_id: &str,
         error: &GatewayApplicationError,
     ) -> Result<(), GatewayApplicationError> {
+        let failed_id = queued_id.to_owned();
         let code = match error {
             GatewayApplicationError::Public { code, .. } => code.clone(),
             GatewayApplicationError::Internal { .. } => {
@@ -234,7 +235,8 @@ impl AppApplication {
             db.execute("UPDATE session_queued_messages SET state='failed',safe_error_code=?1,updated_at=?2 WHERE id=?3 AND state='queued'",params![code,now,queued]).map_err(AppStorageError::sqlite)?;
             let payload=map(&json!({"session_id":chat,"queued_message_id":queued,"action":"failed","safe_error_code":code}))?;
             events::append(db,&subscribers,"session_queue.changed",None,payload,&now)?;Ok(())
-        }).await.map_err(app_error)
+        }).await.map_err(app_error)?;
+        canon_queue::steps::delivery_failed(self, failed_id, true).await
     }
 
     pub(super) async fn claimed_client_message_id(

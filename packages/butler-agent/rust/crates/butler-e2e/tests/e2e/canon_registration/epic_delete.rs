@@ -1,10 +1,12 @@
 //! Epic deletion uses the same transaction for HTTP and approved chat drafts.
 use super::*;
+mod admission_failure;
 mod guards;
+mod lifecycle;
 mod panels;
 mod queue;
 mod receipts;
-mod round3;
+mod terminal_events;
 
 async fn create(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
     Ok(data(
@@ -398,6 +400,16 @@ async fn epic_delete_requires_its_own_card_in_auto_modes() -> Result<(), Harness
         assert_eq!(accept(&s, &id).await?["ok"], true);
         server.abort();
         s.finish().await?;
+    }
+    Ok(())
+}
+
+async fn wait_receipt(s: &Scenario, epic: &str) -> Result<(), HarnessError> {
+    let canon = db(s)?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    while canon.query_row::<i64,_,_>("SELECT count(*) FROM canon_session_queue WHERE epic_id=?1 AND step_op_id IS NOT NULL AND turn_ended_at IS NULL",[epic],|r|r.get(0))? > 0 {
+        assert!(std::time::Instant::now() < deadline,"terminal receipt missing");
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
     Ok(())
 }

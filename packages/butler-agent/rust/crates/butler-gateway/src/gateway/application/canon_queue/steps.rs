@@ -124,3 +124,29 @@ pub(in crate::gateway::application) async fn turn_ended(
     }
     Ok(())
 }
+
+/// Admission can terminate a step before a public turn exists.
+pub(in crate::gateway::application) async fn delivery_failed(
+    app: &AppApplication,
+    id: String,
+    queued: bool,
+) -> Result<(), GatewayApplicationError> {
+    let op = app.storage.read(move |db| {
+        let sql = if queued {
+            "SELECT i.source_key FROM session_queued_messages q JOIN app_initiated_messages i ON i.chat_id=q.chat_id AND i.message_id=q.client_message_id WHERE q.id=?1 AND q.state='failed' AND i.kind='canon_step'"
+        } else {
+            "SELECT source_key FROM app_initiated_messages WHERE id=?1 AND state='failed' AND kind='canon_step'"
+        };
+        db.query_row(sql, [id], |r|r.get::<_,String>(0)).optional().map_err(AppStorageError::sqlite)
+    }).await.map_err(app_error)?;
+    if let Some(op_id) = op {
+        app.dependencies
+            .canon
+            .canon_operation(AppCanonOperation::StepTurnEnded {
+                op_id,
+                outcome: "failed".into(),
+            })
+            .await?;
+    }
+    Ok(())
+}

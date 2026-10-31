@@ -12,6 +12,7 @@ impl AppApplication {
         id: String,
         error: &GatewayApplicationError,
     ) -> Result<(), GatewayApplicationError> {
+        let failed_id = id.clone();
         let permanent = error.failure_class() == FailureClass::Permanent;
         let reason = match error {
             GatewayApplicationError::Public { code, .. } => code.clone(),
@@ -40,6 +41,7 @@ impl AppApplication {
             tx.commit().map_err(super::super::AppStorageError::sqlite)
         }).await.map_err(app_error)?;
         if permanent {
+            super::super::canon_queue::steps::delivery_failed(self, failed_id, false).await?;
             self.projection.handoffs_changed();
         }
         self.automation_wake.notify_one();
