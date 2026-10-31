@@ -1,6 +1,8 @@
 //! Interrupted manifest/marker/index writes: only the manifest owns an output.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod archive_refs;
 mod compatibility;
+mod read_failure;
 use super::output_blob_index::{
     blob, block_completion, chat, completed, content, db, delete, hash, scalar, schema, seed, setup,
 };
@@ -152,6 +154,7 @@ async fn adopt_archive(complete: bool) -> Result<(), HarnessError> {
     let archived = archive(&s).await?;
     live_rows(&s.sandbox.data, &id, &real)?;
     live_rows(&s.sandbox.data, &own, &archived)?;
+    archive_refs::reference(&s.sandbox.data, &id, "earlier", &archived)?;
     no_session_rows(&s.sandbox.data, "general")?;
     let count: i64 = db(&s.sandbox.data)?.query_row(
         "SELECT count(*) FROM outputs WHERE session=?1",
@@ -178,7 +181,18 @@ async fn transfer_delete(complete: bool) -> Result<(), HarnessError> {
     s.gw = s.agent.start_again().await?;
     delete(&s, &source).await?;
     assert!(manifest(&s.sandbox.data, &id).is_file());
-    live_rows(&s.sandbox.data, &id, &target)?;
+    let projected: String =
+        db(&s.sandbox.data)?.query_row("SELECT session FROM outputs WHERE id=?1", [&id], |r| {
+            r.get(0)
+        })?;
+    assert_eq!(projected, target);
+    assert_eq!(owner(&s.sandbox.data, &id)?, target);
+    let references: i64 = db(&s.sandbox.data)?.query_row(
+        "SELECT count(*) FROM output_refs WHERE id=?1",
+        [&id],
+        |r| r.get(0),
+    )?;
+    assert_eq!(references, 0, "deleting the source removes its references");
     no_session_rows(&s.sandbox.data, &source)?;
     content(&s, &id, "Transferred").await?;
     finish_migration(&mut s, complete).await?;

@@ -189,9 +189,9 @@ pub(super) fn block_completion(data: &Path) -> Result<(), HarnessError> {
     db(data)?.execute_batch("CREATE TRIGGER block_complete BEFORE UPDATE OF complete ON output_blob_backfill WHEN NEW.complete=1 BEGIN SELECT RAISE(ABORT,'hold backfill'); END;")?;
     Ok(())
 }
-struct Unreadable(PathBuf, Option<secure_fs::FileMode>);
+pub(super) struct Unreadable(PathBuf, Option<secure_fs::FileMode>);
 impl Unreadable {
-    fn directory(path: PathBuf) -> Result<Self, HarnessError> {
+    pub(super) fn directory(path: PathBuf) -> Result<Self, HarnessError> {
         secure_fs::create_private_dir_all(&path)?;
         let original = secure_fs::file_mode(&secure_fs::current_metadata(&path)?);
         if let Some(result) = secure_fs::set_file_mode(&path, secure_fs::FileMode::from_bits(0)) {
