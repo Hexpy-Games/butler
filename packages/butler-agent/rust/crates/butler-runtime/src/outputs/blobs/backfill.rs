@@ -113,14 +113,35 @@ fn index_batch(
     db: &mut sqlite::Connection,
     batch: &[std::ffi::OsString],
 ) -> std::io::Result<()> {
+    // Disk reads and JSON parsing do not hold up publication. Only the current
+    // file version may reconcile rows after acquiring the publication lock.
+    let prepared = batch
+        .iter()
+        .map(|name| {
+            let path = store.root.join("manifests").join(name);
+            read(&path).map(|snapshot| (path, snapshot))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let _lock = CHANGES
         .lock()
         .map_err(|_| error("output_store_unavailable"))?;
     let tx = db.transaction().map_err(std::io::Error::other)?;
     let mut indexed = 0;
-    for name in batch {
-        if let Some(manifest) = read(&store.root.join("manifests").join(name))? {
-            index_manifest(&tx, manifest)?;
+    for (path, snapshot) in prepared {
+        if snapshot
+            .as_ref()
+            .is_some_and(|snapshot| matches!(snapshot.manifest, Manifest::Uncertain { .. }))
+        {
+            // Even a malformed snapshot superseded by publication makes this
+            // run conservative. Persist this together with its batch cursor.
+            tx.execute(
+                "UPDATE output_blob_backfill SET skip_orphans=1 WHERE id=1",
+                [],
+            )
+            .map_err(std::io::Error::other)?;
+        }
+        if let Some(snapshot) = current(&path, snapshot)? {
+            index_manifest(&tx, snapshot.manifest)?;
             indexed += 1;
         }
     }
@@ -199,15 +220,23 @@ fn raw_shas(bytes: &[u8]) -> BTreeSet<String> {
         .collect()
 }
 
-fn read(path: &Path) -> std::io::Result<Option<Manifest>> {
-    let mut bytes = Vec::new();
-    match secure_fs::open_read_no_follow(path).and_then(|mut f| f.read_to_end(&mut bytes)) {
-        Ok(_) => {}
+struct Snapshot {
+    identity: secure_fs::FileIdentity,
+    len: u64,
+    manifest: Manifest,
+}
+
+fn read(path: &Path) -> std::io::Result<Option<Snapshot>> {
+    let mut file = match secure_fs::open_read_no_follow(path) {
+        Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e),
-    }
-    match serde_json::from_slice(&bytes) {
-        Ok(output) => Ok(Some(Manifest::Parsed(output))),
+    };
+    let metadata = file.metadata()?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let manifest = match serde_json::from_slice(&bytes) {
+        Ok(output) => Manifest::Parsed(output),
         Err(e) => {
             butler_core::diagnostic!(
                 "[outputs] unreadable manifest {}; orphan pass skipped: {e}",
@@ -218,12 +247,36 @@ fn read(path: &Path) -> std::io::Result<Option<Manifest>> {
                 .ok_or_else(|| error("manifest_stem_missing"))?
                 .to_string_lossy()
                 .into_owned();
-            Ok(Some(Manifest::Uncertain {
+            Manifest::Uncertain {
                 id,
                 shas: raw_shas(&bytes),
-            }))
+            }
         }
+    };
+    Ok(Some(Snapshot {
+        identity: secure_fs::identity(&metadata),
+        len: metadata.len(),
+        manifest,
+    }))
+}
+
+// Called only under CHANGES, including when the initial unlocked read missed a
+// file that publication has since created. I/O errors still fail closed.
+fn current(path: &Path, snapshot: Option<Snapshot>) -> std::io::Result<Option<Snapshot>> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let identity = secure_fs::identity(&metadata);
+    if let Some(snapshot) = snapshot
+        && identity.id.is_some()
+        && snapshot.identity == identity
+        && snapshot.len == metadata.len()
+    {
+        return Ok(Some(snapshot));
     }
+    read(path)
 }
 
 /// Enumerate shards once, outside CHANGES; inspect each bounded batch under
