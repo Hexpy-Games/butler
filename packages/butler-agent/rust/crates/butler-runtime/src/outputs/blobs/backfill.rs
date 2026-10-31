@@ -291,7 +291,7 @@ fn queue_orphans(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e),
     };
-    shards.sort_by_key(|entry| entry.file_name());
+    shards.sort_by_key(std::fs::DirEntry::file_name);
     let cursor: String = db
         .query_row(
             "SELECT orphan_cursor FROM output_blob_backfill WHERE id=1",
