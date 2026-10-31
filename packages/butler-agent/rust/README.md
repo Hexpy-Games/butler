@@ -187,7 +187,8 @@ running the hook again. Nothing the text says grants permission, answers an
 approval or changes the permission mode.
 
 Up to 8,000 tokens per hook stay exact. Longer output becomes the same preview as
-tool output, with the full text readable through `read_tool_output_artifact`, and
+tool output, with the full text readable through `read_tool_output_artifact`
+(read-only sessions do not offer that tool, so they get the preview alone), and
 the run log names the artifact. Past 10 MiB the hook fails as an output overflow:
 nothing is added, and the model and the run log are told.
 

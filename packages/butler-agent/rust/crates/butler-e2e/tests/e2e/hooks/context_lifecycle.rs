@@ -282,3 +282,63 @@ async fn hooks_context_failed_first_dispatch_keeps_session_start_text() -> Resul
     assert!(!split(&after).1.contains(text), "{after}");
     s.finish().await
 }
+
+/// A message sent during a slow hook runs without its text, even when that message
+/// adds text of its own; the text then goes with the next turn, once.
+#[tokio::test]
+async fn hooks_context_session_start_finishing_late_goes_with_the_next_turn()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("HOOK-CONTEXT-LATE")?.env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
+    let held = setup.sandbox.home.join("hook-held");
+    let release = setup.sandbox.home.join("hook-release");
+    let late = "HOOK-LATE-TEXT";
+    configure(
+        &setup,
+        &[
+            json!({"id":"hold","event":"SessionStart","type":"command","args":fixture(&setup,"hold"),
+                "timeout_ms":60000,"env":{"HOOK_HELD":held,"HOOK_RELEASE":release,"HOOK_TEXT":late}}),
+            printing(&setup, "own", "UserPromptSubmit", "HOOK-OWN-TEXT"),
+        ],
+    )?;
+    let s = setup.start().await?;
+    let (created, chat) = tokio::join!(
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Slow start"})),
+        async {
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while !held.exists() {
+                assert!(Instant::now() < deadline, "the hook never started");
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            let sessions = s.gw.get("/sessions").await.unwrap();
+            let chat = sessions.data()["sessions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|session| session["title"] == "Slow start")
+                .expect("published before its hook")["id"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            assert_eq!(
+                s.turn(&chat, "During the hook.").await.unwrap().1["state"],
+                "delivered"
+            );
+            fs::write(&release, b"").unwrap();
+            chat
+        }
+    );
+    assert_eq!(created?.status, 201);
+    let during = wait_prompt(&s, "During the hook.").await?;
+    assert!(split(&during).1.contains("HOOK-OWN-TEXT"), "{during}");
+    assert!(!during.contains(late), "{during}");
+    assert_eq!(waiting_rows(&s)?, 1, "the late text was consumed");
+    assert_eq!(
+        s.turn(&chat, "After the hook.").await?.1["state"],
+        "delivered"
+    );
+    let after = wait_prompt(&s, "After the hook.").await?;
+    assert_eq!(split(&after).1.matches(late).count(), 1, "{after}");
+    assert_eq!(waiting_rows(&s)?, 0);
+    s.finish().await
+}

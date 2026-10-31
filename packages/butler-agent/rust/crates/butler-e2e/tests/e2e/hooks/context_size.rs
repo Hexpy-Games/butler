@@ -159,9 +159,10 @@ async fn hooks_context_over_the_read_bound_tells_model_and_run_log() -> Result<(
     s.finish().await
 }
 
-/// A read-only session can read the rest of a preview too: the tool only reads.
+/// A read-only session gets the preview and is told the rest is out of reach;
+/// the tool stays closed there because it is not scoped to the session.
 #[tokio::test]
-async fn hooks_context_oversized_output_stays_readable_in_read_only() -> Result<(), HarnessError> {
+async fn hooks_context_oversized_output_is_preview_only_in_read_only() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("HOOK-CONTEXT-RO")?
         .stub_cassette(Cassette::load("TOOL-01")?)
@@ -179,7 +180,16 @@ async fn hooks_context_oversized_output_stays_readable_in_read_only() -> Result<
     assert_eq!(turn["state"], "delivered", "{turn}");
     let all = prompts(&s)?;
     assert!(all[0].contains("- access: read_only"), "{}", all[0]);
-    assert!(!split(&all[0]).1.contains(TAIL), "not a preview");
+    let (_, current) = split(&all[0]);
+    assert!(
+        current.contains(HEAD) && !current.contains(TAIL),
+        "not a preview"
+    );
+    assert!(
+        current
+            .contains("In a read-only session the full text of a previewed item is not available."),
+        "{current}"
+    );
     let requests = s.provider()?.requests();
     let output = requests
         .iter()
@@ -188,7 +198,8 @@ async fn hooks_context_oversized_output_stays_readable_in_read_only() -> Result<
         .find(|item| item["type"] == "function_call_output" && item["call_id"] == "call_hooks")
         .unwrap();
     let read: Value = serde_json::from_str(output["output"].as_str().unwrap())?;
-    assert_eq!(read["output"]["stdout"]["search"]["found"], true, "{read}");
+    assert_eq!(read["ok"], false, "{read}");
+    assert_eq!(read["error"]["code"], "disabled_tool", "{read}");
     s.finish().await
 }
 

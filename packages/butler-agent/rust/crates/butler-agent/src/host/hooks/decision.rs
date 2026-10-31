@@ -89,6 +89,12 @@ pub(super) fn added_context(raw: &str) -> Option<String> {
     let text = text.trim();
     (!text.is_empty()).then(|| text.to_owned())
 }
+/// Whether stdout looked like a decision but could only be read as text. A
+/// broken guard hook looks like this, so the run log says it.
+pub(super) fn fell_back_to_text(raw: &str) -> bool {
+    let raw = raw.trim();
+    (raw.starts_with('{') || raw.starts_with('[')) && serde_json::from_str::<Decision>(raw).is_err()
+}
 fn deny(hook: &HookDefinition, reason: String) -> (String, Option<String>) {
     if reason.len() > 16 * 1024 {
         return failure(hook, "error", "Hook reason exceeds 16 KiB");

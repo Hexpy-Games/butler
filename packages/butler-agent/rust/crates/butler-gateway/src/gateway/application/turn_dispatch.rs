@@ -132,12 +132,11 @@ impl AppApplication {
         turn_id: &str,
         queue_replay: bool,
     ) -> Result<(), GatewayApplicationError> {
-        let native = match self.prepare_claimed_native(claim).await {
-            Ok(native) => native,
+        let (native, waiting_hook_context) = match self.prepare_claimed_native(claim).await {
+            Ok(prepared) => prepared,
             Err(error) => return Err(self.dispatch_error(claim, error).await?),
         };
         self.ensure_dispatch_open(claim).await?;
-        let adds_hook_context = native.app_turn_context.get("hookContext").is_some();
         let receipt = match self
             .dependencies
             .native_ingress
@@ -173,8 +172,8 @@ impl AppApplication {
                 }
             }
         };
-        if adds_hook_context {
-            self.settle_hook_context(claim).await;
+        if let Some(read) = waiting_hook_context {
+            self.settle_hook_context(claim, read).await;
         }
         if !queue_replay {
             self.publish_native_queued(claim, turn_id, &receipt).await?;
@@ -184,11 +183,11 @@ impl AppApplication {
 
     /// The turn is accepted and already carries the text; failing to record that
     /// only means a later turn reads the waiting text again.
-    async fn settle_hook_context(&self, claim: &QueueClaim) {
+    async fn settle_hook_context(&self, claim: &QueueClaim, read: String) {
         let (chat, queued) = (claim.chat_id.clone(), claim.queued_message_id.clone());
         let settled = self
             .storage
-            .execute(move |db| super::hook_context::settle(db, &chat, &queued))
+            .execute(move |db| super::hook_context::settle(db, &chat, &queued, &read))
             .await;
         if let Err(error) = settled {
             butler_core::diagnostic!("warning: SessionStart hook output not settled: {error}");

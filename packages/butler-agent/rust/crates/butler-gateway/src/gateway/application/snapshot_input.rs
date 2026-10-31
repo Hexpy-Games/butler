@@ -14,7 +14,7 @@ impl AppApplication {
     pub(super) async fn prepare_claimed_native(
         &self,
         claim: &QueueClaim,
-    ) -> Result<AppTurn, GatewayApplicationError> {
+    ) -> Result<(AppTurn, Option<String>), GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
         let facts = self.dependencies.settings_facts.snapshot()?;
@@ -73,10 +73,10 @@ impl AppApplication {
         );
         turn.app_turn_context["language"] = language.into();
         turn.app_turn_context["documentEdits"] = json!(document_edits);
-        if let Some(hook) = hook {
-            turn.app_turn_context["hookContext"] = hook.into();
+        if let Some(text) = hook.text {
+            turn.app_turn_context["hookContext"] = text.into();
         }
-        self.with_canon_epics(turn).await
+        Ok((self.with_canon_epics(turn).await?, hook.waiting))
     }
 
     fn ensure_native_dispatch_ready(&self) -> Result<(), GatewayApplicationError> {

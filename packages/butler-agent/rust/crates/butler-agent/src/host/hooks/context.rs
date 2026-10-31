@@ -61,11 +61,14 @@ pub(super) async fn added(
     // JSON can spell a value differently, so only the decoded text can be checked.
     let text = super::execute::clean(&text, finished.redact);
     let bytes = Some(text.len() as u64);
-    let (text, note) = budgeted(hooks, hook, text).await;
+    let (text, budget_note) = budgeted(hooks, hook, text).await;
+    let fallback = super::decision::fell_back_to_text(finished.stdout)
+        .then(|| "not valid JSON; treated as text".to_owned());
+    let notes: Vec<String> = fallback.into_iter().chain(budget_note).collect();
     Added {
         context: Some(item(hook, text)),
         bytes,
-        note,
+        note: (!notes.is_empty()).then(|| notes.join("; ")),
     }
 }
 
