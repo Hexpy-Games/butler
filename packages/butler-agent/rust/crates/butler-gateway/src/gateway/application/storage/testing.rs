@@ -114,3 +114,18 @@ pub fn pending_ask_plan_statements() -> Vec<(String, &'static str)> {
         (metadata::CHAT_MESSAGE.into(), "messages_assistant_turn_idx"),
     ]
 }
+
+/// Exercise the production cleanup store's write and acknowledgment from companions.
+pub fn record_session_delete_cleanup(db: &Connection, id: &str, hint: &str) -> Result<(), String> {
+    super::super::sessions::cleanup::record_delete(db, id, hint).map_err(|error| error.to_string())
+}
+
+pub fn clear_session_cleanup(
+    db: &Connection,
+    id: &str,
+    kind: &str,
+    generation: i64,
+) -> Result<usize, String> {
+    super::super::sessions::cleanup::clear_record_in(db, id, kind, generation)
+        .map_err(|error| error.to_string())
+}

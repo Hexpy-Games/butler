@@ -10,6 +10,7 @@ import type { NavigationView, SessionSummary } from "@/app/types.ts";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { projectSpace } from "@/app/space/projection";
 import { spaceActivity } from "@/app/space/activity";
+import { onMemoryEvent } from "@/app/memoryEvents.ts";
 import {
   FakeClock,
   flushMicrotasks,
@@ -426,6 +427,30 @@ test("an absent session.updated delegates unarchive visibility to one canonical 
     .toEqual(["session-unarchive"]);
   expect(storeState.navigation.projects[0]?.sessions?.[0]?.title)
     .toBe("최신 복원 제목");
+});
+
+test("project permanent deletion refreshes canonical navigation without an HTTP result", async () => {
+  const canonical = initialNavigation();
+  canonical.projects = canonical.projects.filter((project) => project.id !== "project-one");
+  navigationRefreshSnapshots.push(canonical);
+  await renderHarness();
+  const memoryEvents: string[] = [];
+  const unsubscribe = onMemoryEvent((event) => memoryEvents.push(event.type));
+  try {
+    deliverEvent(0, {
+      id: 43,
+      type: "project.permanently_deleted",
+      created_at: new Date().toISOString(),
+      payload: { project: storeState.navigation.projects[0] },
+    });
+    await flushMicrotasks();
+    expect(navigationRefreshCalls).toBe(1);
+    expect(storeState.navigation.projects.map((project) => project.id)).toEqual(["project-two"]);
+    expect(subscriptions).toHaveLength(1);
+    expect(memoryEvents).toEqual(["project.permanently_deleted"]);
+  } finally {
+    unsubscribe();
+  }
 });
 
 test("reconnect and reconcile-required events refresh canonical navigation through one stream", async () => {

@@ -72,7 +72,10 @@ pub(super) fn handoff_events(
         .subscribe(std::sync::Arc::new(move |event| {
             if matches!(
                 event.envelope().event_type.as_str(),
-                "turn.state_changed" | "session.permanently_deleted" | "project.deleted"
+                "turn.state_changed"
+                    | "session.permanently_deleted"
+                    | "project.deleted"
+                    | "project.permanently_deleted"
             ) {
                 pending.lock().handoffs = true;
                 let _ = sender.try_send(super::Command::Events);
