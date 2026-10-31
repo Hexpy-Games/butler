@@ -1,3 +1,4 @@
+import { apiErrorCode } from "@/app/api.ts";
 import { CanonProposalChanges } from "./CanonProposalChanges.tsx";
 import { useState } from "react";
 import { Button, ButtonContainer, Card, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
@@ -37,7 +38,10 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
       const result = await resolveCanonProposal(p.proposal_id, outcome, !chooseProject ? undefined : target === "@new" ? { new_name: name } : { project_id: target });
       if (!result.ok) notifyStatus(result.error?.code === "canon_not_found" ? appCopy.canon.deletion.missing : appCopy.canon.conflict, { tone: "error" });
       await refresh();
-    } catch (error) { notifyError(error, appCopy.interfaceFeedback.requestFailed); }
+    } catch (error) {
+      if (apiErrorCode(error) === "running") notifyStatus(appCopy.canon.deletion.running, { tone: "error" });
+      else notifyError(error, appCopy.interfaceFeedback.requestFailed);
+    }
     finally { setBusy(false); }
   };
   const open = () => {
@@ -59,8 +63,8 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
   return <Card radius="lg" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
     <Stack gap="lg">
       <Stack gap="md">
-        <Typo.Caption tone="tertiary">{creates ? copy.draft : copy.changes}</Typo.Caption>
-        <Typo.Caption>{creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.target_label}</Typo.Caption>
+        <Typo.Caption tone="tertiary">{creates && !deletes ? copy.draft : copy.changes}</Typo.Caption>
+        <Typo.Caption>{deletes ? creates ? copy.addDelete : p.target_label : creates ? copy.target(p.plan?.title, target === "@new" ? name : undefined) : p.target_label}</Typo.Caption>
         {p.epics.map((epic, index) => {
           const description = epic.description.replace(/!?\[[^\]]*\]\(attachment:[^)]+\)/giu, "");
           return <Stack key={index} gap="sm">
@@ -76,7 +80,7 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
         : <CanonProposalFact label={copy.project} value={projectName} />}
       <ButtonContainer size="sm" justify="end">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => void apply("declined")}>{copy.cancel}</Button>
-        <Tooltip wrap label={empty ? copy.name : undefined}><Button size="sm" variant={deletes ? "destructive" : "default"} disabled={busy} aria-disabled={empty || undefined} onClick={() => void apply("accepted")}>{creates ? copy.add : copy.apply}</Button></Tooltip>
+        <Tooltip wrap label={empty ? copy.name : undefined}><Button size="sm" variant={deletes ? "destructive" : "default"} disabled={busy} aria-disabled={empty || undefined} onClick={() => void apply("accepted")}>{deletes ? creates ? copy.addDelete : copy.deleteEpic : creates ? copy.add : copy.apply}</Button></Tooltip>
       </ButtonContainer>
     </Stack>
   </Card>;

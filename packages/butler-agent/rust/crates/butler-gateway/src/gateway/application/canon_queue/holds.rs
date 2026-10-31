@@ -6,38 +6,37 @@ pub(super) async fn apply(
     kind: String,
     mut panel: Value,
 ) -> Result<(), GatewayApplicationError> {
+    #[cfg(feature = "e2e-fixtures")]
+    super::super::canon::hold(app, "canon_panel_projection").await?;
+    let pending = panel["state"].is_null() || panel["state"] == "pending";
+    let epic_id = field(&panel, "epic_id")?;
+    let _projection = app
+        .canon_projection_locks
+        .acquire(format!("canon-epic-projection:{epic_id}"))
+        .await;
+    // A replay may already have read this intent when deletion committed. Never
+    // restore actionable buttons after the terminal projection has settled it.
+    match app
+        .dependencies
+        .canon
+        .project_scope(AppCanonResource::Epic, epic_id)
+        .await
+    {
+        Err(GatewayApplicationError::Public { status: 404, .. }) => {
+            if pending {
+                panel["state"] = json!("deleted");
+            }
+        }
+        Err(error) => return Err(error),
+        Ok(_) => {}
+    }
     let chat = app.owner_chat(field(&panel, "session_id")?).await?;
     panel["session_id"] = json!(chat);
     panel["kind"] = json!(kind);
     if let Some(other) = panel["other_session_id"].as_str() {
         panel["other_session_id"] = json!(app.owner_chat(other.to_owned()).await?);
     }
-    let language = super::super::canon_proposals::language(app).await?;
-    let epic = field(&panel, "epic_title")?;
-    let text = if kind == "canon_hold" {
-        if language.starts_with("ko") {
-            format!("‘{epic}’가 막혀 다음 과제를 멈췄습니다.")
-        } else {
-            format!("‘{epic}’ is blocked. Later epics are on hold.")
-        }
-    } else {
-        let other = field(&panel, "other_session_id")?;
-        let title = app
-            .storage
-            .read(move |db| {
-                db.query_row("SELECT title FROM chats WHERE id=?1", [other], |r| {
-                    r.get::<_, String>(0)
-                })
-                .map_err(AppStorageError::sqlite)
-            })
-            .await
-            .map_err(app_error)?;
-        if language.starts_with("ko") {
-            format!("‘{epic}’는 ‘{title}’ 대화에서 진행 중입니다(예정입니다). 여기서 할까요?")
-        } else {
-            format!("‘{epic}’ is running or queued in ‘{title}’. Do it here?")
-        }
-    };
+    let text = panel_text(app, &kind, &panel).await?;
     let source = panel["source_key"].as_str().unwrap_or(op).to_owned();
     panel
         .as_object_mut()
@@ -61,6 +60,10 @@ pub(super) async fn apply(
                 &payload,
                 &now,
             )?;
+            // A stale pending snapshot must never reopen or relabel a settled card.
+            if pending && db.query_row("SELECT COALESCE(json_extract(payload_json,'$.panel.state'),'pending')<>'pending' FROM app_initiated_messages WHERE source_key=?1", [&source], |r|r.get::<_,bool>(0)).map_err(AppStorageError::sqlite)? {
+                return Ok(());
+            }
             if let Some(event) =
                 super::super::initiated::update_canon_payload(db, &source, &payload, &now)?
             {
@@ -72,4 +75,38 @@ pub(super) async fn apply(
         .map_err(app_error)?;
     app.automation_wake.notify_one();
     Ok(())
+}
+
+async fn panel_text(
+    app: &AppApplication,
+    kind: &str,
+    panel: &Value,
+) -> Result<String, GatewayApplicationError> {
+    let language = super::super::canon_proposals::language(app).await?;
+    let epic = field(panel, "epic_title")?;
+    let text = if kind == "canon_hold" {
+        if language.starts_with("ko") {
+            format!("‘{epic}’가 막혀 다음 과제를 멈췄습니다.")
+        } else {
+            format!("‘{epic}’ is blocked. Later epics are on hold.")
+        }
+    } else {
+        let other = field(panel, "other_session_id")?;
+        let title = app
+            .storage
+            .read(move |db| {
+                db.query_row("SELECT title FROM chats WHERE id=?1", [other], |r| {
+                    r.get::<_, String>(0)
+                })
+                .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        if language.starts_with("ko") {
+            format!("‘{epic}’는 ‘{title}’ 대화에서 진행 중입니다(예정입니다). 여기서 할까요?")
+        } else {
+            format!("‘{epic}’ is running or queued in ‘{title}’. Do it here?")
+        }
+    };
+    Ok(text)
 }

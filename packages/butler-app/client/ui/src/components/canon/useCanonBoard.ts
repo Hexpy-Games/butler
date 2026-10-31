@@ -1,3 +1,4 @@
+import { apiErrorCode } from "@/app/api.ts";
 import { readCanonProgress } from "./canonProgressSource.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -14,6 +15,7 @@ export function useCanonBoard(projectId: string) {
   const [detail, setDetail] = useState<EpicDetail | null>(null);
   const [tasks, setTasks] = useState<EpicProgressSnapshot | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [missing, setMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
   const selectedRef = useRef(selected);
@@ -30,8 +32,13 @@ export function useCanonBoard(projectId: string) {
       const [epic, queue] = await Promise.all([exists ? getCanonEpic(id) : null, exists ? readCanonProgress(id) : null]);
       if (!mounted.current || epoch !== generation.current) return;
       useCanonSidebarState.getState().rememberCanon(board);
-      setCanon(board); setDetail(epic); setTasks(queue); setError(null);
-    } catch (error) { if (mounted.current && epoch === generation.current) setError(error); }
+      setCanon(board); setDetail(epic); setTasks(queue); setMissing(Boolean(id && !exists)); setError(null);
+    } catch (error) {
+      if (mounted.current && epoch === generation.current) {
+        if (apiErrorCode(error) === "work_model_not_found") { setDetail(null); setTasks(null); setMissing(true); setError(null); }
+        else setError(error);
+      }
+    }
   }, [projectId]);
   const drag = useCanonMove(canon, setCanon, refresh, () => { generation.current++; }, movingRef);
   useEffect(() => {
@@ -49,7 +56,7 @@ export function useCanonBoard(projectId: string) {
     if (id === selectedRef.current) return;
     generation.current++;
     selectedRef.current = id;
-    setSelected(id); setDetail(null); setTasks(null);
+    setSelected(id); setDetail(null); setTasks(null); setMissing(false);
   };
   const write = async (input: EpicInput, message?: string): Promise<boolean> => {
     if (!detail || busy) return false;
@@ -62,5 +69,5 @@ export function useCanonBoard(projectId: string) {
     } catch (error) { await canonWriteFailure(error, refresh); return false; }
     finally { if (mounted.current) setBusy(false); }
   };
-  return { canon, selected, detail, tasks, error, busy, refresh, select, write, move: drag.move, moving: drag.moving };
+  return { canon, selected, detail, tasks, error, missing, busy, refresh, select, write, move: drag.move, moving: drag.moving };
 }

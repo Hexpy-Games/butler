@@ -14,8 +14,8 @@ export function CanonProposalChanges({ changes, ko }: { changes: CanonProposal["
   if (visible.length === 0) return null;
   return <Stack gap="lg">{visible.map((change, index) => <Stack gap="md" key={index}>
     {change.op !== "epic.move" && <Typo.Caption tone="secondary">{labels[change.op]}</Typo.Caption>}
+    {(change.op === "epic.delete" || !change.op.startsWith("epic.")) && change.title && <Typo.PanelTitle wrap="anywhere">{change.title}</Typo.PanelTitle>}
     {change.op === "epic.delete" && <Typo.Caption>{deletion.deleteDetail}</Typo.Caption>}
-    {!change.op.startsWith("epic.") && change.title && <Typo.PanelTitle wrap="anywhere">{change.title}</Typo.PanelTitle>}
     {!change.op.startsWith("epic.") && (change.body ?? change.description) && <EpicMarkdown epicId="" description={change.body ?? change.description ?? ""} density="compact" />}
     {(change.op === "epic.move" || change.status || change.assignee !== undefined || change.due_on !== undefined || change.order_titles) && <Stack gap="lg">
       {change.op === "epic.move" && <CanonProposalFact label={canonProposalCopy(ko).currentPlan} value={change.current_plan_title ?? (ko ? "백로그" : "Backlog")} />}

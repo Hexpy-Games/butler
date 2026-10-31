@@ -14,6 +14,11 @@ pub fn epic_running(db: &Connection, epic: &str) -> Result<bool> {
     }
     Ok(false)
 }
+/// Deletion also protects admitted queue steps before their first Work link.
+pub fn epic_delete_running(db: &Connection, epic: &str) -> Result<bool> {
+    let active: bool = db.query_row(Query::DeleteRunning.sql(), [epic], |r| r.get(0))?;
+    Ok(active || epic_running(db, epic)?)
+}
 pub type ProjectViews = std::collections::HashMap<String, Value>;
 use queries::Query;
 use rusqlite::params;

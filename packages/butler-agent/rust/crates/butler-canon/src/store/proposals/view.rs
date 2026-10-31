@@ -50,7 +50,7 @@ pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
     for change in changes.iter().filter(|c| {
         matches!(
             c["op"].as_str(),
-            Some("epic.create" | "epic.edit" | "epic.move" | "epic.delete")
+            Some("epic.create" | "epic.edit" | "epic.move")
         )
     }) {
         epics.push(epic(db, change)?);

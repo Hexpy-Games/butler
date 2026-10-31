@@ -159,6 +159,7 @@ jobs:
               smoke hooks-settings-smoke
               smoke sidebar-group-drop
               smoke app-canon-board-smoke
+              smoke app-canon-epic-delete-smoke
               smoke composer-model-fallback-smoke
               smoke sidebar-new-chat-smoke
               smoke settings-trace-smoke
