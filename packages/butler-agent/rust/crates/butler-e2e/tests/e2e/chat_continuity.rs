@@ -344,5 +344,8 @@ mod window;
 #[path = "chat_continuity_fold_edge.rs"]
 mod fold_edge;
 
+#[path = "chat_continuity_hooks.rs"]
+mod hooks;
+
 #[path = "chat_continuity_contracts.rs"]
 mod contracts;

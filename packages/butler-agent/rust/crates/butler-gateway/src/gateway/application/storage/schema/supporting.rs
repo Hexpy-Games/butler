@@ -27,6 +27,11 @@ CREATE TABLE IF NOT EXISTS turn_stream_drafts (
   discarded INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS session_start_hook_context (
+  chat_id TEXT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
+  items_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS session_queue_pauses (
   chat_id TEXT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
   turn_id TEXT NOT NULL,

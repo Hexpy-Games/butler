@@ -645,7 +645,7 @@ export const enUsCopy: AppCopy = {
         title: (folder) => folder ? `Run hooks from the ${folder} folder?` : "Run hooks from this folder?",
         changedTitle: (folder) => `Run the changed hooks in ${folder ?? "this folder"}?`,
         offTitle: (folder) => folder ? `Continue without the hooks in the ${folder} folder?` : "Continue without this folder's hooks?",
-        receives: "Receives your prompts and tool results",
+        receives: "Receives your prompts and tool results; output can reach the model",
         unsandboxed: "Runs without a sandbox",
         off: { missing: "The hook file is gone", disabled: "All hooks are turned off", refused: "The hook file can't be used" },
         change: { changed: "changed", added: "added", removed: "removed" },

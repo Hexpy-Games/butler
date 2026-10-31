@@ -272,6 +272,7 @@ impl AgentRuntime {
             paths.data_root.clone(),
             stores.bindings.clone(),
             &host_environment,
+            tool_output.clone(),
             stop.clone(),
         )
         .await;

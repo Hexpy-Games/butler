@@ -241,6 +241,26 @@ pub(super) async fn review(
     })
 }
 
+/// A held SessionStart runs after its turn's context was claimed, so what it prints
+/// has no turn to join. Its side effects stand; the run log says the text was dropped.
+fn record_dropped(hooks: &Hooks, session_id: &str, context: &[HookContext]) {
+    for dropped in context {
+        hooks.record(HookRun {
+            time: chrono::Utc::now().to_rfc3339(),
+            hook_id: dropped.hook.clone(),
+            event: dropped.event,
+            session_id: Some(session_id.to_owned()),
+            outcome: "continue".into(),
+            reason: Some("Added text was dropped: this hook waited for an answer".into()),
+            exit_code: None,
+            duration_ms: 0,
+            context_bytes: None,
+            stdout: String::new(),
+            stderr: String::new(),
+        });
+    }
+}
+
 /// The dispatcher plus the hooks one review read; those never change afterwards.
 struct Scoped {
     inner: Dispatcher,
@@ -281,7 +301,7 @@ impl HookPort for Scoped {
         &self,
         payload: HookEnvelope,
         cancel: CancellationToken,
-    ) -> HookFuture<'_, Option<String>> {
+    ) -> HookFuture<'_, HookDispatched> {
         Box::pin(execute::dispatch(
             &self.inner.0,
             payload,
@@ -335,7 +355,9 @@ impl HookPort for Scoped {
                     .cloned()
                     .collect();
                 let root = Some(self.root.clone());
-                execute::run_handlers(&self.inner.0, handlers, envelope, cancel, root).await;
+                let dispatched =
+                    execute::run_handlers(&self.inner.0, handlers, envelope, cancel, root).await;
+                record_dropped(&self.inner.0, &session_id, &dispatched.context);
             }
             Ok(())
         })

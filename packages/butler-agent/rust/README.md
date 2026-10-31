@@ -160,9 +160,37 @@ Exit 2 or `{"decision":"deny","reason":"..."}` denies a pre-event. `block` and
 Claude Code's `hookSpecificOutput.permissionDecision: "deny"` are also accepted.
 Exit 0 with empty/non-JSON stdout continues. Other exits, crashes, invalid JSON,
 spawn failures, timeout and output overflow are logged and continue by default;
-`failClosed: true` blocks on these failures. `allow` and `ask` are logged as
-`approval_ignored`; normal permission checks still run. Input rewriting and
-context injection are ignored. Reasons are limited to 16 KiB.
+`failClosed: true` blocks on these failures. A `UserPromptSubmit` or `SessionStart`
+hook's non-JSON stdout counts as text even when it starts with `[` or `{`, unless
+that hook sets `failClosed: true`. `allow` and `ask` are logged as
+`approval_ignored`; normal permission checks still run. Input rewriting is
+ignored. Reasons are limited to 16 KiB.
+
+A `UserPromptSubmit` or `SessionStart` hook can add text to the model's context.
+On exit 0, the text is `hookSpecificOutput.additionalContext` from JSON stdout, or
+the whole stdout when it is not JSON. **Any plain stdout from these two events now
+reaches the model:** print nothing or `{}` from a hook that only observes. Other
+events, `async: true` hooks and failed hooks add nothing.
+
+This text is sent to the model provider and stored in the conversation's history.
+Butler removes a plugin's own secrets from its hook's text. Text from your own
+hooks is not redacted, so do not print anything you would not send to the provider.
+
+The text goes with the turn it belongs to: `UserPromptSubmit` with its message,
+`SessionStart` with the first turn admitted after the hook finishes. A message sent
+during a slow hook therefore runs without it. The model reads it right before the
+request, in a labelled section with each hook's text fenced by a marker derived
+from that text, so the text cannot pass for a heading or a message. It then
+stays in that turn's history like the rest of the turn. Hooks do not change the
+stable part of the prompt, and a retry or resume uses the admitted text without
+running the hook again. Nothing the text says grants permission, answers an
+approval or changes the permission mode.
+
+Up to 8,000 tokens per hook stay exact. Longer output becomes the same preview as
+tool output, with the full text readable through `read_tool_output_artifact`
+(read-only sessions do not offer that tool, so they get the preview alone), and
+the run log names the artifact. Past 10 MiB the hook fails as an output overflow:
+nothing is added, and the model and the run log are told.
 
 A tool denial becomes model feedback with code `hook_denied`. A Stop denial uses
 the existing continuation budget. A rejected send returns `422 hook_blocked` and
@@ -172,8 +200,9 @@ Sync timeout defaults to 30 seconds, capped at 120; observe-only `async: true`
 defaults to 60 seconds, capped at 600. Matching sync handlers run concurrently,
 then background handlers use a pool of eight. Identical handlers deduplicate.
 Timeout and cancellation terminate the process tree, allow two seconds of grace,
-then force termination and reap. Each output stream is capped at 64 KiB; overflow
-is an error, never truncated success. Stdin is streamed in full.
+then force termination and reap. Each output stream is capped at 64 KiB, except
+stdout of hooks that can add context (above); overflow is an error, never truncated
+success. Stdin is streamed in full.
 
 ### Project-folder hooks
 
@@ -197,12 +226,18 @@ Hooks read for a turn are the hooks that turn runs: changing the file mid-turn h
 no effect until the next turn asks. The commands themselves are not hashed, so an
 allowed hook that runs a script in the project runs the script's current content.
 
+A project hook adds text to the model's context only through
+`hookSpecificOutput.additionalContext`; its plain stdout is not added, and the run log
+says so. The text is labelled `scope=project`. Because scripts are not hashed, a script
+that changes after its one approval, for example through `git pull`, can still emit
+that JSON and reach the model with no new card.
+
 The card appears before the turn's first model round. If the file you allowed is
 deleted, loses all its enabled hooks or stops being usable, the next turn asks whether
 to continue without them. A scheduled run has nobody to answer, so unanswered hooks
 do not run and the run continues; if hooks you had allowed are affected, the run
-reports it. SessionStart held back by a card runs after you allow it; UserPromptSubmit
-starts with your next message. A symlink at `.butler/hooks.json` or `.butler` and an
+reports it. SessionStart held back by a card runs after you allow it, and any text it
+adds is dropped and noted in the run log; UserPromptSubmit starts with your next message. A symlink at `.butler/hooks.json` or `.butler` and an
 invalid file are refused: nothing runs, and the reason is in the run log. Project hooks receive `hook: {id: "project:<id>", scope: "project"}`,
 with `cwd` and `project_dir` set to the folder they were reviewed in. Answers are kept
 in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write.

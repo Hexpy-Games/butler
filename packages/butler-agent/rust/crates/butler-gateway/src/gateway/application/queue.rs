@@ -24,6 +24,8 @@ pub(super) struct QueueReservation {
     pub attachments_json: String,
     pub content_parts_json: Option<String>,
     pub project_source_refs_json: String,
+    /// Hook output for this message's turn; it never changes the message itself.
+    pub hook_context_json: Option<String>,
     pub created_at: String,
 }
 
@@ -138,8 +140,8 @@ pub(super) fn reserve(
                control_resolution_json, controls_json, attachments_json, content_parts_json, \
                project_source_refs_json, state, safe_error_code, dispatched_message_id, turn_id, \
                claim_id, claim_owner, claimed_at, lease_expires_at, terminal_result_message_id, \
-               created_at, updated_at\
-             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'queued',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,?11,?11)",
+               created_at, updated_at, hook_context_json\
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'queued',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,?11,?11,?12)",
             params![
                 input.id,
                 input.chat_id,
@@ -152,6 +154,7 @@ pub(super) fn reserve(
                 input.content_parts_json,
                 input.project_source_refs_json,
                 input.created_at,
+                input.hook_context_json,
             ],
         )
         .map_err(AppStorageError::sqlite)?;

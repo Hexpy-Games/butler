@@ -644,7 +644,7 @@ export const koKrCopy: AppCopy = {
         title: (folder) => `${folder ?? "이"} 폴더의 훅을 실행할까요?`,
         changedTitle: (folder) => folder ? `${folder}의 바뀐 훅을 실행할까요?` : "이 폴더의 바뀐 훅을 실행할까요?",
         offTitle: (folder) => `${folder ?? "이"} 폴더의 훅 없이 계속할까요?`,
-        receives: "프롬프트와 도구 결과를 받습니다",
+        receives: "프롬프트와 도구 결과를 받고, 출력이 모델에 전달될 수 있습니다",
         unsandboxed: "샌드박스 없이 실행됩니다",
         off: { missing: "훅 파일이 없어졌습니다", disabled: "훅이 모두 꺼졌습니다", refused: "훅 파일을 쓸 수 없습니다" },
         change: { changed: "변경", added: "추가", removed: "삭제" },

@@ -3,6 +3,8 @@
 use super::*;
 use std::path::PathBuf;
 
+#[path = "project_trust/added_text.rs"]
+mod added_text;
 #[path = "project_trust/boundary.rs"]
 mod boundary;
 #[path = "project_trust/modes.rs"]
@@ -20,6 +22,7 @@ pub(super) struct Project {
     /// The first chat, created before any hook file exists.
     pub(super) chat: String,
     observe: Vec<String>,
+    print: Vec<String>,
     home: PathBuf,
 }
 
@@ -30,6 +33,7 @@ pub(super) async fn start(name: &str) -> Result<(Scenario, Project), HarnessErro
 
 pub(super) async fn start_with(setup: Setup) -> Result<(Scenario, Project), HarnessError> {
     let observe = fixture(&setup, "observe");
+    let print = fixture(&setup, "print");
     let mut s = setup.start().await?;
     let parent = s.sandbox.root.join("projects");
     fs::create_dir_all(&parent)?;
@@ -55,6 +59,7 @@ pub(super) async fn start_with(setup: Setup) -> Result<(Scenario, Project), Harn
             id,
             chat,
             observe,
+            print,
             home,
         },
     ))
@@ -65,6 +70,11 @@ impl Project {
     pub(super) fn observer(&self, id: &str, event: &str, out: &str) -> Value {
         json!({"id":id,"event":event,"type":"command","args":self.observe,
             "env":{"HOOK_OUTPUT":self.home.join(out)},"timeout_ms":3000})
+    }
+    /// A hook that prints `text` to stdout.
+    pub(super) fn printing(&self, id: &str, event: &str, text: &str) -> Value {
+        json!({"id":id,"event":event,"type":"command","args":self.print,
+            "env":{"HOOK_TEXT":text},"timeout_ms":10000})
     }
     pub(super) fn write(&self, hooks: &[Value]) -> Result<(), HarnessError> {
         fs::create_dir_all(self.root.join(".butler"))?;

