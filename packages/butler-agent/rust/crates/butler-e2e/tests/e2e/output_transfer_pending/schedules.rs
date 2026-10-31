@@ -104,8 +104,11 @@ async fn assert_once(s: &Scenario) -> Result<serde_json::Value, HarnessError> {
     Ok(record)
 }
 async fn idle(s: &Scenario, kind: &str) -> Result<(), HarnessError> {
-    let mut watch =
-        super::super::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
+    let mut watch = super::super::idle_resources::writes::Watch::open_after_quiet_with_paths(
+        &s.sandbox.data,
+        &[&s.sandbox.logs],
+    )
+    .await?;
     let pid = s.agent.pid().unwrap();
     let before = usage::sample(pid)?.unwrap();
     tokio::time::sleep(Duration::from_secs(60)).await;
@@ -116,7 +119,7 @@ async fn idle(s: &Scenario, kind: &str) -> Result<(), HarnessError> {
         .zip(before.cpu_time())
         .map(|(a, b)| a.checked_sub(b).expect("CPU time must be monotonic"));
     eprintln!(
-        "TRANSFER-HOLD kind={kind} idle_seconds=60 disk_write_bytes={writes} buffered_write_bytes={:?} cpu_ms={:?}",
+        "TRANSFER-HOLD kind={kind} idle_seconds=60 disk_write_bytes={writes} process_write_chars_delta={:?} cpu_ms={:?}",
         after
             .write_chars
             .zip(before.write_chars)
@@ -124,15 +127,7 @@ async fn idle(s: &Scenario, kind: &str) -> Result<(), HarnessError> {
         cpu.map(|time| time.as_millis())
     );
     assert_eq!(writes, 0, "physical writes while gated");
-    assert!(
-        after
-            .write_chars
-            .zip(before.write_chars)
-            .is_none_or(|(a, b)| a == b),
-        "buffered writes while gated: before={:?} after={:?}",
-        before.write_chars,
-        after.write_chars
-    );
+    // Linux wchar includes eventfd wakeups. Watch both data and logs for file writes.
     // CPU consumption is a resource counter, enforced in every tier, not wall-clock latency.
     // More than one CPU second in a minute is sustained work for an idle agent.
     if let Some(cpu) = cpu {

@@ -56,6 +56,7 @@ pub struct ProcessUsage {
     /// a conservative native I/O upper bound, including cached/network reads.
     pub read_bytes: u64,
     /// Bytes submitted to writes, including writes buffered by the OS.
+    /// Linux includes non-file writes such as eventfd wakeups.
     pub write_chars: Option<u64>,
     /// Bytes written to storage. Windows supplies a conservative native I/O
     /// upper bound, including buffered/network writes.
