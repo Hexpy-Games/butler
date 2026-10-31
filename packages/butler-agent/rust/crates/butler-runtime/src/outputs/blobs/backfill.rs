@@ -117,6 +117,16 @@ fn index_batch(
     // file version may reconcile rows after acquiring the publication lock.
     let prepared = batch
         .iter()
+        .filter(|name| {
+            let valid = name
+                .to_str()
+                .and_then(|name| name.strip_suffix(".json"))
+                .is_some_and(|id| store.manifest(id).is_ok());
+            if !valid {
+                butler_core::diagnostic!("[outputs] skipping non-manifest file {name:?}");
+            }
+            valid
+        })
         .map(|name| {
             let path = store.root.join("manifests").join(name);
             read(&path).map(|snapshot| (path, snapshot))
@@ -128,10 +138,8 @@ fn index_batch(
     let tx = db.transaction().map_err(std::io::Error::other)?;
     let mut indexed = 0;
     for (path, snapshot) in prepared {
-        if snapshot
-            .as_ref()
-            .is_some_and(|snapshot| matches!(snapshot.manifest, Manifest::Uncertain { .. }))
-        {
+        let uncertain = log_uncertain(&path, snapshot.as_ref());
+        if uncertain {
             // Even a malformed snapshot superseded by publication makes this
             // run conservative. Persist this together with its batch cursor.
             tx.execute(
@@ -141,6 +149,9 @@ fn index_batch(
             .map_err(std::io::Error::other)?;
         }
         if let Some(snapshot) = current(&path, snapshot)? {
+            if !uncertain {
+                log_uncertain(&path, Some(&snapshot));
+            }
             index_manifest(&tx, snapshot.manifest)?;
             indexed += 1;
         }
@@ -187,13 +198,32 @@ fn finish(
 
 enum Manifest {
     Parsed(Output),
-    Uncertain { id: String, shas: BTreeSet<String> },
+    Uncertain {
+        id: String,
+        shas: BTreeSet<String>,
+        diagnostic: serde_json::Error,
+    },
+}
+
+fn log_uncertain(path: &Path, snapshot: Option<&Snapshot>) -> bool {
+    if let Some(Snapshot {
+        manifest: Manifest::Uncertain { diagnostic, .. },
+        ..
+    }) = snapshot
+    {
+        butler_core::diagnostic!(
+            "[outputs] unreadable manifest {}; orphan pass skipped: {diagnostic}",
+            path.display()
+        );
+        return true;
+    }
+    false
 }
 
 fn index_manifest(db: &Connection, manifest: Manifest) -> std::io::Result<()> {
     match manifest {
         Manifest::Parsed(output) => reconcile(db, &output),
-        Manifest::Uncertain { id, shas } => {
+        Manifest::Uncertain { id, shas, .. } => {
             for sha in shas {
                 db.execute(
                     "INSERT OR IGNORE INTO output_blobs(sha,output_id) VALUES(?1,?2)",
@@ -215,7 +245,7 @@ fn index_manifest(db: &Connection, manifest: Manifest) -> std::io::Result<()> {
 fn raw_shas(bytes: &[u8]) -> BTreeSet<String> {
     bytes
         .split(|b| !b.is_ascii_hexdigit())
-        .flat_map(|run| run.windows(64))
+        .filter(|run| run.len() == 64 && !run.iter().any(u8::is_ascii_uppercase))
         .map(|sha| String::from_utf8_lossy(sha).into_owned())
         .collect()
 }
@@ -238,10 +268,6 @@ fn read(path: &Path) -> std::io::Result<Option<Snapshot>> {
     let manifest = match serde_json::from_slice(&bytes) {
         Ok(output) => Manifest::Parsed(output),
         Err(e) => {
-            butler_core::diagnostic!(
-                "[outputs] unreadable manifest {}; orphan pass skipped: {e}",
-                path.display()
-            );
             let id = path
                 .file_stem()
                 .ok_or_else(|| error("manifest_stem_missing"))?
@@ -250,6 +276,7 @@ fn read(path: &Path) -> std::io::Result<Option<Snapshot>> {
             Manifest::Uncertain {
                 id,
                 shas: raw_shas(&bytes),
+                diagnostic: e,
             }
         }
     };
@@ -270,9 +297,13 @@ fn current(path: &Path, snapshot: Option<Snapshot>) -> std::io::Result<Option<Sn
     };
     let identity = secure_fs::identity(&metadata);
     if let Some(snapshot) = snapshot
-        && identity.id.is_some()
-        && snapshot.identity == identity
         && snapshot.len == metadata.len()
+        && match identity.id {
+            Some(_) => snapshot.identity == identity,
+            // Atomic publication replaces a freshly written temp. Without a
+            // file ID, matching known modification time and length suffice.
+            None => identity.modified.is_some() && snapshot.identity.modified == identity.modified,
+        }
     {
         return Ok(Some(snapshot));
     }

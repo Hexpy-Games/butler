@@ -16,7 +16,12 @@ async fn delete_does_not_walk_the_store() -> Result<(), HarnessError> {
         seed(&s.sandbox.data, chat, &n.to_string(), b"Shared", true)?;
     }
     s.gw = s.agent.start_again().await?;
-    std::fs::write(s.sandbox.data.join("outputs/manifests/corrupt.json"), b"{")?;
+    std::fs::write(
+        s.sandbox
+            .data
+            .join(format!("outputs/manifests/{}.json", hash(b"corrupt"))),
+        b"{",
+    )?;
     let unreadable = Unreadable::directory(s.sandbox.data.join("outputs/blobs/zz"))?;
     if secure_fs::PERMISSION_MODES {
         assert!(std::fs::read_dir(&unreadable.0).is_err());
@@ -59,7 +64,12 @@ async fn stuck_record_does_not_walk_per_delete() -> Result<(), HarnessError> {
         s.gw.delete(&format!("/sessions/{stuck}?permanent=true"))
             .await?;
     assert_eq!(r.status, 500, "{r:?}");
-    std::fs::write(s.sandbox.data.join("outputs/manifests/corrupt.json"), b"{")?;
+    std::fs::write(
+        s.sandbox
+            .data
+            .join(format!("outputs/manifests/{}.json", hash(b"corrupt"))),
+        b"{",
+    )?;
     let watch =
         super::super::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
     for chat in &chats {
