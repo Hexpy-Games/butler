@@ -1,5 +1,58 @@
 use super::*;
 
+#[tokio::test]
+async fn non_manifest_files_do_not_disable_orphan_reclaim() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BLOB-MANIFEST-STRAYS")?;
+    let data = &setup.sandbox.data;
+    schema(data, false)?;
+    let id = seed(data, "general", "live", b"Live", false)?;
+    let orphan = blob(data, b"Orphan")?;
+    let sha = hash(b"Orphan");
+    let names = [
+        ".DS_Store".to_owned(),
+        format!(".{id}.123.1.42.tmp"),
+        "corrupt.json".to_owned(),
+        format!("{}.JSON", hash(b"uppercase extension")),
+    ];
+    for name in &names {
+        std::fs::write(
+            data.join("outputs/manifests").join(name),
+            json!({"future_format": [sha]}).to_string(),
+        )?;
+    }
+    let s = setup.start().await?;
+    completed(&s).await?;
+    assert!(!orphan.exists(), "non-manifests disabled orphan reclaim");
+    assert_eq!(
+        scalar(
+            &s.sandbox.data,
+            "SELECT skip_orphans FROM output_blob_backfill"
+        )?,
+        0
+    );
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blobs")?,
+        1,
+        "non-manifests must not acquire ownership rows"
+    );
+    for name in names {
+        assert!(
+            s.agent.logs().contains(&name),
+            "missing diagnostic for {name}"
+        );
+        assert!(
+            s.sandbox
+                .data
+                .join("outputs/manifests")
+                .join(name)
+                .is_file()
+        );
+    }
+    content(&s, &id, "Live").await?;
+    s.finish().await
+}
+
 async fn stray(kind: &str) -> Result<(), HarnessError> {
     let setup = setup(&format!("BLOB-STRAY-{kind}"))?;
     schema(&setup.sandbox.data, false)?;

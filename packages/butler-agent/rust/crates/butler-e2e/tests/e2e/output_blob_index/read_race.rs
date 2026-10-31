@@ -5,6 +5,11 @@ use notify::{Config, EventKind, EventKindMask, RecommendedWatcher, RecursiveMode
 #[tokio::test]
 async fn replaced_manifest_uses_current_revisions() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    // notify emits Close(Read) only through its Linux inotify backend.
+    butler_e2e::skip_unless!(
+        butler_platform::command_sandbox::linux_test_host(),
+        "Linux inotify close-read notification"
+    );
     let setup = setup("BLOB-READ-REPLACE-PROOF")?;
     let data = &setup.sandbox.data;
     schema(data, false)?;
@@ -20,10 +25,17 @@ async fn replaced_manifest_uses_current_revisions() -> Result<(), HarnessError> 
     // Publish's ordering: protect the new revision before atomically replacing the file.
     db(data)?.execute("INSERT INTO output_blobs VALUES(?1,?2)", params![sha, id])?;
     let current = serde_json::to_vec(&current)?;
+    // Equal lengths ensure the race also proves the identity fence itself.
+    let mut original = std::fs::read(&path)?;
+    assert!(original.len() < current.len());
+    original.resize(current.len(), b' ');
+    std::fs::write(&path, original)?;
     // Same batch, sorted after the target; parsing this file gives the watcher time
     // to replace the already-read target before the batch enters reconciliation.
-    let padding = data.join("outputs/manifests/zz-padding.json");
-    let padding_output = json!({"kind":"file", "output_id":hash(b"padding"),
+    let padding_id = "f".repeat(64);
+    assert!(padding_id > id, "padding must sort after the target");
+    let padding = data.join(format!("outputs/manifests/{padding_id}.json"));
+    let padding_output = json!({"kind":"file", "output_id":padding_id,
         "session_id":"general", "message_id":"padding", "turn_id":"padding",
         "title":"p".repeat(32*1024*1024), "revisions":[]});
     std::fs::write(&padding, serde_json::to_vec(&padding_output)?)?;
