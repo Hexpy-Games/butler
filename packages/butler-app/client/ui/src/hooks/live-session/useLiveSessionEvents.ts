@@ -168,6 +168,7 @@ export function useLiveSessionEvents(): void {
       if (
         event.type === "space.changed" || event.type === "session.created" ||
         event.type === "project.created" || event.type === "project.updated" ||
+        event.type === "project.permanently_deleted" ||
         event.type === "turn.state_changed" || event.type === "subsession.changed" ||
         event.type.startsWith("question.") || event.type.startsWith("authority.") ||
         event.type.startsWith("worker.") || event.type.startsWith("worker_") ||
