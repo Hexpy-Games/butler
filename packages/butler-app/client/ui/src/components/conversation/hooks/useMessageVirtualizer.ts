@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { observeElementRect, useVirtualizer, type VirtualItem, type Virtualizer } from "@tanstack/react-virtual";
 import type { MessageRecord } from "@/app/types.ts";
 import { MESSAGE_LIST_TOP_PADDING } from "../conversationUtils";
@@ -55,9 +55,8 @@ export function useMessageVirtualizer({
     overscan: 8,
     paddingStart: headerHeight,
   });
-  const measuredAtWidth = useRef(new Map<VirtualItem["key"], number>());
-  rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) =>
-    keepReaderOnRewrap(item, delta, instance, measuredAtWidth.current);
+  const keepLine = useKeepMiddleLine(rowVirtualizer, scrollRef);
+  rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = keepLine;
 
   const virtualContentHeight = Math.max(headerHeight, rowVirtualizer.getTotalSize());
   const viewportHeight =
@@ -94,22 +93,37 @@ const NO_QUEUED_KEYS: readonly string[] = [];
 const QUEUED_ROW_ESTIMATE = 112;
 
 /**
- * A row re-measured at another column width (the window, a pane beside the chat) rewrapped, now or when it scrolled back
- * into range, and the reader keeps their place. Above the reader, the scroll offset follows its whole change. Under
- * the top of the view, it follows the part above the reader's line, in proportion, as the text rewraps evenly. Any other
- * resize (streaming, a block opening) leaves the offset alone.
+ * Rows above the reader change height when the column's width changes (the window, a pane beside the chat): they rewrap,
+ * then or when they scroll back into range. The line in the middle of the view stays there: it is noted as a place in its
+ * row, in proportion, as text rewraps evenly, and put back after each commit with the new heights. Any other resize
+ * (streaming, a block opening) leaves the scroll offset alone.
  */
-function keepReaderOnRewrap(item: VirtualItem, delta: number, instance: Virtualizer<HTMLDivElement, Element>, measuredAtWidth: Map<VirtualItem["key"], number>) {
-  const element = instance.scrollElement;
-  if (!element) return false;
-  const width = element.clientWidth, measured = measuredAtWidth.get(item.key);
-  measuredAtWidth.set(item.key, width);
-  if (measured === undefined || measured === width) return false;
-  const offset = instance.scrollOffset ?? 0;
-  if (item.end <= offset) return true;
-  // After the rows above, whose adjustment sets the offset outright.
-  if (item.start < offset) queueMicrotask(() => { element.scrollTop += delta * (offset - item.start) / item.size; });
-  return false;
+function useKeepMiddleLine(rowVirtualizer: Virtualizer<HTMLDivElement, Element>, scrollRef: RefObject<HTMLDivElement | null>) {
+  const measuredAtWidth = useRef(new Map<VirtualItem["key"], number>());
+  const line = useRef<{ key: VirtualItem["key"]; place: number } | null>(null);
+  const rewrapped = useRef(false);
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element || !line.current) return;
+    if (!rewrapped.current) { line.current = null; return; }
+    rewrapped.current = false;
+    const key = line.current.key, row = rowVirtualizer.measurementsCache.find((item) => item.key === key);
+    if (row) element.scrollTop = row.start + line.current.place * row.size - element.clientHeight / 2;
+  });
+  return (item: VirtualItem, _delta: number, instance: Virtualizer<HTMLDivElement, Element>) => {
+    const element = instance.scrollElement;
+    if (!element) return false;
+    const width = element.clientWidth, measured = measuredAtWidth.current.get(item.key);
+    measuredAtWidth.current.set(item.key, width);
+    const middle = element.scrollTop + element.clientHeight / 2;
+    if (measured === width || item.start >= middle) return false;
+    rewrapped.current = true;
+    if (!line.current) {
+      const row = instance.getVirtualItemForOffset(middle);
+      if (row) line.current = { key: row.key, place: (middle - row.start) / row.size };
+    }
+    return false;
+  };
 }
 
 function estimateMessageRowSize(

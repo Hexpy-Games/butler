@@ -22,10 +22,10 @@ const STALL_MS = 250;
 const para = "브라우저를 옆에 열어 두고 대화를 이어 갈 때 문단이 줄바꿈을 다시 하게 됩니다. The transcript keeps its text and its lists exactly as written, and this sentence is long enough to wrap several times at either width.";
 function longTranscript(view: SessionView): SessionView {
   const start = Date.now() - 60 * 60_000;
-  const tall = Array.from({ length: 40 }, (_, index) => `${TALL_MARK}${index + 100}: ${para} ${para}`).join("\n\n");
+  const tallRow = (first: number) => Array.from({ length: 40 }, (_, index) => `${TALL_MARK}${index + first}: ${para} ${para}`).join("\n\n");
   const filler = Array.from({ length: 40 }, (_, index) => ({
     id: `split-motion-${index}`, chat_id: view.session_id, role: index % 2 ? "assistant" as const : "user" as const,
-    text: index === 31 ? tall : index % 2 ? `## 검토 ${index}\n\n행 ${index}: ${para}\n\n- ${para}\n- 항목 둘\n\n${para}` : `${index}번째 항목도 확인해 줘. ${para}`,
+    text: index === 31 ? tallRow(100) : index === 37 ? tallRow(200) : index % 2 ? `## 검토 ${index}\n\n행 ${index}: ${para}\n\n- ${para}\n- 항목 둘\n\n${para}` : `${index}번째 항목도 확인해 줘. ${para}`,
     created_at: new Date(start + index * 60_000).toISOString(),
   }));
   return { ...view, messages: [...filler, ...view.messages] };
@@ -60,7 +60,12 @@ async function assertReaderKeepsLine(page: Page, label: string, openNext: boolea
   await settled(page);
   await page.waitForTimeout(300);
   const place = await placeOf(page, line.text);
-  assert(place !== null, `${label}: the line being read ("${line.text}") stays on screen`);
+  const where = await page.evaluate(({ scroll, text }) => {
+    const box = document.querySelector(scroll)!;
+    const node = [...document.querySelectorAll("[data-index] p")].find((row) => row.textContent!.startsWith(text));
+    return { top: node ? Math.round(node.getBoundingClientRect().top - box.getBoundingClientRect().top) : null, scrollTop: Math.round(box.scrollTop), bottom: Math.round(box.scrollHeight - box.scrollTop - box.clientHeight), view: box.clientHeight };
+  }, { scroll: SCROLL, text: line.text });
+  assert(place !== null, `${label}: the line being read ("${line.text}", ${Math.round(line.top)} before) stays on screen: ${JSON.stringify(where)}`);
   return { text: line.text, before: Math.round(line.top), after: Math.round(place) };
 }
 
@@ -223,13 +228,28 @@ try {
   await page.locator(TOGGLE).click();
   await page.locator(PANE).waitFor({ state: "detached" });
   await settled(page);
+  // Near the end of the transcript first, where the list's old height would stop the scroll.
+  // A wheel first: the reader's own scroll is what releases the bottom lock.
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(100);
+  await wheelUntil(page, -500, () => page.evaluate((text) => [...document.querySelectorAll("[data-index] p")].some((node) => node.textContent!.startsWith(text)), `${TALL_MARK}220:`));
+  await page.mouse.move(800, 400);
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(100);
+  await page.evaluate(({ scroll, text }) => {
+    const box = document.querySelector(scroll)!;
+    const node = [...document.querySelectorAll("[data-index] p")].find((row) => row.textContent!.startsWith(text))!;
+    box.scrollTop += node.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientHeight / 2;
+  }, { scroll: SCROLL, text: `${TALL_MARK}220:` });
+  await page.waitForTimeout(300);
+  const nearEnd = [await assertReaderKeepsLine(page, "near the end, open", true), await assertReaderKeepsLine(page, "near the end, close", false)];
   await wheelUntil(page, -800, () => rowMounted(page, 12));
   await readTallParagraph(page, 120);
   const distBefore = await page.locator(SCROLL).evaluate((node) => node.scrollHeight - node.scrollTop - node.clientHeight);
   assert(distBefore > 300, `the reader is above the bottom (${distBefore})`);
   const lineOpen = await assertReaderKeepsLine(page, "open", true);
   const lineClose = await assertReaderKeepsLine(page, "close", false);
-  facts.reader = { open: lineOpen, close: lineClose };
+  facts.reader = { nearEnd, open: lineOpen, close: lineClose };
 
   // Rows that went out of view at the old width rewrap as they come back: wheeling up moves the text by the wheel only.
   await page.locator(TOGGLE).click();
