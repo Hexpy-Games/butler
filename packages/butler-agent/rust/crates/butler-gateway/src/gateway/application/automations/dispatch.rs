@@ -128,15 +128,15 @@ impl AppApplication {
             let late = super::occurrence::is_late(scheduled_at.as_deref(), &started);
             if trigger == "scheduled" {
                 let existing: Option<String> = db.query_row(
-                    "SELECT id FROM app_automation_runs WHERE automation_id=?1 AND state='queued' AND trigger='scheduled' LIMIT 1",
-                    [&row.id], |r| r.get(0),
+                    "SELECT id FROM app_automation_runs WHERE automation_id=?1 AND target_session_id=?2 AND state='queued' AND trigger='scheduled' LIMIT 1",
+                    params![row.id, row.target_id], |r| r.get(0),
                 ).optional().map_err(AppStorageError::sqlite)?;
                 if let Some(run) = existing {
                     db.execute(
                         "UPDATE app_automation_runs SET scheduled_at=?1,late=?2 WHERE id=?3",
                         params![scheduled_at, late, run],
                     ).map_err(AppStorageError::sqlite)?;
-                    // Keep the queued run's input and destination, including after an edit.
+                    // Keep this target's queued input and destination after an edit.
                     return Ok((row, true, run));
                 }
             }
@@ -158,6 +158,17 @@ impl AppApplication {
     pub(crate) async fn execute_due_automations(
         &self,
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
+        let mut runs = Vec::new();
+        // Merge the current occurrence before a released queued run is sent.
+        let now = self.dependencies.identity_clock.now_iso();
+        let due = self
+            .storage
+            .read(move |db| records::due(db, &now))
+            .await
+            .map_err(app_error)?;
+        for row in due {
+            runs.push(self.execute_automation(row.id, "scheduled").await?.run);
+        }
         let queued = self
             .storage
             .read(records::queued)
@@ -165,7 +176,6 @@ impl AppApplication {
             .map_err(app_error)?;
         self.automation_queued
             .store(!queued.is_empty(), std::sync::atomic::Ordering::Release);
-        let mut runs = Vec::new();
         let mut still_queued = false;
         let batch_full = queued.len() == 20;
         let mut dispatched_queued = 0;
@@ -193,15 +203,6 @@ impl AppApplication {
         );
         if batch_full && dispatched_queued > 0 {
             self.automation_wake.notify_one();
-        }
-        let now = self.dependencies.identity_clock.now_iso();
-        let due = self
-            .storage
-            .read(move |db| records::due(db, &now))
-            .await
-            .map_err(app_error)?;
-        for row in due {
-            runs.push(self.execute_automation(row.id, "scheduled").await?.run);
         }
         Ok(AutomationRunListView { runs })
     }
