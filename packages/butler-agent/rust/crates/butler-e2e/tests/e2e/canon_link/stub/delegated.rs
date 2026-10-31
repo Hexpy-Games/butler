@@ -85,6 +85,15 @@ pub(super) fn sequence(
             calls.push(("wait_for_worker", json!({})));
         }
     }
+    if direct
+        && !worker
+        && script
+            .direction_blocked
+            .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        calls.push(("record_work_disposition",json!({"work_id":work,"disposition":"blocked","summary":"Rollback notes missing","action_updates":[],"remaining_actions":["verify"],"next_condition":"Owner follow-up","followups":[]})));
+        return calls;
+    }
     calls.push(("record_work_checkpoint",json!({"action_updates":done,"public_summary":"Evidence verified","next_step":"Review evidence"})));
     calls.push(review("result"));
     calls.push(review("completion"));

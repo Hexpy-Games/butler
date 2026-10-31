@@ -103,12 +103,49 @@ fn works(s: &Scenario, session: &str) -> Vec<String> {
         .collect()
 }
 
+fn first_work(s: &Scenario, session: &str) -> String {
+    db(s)
+        .query_row(
+            "SELECT work_id FROM btcc_guided_works WHERE session_id=?1 ORDER BY rowid LIMIT 1",
+            [session],
+            |row| row.get(0),
+        )
+        .unwrap()
+}
+
+/// What the parent's second-direction calls returned.
+fn steer_answers(script: &stub::Script) -> Vec<Value> {
+    let requests = script.requests.lock().unwrap();
+    let last = requests
+        .iter()
+        .rfind(|request| request_text(request) == stub::DIRECTION_2)
+        .expect("the parent saw its steer results");
+    last["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| {
+            item["type"] == "function_call_output"
+                && item["call_id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("steer-2"))
+        })
+        .map(|item| {
+            let output: Value = serde_json::from_str(item["output"].as_str().unwrap()).unwrap();
+            output.get("output").cloned().unwrap_or(output)
+        })
+        .collect()
+}
+
 #[tokio::test]
 async fn next_direction_stays_on_the_work_a_continuation_left_blocked() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
     let (s, script, server, relation, session) =
         hold_continuation("STEWARD-DIRECTION-BLOCKED", "message", true).await?;
+    // A parent may still hold the first Work's id, and may repeat its call.
+    *script.steer_by_work.lock().unwrap() = Some(first_work(&s, &session));
+    script.replay_steer.store(true, Ordering::SeqCst);
     s.turn("general", stub::DIRECTION_2).await?;
     assert_eq!(
         count(
@@ -117,8 +154,14 @@ async fn next_direction_stays_on_the_work_a_continuation_left_blocked() -> Resul
             &relation
         ),
         1,
-        "the running continuation must keep the next direction"
+        "the running continuation must keep the next direction, once"
     );
+    let answers = steer_answers(&script);
+    assert_eq!(answers.len(), 2, "{answers:?}");
+    for answer in &answers {
+        assert_eq!(answer["ok"], true, "{answer}");
+    }
+    assert_eq!(answers[0]["instruction_id"], answers[1]["instruction_id"]);
     script.item_release.notify_one();
     let saved = wait_reports(&s, &relation, 3).await?;
     let statuses: Vec<_> = saved.iter().map(|(_, status)| status.as_str()).collect();
@@ -156,12 +199,13 @@ async fn direction_after_a_closed_continuation_is_refused_with_feedback() -> Res
         hold_continuation("STEWARD-DIRECTION-CLOSED", "message", false).await?;
     script.item_release.notify_one();
     wait_reports(&s, &relation, 2).await?;
+    *script.steer_by_work.lock().unwrap() = Some(first_work(&s, &session));
     s.turn("general", stub::DIRECTION_2).await?;
-    let refused = script.requests.lock().unwrap().iter().any(|request| {
-        request_text(request) == stub::DIRECTION_2
-            && request.to_string().contains("delegated_session_closed")
-    });
-    assert!(refused, "the closed relation must say so");
+    let answers = steer_answers(&script);
+    assert_eq!(
+        answers[0]["error"]["code"], "delegated_session_closed",
+        "the closed relation must say so: {answers:?}"
+    );
     assert_eq!(results(&s, &relation).len(), 2, "no child was steered");
     assert_eq!(works(&s, &session), ["completed", "completed"]);
     s.finish().await?;

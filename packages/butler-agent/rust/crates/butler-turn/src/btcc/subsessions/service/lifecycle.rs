@@ -38,12 +38,27 @@ impl SubsessionService {
         let scope = child_work_scope(&stored, &binding, turn)?;
         let existing = self.work.bound_work_for_turn(turn.into()).await?;
         if let Some(existing) = existing {
+            // A crash can land between starting a direction's Work and following it.
+            let unfollowed = stored.packet.child_role == ChildRole::Steward
+                && existing.work_id != stored.root_work_id
+                && existing.work_id
+                    == delegation::work_id_of_call(&delegation::continuation_mutation(
+                        &stored.delegation_id,
+                        turn,
+                    ));
             if (existing.work_id != stored.root_work_id
+                && !unfollowed
                 && !(stored.packet.child_role == ChildRole::Worker && turn != stored.child_turn_id))
                 || existing.session_id != session
                 || !work_matches_scope(&existing, &scope)
             {
                 return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
+            }
+            if unfollowed {
+                self.repository
+                    .follow_work(stored.relation_id.clone(), existing.work_id)
+                    .await
+                    .map_err(BtccError::from)?;
             }
             return Ok(());
         }

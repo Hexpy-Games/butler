@@ -15,6 +15,33 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// The parent's round for a direction: one steer, or a repeat of it, then done.
+pub(super) fn parent_steer(
+    script: &stub::Script,
+    request: &str,
+    round: usize,
+) -> serde_json::Value {
+    let second = request == stub::DIRECTION_2;
+    let replay = second && round > 0 && round <= 2 && script.replay_steer.load(Ordering::SeqCst);
+    if round > 0 && !replay {
+        return stub::message("Direction delivered.");
+    }
+    let id = match (second, replay) {
+        (false, _) => "steer",
+        (true, false) => "steer-2",
+        (true, true) => "steer-2-replay",
+    };
+    let by_work = script.steer_by_work.lock().unwrap().clone();
+    let arguments = match by_work.filter(|_| second) {
+        Some(work) => json!({"work_id":work,"instruction":request}),
+        None => json!({"relation_id":*script.relation.lock().unwrap(),"instruction":request}),
+    };
+    if replay {
+        script.replay_steer.store(false, Ordering::SeqCst);
+    }
+    stub::call(id, "steer_steward", &arguments)
+}
+
 fn close(work: &str) -> serde_json::Value {
     stub::call(
         "direction-close",

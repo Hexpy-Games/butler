@@ -45,6 +45,15 @@ impl SubsessionService {
         &self,
         query: &RelationQuery<'_>,
     ) -> Result<Vec<StoredSubsessionDelegation>, BtccError> {
+        let addressed = match query.work_id {
+            Some(work) => self
+                .repository
+                .relation_by_work(work.into())
+                .await
+                .map_err(BtccError::from)?
+                .map(|relation| relation.relation_id),
+            None => None,
+        };
         let mut candidates = match (query.purpose, query.work_id, query.relation_id) {
             (_, _, Some(id)) => self
                 .repository
@@ -72,7 +81,7 @@ impl SubsessionService {
             "steward"
         };
         candidates.retain(|candidate| {
-            query.work_id.is_none_or(|id| candidate.root_work_id == id)
+            (query.work_id.is_none() || addressed.as_ref() == Some(&candidate.relation_id))
                 && query
                     .relation_id
                     .is_none_or(|id| candidate.relation_id == id)

@@ -185,7 +185,15 @@ impl SubsessionService {
         let role = relation.packet.child_role.as_str();
         let waiting = relation.packet.child_role == crate::btcc::ChildRole::Worker
             && relation.dispatch_state == SubsessionDispatchState::Pending;
-        let continuing = continuing(result.as_ref(), latest.as_ref());
+        let directed = relation.packet.child_role == crate::btcc::ChildRole::Steward
+            && result.is_some()
+            && self
+                .repository
+                .pending_direction(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                .is_some();
+        let continuing = directed || continuing(result.as_ref(), latest.as_ref());
         let status = if waiting {
             "waiting"
         } else if continuing {

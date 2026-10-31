@@ -50,6 +50,10 @@ pub(crate) struct Script {
     pub continuation_work: Mutex<String>,
     /// The closing round also reads the prior delegation in the same batch.
     pub read_prior_after_close: AtomicBool,
+    /// The second direction addresses this Work id instead of the relation,
+    /// and repeats its call when `replay_steer` is set.
+    pub steer_by_work: Mutex<Option<String>>,
+    pub replay_steer: AtomicBool,
 }
 
 pub(crate) async fn start()
@@ -134,20 +138,11 @@ async fn reply(
     } else if child {
         child_item(step, &body, &script)
     } else if key.user_request == DIRECTION || key.user_request == DIRECTION_2 {
-        if key.round.is_empty() {
-            let id = if key.user_request == DIRECTION {
-                "steer"
-            } else {
-                "steer-2"
-            };
-            call(
-                id,
-                "steer_steward",
-                &json!({"relation_id":*script.relation.lock().unwrap(),"instruction":key.user_request}),
-            )
-        } else {
-            message("Direction delivered.")
-        }
+        super::super::steward_direction_finish::parent_steer(
+            &script,
+            &key.user_request,
+            key.round.len(),
+        )
     } else if key.user_request.contains("Delegated result")
         && script.open_disposition.load(Ordering::SeqCst)
     {

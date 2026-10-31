@@ -37,19 +37,10 @@ impl SubsessionService {
         let objective = direction
             .map(|direction| direction.instruction)
             .unwrap_or_else(|| stored.packet.objective.clone());
-        let mutation_call_id = format!(
-            "subsession-continuation-work:{}:{}",
-            stored.delegation_id, scope.turn_id
-        );
-        let work_id = delegation::work_id_of_call(&mutation_call_id);
-        // The relation moves first: a crash before the Work exists leaves it
-        // closed, never an open Work no relation can reach.
-        if steward {
-            self.repository
-                .follow_work(stored.relation_id.clone(), work_id.clone())
-                .await
-                .map_err(BtccError::from)?;
-        }
+        let mutation_call_id =
+            delegation::continuation_mutation(&stored.delegation_id, &scope.turn_id);
+        #[cfg(feature = "e2e-fixtures")]
+        super::handoff_hold::direction_work(b"before-work").await?;
         let work = self
             .work
             .start_work(StartWorkInput {
@@ -59,8 +50,15 @@ impl SubsessionService {
                 backfill_tool_call_ids: None,
             })
             .await?;
-        if steward && work.work_id != work_id {
-            return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
+        #[cfg(feature = "e2e-fixtures")]
+        super::handoff_hold::direction_work(b"work-started").await?;
+        // The relation moves only onto a Work that exists. If this turn dies
+        // here, closing it follows the Work from its binding.
+        if steward {
+            self.repository
+                .follow_work(stored.relation_id.clone(), work.work_id)
+                .await
+                .map_err(BtccError::from)?;
         }
         Ok(())
     }

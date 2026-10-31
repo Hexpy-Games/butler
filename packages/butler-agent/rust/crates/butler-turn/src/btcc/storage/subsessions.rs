@@ -350,12 +350,30 @@ impl SqliteSubsessionRepository {
             }).optional().map_err(StorageError::sqlite)).await
     }
 
+    /// The relation following a Work, or the one that ran it earlier in its
+    /// child session: a parent can still hold a Work its relation moved past.
     pub(crate) async fn relation_by_work(
         &self,
         work: String,
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| read(db, "d.root_work_id=?1", &work))
+            .execute(move |db| {
+                if let Some(relation) = read(db, "d.root_work_id=?1", &work)? {
+                    return Ok(Some(relation));
+                }
+                let session: Option<String> = db
+                    .query_row(
+                        "SELECT session_id FROM btcc_guided_works WHERE work_id=?1",
+                        [&work],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(StorageError::sqlite)?;
+                match session {
+                    Some(session) => read(db, "r.child_session_id=?1", &session),
+                    None => Ok(None),
+                }
+            })
             .await
     }
 

@@ -68,6 +68,11 @@ pub(super) fn root_mutation(delegation: &str, task: &str, session: &str) -> Stri
     format!("subsession-root-work:{delegation}:{task}:{session}")
 }
 
+/// The mutation that starts the Work a direction's turn runs on.
+pub(super) fn continuation_mutation(delegation: &str, turn: &str) -> String {
+    format!("subsession-continuation-work:{delegation}:{turn}")
+}
+
 /// The Work id `start_work` assigns to a mutation call.
 pub(super) fn work_id_of_call(call: &str) -> String {
     format!(
