@@ -2,7 +2,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod backfill;
 mod cleanup;
+mod malformed;
+mod orphan_cursor;
 mod publication;
+mod read_race;
 mod recovery;
 mod shutdown;
 mod strays;

@@ -140,16 +140,76 @@ async fn invalid_queued_names_are_cleared_without_filesystem_access() -> Result<
     let setup = setup("BLOB-INVALID-QUEUE")?;
     schema(&setup.sandbox.data, true)?;
     let s = setup.start().await?;
-    let sentinel = s.sandbox.data.join("outputs/blobs/.invalid.tmp");
+    let sentinel = s.sandbox.data.join("outputs/blobs/.i/.invalid.tmp");
     std::fs::create_dir_all(sentinel.parent().unwrap())?;
     std::fs::write(&sentinel, b"keep")?;
-    db(&s.sandbox.data)?
-        .execute_batch("INSERT INTO output_blob_sweep VALUES('.invalid.tmp'),('');")?;
+    db(&s.sandbox.data)?.execute_batch("INSERT INTO output_blob_sweep VALUES('.invalid.tmp');")?;
     delete(&s, &chat(&s).await?).await?;
     assert_eq!(
         scalar(&s.sandbox.data, "SELECT count(*) FROM output_blob_sweep")?,
         0
     );
     assert_eq!(std::fs::read(sentinel)?, b"keep");
+    db(&s.sandbox.data)?.execute_batch("INSERT INTO output_blob_sweep VALUES('');")?;
+    delete(&s, &chat(&s).await?).await?;
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blob_sweep")?,
+        0
+    );
+    s.finish().await
+}
+
+#[tokio::test]
+async fn request_reclaims_own_candidate_but_only_one_global_page() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BLOB-BOUNDED-REQUEST")?;
+    schema(&setup.sandbox.data, true)?;
+    let s = setup.start().await?;
+    let owner = chat(&s).await?;
+    seed(&s.sandbox.data, &owner, "own", b"Own candidate", true)?;
+    let own = blob(&s.sandbox.data, b"Own candidate")?;
+    let mut connection = db(&s.sandbox.data)?;
+    let tx = connection.transaction()?;
+    for n in 0..260 {
+        let key = format!("{n:064x}");
+        assert!(key.as_str() < hash(b"Own candidate").as_str());
+        let path = s
+            .sandbox
+            .data
+            .join("outputs/blobs")
+            .join(&key[..2])
+            .join(&key);
+        std::fs::create_dir_all(&path)?;
+        tx.execute("INSERT INTO output_blob_sweep VALUES(?1)", [&key])?;
+    }
+    // Observe processing, including failed unlink attempts that retain their rows.
+    tx.execute_batch(
+        "CREATE TABLE sweep_visits(sha TEXT PRIMARY KEY);
+        CREATE TRIGGER observe_sweep BEFORE DELETE ON output_blob_sweep BEGIN
+          INSERT OR IGNORE INTO sweep_visits VALUES(OLD.sha); END;",
+    )?;
+    let later = blob(&s.sandbox.data, b"Later debt")?;
+    let later_sha = hash(b"Later debt");
+    assert!(later_sha.as_str() > format!("{:064x}", 259).as_str());
+    tx.execute("INSERT INTO output_blob_sweep VALUES(?1)", [&later_sha])?;
+    tx.commit()?;
+    delete(&s, &owner).await?;
+    assert!(
+        !own.exists(),
+        "own candidate behind stuck pages was not reclaimed"
+    );
+    assert!(
+        later.is_file(),
+        "one request processed more than one global page"
+    );
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM sweep_visits")?,
+        1
+    );
+    assert_eq!(s.agent.logs().matches("blob unlink deferred").count(), 128);
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blob_sweep")?,
+        261
+    );
     s.finish().await
 }

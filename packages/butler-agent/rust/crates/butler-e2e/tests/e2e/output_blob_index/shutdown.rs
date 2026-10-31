@@ -48,6 +48,11 @@ async fn stop_during_backfill_preserves_cursor_and_resumes() -> Result<(), Harne
     let stop = Instant::now();
     s.agent.terminate().await?;
     let stop_elapsed = stop.elapsed();
+    assert!(
+        !s.agent.logs().contains("stop deadline reached"),
+        "backfill required forced exit: {}",
+        s.agent.logs()
+    );
     butler_e2e::assert_wall_clock_budget!(
         stop_elapsed,
         Duration::from_secs(8),

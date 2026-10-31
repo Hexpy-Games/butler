@@ -1,0 +1,72 @@
+use super::*;
+
+#[tokio::test]
+async fn orphan_pass_resumes_after_last_completed_shard() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BLOB-ORPHAN-CURSOR")?;
+    schema(&setup.sandbox.data, false)?;
+    let id = seed(&setup.sandbox.data, "general", "live", b"Live", false)?;
+    let mut orphans = Vec::new();
+    for shard in ["00", "80", "ff"] {
+        for n in 0..260 {
+            let sha = format!("{shard}{n:062x}");
+            let path = setup
+                .sandbox
+                .data
+                .join("outputs/blobs")
+                .join(shard)
+                .join(sha);
+            std::fs::create_dir_all(path.parent().unwrap())?;
+            std::fs::write(&path, b"orphan")?;
+            orphans.push(path);
+        }
+    }
+    db(&setup.sandbox.data)?.execute_batch("CREATE TRIGGER interrupt_orphans BEFORE INSERT ON output_blob_sweep WHEN substr(NEW.sha,1,2)='80' BEGIN SELECT RAISE(ABORT,'interrupt orphan shard'); END;")?;
+    let mut s = setup.start().await?;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !s.agent.logs().contains("interrupt orphan shard") {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .map_err(|_| HarnessError("orphan interruption not observed".into()))?;
+    s.agent.terminate().await?;
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT complete FROM output_blob_backfill")?,
+        0
+    );
+    let cursor: String = db(&s.sandbox.data)?.query_row(
+        "SELECT orphan_cursor FROM output_blob_backfill",
+        [],
+        |r| r.get(0),
+    )?;
+    assert!(
+        cursor.as_str() >= "00" && cursor.as_str() < "80",
+        "{cursor}"
+    );
+    db(&s.sandbox.data)?.execute_batch(&format!("DROP TRIGGER interrupt_orphans;
+        CREATE TRIGGER no_orphan_rewind BEFORE UPDATE OF orphan_cursor ON output_blob_backfill WHEN NEW.orphan_cursor<='{cursor}' BEGIN SELECT RAISE(ABORT,'orphan cursor rewound'); END;
+        CREATE TRIGGER no_rescan BEFORE INSERT ON output_blob_sweep WHEN substr(NEW.sha,1,2)='00' BEGIN SELECT RAISE(ABORT,'completed shard rescanned'); END;"))?;
+    s.gw = s.agent.start_again().await?;
+    completed(&s).await?;
+    let next: String = db(&s.sandbox.data)?.query_row(
+        "SELECT orphan_cursor FROM output_blob_backfill",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(next, "ff");
+    assert!(next > cursor);
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT queued FROM output_blob_backfill")?,
+        780
+    );
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blobs")?,
+        1
+    );
+    for path in orphans {
+        assert!(!path.exists(), "{}", path.display());
+    }
+    content(&s, &id, "Live").await?;
+    s.finish().await
+}
