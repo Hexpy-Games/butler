@@ -92,13 +92,13 @@ fn extended_file_path(path: &Path) -> std::io::Result<std::path::PathBuf> {
         return Ok(path.to_path_buf());
     }
     let Some(name) = path.file_name() else {
-        return std::fs::canonicalize(path);
+        return crate::secure_fs::canonicalize_extended(path);
     };
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    Ok(std::fs::canonicalize(parent)?.join(name))
+    Ok(crate::secure_fs::canonicalize_extended(parent)?.join(name))
 }
 
 /// Sync committed WAL bytes and their directory entry without copying pages to

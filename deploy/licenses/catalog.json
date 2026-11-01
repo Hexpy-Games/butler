@@ -33,7 +33,7 @@
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
     "packages/butler-app/client/electron/package.json": "75bf192017270ab76ef12a560dd7643789a965331e1958edb5f5a930fd1587a8",
     "packages/butler-app/client/ui/package.json": "8739df6bdb3dd0b3925c98fd070483d82de06619861dce3806eac6df3f15952f",
-    "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",
+    "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "f77a06e6ca123d65971fff38e3616fe9344efab396b6a3ebea7250a771064a90",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
     "third_party/notify-windows-ledger/Cargo.toml": "d3badd5e47fb7b50cb83af425266e1dd89f14cd324d6598d7cb2d6d66a01baac",
     "third_party/notify-windows-ledger/LICENSE": "29f359024dacaa3361dcddf5a9316e8458028ff062b63105a61e04a16566f968"
@@ -31149,7 +31149,7 @@
         "Unsigned Windows x64 Agent preview"
       ],
       "evidenceSha256": [
-        "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36"
+        "f77a06e6ca123d65971fff38e3616fe9344efab396b6a3ebea7250a771064a90"
       ],
       "files": [
         "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE"

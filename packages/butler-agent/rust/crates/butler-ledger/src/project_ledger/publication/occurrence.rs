@@ -373,10 +373,8 @@ fn open_shard(
         }
     }
     fs::create_dir_all(&directory).map_err(|source| io().with_source(source))?;
-    if !fs::canonicalize(&directory)
-        .map_err(|source| io().with_source(source))?
-        .starts_with(canonical_root)
-    {
+    let resolved = fs::canonicalize(&directory).map_err(|source| io().with_source(source))?;
+    if !butler_platform::secure_fs::is_within(&resolved, canonical_root) {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
     fs::restrict_directory(&directory)
