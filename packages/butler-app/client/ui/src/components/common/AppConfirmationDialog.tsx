@@ -1,5 +1,5 @@
 import { useAppLocale, appCopy } from "@/app/copy.ts";
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { Fragment, useId, useRef, useState, type KeyboardEvent } from "react";
 import { typedConfirmationMatches, useConfirmationStore, type ConfirmationRequest } from "@/app/confirmation.ts";
 import {
   Button, ButtonContainer, Card, Dialog, DialogContent, DialogDescription,
@@ -52,7 +52,7 @@ function ConfirmationDialog({ pending }: { pending: ConfirmationRequest }) {
           {pending.details && <Card padding="md"><Stack gap="sm">
             {pending.details.map((detail, index) => <Stack gap="none" key={index}>
               {detail.label && <Typo.Caption tone="secondary">{detail.label}</Typo.Caption>}
-              <Typo.Body as="div" wrap="pre">{detail.text}</Typo.Body>
+              <Typo.Body as="div" wrap="pre">{detail.isolate ? isolated(detail.text) : detail.text}</Typo.Body>
               {detail.caption && <Typo.Caption tone="secondary" wrap="anywhere">{detail.caption}</Typo.Caption>}
             </Stack>)}
           </Stack></Card>}
@@ -77,4 +77,9 @@ function ConfirmationDialog({ pending }: { pending: ConfirmationRequest }) {
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Each line in its own left-to-right isolate; the line breaks stay outside them. */
+function isolated(text: string) {
+  return text.split("\n").map((line, index) => <Fragment key={index}>{index > 0 && "\n"}<bdi dir="ltr">{line}</bdi></Fragment>);
 }

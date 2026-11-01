@@ -21,8 +21,8 @@ export async function askFolderTrust(projectId: string, accessMode: AccessMode, 
     const copy = appCopy.interfaceTemplates.approvalRequest.projectHooks;
     const choice = await chooseAction(copy.receives, {
       title: copy.title, confirmLabel: copy.allow, cancelLabel: copy.deny,
-      details: [{ text: visibleText(question.folder) },
-        { text: question.hooks.map((hook) => visibleText(projectHookText(hook))).join("\n") }],
+      details: [{ text: visibleText(question.folder), isolate: true },
+        { text: question.hooks.map((hook) => visibleText(projectHookText(hook))).join("\n"), isolate: true }],
       ...(accessMode === "full_access" ? { note: copy.unsandboxed } : {}),
     });
     if (choice === "dismissed") return;

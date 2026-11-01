@@ -13,7 +13,8 @@ interface ConfirmationOptions {
   /** Replaces the cancel button's label, when choosing it is an answer of its own. */
   cancelLabel?: string;
   destructive?: boolean;
-  details?: Array<{ label?: string; text: string; caption?: string }>;
+  /** `isolate` shows each line left to right on its own, so right-to-left letters can't reorder them. */
+  details?: Array<{ label?: string; text: string; caption?: string; isolate?: boolean }>;
   note?: string;
   typedConfirmation?: TypedConfirmation;
 }

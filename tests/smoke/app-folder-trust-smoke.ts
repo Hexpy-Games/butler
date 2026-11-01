@@ -136,6 +136,8 @@ async function exercise() {
   assert(text.includes(join(workspaceRoot, everything)), text);
   assert(text.includes("PreToolUse (run_command) · ./scripts/hooks/guard.sh --strict"), text);
   assert(text.includes("./scripts/hooks/summary.sh⏎./scripts/hooks/notify.sh"), "a real line break is marked");
+  // The path and every hook line sit in their own left-to-right isolate.
+  assert.equal(await asked().locator('bdi[dir="ltr"]').count(), long.length + 1);
   const buttons = asked().getByRole("button");
   assert.deepEqual(await buttons.allTextContents(), [copy.deny, copy.allow]);
   const denied = (await buttons.first().boundingBox())!;

@@ -72,6 +72,20 @@ async fn project_added_and_trusted_runs_with_no_card() -> Result<(), HarnessErro
         "{}",
         runs.text
     );
+
+    // That text came from the project folder, so the turn has read outside content: in
+    // auto, going out asks, and says why.
+    if command_sandbox::project_write_available() {
+        s.patch_settings(json!({"access_mode":"auto"}), "mode")
+            .await?;
+        s.provider()?.set_chat_responder(stub::remote_check);
+        let chat = project.new_chat(&s).await?;
+        let turn = s.gw.say_turn(&chat, "Second.").await?;
+        let going_out = card(&s, &chat).await?;
+        assert_eq!(going_out["reason"], "authority.taintReason", "{going_out}");
+        answer(&s, &chat, &going_out, "deny").await?;
+        delivered(&s, &chat, &turn).await?;
+    }
     s.finish().await
 }
 
