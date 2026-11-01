@@ -362,5 +362,5 @@ impl Source {
 
 #[cfg(feature = "test-support")]
 pub(super) fn project_aliases(root: &Path) -> Result<Vec<PathBuf>, Error> {
-    views::snapshot()?.aliases(&[crate::secure_fs::canonicalize(&root)?])
+    views::snapshot()?.aliases(&[crate::secure_fs::canonicalize(root)?])
 }
