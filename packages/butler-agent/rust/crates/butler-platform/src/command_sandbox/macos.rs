@@ -22,7 +22,7 @@ pub(super) fn read_only_contained(
     .join("\n");
     for (action, roots) in [("deny", denied), ("allow", allowed)] {
         for root in roots {
-            let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+            let real = crate::secure_fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
             for path in [*root, real.as_path()] {
                 let quoted = serde_json::to_string(&path.to_string_lossy())?;
                 profile.push_str(&format!("\n({action} file-read* (subpath {quoted}))"));
@@ -31,14 +31,14 @@ pub(super) fn read_only_contained(
     }
     // Credentials stay denied even when the admitted project overlaps a store.
     for root in super::credentials::roots(environment) {
-        let real = root.canonicalize().unwrap_or_else(|_| root.clone());
+        let real = crate::secure_fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
         for path in [&root, &real] {
             let quoted = serde_json::to_string(&path.to_string_lossy())?;
             profile.push_str(&format!("\n(deny file-read* (subpath {quoted}))"));
         }
     }
     for root in allowed {
-        let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        let real = crate::secure_fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
         for path in [*root, real.as_path()] {
             deny_project_secrets(&mut profile, path, "file-read*")?;
         }
@@ -60,7 +60,7 @@ pub(super) fn project_write(
     let mut profile = ["(version 1)", "(allow default)", "(deny file-write*)"].join("\n");
     let rule = |profile: &mut String, rule: &str, paths: &[&Path]| {
         for path in paths {
-            let real = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+            let real = crate::secure_fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
             for path in [*path, real.as_path()] {
                 let quoted = serde_json::to_string(&path.to_string_lossy())?;
                 profile.push_str(&format!("\n({rule} (subpath {quoted}))"));
@@ -72,7 +72,7 @@ pub(super) fn project_write(
     rule(&mut profile, "deny file-write*", denied)?;
     rule(&mut profile, "allow file-write*", writable)?;
     profile.push_str("\n(allow file-write-data (literal \"/dev/null\"))");
-    let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let real = crate::secure_fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     for path in [root, real.as_path()] {
         deny_project_secrets(&mut profile, path, "file-write*")?;
         deny_project_secrets(&mut profile, path, "file-read*")?;
@@ -123,7 +123,7 @@ pub(super) fn protect_writes(
     root: &Path,
 ) -> Result<Protection, ProtectError> {
     let lexical = root.to_path_buf();
-    let real = lexical.canonicalize().unwrap_or_else(|_| lexical.clone());
+    let real = crate::secure_fs::canonicalize(&lexical).unwrap_or_else(|_| lexical.clone());
     let mut roots = vec![lexical];
     if roots.first() != Some(&real) {
         roots.push(real);
@@ -153,7 +153,7 @@ pub(super) fn deny_secret_reads(
 ) -> Result<Invocation, SandboxError> {
     let mut profile = ["(version 1)", "(allow default)"].join("\n");
     let both = |path: &Path| {
-        let real = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let real = crate::secure_fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         [path.to_path_buf(), real]
     };
     let mut ancestors = std::collections::BTreeSet::new();

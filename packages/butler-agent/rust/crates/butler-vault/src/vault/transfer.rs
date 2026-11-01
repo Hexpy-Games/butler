@@ -61,9 +61,12 @@ impl Vault {
                 .parent()
                 .filter(|parent| !parent.as_os_str().is_empty())
                 .unwrap_or(Path::new("."));
-            std::fs::canonicalize(folder).map_err(VaultError::Io)
+            butler_platform::secure_fs::canonicalize(folder).map_err(VaultError::Io)
         };
-        if real_folder(destination)?.starts_with(real_folder(&self.paths.file)?) {
+        if butler_platform::secure_fs::is_within(
+            &real_folder(destination)?,
+            &real_folder(&self.paths.file)?,
+        ) {
             return Err(VaultError::ExportInsideVault);
         }
         Ok(())

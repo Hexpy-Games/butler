@@ -163,6 +163,10 @@ fn module_file(
     ))
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "repository tool without butler-platform; compares only paths it resolves here"
+)]
 fn canonical(path: &Path) -> Result<PathBuf, String> {
     fs::canonicalize(path).map_err(|error| format!("{}: {error}", path.display()))
 }

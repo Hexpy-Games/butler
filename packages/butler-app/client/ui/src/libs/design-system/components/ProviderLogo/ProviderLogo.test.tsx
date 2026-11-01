@@ -14,7 +14,7 @@ test("each logo string is a byte-for-byte copy of its vendored SVG file", () => 
   }
 });
 
-test("only the ten listed logos are vendored, and the NOTICE names every file", () => {
+test("only the twelve listed logos are vendored, and the NOTICE names every file", () => {
   const files = readdirSync(logosDir).filter((file) => file.endsWith(".svg")).sort();
   expect(files).toEqual([...new Set(Object.values(PROVIDER_LOGO_SVGS).map((logo) => logo.file))].sort());
   const notice = readFileSync(new URL("NOTICE", logosDir), "utf8");
