@@ -89,7 +89,17 @@ impl AppApplication {
         &self,
         chat: String,
         trigger: &str,
+        now: String,
     ) -> Result<Hold, GatewayApplicationError> {
+        let target = chat.clone();
+        if self
+            .storage
+            .read(move |db| relocating(db, &target))
+            .await
+            .map_err(app_error)?
+        {
+            return Ok(Hold::Busy);
+        }
         if trigger != "scheduled" || chat != "general" {
             return self
                 .storage
@@ -105,7 +115,8 @@ impl AppApplication {
                 .await
                 .map_err(app_error);
         }
-        let gate = self.initiated_gate().await?;
+        let mut gate = self.initiated_gate().await?;
+        gate.now = now;
         self.storage
             .read(move |db| gate.hold(db, &chat, false))
             .await
@@ -136,7 +147,9 @@ impl Gate {
         chat: &str,
         bypass: bool,
     ) -> Result<Hold, AppStorageError> {
-        if super::super::queue_dispatcher::session_has_active_turn(db, chat)? {
+        if relocating(db, chat)?
+            || super::super::queue_dispatcher::session_has_active_turn(db, chat)?
+        {
             return Ok(Hold::Busy);
         }
         if chat != "general" {
@@ -197,4 +210,12 @@ impl Gate {
 }
 fn string(settings: &Value, key: &str, default: &str) -> String {
     settings[key].as_str().unwrap_or(default).to_owned()
+}
+
+fn relocating(db: &Connection, chat: &str) -> Result<bool, AppStorageError> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM app_session_context_gate WHERE session_id=?1 AND owner_kind='relocate')",
+        [chat],
+        |r| r.get(0),
+    ).map_err(AppStorageError::sqlite)
 }

@@ -69,9 +69,11 @@ pub(super) fn new(path: Option<String>, error: &'static str) -> MutationFailure 
 }
 
 pub(super) fn guard(guard: GuardResult) -> MutationFailure {
-    let mut failure = new(guard.safe_path(), guard.reason.unwrap_or("path_rejected"));
-    failure.message = "The requested workspace path was rejected.".into();
-    failure.recovery_hint = "Retry with a regular absolute or workspace-relative file path.".into();
+    let reason = guard.reason.unwrap_or("path_rejected");
+    let (message, hint) = crate::workspace::path_messages::explanation(reason);
+    let mut failure = new(guard.safe_path(), reason);
+    failure.message = message.into();
+    failure.recovery_hint = hint.into();
     failure.guard = Some(Box::new(guard));
     failure
 }

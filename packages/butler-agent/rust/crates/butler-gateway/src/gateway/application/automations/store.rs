@@ -229,6 +229,7 @@ impl AppApplication {
             let mut row = records::get(db, &id)?.ok_or_else(records::not_found)?;
             row.state = "deleted".into(); row.next = None; row.updated = now.clone();
             db.execute("UPDATE app_automations SET state='deleted',next_run_at=NULL,updated_at=?1 WHERE id=?2", params![now,id]).map_err(AppStorageError::sqlite)?;
+            settle_deleted_runs(db, &subscribers, &id, &now)?;
             let automation = records::summary(row);
             publish(db, &subscribers, "automation.deleted", &json!({"automation":automation}), &now)?;
             Ok(AutomationMutationResult { automation: serde_json::to_value(automation).map_err(json_error)? })
@@ -279,6 +280,38 @@ impl AppApplication {
             .await
             .is_ok()
     }
+}
+
+fn settle_deleted_runs(
+    db: &rusqlite::Connection,
+    subscribers: &events::EventSubscribers,
+    id: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let queued = db
+        .prepare_cached("SELECT id,queued_message_id FROM app_automation_runs WHERE automation_id=?1 AND state='queued'")
+        .map_err(AppStorageError::sqlite)?
+        .query_map([id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)))
+        .map_err(AppStorageError::sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppStorageError::sqlite)?;
+    for (run, placeholder) in queued {
+        db.execute(
+            "UPDATE app_automation_runs SET state='skipped_target_unavailable',completed_at=?1,queued_message_id=NULL WHERE id=?2",
+            params![now, run],
+        ).map_err(AppStorageError::sqlite)?;
+        if let Some(message) = placeholder {
+            super::dispatch::remove_placeholder(db, subscribers, &message, now)?;
+        }
+        publish(
+            db,
+            subscribers,
+            "automation.run",
+            &super::dispatch::run_event(&records::run(db, &run)?),
+            now,
+        )?;
+    }
+    Ok(())
 }
 
 pub(super) fn publish(

@@ -8,9 +8,10 @@ import styles from "./ComposerDecisionPanel.module.css";
  * cut; with `showMoreLabel` and `showLessLabel` a long block clamps and an
  * inline button reveals the rest (the QueuedMessage pattern).
  */
-export function ComposerDecisionDetails({ lines, showMoreLabel, showLessLabel, renderText }: {
+export function ComposerDecisionDetails({ lines, showMoreLabel, showLessLabel, renderText, literal }: {
   lines: readonly string[];
   renderText?: (text: string) => ReactNode;
+  literal?: boolean;
   showMoreLabel?: string;
   showLessLabel?: string;
 }) {
@@ -43,7 +44,7 @@ export function ComposerDecisionDetails({ lines, showMoreLabel, showLessLabel, r
     <div className={styles.details} data-slot="composer-decision-details">
       <div id={id} ref={ref} className={styles.detailLines} data-clamped={clamp && !expanded ? "true" : undefined}>
         {lines.map((line, index) => (
-          <Typo.Caption key={`${index}:${line}`} as="p" tone="secondary" wrap="anywhere" title={line}>{renderText ? renderText(line) : line}</Typo.Caption>
+          <Typo.Caption key={`${index}:${line}`} as="p" tone="secondary" wrap="anywhere" literal={literal} title={line}>{renderText ? renderText(line) : line}</Typo.Caption>
         ))}
       </div>
       {clamp && (overflowing || expanded) ? (

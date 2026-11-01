@@ -110,6 +110,7 @@ async fn abort(app: &AppApplication, row: Row) -> Result<(), GatewayApplicationE
         })
         .await
         .map_err(app_error)??;
+    app.automation_wake.notify_one();
     cleanup_plan(app, row).await
 }
 

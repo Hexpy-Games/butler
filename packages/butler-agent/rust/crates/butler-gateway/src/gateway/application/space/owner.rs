@@ -9,7 +9,7 @@ use std::{
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 use super::commands::{self, SpaceHistory};
 use super::contracts::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
@@ -22,14 +22,16 @@ use crate::gateway::{GatewayApplicationError, application::AppIdentityClock};
 
 pub(in crate::gateway::application) struct SpaceMutationOwner {
     closed: AtomicBool,
+    automation_wake: Arc<Notify>,
     state: Mutex<SpaceHistory>,
     relocation_locks: StdMutex<HashMap<String, Weak<Mutex<()>>>>,
 }
 
 impl SpaceMutationOwner {
-    pub(in crate::gateway::application) fn new() -> Self {
+    pub(in crate::gateway::application) fn new(automation_wake: Arc<Notify>) -> Self {
         Self {
             closed: AtomicBool::new(false),
+            automation_wake,
             state: Mutex::new(SpaceHistory::default()),
             relocation_locks: StdMutex::new(HashMap::new()),
         }
@@ -143,6 +145,7 @@ impl SpaceMutationOwner {
             })
             .await
             .map_err(super::super::app_error)??;
+        self.automation_wake.notify_one();
         *history = SpaceHistory::default();
         drop(history);
         for event in result.events {

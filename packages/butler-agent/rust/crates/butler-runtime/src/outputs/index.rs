@@ -1,5 +1,5 @@
 //! Small indexed projections; rendering a session never scans manifests or blobs.
-use super::store::{Output, error};
+use super::store::{Output, OutputStore, error};
 use rusqlite::{OpenFlags, params};
 use std::path::Path;
 
@@ -47,6 +47,22 @@ pub(super) fn save(path: &Path, output: &Output) -> std::io::Result<()> {
     .map_err(std::io::Error::other)?;
     db.commit().map_err(std::io::Error::other)
 }
+pub(super) fn owner_matches(path: &Path, id: &str, session: &str) -> std::io::Result<bool> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(std::io::Error::other)?;
+    if !ready(&db)? {
+        return Ok(false);
+    }
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM outputs WHERE id=?1 AND session=?2)",
+        params![id, session],
+        |row| row.get(0),
+    )
+    .map_err(std::io::Error::other)
+}
 pub(super) fn summaries(path: &Path, session: &str) -> std::io::Result<Vec<OutputSummary>> {
     if !path.exists() {
         return Ok(Vec::new());
@@ -81,6 +97,10 @@ pub(super) fn remove(path: &Path, session: &str, ids: &[String]) -> std::io::Res
     let db = connection.transaction().map_err(std::io::Error::other)?;
     super::blobs::remove(&db, ids)?;
     if ready(&db)? {
+        for id in ids {
+            db.execute("DELETE FROM outputs WHERE id=?1", [id])
+                .map_err(std::io::Error::other)?;
+        }
         db.execute("DELETE FROM output_refs WHERE session=?1", [session])
             .map_err(std::io::Error::other)?;
         db.execute("DELETE FROM outputs WHERE session=?1", [session])
@@ -138,14 +158,53 @@ pub(super) fn ready(db: &rusqlite::Connection) -> std::io::Result<bool> {
     .map_err(std::io::Error::other)
 }
 
-pub(super) fn transfer(path: &Path, source: &str, target: &str) -> std::io::Result<()> {
+/// Correct only the keyed ownership projection. Transcript references follow
+/// their session through transfer or removal. The caller owns the transaction.
+pub(super) fn correct_owner(
+    db: &rusqlite::Connection,
+    id: &str,
+    owner: &str,
+) -> std::io::Result<()> {
+    if !ready(db)? {
+        return Ok(());
+    }
+    db.execute(
+        "UPDATE outputs SET session=?2 WHERE id=?1 AND session<>?2",
+        params![id, owner],
+    )
+    .map_err(std::io::Error::other)?;
+    Ok(())
+}
+
+pub(super) fn transfer(store: &OutputStore, source: &str, target: &str) -> std::io::Result<()> {
+    let path = store.root.join("index.sqlite");
     if !path.exists() {
         return Ok(());
     }
-    let mut db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    let mut db = butler_platform::sqlite::open(&path).map_err(std::io::Error::other)?;
     let tx = db.transaction().map_err(std::io::Error::other)?;
     if !ready(&tx)? {
         return Ok(());
+    }
+    let ids = tx
+        .prepare("SELECT id FROM outputs WHERE session=?1")
+        .map_err(std::io::Error::other)?
+        .query_map([source], |r| r.get::<_, String>(0))
+        .map_err(std::io::Error::other)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(std::io::Error::other)?;
+    for id in ids {
+        if store.manifest(&id).is_err() {
+            butler_core::diagnostic!("[outputs] ignoring invalid indexed output id {id:?}");
+            continue;
+        }
+        // Reconcile stale row hints too; only missing or unparseable manifests
+        // have no servable owner. Other I/O errors must leave the transfer pending.
+        if let Some(output) = store.read_optional(&id, true)?
+            && output.session_id != source
+        {
+            correct_owner(&tx, &id, &output.session_id)?;
+        }
     }
     for table in ["outputs", "output_refs"] {
         tx.execute(

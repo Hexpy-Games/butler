@@ -25,6 +25,76 @@ fn command_args() -> Value {
     };
     json!({"command":command,"summary":"Hook check","state_effect":"read_only","timeout_ms":30000})
 }
+/// Reads a project file, then answers.
+pub(super) fn read_input(body: &Value) -> Option<ResponseRecord> {
+    tool(
+        body,
+        "read_file",
+        &json!({"requests":[{"path":"hook-input.txt","max_bytes":1024}],"max_total_bytes":1024}),
+    )
+}
+/// Rewrites the project's hook file through the file tool.
+pub(super) fn edit_project_hooks(body: &Value) -> Option<ResponseRecord> {
+    let command = if butler_platform::command_sandbox::POSIX_SHELL {
+        "printf ran > model-hook-ran"
+    } else {
+        "echo ran> model-hook-ran"
+    };
+    let hooks = json!({"version":1,"hooks":[{"id":"written","event":"Stop","type":"command","command":command}]});
+    tool(
+        body,
+        "write_file",
+        &json!({"path":".butler/hooks.json","content":hooks.to_string(),"create_parents":true}),
+    )
+}
+/// Tries to write the path the user's prompt names, `<path>…</path>`.
+pub(super) fn forge_trust(body: &Value) -> Option<ResponseRecord> {
+    let text = body["input"].to_string();
+    let path = text.split("<path>").nth(1)?.split("</path>").next()?;
+    tool(
+        body,
+        "write_file",
+        &json!({"path":path,"content":"{}","create_parents":true}),
+    )
+}
+/// Tries to write the same path with a shell command.
+pub(super) fn forge_trust_by_command(body: &Value) -> Option<ResponseRecord> {
+    let text = body["input"].to_string();
+    let path = text.split("<path>").nth(1)?.split("</path>").next()?;
+    let command = if butler_platform::command_sandbox::POSIX_SHELL {
+        format!("printf forged > '{path}'")
+    } else {
+        format!("echo forged> \"{path}\"")
+    };
+    tool(
+        body,
+        "run_command",
+        &json!({"command":command,"summary":"Hook check","state_effect":"mutation","timeout_ms":30000}),
+    )
+}
+/// Checks a remote: a command the access tiers treat as going out.
+pub(super) fn remote_check(body: &Value) -> Option<ResponseRecord> {
+    tool(
+        body,
+        "run_command",
+        &json!({"command":"echo remote-ok","summary":"Check remote","state_effect":"remote_observation"}),
+    )
+}
+/// Reads a file; once that has an outcome, checks a remote.
+pub(super) fn read_then_remote_check(body: &Value) -> Option<ResponseRecord> {
+    let read = body["input"]
+        .as_array()?
+        .iter()
+        .any(|item| item["type"] == "function_call_output" && item["call_id"] == "call_read");
+    if read {
+        return remote_check(body);
+    }
+    Some(response(
+        &json!({"type":"function_call","id":"fc_read","call_id":"call_read",
+        "name":"read_file","arguments":json!({"requests":[{"path":"hook-input.txt"}]}).to_string(),
+        "status":"completed"}),
+    ))
+}
 pub(super) fn large(body: &Value) -> Option<ResponseRecord> {
     tool(
         body,

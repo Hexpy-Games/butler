@@ -56,6 +56,7 @@ pub struct ProcessUsage {
     /// a conservative native I/O upper bound, including cached/network reads.
     pub read_bytes: u64,
     /// Bytes submitted to writes, including writes buffered by the OS.
+    /// Linux includes non-file writes such as eventfd wakeups.
     pub write_chars: Option<u64>,
     /// Bytes written to storage. Windows supplies a conservative native I/O
     /// upper bound, including buffered/network writes.
@@ -64,6 +65,24 @@ pub struct ProcessUsage {
     pub cpu_user_time: Option<u64>,
     /// Cumulative system CPU counter (Linux ticks, macOS nanoseconds); absent elsewhere.
     pub cpu_system_time: Option<u64>,
+}
+
+impl ProcessUsage {
+    /// Cumulative user and system CPU time in a portable unit.
+    pub fn cpu_time(&self) -> Option<std::time::Duration> {
+        let total = self.cpu_user_time?.checked_add(self.cpu_system_time?)?;
+        #[cfg(target_os = "linux")]
+        {
+            let ticks = nix::unistd::sysconf(nix::unistd::SysconfVar::CLK_TCK).ok()??;
+            Some(std::time::Duration::from_secs_f64(
+                total as f64 / ticks as f64,
+            ))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Some(std::time::Duration::from_nanos(total))
+        }
+    }
 }
 
 /// Samples native process counters; unavailable metrics remain `None`.

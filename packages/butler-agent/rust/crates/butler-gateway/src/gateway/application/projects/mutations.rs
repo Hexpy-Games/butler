@@ -103,15 +103,19 @@ impl AppApplication {
         display_name: Option<String>,
         pinned: Option<bool>,
     ) -> Result<AppProjectActionResult, GatewayApplicationError> {
-        if action == ProjectLifecycle::PermanentDelete {
-            cleanup::replay(self).await;
-        }
         let query_id = project_id.clone();
         let sessions = self
             .storage
             .execute(move |db| project_session_ids(db, &query_id))
             .await
             .map_err(app_error)?;
+        // Validate every target before closing any authority or replaying deletion.
+        for session_id in &sessions {
+            self.ensure_output_transfer_complete(session_id).await?;
+        }
+        if action == ProjectLifecycle::PermanentDelete {
+            cleanup::replay(self).await;
+        }
         for session_id in sessions {
             let runtime_session_id = self.runtime_hint(&session_id).await?;
             self.dependencies

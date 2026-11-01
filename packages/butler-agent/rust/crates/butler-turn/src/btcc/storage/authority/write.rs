@@ -76,10 +76,12 @@ pub(super) fn insert(db: &mut Connection, record: &AuthorityRecord) -> Authority
             ],
         )
         .map_err(query::sql)?;
+    // A project hook card parks the turn before any tool call exists to journal.
     if let Some(call) = record
         .source_call_id
         .as_deref()
         .filter(|value| !value.is_empty())
+        .filter(|_| record.capability != butler_core::hooks::PROJECT_HOOKS_CAPABILITY)
     {
         let changed = transaction
             .execute(

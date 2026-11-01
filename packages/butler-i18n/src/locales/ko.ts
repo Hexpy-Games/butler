@@ -480,6 +480,7 @@ export const koKrCopy: AppCopy = {
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `요청의 목표와 범위를 확인했습니다: ${text}` : "요청의 목표와 범위를 확인했습니다.", workInProgress: text => `${text} 작업을 진행하고 있습니다.`, toolsSummary: text => text ? `${text} 도구로 필요한 정보를 확인하고 있습니다.` : "필요한 도구로 작업을 진행하고 있습니다.",
   },
   serverErrors: {
+    output_transfer_pending: "결과물을 옮기는 중입니다. 잠시 후 다시 시도해 주세요.",
     model_not_in_chatgpt_plan: 'ChatGPT 플랜에 없는 모델입니다.',
     credential_in_use_by_default: "기본 모델이 이 키를 씁니다. 기본 모델을 먼저 바꾸세요.", credential_in_use: "이 키를 쓰는 모델이 있습니다. 키와 함께 삭제하세요.", credential_not_found: "이미 삭제된 키입니다. 목록을 새로 고치세요.",
     space_changed: "목록이 변경되었습니다. 최신 목록에서 다시 시도해 주세요.", space_invalid_group: "서로 다른 두 대화를 선택해 주세요.", space_invalid_scope: "같은 프로젝트의 대화끼리 묶을 수 있습니다.", space_invalid_pin: "대화 또는 프로젝트를 즐겨찾기에 추가해 주세요.", space_undo_expired: "다른 변경이 있어 되돌릴 수 없습니다.", space_invalid_title: "그룹 이름은 1~120자로 입력해 주세요.",
@@ -640,6 +641,13 @@ export const koKrCopy: AppCopy = {
       startConversation: "새 대화를 시작할까요?",
       restartService: "버틀러를 다시 시작할까요?",
       createWorktree: "이 대화용 워크트리를 만들까요?",
+      projectHooks: {
+        title: "이 폴더의 훅을 실행할까요?",
+        receives: "프롬프트와 도구 결과를 받고, 출력이 모델에 전달될 수 있습니다",
+        unsandboxed: "샌드박스 없이 실행됩니다",
+        deny: "실행 안 함",
+        allow: "실행",
+      },
       switchFolder: "작업 폴더를 옮길까요?",
       generic: "이 작업을 허용할까요?",
       more: count => `외 ${count}개`,
@@ -1411,7 +1419,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   settings: {
     localModelErrors: { discover: "이 주소에서 모델을 찾지 못했습니다.", register: "모델을 추가하지 못했습니다." },
-    archiveErrors: { restore: "복원하지 못했습니다.", loadMore: "더 불러오지 못했습니다." },
+    archiveErrors: { remove: "삭제하지 못했습니다.", restore: "복원하지 못했습니다.", loadMore: "더 불러오지 못했습니다." },
     skillErrors: { invalid: "스킬 .zip 파일이 아닙니다.", tooLarge: "파일이 너무 큽니다.", import: "가져오지 못했습니다." },
     mcpErrors: { save: "서버를 저장하지 못했습니다.", notFound: "이미 삭제된 서버입니다.", unavailable: "MCP 설정을 열지 못했습니다.", remove: "서버를 삭제하지 못했습니다.", toggle: "변경하지 못했습니다.", probe: "연결을 확인하지 못했습니다." },
     hooks: { add: "훅 추가", edit: "편집", test: "테스트", remove: "삭제", recent: "최근 실행", empty: "훅 없음", name: "이름", event: "이벤트", tools: "도구", command: "명령", args: "인수 (JSON)", timeout: "제한 시간 (ms)", failClosed: "오류 시 차단", async: "백그라운드", enabled: "사용", refresh: "새로고침", blocked: "훅이 차단함", editTitle: "훅 편집", disabled: "사용 안 함", emptyRuns: "실행 기록 없음", testSuccess: "실행 성공", testFailure: "실행 실패", exitCode: "종료 코드", commandDisabled: "인수를 사용 중입니다.", commandRequired: "명령 또는 인수를 입력합니다.", deleteConfirm: name => `훅 "${name}"을 삭제합니다.` },
