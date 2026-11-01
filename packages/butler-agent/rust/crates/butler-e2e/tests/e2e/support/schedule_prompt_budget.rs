@@ -32,9 +32,8 @@ pub(super) fn assert_budget() {
         }
         let budgets: Value =
             serde_json::from_str(include_str!("../token_cache/prefix-budgets.json")).unwrap();
-        // Owner-approved one-call schema and instruction update, then the
-        // canon-stays-with-Butler sentence (+24); retain exact measured prefixes.
-        let limit = usize::try_from(budgets[key].as_u64().unwrap()).unwrap() + 964;
+        // Owner-approved one-call schema and instruction update; retain exact measured prefixes.
+        let limit = usize::try_from(budgets[key].as_u64().unwrap()).unwrap() + 940;
         let total = tokens(text) + changed_schema;
         assert!(
             total <= limit,

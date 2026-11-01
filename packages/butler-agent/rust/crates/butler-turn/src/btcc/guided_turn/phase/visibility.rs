@@ -103,7 +103,7 @@ pub(super) fn legacy_authorized<'a>(
 }
 
 fn authorize_canon(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
-    if policy.role == PolicyRole::Butler && policy.subsession.is_none() {
+    if policy.canon_writer() {
         names.extend([
             "canon_read".into(),
             "canon_propose".into(),
