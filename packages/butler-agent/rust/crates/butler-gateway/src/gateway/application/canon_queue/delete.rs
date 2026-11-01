@@ -63,6 +63,7 @@ async fn reconcile_step(app: &AppApplication, op: String) -> Result<(), GatewayA
                 .canon_operation(AppCanonOperation::StepTurnEnded {
                     op_id: op,
                     outcome: "failed".into(),
+                    turn_id: None,
                 })
                 .await?;
         }

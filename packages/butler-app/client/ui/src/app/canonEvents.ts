@@ -17,7 +17,8 @@ export function publishCanonEvent(event: TimelineEvent): void {
     const app = useButlerStore.getState();
     if (app.view.kind === "project-dashboard" && app.view.epicId === payload.id) app.setView({ ...app.view, epicId: undefined });
   }
-  if (event.type === "stream.reconcile_required") {
+  if (event.type === "stream.reconcile_required" || event.type === "canon.queue_changed") {
+    // A queue change names only its session, and binds or unbinds that session's 과제.
     for (const listener of listeners.keys()) listener(null);
   } else if (event.type === "space.changed" || event.type === "canon.changed" || event.type === "canon.progress_changed") {
     const projectId = payload?.project_id;
@@ -27,4 +28,18 @@ export function publishCanonEvent(event: TimelineEvent): void {
       } else if (event.type === "space.changed" && options.sidebar) listener(null);
     }
   }
+}
+/**
+ * One read at a time: a change during a read runs exactly one more afterwards.
+ * A burst of events cannot queue reads that are all discarded on arrival.
+ */
+export function singleFlight(read: () => Promise<void>): () => Promise<void> {
+  let current: Promise<void> | null = null, dirty = false;
+  return () => {
+    if (current) { dirty = true; return current; }
+    current = (async () => {
+      try { do { dirty = false; await read(); } while (dirty); } finally { current = null; }
+    })();
+    return current;
+  };
 }

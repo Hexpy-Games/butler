@@ -119,7 +119,7 @@ fn held_elsewhere(
         ctx,
         &op,
         "canon_take_here",
-        &json!({"session_id":session,"epic_id":epic,"epic_title":other["title"],"other_session_id":other["session_id"],"state":"pending"}),
+        &json!({"session_id":session,"epic_id":epic,"epic_title":other["title"],"other_session_id":other["session_id"],"other_running":other["state"]=="running","state":"pending"}),
     )?;
     Ok(json!({"ok":false,"code":"held_elsewhere","other_session":other["session_id"]}))
 }

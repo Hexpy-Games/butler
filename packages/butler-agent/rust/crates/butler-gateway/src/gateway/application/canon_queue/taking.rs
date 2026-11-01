@@ -100,6 +100,7 @@ async fn stop_source(
         .canon_operation(AppCanonOperation::StepTurnEnded {
             op_id: source,
             outcome: "cancelled".into(),
+            turn_id: None,
         })
         .await?;
     Ok(())
@@ -143,6 +144,7 @@ async fn reconcile_one(app: &AppApplication, row: &Value) -> Result<(), GatewayA
             .canon_operation(AppCanonOperation::StepTurnEnded {
                 op_id: op,
                 outcome: "cancelled".into(),
+                turn_id: None,
             })
             .await?;
         return Ok(());

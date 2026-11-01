@@ -110,6 +110,7 @@ pub(in crate::gateway::application) async fn turn_ended(
     port: &Arc<dyn AppCanonPort>,
     turn: String,
 ) -> Result<(), GatewayApplicationError> {
+    let ended = turn.clone();
     let row=storage.read(move|db|db.query_row("SELECT i.source_key,t.state,t.safe_error_code FROM turns t JOIN app_initiated_messages i ON i.message_id=t.user_message_id WHERE t.id=?1 AND i.kind='canon_step' AND t.state IN ('delivered','failed','cancelled','runtime_fault')",[turn],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?))).optional().map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
     if let Some((op, state, code)) = row {
         let outcome = if code.as_deref() == Some("turn_interrupted") {
@@ -119,8 +120,12 @@ pub(in crate::gateway::application) async fn turn_ended(
         } else {
             state
         };
-        port.canon_operation(AppCanonOperation::StepTurnEnded { op_id: op, outcome })
-            .await?;
+        port.canon_operation(AppCanonOperation::StepTurnEnded {
+            op_id: op,
+            outcome,
+            turn_id: Some(ended),
+        })
+        .await?;
     }
     Ok(())
 }

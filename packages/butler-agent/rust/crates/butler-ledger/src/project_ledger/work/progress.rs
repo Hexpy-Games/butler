@@ -310,6 +310,8 @@ impl ProjectWorkRepository {
         view.current_stage = Some(command.stage);
         view.allowed_next_stages = butler_turn::btcc::allowed_next_work_stages(Some(command.stage));
         view.action_progress = command.action_progress.clone();
+        // A disposition belongs to its original material; its child remains history.
+        view.latest_disposition = None;
         view.latest_checkpoint = Some(checkpoint);
         view.updated_at = at;
         let mut revisions = codec::revisions(&current.manifest);

@@ -17,6 +17,7 @@ pub const START: &str = "UPDATE canon_session_queue SET state='running',started_
 pub const OWNER: &str =
     "SELECT * FROM canon_session_queue WHERE epic_id=?1 AND state IN ('waiting','running','held')";
 pub const DONE: &str = "UPDATE canon_session_queue SET state='done',btcc_work_id=?3,result_reported_at=?4 WHERE session_id=?1 AND epic_id=?2";
+pub const RESOLVE: &str = "UPDATE canon_session_queue SET state='done',hold_reason=NULL,btcc_work_id=?3,result_reported_at=?4 WHERE session_id=?1 AND epic_id=?2";
 pub const STEP: &str = "SELECT * FROM canon_session_queue WHERE step_op_id=?1";
 pub const FAIL: &str = "UPDATE canon_session_queue SET hold_reason=?3,question_message_id=?4 WHERE session_id=?1 AND epic_id=?2 AND decision IS NULL";
 pub const PLAN_EPICS: &str = "SELECT id FROM canon_epics WHERE plan_id=?1 AND canon_status NOT IN ('done','cancelled') ORDER BY plan_rank,id";

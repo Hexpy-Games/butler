@@ -1,3 +1,4 @@
+import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
@@ -15,9 +16,12 @@ export function useSessionSectionsModel() {
   const loadSettled = useSessionViewLoad(state => state.settled === sessionId);
   const messages = useButlerStore(state => state.messages);
   const queue = useButlerStore(state => state.sessionQueue);
-  const epic = useActiveCanonEpic();
+  const firstEpic = useActiveCanonEpic();
   const asks = usePendingAsks(sessionId);
   const order = useSessionCanonQueue(sessionId);
+  const currentStep = order.view?.chains.flatMap(chain => chain.steps).flatMap(step => step.items).find(item => item.state === "running")?.epic_id;
+  const stepEpic = useCanonSidebarState(state => state.sessions[sessionId]?.find(match => match.epic.id === currentStep));
+  const epic = stepEpic ?? firstEpic;
   const notDone = order.view?.chains.reduce((count, chain) => count + chain.steps.reduce((sum, step) => sum + step.items.filter(item => item.state !== "done").length, 0), 0) ?? 0;
   const browserTabs = useConversationAgentTabs(sessionId);
   const branch = summary?.branch_info;
