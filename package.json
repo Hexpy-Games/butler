@@ -66,6 +66,7 @@
     "app:scrollbar-gap:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/classic-scrollbar-gap-smoke.ts",
     "app:text-size:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-text-size-smoke.ts",
     "app:folder-trust:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-folder-trust-smoke.ts",
+    "app:sidebar-peek:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/sidebar-peek-toggle-smoke.ts",
     "app:focus-ring:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/focus-ring-clipping-smoke.ts",
     "app:newchat:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-newchat-visual-smoke.ts",
     "app:security-bind-error:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-security-bind-error-smoke.ts",

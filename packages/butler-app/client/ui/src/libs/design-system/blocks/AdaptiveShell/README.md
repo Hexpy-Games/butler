@@ -72,6 +72,11 @@ block. Do not use it as a generic card or nested panel.
   closes 240ms after the pointer leaves the sidebar (coming back cancels), at
   once on window blur, Escape or a press outside, and when the pointer leaves
   the document. Do not add your own `onPointerLeave` on the sidebar.
+  The window chrome toggle (`ChromeFloatingToggleLayer`, `--z-drawer`) stays
+  above the peek card and the drawer, in the room their titlebars leave free.
+  Chrome marked `data-peek-companion` (the toggle's wrapper) is part of the
+  peek's hover area: pointing at it keeps the peek open, and pressing it is not
+  a press outside.
 - A native view (Electron `WebContentsView`) hides the pointer from the DOM,
   so moving from the peeked sidebar straight onto the page sends no DOM event.
   The App forwards the host's signal; the DS stays free of Electron:
