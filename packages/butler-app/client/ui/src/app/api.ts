@@ -669,6 +669,16 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   const projectArchiveMatch = method === "POST" ? url.pathname.match(/^\/projects\/([^/]+)\/archive$/) : null;
   if (projectArchiveMatch) return await callBridge<T>(bridge, "archiveProject", { projectId: decodeURIComponent(projectArchiveMatch[1]) });
+  const folderTrustMatch = url.pathname.match(/^\/projects\/([^/]+)\/folder-trust$/);
+  if (folderTrustMatch && method === "GET") {
+    return await callBridge<T>(bridge, "getProjectFolderTrust", { projectId: decodeURIComponent(folderTrustMatch[1]) });
+  }
+  if (folderTrustMatch && method === "POST") {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "answerProjectFolderTrust", {
+      projectId: decodeURIComponent(folderTrustMatch[1]), trusted: body.trusted, hooks: body.hooks,
+    });
+  }
   const projectPinMatch = method === "POST" ? url.pathname.match(/^\/projects\/([^/]+)\/pin$/) : null;
   if (projectPinMatch) {
     return await callBridge<T>(bridge, "pinProject", {
