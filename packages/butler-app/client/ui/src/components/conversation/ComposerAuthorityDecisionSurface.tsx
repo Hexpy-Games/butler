@@ -14,9 +14,11 @@ import { ComposerBrowserHandoffSurface } from "./ComposerBrowserHandoffSurface";
 const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
   generate_image: ImageIcon, edit_image: Pencil, edit_files: Folder, run_command: Terminal, network_command: Globe2, web_request: Globe2, use_connector: McpServer,
   manage_schedule: Clock3, update_project: ListChecks, start_conversation: MessageSquarePlus,
-  restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, other: ShieldCheck,
+  restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, project_hooks: Terminal, other: ShieldCheck,
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
+
+const hookCopy = () => appCopy.interfaceTemplates.approvalRequest.projectHooks;
 
 /**
  * Display only. Every line, the title included, is the exact action: never shortened, only made
@@ -55,7 +57,10 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
       {decision.pendingCount > 1 ? <Typo.Caption>+{decision.pendingCount - 1}</Typo.Caption> : null}
     </>}
     data-test-class="composer-authority-decision"
-    actions={(complete) => <ButtonContainer size="sm" justify="end">
+    actions={(complete) => decision.actionKind === "project_hooks" ? <ButtonContainer size="sm" justify="end">
+      <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{hookCopy().deny}</Button>
+      <Button type="button" size="sm" disabled={decision.pending} onClick={() => complete(decision.onAllow)}>{hookCopy().allow}</Button>
+    </ButtonContainer> : <ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{appCopy.interfaceDetails.deny}</Button>
       <SplitButton size="sm" text={decision.allowSite ? appCopy.interfaceDetails.allowInChat : appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}
         menuLabel={appCopy.interfaceDetails.allowScope} menuSide="top"
