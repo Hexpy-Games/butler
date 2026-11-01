@@ -39,9 +39,6 @@ pub struct AuthorityLoopContinuation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub presentation: Option<GuidedPresentation>,
     pub batch: AuthorityBatch,
-    /// Parked before any model round on a project hook card; there is no batch to replay.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub project_hooks_card: bool,
     #[serde(flatten)]
     // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
@@ -68,7 +65,6 @@ impl AuthorityLoopContinuation {
             tool_results: Vec::new(),
             presentation: None,
             batch: AuthorityBatch::default(),
-            project_hooks_card: false,
             extensions: Map::new(),
         }
     }

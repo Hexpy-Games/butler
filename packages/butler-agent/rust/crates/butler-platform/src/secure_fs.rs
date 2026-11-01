@@ -492,7 +492,7 @@ pub mod fixture_links;
 #[cfg(feature = "test-support")]
 pub mod fixture_locks;
 mod path_identity;
-pub use path_identity::{directory_id, same_file, same_metadata, same_open_file};
+pub use path_identity::{same_file, same_metadata, same_open_file};
 
 /// Open a regular package file, refusing links in every relative component.
 pub fn open_package_file(root: &Path, relative: &Path) -> io::Result<File> {

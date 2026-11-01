@@ -62,25 +62,8 @@ pub(super) fn project(output: &mut serde_json::Map<String, serde_json::Value>, r
     output.insert("default_project_workspace_path".into(), json!(root));
 }
 
-/// Workspace navigation and the question about a project's folder, for the same clients
-/// as project lists.
+/// Read-only workspace navigation available to the same clients as project lists.
 pub trait GatewayProjectFolders {
-    /// The hooks of a project's folder, if nobody answered for it yet.
-    fn project_folder_question(
-        &self,
-        _project_id: String,
-    ) -> crate::gateway::ApplicationFuture<Option<butler_core::hooks::ProjectHookRequest>> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-    /// Answers that question, for the list of hooks the person saw.
-    fn answer_project_folder(
-        &self,
-        _project_id: String,
-        _hooks: Vec<butler_core::hooks::ProjectHookLine>,
-        _trusted: bool,
-    ) -> crate::gateway::ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
     fn list_project_folders(
         &self,
         _path: String,
@@ -91,22 +74,6 @@ pub trait GatewayProjectFolders {
 }
 
 impl GatewayProjectFolders for super::AppApplication {
-    fn project_folder_question(
-        &self,
-        project_id: String,
-    ) -> crate::gateway::ApplicationFuture<Option<butler_core::hooks::ProjectHookRequest>> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.project_folder_question(project_id).await })
-    }
-    fn answer_project_folder(
-        &self,
-        project_id: String,
-        hooks: Vec<butler_core::hooks::ProjectHookLine>,
-        trusted: bool,
-    ) -> crate::gateway::ApplicationFuture<()> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.answer_project_folder(project_id, hooks, trusted).await })
-    }
     fn list_project_folders(
         &self,
         path: String,

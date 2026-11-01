@@ -64,13 +64,6 @@ pub(super) async fn skipped_input(
     skipped(owner, facts, code).await;
 }
 
-impl GuidedTools {
-    /// The session that answers this turn's approvals.
-    pub(crate) fn authority_owner(&self) -> &str {
-        &self.binding.owner_session_id
-    }
-}
-
 async fn skipped(owner: &GuidedTools, facts: AuthorityAdmissionInput, code: &str) {
     let capability = facts.capability.clone();
     if let Ok(identity) = owner.authority.action_identity(&facts)
