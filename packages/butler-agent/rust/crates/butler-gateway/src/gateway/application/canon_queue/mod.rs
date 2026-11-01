@@ -78,7 +78,7 @@ async fn validate(
         return Err(public(
             403,
             "read_only",
-            "This conversation is read-only. Change its permission level to queue epics.",
+            "This conversation is read-only. Change its permission level to queue tasks.",
         ));
     }
     let resource = if args["plan_id"].is_string() {

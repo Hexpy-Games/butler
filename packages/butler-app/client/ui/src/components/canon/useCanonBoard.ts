@@ -1,8 +1,8 @@
 import { readCanonProgress } from "./canonProgressSource.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCanon, getCanonEpic, editCanonEpic, type CanonOverview, type EpicDetail, type EpicInput, type EpicProgressSnapshot } from "@/app/canonApi.ts";
-import { subscribeCanonChanges } from "@/app/canonEvents.ts";
+import { singleFlight, subscribeCanonChanges } from "@/app/canonEvents.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import { useCanonMove } from "./useCanonMove.ts";
 import { canonWriteFailure } from "./canonFeedback.ts";
@@ -20,7 +20,7 @@ export function useCanonBoard(projectId: string) {
   const mounted = useRef(true);
   selectedRef.current = selected;
   const movingRef = useRef(false);
-  const refresh = useCallback(async () => {
+  const read = useCallback(async () => {
     if (movingRef.current) return;
     const epoch = ++generation.current;
     const id = selectedRef.current;
@@ -31,6 +31,7 @@ export function useCanonBoard(projectId: string) {
       setCanon(board); setDetail(epic); setTasks(queue); setError(null);
     } catch (error) { if (mounted.current && epoch === generation.current) setError(error); }
   }, [projectId]);
+  const refresh = useMemo(() => singleFlight(read), [read]);
   const drag = useCanonMove(canon, setCanon, refresh, () => { generation.current++; }, movingRef);
   useEffect(() => {
     mounted.current = true;

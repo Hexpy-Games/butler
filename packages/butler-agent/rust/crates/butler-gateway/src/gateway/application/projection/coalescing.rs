@@ -280,6 +280,18 @@ async fn flush_session(
         context
             .storage
             .execute(move |db| {
+                // A deleted conversation's stream has nowhere to land, not even its
+                // checkpoint. Retrying it would fail every later flush.
+                let exists = db
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1)",
+                        [&chat_id],
+                        |row| row.get::<_, bool>(0),
+                    )
+                    .map_err(super::super::storage::AppStorageError::sqlite)?;
+                if !exists {
+                    return Ok(());
+                }
                 non_final::batch::run(db, |db| {
                     for delta in &deltas {
                         persist(db, &chat_id, delta, &subscribers)?;
