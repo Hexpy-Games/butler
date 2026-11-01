@@ -1,5 +1,4 @@
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
-import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { useSessionViewLoad } from "@/app/sessionViewLoad.ts";
@@ -31,7 +30,6 @@ export function useSessionSectionsModel() {
   const schedules = summary?.automation_targets ?? [];
   const subtasks = summary?.subtasks ?? [];
   const waiting = queue.filter(item => item.chat_id === sessionId && ["queued", "dispatching"].includes(item.state));
-  const running = (ACTIVE_TURN_STATES.has(summary?.turn_state ?? "") ? summary?.latest_progress?.safe_progress_rows : [])?.filter(row => ["running", "active", "thinking", "streaming", "reviewing", "waiting_for_tool"].includes(row.state ?? "")) ?? [];
   const hasArtifacts = artifacts.length > 0 || messages.some(message => message.artifacts?.length);
   const ids: string[] = [];
   // The summary's sections sit above the task: showing any section while it loads would push them down when it lands.
@@ -48,9 +46,9 @@ export function useSessionSectionsModel() {
     if (hasArtifacts) ids.push("artifacts");
     if (attachments.length > 0) ids.push("attachments");
     if (schedules.length > 0) ids.push("schedules");
-    if (running.length > 0 || waiting.length > 0) ids.push("queue");
+    if (waiting.length > 0) ids.push("queue");
   }
-  return { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting };
+  return { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, waiting };
 }
 
 export function useSessionInfoHasContent() {
