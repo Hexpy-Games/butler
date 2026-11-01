@@ -369,7 +369,7 @@ impl GuidedTurnFactoryAdapter {
             self.preparation.work.clone(),
             scope.clone(),
             policy.tracking_mode.clone(),
-            policy.role.as_str(),
+            self.preparation.subsessions.repository(),
             language,
             turn.original_message.clone(),
         )?

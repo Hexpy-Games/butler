@@ -20,6 +20,7 @@ use butler_turn::btcc::{
 
 pub(crate) struct GuidedWorkAdapter {
     service: Arc<DurableWorkService>,
+    subsessions: butler_turn::btcc::SqliteSubsessionRepository,
     scope: WorkTurnScope,
     tracking_mode: String,
     response_language: String,
@@ -32,13 +33,13 @@ impl GuidedWorkAdapter {
         service: Arc<DurableWorkService>,
         scope: WorkTurnScope,
         tracking_mode: String,
-        role: &str,
+        subsessions: butler_turn::btcc::SqliteSubsessionRepository,
         response_language: String,
         original_request: String,
     ) -> Result<Self, BtccError> {
-        let _ = role;
         Ok(Self {
             service,
+            subsessions,
             scope,
             tracking_mode,
             response_language,
@@ -55,6 +56,48 @@ impl GuidedWorkAdapter {
         self.capability_recovery =
             capability_recovery::CapabilityRecovery::new(&self.original_request, granted, journal);
         self
+    }
+
+    async fn waiting_for_child(
+        &self,
+        calls: &[ModelRoundToolCall],
+        results: &[ToolResult],
+    ) -> Result<bool, BtccError> {
+        let Some((call, result)) = calls.last().zip(results.last()) else {
+            return Ok(false);
+        };
+        if call.name != result.name {
+            return Ok(false);
+        }
+        // Fields borrow encoded JSON tokens, including quotes around strings.
+        let field = |name| {
+            result
+                .output
+                .as_ref()
+                .and_then(|output| output.field(name).ok().flatten())
+        };
+        let requested = match ToolName::parse(call.name.as_str()) {
+            Some(ToolName::WaitForWorker) => result.ok && field("status") == Some("\"waiting\""),
+            Some(ToolName::DelegateToSteward) => {
+                result.ok || field("wait_for_child") == Some("true")
+            }
+            _ => false,
+        };
+        if !requested {
+            return Ok(false);
+        }
+        let unfinished = self
+            .subsessions
+            .has_active_child(self.scope.session_id.clone())
+            .await?;
+        // Results commit with a durable outbox entry. The session's active queue
+        // claim keeps their continuation queued until this execution settles,
+        // including a child completing after this read but before suspension.
+        #[cfg(feature = "e2e-fixtures")]
+        if unfinished {
+            butler_turn::btcc::pause_for_test("child_wait_checked", &self.scope.turn_id).await;
+        }
+        Ok(unfinished)
     }
 
     async fn recovery_instruction(&self) -> Result<Option<String>, BtccError> {
@@ -188,18 +231,7 @@ impl WorkPort for GuidedWorkAdapter {
                 && results.last().is_some_and(|result| {
                     result.ok && result.name == ToolName::RecordWorkDisposition
                 });
-            let waiting = calls.last().is_some_and(|call| {
-                matches!(
-                    ToolName::parse(call.name.as_str()),
-                    Some(ToolName::DelegateToSteward | ToolName::WaitForWorker)
-                )
-            }) && results.last().is_some_and(|result| {
-                result.ok
-                    || result.output.as_ref().is_some_and(|output| {
-                        output.field("wait_for_child").ok().flatten() == Some("true")
-                    })
-            });
-            if waiting {
+            if self.waiting_for_child(calls, results).await? {
                 return Ok(BatchDisposition::Wait);
             }
             if !final_disposition {
