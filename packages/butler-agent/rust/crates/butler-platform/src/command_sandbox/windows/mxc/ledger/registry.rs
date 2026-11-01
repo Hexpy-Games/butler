@@ -46,10 +46,10 @@ fn evict() {
     }
 }
 pub(super) fn get(root: &Path, scratch: &[PathBuf]) -> io::Result<Arc<Ledger>> {
-    let canonical = fs::canonicalize(root)?;
+    let canonical = crate::secure_fs::canonicalize_extended(root)?;
     let mut roots = vec![canonical.clone()];
     for path in scratch {
-        roots.push(fs::canonicalize(path)?);
+        roots.push(crate::secure_fs::canonicalize_extended(path)?);
     }
     roots.sort();
     roots.dedup();
