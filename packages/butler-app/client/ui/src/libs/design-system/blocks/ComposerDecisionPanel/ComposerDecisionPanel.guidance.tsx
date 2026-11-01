@@ -25,7 +25,7 @@ function PlanDecision() {
 function ApprovalRequest() {
   return (
     <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} eyebrow="Permission" title="Edit 24 files in 'Desktop'?" onOpen={() => undefined}
-      details={["Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshot 10.09.02.png", "+21 more"]}
+      details={["Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshot 10.09.02.png", "+21 more"]} literal
       aside={<Tag tone="warning">Medium risk</Tag>}
       actions={<ButtonContainer size="sm" justify="end">
         <Button size="sm" variant="secondary">Deny</Button>
@@ -74,7 +74,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Plan waiting for acceptance", description: "Icon, clickable title, then a ButtonContainer justify=\"end\" of decisions.", render: () => <PlanDecision /> },
-    { name: "Approval request with examples and risk", description: "A one-sentence question, up to three examples and a \"+N more\" line as details, a risk Tag in the aside.", render: () => <ApprovalRequest /> },
+    { name: "Approval request with examples and risk", description: "A one-sentence question, up to three examples and a \"+N more\" line as details, a risk Tag in the aside; literal draws the exact characters.", render: () => <ApprovalRequest /> },
     { name: "Approval in the conversation", description: "placement=\"conversation\": its own flat Card radius=\"lg\", a 12px inset and control-radius buttons; no ComposerCard.", render: () => <ConversationApproval /> },
     { name: "Browser approval with the page", description: "media: the tab's 16:10 frame at the subject row's end; under 420px it spans the text column, cropped from the page's top to 140px. Clicking it opens the tab.", render: () => <BrowserApproval /> },
   ],
@@ -92,6 +92,7 @@ export const guidance: ShowcaseGuidance = {
     "The title names the plan, or asks what the request will do: what, where and how many (Edit 24 files in 'Desktop'?).",
     "Details are short concrete items (file names, the command line), at most three, then \"+N more\".",
     "Details show exactly what is decided: never cut a command or path; pass the Show more/less labels so a long block clamps with the full text one click away.",
+    "An approval passes literal: the title and details then draw their own characters (2876x6 stays x, -> stays two characters), never the body font's × or arrow.",
     "A complete reviewed input (memory text, schedule prompt, browser fields, MCP arguments) is a later detail line; the clamp keeps the first lines visible and Show more reveals the rest, never a silent cut.",
     "Paths in details are relative to the workspace, never absolute.",
     "Buttons are verbs (Accept plan, Deny, Allow once).",
