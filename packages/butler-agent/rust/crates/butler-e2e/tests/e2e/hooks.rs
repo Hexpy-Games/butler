@@ -389,7 +389,13 @@ async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), Harness
     butler_e2e::gate!();
     let setup = setup("HOOK-TIMEOUT")?;
     let pids = setup.sandbox.home.join("hook-pids");
-    let mut hook = json!({"id":"tree","event":"UserPromptSubmit","type":"command","args":fixture(&setup,"tree"),
+    // The Windows fixture avoids PowerShell: its cold start would be the whole 300 ms budget.
+    let tree = if command_sandbox::POSIX_SHELL {
+        "tree"
+    } else {
+        "tree-fast"
+    };
+    let mut hook = json!({"id":"tree","event":"UserPromptSubmit","type":"command","args":fixture(&setup,tree),
         "timeout_ms":300,"env":{"HOOK_PIDS":pids}});
     configure(&setup, &[hook.clone()])?;
     let s = setup.start().await?;

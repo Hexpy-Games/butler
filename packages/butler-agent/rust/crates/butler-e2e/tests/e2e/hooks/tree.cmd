@@ -1,5 +1,2 @@
 @echo off
-rem Two fast-starting children (ping), no PowerShell: its cold start would count against the hook's timeout.
-start "" /b cmd /d /c "ping -n 60 -l 1357 127.0.0.1 >nul"
-echo up> "%HOOK_PIDS%"
-ping -n 60 -l 1357 127.0.0.1 >nul
+powershell.exe -NoProfile -Command "$child = Start-Process powershell.exe -ArgumentList '-NoProfile','-Command','Start-Sleep 60' -PassThru; Set-Content -Encoding ASCII -LiteralPath $env:HOOK_PIDS -Value @($PID, $child.Id); Start-Sleep 60"
