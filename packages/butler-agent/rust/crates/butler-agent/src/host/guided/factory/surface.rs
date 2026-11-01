@@ -47,6 +47,43 @@ pub(super) fn with_worker_profile_choices(
     Ok(())
 }
 
+/// Offer the same capability choices that image input validation enforces.
+pub(super) fn with_image_model_choices(
+    phase: &mut GuidedPhaseSelection,
+    settings: Option<&serde_json::Value>,
+) {
+    let selected = settings
+        .and_then(|s| s.get("selected"))
+        .filter(|s| !s.is_null());
+    let capability = settings
+        .and_then(|s| s["models"].as_array())
+        .and_then(|models| {
+            models
+                .iter()
+                .find(|m| Some(&m["model_ref"]) == selected.map(|s| &s["model_ref"]))
+        });
+    let Some(capability) = capability else {
+        for name in ["generate_image", "edit_image"] {
+            phase.authorized_names.retain(|n| n != name);
+            phase.provider_tools.retain(|t| t["name"] != name);
+        }
+        return;
+    };
+    for tool in &mut phase.provider_tools {
+        if tool["name"] != "generate_image" && tool["name"] != "edit_image" {
+            continue;
+        }
+        for (key, choices) in [("size", "sizes"), ("quality", "qualities")] {
+            let property = &mut tool["parameters"]["properties"][key];
+            property["enum"] = capability[choices].clone();
+            property["description"] = serde_json::json!(format!(
+                "Allowed {key} values for the selected image model: {}. Omit for the default.",
+                capability[choices]
+            ));
+        }
+    }
+}
+
 pub(super) fn available(
     phase: &mut GuidedPhaseSelection,
     catalog: &GuidedCatalogSnapshot,

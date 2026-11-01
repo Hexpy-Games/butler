@@ -122,7 +122,14 @@ impl Attempt {
     }
     pub(super) fn read_error(&mut self, error: &reqwest::Error) {
         self.row.level = if self.phase.routine { "DEBUG" } else { "ERROR" }.into();
-        self.row.error = Some(json!({"message":error.to_string()}));
+        let mut causes = Vec::new();
+        let mut source = std::error::Error::source(error);
+        while let Some(cause) = source.filter(|_| causes.len() < 4) {
+            causes.push(crate::redact_log_line(&cause.to_string()));
+            source = cause.source();
+        }
+        self.row.error = Some(json!({"message":error.to_string(), "causes":causes,
+            "timeout":error.is_timeout(), "body":error.is_body(), "decode":error.is_decode()}));
     }
     pub(super) fn complete(&mut self) {
         self.row.attrs["response_complete"] = json!(true);

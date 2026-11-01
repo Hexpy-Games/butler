@@ -13,6 +13,7 @@ struct ImageState {
     requests: Mutex<Vec<ImageRequest>>,
     error: Mutex<Option<(u16, String)>>,
     png: Vec<u8>,
+    response: Mutex<Option<(Vec<u8>, bool)>>,
 }
 pub struct ImageServer {
     pub base: String,
@@ -54,6 +55,9 @@ impl ImageServer {
     pub fn bytes(&self) -> Vec<u8> {
         self.state.png.clone()
     }
+    pub fn respond(&self, bytes: Vec<u8>, truncated: bool) {
+        *lock(&self.state.response) = Some((bytes, truncated));
+    }
     pub fn fail(&self, status: u16, message: &str) {
         *lock(&self.state.error) = Some((status, message.into()));
     }
@@ -89,6 +93,22 @@ async fn image_reply(
     });
     if let Some((status, message)) = lock(&state.error).as_ref() {
         return json_response(*status, &json!({"error":{"message":message}}));
+    }
+    if let Some((bytes, truncated)) = lock(&state.response).clone() {
+        let body = if truncated {
+            let first = futures_util::stream::once(async move { Ok::<_, std::io::Error>(bytes) });
+            let failure = futures_util::stream::once(async {
+                tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+                Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof))
+            });
+            Body::from_stream(futures_util::StreamExt::chain(first, failure))
+        } else {
+            Body::from(bytes)
+        };
+        return Response::builder()
+            .header("content-type", "application/json")
+            .body(body)
+            .expect("fixture response");
     }
     let data = STANDARD.encode(&state.png);
     let body = if path.ends_with("interactions") {
