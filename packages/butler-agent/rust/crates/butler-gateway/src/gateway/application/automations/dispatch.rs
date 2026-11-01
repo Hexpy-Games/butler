@@ -64,6 +64,7 @@ impl AppApplication {
                     .summary
                     .target_session_id,
                 trigger,
+                self.dependencies.identity_clock.now_iso(),
             )
             .await?;
         let held = !matches!(hold, Hold::Free);
@@ -72,37 +73,9 @@ impl AppApplication {
         } else {
             self.pause_unopened_report(id.clone(), trigger).await?
         };
-        let started = self.dependencies.identity_clock.now_iso();
-        let run_id = format!(
-            "automation-run-{}",
-            self.dependencies.identity_clock.new_uuid()
-        );
-        let message_id = super::super::admission_identity::stable_client_id(
-            Some(&json!(format!("automation-{id}-{run_id}"))),
-            &*self.dependencies.identity_clock,
-        )?;
-        let run = run_id.clone();
-        let automation_id = id.clone();
-        let (row, queued) = self.storage.execute(move |db| {
-            let row = records::active(db, &automation_id)?;
-            if trigger == "scheduled" && row.state != "enabled" && !paused {
-                return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Schedule is not enabled."));
-            }
-            let scheduled_at = if trigger == "scheduled" { super::occurrence::latest(&row, &started)? } else { None };
-            let late = super::occurrence::is_late(scheduled_at.as_deref(), &started);
-            let busy = held || session_has_active_turn(db, &row.target_id)?;
-            db.execute(
-                "INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,scheduled_at,late) VALUES(?1,?2,?3,'running',?4,?5,?6,?7)",
-                params![run,row.id,row.target_id,trigger,started,scheduled_at,late],
-            ).map_err(AppStorageError::sqlite)?;
-            super::holds::record(db, &run, hold, &started)?;
-            // Bind the schedule input before dispatch can run any browser tools.
-            db.execute(
-                "INSERT INTO app_automation_run_inputs(message_id,run_id) VALUES(?1,?2)",
-                params![message_id, run],
-            ).map_err(AppStorageError::sqlite)?;
-            Ok((row, busy))
-        }).await.map_err(app_error)?;
+        let (row, queued, run_id) = self
+            .prepare_automation_run(id, trigger, hold, paused)
+            .await?;
         if paused || queued {
             if queued && !paused {
                 self.automation_queued
@@ -130,9 +103,75 @@ impl AppApplication {
         self.complete_fresh_run(row, run_id, trigger, result).await
     }
 
+    async fn prepare_automation_run(
+        &self,
+        id: String,
+        trigger: &'static str,
+        hold: Hold,
+        paused: bool,
+    ) -> Result<(AutomationRow, bool, String), GatewayApplicationError> {
+        let held = !matches!(hold, Hold::Free);
+        let started = self.dependencies.identity_clock.now_iso();
+        let run = format!(
+            "automation-run-{}",
+            self.dependencies.identity_clock.new_uuid()
+        );
+        let message_id = super::super::admission_identity::stable_client_id(
+            Some(&json!(format!("automation-{id}-{run}"))),
+            &*self.dependencies.identity_clock,
+        )?;
+        self.storage.execute(move |db| {
+            let row = records::active(db, &id)?;
+            if trigger == "scheduled" && row.state != "enabled" && !paused {
+                return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Schedule is not enabled."));
+            }
+            let scheduled_at = if trigger == "scheduled" { super::occurrence::latest(&row, &started)? } else { None };
+            let late = super::occurrence::is_late(scheduled_at.as_deref(), &started);
+            if trigger == "scheduled" {
+                let existing: Option<String> = db.query_row(
+                    "SELECT id FROM app_automation_runs WHERE automation_id=?1 AND target_session_id=?2 AND state='queued' AND trigger='scheduled' LIMIT 1",
+                    params![row.id, row.target_id], |r| r.get(0),
+                ).optional().map_err(AppStorageError::sqlite)?;
+                if let Some(run) = existing {
+                    db.execute(
+                        "UPDATE app_automation_runs SET scheduled_at=?1,late=?2 WHERE id=?3",
+                        params![scheduled_at, late, run],
+                    ).map_err(AppStorageError::sqlite)?;
+                    // Keep this target's queued input and destination after an edit.
+                    return Ok((row, true, run));
+                }
+            }
+            let busy = held || session_has_active_turn(db, &row.target_id)?;
+            db.execute(
+                "INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,scheduled_at,late) VALUES(?1,?2,?3,'running',?4,?5,?6,?7)",
+                params![run,row.id,row.target_id,trigger,started,scheduled_at,late],
+            ).map_err(AppStorageError::sqlite)?;
+            super::holds::record(db, &run, hold, &started)?;
+            // Bind the schedule input before dispatch can run any browser tools.
+            db.execute(
+                "INSERT INTO app_automation_run_inputs(message_id,run_id) VALUES(?1,?2)",
+                params![message_id, run],
+            ).map_err(AppStorageError::sqlite)?;
+            Ok((row, busy, run))
+        }).await.map_err(app_error)
+    }
+
     pub(crate) async fn execute_due_automations(
         &self,
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
+        let mut runs = Vec::new();
+        // One cutoff for due occurrences and release gates: crossing a hold's
+        // end between passes must not release a run before its occurrence merges.
+        let now = self.dependencies.identity_clock.now_iso();
+        let due_at = now.clone();
+        let due = self
+            .storage
+            .read(move |db| records::due(db, &due_at))
+            .await
+            .map_err(app_error)?;
+        for row in due {
+            runs.push(self.execute_automation(row.id, "scheduled").await?.run);
+        }
         let queued = self
             .storage
             .read(records::queued)
@@ -140,19 +179,18 @@ impl AppApplication {
             .map_err(app_error)?;
         self.automation_queued
             .store(!queued.is_empty(), std::sync::atomic::Ordering::Release);
-        let mut runs = Vec::new();
         let mut still_queued = false;
         let batch_full = queued.len() == 20;
         let mut dispatched_queued = 0;
         for row in queued {
             let hold = self
-                .automation_hold(row.run_target_id.clone(), &row.trigger)
+                .automation_hold(row.run_target_id.clone(), &row.trigger, now.clone())
                 .await?;
             let held = !matches!(hold, Hold::Free);
             let run = row.run_id.clone();
-            let now = self.dependencies.identity_clock.now_iso();
+            let held_at = now.clone();
             self.storage
-                .execute(move |db| super::holds::record(db, &run, hold, &now))
+                .execute(move |db| super::holds::record(db, &run, hold, &held_at))
                 .await
                 .map_err(app_error)?;
             if held {
@@ -168,15 +206,6 @@ impl AppApplication {
         );
         if batch_full && dispatched_queued > 0 {
             self.automation_wake.notify_one();
-        }
-        let now = self.dependencies.identity_clock.now_iso();
-        let due = self
-            .storage
-            .read(move |db| records::due(db, &now))
-            .await
-            .map_err(app_error)?;
-        for row in due {
-            runs.push(self.execute_automation(row.id, "scheduled").await?.run);
         }
         Ok(AutomationRunListView { runs })
     }

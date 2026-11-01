@@ -282,8 +282,24 @@ pub(super) fn commit(
     })
 }
 
+/// Whether the target's folder still resolves to where the path guard admitted it,
+/// so a parent swapped since cannot carry the write somewhere else.
+fn parent_moved(path: &GuardedPath) -> bool {
+    match (path.absolute.parent(), path.real.parent()) {
+        (Some(parent), Some(admitted)) => parent.canonical().map_or(true, |current| {
+            secure_fs::path_key(&current) != secure_fs::path_key(admitted)
+        }),
+        _ => true,
+    }
+}
+
 fn verify_unchanged(prepared: &Prepared) -> Result<(), MutationFailure> {
     let path = prepared.before.path.public.clone();
+    if parent_moved(&prepared.before.path) {
+        let mut conflict = failure::new(Some(path), "external_change_conflict");
+        conflict.before_sha256 = prepared.before.sha256.clone();
+        return Err(conflict);
+    }
     let current = observe(
         GuardedPath {
             read_scope: prepared.before.path.read_scope.clone(),

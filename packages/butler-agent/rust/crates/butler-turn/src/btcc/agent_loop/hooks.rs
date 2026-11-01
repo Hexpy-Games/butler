@@ -26,12 +26,15 @@ async fn emit(
         access_mode: Some(binding.access_mode.clone()),
         payload,
     };
-    binding
+    let dispatched = binding
         .port
         .dispatch(envelope, input.cancellation.child_token())
         .await
-        .ok()
-        .and_then(|dispatched| dispatched.deny)
+        .ok()?;
+    if dispatched.project_denied {
+        policy.project_hook_spoke();
+    }
+    dispatched.deny
 }
 fn tool_payload(
     policy: &dyn GuidedPolicyPort,

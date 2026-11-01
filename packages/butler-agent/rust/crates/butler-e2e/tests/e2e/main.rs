@@ -177,6 +177,7 @@ mod sandbox_installation;
 mod schedule_calendar;
 mod schedule_chat;
 mod schedule_model;
+mod schedule_replay_after_hold;
 mod schedule_sleep_wake;
 mod schedule_store;
 mod schedule_wake_catchup;
