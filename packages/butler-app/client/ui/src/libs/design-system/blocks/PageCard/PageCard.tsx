@@ -36,7 +36,7 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   viewport?: NativeViewViewport;
   /** Where the native view goes, with the card's inner corner radius. */
   onBoundsChange: (bounds: PageCardBounds) => void;
-  onOcclusion?: (occluded: boolean) => void;
+  onOcclusion?: (occluded: boolean) => void | Promise<unknown>;
   /** No native view (no tab, crashed, a DOM page): `children` show instead. */
   hidden?: boolean;
   covered?: boolean;
