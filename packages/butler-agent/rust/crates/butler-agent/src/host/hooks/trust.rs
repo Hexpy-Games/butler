@@ -3,7 +3,7 @@
 //! write. An answer covers one folder: a replaced or renamed one asks again, and a
 //! store that cannot be read holds no answers, so it asks again too.
 use super::Hooks;
-use butler_core::hooks::ProjectHookRequest;
+use butler_core::hooks::{ProjectHookAnswer, ProjectHookRequest};
 use butler_platform::secure_fs;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -82,6 +82,38 @@ pub(super) async fn decide(
                 trusted,
             },
         );
+        write(&data, &store)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())
+}
+
+/// Every saved answer, by path.
+pub(super) async fn list(hooks: &Arc<Hooks>) -> Result<Vec<ProjectHookAnswer>, String> {
+    let data = hooks.data.clone();
+    let store = tokio::task::spawn_blocking(move || read(&data))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(store
+        .projects
+        .into_iter()
+        .map(|(path, answer)| ProjectHookAnswer {
+            path,
+            run: answer.trusted,
+        })
+        .collect())
+}
+
+/// Forgets the answer about the folder at `path`; there being none is no error.
+pub(super) async fn clear(hooks: &Arc<Hooks>, path: String) -> Result<(), String> {
+    let _writer = hooks.trust_writer.lock().await;
+    let data = hooks.data.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut store = read(&data);
+        if store.projects.remove(&path).is_none() {
+            return Ok(());
+        }
         write(&data, &store)
     })
     .await

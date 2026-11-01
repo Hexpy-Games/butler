@@ -6,6 +6,7 @@ import { Button, CardList, Dialog, DialogContent, DialogHeader, DialogTitle, Plu
 import { confirmAction } from "@/app/confirmation.ts";
 import { HookRow } from "./HookRow";
 import { HookRuns } from "./HookRuns";
+import { HookAnswers } from "./HookAnswers";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { HookForm } from "./HookForm";
 import { emptyHook, type HookDefinition, type HookRun, type HookSettings } from "./hooksTypes";
@@ -68,6 +69,7 @@ export function HooksSettings() {
           onSave={(hook) => void save(hooks.some((h) => h.id === hook.id) ? hooks.map((h) => h.id === hook.id ? hook : h) : [...hooks, hook])} /> : null}
       </DialogContent>
     </Dialog>
+    <HookAnswers />
     <SettingsSection id="hook-runs" kind="list" title={copy.recent} state={runs.length ? "ready" : "empty"}
       emptyMessage={copy.emptyRuns} actions={<Button size="sm" disabled={busy} onClick={() => void refresh()}>{copy.refresh}</Button>}>
       <HookRuns runs={runs} />

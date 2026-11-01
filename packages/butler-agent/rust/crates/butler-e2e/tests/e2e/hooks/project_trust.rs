@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 #[path = "project_trust/added_text.rs"]
 mod added_text;
+#[path = "project_trust/answers.rs"]
+mod answers;
 #[path = "project_trust/at_add.rs"]
 mod at_add;
 #[path = "project_trust/boundary.rs"]

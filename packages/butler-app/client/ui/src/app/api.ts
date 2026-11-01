@@ -448,6 +448,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "GET" && url.pathname === "/hooks") return unwrapBridgeResult<T>(await callBridge(bridge, "getHooks"));
   if (method === "GET" && url.pathname === "/hooks/runs") return unwrapBridgeResult<T>(await callBridge(bridge, "getHookRuns"));
+  if (method === "GET" && url.pathname === "/hooks/project-answers") return unwrapBridgeResult<T>(await callBridge(bridge, "getHookAnswers"));
+  if (method === "POST" && url.pathname === "/hooks/project-answers/clear") {
+    return unwrapBridgeResult<T>(await callBridge(bridge, "clearHookAnswer", { path: parseBody(options.body).path }));
+  }
   if (method === "PUT" && url.pathname === "/hooks") return unwrapBridgeResult<T>(await callBridge(bridge, "saveHooks", parseBody(options.body)));
   const hookTest = method === "POST" ? url.pathname.match(/^\/hooks\/([a-z0-9_-]+)\/test$/iu) : null;
   if (hookTest) return unwrapBridgeResult<T>(await callBridge(bridge, "testHook", { hookId: hookTest[1] }));

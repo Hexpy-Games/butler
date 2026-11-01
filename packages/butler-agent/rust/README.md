@@ -217,7 +217,8 @@ After you say to run them, the folder's hooks run, including ones added or chang
 further question. If the file changed while the question waited, the answer saves
 nothing and a new card lists what is there now. If you don't, nothing from that file
 runs, whatever it says later.
-The answer covers that folder: a replaced or renamed one asks again. Answers are kept
+The answer covers that folder: a replaced or renamed one asks again, and clearing it in
+Settings › Hooks brings the question back. Answers are kept
 in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write. A
 scheduled run has nobody to answer, so without an answer its hooks do not run and the
 run continues.

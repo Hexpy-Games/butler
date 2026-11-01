@@ -27,6 +27,8 @@ const SECURITY_ROUTES = Object.freeze({
   getHooks: { method: "GET", path: "/hooks" },
   saveHooks: { method: "PUT", path: "/hooks" },
   getHookRuns: { method: "GET", path: "/hooks/runs" },
+  getHookAnswers: { method: "GET", path: "/hooks/project-answers" },
+  clearHookAnswer: { method: "POST", path: "/hooks/project-answers/clear", payload: true },
   testHook: { method: "POST", path: "/hooks", hook: true },
   listOauthCredentials: { method: "GET", path: "/security/oauth" },
   removeOauthCredential: { method: "DELETE", path: "/security/oauth", credential: true },

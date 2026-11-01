@@ -4,6 +4,11 @@ use butler_core::hooks::HookConfig;
 use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ClearAnswer {
+    path: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Save {
     revision: u64,
     config: HookConfig,
@@ -34,6 +39,20 @@ pub(super) async fn route(
                     .map_err(|e| failure(&e))?,
             )
             .map_err(|_| HttpError::invalid_json())?
+        }
+        (Method::GET, "/hooks/project-answers") => {
+            serde_json::to_value(port.project_answers().await.map_err(|e| failure(&e))?)
+                .map_err(|_| HttpError::invalid_json())?
+        }
+        (Method::POST, "/hooks/project-answers/clear") => {
+            let bytes = read_body_with_limit(request.into_body(), 64 * 1024).await?;
+            let input: ClearAnswer =
+                serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+            port.clear_project_answer(input.path)
+                .await
+                .map_err(|e| failure(&e))?;
+            serde_json::to_value(port.project_answers().await.map_err(|e| failure(&e))?)
+                .map_err(|_| HttpError::invalid_json())?
         }
         (Method::GET, "/hooks/runs") => {
             serde_json::to_value(port.runs()).map_err(|_| HttpError::invalid_json())?

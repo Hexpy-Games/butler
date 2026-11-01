@@ -42,6 +42,15 @@ impl ProjectHookRequest {
     }
 }
 
+/// The user's saved answer about one project folder's hooks.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectHookAnswer {
+    /// The folder's resolved path.
+    pub path: String,
+    /// Whether its hooks run.
+    pub run: bool,
+}
+
 /// What a project folder's hooks mean right now.
 pub enum ProjectHookReview {
     /// This folder has no hook that could run.

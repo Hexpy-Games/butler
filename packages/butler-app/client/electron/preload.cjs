@@ -1302,6 +1302,8 @@ const butlerApp = Object.freeze({
   getHooks: () => requestSecurity("getHooks"),
   saveHooks: (body) => requestSecurity("saveHooks", body),
   getHookRuns: () => requestSecurity("getHookRuns"),
+  getHookAnswers: () => requestSecurity("getHookAnswers"),
+  clearHookAnswer: ({ path } = {}) => requestSecurity("clearHookAnswer", { payload: { path: String(path ?? "") } }),
   testHook: (body) => requestSecurity("testHook", body),
   listMcpServers: () => requestBridgeResult("/mcp-servers"),
   listMcpCapabilities: () => requestJson("/mcp-capabilities"),

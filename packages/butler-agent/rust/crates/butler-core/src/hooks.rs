@@ -7,8 +7,8 @@ pub use config::{HookConfig, HookDefinition, HookMatcher};
 pub use context::{HookContext, HookDispatched};
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
 pub use project::{
-    PROJECT_HOOK_FILE, PROJECT_HOOK_ID_PREFIX, PROJECT_HOOKS_CAPABILITY, ProjectHookLine,
-    ProjectHookRequest, ProjectHookReview,
+    PROJECT_HOOK_FILE, PROJECT_HOOK_ID_PREFIX, PROJECT_HOOKS_CAPABILITY, ProjectHookAnswer,
+    ProjectHookLine, ProjectHookRequest, ProjectHookReview,
 };
 use serde::{Deserialize, Serialize};
 use std::{future::Future, pin::Pin};
@@ -88,6 +88,15 @@ pub trait HookPort: Send + Sync {
     }
     /// Remembers the user's answer for exactly this content.
     fn decide_project(&self, _request: ProjectHookRequest, _allowed: bool) -> HookFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+    /// The saved answers about project folders, by path.
+    fn project_answers(&self) -> HookFuture<'_, Vec<ProjectHookAnswer>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    /// Forgets the answer about the folder at `path`, so its question comes back.
+    /// Clearing only ever removes: it can never trust a folder.
+    fn clear_project_answer(&self, _path: String) -> HookFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
     /// Keeps a SessionStart that could not run yet because its hooks wait for an answer.

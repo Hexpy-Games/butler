@@ -1318,6 +1318,7 @@ export interface AppCopy {
     archiveErrors: { remove: string; restore: string; loadMore: string; };
     localModelErrors: { discover: string; register: string; };
     hooks: { add: string; edit: string; test: string; remove: string; recent: string; empty: string;
+      folders: string; foldersEmpty: string; folderRuns: string; folderDoesNotRun: string; clearAnswer: string; answerCleared: string;
       name: string; event: string; tools: string; command: string; args: string; timeout: string;
       failClosed: string; async: string; enabled: string; refresh: string; blocked: string; editTitle: string; disabled: string; emptyRuns: string; testSuccess: string; testFailure: string;
       exitCode: string; commandDisabled: string; commandRequired: string; deleteConfirm: (name: string) => string; };

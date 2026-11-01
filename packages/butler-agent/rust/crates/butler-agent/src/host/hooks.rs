@@ -181,6 +181,12 @@ impl HookPort for Dispatcher {
     fn decide_project(&self, request: ProjectHookRequest, allowed: bool) -> HookFuture<'_, ()> {
         Box::pin(project::decide(&self.0, request, allowed))
     }
+    fn project_answers(&self) -> HookFuture<'_, Vec<ProjectHookAnswer>> {
+        Box::pin(trust::list(&self.0))
+    }
+    fn clear_project_answer(&self, path: String) -> HookFuture<'_, ()> {
+        Box::pin(trust::clear(&self.0, path))
+    }
     fn hold_session_start(&self, envelope: HookEnvelope) {
         if let Some(session) = envelope.session_id.clone() {
             let mut held = self.0.held_starts.lock();

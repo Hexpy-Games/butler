@@ -41,7 +41,7 @@ try {
       if (request.method() === "PUT") { hooks = request.postDataJSON().config.hooks; revision += 1; }
       if (path.endsWith("/test")) runs.push({ time: "2026-10-06T09:00:00Z", hook_id: "test", event: "UserPromptSubmit", session_id: null,
         outcome, duration_ms: outcome === "continue" ? 4 : 31, exit_code: outcome === "continue" ? 0 : 1, stdout: "test output", stderr: "", reason: null });
-      await route.fulfill({ json: { data: path.endsWith("/runs") ? runs : path.endsWith("/test") ? runs.at(-1) : { revision, config: { version: 1, hooks }, error: null } } });
+      await route.fulfill({ json: { data: path.endsWith("/project-answers") ? [] : path.endsWith("/runs") ? runs : path.endsWith("/test") ? runs.at(-1) : { revision, config: { version: 1, hooks }, error: null } } });
     });
     await page.goto(`http://127.0.0.1:${server.port}/?visual=components&locale=${locale}&theme=${theme}`);
     await page.locator('[data-test-class~="visual-harness"]').waitFor();
