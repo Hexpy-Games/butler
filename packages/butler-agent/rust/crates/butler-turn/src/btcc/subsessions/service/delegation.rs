@@ -63,6 +63,24 @@ fn short_digest(input: &str, len: usize) -> String {
         .map_or_else(|| digest.clone(), str::to_owned)
 }
 
+/// The mutation that starts a delegation's first Work.
+pub(super) fn root_mutation(delegation: &str, task: &str, session: &str) -> String {
+    format!("subsession-root-work:{delegation}:{task}:{session}")
+}
+
+/// The mutation that starts the Work a direction's turn runs on.
+pub(super) fn continuation_mutation(delegation: &str, turn: &str) -> String {
+    format!("subsession-continuation-work:{delegation}:{turn}")
+}
+
+/// The Work id `start_work` assigns to a mutation call.
+pub(super) fn work_id_of_call(call: &str) -> String {
+    format!(
+        "guided-work-{}",
+        crate::btcc::digest_identity(&format!("btcc-guided-work.v1\0work\0{call}"))
+    )
+}
+
 /// The ids derived from a delegation id.
 pub(super) struct DelegationIds {
     pub(super) delegation_id: String,
@@ -101,12 +119,8 @@ impl DelegationIds {
             naming.turn_prefix,
             short_digest(&format!("{}\0{relation_id}", naming.turn), 32)
         );
-        let mutation_call_id =
-            format!("subsession-root-work:{delegation_id}:{task_id}:{child_session_id}");
-        let root_work_id = format!(
-            "guided-work-{}",
-            crate::btcc::digest_identity(&format!("btcc-guided-work.v1\0work\0{mutation_call_id}"))
-        );
+        let root_work_id =
+            work_id_of_call(&root_mutation(&delegation_id, &task_id, &child_session_id));
         Self {
             delegation_id,
             relation_id,

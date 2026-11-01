@@ -122,9 +122,11 @@ impl AppApplication {
         &self,
     ) -> Result<Option<String>, GatewayApplicationError> {
         let mut rows = self.storage.read(held).await.map_err(app_error)?;
-        let queued = self.storage.read(|db| db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM app_automation_runs WHERE state='queued' AND trigger='scheduled' AND target_session_id='general')",
-            [], |r| r.get::<_,bool>(0)).map_err(AppStorageError::sqlite)).await.map_err(app_error)?;
+        let queued = self
+            .storage
+            .read(super::super::automations::records::has_queued_general)
+            .await
+            .map_err(app_error)?;
         if queued {
             rows.push(Entry {
                 id: String::new(),

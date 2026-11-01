@@ -111,6 +111,7 @@ pub trait ContextPort: Send + Sync {
     fn steering<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>>;
 
     /// Starts the turn's context projection under its continuation budget.
@@ -127,6 +128,7 @@ pub trait TurnSteeringPort: Send + Sync {
     fn observe<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>>;
 }
 

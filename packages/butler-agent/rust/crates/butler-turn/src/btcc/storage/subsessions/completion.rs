@@ -105,6 +105,9 @@ impl SqliteSubsessionRepository {
             let input = serde_json::to_string(&input).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
             tx.execute("INSERT OR IGNORE INTO btcc_subsession_outbox (outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",params![format!("outbox-{result_id}"),delegation.relation_id,result_id,delegation.parent_session_id,delegation.parent_turn_id,format!("subsession-result-message:{result_id}"),input,now]).map_err(StorageError::sqlite)?;
             super::directions::settle_continued_direction(&tx, &delegation.relation_id, &child_turn, &now)?;
+            if packet.child_role == ChildRole::Steward && status == "cancelled" {
+                super::directions::retire_with_stop(&tx, &delegation.relation_id, &child_turn, &now)?;
+            }
             if packet.child_role == ChildRole::Worker {
                 tx.execute(super::worker_admission::COMPLETE_WORKER_SQL, params![delegation.relation_id]).map_err(StorageError::sqlite)?;
             }

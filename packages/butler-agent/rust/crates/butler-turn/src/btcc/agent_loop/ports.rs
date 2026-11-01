@@ -212,6 +212,7 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
     fn before_model_round<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>>;
 
     fn resolve_tools<'a>(

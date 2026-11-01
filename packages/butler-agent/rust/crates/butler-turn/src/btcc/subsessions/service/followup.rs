@@ -67,12 +67,59 @@ impl SubsessionService {
     /// The full prior delegation context of `child_session`'s own packet; its
     /// input shows only an excerpt.
     pub async fn prior_delegation(&self, child_session: &str) -> Result<Option<String>, BtccError> {
-        Ok(self
+        let Some(relation) = self
             .repository
             .by_child(child_session.into())
             .await
             .map_err(BtccError::from)?
-            .and_then(|relation| relation.packet.prior_context))
+        else {
+            return Ok(None);
+        };
+        // A direction's new Work has this child's own first result behind it.
+        let first_work = super::delegation::work_id_of_call(&super::delegation::root_mutation(
+            &relation.delegation_id,
+            &relation.task_id,
+            child_session,
+        ));
+        if relation.packet.child_role == crate::btcc::ChildRole::Steward
+            && relation.root_work_id != first_work
+        {
+            return Ok(Some(self.prior_context(&relation).await?.to_string()));
+        }
+        Ok(relation.packet.prior_context)
+    }
+
+    /// The message of a direction's own turn. A Steward's closed Work stays
+    /// closed, so its direction runs on a new Work and carries the prior result.
+    pub(super) async fn direction_message(
+        &self,
+        relation: &StoredSubsessionDelegation,
+        instruction: &str,
+    ) -> Result<String, BtccError> {
+        if !self.outlived_its_work(relation).await? {
+            return Ok(super::direction_text(instruction));
+        }
+        let prior = self.prior_context(relation).await?.to_string();
+        Ok(super::helpers::closed_work_direction_text(
+            instruction,
+            &prior,
+        ))
+    }
+
+    /// Whether this Steward's root Work has closed.
+    async fn outlived_its_work(
+        &self,
+        relation: &StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        Ok(
+            relation.packet.child_role == crate::btcc::ChildRole::Steward
+                && self
+                    .repository
+                    .open_relation_by_work(relation.root_work_id.clone())
+                    .await
+                    .map_err(BtccError::from)?
+                    .is_none(),
+        )
     }
 
     /// One indexed current snapshot, not a transcript or parent-history scan.

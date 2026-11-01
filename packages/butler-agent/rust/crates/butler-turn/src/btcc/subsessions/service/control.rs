@@ -5,7 +5,7 @@ use crate::btcc::storage::SubsessionDispatchState;
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
-use super::{SubsessionService, direction_text, error};
+use super::{SubsessionService, error};
 use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
@@ -64,6 +64,20 @@ impl SubsessionService {
             .has_turn_result(child_session.to_owned(), turn)
             .await
             .map_err(BtccError::from)?)
+    }
+
+    /// Whether a direction is still waiting for or running on this child.
+    pub(super) async fn steward_continuing(
+        &self,
+        relation: &StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        Ok(self
+            .repository
+            .pending_direction(relation.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?
+            .is_some()
+            || self.child_turn_running(&relation.child_session_id).await?)
     }
 
     /// Enqueues the child's pending direction once its latest turn has ended.
@@ -312,8 +326,15 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .is_some()
+            && !self.child_turn_running(&relation.child_session_id).await?
         {
-            return Err(error(BtccCode::ActiveStewardRelationNotFound));
+            // Nothing runs yet: stopping retires the directions still waiting.
+            return self
+                .repository
+                .retire_pending_directions(relation.relation_id.clone(), (self.now)())
+                .await
+                .map_err(BtccError::from)?
+                .ok_or_else(|| error(BtccCode::ActiveStewardRelationNotFound));
         }
         Ok(self
             .repository
@@ -431,12 +452,15 @@ impl SubsessionService {
         let schedule_run = self
             .instruction_run_context(&relation.child_session_id)
             .await?;
+        let text = self
+            .direction_message(relation, &direction.instruction)
+            .await?;
         self.enqueue_child(super::SubsessionEnqueue {
             envelope: json!({
             "eventId":format!("subsession-direction:{}",direction.instruction_id),"transport":"app","accountId":"local",
             "peer":{"kind":"dm","id":relation.child_session_id,"parentId":relation.parent_session_id},
             "sender":{"id":if role=="worker"{"steward-worker-direction"}else{"butler-steward-direction"},"displayName":if role=="worker"{"Steward"}else{"Butler"}},
-            "message":{"id":format!("subsession-direction-message:{}",direction.instruction_id),"text":direction_text(&direction.instruction),"timestamp":direction.created_at},
+            "message":{"id":format!("subsession-direction-message:{}",direction.instruction_id),"text":text,"timestamp":direction.created_at},
             "routingHints":{"sessionId":relation.child_session_id,"turnId":turn_id},
             "nativeStewardContext":{"version":1,"role":role,"scheduleRun":schedule_run,"projectName":child.project_id.unwrap_or_default(),"workspacePath":child.workspace_path,"modelRef":child.model_ref,"reasoningEffort":child.metadata.as_ref().and_then(|m|m.get("reasoning_effort")).and_then(Value::as_str).unwrap_or("")},
             "raw":{"source":"btcc-subsession-direction","instruction_id":direction.instruction_id}

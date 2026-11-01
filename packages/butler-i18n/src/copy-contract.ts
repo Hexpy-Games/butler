@@ -1315,7 +1315,7 @@ export interface AppCopy {
   settings: {
     mcpErrors: { save: string; notFound: string; unavailable: string; remove: string; toggle: string; probe: string; };
     skillErrors: { invalid: string; tooLarge: string; import: string; };
-    archiveErrors: { restore: string; loadMore: string; };
+    archiveErrors: { remove: string; restore: string; loadMore: string; };
     localModelErrors: { discover: string; register: string; };
     hooks: { add: string; edit: string; test: string; remove: string; recent: string; empty: string;
       name: string; event: string; tools: string; command: string; args: string; timeout: string;
