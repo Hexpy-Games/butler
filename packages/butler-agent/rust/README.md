@@ -120,8 +120,8 @@ change nothing else. Each is off unless set to `1`.
 
 Settings → Hooks manages `$BUTLER_DATA/hooks.json`. No hooks are installed by
 default. Hooks run with your privileges and receive full prompt and tool content.
-They cannot grant permission or change tool inputs. Project and plugin hooks are
-not supported yet.
+They cannot grant permission or change tool inputs. Project-folder hooks are not
+supported yet.
 
 ```json
 {
