@@ -57,7 +57,7 @@ pub(crate) fn watch(
 ) -> Result<ModuleWatcher, GatewayApplicationError> {
     // FSEvents reports resolved paths, so match against the canonical root.
     let root = std::fs::create_dir_all(root)
-        .and_then(|()| std::fs::canonicalize(root))
+        .and_then(|()| butler_platform::secure_fs::canonicalize(root))
         .map_err(GatewayApplicationError::internal_from)?;
     let (sender, receiver) = channel(PENDING);
     let overflow = Arc::new(AtomicBool::new(false));

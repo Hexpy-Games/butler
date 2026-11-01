@@ -9,6 +9,7 @@ use butler_memory::{
         CoordinationResult,
     },
 };
+use butler_platform::secure_fs::Canonical;
 use butler_turn::conversation::CanonicalMemoryReadBinding;
 use serde_json::{Value, json};
 use std::{
@@ -76,11 +77,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ancestors()
         .nth(5)
         .ok_or("worktree root unavailable")?
-        .canonicalize()?;
+        .canonical()?;
     if output
         .parent()
         .ok_or("output needs parent")?
-        .canonicalize()?
+        .canonical()?
         .starts_with(worktree)
     {
         return Err("private output must be outside the worktree".into());

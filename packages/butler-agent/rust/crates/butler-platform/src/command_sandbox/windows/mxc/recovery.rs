@@ -103,8 +103,8 @@ fn reconcile_policy(
     {
         return Ok(());
     }
-    if let Ok(scratch) = dunce::canonicalize(&payload.scratch)
-        && scratch.parent() == Some(dunce::canonicalize(scratch_root)?.as_path())
+    if let Ok(scratch) = crate::secure_fs::canonicalize(&payload.scratch)
+        && scratch.parent() == Some(crate::secure_fs::canonicalize(scratch_root)?.as_path())
     {
         ignore_missing(fs::remove_dir_all(scratch))?;
     }
