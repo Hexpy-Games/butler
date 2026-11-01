@@ -31,9 +31,6 @@ pub enum EffectFileError {
         #[source]
         source: Option<Arc<dyn std::error::Error + Send + Sync>>,
     },
-    /// The target is one of Butler's own credential stores.
-    #[error("{} {}", super::path_messages::CREDENTIAL_STORE.0, super::path_messages::CREDENTIAL_STORE.1)]
-    CredentialStore,
     /// The mutation guard rejected the target; `reason` is the guard's wire code.
     #[error("write_file target does not identify an accessible regular file.")]
     OutsideBoundary { reason: &'static str },
@@ -71,7 +68,6 @@ impl EffectFileError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::ContainmentUnavailable { .. } => "workspace_target_unavailable",
-            Self::CredentialStore => "credential_store_blocked",
             Self::OutsideBoundary { reason } => reason,
             Self::EditTargetUnobservable { .. } | Self::WriteTargetUnobservable { .. } => {
                 "workspace_target_observation_failed"
@@ -146,11 +142,7 @@ pub async fn guard_effect_file(
         })
         .map_err(EffectFileError::containment)?;
         if let Some(reason) = guarded.reason {
-            return Err(if reason == "credential_store_blocked" {
-                EffectFileError::CredentialStore
-            } else {
-                EffectFileError::OutsideBoundary { reason }
-            });
+            return Err(EffectFileError::OutsideBoundary { reason });
         }
         let identity = guarded.real.clone().or_else(|| guarded.absolute.clone());
         match (guarded.absolute, identity) {

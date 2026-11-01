@@ -26,12 +26,6 @@ pub(super) fn io_reason(error: &std::io::Error) -> &'static str {
     }
 }
 
-/// What a file tool says about Butler's own credential stores, and what to do instead.
-pub(super) const CREDENTIAL_STORE: (&str, &str) = (
-    "Butler's own credential stores can't be changed with file tools.",
-    "Ask the user to change this in Settings, or to edit the file themselves.",
-);
-
 pub(super) fn explanation(reason: &str) -> (&'static str, &'static str) {
     match reason {
         "safety_refused" => (
@@ -61,11 +55,6 @@ pub(super) fn explanation(reason: &str) -> (&'static str, &'static str) {
         "sensitive_path_blocked" => (
             "The requested path contains sensitive or credential files.",
             "Choose a non-sensitive path.",
-        ),
-        "credential_store_blocked" => CREDENTIAL_STORE,
-        "program_directory_read_only" => (
-            "Butler's program folder is read-only.",
-            "Choose a path outside Butler's installation.",
         ),
         "protected_path" => (
             "Project Ledger paths require dedicated tools.",

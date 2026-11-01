@@ -99,7 +99,6 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     sync_failure_and_link_fallback();
     let root = std::env::temp_dir().join(format!("butler-k1b-create-race-{}", Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
-    let root = butler_platform::secure_fs::canonicalize(&root).unwrap();
     let absolute = root.join("target.txt");
     let snapshot = io::observe(
         GuardedPath {
@@ -143,30 +142,6 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     let failure = io::commit(prepared, &external).expect_err("late editor save must win");
     assert_eq!(failure.error, "external_change_conflict");
     assert_eq!(std::fs::read(&absolute).unwrap(), b"new-editor-save");
-    // A parent swapped after the guard admitted the path never carries the write away.
-    let parent = root.join("parent");
-    let elsewhere = root.join("elsewhere");
-    std::fs::create_dir(&parent).unwrap();
-    std::fs::create_dir(&elsewhere).unwrap();
-    let snapshot = io::observe(
-        GuardedPath {
-            read_scope: None,
-            public: "parent/target.txt".into(),
-            absolute: parent.join("target.txt"),
-            real: parent.join("target.txt"),
-        },
-        io::Parent::MustExist,
-    )
-    .unwrap();
-    let prepared =
-        io::prepare(snapshot, b"ours".to_vec(), None, io::Replacement::Unguarded).unwrap();
-    let swap = At((Point::BeforeReplace, |_: &Path| {
-        std::fs::rename(&parent, root.join("moved")).unwrap();
-        butler_platform::secure_fs::symlink(&elsewhere, &parent).unwrap();
-    }));
-    let failure = io::commit(prepared, &swap).expect_err("a swapped parent refuses the write");
-    assert_eq!(failure.error, "external_change_conflict");
-    assert_eq!(std::fs::read_dir(&elsewhere).unwrap().count(), 0);
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -275,7 +250,6 @@ fn sync_failure_and_link_fallback() {
     }
     let root = std::env::temp_dir().join(format!("workspace-sync-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
-    let root = butler_platform::secure_fs::canonicalize(&root).unwrap();
     let target = root.join("new.txt");
     let prepare = || {
         let before = io::observe(

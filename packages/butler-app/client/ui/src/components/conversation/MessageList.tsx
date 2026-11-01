@@ -34,8 +34,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
   const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
   const queue = useQueuedConversation(visibleMessages, activeChatId);
   const request = useConversationRequest();
-  // A request asked before Butler wrote anything belongs in its own row, not inside the user's bubble.
-  const anchored = request?.active && visibleMessages.some(message => message.id === request.sourceMessageId && message.role !== "user");
+  const anchored = request?.active && visibleMessages.some(message => message.id === request.sourceMessageId);
   const requestIndex = messageItemCount + queue.items.length;
   const intro = useChatsIntroVisible();
   const introIndex = requestIndex + (request?.active && !anchored ? 1 : 0);

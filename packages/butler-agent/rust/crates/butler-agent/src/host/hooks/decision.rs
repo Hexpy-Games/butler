@@ -89,14 +89,6 @@ pub(super) fn added_context(raw: &str) -> Option<String> {
     let text = text.trim();
     (!text.is_empty()).then(|| text.to_owned())
 }
-/// Only the explicit `additionalContext` of a decision, for hooks whose plain output
-/// must not reach the model by accident.
-pub(super) fn explicit_context(raw: &str) -> Option<String> {
-    let decision = serde_json::from_str::<Decision>(raw.trim()).ok()?;
-    let context = decision.specific?.context?;
-    let text = context.trim();
-    (!text.is_empty()).then(|| text.to_owned())
-}
 /// Whether stdout looked like a decision but could only be read as text. A
 /// broken guard hook looks like this, so the run log says it.
 pub(super) fn fell_back_to_text(raw: &str) -> bool {

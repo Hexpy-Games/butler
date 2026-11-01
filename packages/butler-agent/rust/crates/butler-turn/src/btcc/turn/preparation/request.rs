@@ -306,7 +306,6 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
             ("contentParts", "messageContent"),
             ("documentEdits", "documentEdits"),
             ("hookContext", "hookContext"),
-            ("hookContextProject", "hookContextProject"),
         ] {
             if let Some(value) = app.get(source).filter(|value| js_truthy(value)) {
                 fields.insert(target.into(), value.clone());

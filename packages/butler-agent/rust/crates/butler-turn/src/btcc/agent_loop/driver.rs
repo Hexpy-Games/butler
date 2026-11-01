@@ -37,7 +37,6 @@ use super::tool_batch::{self, PreparedCall};
 mod answer;
 mod batch;
 mod final_report;
-mod park;
 use answer::*;
 use batch::*;
 
@@ -113,17 +112,6 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
             return Err(error);
         }
     };
-    if let Some(card) = input
-        .policy
-        .hooks()
-        .and_then(|h| h.project_hooks_card.as_ref())
-    {
-        let parked = park::for_project_hooks(&input, &mut state, &prepared, card).await;
-        if parked.is_err() {
-            super::progress::fail_pending(&input, &state).await;
-        }
-        return parked;
-    }
     let context = match input
         .policy
         .begin_context(GuidedInvocation::from(&input), input.budget.clone())
