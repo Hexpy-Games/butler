@@ -8,7 +8,7 @@ import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
 import { SplitButton } from "../SplitButton";
 import { ComposerDecisionPanel, type ComposerDecisionPanelProps } from "./ComposerDecisionPanel";
-import { BrowserApproval, BrowserHandoff } from "./ComposerDecisionPanel.showcaseParts";
+import { BrowserApproval, BrowserHandoff, CommandScript } from "./ComposerDecisionPanel.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "ComposerDecisionPanel",
@@ -113,6 +113,8 @@ export const stories: ShowcaseStory[] = [
   // ComposerAuthorityDecisionSurface: a question, examples with "+N more", a risk Tag, Deny and Allow once.
   { name: "Approval request", widths: ["375", "app"], render: (context) => <ComposerCard><ApprovalRequest context={context} /></ComposerCard> },
   { name: "High-risk command", widths: ["375", "app"], render: (context) => <ComposerCard><ApprovalRequest context={context} command /></ComposerCard> },
+  // A command body as { code }: the code frame keeps indentation and line breaks; the long line scrolls sideways under the fade.
+  { name: "Command body in a code frame", widths: ["375", "app"], render: (context) => <ComposerCard><CommandScript {...context} /></ComposerCard> },
   // A short line, the tool, then a long reviewed input: clamped with Show more even though the first lines are short.
   { name: "Long reviewed input", widths: ["375", "app"], render: (context) => <ComposerCard><LongReviewedInput context={context} /></ComposerCard> },
   // An agent without structured approvals: the legacy title, a pending count.

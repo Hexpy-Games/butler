@@ -1,7 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ApprovalActionKind } from "@/app/approvalRequest.ts";
-import { visibleText } from "@/app/visibleText.ts";
+import { visibleCode, visibleText } from "@/app/visibleText.ts";
 import type { ApprovalRisk } from "@/app/types.ts";
 import {
   ImageIcon, Pencil, Button, ButtonContainer, Clock3, ComposerDecisionPanel, Folder, GitBranch, Globe2, ListChecks, McpServer,
@@ -24,9 +24,12 @@ const hookCopy = () => appCopy.interfaceTemplates.approvalRequest.projectHooks;
  * Display only. Every line, the title included, is the exact action: never shortened, only made
  * unambiguous. Hidden and reflowing characters show as escapes, and each line is its own left-to-right
  * isolate (which limits, but does not stop, bidi reordering). A short run of spaces keeps its width; a
- * long one shows as a count, so padding cannot push the rest of a command out of view.
+ * long one shows as a count, so padding cannot push the rest of a line out of view.
+ * A command body sits in the panel's code frame instead: its spaces, tabs and newlines stay real, and
+ * padding that pushes the rest sideways shows as the frame's horizontal scroll and edge fade.
  */
-function approvalText(text: string) {
+function approvalText(text: string, as: "text" | "code") {
+  if (as === "code") return <bdi dir="ltr">{visibleCode(text)}</bdi>;
   const escaped = visibleText(text).replace(/ {5,}/gu, (run) => `‹U+0020×${run.length}›`);
   // A run of spaces collapses under normal wrapping; a no-break space keeps each one's width (a real one is escaped above).
   const shown = escaped.replace(/ (?= )|^ | $/gu, "\u00A0");

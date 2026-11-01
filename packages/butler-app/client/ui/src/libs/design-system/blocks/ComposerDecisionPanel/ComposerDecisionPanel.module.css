@@ -18,6 +18,42 @@
   -webkit-line-clamp: 4;
 }
 
+/* A { code } detail: the markdown code frame (hairline border, panel radius,
+   raised surface). The command keeps its own spaces and line breaks; a long
+   line scrolls sideways under the shared edge fade, so text pushed out of
+   view still reads as more. The block inset sits on the frame because the
+   Typo trim owns the text's own block padding. The scroller is a keyboard
+   stop, so it is never taller than the part of the details scroll area that
+   its fades leave clear (a taller script scrolls inside it): focus can always
+   reveal its whole ring. A focused scroller draws that ring inset (the frame
+   clips outside it) and drops its fade mask, which would cut the ring. */
+.code {
+  min-width: 0;
+  margin-block: var(--space-xs);
+  padding-block: var(--space-sm);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+
+.codeText {
+  max-height: calc(
+    var(--scroll-area-max-height-xs) - 2 *
+      (var(--scroll-fade-size) + var(--focus-ring-room))
+  );
+  padding-inline: var(--space-md);
+  overflow: auto;
+  white-space: pre;
+}
+
+.codeText:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .error {
   padding-block: var(--space-sm);
   padding-inline: var(--composer-panel-inset);

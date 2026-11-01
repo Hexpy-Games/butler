@@ -25,6 +25,8 @@ export interface ApprovalRequestView {
   details: string[];
   /** Path lines eligible for visual abbreviation; commands remain verbatim. */
   pathDetails?: string[];
+  /** The details that are command bodies (the operation's command, a command kind's examples as shown). */
+  commands?: string[];
   /** As the agent sent it; unknown or missing reads as high. */
   risk: ApprovalRisk;
   /** What "Always allow in this conversation" covers. */
@@ -165,6 +167,8 @@ export function approvalRequestView(
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
       ...actionDetails(approval, actionKind, card, copy)],
+    commands: [...(operation?.command ? [operation.command] : []),
+      ...(COMMAND_KINDS.has(actionKind) ? operation ? approval.examples : shownExamples(approval) : [])],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -281,8 +285,7 @@ function details(
   copy: ApprovalRequestCopy,
 ): string[] {
   const notice = approval.commandAccess === "read_only_unisolated" ? [copy.readOnlyUnisolated] : [];
-  const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example, index) =>
-    approval.examplesTruncated?.[index] ? `${example}…` : example);
+  const shown = shownExamples(approval);
   const outside = approval.targets.filter(target => target.kind === "outside").map(target => target.path);
   if (shown.length) {
     const additionalOutside = outside.filter(path => !shown.includes(path));
@@ -295,6 +298,11 @@ function details(
   if (lines.length || kind !== "other") return lines;
   const fallback = (card.scope?.description ?? card.reason).trim();
   return fallback ? [fallback] : [];
+}
+
+/** Up to three examples as the card shows them: a capped one ends in `…`. */
+function shownExamples(approval: ApprovalSummary): string[] {
+  return approval.examples.slice(0, MAX_EXAMPLES).map((example, index) => approval.examplesTruncated?.[index] ? `${example}…` : example);
 }
 
 /** A step only the user can do in a tab (a sign-in step, a secure field, ...):

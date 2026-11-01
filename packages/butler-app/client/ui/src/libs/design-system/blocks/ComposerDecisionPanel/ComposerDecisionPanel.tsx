@@ -7,7 +7,7 @@ import { composerDecisionKeyboard } from "../../lib/composerDecisionKeyboard";
 import { Typo } from "../../components/Typo";
 import { FieldError } from "../../components/Field";
 import { dsClass } from "../../lib/internal";
-import { ComposerDecisionDetails } from "./ComposerDecisionDetails";
+import { ComposerDecisionDetails, type ComposerDecisionDetail, type ComposerDecisionRenderText } from "./ComposerDecisionDetails";
 import styles from "./ComposerDecisionPanel.module.css";
 
 export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title" | "children"> {
@@ -18,12 +18,15 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   /** What is being decided; wraps in full and opens the source. */
   title: string;
   onOpen: () => void;
-  /** Optional display formatting; the full title and detail text remain available. */
-  renderText?: (text: string) => ReactNode;
+  /** Optional display formatting; `as` is `code` for a `{ code }` detail. The full title and detail text remain available. */
+  renderText?: ComposerDecisionRenderText;
   /** The title and details are the exact action (commands, paths, URLs): drawn as their own characters (Typo `literal`). */
   literal?: boolean;
-  /** Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut. */
-  details?: readonly string[];
+  /**
+   * Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut.
+   * `{ code }` is a command body in a code frame: monospace, its own spaces and line breaks, long lines scroll sideways.
+   */
+  details?: readonly ComposerDecisionDetail[];
   /** With `detailsShowLessLabel`, clamps long details to four lines behind an inline "Show more". */
   detailsShowMoreLabel?: string;
   detailsShowLessLabel?: string;
@@ -68,7 +71,7 @@ export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, d
     onKeyDown={(event) => { if (deferring) { event.preventDefault(); event.stopPropagation(); return; } composerDecisionKeyboard(event); onKeyDown?.(event); }} {...props}>
     <ComposerPanelHeader icon={icon} eyebrow={eyebrow} dataSlot="composer-decision-subject" hasDetails={hasDetails}
       title={<Clickable variant="text" onClick={onOpen} title={title}>
-        <Typo.Label weight="medium" tone="primary" wrap="anywhere" literal={literal}>{renderText ? renderText(title) : title}</Typo.Label>
+        <Typo.Label weight="medium" tone="primary" wrap="anywhere" literal={literal}>{renderText ? renderText(title, "text") : title}</Typo.Label>
       </Clickable>} aside={aside} />
     {hasDetails && <ComposerPanelBody dataSlot="decision-details-scroll" single>
       <ComposerDecisionDetails lines={details!} renderText={renderText} literal={literal} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />

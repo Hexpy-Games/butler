@@ -21,10 +21,10 @@ The header row stays icon, small label and title. The default
 | `icon` | Decision-kind icon, sized to `sm` by the shared header, drawn in the secondary tone |
 | `eyebrow` | Localized decision category (Plan / Permission) |
 | `title` | What is being decided; wraps in full, opens the source |
-| `renderText` | Optional display formatter for title and details; original strings remain available in titles and accessible labels |
+| `renderText` | Optional display formatter `(text, as)` for title and details; `as` is `"code"` for a `{ code }` detail. Original strings remain available in titles and accessible labels |
 | `literal` | The title and details are the exact action (commands, paths, URLs): Typo `literal` draws their own characters, so `2876x6` never shows as `2876×6` and `->` never as an arrow. Approval requests set it |
 | `onOpen` | Opens the plan or the request's source |
-| `details` | Lines under the title (examples, a "+N more" line) in the secondary caption style, aligned to the title text. Every line wraps in full: what is being decided is never cut |
+| `details` | Lines under the title (examples, a "+N more" line) in the secondary caption style, aligned to the title text. Every line wraps in full: what is being decided is never cut. A `{ code }` item is a command body in a code frame (the markdown code frame look: hairline border, panel radius, raised surface, code font): its own spaces, indentation and line breaks; a long line scrolls sideways under the edge fade instead of wrapping. The frame is never taller than the part of the details scroll area its fades leave clear (a taller script scrolls inside it), so keyboard focus always shows its whole inset ring |
 | `detailsShowMoreLabel`, `detailsShowLessLabel` | With both, details longer than four lines clamp behind an inline Show more / Show less button (the QueuedMessage pattern); without them details always show in full. Overflow is measured against the clamped block's real height, so several detail lines (a short line followed by a long reviewed input) still get the button when a later line is hidden |
 | `aside` | Trailing subject-row content: a status `Tag`, a pending count, non-interactive metadata |
 | `error` | A failed decision, announced with `role="alert"` |
@@ -66,6 +66,15 @@ when the tab is vault-filled:
   actions={<ButtonContainer size="sm" justify="end">…</ButtonContainer>} />
 ```
 
+A command body (a script, a multi-line command) goes in as `{ code }`, so its
+indentation and line breaks stay as written:
+
+```tsx
+<ComposerDecisionPanel icon={<Terminal aria-hidden="true" size="lg" />} title="Run a command in 'garden'?" onOpen={openSource}
+  details={[{ code: command }, "garden"]} literal renderText={(text, as) => as === "code" ? escapeDeceptive(text) : escapeLine(text)}
+  actions={<ButtonContainer size="sm" justify="end">…</ButtonContainer>} />
+```
+
 Approval cards that show a complete reviewed input (a memory text, a schedule's
 prompt, a browser step's fields, an MCP call's arguments) pass the input as a
 later detail line with both Show more/less labels: the first lines stay
@@ -89,7 +98,7 @@ confirmations; use `Dialog`. Do not pack examples into the title; use
 `details`.
 
 ## Tags
-composer, decision, approval, plan, authority, risk, media, thumbnail, browser
+composer, decision, approval, plan, authority, risk, media, thumbnail, browser, command, code
 
 ## Shared composition and keyboard
 The private `composerPanel` frame, header, scroll body and footer are shared
