@@ -16,6 +16,7 @@ use super::WebAccess;
 use super::service::{DirectPageRoute, PageRoute};
 use super::testing::{access, configured};
 
+mod fidelity;
 mod readers;
 mod search_providers;
 
@@ -202,6 +203,7 @@ async fn page_read_returns_turn_evidence_and_drops_data_spool_with_session() {
     assert_eq!(first["chunks"], second["chunks"]);
     assert!(second.get("unchanged").is_none());
     assert_eq!(first["chunks"][0]["text"], first["markdown"]);
+    fidelity::tab_reads(&session, &endpoint, &paragraph).await;
     server.await.unwrap();
     let spool_dir = root.join("tmp/web-access-spool");
     assert_eq!(fs::read_dir(&spool_dir).unwrap().count(), 1);

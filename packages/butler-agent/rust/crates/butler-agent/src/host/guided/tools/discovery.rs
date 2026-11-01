@@ -333,7 +333,14 @@ fn projection<'a>(
     owner: &GuidedTools,
     tool: butler_turn::btcc::GuidedCatalogRead<'a>,
 ) -> BridgeCatalogTool<'a> {
-    let configured_disabled = owner.web_session.configured_disabled_reason(tool.name);
+    let configured_disabled = if tool.name == "web_read" && owner.browser_available() {
+        Some((
+            "browser_available",
+            "Open the page with browser_open and read it with browser_observe.",
+        ))
+    } else {
+        owner.web_session.configured_disabled_reason(tool.name)
+    };
     let enabled = configured_disabled.is_none()
         && owner.binding.authorized_names.contains(tool.name)
         && GuidedTools::supports(tool.name)

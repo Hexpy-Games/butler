@@ -1,6 +1,5 @@
-//! A scripted model that follows the tool contracts the same way on each
-//! provider's wire: read the page, open it in a tab when the read says so,
-//! read the tab, show the comparison in answer blocks, then answer.
+//! A model that follows the offered browser contracts on both provider wires:
+//! open the page, observe its content, show answer blocks, then answer.
 use axum::{Json, Router, extract::State, response::Response, routing::post};
 use butler_e2e::e2e::HarnessError;
 use futures_util::StreamExt;
@@ -68,12 +67,12 @@ impl Drop for Fixture {
 /// final answer when `None`.
 fn next(outputs: &[Value]) -> Option<(&'static str, Value)> {
     match outputs.len() {
-        0 => Some(("web_read", json!({"url":super::PAGE}))),
-        1 if outputs[0]["next_action"] == "open_in_tab" => {
-            Some(("browser_open", json!({"url":super::PAGE})))
-        }
-        2 => Some(("web_read", json!({"tab":outputs[1]["tab"]}))),
-        3 => Some(("answer_blocks", blocks(&outputs[2]))),
+        0 => Some(("browser_open", json!({"url":super::PAGE}))),
+        1 => Some((
+            "browser_observe",
+            json!({"tab":outputs[0]["tab"],"scope":"text","look":"never"}),
+        )),
+        2 => Some(("answer_blocks", blocks(&outputs[1]))),
         _ => None,
     }
 }
@@ -82,7 +81,7 @@ const ANSWER: &str = "The Beacon is the brightest of the three lamps.";
 
 /// The comparison of the read page's candidates, each value sourced to it.
 fn blocks(read: &Value) -> Value {
-    let source = read["source_url"].clone();
+    let source = read["untrusted_content"]["url"].clone();
     let checked = chrono::Utc::now().to_rfc3339();
     let lamps = [("Aurora", 450), ("Beacon", 1200), ("Cinder", 800)];
     let cards = lamps.map(|(name, lumens)| {

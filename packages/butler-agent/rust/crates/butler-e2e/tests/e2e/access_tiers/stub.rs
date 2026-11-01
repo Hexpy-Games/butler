@@ -9,6 +9,8 @@ use std::{
 
 #[derive(Default)]
 pub(crate) struct Script {
+    pub wait_for_tools: std::sync::atomic::AtomicBool,
+    waiting: Mutex<HashMap<String, usize>>,
     pub rounds: Mutex<HashMap<String, Vec<Value>>>,
     pub requests: Mutex<Vec<Value>>,
 }
@@ -56,7 +58,7 @@ async fn reply(
         })
         .count();
     let work = work_id(&body);
-    requests.push(body);
+    requests.push(body.clone());
     // Rounds keyed by a prefix serve turns whose full request text is
     // rendered by Butler (a delegated steward's packet, a delegated result).
     let rounds = script.rounds.lock().expect("script lock");
@@ -66,8 +68,25 @@ async fn reply(
             .find(|(prefix, _)| key.user_request.starts_with(prefix.as_str()))
             .map(|(_, round)| round)
     });
-    let item = round.and_then(|r| r.get(step)).cloned()
+    let mut waiting = script.waiting.lock().expect("waiting lock");
+    let offset = waiting.entry(key.user_request.clone()).or_default();
+    let item = round.and_then(|r| r.get(step - *offset)).cloned()
         .unwrap_or_else(|| json!({"type":"message","id":"msg_done","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Checked.","annotations":[]}]}));
+    let item = if script
+        .wait_for_tools
+        .load(std::sync::atomic::Ordering::Relaxed)
+        && item["type"] == "function_call"
+        && !butler_e2e::e2e::chatgpt_wire::functions(&body).any(|tool| tool["name"] == item["name"])
+    {
+        *offset += 1;
+        call(
+            &format!("availability-{step}"),
+            "tool_describe",
+            &json!({"ids":[format!("native:{}", item["name"].as_str().expect("tool name"))]}),
+        )
+    } else {
+        item
+    };
     let item: Value =
         serde_json::from_str(&item.to_string().replace("{{WORK}}", &work)).expect("stub item");
     (

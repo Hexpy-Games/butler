@@ -218,6 +218,19 @@ impl GuidedToolError {
 }
 
 impl GuidedTools {
+    fn browser_available(&self) -> bool {
+        let admitted = |name: &str| {
+            self.binding.authorized_names.contains(name)
+                && self
+                    .binding
+                    .allowed_tools_and_effects
+                    .as_ref()
+                    .is_none_or(|names| names.iter().any(|allowed| allowed == name))
+        };
+        butler_runtime::browser::host_attached()
+            && (admitted("browse") || (admitted("browser_open") && admitted("browser_observe")))
+    }
+
     #[expect(
         clippy::too_many_arguments,
         reason = "composition explicitly requires independently owned tool, authority, and lifecycle collaborators"
@@ -343,7 +356,12 @@ impl ToolPort for GuidedTools {
                 ));
             }
             self.resume_pool().await?;
-            let tools = self.binding.surface.clone();
+            let mut tools = self.binding.surface.clone();
+            // Resolve the live host each round, just as browser calls do on
+            // dispatch. Keep admitted executors for in-flight/internal reads.
+            if self.browser_available() {
+                tools.retain(|tool| tool.name != "web_read");
+            }
             let encoded = serde_json::to_string(&tools).map_err(|error| {
                 BtccError::relayed("guided_tool_surface_invalid", error.to_string())
                     .with_source(error)

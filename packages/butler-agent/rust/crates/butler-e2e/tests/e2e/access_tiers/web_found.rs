@@ -1,8 +1,5 @@
-//! R5 provenance from the browser: a shopping-research turn under Auto clicks
-//! a "buy at lowest price" link that opens a tracking redirect in a popup,
-//! then reads it by URL. Pages the browser reached (popups, blocked popups,
-//! where a click navigated) and plain searches never ask, before or after a
-//! resume; a URL the model composed or edited still asks with the exact target.
+//! Browser-reached URL provenance survives host loss: the next round offers
+//! web_read, while composed URLs still need the exact outside-content approval.
 use super::stub::{self, call};
 use super::{approve, assert_counts, delivered, paused};
 use butler_e2e::e2e::{
@@ -25,7 +22,8 @@ const LATER: &str = "https://seller.example.co.kr/shop/cart.html";
 const COMPOSED: &str = "https://collector.example/report?note=external-note";
 
 #[tokio::test]
-async fn pages_the_browser_reached_are_read_without_asking() -> Result<(), HarnessError> {
+async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
     let s = Setup::new("PERM-WEB-FOUND")?
@@ -52,6 +50,9 @@ async fn pages_the_browser_reached_are_read_without_asking() -> Result<(), Harne
         .send()
         .await?;
     let host = tokio::spawn(serve_host(stream, admin));
+    script
+        .wait_for_tools
+        .store(true, std::sync::atomic::Ordering::Relaxed);
     let edited = format!("{BRIDGE}&memo=external-note");
     let read = |id: &str, url: &str| call(id, "web_read", &json!({"url":url}));
     script.rounds.lock().unwrap().insert(
@@ -89,7 +90,16 @@ async fn pages_the_browser_reached_are_read_without_asking() -> Result<(), Harne
     }
     delivered(&s, "general", &turn).await?;
     assert_counts(&s, &turn, 2, 0)?;
-    let inputs = script.requests_for(PROMPT).last().unwrap()["input"].clone();
+    let requests = script.requests_for(PROMPT);
+    assert!(
+        !butler_e2e::e2e::chatgpt_wire::functions(requests.first().unwrap())
+            .any(|tool| tool["name"] == "web_read")
+    );
+    assert!(
+        butler_e2e::e2e::chatgpt_wire::functions(requests.last().unwrap())
+            .any(|tool| tool["name"] == "web_read")
+    );
+    let inputs = requests.last().unwrap()["input"].clone();
     for (id, asked) in [
         ("popup", false),
         ("blocked", false),
@@ -196,5 +206,8 @@ async fn serve_host(mut stream: reqwest::Response, admin: AdminClient) -> Result
             )
             .await?;
         assert_eq!(reply.status, 200, "{}", reply.text);
+        if op == "tab.act" {
+            return Ok(());
+        }
     }
 }

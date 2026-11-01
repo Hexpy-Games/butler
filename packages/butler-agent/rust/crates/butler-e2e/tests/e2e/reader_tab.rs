@@ -1,7 +1,4 @@
-//! A product page the reader gets only part of goes to a browser tab before
-//! the answer, and the comparison of its candidates arrives as answer
-//! blocks. The same flow and expectations on each provider's wire: a
-//! scripted model, this test as the App browser host, no network.
+//! Attached browser reads and sourced answer blocks on both provider wires.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -26,14 +23,15 @@ const PROMPT: &str =
     "Which desk lamp on https://93.184.216.34/desk-lamps is the brightest? Compare them.";
 
 #[tokio::test]
-async fn partial_page_goes_to_a_tab_and_comparison_has_blocks_openai() -> Result<(), HarnessError> {
+async fn attached_browser_reads_page_and_comparison_has_blocks_openai() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     flow(Wire::Codex).await
 }
 
 #[tokio::test]
-async fn partial_page_goes_to_a_tab_and_comparison_has_blocks_anthropic() -> Result<(), HarnessError>
-{
+async fn attached_browser_reads_page_and_comparison_has_blocks_anthropic()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     flow(Wire::Anthropic).await
 }
@@ -41,6 +39,11 @@ async fn partial_page_goes_to_a_tab_and_comparison_has_blocks_anthropic() -> Res
 async fn flow(wire: Wire) -> Result<(), HarnessError> {
     let fixture = model::Fixture::start(wire).await?;
     let s = start(wire, &fixture.base).await?;
+    s.patch_settings(
+        json!({"browser":{"browsing_agent":"off"}}),
+        "direct browser tools",
+    )
+    .await?;
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"mock","readerBackend":"browser",
@@ -54,23 +57,13 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
     assert_eq!(turn["state"], "delivered", "{turn}\n{}", s.agent.logs());
     let outputs = fixture.outputs.lock().unwrap().clone();
 
-    // (a) The partial read is a failure that names the tab; the tab is read
-    // before the answer.
-    let partial = &outputs[0];
-    assert_eq!(partial["ok"], false, "{partial}");
-    assert_eq!(partial["next_action"], "open_in_tab", "{partial}");
-    assert!(
-        partial["error"].as_str().unwrap().contains("browser_open"),
-        "{partial}"
-    );
-    assert_eq!(outputs[1]["status"], "ok", "{}", outputs[1]);
-    let read = &outputs[2];
-    assert_eq!(read["ok"], true, "{read}");
-    assert_eq!(read["reader"], "butler-browser-tab", "{read}");
-    assert!(read.get("next_action").is_none(), "{read}");
-    let markdown = read["markdown"].as_str().unwrap();
+    // The attached host is read directly through the offered browser tools.
+    assert_eq!(outputs[0]["status"], "ok", "{}", outputs[0]);
+    let read = &outputs[1];
+    assert_eq!(read["schema"], "butler.browser-observation.v1", "{read}");
+    let text = read["untrusted_content"]["text"].as_str().unwrap();
     for lamp in ["Aurora", "Beacon", "Cinder"] {
-        assert!(markdown.contains(lamp), "{read}");
+        assert!(text.contains(lamp), "{read}");
     }
     let ops = log
         .lock()
@@ -79,10 +72,9 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
         .filter_map(|frame| frame["op"].as_str().map(str::to_owned))
         .filter(|op| op != "tabs.list")
         .collect::<Vec<_>>();
-    assert_eq!(ops, ["reader.render", "tab.open", "tab.read"], "{ops:?}");
-
+    assert_eq!(ops, ["tab.open", "tab.observe"], "{ops:?}");
     // (b) The comparison is on the delivered reply as blocks.
-    assert_eq!(outputs[3]["ok"], true, "{}", outputs[3]);
+    assert_eq!(outputs[2]["ok"], true, "{}", outputs[2]);
     let messages = s.gw.messages("general").await?;
     let reply = messages
         .iter()
@@ -111,7 +103,7 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
             .unwrap()
             .to_owned()
     };
-    assert!(description("web_read").contains("ok:false with next_action open_in_tab"));
+    assert!(!butler_e2e::e2e::chatgpt_wire::tools(&first).any(|tool| tool["name"] == "web_read"));
     assert!(description("answer_blocks").contains("with or without a Plan"));
     s.finish().await
 }

@@ -96,7 +96,6 @@ async fn observation_v2_keeps_every_ref_and_rereads_only_identical_pages()
         seen as f64 / raw as f64
     );
     assert!(seen * 10 <= raw * 7, "v2 text {seen} B vs raw {raw} B");
-    assert_rereads(last);
     served.abort();
     let _ = served.await;
     s.finish().await
@@ -177,35 +176,6 @@ fn removed(text: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The three tab reads: fresh, unchanged (same content), fresh again after
-/// the page changed without navigating.
-fn assert_rereads(request: &Value) {
-    let reads: Vec<Value> = request["input"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|item| item["type"] == "function_call_output")
-        .filter_map(|item| serde_json::from_str::<Value>(item["output"].as_str()?).ok())
-        .map(|value| value.get("output").cloned().unwrap_or(value))
-        .filter(|output| output.get("content_sha256").is_some())
-        .collect();
-    assert_eq!(reads.len(), 3, "{reads:?}");
-    let markdown = |read: &Value| read["markdown"].as_str().unwrap_or("").to_owned();
-    assert!(markdown(&reads[0]).contains("40 stalls"), "{}", reads[0]);
-    assert_eq!(reads[1]["unchanged"], true, "{}", reads[1]);
-    assert_eq!(reads[1]["same_as"], reads[0]["read_id"]);
-    assert!(
-        reads[1].get("markdown").is_none(),
-        "an unchanged read resends nothing"
-    );
-    assert_ne!(reads[2]["content_sha256"], reads[0]["content_sha256"]);
-    assert!(
-        markdown(&reads[2]).contains("moved to Sunday"),
-        "a changed page returns fresh text: {}",
-        reads[2]
-    );
-}
-
 fn act(observation: usize, steps: &Value) -> (&'static str, Value) {
     (
         "browser_act",
@@ -217,7 +187,6 @@ fn cassette() -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
-    let read = ("web_read", json!({"tab":"t1"}));
     let calls = vec![
         (
             "tool_describe",
@@ -243,10 +212,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
         ),
         ("browser_observe", json!({"tab":"t1","full":true})),
         act(9, &json!([{"action":"click","ref":"f0-e1"}])),
-        read.clone(),
-        read.clone(),
         act(10, &json!([{"action":"click","ref":"f0-e5"}])),
-        read,
     ];
     super::browser_prefix::add_turn(
         &mut cassette,

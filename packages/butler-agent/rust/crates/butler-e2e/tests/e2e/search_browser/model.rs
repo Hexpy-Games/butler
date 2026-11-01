@@ -13,10 +13,9 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 pub(super) struct StateData {
+    pub(super) page_fetches: std::sync::atomic::AtomicUsize,
     /// Each tool output the model received, in order.
     pub(super) outputs: Mutex<Vec<Value>>,
-    /// Bytes of each complete model-facing tool output, including metadata.
-    pub(super) output_bytes: Mutex<Vec<usize>>,
     /// The tools (name, description, parameters) of the first agent request.
     pub(super) tools: Mutex<Vec<Value>>,
 }
@@ -45,6 +44,7 @@ impl Fixture {
                 butler_e2e::e2e::chatgpt_wire::validate,
             ))
             .route("/search", get(search))
+            .route("/report", get(report))
             .with_state(state.clone());
         let server = tokio::spawn(async move {
             axum::serve(socket, app).await.unwrap();
@@ -61,6 +61,16 @@ impl Drop for Fixture {
     fn drop(&mut self) {
         self.server.abort();
     }
+}
+
+async fn report(State(state): State<Arc<StateData>>) -> axum::response::Html<String> {
+    state
+        .page_fetches
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    axum::response::Html(format!(
+        "<html><title>Report</title><article><h1>Published report</h1><p>{}</p><p>End of the report.</p></article></html>",
+        "The published report includes the complete source details and context. ".repeat(65)
+    ))
 }
 
 async fn search() -> Json<Value> {
@@ -102,11 +112,8 @@ fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
                 .collect();
         }
     }
-    *state.output_bytes.lock().unwrap() =
-        output_texts(body).iter().map(|text| text.len()).collect();
     let outputs = outputs(body);
     *state.outputs.lock().unwrap() = outputs.clone();
-    let first_url = || outputs[0]["results"][0]["url"].clone();
     match outputs.len() {
         0 => call(0, "web_search", &json!({"query":"spring tide tables"})),
         1 => {
@@ -118,17 +125,10 @@ fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
                 .collect::<Vec<_>>();
             call(1, "browser_open", &json!({"results":ids}))
         }
-        2 => call(2, "web_read", &json!({"url":first_url()})),
-        // The rest of the page: the same read, continued.
-        3 => call(
-            3,
-            "web_read",
-            &json!({"url":first_url(),"start_chunk":outputs[2]["next_start_chunk"],"max_chunks":8,"max_chars":8000}),
-        ),
-        4 => call(
-            4,
+        2 => call(
+            2,
             "browser_observe",
-            &json!({"tab":outputs[1]["tabs"][0]["tab"]}),
+            &json!({"tab":outputs[1]["tabs"][0]["tab"],"look":"never"}),
         ),
         _ => message("The three tables agree: the highest spring tide is 6.1 m."),
     }
@@ -170,85 +170,4 @@ pub(super) fn call(round: usize, name: &str, args: &Value) -> Value {
 
 pub(super) fn message(text: &str) -> Value {
     json!({"type":"message","id":"msg_research","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
-}
-
-/// Bytes the turn wrote per browser and web step: its tool journal rows and
-/// its progress events (the transcript carries the same events).
-pub(super) fn step_bytes(
-    data: &std::path::Path,
-    turn: &str,
-    outputs: &[Value],
-    output_bytes: &[usize],
-) -> String {
-    let db = butler_platform::sqlite::open_with_flags(
-        data.join("agent-runtime/btcc.sqlite"),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .unwrap();
-    let model_bytes = web_read_model_bytes(&db, turn, &outputs[2], output_bytes[2]);
-    let mut journal = db
-        .prepare(
-            "SELECT tool_name, length(result_json) FROM btcc_guided_tool_calls WHERE turn_id=?1",
-        )
-        .unwrap();
-    let rows = journal
-        .query_map([turn], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1).unwrap_or(0)))
-        })
-        .unwrap()
-        .flatten()
-        .collect::<Vec<_>>();
-    let mut events = db
-        .prepare("SELECT event_json FROM btcc_progress_events WHERE turn_id=?1")
-        .unwrap();
-    let progress = events
-        .query_map([turn], |r| r.get::<_, String>(0))
-        .unwrap()
-        .flatten()
-        .filter(|e| e.contains("\"operation.output.chunk\"") || e.contains("\"tool."))
-        .map(|e| e.len())
-        .sum::<usize>();
-    let journal = rows.iter().map(|(_, n)| *n).sum::<i64>();
-    format!(
-        "search-browser bytes: {} tool steps, journal {journal} B, progress {progress} B, {} B/step; {model_bytes}",
-        rows.len(),
-        (usize::try_from(journal).unwrap_or(0) + progress) / rows.len().max(1)
-    )
-}
-
-/// Reconstruct the previous projection from the immutable stored result and
-/// compare it with the model's actual first web_read output. The unchanged
-/// envelope and metadata retain their actual wire size; host receipts stay
-/// available to the App.
-fn web_read_model_bytes(
-    db: &rusqlite::Connection,
-    turn: &str,
-    model: &Value,
-    after: usize,
-) -> String {
-    let raw: String = db.query_row(
-        "SELECT result_json FROM btcc_guided_tool_calls WHERE turn_id=?1 AND tool_name='web_read' ORDER BY rowid LIMIT 1",
-        [turn], |row| row.get(0),
-    ).unwrap();
-    let mut before: Value = serde_json::from_str(&raw).unwrap();
-    before["tool_name"] = json!("web_read");
-    let mut projected = before.clone();
-    for key in [
-        "evidence_receipts",
-        "evidence_capability_receipts",
-        "public_web_evidence_items",
-    ] {
-        assert!(
-            before.get(key).is_some(),
-            "stored host bookkeeping lost {key}"
-        );
-        projected.as_object_mut().unwrap().remove(key);
-    }
-    assert_eq!(&projected, model, "projection changed web content");
-    let before = after + before.to_string().len() - model.to_string().len();
-    assert!(
-        before < 50 * 1024,
-        "previous projection fit without a byte cut"
-    );
-    format!("web_read model output {before} -> {after} B (before reconstructed from stored result)")
 }
