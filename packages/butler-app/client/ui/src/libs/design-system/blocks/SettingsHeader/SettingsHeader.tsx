@@ -9,7 +9,9 @@ import { dsClass } from "../../lib/internal";
 export interface SettingsHeaderProps extends DsPrivateStyleProps {
   title: ReactNode;
   description?: ReactNode;
+  /** A subpage's breadcrumb, under the description. */
   secondary?: ReactNode;
+  /** Not used by settings pages (no page-level actions); for settings-like editors outside the settings window. */
   action?: ReactNode;
 }
 

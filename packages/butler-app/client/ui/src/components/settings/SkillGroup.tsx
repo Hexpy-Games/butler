@@ -1,24 +1,18 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { appCopy } from "@/app/copy.ts";
 import type { SkillSummaryView } from "@/app/types.ts";
-import { CardList, CardListItem, FileText, Sparkles, Typo } from "@/butler-ds";
+import { CardList, CardListItem, FileText, Sparkles } from "@/butler-ds";
 
+/** A skills list in its section card; the section owns the title and the empty state. */
 export function SkillGroup({
-  title,
   skills,
   maxVisibleRows,
 }: {
-  title: string;
   skills: SkillSummaryView[];
   maxVisibleRows?: number;
 }) {
   useAppLocale();
   return (
-    <CardList
-      title={title}
-      maxVisibleRows={maxVisibleRows}
-      empty={<Typo.Caption>{appCopy.interfaceDetails.noSkills}</Typo.Caption>}
-    >
+    <CardList maxVisibleRows={maxVisibleRows}>
       {skills.map((skill) => (
         <CardListItem
           key={`${skill.source}:${skill.project_id ?? "default"}:${skill.name}`}

@@ -59,10 +59,12 @@ export function SystemEventsSettings() {
       <SettingsSection
         id="system-events"
         kind="list"
+        title={settingsCopy.pageSections.systemEvents}
         description={settingsCopy.descriptions.systemEvents}
         state={view === null ? (loadFailed ? "error" : "loading") : events.length === 0 ? "empty" : "ready"}
         emptyMessage={settingsCopy.descriptions.systemEventsEmpty}
         onRetry={() => void refresh()}
+        more={view?.pagination.has_more ? { label: appCopy.common.more, busy: loading, onClick: () => void loadMore() } : undefined}
         actions={
           <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void refresh()}>
             {appCopy.common.refresh}
@@ -72,11 +74,6 @@ export function SystemEventsSettings() {
         {events.map((event) => (
           <SystemEventCard key={event.id} event={event} />
         ))}
-        {view?.pagination.has_more && (
-          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void loadMore()}>
-            {appCopy.common.more}
-          </Button>
-        )}
       </SettingsSection>
     </SettingsPage>
   );

@@ -26,7 +26,7 @@ export const MOTION_COPY = {
     full: "Full", reduced: "Reduced", fullHow: "translate + opacity", reducedHow: "opacity only",
     lanes: ["Send", "Bubble", "Thinking", "Reply", "Done"],
     twinLanes: ["Bubble", "Reply"],
-    field: "Send with Enter", fieldHint: "Shift+Enter starts a new line.",
+    section: "Message box", field: "Send with Enter", fieldHint: "Shift+Enter starts a new line.",
   },
   ko: {
     title: "Motion",
@@ -46,7 +46,7 @@ export const MOTION_COPY = {
     full: "모든 동작", reduced: "동작 줄이기", fullHow: "translate + opacity", reducedHow: "opacity",
     lanes: ["전송", "말풍선", "생각 중", "답변", "완료"],
     twinLanes: ["말풍선", "답변"],
-    field: "Enter로 보내기", fieldHint: "Shift+Enter는 줄을 바꿉니다.",
+    section: "입력창", field: "Enter로 보내기", fieldHint: "Shift+Enter는 줄을 바꿉니다.",
   },
 } satisfies Record<FoundationHeroLang, unknown>;
 

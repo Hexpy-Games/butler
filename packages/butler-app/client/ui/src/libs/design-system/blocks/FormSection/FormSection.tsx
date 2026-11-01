@@ -1,6 +1,7 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { useId, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
+import { isDevBuild } from "../../lib/devBuild";
 import { cn } from "../../lib/utils";
 import { SettingsFieldScopeProvider } from "../SettingsField/settingsFieldScope";
 import { repeatsSettingsCopy, useSettingsPage } from "../SettingsShell/settingsPage";
@@ -11,16 +12,17 @@ export type FormSectionKind = "form" | "list" | "status" | "info";
 
 export interface FormSectionProps extends DsPrivateStyleProps {
   /**
-   * Section title. Omit it when it would repeat the page title; inside a
-   * `SettingsShell` page a title that repeats `pageTitle` is not rendered.
+   * Section title; every section has one. It names this card below the page
+   * title, so it never repeats `pageTitle` (a repeat throws in dev builds).
    */
-  title?: string;
+  title: string;
   /** Optional description; inside a `SettingsShell` page one that repeats `pageDescription` is not rendered. */
   description?: string;
   /**
-   * List toolbar (add, refresh, filter, a bulk action on every row) at the
-   * inline end of the title and description; only on `kind="list"`. Other
-   * actions are `SettingsActionField` rows in the card.
+   * Section actions (add, refresh, filter, period) at the inline end of the
+   * header, outline and small; only on `kind="list"` and `kind="status"`.
+   * Never a setting: settings are fields in the card, and reset, clear or
+   * export are `SettingsActionField` rows.
    */
   actions?: ReactNode;
   /**
@@ -43,9 +45,9 @@ export interface FormSectionProps extends DsPrivateStyleProps {
  * description, max 60ch, optional toolbar) sits above the card, outside its
  * surface, and the bordered card is the section's only surface.
  * Header -> card is `--settings-section-header-gap`; card -> next header is
- * the wider `--settings-section-gap` owned by the page. Copy that repeats the
- * page header (see `repeatsSettingsCopy`) is dropped, so a page whose single
- * section only restates the page renders the card alone.
+ * the wider `--settings-section-gap` owned by the page. A title that repeats
+ * the page title (see `repeatsSettingsCopy`) throws in dev builds; a
+ * description that repeats the page description is dropped.
  */
 export function FormSection({
   title,
@@ -59,7 +61,9 @@ export function FormSection({
 }: FormSectionProps) {
   const titleId = useId();
   const page = useSettingsPage();
-  const shownTitle = title && !repeatsSettingsCopy(title, page?.title) ? title : undefined;
+  if (isDevBuild() && repeatsSettingsCopy(title, page?.title)) {
+    throw new Error(`Settings section title "${title}" repeats the page title; name what this card holds.`);
+  }
   const shownDescription =
     description && !repeatsSettingsCopy(description, page?.description) ? description : undefined;
   return (
@@ -68,26 +72,20 @@ export function FormSection({
       data-slot="form-section"
       data-settings-section-id={sectionId}
       data-kind={kind}
-      aria-labelledby={shownTitle ? titleId : undefined}
+      aria-labelledby={titleId}
       aria-busy={busy || undefined}
     >
-      {shownTitle || shownDescription || actions ? (
-        <div className={styles.header} data-slot="form-section-header">
-          {shownTitle || shownDescription ? (
-            <div className={styles.copy}>
-              {shownTitle ? (
-                <Typo.H4 as="h3" id={titleId} className={dsClass(styles.title)}>{shownTitle}</Typo.H4>
-              ) : null}
-              {shownDescription ? (
-                <Typo.Body className={dsClass(styles.description)}>{shownDescription}</Typo.Body>
-              ) : null}
-            </div>
-          ) : null}
-          {actions ? (
-            <div className={styles.actions} data-slot="form-section-actions">{actions}</div>
+      <div className={styles.header} data-slot="form-section-header">
+        <div className={styles.copy}>
+          <Typo.H4 as="h3" id={titleId} className={dsClass(styles.title)}>{title}</Typo.H4>
+          {shownDescription ? (
+            <Typo.Body className={dsClass(styles.description)}>{shownDescription}</Typo.Body>
           ) : null}
         </div>
-      ) : null}
+        {actions ? (
+          <div className={styles.actions} data-slot="form-section-actions">{actions}</div>
+        ) : null}
+      </div>
       <div className={styles.card} data-slot="form-section-card" data-kind={kind}>
         <SettingsFieldScopeProvider sectionId={sectionId}>{children}</SettingsFieldScopeProvider>
       </div>

@@ -30,26 +30,18 @@
   min-width: 0;
 }
 
-/* Section toolbar: page-level controls for single-list sections, compact
-   header controls (Worker profiles). Wraps under the copy when narrow. */
+/* Section actions (add, refresh, filter, period) sit at the inline end of
+   the title. When they wrap under the copy at narrow widths they stay at the
+   inline end, so every section's actions line up on the same edge. */
 .actions {
   display: flex;
   flex: 0 1 auto;
   flex-wrap: wrap;
   gap: var(--space-sm);
   align-items: center;
+  justify-content: flex-end;
   min-width: 0;
-}
-
-/* A toolbar without a title (single-list pages) spans the header; text
-   inputs in it share the row instead of taking a full line each. */
-.actions:only-child {
-  flex: 1 1 100%;
-}
-
-.actions > [data-slot="input"]:not([data-compact]) {
-  flex: 1 1 10rem;
-  width: auto;
+  margin-inline-start: auto;
 }
 
 .card {

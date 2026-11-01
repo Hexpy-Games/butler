@@ -16,3 +16,9 @@
   border-top: var(--border-hairline) solid var(--line);
   background: var(--settings-bg);
 }
+
+/* A paged list's last row: below the rows' hairline, centered under them. */
+.more {
+  display: flex;
+  justify-content: center;
+}

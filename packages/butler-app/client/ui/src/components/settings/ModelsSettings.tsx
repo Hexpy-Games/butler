@@ -9,7 +9,7 @@ import { BackupModelsSummary } from "./BackupModelsSummary";
 import { ButlerModelFields } from "./ButlerModelFields";
 import { ModelAddEditPage } from "./ModelAddEditPage";
 import { ModelManagementPage } from "./ModelManagementPage";
-import { WorkerProfileControls } from "./WorkerProfileControls";
+import { WorkerMaxSimultaneousField, WorkerProfileAddButton } from "./WorkerProfileControls";
 import { WorkerProfileEditor } from "./WorkerProfileEditor";
 import { useWorkerProfiles } from "./hooks/useWorkerProfiles";
 
@@ -65,15 +65,12 @@ function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: bool
             kind="list"
             title={sections.workerProfiles}
             description={workers.canAdd ? undefined : settingsCopy.workerProfilesPanel.addLimitReached}
-            actions={
-              <WorkerProfileControls
-                canAdd={workers.canAdd}
-                maxSimultaneousWorkers={workers.maxSimultaneousWorkers}
-                onAdd={workers.addProfile}
-                onMaxChange={workers.setMaxSimultaneousWorkers}
-              />
-            }
+            actions={<WorkerProfileAddButton canAdd={workers.canAdd} onAdd={workers.addProfile} />}
           >
+            <WorkerMaxSimultaneousField
+              maxSimultaneousWorkers={workers.maxSimultaneousWorkers}
+              onMaxChange={workers.setMaxSimultaneousWorkers}
+            />
             {workers.profiles.map((profile, index) => (
               <WorkerProfileEditor
                 key={profile.id}
