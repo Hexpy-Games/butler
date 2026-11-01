@@ -949,7 +949,7 @@
       "definition": {
         "type": "function",
         "name": "project_ledger_list",
-        "description": "List bounded Ledger records by kind, status, or query. Omitted or blank kind lists all kinds.",
+        "description": "List bounded Ledger records by kind, status, or query. Omitted or blank kind lists all kinds. The Ledger is internal work-tracking; the user's epics (과제), plans (계획) and specs (명세) live in canon.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -1008,7 +1008,7 @@
       "definition": {
         "type": "function",
         "name": "project_ledger_show",
-        "description": "Read one Ledger record, optionally with its body.",
+        "description": "Read one Ledger record, optionally with its body. The Ledger is internal work-tracking; the user's epics (과제), plans (계획) and specs (명세) live in canon.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -1062,7 +1062,7 @@
       "definition": {
         "type": "function",
         "name": "project_ledger_create",
-        "description": "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance.",
+        "description": "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance. The Ledger is internal work-tracking; the user's epics (과제), plans (계획) and specs (명세) live in canon.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -1279,7 +1279,7 @@
       "definition": {
         "type": "function",
         "name": "project_ledger_update",
-        "description": "Update one exact Ledger record by kind and id.",
+        "description": "Update one exact Ledger record by kind and id. The Ledger is internal work-tracking; the user's epics (과제), plans (계획) and specs (명세) live in canon.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4684,7 +4684,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
+        "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. A Steward cannot read or change canon; make canon changes yourself with canon_propose, delegating only research they need. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -8094,7 +8094,7 @@
     "project_ledger_create": {
       "type": "function",
       "name": "project_ledger_create",
-      "description": "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance.",
+      "description": "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance. The Ledger is internal work-tracking; the user's epics (과제), plans (계획) and specs (명세) live in canon.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10295,7 +10295,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
+      "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. A Steward cannot read or change canon; make canon changes yourself with canon_propose, delegating only research they need. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10959,7 +10959,7 @@
     "project_ledger_show": {
       "type": "function",
       "name": "project_ledger_show",
-      "description": "Read one Ledger record, optionally with its body.",
+      "description": "Read one Ledger record, optionally with its body. The Ledger is internal work-tracking; the user's epics (과제), plans (계획) and specs (명세) live in canon.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11936,7 +11936,7 @@
     "project_ledger_list": {
       "type": "function",
       "name": "project_ledger_list",
-      "description": "List bounded Ledger records by kind, status, or query. Omitted or blank kind lists all kinds.",
+      "description": "List bounded Ledger records by kind, status, or query. Omitted or blank kind lists all kinds. The Ledger is internal work-tracking; the user's epics (과제), plans (계획) and specs (명세) live in canon.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12273,7 +12273,7 @@
     "project_ledger_update": {
       "type": "function",
       "name": "project_ledger_update",
-      "description": "Update one exact Ledger record by kind and id.",
+      "description": "Update one exact Ledger record by kind and id. The Ledger is internal work-tracking; the user's epics (과제), plans (계획) and specs (명세) live in canon.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

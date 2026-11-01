@@ -318,6 +318,7 @@ mod worker_cap;
 mod canon_link;
 mod canon_plan_run;
 mod canon_registration;
+mod canon_routing;
 mod one_call_delegation;
 
 mod chats_initiated;
