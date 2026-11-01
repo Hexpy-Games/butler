@@ -34,6 +34,7 @@ Every variant accepts the same text props; none of them change the type scale:
 | `lineClamp` | `2`, `3`, `4`, `5` | Clamp to that many lines; `5` is the message-length clamp (a user message before Show more). |
 | `wrap` | `normal`, `nowrap`, `anywhere`, `pre` | `anywhere` lets long tokens (URLs, paths) wrap; Korean still keeps words whole. `pre` keeps typed line breaks and wraps long tokens anywhere (user messages, logs). |
 | `numeric` | `tabular` | Tabular numerals for clocks, counts and columns. |
+| `literal` | `boolean` | The text is an exact value (a command, path, URL, an approval or confirmation line): draws its own characters. Pretendard otherwise draws `2876x6` as `2876×6` and `->`, `=>`, `<-` as arrows, through the same substitutions in `calt` and `clig`; `literal` sets `font-variant-ligatures: none`. Prose keeps them. |
 
 `Typo.Text` (default `span`) inherits the container's size, weight and
 line-height and only applies text props. Use it for text inside blocks that own
@@ -42,7 +43,7 @@ the type scale (NavRow labels, message footers, pill buttons):
 ```tsx
 <NavRow label={<Typo.Text lineClamp={2} wrap="anywhere">{title}</Typo.Text>} />
 <Typo.Text as="time" dateTime={iso} numeric="tabular">{formatClock(date, locale)}</Typo.Text>
-<Typo.Caption tone="secondary" truncate>{path}</Typo.Caption>
+<Typo.Caption tone="secondary" truncate literal>{path}</Typo.Caption>
 ```
 
 ## Who can use this component
@@ -93,4 +94,4 @@ Interactive controls retain the keyboard focus ring from the Focus foundation.
 - Do not lock dimensions to pixel-perfect desktop-only widths. Use responsive containers, intrinsic sizing, and tokens.
 
 ## Tags
-typography, text, semantic, tone, truncate, line-clamp, tabular-numbers
+typography, text, semantic, tone, truncate, line-clamp, tabular-numbers, literal, ligatures

@@ -44,6 +44,7 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
     title={decision.title}
     details={decision.details}
     renderText={approvalText}
+    literal
     // No clamp: a long card scrolls in the details area, so Allow never sits over hidden text.
     onOpen={decision.onOpenSource}
     error={decision.error}
