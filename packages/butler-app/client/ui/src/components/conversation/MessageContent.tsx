@@ -91,7 +91,7 @@ function MessageContentComponent({
             withCurrentControls={canRetryWithCurrentControls(message)}
           />
         )}
-      <ConversationRequestAnchor messageId={message.id} />
+      {message.role !== "user" && <ConversationRequestAnchor messageId={message.id} />}
     </MessageImageContext.Provider>
   );
 }

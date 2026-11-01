@@ -161,6 +161,10 @@ async function exercise() {
   await page.locator("[data-test-class~='composer-send-button']").click();
   const card = page.locator('[data-test-class="composer-authority-decision"]').first();
   await card.getByText(copy.title, { exact: true }).waitFor();
+  // Asked before Butler wrote anything: its own full-width row, not squeezed into the user's bubble.
+  const composerWidth = (await page.locator('[data-test-class="composer-card"]').boundingBox())!.width;
+  const cardWidth = (await card.boundingBox())!.width;
+  assert(cardWidth >= composerWidth * 0.9, `card ${cardWidth}px beside composer ${composerWidth}px`);
   await card.getByRole("button", { name: copy.deny, exact: true }).click();
   await card.waitFor({ state: "hidden" });
 
