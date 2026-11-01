@@ -15,6 +15,8 @@ mod context_lifecycle;
 mod context_resume;
 #[path = "hooks/context_size.rs"]
 mod context_size;
+#[path = "hooks/fail_closed.rs"]
+mod fail_closed;
 use super::delegate_followup::stub as child_stub;
 mod idle;
 #[path = "hooks/limits.rs"]
@@ -269,14 +271,14 @@ async fn hooks_crash_failclosed_prompt_deny_and_next_send() -> Result<(), Harnes
     } else {
         "exit /b 3"
     };
-    replace(&s, vec![hook("crash", "UserPromptSubmit", crash)]).await?;
+    let mut open = hook("crash", "UserPromptSubmit", crash);
+    open["failClosed"] = json!(false);
+    replace(&s, vec![open]).await?;
     assert_eq!(
         s.turn("general", "First send.").await?.1["state"],
         "delivered"
     );
-    let mut guard = hook("crash", "UserPromptSubmit", crash);
-    guard["failClosed"] = json!(true);
-    replace(&s, vec![guard]).await?;
+    replace(&s, vec![hook("crash", "UserPromptSubmit", crash)]).await?;
     let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
     let count = || {
         db.query_row("SELECT COUNT(*) FROM session_queued_messages", [], |r| {
@@ -396,7 +398,7 @@ async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), Harness
         "tree-fast"
     };
     let mut hook = json!({"id":"tree","event":"UserPromptSubmit","type":"command","args":fixture(&setup,tree),
-        "timeout_ms":300,"env":{"HOOK_PIDS":pids}});
+        "timeout_ms":300,"env":{"HOOK_PIDS":pids},"failClosed":false});
     configure(&setup, &[hook.clone()])?;
     let s = setup.start().await?;
     assert_eq!(
@@ -421,7 +423,7 @@ async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), Harness
     }
     let runs = api(&s, Method::GET, "/hooks/runs", None).await?;
     assert_eq!(runs.data()[0]["outcome"], "timeout");
-    hook["failClosed"] = json!(true);
+    hook.as_object_mut().unwrap().remove("failClosed");
     replace(&s, vec![hook]).await?;
     let blocked =
         s.gw.post(

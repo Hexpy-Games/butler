@@ -252,14 +252,14 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
         hook["env"]["HOOK_EXIT"] = json!(code);
         hook
     };
-    let crash = exits("crash", "UserPromptSubmit", "CRASH-TEXT", "1");
-    let mut invalid = printing(&setup, "invalid", "UserPromptSubmit", "{INVALID-TEXT");
-    invalid["failClosed"] = json!(true);
+    let mut crash = exits("crash", "UserPromptSubmit", "CRASH-TEXT", "1");
+    crash["failClosed"] = json!(false);
+    let invalid = printing(&setup, "invalid", "UserPromptSubmit", "{INVALID-TEXT");
     let start = exits("start", "SessionStart", "START-TEXT", "2");
     let denied = exits("denied", "UserPromptSubmit", "DENIED-TEXT", "2");
-    let mut closed = exits("closed", "UserPromptSubmit", "CLOSED-TEXT", "1");
-    closed["failClosed"] = json!(true);
+    let closed = exits("closed", "UserPromptSubmit", "CLOSED-TEXT", "1");
     let mut slow = printing(&setup, "slow", "UserPromptSubmit", "SLOW-TEXT");
+    slow["failClosed"] = json!(false);
     slow["args"] = json!(fixture(&setup, "hold"));
     slow["env"] = json!({"HOOK_HELD":setup.sandbox.home.join("slow-held"),
         "HOOK_RELEASE":setup.sandbox.home.join("never")});
@@ -307,23 +307,25 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
     s.finish().await
 }
 
-/// Text starting with a bracket is text unless the hook asked to be judged strictly.
+/// Text starting with a bracket is text for a hook that set `failClosed: false`;
+/// otherwise a failure blocks the send, so stdout is judged as a decision.
 #[tokio::test]
 async fn hooks_context_bracketed_plain_text_reaches_the_model() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = setup("HOOK-CONTEXT-BRACKET")?.env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
+    let open = |id: &str, text: &str| {
+        let mut hook = printing(&setup, id, "UserPromptSubmit", text);
+        hook["failClosed"] = json!(false);
+        hook
+    };
     configure(
         &setup,
         &[
-            printing(&setup, "array", "UserPromptSubmit", "[branch] main"),
-            printing(&setup, "object", "UserPromptSubmit", "{branch} is main"),
+            open("array", "[branch] main"),
+            open("object", "{branch} is main"),
         ],
     )?;
-    let strict = {
-        let mut hook = printing(&setup, "strict", "UserPromptSubmit", "[branch] main");
-        hook["failClosed"] = json!(true);
-        hook
-    };
+    let strict = printing(&setup, "strict", "UserPromptSubmit", "[branch] main");
     let s = setup.start().await?;
     assert_eq!(s.turn("general", "Which?").await?.1["state"], "delivered");
     let prompt = prompts(&s)?.pop().unwrap();
