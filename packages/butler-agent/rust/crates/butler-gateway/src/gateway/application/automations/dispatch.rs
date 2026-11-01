@@ -397,7 +397,7 @@ pub(super) fn run_event(run: &AutomationRunSummary) -> serde_json::Value {
 
 /// Removes the chat message an earlier version wrote for a queued run; the
 /// schedule's run list shows a queued run.
-fn remove_placeholder(
+pub(super) fn remove_placeholder(
     db: &rusqlite::Connection,
     subscribers: &crate::gateway::application::events::EventSubscribers,
     message_id: &str,
