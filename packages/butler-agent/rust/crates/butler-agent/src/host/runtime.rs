@@ -267,15 +267,15 @@ impl AgentRuntime {
         let restart_tool_journal =
             Arc::new(ToolJournalRepository::new(stores.btcc.clone(), now.clone()));
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));
-        let hooks = crate::host::hooks::Dispatcher::open(
+        let hooks = crate::host::hooks::Dispatcher::port(
             plugins.clone(),
             paths.data_root.clone(),
+            stores.bindings.clone(),
             &host_environment,
             tool_output.clone(),
             stop.clone(),
         )
         .await;
-        let hooks: Arc<dyn butler_core::hooks::HookPort> = Arc::new(hooks);
         let factory = GuidedTurnFactoryAdapter {
             hooks: Some(hooks.clone()),
             preparation: GuidedPreparation {

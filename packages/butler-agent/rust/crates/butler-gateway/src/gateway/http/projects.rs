@@ -4,10 +4,12 @@ use std::sync::Arc;
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode, Uri},
+    http::{Method, Request, StatusCode, Uri},
     response::Response,
 };
-use serde_json::Value;
+use butler_core::hooks::ProjectHookLine;
+use serde::Deserialize;
+use serde_json::{Value, json as value};
 
 use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json, query, read_body_with_limit};
 use crate::gateway::{
@@ -45,6 +47,54 @@ pub(super) async fn create(
             data: created,
         },
     )
+}
+
+/// The answer to a project folder's question. The folder is the project's own: the
+/// request names only the hooks the person saw.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FolderTrustAnswer {
+    trusted: bool,
+    hooks: Vec<ProjectHookLine>,
+}
+
+/// Whether to trust a project's folder, asked when the project is added. The app's own
+/// route, with no model tool behind it.
+pub(super) async fn folder_trust(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    project_id: String,
+) -> Result<Option<Response>, HttpError> {
+    let data = match *request.method() {
+        Method::GET => {
+            let question = state
+                .application
+                .project_folder_question(project_id)
+                .await?;
+            let question = question
+                .map(|request| value!({"folder":request.project_path,"hooks":request.hooks}));
+            value!({"question":question})
+        }
+        Method::POST => {
+            let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
+            let answer: FolderTrustAnswer =
+                serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+            state
+                .application
+                .answer_project_folder(project_id, answer.hooks, answer.trusted)
+                .await?;
+            value!({})
+        }
+        _ => return Ok(None),
+    };
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data,
+        },
+    )
+    .map(Some)
 }
 
 fn parse_request(value: &Value) -> Option<AppCreateProjectRequest> {

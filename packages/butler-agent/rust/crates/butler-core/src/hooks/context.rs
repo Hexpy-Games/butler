@@ -22,4 +22,6 @@ pub struct HookDispatched {
     pub deny: Option<String>,
     /// Added context in config order.
     pub context: Vec<HookContext>,
+    /// A project folder's hook wrote some of `deny`, and the model will read it.
+    pub project_denied: bool,
 }
