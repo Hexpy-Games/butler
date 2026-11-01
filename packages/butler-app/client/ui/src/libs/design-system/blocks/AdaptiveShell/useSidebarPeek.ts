@@ -51,7 +51,10 @@ export function useSidebarPeek(rootRef: RefObject<HTMLElement | null>, { enabled
     const view = doc.defaultView ?? window;
     const onBlur = () => controller.close("window-blur");
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") controller.close("escape"); };
-    const onPress = (event: PointerEvent) => { if (!sidebar.contains(event.target as Node)) controller.close("press-outside"); };
+    // Chrome that sits over the peeked card (the sidebar toggle) is part of its hover area.
+    const companions = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-peek-companion]") ?? []);
+    const inPeek = (target: Node) => sidebar.contains(target) || companions.some((companion) => companion.contains(target));
+    const onPress = (event: PointerEvent) => { if (!inPeek(event.target as Node)) controller.close("press-outside"); };
     const listeners: Array<[EventTarget, string, EventListener, boolean]> = [
       [sidebar, "pointerenter", controller.pointerEnter as EventListener, false],
       [sidebar, "pointerleave", controller.pointerLeave as EventListener, false],
@@ -59,6 +62,10 @@ export function useSidebarPeek(rootRef: RefObject<HTMLElement | null>, { enabled
       [view, "blur", onBlur as EventListener, false],
       [doc, "keydown", onKey as EventListener, true],
       [doc, "pointerdown", onPress as EventListener, true],
+      ...companions.flatMap((companion): Array<[EventTarget, string, EventListener, boolean]> => [
+        [companion, "pointerenter", controller.pointerEnter as EventListener, false],
+        [companion, "pointerleave", controller.pointerLeave as EventListener, false],
+      ]),
     ];
     for (const [target, type, listener, capture] of listeners) target.addEventListener(type, listener, capture);
     return () => { for (const [target, type, listener, capture] of listeners) target.removeEventListener(type, listener, capture); };
