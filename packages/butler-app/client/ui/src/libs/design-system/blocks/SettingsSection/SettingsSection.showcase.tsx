@@ -143,7 +143,7 @@ function ExplicitSave({ locale }: ShowcaseRenderContext) {
       </ButtonContainer>
     )}>
       <SettingsSection id="profile" kind="form" title={t.profile}>
-        <SettingsField id="sc-nickname" settingId="nickname" label={t.nickname} control={<Input id="sc-nickname" defaultValue={locale === "ko-KR" ? "연우" : "Yeonwoo"} />} />
+        <SettingsField id="sc-nickname" settingId="nickname" label={t.nickname} control={<Input id="sc-nickname" defaultValue={locale === "ko-KR" ? "지수" : "Sam"} />} />
       </SettingsSection>
     </SettingsPage>
   );
