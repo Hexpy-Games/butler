@@ -13,6 +13,7 @@ pub(in crate::host::guided) mod open_asks;
 mod phase_memory;
 mod prior_tool;
 pub(in crate::host) mod work_context;
+pub(in crate::host::guided) use canon::run_note;
 
 use std::sync::Arc;
 

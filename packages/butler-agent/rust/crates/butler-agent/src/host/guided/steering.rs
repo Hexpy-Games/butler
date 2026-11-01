@@ -13,6 +13,8 @@ use crate::host::guided::prompt::{GuidedTextState, work_context};
 pub(crate) struct GuidedSteering {
     state: Arc<GuidedTextState>,
     last_rendered: Mutex<Option<String>>,
+    /// The plan run note the model last saw; `None` until the first round.
+    last_run_note: Mutex<Option<Option<String>>>,
     subsessions: Arc<butler_turn::btcc::SubsessionService>,
     child_session_id: String,
     child_turn_id: String,
@@ -30,6 +32,7 @@ impl GuidedSteering {
         Self {
             state,
             last_rendered: Mutex::new(last_rendered),
+            last_run_note: Mutex::new(None),
             subsessions,
             child_session_id,
             child_turn_id,
@@ -80,6 +83,9 @@ impl TurnSteeringPort for GuidedSteering {
                     request_segment_kind: "project_ledger_and_work_authority".into(),
                 });
             }
+            if let Some(note) = self.run_note(&invocation).await? {
+                observations.push(note);
+            }
             if let Some(direction) = direction {
                 let unplanned = current
                     .as_ref()
@@ -94,8 +100,34 @@ impl TurnSteeringPort for GuidedSteering {
                     request_segment_kind: "subsession_parent_direction".into(),
                 });
             }
-            let _ = invocation;
             Ok(observations)
         })
+    }
+}
+
+impl GuidedSteering {
+    /// The run as it is now, re-sent only when it changed since the model last saw it.
+    /// The first round already has it in its prompt.
+    async fn run_note(
+        &self,
+        invocation: &GuidedInvocation<'_>,
+    ) -> Result<Option<SteeringObservation>, butler_turn::btcc::BtccError> {
+        let current = crate::host::guided::prompt::run_note(&self.state, invocation.turn).await?;
+        let mut last = self.last_run_note.lock().await;
+        let seen = last.replace(current.clone());
+        let Some(seen) = seen else {
+            return Ok(None);
+        };
+        if seen == current {
+            return Ok(None);
+        }
+        let content = match current {
+            Some(note) => format!("Updated plan run; it changed since the last note.\n{note}"),
+            None => "Updated plan run: this conversation no longer has a run.".to_owned(),
+        };
+        Ok(Some(SteeringObservation {
+            content,
+            request_segment_kind: "canon_run_status".into(),
+        }))
     }
 }

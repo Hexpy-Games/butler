@@ -9,10 +9,10 @@ use super::*;
 use crate::work_chain::{Chain, Step};
 use crate::work_types::EpicId;
 pub use edits::edit;
+pub use note::note;
 pub use operations::{bound_sessions, decide_hold, owner, request, session_deleted, take_here};
 use rusqlite::params;
 use std::collections::{BTreeMap, BTreeSet};
-pub use note::note;
 pub use view::view;
 
 fn revision(db: &Connection, session: &str) -> Result<i64> {
