@@ -7305,7 +7305,7 @@
             },
             "size": {
               "type": "string",
-              "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+              "description": "Use an allowed size for the selected image model. Omit for the model's default."
             },
             "quality": {
               "type": "string",
@@ -7359,7 +7359,7 @@
             },
             "size": {
               "type": "string",
-              "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+              "description": "Use an allowed size for the selected image model. Omit for the model's default."
             },
             "quality": {
               "type": "string",
@@ -13564,7 +13564,7 @@
           },
           "size": {
             "type": "string",
-            "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+            "description": "Use an allowed size for the selected image model. Omit for the model's default."
           },
           "quality": {
             "type": "string",
@@ -13609,7 +13609,7 @@
           },
           "size": {
             "type": "string",
-            "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+            "description": "Use an allowed size for the selected image model. Omit for the model's default."
           },
           "quality": {
             "type": "string",

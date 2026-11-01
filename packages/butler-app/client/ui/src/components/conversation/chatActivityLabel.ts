@@ -1,6 +1,7 @@
 import { appCopy } from "@/app/copy.ts";
 import type { PhaseActivity } from "@/app/conversation-progress";
 import { toolchainGroupLabel } from "./toolchainUtils";
+import { isTerminalProgressState } from "@/app/utils";
 import { isWorkActivityToolRow } from "./workActivityToolRow";
 
 /**
@@ -9,7 +10,7 @@ import { isWorkActivityToolRow } from "./workActivityToolRow";
  */
 export function chatActivityLabel(activities: PhaseActivity[]): string | undefined {
   const tools = (activities.at(-1)?.operations ?? []).filter(row => isWorkActivityToolRow(row) && !row.thinking_title);
-  const latest = tools.filter(row => row.safe_tool_name).at(-1);
+  const latest = tools.filter(row => row.safe_tool_name && !row.failure_code && !isTerminalProgressState(row.state ?? "")).at(-1);
   if (!latest?.safe_tool_name) return undefined;
   const label = appCopy.guided.tools[latest.safe_tool_name];
   if (!label) return appCopy.guided.tools.fallback;

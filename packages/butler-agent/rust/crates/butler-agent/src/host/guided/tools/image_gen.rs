@@ -141,5 +141,9 @@ fn invalid(_: impl std::fmt::Display) -> ImageGenError {
     ImageGenError::new("image_invalid", "Invalid image data.")
 }
 fn failure(code: &str, message: &str) -> Result<JsonDocument, ToolExecutionError> {
-    encoded(&json!({"status":"error","ok":false,"error":{"code":code,"message":message}}))
+    let mut error = json!({"code":code,"message":message});
+    if matches!(code, "image_transport" | "image_timeout") {
+        error["retryable"] = json!(true);
+    }
+    encoded(&json!({"status":"error","ok":false,"error":error}))
 }
