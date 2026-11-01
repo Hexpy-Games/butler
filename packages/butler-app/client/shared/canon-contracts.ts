@@ -43,7 +43,12 @@ export interface CanonWork {
   origin: "chat" | "dialog" | "board" | "mcp";
   revision: number;
 }
-export interface EpicCard extends CanonWork { task_counts: TaskCounts; running?: boolean }
+export interface EpicCard extends CanonWork {
+  task_counts: TaskCounts;
+  running?: boolean;
+  /** Its place in its home conversation's queue; `hold` marks a step waiting on a decision. */
+  queue?: { state: "waiting" | "running" | "held" | "done"; hold: boolean; finished_at: number | null } | null;
+}
 export interface CanonPlan {
   updated_at?: number;
   id: string;

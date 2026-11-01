@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import { sessionFromNavigation } from "@/app/utils.ts";
 import { getCanon } from "@/app/canonApi.ts";
-import { subscribeCanonChanges } from "@/app/canonEvents.ts";
+import { singleFlight, subscribeCanonChanges } from "@/app/canonEvents.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 
 const reads = new Map<string, Promise<void>>();
@@ -16,11 +16,14 @@ function readProject(projectId: string): Promise<void> {
   void read.catch(() => { if (reads.get(projectId) === read) reads.delete(projectId); });
   return read;
 }
-const queued = new Set<string>();
+const refreshes = new Map<string, () => Promise<void>>();
 function refreshProject(projectId: string) {
-  if (queued.has(projectId)) return;
-  queued.add(projectId); reads.delete(projectId);
-  queueMicrotask(() => { queued.delete(projectId); void readProject(projectId).catch(() => {}); });
+  let refresh = refreshes.get(projectId);
+  if (!refresh) {
+    refresh = singleFlight(() => { reads.delete(projectId); return readProject(projectId).catch(() => {}); });
+    refreshes.set(projectId, refresh);
+  }
+  void refresh();
 }
 /** Sidebar data wins immediately; a direct conversation entry reads canon once. */
 export function useActiveCanonEpic() {

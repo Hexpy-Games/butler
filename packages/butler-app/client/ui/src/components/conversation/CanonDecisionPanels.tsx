@@ -17,7 +17,7 @@ export function CanonHold({ panel }: { panel: CanonHoldPanel }) {
     await decideCanonHold(panel.session_id, panel.epic_id, proceed ? "continue" : "delete");
     complete(() => setState(proceed ? "continued" : "deleted"));
   }, () => useButlerStore.getState().refreshSessionView(panel.session_id)); };
-  if (state !== "pending") return <Typo.Caption tone="secondary" data-test-class="canon-hold-settled">{state === "deleted" ? copy.removed : copy.continued}</Typo.Caption>;
+  if (state !== "pending") return <Typo.Caption tone="secondary" data-test-class="canon-hold-settled">{state === "deleted" ? copy.removed : state === "resolved" ? copy.resolved : copy.continued}</Typo.Caption>;
   return <ComposerDecisionPanel placement="conversation" icon={<CircleAlert size="lg" />} title={panel.epic_title}
     data-test-class="canon-hold" onOpen={() => useButlerStore.getState().openSession(panel.session_id)} actions={complete => <ButtonContainer size="sm" justify="end">
       <Button size="sm" variant="secondary" disabled={decision.busy} onClick={() => decide(false, complete)}>{copy.remove}</Button>
