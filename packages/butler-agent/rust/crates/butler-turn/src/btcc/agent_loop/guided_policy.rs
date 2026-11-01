@@ -54,6 +54,9 @@ impl GuidedPolicyPort for GuidedPolicy {
     fn hooks(&self) -> Option<&super::guided_ports::GuidedHookBinding> {
         self.dependencies.hooks.as_ref()
     }
+    fn project_hook_spoke(&self) {
+        self.dependencies.tools.project_hook_spoke();
+    }
 
     fn prepare<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, PreparedPolicy> {
         Box::pin(async move {
@@ -80,8 +83,9 @@ impl GuidedPolicyPort for GuidedPolicy {
     fn before_model_round<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
-        self.dependencies.context.steering(invocation)
+        self.dependencies.context.steering(invocation, phase)
     }
 
     fn resolve_tools<'a>(

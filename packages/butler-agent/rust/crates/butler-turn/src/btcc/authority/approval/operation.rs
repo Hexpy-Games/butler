@@ -111,7 +111,11 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         // R5 web requests are never covered by a standing permission.
         allow_conversation: matches!(
             facts.capability,
-            "web_read" | "web_search" | "generate_image" | "edit_image"
+            "web_read"
+                | "web_search"
+                | "generate_image"
+                | "edit_image"
+                | butler_core::hooks::PROJECT_HOOKS_CAPABILITY
         )
         .then_some(false),
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),

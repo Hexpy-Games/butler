@@ -172,3 +172,55 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
     assert!(test_support::task_xml(&invalid, SID, SHELL).is_err());
     Ok(())
 }
+
+/// The task's script, decoded from its `-EncodedCommand`.
+fn task_script(xml: &str) -> String {
+    let encoded = xml
+        .split("-EncodedCommand ")
+        .nth(1)
+        .unwrap()
+        .split("</Arguments>")
+        .next()
+        .unwrap();
+    let bytes = STANDARD.decode(encoded).unwrap();
+    String::from_utf16(
+        &bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap()
+}
+
+// test-category: pure-logic
+/// PowerShell ends a single-quoted string at any of its four single quotes, so a user
+/// folder such as `C:\Users\O’Brien` must stay one string in the task's script.
+#[test]
+fn windows_task_script_keeps_typographic_quotes_inside_strings()
+-> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let home = "C:\\Users\\O\u{2019}Brien \u{2018}x\u{201a}y\u{201b}";
+    let definition = Definition {
+        program: format!("{home}\\Butler\\butler-agent.exe").into(),
+        args: vec!["--data".into(), format!("{home}\\.butler")],
+        working_dir: format!("{home}\\.butler").into(),
+        env: vec![("BUTLER_DATA".into(), format!("{home}\\.butler"))],
+    };
+    let script = task_script(&test_support::task_xml(&definition, SID, SHELL).unwrap());
+    let doubled =
+        "C:\\Users\\O\u{2019}\u{2019}Brien \u{2018}\u{2018}x\u{201a}\u{201a}y\u{201b}\u{201b}";
+    assert!(
+        script.contains(&format!("'{doubled}\\Butler\\butler-agent.exe'")),
+        "{script}"
+    );
+    assert!(
+        script.contains(&format!(
+            "SetEnvironmentVariable('BUTLER_DATA','{doubled}\\.butler','Process')"
+        )),
+        "{script}"
+    );
+    assert!(!script.contains("O\u{2019}Brien"), "{script}");
+    Ok(())
+}

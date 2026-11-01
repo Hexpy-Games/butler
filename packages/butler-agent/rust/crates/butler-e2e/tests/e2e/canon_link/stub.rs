@@ -1,4 +1,4 @@
-mod delegated;
+pub(super) mod delegated;
 use super::*;
 use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
 use std::sync::{
@@ -19,6 +19,8 @@ pub(crate) struct Script {
     pub(super) steward_held: Semaphore,
     pub(super) steward_release: Semaphore,
     pub(crate) delegate: AtomicBool,
+    pub(super) steer_relation: Mutex<String>,
+    pub(super) direction_blocked: AtomicBool,
     pub(super) hold_report: AtomicBool,
     reporting: Semaphore,
     report_release: Semaphore,
@@ -72,6 +74,8 @@ pub(super) async fn start(
         steward_held: Semaphore::new(0),
         steward_release: Semaphore::new(0),
         delegate: AtomicBool::new(false),
+        steer_relation: Mutex::new(String::new()),
+        direction_blocked: AtomicBool::new(false),
         hold_report: AtomicBool::new(false),
         reporting: Semaphore::new(0),
         report_release: Semaphore::new(0),

@@ -22,6 +22,7 @@ The header row stays icon, small label and title. The default
 | `eyebrow` | Localized decision category (Plan / Permission) |
 | `title` | What is being decided; wraps in full, opens the source |
 | `renderText` | Optional display formatter for title and details; original strings remain available in titles and accessible labels |
+| `literal` | The title and details are the exact action (commands, paths, URLs): Typo `literal` draws their own characters, so `2876x6` never shows as `2876×6` and `->` never as an arrow. Approval requests set it |
 | `onOpen` | Opens the plan or the request's source |
 | `details` | Lines under the title (examples, a "+N more" line) in the secondary caption style, aligned to the title text. Every line wraps in full: what is being decided is never cut |
 | `detailsShowMoreLabel`, `detailsShowLessLabel` | With both, details longer than four lines clamp behind an inline Show more / Show less button (the QueuedMessage pattern); without them details always show in full. Overflow is measured against the clamped block's real height, so several detail lines (a short line followed by a long reviewed input) still get the button when a later line is hidden |

@@ -1,0 +1,179 @@
+use super::*;
+
+fn malformed_store(data: &Path) -> Result<(Vec<PathBuf>, Vec<PathBuf>), HarnessError> {
+    schema(data, false)?;
+    let dir = data.join("outputs/manifests");
+    std::fs::create_dir_all(&dir)?;
+    let mut blobs = Vec::new();
+    let mut manifests = Vec::new();
+    for (name, body, truncated) in [
+        ("newer", b"Unknown shape".as_slice(), false),
+        ("cut", b"Truncated".as_slice(), true),
+    ] {
+        blobs.push(blob(data, body)?);
+        let path = dir.join(format!("{}.json", hash(name.as_bytes())));
+        let sha = hash(body);
+        let raw = if truncated {
+            format!("{{\"files\":[\"{sha}\"],\"unfinished\":")
+        } else {
+            json!({"future_format":{"references":[sha]}}).to_string()
+        };
+        std::fs::write(&path, raw)?;
+        manifests.push(path);
+    }
+    Ok((blobs, manifests))
+}
+
+#[tokio::test]
+async fn unparseable_manifests_protect_visible_references() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BLOB-RAW-REFERENCES")?;
+    let (blobs, manifests) = malformed_store(&setup.sandbox.data)?;
+    let s = setup.start().await?;
+    completed(&s).await?;
+    for (blob, manifest) in blobs.iter().zip(&manifests) {
+        assert!(blob.is_file(), "backfill deleted {}", blob.display());
+        let rows: i64 = db(&s.sandbox.data)?.query_row(
+            "SELECT count(*) FROM output_blobs WHERE output_id=?1 AND sha=?2",
+            params![
+                manifest.file_stem().unwrap().to_str(),
+                blob.file_name().unwrap().to_str()
+            ],
+            |r| r.get(0),
+        )?;
+        assert_eq!(rows, 1, "raw reference must belong to the manifest stem");
+    }
+    let unrelated = chat(&s).await?;
+    seed(&s.sandbox.data, &unrelated, "own", b"Unrelated", true)?;
+    seed(
+        &s.sandbox.data,
+        &unrelated,
+        "shared",
+        b"Unknown shape",
+        true,
+    )?;
+    db(&s.sandbox.data)?.execute_batch(
+        "CREATE TABLE swept_raw(sha TEXT PRIMARY KEY);
+         CREATE TRIGGER observe_raw_sweep BEFORE DELETE ON output_blob_sweep BEGIN
+           INSERT OR IGNORE INTO swept_raw VALUES(OLD.sha); END;",
+    )?;
+    delete(&s, &unrelated).await?;
+    assert_eq!(
+        db(&s.sandbox.data)?.query_row(
+            "SELECT count(*) FROM swept_raw WHERE sha=?1",
+            [hash(b"Unknown shape")],
+            |r| r.get::<_, i64>(0),
+        )?,
+        1,
+        "the shared raw reference must reach the sweep"
+    );
+    for blob in blobs {
+        assert!(blob.is_file(), "unrelated delete removed protected data");
+    }
+    s.finish().await
+}
+
+#[tokio::test]
+async fn malformed_manifests_ignore_noncanonical_sha_runs() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BLOB-RAW-CANONICAL")?;
+    let data = &setup.sandbox.data;
+    schema(data, false)?;
+    seed(data, "general", "live", b"Live", false)?;
+    let manifests = data.join("outputs/manifests");
+    let uppercase = hash(b"Live").to_ascii_uppercase();
+    let long = "abcdef0123456789".repeat(1024);
+    let id = hash(b"noncanonical");
+    std::fs::write(
+        manifests.join(format!("{id}.json")),
+        json!({"future_format": [uppercase, long]}).to_string(),
+    )?;
+    let s = setup.start().await?;
+    completed(&s).await?;
+    let rows = db(&s.sandbox.data)?
+        .prepare("SELECT sha FROM output_blobs WHERE output_id=?1")?
+        .query_map([id], |r| r.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    assert!(rows.is_empty(), "noncanonical raw sha rows: {rows:?}");
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blobs")?,
+        1,
+        "the parsed live reference must remain indexed"
+    );
+    s.finish().await
+}
+
+#[tokio::test]
+async fn unparseable_manifests_skip_orphans_and_log_paths() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BLOB-RAW-ORPHAN")?;
+    let (blobs, manifests) = malformed_store(&setup.sandbox.data)?;
+    let orphan = blob(&setup.sandbox.data, b"Real orphan")?;
+    let s = setup.start().await?;
+    completed(&s).await?;
+    assert!(
+        orphan.is_file(),
+        "uncertain ownership must skip orphan reclaim"
+    );
+    for path in blobs {
+        assert!(path.is_file());
+    }
+    let logs = s.agent.logs();
+    for path in manifests {
+        assert_eq!(
+            logs.matches(&format!(
+                "outputs/manifests/{}",
+                path.file_name().unwrap().to_str().unwrap()
+            ))
+            .count(),
+            1,
+            "uncertain manifest must be diagnosed once per batch: {logs}"
+        );
+        assert!(
+            logs.contains(&format!(
+                "outputs/manifests/{}",
+                path.file_name().unwrap().to_str().unwrap()
+            )),
+            "missing diagnostic: {logs}"
+        );
+    }
+    assert!(
+        logs.contains("orphan pass skipped"),
+        "missing diagnostic: {logs}"
+    );
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT queued FROM output_blob_backfill")?,
+        0
+    );
+    s.finish().await
+}
+
+#[tokio::test]
+async fn interrupted_uncertain_backfill_still_skips_orphans() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BLOB-RAW-RESUME")?;
+    let (blobs, _) = malformed_store(&setup.sandbox.data)?;
+    let orphan = blob(&setup.sandbox.data, b"Real orphan")?;
+    block_completion(&setup.sandbox.data)?;
+    let mut s = setup.start().await?;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !s.agent.logs().contains("hold backfill") {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .map_err(|_| HarnessError("completion interruption not observed".into()))?;
+    s.agent.terminate().await?;
+    assert_eq!(
+        scalar(&s.sandbox.data, "SELECT count(*) FROM output_blobs")?,
+        2
+    );
+    db(&s.sandbox.data)?.execute_batch("DROP TRIGGER block_complete;")?;
+    s.gw = s.agent.start_again().await?;
+    completed(&s).await?;
+    assert!(orphan.is_file(), "resume forgot uncertain ownership");
+    for path in blobs {
+        assert!(path.is_file());
+    }
+    s.finish().await
+}

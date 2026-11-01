@@ -482,6 +482,7 @@ export const enUsCopy: AppCopy = {
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `Confirmed the request goal and scope: ${text}` : "Confirmed the request goal and scope.", workInProgress: text => `Working on ${text}.`, toolsSummary: text => text ? `Checking the required information with ${text}.` : "Working with the required tools.",
   },
   serverErrors: {
+    output_transfer_pending: "Outputs are being moved. Please try again shortly.",
     model_not_in_chatgpt_plan: "That model isn't in your ChatGPT plan.",
     credential_in_use_by_default: "The default model uses this key. Change the default model first.", credential_in_use: "Models use this key. Delete them with the key.", credential_not_found: "This key was already deleted. Refresh the list.",
     space_changed: "The list changed. Refresh it and try again.", space_invalid_group: "Select two different conversations.", space_invalid_scope: "Group conversations within the same project.", space_invalid_pin: "Pin a conversation or project.", space_undo_expired: "Other changes prevent undoing this action.", space_invalid_title: "Enter a group name between 1 and 120 characters.",
@@ -641,6 +642,13 @@ export const enUsCopy: AppCopy = {
       manageSchedule: { create: "Create a schedule?", delete: "Delete a schedule?", run: "Run due schedules?", change: "Change a schedule?" },
       updateProject: "Update the project records?",
       startConversation: "Start a new conversation?",
+      projectHooks: {
+        title: "Run this folder's hooks?",
+        receives: "Receives your prompts and tool results; output can reach the model",
+        unsandboxed: "Runs without a sandbox",
+        deny: "Don't run",
+        allow: "Run",
+      },
       restartService: "Restart Butler?",
       createWorktree: "Create a worktree for this conversation?",
       switchFolder: "Move the working folder?",
@@ -1406,7 +1414,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   settings: {
     localModelErrors: { discover: "No models found at this address.", register: "Couldn't add the model." },
-    archiveErrors: { restore: "Couldn't restore it.", loadMore: "Couldn't load more." },
+    archiveErrors: { remove: "Couldn't delete it.", restore: "Couldn't restore it.", loadMore: "Couldn't load more." },
     skillErrors: { invalid: "That isn't a skill .zip.", tooLarge: "That file is too large.", import: "Couldn't import it." },
     mcpErrors: { save: "Couldn't save the server.", notFound: "This server was already removed.", unavailable: "Couldn't open MCP settings.", remove: "Couldn't remove the server.", toggle: "Couldn't change it.", probe: "Couldn't reach the server." },
     hooks: { add: "Add hook", edit: "Edit", test: "Test", remove: "Delete", recent: "Recent runs", empty: "No hooks", name: "Name", event: "Event", tools: "Tools", command: "Command", args: "Args (JSON)", timeout: "Timeout (ms)", failClosed: "Block on error", async: "Background", enabled: "Enabled", refresh: "Refresh", blocked: "Blocked by hook", editTitle: "Edit hook", disabled: "Disabled", emptyRuns: "No runs yet", testSuccess: "Run succeeded", testFailure: "Run failed", exitCode: "Exit code", commandDisabled: "Using arguments.", commandRequired: "Enter a command or arguments.", deleteConfirm: name => `Delete hook "${name}".` },

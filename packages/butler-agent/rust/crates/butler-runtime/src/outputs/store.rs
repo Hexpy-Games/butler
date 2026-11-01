@@ -2,12 +2,13 @@ use butler_platform::secure_fs;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
+    io::Read,
     path::{Path, PathBuf},
     sync::Mutex,
 };
 
-static CHANGES: Mutex<()> = Mutex::new(());
+pub(super) static CHANGES: Mutex<()> = Mutex::new(());
 pub(super) fn error(message: &str) -> std::io::Error {
     std::io::Error::other(message)
 }
@@ -17,7 +18,7 @@ pub(super) fn hash(bytes: &[u8]) -> String {
 
 #[derive(Clone)]
 pub struct OutputStore {
-    root: PathBuf,
+    pub(super) root: PathBuf,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Revision {
@@ -76,25 +77,75 @@ impl OutputStore {
             root: data.join(butler_platform::data_paths::OUTPUTS),
         }
     }
-    fn manifest(&self, id: &str) -> std::io::Result<PathBuf> {
+    pub(super) fn manifest(&self, id: &str) -> std::io::Result<PathBuf> {
         if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(error("invalid_output_id"));
         }
         Ok(self.root.join("manifests").join(format!("{id}.json")))
     }
+    /// One-time ownership migration, called after readiness on a blocking worker.
+    pub fn backfill_blobs(
+        &self,
+        stop: &tokio_util::sync::CancellationToken,
+    ) -> std::io::Result<()> {
+        super::blobs::run(self, stop)
+    }
     pub fn read(&self, id: &str) -> std::io::Result<Output> {
         serde_json::from_reader(secure_fs::open_read_no_follow(&self.manifest(id)?)?)
             .map_err(std::io::Error::other)
     }
-    fn list(&self, session: &str) -> std::io::Result<Vec<Output>> {
-        let dir = self.root.join("sessions").join(hash(session.as_bytes()));
-        if !dir.exists() {
-            return Ok(Vec::new());
+    /// Read I/O separately from parsing: unservable manifests can be skipped when
+    /// transferring, or collected from indexed references after blob migration.
+    pub(super) fn read_optional(
+        &self,
+        id: &str,
+        skip_unparseable: bool,
+    ) -> std::io::Result<Option<Output>> {
+        let mut bytes = Vec::new();
+        let read = secure_fs::open_read_no_follow(&self.manifest(id)?)
+            .and_then(|mut file| file.read_to_end(&mut bytes));
+        match read {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
         }
-        let mut outputs = Vec::new();
-        for entry in std::fs::read_dir(dir)? {
+        match serde_json::from_slice(&bytes) {
+            Ok(output) => Ok(Some(output)),
+            Err(e) if skip_unparseable => {
+                butler_core::diagnostic!("[outputs] ignoring unparseable manifest {id}: {e}");
+                Ok(None)
+            }
+            Err(e) => Err(std::io::Error::other(e)),
+        }
+    }
+    /// Session directories are lookup hints; interrupted replacements can leave
+    /// staging names and markers for manifests that have already moved.
+    pub(super) fn marker_ids(&self, session: &str) -> std::io::Result<BTreeSet<String>> {
+        let dir = self.root.join("sessions").join(hash(session.as_bytes()));
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeSet::new()),
+            Err(e) => return Err(e),
+        };
+        let mut ids = BTreeSet::new();
+        for entry in entries {
             let id = entry?.file_name().to_string_lossy().into_owned();
-            outputs.push(self.read(&id)?);
+            if self.manifest(&id).is_err() {
+                butler_core::diagnostic!("[outputs] ignoring invalid session marker {id:?}");
+                continue;
+            }
+            ids.insert(id);
+        }
+        Ok(ids)
+    }
+    fn list(&self, session: &str) -> std::io::Result<Vec<Output>> {
+        let mut outputs = Vec::new();
+        for id in self.marker_ids(session)? {
+            if let Some(output) = self.read_optional(&id, true)?
+                && output.session_id == session
+            {
+                outputs.push(output);
+            }
         }
         outputs.sort_by(|a, b| a.output_id.cmp(&b.output_id));
         Ok(outputs)
@@ -136,6 +187,7 @@ impl OutputStore {
         if snapshot.files.is_empty() {
             return Ok((refused(request, snapshot, id), 0));
         }
+        super::blobs::initialize(&self.root)?;
         let path = self.manifest(&id)?;
         let mut output = if path.exists() {
             self.read(&id)?
@@ -171,6 +223,8 @@ impl OutputStore {
             hashes.insert(name, sha);
         }
         if output.revisions.last().is_some_and(|r| r.files == hashes) {
+            super::blobs::protect(&self.root, &output)?;
+            super::index::save(&self.root.join("index.sqlite"), &output)?;
             super::index::reference(
                 &self.root.join("index.sqlite"),
                 &output.output_id,
@@ -203,6 +257,7 @@ impl OutputStore {
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
         let mut output = self.read(id)?;
+        let index = self.root.join("index.sqlite");
         if output.session_id != session {
             let old = self
                 .root
@@ -216,8 +271,12 @@ impl OutputStore {
             if old.exists() {
                 std::fs::remove_file(old)?;
             }
+        } else if !super::index::owner_matches(&index, id, session)? {
+            // Replay a manifest replacement interrupted before its index save.
+            // Already-correct owners retain their existing metadata/references.
+            super::index::save(&index, &output)?;
         }
-        super::index::reference(&self.root.join("index.sqlite"), id, session, turn, message)
+        super::index::reference(&index, id, session, turn, message)
     }
     fn publication_id(&self, session: &str, source: &str) -> std::io::Result<String> {
         let generation = self.root.join("generations").join(hash(session.as_bytes()));
@@ -234,9 +293,8 @@ impl OutputStore {
         Ok(hash(identity.as_bytes()))
     }
     fn persist(&self, path: &Path, output: &Output) -> std::io::Result<()> {
+        super::blobs::protect(&self.root, output)?;
         secure_fs::create_private_dir_all(path.parent().ok_or_else(|| error("manifest_parent"))?)?;
-        let bytes = serde_json::to_vec(output).map_err(std::io::Error::other)?;
-        secure_fs::replace_private(path, |file| std::io::Write::write_all(file, &bytes), |e| e)?;
         let index = self
             .root
             .join("sessions")
@@ -249,10 +307,12 @@ impl OutputStore {
                 |e: std::io::Error| e,
             )?;
         }
+        let bytes = serde_json::to_vec(output).map_err(std::io::Error::other)?;
+        secure_fs::replace_private(path, |file| std::io::Write::write_all(file, &bytes), |e| e)?;
         super::index::save(&self.root.join("index.sqlite"), output)?;
         Ok(())
     }
-    fn blob(&self, sha: &str) -> std::io::Result<PathBuf> {
+    pub(super) fn blob(&self, sha: &str) -> std::io::Result<PathBuf> {
         if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(error("invalid_blob"));
         }
@@ -277,8 +337,8 @@ impl OutputStore {
             .ok_or_else(|| error("output_file_not_found"))?;
         secure_fs::open_read_no_follow(&self.blob(sha)?)
     }
-    /// Replayable ownership transfer. Keep source markers until every manifest and
-    /// index reference has moved, so a crash at any write can replay the same set.
+    /// Keep source markers until manifests and index references have moved.
+    /// Replays reconcile these hints with each manifest's current owner.
     pub fn transfer_session(&self, source: &str, target: &str) -> std::io::Result<()> {
         let _lock = CHANGES
             .lock()
@@ -288,7 +348,7 @@ impl OutputStore {
             output.session_id = target.to_owned();
             self.persist(&self.manifest(&output.output_id)?, &output)?;
         }
-        super::index::transfer(&self.root.join("index.sqlite"), source, target)?;
+        super::index::transfer(self, source, target)?;
         if source_dir.exists() {
             std::fs::remove_dir_all(source_dir)?;
         }
@@ -303,56 +363,23 @@ impl OutputStore {
         )?;
         Ok(())
     }
-    /// Only session archive/delete runs GC; request paths never scan blobs.
+    /// Collect only durable cleanup candidates, never the whole output store.
     pub fn remove_session(&self, session: &str) -> std::io::Result<()> {
         let _lock = CHANGES
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
-        let index = self.root.join("sessions").join(hash(session.as_bytes()));
-        // Directory markers survive until the index is removed. A retry must
-        // not read manifests that an earlier attempt already removed.
-        match std::fs::read_dir(&index) {
-            Ok(entries) => {
-                for entry in entries {
-                    let id = entry?.file_name().to_string_lossy().into_owned();
-                    ignore_missing(std::fs::remove_file(self.manifest(&id)?))?;
-                }
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
+        let (ids, candidates) = super::blobs::queue_session(self, session)?;
+        for id in &ids {
+            ignore_missing(std::fs::remove_file(self.manifest(id)?))?;
         }
-        super::index::remove(&self.root.join("index.sqlite"), session)?;
-        ignore_missing(std::fs::remove_dir_all(index))?;
-        let manifests = self.root.join("manifests");
-        if !manifests.exists() {
-            return Ok(());
-        }
-        let mut live = std::collections::HashSet::new();
-        for entry in std::fs::read_dir(manifests)? {
-            let output: Output =
-                serde_json::from_reader(secure_fs::open_read_no_follow(&entry?.path())?)
-                    .map_err(std::io::Error::other)?;
-            for rev in output.revisions {
-                live.extend(rev.files.into_values());
-            }
-        }
-        let blobs = self.root.join("blobs");
-        if !blobs.exists() {
-            return Ok(());
-        }
-        for shard in std::fs::read_dir(blobs)? {
-            for blob in std::fs::read_dir(shard?.path())? {
-                let blob = blob?;
-                if !live.contains(&blob.file_name().to_string_lossy().into_owned()) {
-                    std::fs::remove_file(blob.path())?;
-                }
-            }
-        }
-        Ok(())
+        super::index::remove(&self.root.join("index.sqlite"), session, &ids)?;
+        let markers = self.root.join("sessions").join(hash(session.as_bytes()));
+        ignore_missing(std::fs::remove_dir_all(markers))?;
+        super::blobs::drain(self, &candidates)
     }
 }
 
-fn ignore_missing(result: std::io::Result<()>) -> std::io::Result<()> {
+pub(super) fn ignore_missing(result: std::io::Result<()>) -> std::io::Result<()> {
     match result {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         result => result,

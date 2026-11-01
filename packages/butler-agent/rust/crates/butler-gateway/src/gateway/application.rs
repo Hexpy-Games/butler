@@ -308,7 +308,7 @@ impl AppApplication {
             automation_scheduler: Some(automation_scheduler),
             composing: Default::default(),
             initiated_decisions: Default::default(),
-            automation_wake,
+            automation_wake: automation_wake.clone(),
             automation_queued,
             automation_runs,
             queue_mutations: SessionQueueMutationOwner::new(),
@@ -320,7 +320,7 @@ impl AppApplication {
             session_branches: session_branches::SessionBranchOwner::new(),
             session_titles: session_titles::SessionTitleOwner::default(),
             smart_groups: smart_groups::SmartGroupOwner::default(),
-            space_mutations: Arc::new(space::SpaceMutationOwner::new()),
+            space_mutations: Arc::new(space::SpaceMutationOwner::new(automation_wake)),
             transcript_exports: TranscriptExportOwner::new(),
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
             queue_owner,
@@ -342,7 +342,7 @@ impl AppApplication {
     }
 
     async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
-        self.recover_output_transfers().await?;
+        self.recover_output_transfers_for_open().await;
         self.surface_work_failures(None).await?;
         self.connect_update_progress().await;
         if let Err(error) = self.recover_session_relocation_owned().await {

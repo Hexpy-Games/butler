@@ -16,7 +16,7 @@ use butler_turn::btcc::{
     BoundedContinuationEnvelope, BoundedEnvelopeV1, BtccError, ContextCompactionRepository,
     ContextMessages, ContextPort, ContextProjection, ContextProjectionError,
     ContextProjectionInput, ContextProjectionRebaseIdentity, ContextRebase, ContextSizingRequest,
-    GuidedInvocation, ModelRoundError, ModelRoundMessage, ModelRoundRequest, PortFuture,
+    GuidedInvocation, LoopPhase, ModelRoundError, ModelRoundMessage, ModelRoundRequest, PortFuture,
     ProviderBodyAdmissionPort, SteeringObservation, TurnContextProjection,
     TurnContinuationBudgetPort, TurnSteeringPort, UsageAttribution,
 };
@@ -46,8 +46,9 @@ impl ContextPort for ContextPortAdapter {
     fn steering<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
+        phase: LoopPhase,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
-        self.steering.observe(invocation)
+        self.steering.observe(invocation, phase)
     }
 
     fn begin_turn<'a>(

@@ -55,14 +55,25 @@ pub(super) async fn added(
     {
         return Added::default();
     }
-    let Some(text) = super::decision::added_context(finished.stdout) else {
-        return Added::default();
+    // A repo's script can change after its one approval, so it must say what it adds.
+    let project = hook.id.starts_with(PROJECT_HOOK_ID_PREFIX);
+    let text = if project {
+        super::decision::explicit_context(finished.stdout)
+    } else {
+        super::decision::added_context(finished.stdout)
+    };
+    let Some(text) = text else {
+        return Added {
+            note: (project && !finished.stdout.trim().is_empty())
+                .then(|| "plain output not added: project hooks use additionalContext".to_owned()),
+            ..Added::default()
+        };
     };
     // JSON can spell a value differently, so only the decoded text can be checked.
     let text = super::execute::clean(&text, finished.redact);
     let bytes = Some(text.len() as u64);
     let (text, budget_note) = budgeted(hooks, hook, text).await;
-    let fallback = super::decision::fell_back_to_text(finished.stdout)
+    let fallback = (!project && super::decision::fell_back_to_text(finished.stdout))
         .then(|| "not valid JSON; treated as text".to_owned());
     let notes: Vec<String> = fallback.into_iter().chain(budget_note).collect();
     Added {

@@ -382,3 +382,5 @@ async fn sched_04_one_store_imports_and_shares_schedules() -> Result<(), Harness
     drop(db);
     s.finish().await
 }
+
+mod requires_e2e_fixtures;

@@ -60,11 +60,8 @@ fn single_result(result: Result<EditedFile, EditFailure>, elapsed: Duration) -> 
             value
         }
         Err(failure) => {
-            let (message, hint) = if failure.guard.is_some() {
-                (
-                    "The requested workspace path was rejected.",
-                    "Retry with a regular absolute or workspace-relative file path.",
-                )
+            let (message, hint) = if let Some(guard) = &failure.guard {
+                guard.explained()
             } else {
                 (failure_message(failure.error), failure_hint(failure.error))
             };

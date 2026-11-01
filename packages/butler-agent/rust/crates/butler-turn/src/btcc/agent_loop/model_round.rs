@@ -178,7 +178,7 @@ async fn steer_after_rebase(
     let input = round.input;
     let observations = input
         .policy
-        .before_model_round(GuidedInvocation::from(input))
+        .before_model_round(GuidedInvocation::from(input), state.phase)
         .await
         .map_err(AttemptError::Contract)?;
     if observations.is_empty() {
