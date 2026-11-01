@@ -150,6 +150,7 @@ pub(in crate::gateway::application) async fn delivery_failed(
             .canon_operation(AppCanonOperation::StepTurnEnded {
                 op_id,
                 outcome: "failed".into(),
+                turn_id: None,
             })
             .await?;
     }

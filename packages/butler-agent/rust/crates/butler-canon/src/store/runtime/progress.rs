@@ -8,7 +8,7 @@ fn latest(db: &Connection, query: Query, work: &str) -> Result<Option<Value>> {
 }
 
 pub(super) fn running(db: &Connection, work: &Value) -> Result<bool> {
-    if work["status"] != "open" {
+    if work["status"] != "open" || held(db, work)? {
         return Ok(false);
     }
     let session = text(work, "session_id")?;
@@ -35,6 +35,25 @@ pub(super) fn running(db: &Connection, work: &Value) -> Result<bool> {
         .optional()?
         .is_some();
     Ok(own || child)
+}
+
+/// Only the latest linked Work in each conversation can still run for this step.
+pub(super) fn current(works: &[Value], index: usize) -> bool {
+    !works[index + 1..]
+        .iter()
+        .any(|later| later["session_id"] == works[index]["session_id"])
+}
+
+/// Every hold reason stops the step, including an open Work left by Stop.
+fn held(db: &Connection, work: &Value) -> Result<bool> {
+    Ok(db
+        .query_row(
+            Query::QueueHeld.sql(),
+            params![text(work, "session_id")?, text(work, "epic_id")?],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
 }
 
 fn actions(db: &Connection, work: &str) -> Result<Vec<Value>> {
@@ -77,10 +96,7 @@ pub fn progress(db: &Connection, epic: &str, views: &ProjectViews) -> Result<Val
     let mut active = None;
     for (index, work) in works.iter().enumerate() {
         let id = text(work, "work_id")?;
-        // A later Work in the same conversation replaced this one, even if it was left open.
-        let current = !works[index + 1..]
-            .iter()
-            .any(|later| later["session_id"] == work["session_id"]);
+        let current = current(&works, index);
         if current && running(db, work)? {
             result["running"] = json!(true);
         }
@@ -126,8 +142,8 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
                 object.insert("progress".into(), progress);
             } else {
                 let delete_blocked = super::epic_delete_running(db, id)?;
-                object.insert("delete_blocked".into(), json!(delete_blocked));
                 let queue = queue_item(db, id, object.get("home_session_id"))?;
+                object.insert("delete_blocked".into(), json!(delete_blocked));
                 object.insert("queue".into(), queue);
                 object.insert("task_counts".into(), progress["counts"].clone());
                 object.insert("running".into(), progress["running"].clone());

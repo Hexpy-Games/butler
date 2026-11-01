@@ -134,7 +134,7 @@ fn ordinal(value: usize) -> Result<i64> {
     i64::try_from(value).map_err(|_| Error::Invalid("index"))
 }
 
-/// Startup examines only unresolved running steps, through the live-state index.
+/// Startup reconciles live steps and held steps missing a terminal receipt.
 pub fn running(db: &Connection) -> Result<Value> {
     Ok(json!(rows(db, sql::RUNNING, [])?))
 }

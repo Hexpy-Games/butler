@@ -7,14 +7,16 @@ pub use feed::{catch_up, prepare};
 pub use progress::{enrich, progress, project_works};
 pub(crate) use progress::{queue_outcome, step_unfinished};
 pub fn epic_running(db: &Connection, epic: &str) -> Result<bool> {
-    for work in rows(db, Query::Works.sql(), [epic])? {
-        if progress::running(db, &work)? {
+    let works = rows(db, Query::Works.sql(), [epic])?;
+    for (index, work) in works.iter().enumerate() {
+        if progress::current(&works, index) && progress::running(db, work)? {
             return Ok(true);
         }
     }
     Ok(false)
 }
-/// Deletion also protects admitted queue steps before their first Work link.
+/// Protect admission before its Work link, unless the queue says later chat
+/// Turns no longer belong to this step. Linked Works use the progress check.
 pub fn epic_delete_running(db: &Connection, epic: &str) -> Result<bool> {
     let active: bool = db.query_row(Query::DeleteRunning.sql(), [epic], |r| r.get(0))?;
     Ok(active || epic_running(db, epic)?)

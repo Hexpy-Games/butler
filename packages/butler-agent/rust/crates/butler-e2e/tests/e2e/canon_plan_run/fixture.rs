@@ -11,7 +11,7 @@ pub(super) fn data(reply: butler_e2e::e2e::gateway::Reply, status: u16) -> Value
     let mut body = reply.body;
     body["data"].take()
 }
-pub(super) async fn plan(
+pub(crate) async fn plan(
     s: &Scenario,
     script: &Arc<crate::canon_link::stub::Script>,
     first: &str,
@@ -60,7 +60,7 @@ pub(super) async fn plan(
     *script.epics.lock().unwrap() = epics.clone();
     Ok((id, epics))
 }
-pub(super) async fn wait_done(
+pub(crate) async fn wait_done(
     s: &Scenario,
     chat: &str,
     count: usize,

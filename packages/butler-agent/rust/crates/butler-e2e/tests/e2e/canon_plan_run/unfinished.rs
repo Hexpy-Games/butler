@@ -17,7 +17,10 @@ fn cards(s: &Scenario) -> Result<Vec<(String, String)>, HarnessError> {
     Ok(rows)
 }
 
-async fn wait_card(s: &Scenario, state: &str) -> Result<Vec<(String, String)>, HarnessError> {
+pub(crate) async fn wait_card(
+    s: &Scenario,
+    state: &str,
+) -> Result<Vec<(String, String)>, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let cards = cards(s)?;
@@ -29,7 +32,7 @@ async fn wait_card(s: &Scenario, state: &str) -> Result<Vec<(String, String)>, H
     }
 }
 
-async fn run_plan(s: &Scenario, chat: &str, plan: &str) -> Result<(), HarnessError> {
+pub(crate) async fn run_plan(s: &Scenario, chat: &str, plan: &str) -> Result<(), HarnessError> {
     data(
         s.gw.post(
             &format!("/sessions/{chat}/canon/queue"),

@@ -10,6 +10,7 @@ use tokio::sync::Semaphore;
 pub(crate) struct Script {
     pub(crate) requests: Mutex<Vec<Value>>,
     pub epics: Mutex<Vec<String>>,
+    pub(crate) calls: Mutex<std::collections::HashMap<String, Vec<(&'static str, Value)>>>,
     pub path: Mutex<String>,
     pub codes: Mutex<Vec<String>>,
     pub context_seen: AtomicBool,
@@ -84,6 +85,7 @@ pub(super) async fn start(
     let script = Arc::new(Script {
         requests: Mutex::new(Vec::new()),
         epics: Mutex::new(Vec::new()),
+        calls: Mutex::new(std::collections::HashMap::new()),
         path: Mutex::new(String::new()),
         codes: Mutex::new(Vec::new()),
         context_seen: AtomicBool::new(false),
@@ -172,8 +174,10 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     };
     let quick_epic = names(&script.quick_epics);
     let delegated = script.delegate.load(Ordering::SeqCst) && !names(&script.direct_epics);
-    let mut calls = if key.user_request == "Queue this epic" || key.user_request == "Run this plan"
-    {
+    let scripted = script.calls.lock().unwrap().get(&key.user_request).cloned();
+    let mut calls = if let Some(calls) = scripted {
+        calls
+    } else if key.user_request == "Queue this epic" || key.user_request == "Run this plan" {
         script
             .queue_request
             .lock()

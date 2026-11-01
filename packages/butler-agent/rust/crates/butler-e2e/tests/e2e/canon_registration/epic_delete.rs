@@ -3,6 +3,7 @@ use super::*;
 mod admission_failure;
 mod delivery_failure;
 mod guards;
+mod held_steps;
 mod lifecycle;
 mod panels;
 mod queue;
