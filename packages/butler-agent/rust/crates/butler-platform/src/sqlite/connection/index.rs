@@ -61,7 +61,7 @@ impl IndexOwner {
         let Some(path) = connection.path().filter(|path| !path.is_empty()) else {
             return Ok(Self(None));
         };
-        let path = crate::secure_fs::canonicalize_extended(path)?;
+        let path = crate::secure_fs::canonicalize(path)?;
         let mut owners = indexes().owners.lock().map_err(poison)?;
         let owner = loop {
             match owners.get(&path) {
@@ -139,7 +139,7 @@ pub(super) fn sync(connection: &rusqlite::Connection) -> io::Result<()> {
     let Some(path) = connection.path().filter(|path| !path.is_empty()) else {
         return Ok(());
     };
-    let path = crate::secure_fs::canonicalize_extended(path)?;
+    let path = crate::secure_fs::canonicalize(path)?;
     let owner = indexes()
         .owners
         .lock()

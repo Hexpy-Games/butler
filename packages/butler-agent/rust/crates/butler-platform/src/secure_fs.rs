@@ -23,6 +23,7 @@ pub use stage::{
     reset_reader_staging, stage_file,
 };
 mod canonical;
+#[cfg(windows)]
 pub(crate) use canonical::canonicalize_extended;
 pub use canonical::{Canonical, canonicalize, is_within, path_key, same_path};
 mod device;

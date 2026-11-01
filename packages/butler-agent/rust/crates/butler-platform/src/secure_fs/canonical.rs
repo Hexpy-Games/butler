@@ -51,6 +51,7 @@ pub fn same_path(left: &Path, right: &Path) -> bool {
 /// re-parse names (trailing dots or spaces, device names) or that work beyond
 /// MAX_PATH, and for keys that only ever meet other keys made here. Compare
 /// it with any other path only as a [`path_key`].
+#[cfg(windows)]
 #[allow(
     clippy::disallowed_methods,
     reason = "the single std canonicalization behind the extended form"

@@ -268,7 +268,7 @@ pub(super) fn project_write(
     if !super::project_write_available() {
         return Err(SandboxError::ProjectWriteUnavailable);
     }
-    let real = crate::secure_fs::canonicalize(&root)?;
+    let real = crate::secure_fs::canonicalize(root)?;
     // The helper inventories project secrets immediately before containment.
     // Do not repeat a potentially huge inventory in the exec argument block.
     let mut walk = rediscovery::Rediscovery::new(root, &real)?;

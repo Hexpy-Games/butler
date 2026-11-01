@@ -59,7 +59,7 @@ fn names(root: &Path) -> io::Result<Vec<String>> {
 
 fn journal_dir(root: &Path, data: &Path) -> io::Result<std::path::PathBuf> {
     use std::os::unix::ffi::OsStrExt;
-    let real = crate::secure_fs::canonicalize(&root)?;
+    let real = crate::secure_fs::canonicalize(root)?;
     let digest = Sha256::digest(real.as_os_str().as_bytes());
     Ok(data
         .join(crate::data_paths::SANDBOX_GENERATED)

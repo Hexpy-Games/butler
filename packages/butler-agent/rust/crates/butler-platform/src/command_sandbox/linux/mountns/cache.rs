@@ -55,7 +55,7 @@ pub(super) fn remember(data: &Path) {
 fn key(helper: &Path) -> Option<Key> {
     Some(Key {
         boot: std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?,
-        helper: crate::secure_fs::canonicalize(&helper).ok()?,
+        helper: crate::secure_fs::canonicalize(helper).ok()?,
         modified: std::fs::metadata(helper).ok()?.modified().ok()?,
         uid: nix::unistd::getuid().as_raw(),
     })
