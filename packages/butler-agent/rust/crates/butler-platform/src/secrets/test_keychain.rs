@@ -2,6 +2,7 @@
 use super::SecretKey;
 #[cfg(not(target_os = "macos"))]
 use super::SecretStore;
+use crate::secure_fs::{Canonical, is_within, same_path};
 use std::path::Path;
 
 #[cfg(target_os = "macos")]
@@ -43,7 +44,7 @@ pub(super) fn path(home: &Path) -> std::io::Result<std::path::PathBuf> {
             "an isolated test keychain is required",
         ));
     }
-    if !directory.canonicalize()?.starts_with(home.canonicalize()?) {
+    if !is_within(&directory.canonical()?, &home.canonical()?) {
         return Err(std::io::Error::other(
             "an isolated test keychain is required",
         ));
@@ -156,9 +157,9 @@ fn query(
 
 #[cfg(target_os = "macos")]
 fn temporary_home(home: &Path) -> std::io::Result<()> {
-    let temporary = std::env::temp_dir().canonicalize()?;
-    let home = home.canonicalize()?;
-    if home == temporary || !home.starts_with(temporary) {
+    let temporary = std::env::temp_dir().canonical()?;
+    let home = home.canonical()?;
+    if same_path(&home, &temporary) || !is_within(&home, &temporary) {
         return Err(std::io::Error::other("a temporary test home is required"));
     }
     Ok(())
@@ -188,9 +189,9 @@ pub(super) fn test_store(home: &Path) -> std::io::Result<SecretStore> {
 /// Makes only this temporary scenario's configured credential store unreachable.
 /// Retains existing credentials so cleanup tests can check the pending keys.
 pub fn make_system_keychain_unavailable_for_test(home: &Path) -> std::io::Result<()> {
-    let home = home.canonicalize()?;
-    let temporary = std::env::temp_dir().canonicalize()?;
-    if home == temporary || !home.starts_with(temporary) {
+    let home = home.canonical()?;
+    let temporary = std::env::temp_dir().canonical()?;
+    if same_path(&home, &temporary) || !is_within(&home, &temporary) {
         return Err(std::io::Error::other("a temporary test home is required"));
     }
     let directory = home

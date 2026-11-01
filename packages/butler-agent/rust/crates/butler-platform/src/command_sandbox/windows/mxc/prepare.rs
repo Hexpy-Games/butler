@@ -35,7 +35,7 @@ pub(super) fn physical_for(path: &Path, category: &str) -> Result<WinPath, Error
     })
 }
 fn resolve_physical(path: &Path) -> Result<WinPath, Error> {
-    let final_path = dunce::canonicalize(path)?;
+    let final_path = crate::secure_fs::canonicalize(path)?;
     let normalized = WinPath::new(final_path.to_str().ok_or("non_unicode_path")?)?;
     // Case-sensitive Windows directories must never turn a grant or denial
     // into another entry when the portable comparison spelling is normalized.
@@ -225,8 +225,8 @@ fn save_policy(
     let payload = PolicyFile {
         pid,
         started,
-        data: dunce::canonicalize(data)?,
-        project: dunce::canonicalize(root)?,
+        data: crate::secure_fs::canonicalize(data)?,
+        project: crate::secure_fs::canonicalize(root)?,
         scratch,
         git_settings: tools::git_settings(env, &plan.tools)?,
         request,

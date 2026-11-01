@@ -81,6 +81,10 @@ fn unavailable(error: io::Error) -> IdentityError {
 
 /// Both paths resolve to the same file: Windows paths differ in case, in
 /// the `\\?\` prefix and in 8.3 short names, which resolving removes.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the instance layer sits below secure_fs; both sides share the extended form"
+)]
 pub(super) fn same_file(first: &str, second: &str) -> bool {
     match (fs::canonicalize(first), fs::canonicalize(second)) {
         (Ok(first), Ok(second)) => first == second,

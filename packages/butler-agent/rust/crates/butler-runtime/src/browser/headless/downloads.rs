@@ -317,11 +317,15 @@ impl Downloads {
             .unwrap_or("")
             .to_owned();
         let context = port.prepare(session.clone()).await?;
-        let root = std::fs::canonicalize(context["workspace_path"].as_str().unwrap_or(""))
-            .map_err(|e| e.to_string())?;
+        let root = butler_platform::secure_fs::canonicalize(
+            context["workspace_path"].as_str().unwrap_or(""),
+        )
+        .map_err(|e| e.to_string())?;
         let directory = root.join(butler_platform::data_paths::DOWNLOADS);
         std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-        if std::fs::canonicalize(&directory).map_err(|e| e.to_string())? != directory {
+        let resolved =
+            butler_platform::secure_fs::canonicalize(&directory).map_err(|e| e.to_string())?;
+        if !butler_platform::secure_fs::same_path(&resolved, &directory) {
             return Err("download_symlink_refused".into());
         }
         let mut name = clean_name(&transfer.source);

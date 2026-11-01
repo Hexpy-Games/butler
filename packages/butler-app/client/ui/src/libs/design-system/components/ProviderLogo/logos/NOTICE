@@ -1,19 +1,24 @@
 Provider logos
 
-The SVG files in this folder are unmodified copies of files from the npm
-package @lobehub/icons-static-svg, version 1.95.1
+The SVG files in this folder are copies of files from the npm package
+@lobehub/icons-static-svg, version 1.95.1
 (https://github.com/lobehub/lobe-icons), directory `icons/`:
 
   openai.svg, claude-color.svg, gemini-color.svg, grok.svg, qwen-color.svg,
-  kimi.svg, zai.svg, opencode.svg, ollama.svg, lmstudio.svg
+  kimi.svg, zai.svg, deepseek-color.svg, upstage-color.svg, opencode.svg,
+  ollama.svg, lmstudio.svg
+
+All are unmodified except one change: in upstage-color.svg the misspelled
+<title>Upsate</title> is corrected to <title>Upstage</title>. The drawing is
+unchanged.
 
 Only these files are vendored; the package is not a dependency.
 ProviderLogo renders them as they are: no recoloring and no change to their
 proportions. Monochrome files use `currentColor` and follow the text color.
 
 The logos are trademarks of their respective owners (OpenAI, Anthropic,
-Google, xAI, Alibaba Cloud, Moonshot AI, Z.ai, OpenCode, Ollama and
-LM Studio). Butler uses them only to name the service a person connects to;
+Google, xAI, Alibaba Cloud, Moonshot AI, Z.ai, DeepSeek, Upstage, OpenCode,
+Ollama and LM Studio). Butler uses them only to name the service a person connects to;
 no endorsement is implied.
 
 The SVG collection is licensed under the MIT License:
