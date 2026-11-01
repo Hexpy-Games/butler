@@ -101,7 +101,7 @@ async fn security_mail_secret_redaction_destination_refusal_and_remote_plaintext
         assert!(!result.to_string().contains(&password));
     }
     direct.close(&password).await?;
-    let result=tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("e2e-mail-connector")?).env_clear().env("BUTLER_CONNECTOR_FIELDS",json!({"address":"owner@example.test","imap_host":"192.0.2.1","imap_security":"plain","smtp_host":"127.0.0.1","smtp_security":"plain"}).to_string()).env("BUTLER_PLUGIN_DATA",s.sandbox.home.join("refused")).env("IMAP_PASSWORD",&password).stdin(std::process::Stdio::null()).output().await?;
+    let result=tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("e2e-mail-connector")?).env_clear().envs(butler_e2e::e2e::binary::system_environment()).env("BUTLER_CONNECTOR_FIELDS",json!({"address":"owner@example.test","imap_host":"192.0.2.1","imap_security":"plain","smtp_host":"127.0.0.1","smtp_security":"plain"}).to_string()).env("BUTLER_PLUGIN_DATA",s.sandbox.home.join("refused")).env("IMAP_PASSWORD",&password).stdin(std::process::Stdio::null()).output().await?;
     assert!(!result.status.success());
     assert!(!String::from_utf8_lossy(&result.stderr).contains(&password));
     // Refusal precedes opening a socket or creating state.
@@ -135,6 +135,13 @@ fn assert_no_canary(root: &Path, canary: &[u8]) -> Result<(), HarnessError> {
         let path = entry?.path();
         if path.is_dir() {
             assert_no_canary(&path, canary)?;
+        } else if path
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().ends_with("-shm"))
+        {
+            // A WAL index is a table of page numbers, never row content, and
+            // a live database holds a byte-range lock on it that Windows
+            // enforces against readers.
         } else {
             let bytes = fs::read(&path)?;
             assert!(

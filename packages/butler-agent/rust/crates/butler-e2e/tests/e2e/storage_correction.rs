@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use super::storage_correction_seed as seed;
 mod matrix;
+mod presence;
 mod startup;
 mod stub;
 use super::data_perf::wal;
@@ -15,10 +16,7 @@ use butler_platform::secure_fs;
 use notify::{RecursiveMode, Watcher};
 use rusqlite::Connection;
 use std::{
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, Mutex, atomic::Ordering},
     time::Duration,
 };
 
@@ -55,7 +53,8 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     let events = Arc::new(Mutex::new(vec![]));
     let sink = events.clone();
     let watched = path.clone();
-    let missing = Arc::new(AtomicBool::new(false));
+    let presence = presence::Presence::watch(&path);
+    let missing = presence.flag();
     let absent = missing.clone();
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         if !watched.exists() {
@@ -248,14 +247,20 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         "btcc.sqlite was absent during startup"
     );
     assert!(
-        !events
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|event| matches!(event.kind, notify::EventKind::Remove(_))
-                && event.paths.contains(&path)),
+        !presence.was_absent(),
+        "btcc.sqlite stopped resolving during startup"
+    );
+    assert!(
+        !presence::REMOVE_EVENT_MEANS_ABSENT
+            || !events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| matches!(event.kind, notify::EventKind::Remove(_))
+                    && event.paths.contains(&path)),
         "btcc.sqlite was removed instead of atomically replaced"
     );
+    drop(presence);
     s.finish().await?;
     server.abort();
     Ok(())

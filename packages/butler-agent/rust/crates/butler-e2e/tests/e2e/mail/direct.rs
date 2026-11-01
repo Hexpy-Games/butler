@@ -23,6 +23,7 @@ impl Direct {
         )?);
         command
             .env_clear()
+            .envs(butler_e2e::e2e::binary::system_environment())
             .env("BUTLER_CONNECTOR_FIELDS", fields(fake).to_string())
             .env("BUTLER_CONNECTOR_ACCOUNT", id)
             .env(

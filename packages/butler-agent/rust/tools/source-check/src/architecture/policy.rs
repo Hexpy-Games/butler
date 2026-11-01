@@ -93,10 +93,25 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // keeps its per-OS implementations as private children. The private
         // Windows process table serves instance identity and liveness.
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
-        "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
-        | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
-        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files"
-        | "shared_locks" => &[],
+        "data_paths"
+        | "cpu"
+        | "memory"
+        | "desktop"
+        | "launcher"
+        | "network"
+        | "process_table"
+        | "storage_size"
+        | "stdio"
+        | "time_zone"
+        | "user_auth"
+        | "user_dirs"
+        | "diagnostics"
+        | "account_dirs"
+        | "process_priority"
+        | "download_mark"
+        | "plugin_files"
+        | "shared_locks"
+        | "change_notifications" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.

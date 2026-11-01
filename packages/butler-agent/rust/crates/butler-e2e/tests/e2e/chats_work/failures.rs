@@ -14,11 +14,9 @@ async fn block(s: &Scenario) -> Result<(), HarnessError> {
     let current = admin
         .send(reqwest::Method::GET, "/hooks", None, &[])
         .await?;
-    let command = if butler_platform::command_sandbox::POSIX_SHELL {
-        "echo '{\"decision\":\"deny\",\"reason\":\"Blocked\"}'"
-    } else {
-        "echo {\"decision\":\"deny\",\"reason\":\"Blocked\"}"
-    };
+    // A single-quoted string is one literal word in both POSIX shells and
+    // PowerShell; unquoted braces are a script block there and fail to parse.
+    let command = "echo '{\"decision\":\"deny\",\"reason\":\"Blocked\"}'";
     let saved = admin.send(reqwest::Method::PUT, "/hooks", Some(json!({"revision":current.data()["revision"],
         "config":{"version":1,"hooks":[{"id":"guard","event":"UserPromptSubmit","type":"command","command":command,"timeout_ms":3000}]}})), &[]).await?;
     assert_eq!(saved.status, 200, "{saved:?}");
