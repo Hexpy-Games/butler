@@ -15,7 +15,7 @@ fn requests(script: &crate::canon_link::stub::Script) -> Vec<String> {
         .lock()
         .unwrap()
         .iter()
-        .map(|body| body.to_string())
+        .map(ToString::to_string)
         .collect()
 }
 
@@ -71,7 +71,7 @@ async fn no_run_means_no_note() -> Result<(), HarnessError> {
     script.quick.store(true, Ordering::SeqCst);
     s.turn(&chat, "What does this mean?").await?;
     let bodies = requests(&script);
-    assert!(!bodies.is_empty());
+    assert_ne!(bodies.len(), 0);
     assert!(bodies.iter().all(|body| !body.contains(NOTE)));
     s.finish().await?;
     server.abort();
@@ -175,8 +175,7 @@ async fn stack_and_hold_read_as_they_are() -> Result<(), HarnessError> {
     let body = requests(&script)
         .into_iter()
         .skip(before)
-        .filter(|body| body.contains("What does this mean?") && body.contains(NOTE))
-        .next_back()
+        .rfind(|body| body.contains("What does this mean?") && body.contains(NOTE))
         .expect("the reply's request carries the note");
     let note = &body[body.rfind(NOTE).unwrap()..];
     assert!(note.contains("Step 2 (run together):"), "{note}");

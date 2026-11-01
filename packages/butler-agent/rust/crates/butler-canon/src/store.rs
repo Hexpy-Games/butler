@@ -27,6 +27,7 @@ pub use proposals::{
     turn_cards as canon_proposal_turn_cards,
 };
 pub mod queue;
+pub use queue::note as queue_note;
 pub mod runtime;
 pub use api::{mark_outbox_published, read as read_api, write as write_api};
 pub use runtime::{

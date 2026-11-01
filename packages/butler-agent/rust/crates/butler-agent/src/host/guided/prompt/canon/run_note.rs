@@ -18,7 +18,7 @@ pub(in crate::host::guided) async fn read(
     let note = state
         .documents
         .canon_storage()
-        .canon_read(move |db| butler_canon::store::queue::note(db, &session))
+        .canon_read(move |db| butler_canon::store::queue_note(db, &session))
         .await?;
     let step = super::step_epic(turn);
     note.map(|note| render(&note, step.as_deref())).transpose()
