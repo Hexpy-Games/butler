@@ -62,7 +62,8 @@ async fn git_checkout_folder_too_long_to_start_in_is_named() -> Result<(), Harne
     let repo = Repo::new(&setup.sandbox.home, "helper", true)?;
     let sha = repo.publish();
     let s = setup.start().await?;
-    let staging = s.sandbox.data.join("plugins/staging");
+    // The checkout folder (`work/<id>/sources/<hash>`) is created first; none may remain.
+    let work = s.sandbox.data.join("plugins/work");
     let r = api(
         &s,
         Method::POST,
@@ -72,6 +73,6 @@ async fn git_checkout_folder_too_long_to_start_in_is_named() -> Result<(), Harne
     .await?;
     assert_eq!(r.status, 400, "{r:?}");
     assert!(r.text.contains("plugin_path_too_long"), "{r:?}");
-    assert!(empty(&staging));
+    assert!(empty(&work), "checkout folder left behind");
     s.finish().await
 }

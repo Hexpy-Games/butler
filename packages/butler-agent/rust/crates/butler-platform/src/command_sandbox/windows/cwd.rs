@@ -6,10 +6,12 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-const MAX_PATH: usize = 260;
+/// SetCurrentDirectory appends a backslash and keeps the NUL within
+/// MAX_PATH (260), so a process starts in at most 258 UTF-16 units.
+const LONGEST_WORKING_DIRECTORY: usize = 258;
 
 pub(crate) fn working_directory(path: &Path) -> io::Result<PathBuf> {
-    if path.as_os_str().encode_wide().count() < MAX_PATH {
+    if path.as_os_str().encode_wide().count() <= LONGEST_WORKING_DIRECTORY {
         return Ok(dunce::simplified(path).to_path_buf());
     }
     // Native lookup needs the extended prefix even when the caller supplied
@@ -40,7 +42,7 @@ pub(crate) fn working_directory(path: &Path) -> io::Result<PathBuf> {
         }
     }
     let short = dunce::simplified(&short).to_path_buf();
-    if short.as_os_str().encode_wide().count() >= MAX_PATH {
+    if short.as_os_str().encode_wide().count() > LONGEST_WORKING_DIRECTORY {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "This Windows directory has no usable short name. Choose a shorter project folder for commands.",
