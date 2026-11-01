@@ -1,4 +1,4 @@
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 use axum::{
     body::Body,
@@ -7,6 +7,7 @@ use axum::{
 };
 
 use super::{HttpError, subsessions::decode_component};
+use butler_platform::secure_fs;
 
 /// `font-src data:`: a scrap's HTML copy opens in a sandboxed `srcdoc` frame,
 /// which inherits this policy, and carries its web fonts as data: URLs.
@@ -67,9 +68,6 @@ pub(super) async fn serve(
     let Some(root) = root else {
         return Err(not_found());
     };
-    let Ok(root) = tokio::fs::canonicalize(root).await else {
-        return Err(not_found());
-    };
     let relative = if pathname == "/" {
         "index.html".to_owned()
     } else {
@@ -81,18 +79,13 @@ pub(super) async fn serve(
     {
         return Err(not_found());
     }
-    let candidate = root.join(&relative);
-    let file = match tokio::fs::canonicalize(candidate).await {
-        Ok(file) if file.starts_with(&root) && file.is_file() => file,
-        _ if accepts_html || is_static_path(pathname) => {
-            let index = root.join("index.html");
-            match tokio::fs::canonicalize(index).await {
-                Ok(file) if file.starts_with(&root) && file.is_file() => file,
-                _ => return Err(not_found()),
-            }
-        }
-        _ => return Err(not_found()),
-    };
+    let fallback = accepts_html || is_static_path(pathname);
+    let (root, name) = (root.to_path_buf(), relative.clone());
+    let file = tokio::task::spawn_blocking(move || resolve(&root, &name, fallback))
+        .await
+        .ok()
+        .flatten()
+        .ok_or_else(not_found)?;
     let content_type = if file.file_name().is_some_and(|value| value == "index.html") {
         "text/html; charset=utf-8"
     } else {
@@ -115,6 +108,18 @@ pub(super) async fn serve(
         HeaderValue::from_static("nosniff"),
     );
     Ok(response)
+}
+
+/// The file `relative` names inside `root`, or `root`'s `index.html` when
+/// `fallback`: resolved, and only when it stays inside `root`.
+fn resolve(root: &Path, relative: &str, fallback: bool) -> Option<PathBuf> {
+    let root = secure_fs::canonicalize(root).ok()?;
+    let inside = |path: PathBuf| {
+        secure_fs::canonicalize(path)
+            .ok()
+            .filter(|file| secure_fs::is_within(file, &root) && file.is_file())
+    };
+    inside(root.join(relative)).or_else(|| fallback.then(|| inside(root.join("index.html")))?)
 }
 
 fn not_found() -> HttpError {

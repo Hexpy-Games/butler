@@ -1062,7 +1062,7 @@
       "definition": {
         "type": "function",
         "name": "project_ledger_create",
-        "description": "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance.",
+        "description": "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance. Not for the user's epics (과제), plans (계획) or specs (명세); those are canon.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -8094,7 +8094,7 @@
     "project_ledger_create": {
       "type": "function",
       "name": "project_ledger_create",
-      "description": "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance.",
+      "description": "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance. Not for the user's epics (과제), plans (계획) or specs (명세); those are canon.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

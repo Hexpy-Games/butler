@@ -22,7 +22,7 @@ pub(in crate::command_sandbox) fn operate(root: &Path, operation: &str) -> io::R
 pub(in crate::command_sandbox) fn aliases(root: &Path) -> io::Result<Vec<Vec<PathBuf>>> {
     let ledger = registry::get(root, &[])?;
     let state = lock(&ledger)?;
-    let canonical = fs::canonicalize(root)?;
+    let canonical = crate::secure_fs::canonicalize_extended(root)?;
     Ok(state
         .inventory
         .aliases()
@@ -72,7 +72,7 @@ pub(in crate::command_sandbox) fn pause(
     paused: bool,
     after_scan: bool,
 ) -> io::Result<()> {
-    let key = (fs::canonicalize(root)?, after_scan);
+    let key = (crate::secure_fs::canonicalize_extended(root)?, after_scan);
     let mut pauses = PAUSES
         .get_or_init(Mutex::default)
         .lock()
@@ -115,7 +115,7 @@ pub(in crate::command_sandbox) fn verified_files(root: &Path) -> io::Result<usiz
 }
 
 pub(in crate::command_sandbox) fn commit_paused(root: &Path) -> io::Result<bool> {
-    let key = (fs::canonicalize(root)?, true);
+    let key = (crate::secure_fs::canonicalize_extended(root)?, true);
     let pause = PAUSES.get().and_then(|p| p.lock().ok()?.get(&key).cloned());
     Ok(pause.is_some_and(|p| p.0.lock().is_ok_and(|s| s.1)))
 }
