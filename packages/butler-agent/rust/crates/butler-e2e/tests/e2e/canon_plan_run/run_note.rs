@@ -268,3 +268,40 @@ async fn steward_reads_its_epic_without_a_tool() -> Result<(), HarnessError> {
     server.abort();
     Ok(())
 }
+
+/// A title in place of plan_id comes back with what the id looks like and where to find it.
+#[tokio::test]
+async fn unknown_plan_id_says_how_to_find_it() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, chat) =
+        crate::canon_link::setup("CB-NOTE-PLAN-ID", false, false).await?;
+    let (plan, _) = plan(&s, &script, &first).await?;
+    let reply =
+        s.gw.post(
+            &format!("/sessions/{chat}/canon/queue"),
+            json!({"op":"plan_run","plan_id":"Release"}),
+        )
+        .await?;
+    assert_eq!(reply.status, 400, "{}", reply.text);
+    assert!(reply.text.contains("plan_id_unknown"), "{}", reply.text);
+    assert!(
+        reply.text.contains("pl_") && reply.text.contains("canon_read"),
+        "{}",
+        reply.text
+    );
+    script.release();
+    data(
+        s.gw.post(
+            &format!("/sessions/{chat}/canon/queue"),
+            json!({"op":"plan_run","plan_id":plan}),
+        )
+        .await?,
+        200,
+    );
+    wait_done(&s, &chat, 3).await?;
+    let body = step_request(&script, &first);
+    assert!(body.contains(&format!("Plan: {plan}")), "{body}");
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

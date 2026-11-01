@@ -8,8 +8,16 @@ pub fn note(db: &Connection, session: &str) -> Result<Option<Value>> {
         return Ok(None);
     }
     let mut untrusted = serde_json::Map::new();
+    let mut plans = serde_json::Map::new();
     let mut output = Vec::new();
     for (id, chain) in chains(&items)? {
+        let plan = items
+            .iter()
+            .find(|i| i["chain_id"] == id.as_str())
+            .and_then(|i| i["plan_id"].as_str());
+        if let Some(plan) = plan {
+            plans.insert(plan.to_owned(), read_plan(db, plan)?["title"].clone());
+        }
         let mut steps = Vec::new();
         for step in chain.steps {
             let mut entries = Vec::new();
@@ -36,7 +44,10 @@ pub fn note(db: &Connection, session: &str) -> Result<Option<Value>> {
             }
             steps.push(json!({"index":step.index,"items":entries}));
         }
-        output.push(json!({"chain_id":id,"steps":steps}));
+        output.push(json!({"chain_id":id,"plan_id":plan,"steps":steps}));
+    }
+    if !plans.is_empty() {
+        untrusted.insert("plans".into(), json!(plans));
     }
     Ok(Some(
         json!({"revision":revision(db,session)?,"chains":output,"untrusted_content":untrusted}),
