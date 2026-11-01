@@ -126,6 +126,11 @@ impl Command {
 
 /// Starts the bounded async runtime and enters the host. This synchronous,
 /// non-generic boundary keeps host futures out of the executable's codegen.
+///
+/// The host runs as a task on a runtime worker, not inside `block_on` on the
+/// main thread: Windows gives that thread 1 MiB, and startup recovery runs whole
+/// request paths (a replayed question follow-up admits a message) that a debug
+/// build nests deeper than that. Workers have the stack request handlers run on.
 pub fn run(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(butler_platform::cpu::performance_cores().min(8))
@@ -138,7 +143,7 @@ pub fn run(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
-    runtime.block_on(async move {
+    let host = runtime.spawn(async move {
         let recovery = tokio::task::spawn_blocking(|| {
             let executable =
                 butler_platform::process_names::current_exe().map_err(|e| e.to_string())?;
@@ -150,7 +155,15 @@ pub fn run(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode {
             return std::process::ExitCode::FAILURE;
         }
         main(args, build_info).await
-    })
+    });
+    match runtime.block_on(host) {
+        Ok(code) => code,
+        Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
+        Err(error) => {
+            eprintln!("host_task_failed: {error}");
+            std::process::ExitCode::FAILURE
+        }
+    }
 }
 /// The executable entry: the private embedding worker, or installation
 /// resolution followed by one classified command.

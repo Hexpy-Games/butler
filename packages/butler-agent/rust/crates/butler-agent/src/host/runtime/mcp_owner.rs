@@ -59,13 +59,13 @@ pub(super) async fn open(
     writes: &Arc<ConfigurationWrites>,
     startup: &mut super::startup_trace::Trace,
 ) -> Result<(Arc<crate::host::plugins::Plugins>, Arc<McpClient>), butler_turn::btcc::BtccError> {
-    let plugins = crate::host::plugins::Plugins::open(
-        paths.data_root.clone(),
-        std::env::args_os().any(|s| s == "--safe-mode"),
-        writes.clone(),
-    )
-    .await
-    .map_err(super::boundary::setup)?;
+    // Evaluated first: the argument iterator is not `Send`, so a temporary of it
+    // would live across the await below.
+    let safe_mode = std::env::args_os().any(|s| s == "--safe-mode");
+    let plugins =
+        crate::host::plugins::Plugins::open(paths.data_root.clone(), safe_mode, writes.clone())
+            .await
+            .map_err(super::boundary::setup)?;
     startup.phase("plugins_registry");
     let mcp = for_runtime(paths, env, writes.clone(), plugins.clone());
     Ok((plugins, mcp))
