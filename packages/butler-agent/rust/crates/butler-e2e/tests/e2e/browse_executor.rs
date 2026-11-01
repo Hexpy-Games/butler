@@ -165,10 +165,11 @@ fn assert_surface(request: &Value) {
         })
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    for name in ["browse", "browser_act", "web_read", "web_search"] {
+    for name in ["browse", "browser_act", "web_search"] {
         assert!(names.contains(&name), "{names:?}");
     }
     for name in [
+        "web_read",
         "browser_open",
         "browser_observe",
         "browser_close",
@@ -266,83 +267,6 @@ fn outputs(request: &Value) -> Vec<(Value, bool)> {
             Some((serde_json::from_str(text).ok()?, false))
         })
         .collect()
-}
-
-#[tokio::test]
-async fn query_read_returns_complete_ranked_chunks_and_keeps_the_rest_readable()
--> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let s = Setup::new("BROWSE-RANKED-READ")?
-        .stub_cassette(stub::ranked_cassette()?)
-        .start()
-        .await?;
-    let reply =
-        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
-            .await?;
-    assert_eq!(reply.status, 200, "{}", reply.text);
-    let (host, _) = host::start(&s).await?;
-    let (_, turn) = s.turn("general", "Read ranked source windows").await?;
-    assert_eq!(turn["state"], "delivered");
-    let requests = s.provider()?.requests();
-    let outputs = outputs(requests.last().unwrap());
-    let reads: Vec<_> = outputs
-        .iter()
-        .map(|(value, _)| &value["output"])
-        .filter(|value| value.get("chunks").is_some())
-        .collect();
-    assert_eq!(reads.len(), 4);
-    assert_eq!(reads[0]["ranked"], true);
-    assert_eq!(reads[1]["chunks"], reads[0]["chunks"]);
-    let selected = reads[0]["chunks"].as_array().unwrap();
-    let more = reads[0]["more_chunks"].as_array().unwrap();
-    assert_ne!(more.as_slice(), &[] as &[Value]);
-    assert_eq!(
-        (selected.len() + more.len()) as u64,
-        reads[0]["total_chunks"].as_u64().unwrap()
-    );
-    assert!(selected[0]["text"].as_str().unwrap().contains("가격"));
-    assert!(reads[2].get("ranked").is_none());
-    assert_eq!(reads[2]["returned_chunks"], reads[2]["total_chunks"]);
-    let all: std::collections::BTreeSet<_> = selected
-        .iter()
-        .map(|chunk| chunk["index"].as_u64().unwrap())
-        .chain(more.iter().map(|index| index.as_u64().unwrap()))
-        .collect();
-    assert_eq!(
-        all,
-        (0..reads[0]["total_chunks"].as_u64().unwrap()).collect()
-    );
-    let full = reads[2]["markdown"].as_str().unwrap();
-    let complete = reads[3]["chunks"].as_array().unwrap();
-    assert_eq!(
-        complete.len() as u64,
-        reads[0]["total_chunks"].as_u64().unwrap()
-    );
-    assert_eq!(reads[3]["more_chunks"], json!([]));
-    for chunk in complete {
-        assert!(
-            full.contains(chunk["text"].as_str().unwrap()),
-            "every ranked chunk is intact"
-        );
-    }
-    for chunk in selected {
-        assert_eq!(
-            chunk,
-            complete
-                .iter()
-                .find(|c| c["index"] == chunk["index"])
-                .unwrap()
-        );
-    }
-    for chunk in selected {
-        assert!(
-            full.contains(chunk["text"].as_str().unwrap()),
-            "ranked chunks are complete"
-        );
-    }
-    host.abort();
-    let _ = host.await;
-    s.finish().await
 }
 
 #[tokio::test]

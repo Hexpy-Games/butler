@@ -18,19 +18,6 @@ pub(super) struct Host {
 
 const SHELL: &str = "<!doctype html><html><head><title>Desk lamps</title></head><body><div id=\"app\"><h1>Desk lamps</h1><p>Loading products…</p></div></body></html>";
 
-fn listing() -> String {
-    let lamps = [("Aurora", 450), ("Beacon", 1200), ("Cinder", 800)]
-        .map(|(name, lumens)| {
-            format!("<li><h2>{name}</h2><p>The {name} desk lamp gives {lumens} lumens of adjustable light with a weighted base.</p></li>")
-        })
-        .join("");
-    let details =
-        "<p>Every lamp ships with a two-year warranty and a replaceable LED module.</p>".repeat(8);
-    format!(
-        "<!doctype html><html><head><title>Desk lamps</title></head><body><main><h1>Desk lamps</h1><ul>{lamps}</ul>{details}</main></body></html>"
-    )
-}
-
 impl Host {
     pub(super) async fn attach(admin: AdminClient, log: Log) -> Result<Self, HarnessError> {
         let stream = reqwest::Client::new()
@@ -129,8 +116,9 @@ impl Host {
                 "html_base64":base64::engine::general_purpose::STANDARD.encode(SHELL)})
             }
             ("tabs.list", _) => json!({"tabs":self.tabs}),
-            ("tab.read", Some(tab)) => {
-                json!({"status":"ok","tab":tab["id"],"url":tab["url"],"epoch":1,"html":listing()})
+            ("tab.observe", Some(tab)) => {
+                json!({"status":"ok","tab":tab["id"],"url":tab["url"],"obs":"o1",
+                "text":"Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm."})
             }
             _ => json!({"status":"refused","reason":"unsupported_op"}),
         }

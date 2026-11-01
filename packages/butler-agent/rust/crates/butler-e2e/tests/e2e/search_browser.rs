@@ -8,6 +8,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod availability;
 pub(crate) mod host;
 mod model;
 mod resume;
@@ -63,7 +64,6 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     let tools = fixture.tools.lock().unwrap().clone();
     for name in [
         "web_search",
-        "web_read",
         "browser_open",
         "browser_observe",
         "browser_act",
@@ -73,7 +73,8 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
             "{name} offered: {tools:?}"
         );
     }
-    for index in [0, 2, 3] {
+    assert!(!tools.iter().any(|tool| tool["name"] == "web_read"));
+    for index in [0, 2] {
         for key in [
             "evidence_receipts",
             "evidence_capability_receipts",
@@ -115,61 +116,20 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
         "{log:?}"
     );
 
-    // web_read used the open tab's live document, read again for the
-    // continuation: a page can change without navigating.
     let read = &outputs[2];
-    assert_eq!(read["reader"], "butler-browser-tab", "{read}");
+    assert_eq!(read["schema"], "butler.browser-observation.v1", "{read}");
     assert!(
-        read["markdown"]
-            .as_str()
-            .unwrap()
-            .contains("Spring tides alpha"),
-        "{read}"
-    );
-    let again = &outputs[3];
-    assert_eq!(again["reader"], "butler-browser-tab", "{again}");
-    assert_eq!(again["cache_hit"], false, "{again}");
-    assert_eq!(again["content_sha256"], read["content_sha256"], "{again}");
-    // A long page keeps all its text: the continuation reaches the end.
-    assert!(read["total_chunks"].as_u64().unwrap() >= 3, "{read}");
-    assert_eq!(again["content_has_more"], false, "{again}");
-    assert!(
-        again["markdown"]
-            .as_str()
-            .unwrap()
-            .contains("End of the tide table."),
-        "{again}"
-    );
-    assert_eq!(
-        log.iter().filter(|f| f["op"] == "tab.read").count(),
-        2,
-        "{log:?}"
-    );
-
-    // The observation is text and refs; no screenshot was asked for or returned.
-    let observe = log.iter().find(|f| f["op"] == "tab.observe").unwrap();
-    assert_ne!(observe["args"]["include_image"], true, "{observe}");
-    let observed = &outputs[4];
-    assert_eq!(
-        observed["schema"], "butler.browser-observation.v1",
-        "{observed}"
-    );
-    assert!(observed.get("image").is_none(), "{observed}");
-    assert!(
-        observed["untrusted_content"]["text"]
+        read["untrusted_content"]["text"]
             .as_str()
             .unwrap()
             .contains("Spring tides alpha")
     );
-    eprintln!(
-        "{}",
-        model::step_bytes(
-            &s.sandbox.data,
-            &turn,
-            &outputs,
-            &fixture.output_bytes.lock().unwrap()
-        )
+    assert_eq!(log.iter().filter(|f| f["op"] == "tab.observe").count(), 1);
+    assert!(
+        !log.iter()
+            .any(|f| matches!(f["op"].as_str(), Some("tab.read" | "reader.render")))
     );
+    assert!(read.get("image").is_none());
     if let Some(dir) = std::env::var_os("BUTLER_SEARCH_BROWSER_EVIDENCE") {
         std::fs::write(
             std::path::Path::new(&dir).join("model-tools.json"),

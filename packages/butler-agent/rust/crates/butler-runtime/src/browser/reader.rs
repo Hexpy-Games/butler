@@ -16,9 +16,20 @@ pub type RenderFuture =
 
 pub trait RenderPort: Send + Sync {
     fn render(&self, url: String, wait: Duration) -> RenderFuture;
+
+    /// An Electron browser host is attached; checking never starts a host.
+    fn host_attached(&self) -> bool;
 }
 
 static PORT: Mutex<Option<Arc<dyn RenderPort>>> = Mutex::new(None);
+
+/// Uses the same live host state as browser dispatch, without polling or I/O.
+pub fn host_attached() -> bool {
+    PORT.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .is_some_and(|port| port.host_attached())
+}
 
 /// Registers the port renders go through from now on.
 pub fn set_render_port(port: Arc<dyn RenderPort>) {
