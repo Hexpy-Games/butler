@@ -3,16 +3,18 @@
 // digits stays `x` and `->` stays two characters, while the body font keeps its alternates in message prose.
 // The body font (Pretendard) draws `2876x6` with the `×` glyph and `a->b` with an arrow unless ligatures are off,
 // so each check compares the width the element draws against the same characters drawn one glyph each.
+// The real project-hook dialog is checked in app-folder-trust-smoke, which needs the native Agent.
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve, sep } from "node:path";
-import type { Locator, Page } from "playwright";
+import type { Page } from "playwright";
 import { HARNESS_MESSAGES, HARNESS_MODEL_CATALOG, HARNESS_NAVIGATION, HARNESS_SS03_OBSERVER_VIEW } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 import { EMPTY_SETTINGS } from "../../packages/butler-app/client/ui/src/app/constants.ts";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import type { GrantRecord } from "../../packages/butler-app/client/ui/src/components/settings/grantRows.ts";
+import { drawsSubstitutes } from "../support/exact-glyphs.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 
 /** `--before` asserts the substitution on a build without the change and captures the same crops. */
@@ -39,49 +41,6 @@ function sessionView(): SessionView {
     messages: [{ ...HARNESS_MESSAGES[0]!, turn_id: "review-turn", text: prose }],
     authority_requests: [{ request_ref: "review-ref", category: "reviewed_effect", reason: "Reviewed operation", executable: "edit_file",
       command_count: 1, source_turn_id: "review-turn", source_session_id: "butler/app-butler-client", scope: { title: "확인 필요", description: "이 작업" }, approval }] } as SessionView;
-}
-
-/**
- * Widths drawn by the element: the real `2876x6` and `a->b` in its text (one line box each), and the same characters in
- * a shallow clone of the element (same classes and data attributes) with ligatures and contextual alternates off.
- */
-async function glyphs(element: Locator) {
-  return element.evaluate((node) => {
-    const real = (token: string) => {
-      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-        const at = text.textContent!.indexOf(token);
-        if (at < 0) continue;
-        const range = document.createRange();
-        range.setStart(text, at); range.setEnd(text, at + token.length);
-        const rects = range.getClientRects();
-        return rects.length === 1 ? rects[0]!.width : -rects.length;
-      }
-      return Number.NaN;
-    };
-    const plain = (text: string) => {
-      const clone = node.cloneNode(false) as HTMLElement;
-      clone.removeAttribute("id"); clone.textContent = text;
-      Object.assign(clone.style, { position: "absolute", width: "max-content", whiteSpace: "pre", visibility: "hidden", fontVariantLigatures: "none" });
-      node.parentElement!.append(clone);
-      const width = clone.getBoundingClientRect().width; clone.remove();
-      return width;
-    };
-    const times = real("2876x6"), arrow = real("a->b");
-    return { times, timesPlain: plain("2876x6"), arrow, arrowPlain: plain("a->b"), ligatures: getComputedStyle(node).fontVariantLigatures };
-  });
-}
-
-/**
- * Whether the element draws the font's substitutes: its `2876x6` and `a->b` are not as wide as the same characters
- * drawn one glyph each (the `×` and arrow glyphs have other advances than `x`, `-` and `>`).
- */
-async function drawsSubstitutes(element: Locator, label: string) {
-  const width = await glyphs(element);
-  assert(width.times > 0 && width.arrow > 0, `${label}: each token sits on one line: ${JSON.stringify(width)}`);
-  const times = Math.abs(width.times - width.timesPlain) > 0.5, arrow = Math.abs(width.arrow - width.arrowPlain) > 0.5;
-  assert.equal(times, arrow, `${label}: both substitutions agree: ${JSON.stringify(width)}`);
-  return { substituted: times, width };
 }
 
 async function openRevokeDialog(page: Page) {
