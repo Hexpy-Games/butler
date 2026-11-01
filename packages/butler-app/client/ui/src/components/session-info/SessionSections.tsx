@@ -17,7 +17,7 @@ import { useSessionSectionsModel } from "./useSessionSectionsModel.ts";
 /** The same ordered sections on the flat margin and on floating glass. */
 export function SessionSections({ layout }: { layout: AsideLayout }) {
   useAppLocale();
-  const { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting } = useSessionSectionsModel();
+  const { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules, waiting } = useSessionSectionsModel();
   const sections = new Set(ids);
   const setView = useButlerStore(state => state.setView);
   const [contextOpen, setContextOpen] = useState(false);
@@ -56,8 +56,7 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
     {sections.has("schedules") && <SessionSection id="schedules" layout={layout}>
       <AutomationTargetsPanel compact automations={schedules} onOpenAutomation={automationId => setView({ kind: "automation-detail", automationId })} />
     </SessionSection>}
-    {sections.has("queue") && <SessionSection id="queue" layout={layout} title={c.queue} count={running.length + waiting.length}>
-      {running.map(row => <Typo.Caption key={row.id} wrap="anywhere">{row.safe_label}</Typo.Caption>)}
+    {sections.has("queue") && <SessionSection id="queue" layout={layout} title={c.queue} count={waiting.length}>
       {waiting.map(item => <Typo.Caption key={item.id} wrap="anywhere">{item.text}</Typo.Caption>)}
     </SessionSection>}
   </SessionSectionList>;
