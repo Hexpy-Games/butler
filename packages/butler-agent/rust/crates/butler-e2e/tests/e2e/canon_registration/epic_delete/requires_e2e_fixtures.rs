@@ -3,7 +3,8 @@ use super::*;
 use std::{sync::atomic::Ordering, time::Instant};
 
 #[tokio::test]
-async fn epic_delete_review_archive_waits_for_linked_step_turn_to_end() -> Result<(), HarnessError> {
+async fn epic_delete_review_archive_waits_for_linked_step_turn_to_end() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     let (s, script, server, first, chat) = crate::canon_link::setup_env(
         "EPIC-DELETE-ARCHIVE-FINISHING",
@@ -27,7 +28,10 @@ async fn epic_delete_review_archive_waits_for_linked_step_turn_to_end() -> Resul
     // the App terminal receipt, before BTCC acknowledges delivery.
     let deadline = Instant::now() + Duration::from_secs(30);
     while !s.sandbox.data.join("e2e-delivery-held").exists() {
-        assert!(Instant::now() < deadline, "delivery barrier was not reached");
+        assert!(
+            Instant::now() < deadline,
+            "delivery barrier was not reached"
+        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let canon = db(&s)?;
@@ -55,13 +59,42 @@ async fn epic_delete_review_archive_waits_for_linked_step_turn_to_end() -> Resul
         200,
     );
     assert_eq!(canon.query_row::<String,_,_>("SELECT hold_reason FROM canon_session_queue WHERE epic_id=?1 AND turn_ended_at IS NULL", [&first], |r|r.get(0))?,"cancelled");
+    wait_receipt(&s, &first).await?;
+    assert_eq!(
+        canon.query_row::<String, _, _>(
+            "SELECT step_turn_id FROM canon_session_queue WHERE epic_id=?1",
+            [&first],
+            |r| r.get(0)
+        )?,
+        turn
+    );
+    assert_eq!(
+        canon.query_row::<String, _, _>(
+            "SELECT semantic_state FROM btcc_turns WHERE turn_id=?1",
+            [&turn],
+            |r| r.get(0)
+        )?,
+        "delivery_committed"
+    );
     let epic = data(s.gw.get(&format!("/canon/epics/{first}")).await?, 200);
     let refusal = delete(&s, &epic, &epic["revision"]).await?;
     assert_eq!(refusal.status, 409, "{}", refusal.text);
     assert_eq!(refusal.body["error"]["code"], "running");
     assert_eq!(epic["running"], true, "{epic}");
     std::fs::write(s.sandbox.data.join("e2e-delivery-release"), b"1")?;
-    wait_receipt(&s, &first).await?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while canon.query_row::<String, _, _>(
+        "SELECT semantic_state FROM btcc_turns WHERE turn_id=?1",
+        [&turn],
+        |r| r.get(0),
+    )? != "delivered"
+    {
+        assert!(
+            Instant::now() < deadline,
+            "committed delivery did not finish"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     assert_eq!(delete(&s, &epic, &epic["revision"]).await?.status, 200);
     drop(canon);
     s.finish().await?;

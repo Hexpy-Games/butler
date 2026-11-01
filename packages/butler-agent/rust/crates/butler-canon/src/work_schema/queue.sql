@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS canon_session_queue (
   btcc_work_id TEXT,
   result_reported_at INTEGER,
   turn_ended_at INTEGER,
+  step_turn_id TEXT,
   PRIMARY KEY(session_id,epic_id)
 );
 CREATE TABLE IF NOT EXISTS canon_session_queue_chains (

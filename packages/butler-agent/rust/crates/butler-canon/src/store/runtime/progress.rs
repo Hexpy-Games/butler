@@ -56,7 +56,8 @@ pub(super) fn current(works: &[Value], index: usize) -> bool {
 }
 
 /// Stop takes effect after the step's Turn ends. An undecided unfinished
-/// step can still finish through a live reply on its open Work.
+/// step can still finish through a live reply on its open Work, unless another
+/// unheld step owns the chat's Turn.
 fn held(db: &Connection, work: &Value) -> Result<bool> {
     Ok(db
         .query_row(

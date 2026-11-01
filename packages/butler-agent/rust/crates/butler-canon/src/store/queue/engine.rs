@@ -167,8 +167,8 @@ pub fn turn_ended(
     ) {
         for row in rows(
             tx,
-            "UPDATE canon_session_queue SET turn_ended_at=?2 WHERE step_op_id=?1 AND turn_ended_at IS NULL RETURNING epic_id",
-            params![op, ctx.now],
+            "UPDATE canon_session_queue SET turn_ended_at=COALESCE(turn_ended_at,?2),step_turn_id=COALESCE(step_turn_id,?3) WHERE step_op_id=?1 AND (turn_ended_at IS NULL OR (step_turn_id IS NULL AND ?3 IS NOT NULL)) RETURNING epic_id",
+            params![op, ctx.now, turn],
         )? {
             changed_epics.insert(text(&row, "epic_id")?.to_owned());
         }

@@ -292,3 +292,61 @@ async fn epic_delete_bound_live_turn_still_blocks_after_a_closed_work() -> Resul
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn epic_delete_unfinished_linked_work_ignores_another_running_step()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, chat) =
+        crate::canon_link::setup("EPIC-DELETE-UNFINISHED-SIBLING", false, false).await?;
+    stopped_work(&s, &script, &first, &chat).await?;
+    script.quick.store(true, Ordering::SeqCst);
+    data(
+        s.gw.post(
+            &format!("/sessions/{chat}/canon/queue"),
+            json!({"op":"start_now","epic_id":first}),
+        )
+        .await?,
+        200,
+    );
+    unfinished::wait_card(&s, "pending").await?;
+    let canon = db(&s)?;
+    let source: String = canon.query_row("SELECT question_message_id FROM canon_session_queue WHERE epic_id=?1 AND hold_reason='step_unfinished' AND decision IS NULL AND turn_ended_at IS NOT NULL", [&first], |r|r.get(0))?;
+    assert_eq!(count(&canon, "canon_epic_work_links", &first), 1);
+    let second = script.epics.lock().unwrap()[1].clone();
+    script.hold_report.store(true, Ordering::SeqCst);
+    data(
+        s.gw.post(
+            &format!("/sessions/{chat}/canon/queue"),
+            json!({"op":"start_now","epic_id":second}),
+        )
+        .await?,
+        200,
+    );
+    script.wait_reporting().await;
+    assert_eq!(canon.query_row::<i64,_,_>("SELECT count(*) FROM canon_session_queue WHERE epic_id=?1 AND state='running' AND hold_reason IS NULL AND turn_ended_at IS NULL", [&second], |r|r.get(0))?, 1);
+    let progress = data(
+        s.gw.get(&format!("/canon/epics/{first}/progress")).await?,
+        200,
+    );
+    assert_eq!(progress["running"], false, "{progress}");
+    let epic = data(s.gw.get(&format!("/canon/epics/{first}")).await?, 200);
+    assert_eq!(epic["running"], false, "{epic}");
+    assert_eq!(epic["delete_blocked"], false, "{epic}");
+    let reply = delete(&s, &epic, &epic["revision"]).await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let app =
+        butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    panels::wait_settled(&app, &source).await?;
+    assert_eq!(app.query_row::<String,_,_>("SELECT json_extract(payload_json,'$.panel.state') FROM app_initiated_messages WHERE source_key=?1", [&source], |r|r.get(0))?, "deleted");
+    script.finish_report();
+    for turn in s.gw.turns(&chat).await? {
+        s.gw.wait_terminal(&chat, turn["id"].as_str().unwrap(), Duration::from_secs(30))
+            .await?;
+    }
+    drop(app);
+    drop(canon);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

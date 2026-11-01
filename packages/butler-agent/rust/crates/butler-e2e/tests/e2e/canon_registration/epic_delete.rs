@@ -1,6 +1,7 @@
 //! Epic deletion uses the same transaction for HTTP and approved chat drafts.
 use super::*;
 mod admission_failure;
+mod archived_queue;
 mod delegation_guard;
 mod delivery_failure;
 mod guards;

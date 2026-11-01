@@ -44,6 +44,13 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
         connection
             .execute_batch("ALTER TABLE canon_session_queue ADD COLUMN turn_ended_at INTEGER")?;
     }
+    let has_turn: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('canon_session_queue') WHERE name='step_turn_id')",
+        [], |r| r.get(0),
+    )?;
+    if !has_turn {
+        connection.execute_batch("ALTER TABLE canon_session_queue ADD COLUMN step_turn_id TEXT")?;
+    }
     proposals::upgrade(connection)?;
     connection.execute_batch(include_str!("work_schema/mcp.sql"))?;
     connection.execute_batch(include_str!("work_schema/activity.sql"))?;

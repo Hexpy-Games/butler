@@ -3,10 +3,7 @@ use super::*;
 use butler_e2e::e2e::task_graph::{GraphBuilder, actions};
 use butler_turn::btcc::SubsessionDirectionRequest;
 
-#[tokio::test]
-async fn epic_delete_review_ended_step_waits_for_pending_direction_without_live_child()
--> Result<(), HarnessError> {
-    butler_e2e::gate!();
+async fn pending_direction(worker: bool) -> Result<(), HarnessError> {
     let (mut s, _, server, project, _) =
         setup("EPIC-DELETE-PENDING-DIRECTION", Access::AskAlways).await?;
     let epic = create(&s, &project).await?;
@@ -15,26 +12,47 @@ async fn epic_delete_review_ended_step_waits_for_pending_direction_without_live_
     let mut graph = GraphBuilder::open(&s.sandbox.data)
         .await
         .map_err(|e| HarnessError(e.to_string()))?;
-    let mut parent = graph
-        .parent("direction-parent")
-        .await
-        .map_err(|e| HarnessError(e.to_string()))?;
-    graph
-        .plan(&mut parent, "steward", actions(1))
-        .await
-        .map_err(|e| HarnessError(e.to_string()))?;
-    graph
-        .review(&mut parent, "plan", "accept", json!([]))
-        .await
-        .map_err(|e| HarnessError(e.to_string()))?;
-    let child = graph
-        .steward(&parent, "Check the evidence")
-        .await
-        .map_err(|e| HarnessError(e.to_string()))?;
+    let (parent, child_session, role) = if worker {
+        let parent = graph
+            .graph("direction-parent", 1, "Check the evidence")
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?;
+        let child = graph
+            .worker(&parent, "a", "Check remaining evidence")
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?;
+        (
+            parent,
+            child.session,
+            butler_turn::workspace::SessionRole::Worker,
+        )
+    } else {
+        let mut parent = graph
+            .parent("direction-parent")
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?;
+        graph
+            .plan(&mut parent, "steward", actions(1))
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?;
+        graph
+            .review(&mut parent, "plan", "accept", json!([]))
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?;
+        let child = graph
+            .steward(&parent, "Check the evidence")
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?;
+        (
+            parent,
+            child.scope.session_id,
+            butler_turn::workspace::SessionRole::Steward,
+        )
+    };
     let canon = db(&s)?;
     let relation: String = canon.query_row(
         "SELECT relation_id FROM btcc_session_relations WHERE child_session_id=?1",
-        [&child.scope.session_id],
+        [&child_session],
         |r| r.get(0),
     )?;
     let direction = graph
@@ -47,7 +65,7 @@ async fn epic_delete_review_ended_step_waits_for_pending_direction_without_live_
             work_id: None,
             safe_title: None,
             instruction: "Check the remaining evidence".into(),
-            child_role: butler_turn::workspace::SessionRole::Steward,
+            child_role: role,
             access_mode: "full_access".into(),
             schedule_run: None,
         })
@@ -64,37 +82,34 @@ async fn epic_delete_review_ended_step_waits_for_pending_direction_without_live_
     )?;
     canon.execute("INSERT INTO canon_session_queue(session_id,epic_id,chain_id,step_index,stack_position,state,origin,started_at,turn_ended_at) VALUES(?1,?2,'chain',0,0,'running','detach',0,1)",rusqlite::params![parent.scope.session_id,id])?;
     assert_eq!(canon.query_row::<i64,_,_>("SELECT count(*) FROM btcc_turns WHERE semantic_state IN ('admitted','delivery_committed')",[],|r|r.get(0))?,0);
-    // Isolate each arm of WorkDelegationOpen, including a Worker relation.
-    for role in ["steward", "worker"] {
-        canon.execute("UPDATE btcc_session_relations SET activity_role=?2,activity_terminal=1 WHERE relation_id=?1",rusqlite::params![relation,role])?;
-        assert!(
-            butler_canon::store::runtime::epic_delete_running(&canon, id)
-                .map_err(|e| HarnessError(e.to_string()))?,
-            "{role}: pending direction"
-        );
-        canon.execute(
-            "UPDATE btcc_subsession_directions SET status='applied' WHERE relation_id=?1",
-            [&relation],
-        )?;
-        assert!(
-            !butler_canon::store::runtime::epic_delete_running(&canon, id)
-                .map_err(|e| HarnessError(e.to_string()))?,
-            "{role}: terminal child without direction"
-        );
-        canon.execute(
-            "UPDATE btcc_session_relations SET activity_terminal=0 WHERE relation_id=?1",
-            [&relation],
-        )?;
-        assert!(
-            butler_canon::store::runtime::epic_delete_running(&canon, id)
-                .map_err(|e| HarnessError(e.to_string()))?,
-            "{role}: open relation"
-        );
-        canon.execute(
-            "UPDATE btcc_subsession_directions SET status='pending' WHERE relation_id=?1",
-            [&relation],
-        )?;
-    }
+    // Isolate each arm using a relation and packet created by the product.
+    canon.execute(
+        "UPDATE btcc_session_relations SET activity_terminal=1 WHERE relation_id=?1",
+        [&relation],
+    )?;
+    assert!(
+        butler_canon::store::runtime::epic_delete_running(&canon, id)
+            .map_err(|e| HarnessError(e.to_string()))?,
+        "pending direction"
+    );
+    canon.execute(
+        "UPDATE btcc_subsession_directions SET status='applied' WHERE relation_id=?1",
+        [&relation],
+    )?;
+    assert!(
+        !butler_canon::store::runtime::epic_delete_running(&canon, id)
+            .map_err(|e| HarnessError(e.to_string()))?,
+        "terminal child without direction"
+    );
+    canon.execute(
+        "UPDATE btcc_session_relations SET activity_terminal=0 WHERE relation_id=?1",
+        [&relation],
+    )?;
+    assert!(
+        butler_canon::store::runtime::epic_delete_running(&canon, id)
+            .map_err(|e| HarnessError(e.to_string()))?,
+        "open relation"
+    );
     drop(canon);
     graph
         .close()
@@ -103,4 +118,18 @@ async fn epic_delete_review_ended_step_waits_for_pending_direction_without_live_
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+#[tokio::test]
+async fn epic_delete_review_ended_step_waits_for_pending_direction_without_live_child()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    Box::pin(pending_direction(false)).await
+}
+
+#[tokio::test]
+async fn epic_delete_worker_step_waits_for_pending_direction_without_live_child()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    Box::pin(pending_direction(true)).await
 }
