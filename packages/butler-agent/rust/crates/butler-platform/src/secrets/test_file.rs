@@ -1,5 +1,6 @@
 //! Temporary system-store substitute; Windows encrypts fixture values with DPAPI.
 use super::{Inner, SecretError, SecretKey, SecretStore, SecretText, file::FileSecrets};
+use crate::secure_fs::{Canonical, is_within, same_path};
 #[cfg(windows)]
 use base64::{Engine, engine::general_purpose::STANDARD};
 use std::path::Path;
@@ -15,12 +16,12 @@ pub(super) fn open(path: &Path) -> Result<SecretStore, SecretError> {
     let parent = path
         .parent()
         .ok_or_else(invalid_path)?
-        .canonicalize()
+        .canonical()
         .map_err(SecretError::File)?;
     let temporary = std::env::temp_dir()
-        .canonicalize()
+        .canonical()
         .map_err(SecretError::File)?;
-    if parent == temporary || !parent.starts_with(temporary) {
+    if same_path(&parent, &temporary) || !is_within(&parent, &temporary) {
         return Err(invalid_path());
     }
     Ok(SecretStore {
@@ -83,11 +84,11 @@ impl TestSecrets {
 }
 
 pub(super) fn for_home(home: &Path) -> Result<SecretStore, SecretError> {
-    let home = home.canonicalize().map_err(SecretError::File)?;
+    let home = home.canonical().map_err(SecretError::File)?;
     let temporary = std::env::temp_dir()
-        .canonicalize()
+        .canonical()
         .map_err(SecretError::File)?;
-    if home == temporary || !home.starts_with(temporary) {
+    if same_path(&home, &temporary) || !is_within(&home, &temporary) {
         return Err(invalid_path());
     }
     let directory = home

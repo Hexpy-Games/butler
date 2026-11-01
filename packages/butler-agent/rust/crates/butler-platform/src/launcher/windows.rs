@@ -44,6 +44,10 @@ pub(super) fn system_program_dirs() -> Vec<PathBuf> {
 
 // The installer creates a hardlink, so command invocation never goes through
 // cmd.exe (which expands literal percent signs in profile paths).
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the launcher layer sits below secure_fs; this is the same dunce form"
+)]
 pub(super) fn canonical_command_executable(path: PathBuf) -> io::Result<PathBuf> {
     if !path
         .file_name()

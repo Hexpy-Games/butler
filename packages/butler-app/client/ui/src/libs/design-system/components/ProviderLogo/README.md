@@ -2,14 +2,14 @@
 
 ## What is this component
 The logo of an AI service or a local model server (ChatGPT/OpenAI, Claude,
-Gemini, Grok, Qwen, Kimi, Z.AI, OpenCode, Ollama, LM Studio), drawn from the
-vendored SVG files in `logos/` exactly as shipped.
+Gemini, Grok, Qwen, Kimi, Z.AI, DeepSeek, Upstage, OpenCode, Ollama, LM
+Studio), drawn from the vendored SVG files in `logos/` exactly as shipped.
 
 ## Props
 
 | Prop | Values |
 | --- | --- |
-| `name` | `openai`, `claude`, `anthropic`, `gemini`, `grok`, `qwen`, `kimi`, `zai`, `opencode`, `ollama`, `lmstudio` |
+| `name` | `openai`, `claude`, `anthropic`, `gemini`, `grok`, `qwen`, `kimi`, `zai`, `deepseek`, `upstage`, `opencode`, `ollama`, `lmstudio` |
 | `size` | `sm` (14px), `md` (16px, default), `lg` (20px) |
 | `label` | Accessible name; omit when visible text names the service |
 
@@ -23,11 +23,13 @@ import { IconTile, ProviderLogo } from "@/butler-ds";
 
 ## Source and license
 - `anthropic` (the provider) and `claude` (the product) share `claude-color.svg`.
-- The files come from `@lobehub/icons-static-svg` 1.95.1 (MIT). Only these ten
+- The files come from `@lobehub/icons-static-svg` 1.95.1 (MIT). Only these twelve
   files are vendored; the package is not a dependency. `logos/NOTICE` carries
   the license and the trademark note.
 Vendored SVG bytes and license notices are verified by the asset tests; rendered logos are checked in the DS Viewer.
   fails if a string drifts from its file.
+- `upstage-color.svg` has one change from upstream: its misspelled `<title>`
+  ("Upsate") reads "Upstage". `logos/NOTICE` records it.
 - Kimi uses the monochrome file: the color file has white lettering that
   disappears on light surfaces.
 
@@ -54,7 +56,7 @@ name (Claude, Claude Code): the mark is short at the bottom, so its fit sits it
 
 ## Themes
 Monochrome logos paint with `currentColor` (the text color), so they stay
-visible in light and dark. Color logos (Claude, Gemini, Qwen) keep their fills,
+visible in light and dark. Color logos (Claude, Gemini, Qwen, DeepSeek, Upstage) keep their fills,
 which read on both themes. Gradient ids are made unique per rendered logo.
 
 ## Wrong use cases
