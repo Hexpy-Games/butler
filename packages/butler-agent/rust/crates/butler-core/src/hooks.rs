@@ -4,7 +4,7 @@ mod context;
 mod event;
 mod project;
 pub use config::{HookConfig, HookDefinition, HookMatcher};
-pub use context::{HookContext, HookDispatched};
+pub use context::{HookBlock, HookBlockListener, HookContext, HookDispatched};
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
 pub use project::{
     PROJECT_HOOK_FILE, PROJECT_HOOK_ID_PREFIX, PROJECT_HOOKS_CAPABILITY, ProjectHookLine,
@@ -92,6 +92,9 @@ pub trait HookPort: Send + Sync {
     }
     /// Keeps a SessionStart that could not run yet because its hooks wait for an answer.
     fn hold_session_start(&self, _envelope: HookEnvelope) {}
+    /// Sets the one listener told each time a failing hook blocks part of a running
+    /// turn, replacing any earlier one.
+    fn observe_blocks(&self, _listener: HookBlockListener) {}
     /// Ends a session's hold. A port holding allowed project hooks runs them for the
     /// held event, in the session's access mode now; any other port drops it.
     fn release_session_start(

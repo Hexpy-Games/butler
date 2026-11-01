@@ -134,7 +134,6 @@ yet.
     "type": "command",
     "args": ["sh", "/absolute/path/guard.sh"],
     "timeout_ms": 30000,
-    "failClosed": false,
     "enabled": true
   }]
 }
@@ -158,11 +157,17 @@ include full `tool_input`, call id and `resumed`; post events include `ok`, full
 
 Exit 2 or `{"decision":"deny","reason":"..."}` denies a pre-event. `block` and
 Claude Code's `hookSpecificOutput.permissionDecision: "deny"` are also accepted.
-Exit 0 with empty/non-JSON stdout continues. Other exits, crashes, invalid JSON,
-spawn failures, timeout and output overflow are logged and continue by default;
-`failClosed: true` blocks on these failures. A `UserPromptSubmit` or `SessionStart`
-hook's non-JSON stdout counts as text even when it starts with `[` or `{`, unless
-that hook sets `failClosed: true`. `allow` and `ask` are logged as
+Exit 0 with empty/non-JSON stdout continues. Anything else is a failure: another
+exit code, a crash, invalid JSON, a spawn failure, a timeout or output overflow.
+Failures are logged. On an event that can block (`UserPromptSubmit`, `PreToolUse`,
+`Stop`, `SubagentStop`) a failure also blocks, like a deny whose reason names the
+hook and what went wrong; `SessionStart` and `PostToolUse` continue. Set
+`failClosed: false` on a hook to log its failures and continue instead. A rejected
+send names the hook in its toast; a blocked tool call or Stop shows a brief toast
+naming the hook and what it blocked. Since a failure blocks, a `UserPromptSubmit`
+hook's stdout that starts with `[` or `{` is judged as a decision, and invalid JSON
+blocks the send; with `failClosed: false` such stdout counts as text, as other
+non-JSON stdout does. `allow` and `ask` are logged as
 `approval_ignored`; normal permission checks still run. Input rewriting is
 ignored. Reasons are limited to 16 KiB.
 

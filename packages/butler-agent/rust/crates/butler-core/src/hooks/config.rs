@@ -47,8 +47,9 @@ pub struct HookDefinition {
     /// Observe-only background execution.
     #[serde(default, rename = "async")]
     pub asynchronous: bool,
-    /// Errors block pre-events only when explicitly enabled.
-    #[serde(default, rename = "failClosed")]
+    /// Whether a failure (bad exit, timeout, unreadable output) blocks the event.
+    /// Absent, it does for events that can block and does not for the others.
+    #[serde(rename = "failClosed")]
     pub fail_closed: bool,
     /// Enabled by default for user-authored entries.
     #[serde(default = "yes")]
@@ -85,9 +86,9 @@ struct HookDefinitionInput {
     /// Observe-only background execution.
     #[serde(default, rename = "async")]
     asynchronous: bool,
-    /// Errors block pre-events only when explicitly enabled.
+    /// Absent means the event's default, see `HookDefinition::fail_closed`.
     #[serde(default, rename = "failClosed")]
-    fail_closed: bool,
+    fail_closed: Option<bool>,
     /// Enabled by default for user-authored entries.
     #[serde(default = "yes")]
     enabled: bool,
@@ -203,7 +204,7 @@ impl<'de> Deserialize<'de> for HookDefinition {
                 30_000
             }),
             asynchronous: input.asynchronous,
-            fail_closed: input.fail_closed,
+            fail_closed: input.fail_closed.unwrap_or(input.event.blocks()),
             enabled: input.enabled,
             schema_version: input.schema_version,
         })

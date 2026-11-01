@@ -94,6 +94,7 @@ export function useLiveSessionEvents(): void {
       if (event.type === "browser.payment_confirmation_skipped" && isRecentEvent(event)) {
         notifyStatus(appCopy.interfaceDetails.paymentSkipped(String(event.payload?.site ?? ""), String(event.payload?.amount ?? "")), { id: `payment-skipped-${event.id}`, tone: "ok" });
       }
+      if (event.type === "hook.blocked" && isRecentEvent(event)) notifyHookBlocked(event);
       receiveUpdateProgress(event);
       publishMemoryEvent(event);
       publishChatGptEvent(event);
@@ -324,6 +325,14 @@ function notifyDesktopEvent(
     body: turnCompletionBody(turn.state, turn.safe_status_label),
     sessionId: turn.chat_id,
   });
+}
+
+/** A failing hook blocked a tool call or a finish: name the hook and what it blocked. */
+function notifyHookBlocked(event: TimelineEvent): void {
+  const { hook, tool } = (event.payload ?? {}) as Record<string, unknown>;
+  if (typeof hook !== "string" || !hook) return;
+  const copy = appCopy.settings.hooks;
+  notifyStatus(copy.failedBlock(hook, typeof tool === "string" && tool ? tool : copy.finishTarget), { id: "hook-blocked", tone: "error" });
 }
 
 function isRecentEvent(event: TimelineEvent): boolean {

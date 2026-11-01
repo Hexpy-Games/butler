@@ -34,7 +34,7 @@ export interface HookRun {
 }
 export function emptyHook(): HookDefinition {
   return { id: crypto.randomUUID(), name: "", event: "PreToolUse", match: { tools: [] }, type: "command",
-    command: "", args: null, env: {}, timeout_ms: 30_000, async: false, failClosed: false, enabled: true, schema_version: 1 };
+    command: "", args: null, env: {}, timeout_ms: 30_000, async: false, failClosed: blockingEvent("PreToolUse"), enabled: true, schema_version: 1 };
 }
 export function blockingEvent(event: HookEvent): boolean {
   return ["UserPromptSubmit", "PreToolUse", "Stop", "SubagentStop"].includes(event);

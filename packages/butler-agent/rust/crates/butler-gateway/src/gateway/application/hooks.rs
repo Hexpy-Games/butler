@@ -2,11 +2,41 @@
 use super::*;
 use crate::gateway::MessageSendRequest;
 use butler_core::hooks::{
-    HookAttachment, HookContext, HookEnvelope, HookEvent, HookPayload, HookPort, ProjectHookLine,
-    ProjectHookRequest, ProjectHookReview,
+    HookAttachment, HookBlock, HookContext, HookEnvelope, HookEvent, HookPayload, HookPort,
+    ProjectHookLine, ProjectHookRequest, ProjectHookReview,
 };
 use rusqlite::params;
+/// A failing hook blocked part of a running turn; the App names it in a toast.
+pub(super) const BLOCKED_EVENT: &str = "hook.blocked";
 impl AppApplication {
+    /// Publishes each turn-time block by a failing hook as `hook.blocked`. A rejected
+    /// send needs none: its own response names the hook.
+    pub fn observe_hook_blocks(&self) {
+        let Some(port) = &self.dependencies.hooks else {
+            return;
+        };
+        let storage = self.storage.clone();
+        let subscribers = self.subscribers.clone();
+        let clock = self.dependencies.identity_clock.clone();
+        port.observe_blocks(Arc::new(move |block: HookBlock| {
+            let Ok(Value::Object(payload)) = serde_json::to_value(&block) else {
+                return;
+            };
+            let (storage, subscribers, now) =
+                (storage.clone(), subscribers.clone(), clock.now_iso());
+            tokio::spawn(async move {
+                let published = storage
+                    .execute(move |db| {
+                        events::append(db, &subscribers, BLOCKED_EVENT, None, payload, &now)
+                            .map(drop)
+                    })
+                    .await;
+                if let Err(error) = published {
+                    tracing::warn!(event = "hook_block_not_published", %error);
+                }
+            });
+        }));
+    }
     pub(super) async fn session_start_hook(
         &self,
         id: String,

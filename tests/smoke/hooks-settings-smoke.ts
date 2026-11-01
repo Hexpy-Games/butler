@@ -26,15 +26,15 @@ try {
     let hooks: unknown[] = [], revision = 0;
     const runs: unknown[] = [];
     let outcome = "continue";
-    const capture = async (state: string) => {
-      await page.evaluate(() => document.fonts.ready);
-      await page.waitForFunction(() => document.getAnimations().every(animation =>
+    const capture = async (state: string, shot = page) => {
+      await shot.evaluate(() => document.fonts.ready);
+      await shot.waitForFunction(() => document.getAnimations().every(animation =>
         animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, state);
-      await page.screenshot({ path: join(output, `${state}-${width}-${theme}-${locale}.png`), fullPage: true });
+      assert.equal(await shot.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, state);
+      await shot.screenshot({ path: join(output, `${state}-${width}-${theme}-${locale}.png`), fullPage: true });
     };
     await page.route("**/personalization", route => route.fulfill({ json: { data: {
-      persona: "", eol: "", persona_presets: [], profile: {}, profiling: { mode: "off" },
+      persona: "", eol: "", persona_presets: [], profile: { principal_name: "" }, profiling: { mode: "off" },
     } } }));
     await page.route("**/hooks**", async route => {
       const request = route.request(), path = new URL(request.url()).pathname;
@@ -45,7 +45,8 @@ try {
     });
     await page.goto(`http://127.0.0.1:${server.port}/?visual=components&locale=${locale}&theme=${theme}`);
     await page.locator('[data-test-class~="visual-harness"]').waitFor();
-    if (width === 375) await page.getByRole("button", { name: copy.titlebar.hideRightPanel, exact: true }).first().click();
+    const hideRight = page.getByRole("button", { name: copy.titlebar.hideRightPanel, exact: true }).first();
+    if (width === 375 && await hideRight.isVisible()) await hideRight.click();
     const showSidebar = page.getByRole("button", { name: copy.titlebar.showLeftPanel, exact: true });
     if (await showSidebar.isVisible()) await showSidebar.click();
 
@@ -63,20 +64,29 @@ try {
       await page.locator("#hook-args").fill('["printf", "okay"]');
       assert.equal(await page.locator("#hook-command").isDisabled(), true);
       await page.locator("#hook-args").fill("");
+      // A guard's failure blocks by default; another event starts from its own default.
+      assert.equal(await page.locator("#hook-fail-closed").isChecked(), true);
+      await page.locator("#hook-event").selectOption("PostToolUse");
+      assert.equal(await page.locator("#hook-fail-closed").count(), 0);
+      await page.locator("#hook-event").selectOption("PreToolUse");
+      assert.equal(await page.locator("#hook-fail-closed").isChecked(), true);
       await page.locator("#hook-name").fill("Test guard");
       await page.locator("#hook-command").fill("printf okay");
       await capture("add");
       await page.getByRole("button", { name: copy.common.save, exact: true }).click();
       await page.getByText("Test guard", { exact: true }).waitFor();
       assert.equal(hooks.length, 1);
+      assert.equal((hooks[0] as { failClosed: boolean }).failClosed, true);
       await capture("list");
       assert(await page.getByText("Test guard", { exact: true }).evaluate(node => node.parentElement!.scrollWidth <= node.parentElement!.clientWidth), "name is not truncated");
       await page.getByRole("button", { name: copy.settings.hooks.edit, exact: true }).click();
       await page.getByRole("dialog", { name: copy.settings.hooks.editTitle, exact: true }).waitFor();
       await page.locator("#hook-name").fill("Edited guard");
       await capture("edit");
+      await page.locator("#hook-fail-closed").click();
       await page.getByRole("button", { name: copy.common.save, exact: true }).click();
       await page.getByText("Edited guard", { exact: true }).waitFor();
+      assert.equal((hooks[0] as { failClosed: boolean }).failClosed, false);
       await page.getByRole("button", { name: copy.settings.hooks.test, exact: true }).click();
       const success = page.locator('[data-sonner-toast][data-type="success"]').filter({ hasText: copy.settings.hooks.testSuccess }).last();
       await success.waitFor();
@@ -110,6 +120,31 @@ try {
       assert.equal(hooks.length, 0);
     }
     await page.close();
+    if (!baseline) {
+      // A failing guard blocked a tool mid-turn: the live stream tells the open chat.
+      const chat = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+      let sent = 0, releaseBlock = () => {};
+      const blockReleased = new Promise<void>(resolve => { releaseBlock = resolve; });
+      await chat.route("**/events/live**", async route => {
+        if (sent++) return route.fulfill({ status: 204 });
+        await blockReleased;
+        await route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: `data: ${JSON.stringify({
+          id: 900_000, type: "hook.blocked", created_at: new Date().toISOString(), payload: {
+            hook: "Test guard", event: "PreToolUse", tool: "run_command", session_id: "general",
+            reason: "Test guard: hook failed (exited with code 1)" } })}\n\n` });
+      });
+      await chat.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=win-fixes&locale=${locale}&theme=${theme}`);
+      await chat.locator('[data-harness-ready="true"]').waitFor();
+      // The fixture chat's unmocked reads raise their own toasts; clear them first.
+      await chat.waitForLoadState("networkidle");
+      for (const close of await chat.locator("[data-sonner-toast] [data-close-button]").all()) await close.click().catch(() => {});
+      await chat.locator("[data-sonner-toast]").first().waitFor({ state: "detached" }).catch(() => {});
+      releaseBlock();
+      await chat.locator('[data-sonner-toast][data-type="error"]')
+        .filter({ hasText: copy.settings.hooks.failedBlock("Test guard", "run_command") }).waitFor();
+      await capture("hook-blocked", chat);
+      await chat.close();
+    }
   }
   console.log(`Hooks Settings: ${baseline ? "baseline" : "CRUD/test/log"}, ${process.env.HOOK_SMOKE_CASE ? 1 : matrix.length} viewport/theme/language combinations passed; ${output}`);
 } finally { await browser.close(); await server.stop(true); }

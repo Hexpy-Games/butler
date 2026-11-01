@@ -135,11 +135,18 @@ async fn execute(
         Ok(input) => run_process(hooks, input, cancel).await,
         Err(error) => Err(error),
     };
-    let (outcome, reason) = super::decision::resolve(hook, &result);
+    let super::decision::Resolved {
+        outcome,
+        deny: reason,
+        failed,
+    } = super::decision::resolve(hook, &result);
     if outcome == "approval_ignored" {
         tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
     }
     let reason = reason.map(|s| clean(&s, &redact));
+    if let Some(reason) = reason.as_ref().filter(|_| failed) {
+        hooks.blocked(hook, payload, reason);
+    }
     let exit_code = result.as_ref().ok().and_then(|o| o.exit_code);
     let stdout = result
         .as_ref()
@@ -185,6 +192,26 @@ async fn execute(
         project_denied: reason.is_some() && scope(hook) == "project",
         deny: reason,
         context: added.context,
+    }
+}
+impl Hooks {
+    /// Tells listeners that a failing hook blocked part of a running turn. A test run
+    /// or an admission has no turn: whoever asked gets the refusal itself.
+    fn blocked(&self, hook: &HookDefinition, payload: &HookEnvelope, reason: &str) {
+        if payload.turn_id.is_none() {
+            return;
+        }
+        let block = HookBlock {
+            hook: hook.label().to_owned(),
+            event: hook.event,
+            tool: payload.payload.tool_name.clone(),
+            session_id: payload.session_id.clone(),
+            reason: reason.to_owned(),
+        };
+        let listener = self.block_listener.read().clone();
+        if let Some(listener) = listener {
+            listener(block);
+        }
     }
 }
 pub(super) fn clean(text: &str, redact: &[String]) -> String {

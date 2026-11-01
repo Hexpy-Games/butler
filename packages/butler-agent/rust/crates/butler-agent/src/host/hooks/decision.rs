@@ -17,46 +17,54 @@ struct Specific {
     #[serde(rename = "additionalContext")]
     context: Option<String>,
 }
+/// What one handler's run means for its event.
+pub(super) struct Resolved {
+    pub(super) outcome: String,
+    /// Why the event is blocked, if it is.
+    pub(super) deny: Option<String>,
+    /// The block comes from the hook failing, not from its decision or a cancellation.
+    pub(super) failed: bool,
+}
 pub(super) fn resolve(
     hook: &HookDefinition,
     output: &Result<HookOutput, HookProcessError>,
-) -> (String, Option<String>) {
+) -> Resolved {
     let out = match output {
         Ok(out) => out,
-        Err(e) => {
-            return failure(
-                hook,
-                if matches!(e, HookProcessError::Timeout) {
-                    "timeout"
-                } else {
-                    "error"
-                },
-                &e.to_string(),
-            );
+        Err(HookProcessError::Timeout) => {
+            let detail = format!("timed out after {} ms", hook.timeout_ms);
+            return failure(hook, "timeout", &detail);
         }
+        // The turn or the service is stopping: the event still has no answer, but
+        // nothing about the hook is wrong.
+        Err(error @ HookProcessError::Cancelled) => {
+            return Resolved {
+                failed: false,
+                ..failure(hook, "error", &error.to_string())
+            };
+        }
+        Err(error) => return failure(hook, "error", &error.to_string()),
     };
     if out.exit_code == Some(2) && hook.event.blocks() {
         return deny(hook, out.stderr.trim().to_owned());
     }
     if out.exit_code != Some(0) {
-        return failure(
-            hook,
-            "error",
-            &format!("Hook '{}' exited with {:?}", hook.label(), out.exit_code),
+        let detail = out.exit_code.map_or_else(
+            || "exited without a code".to_owned(),
+            |code| format!("exited with code {code}"),
         );
+        return failure(hook, "error", &detail);
     }
     let raw = out.stdout.trim();
     let decision = match serde_json::from_str::<Decision>(raw) {
         Ok(decision) => decision,
-        Err(_) if !raw.starts_with('{') && !raw.starts_with('[') => {
-            return ("continue".into(), None);
-        }
-        // Text may start with a bracket; only a hook that asked for strict
-        // failure has its stdout judged as a decision first.
+        Err(_) if !raw.starts_with('{') && !raw.starts_with('[') => return proceed("continue"),
+        // Text may start with a bracket; a hook whose failure blocks has its stdout
+        // judged as a decision first.
         Err(_) if super::context::can_add(hook) && !hook.fail_closed => {
-            return ("continue".into(), None);
+            return proceed("continue");
         }
-        Err(_) => return failure(hook, "error", "Invalid hook decision JSON"),
+        Err(_) => return failure(hook, "error", "printed invalid JSON"),
     };
     let specific = decision.specific;
     let choice = decision
@@ -68,13 +76,13 @@ pub(super) fn resolve(
         .or_else(|| specific.as_ref().and_then(|s| s.reason.clone()))
         .unwrap_or_default();
     if reason.len() > 16 * 1024 {
-        return failure(hook, "error", "Hook reason exceeds 16 KiB");
+        return failure(hook, "error", "printed a reason over 16 KiB");
     }
     match choice {
         Some("deny" | "block") => deny(hook, reason),
-        Some("allow" | "ask") => ("approval_ignored".into(), None),
-        None | Some("continue") => ("continue".into(), None),
-        Some(_) => failure(hook, "error", "Invalid hook decision"),
+        Some("allow" | "ask") => proceed("approval_ignored"),
+        None | Some("continue") => proceed("continue"),
+        Some(_) => failure(hook, "error", "printed an invalid decision"),
     }
 }
 /// Text a successful handler's stdout adds: `additionalContext` of a decision,
@@ -103,24 +111,37 @@ pub(super) fn fell_back_to_text(raw: &str) -> bool {
     let raw = raw.trim();
     (raw.starts_with('{') || raw.starts_with('[')) && serde_json::from_str::<Decision>(raw).is_err()
 }
-fn deny(hook: &HookDefinition, reason: String) -> (String, Option<String>) {
+fn proceed(outcome: &str) -> Resolved {
+    Resolved {
+        outcome: outcome.into(),
+        deny: None,
+        failed: false,
+    }
+}
+fn deny(hook: &HookDefinition, reason: String) -> Resolved {
     if reason.len() > 16 * 1024 {
-        return failure(hook, "error", "Hook reason exceeds 16 KiB");
+        return failure(hook, "error", "printed a reason over 16 KiB");
     }
     if !hook.event.blocks() {
-        return ("continue".into(), None);
+        return proceed("continue");
     }
     let reason = if reason.is_empty() {
         "Blocked by hook".into()
     } else {
         reason
     };
-    ("deny".into(), Some(format!("{}: {reason}", hook.label())))
+    Resolved {
+        outcome: "deny".into(),
+        deny: Some(format!("{}: {reason}", hook.label())),
+        failed: false,
+    }
 }
-fn failure(hook: &HookDefinition, outcome: &str, reason: &str) -> (String, Option<String>) {
+/// A failed hook blocks an event that can be blocked, unless it set `failClosed: false`.
+fn failure(hook: &HookDefinition, outcome: &str, detail: &str) -> Resolved {
     let blocked = hook.fail_closed && hook.event.blocks();
-    (
-        outcome.into(),
-        blocked.then(|| format!("{}: {reason}", hook.label())),
-    )
+    Resolved {
+        outcome: outcome.into(),
+        deny: blocked.then(|| format!("{}: hook failed ({detail})", hook.label())),
+        failed: blocked,
+    }
 }

@@ -26,7 +26,7 @@ export function HookForm({ hook, busy, onSave, onCancel }: {
     <Field><FieldLabel htmlFor="hook-event">{copy.event}</FieldLabel>
       <NativeSelect id="hook-event" value={form.event} onChange={(e) => {
         const event = e.target.value as HookEvent;
-        update({ event, match: { tools: [] }, async: false });
+        update({ event, match: { tools: [] }, async: false, failClosed: blockingEvent(event) });
       }}>{HOOK_EVENTS.map((event) => <NativeSelectOption key={event} value={event}>{event}</NativeSelectOption>)}</NativeSelect></Field>
     {form.event === "PreToolUse" || form.event === "PostToolUse" ? <Field>
       <FieldLabel htmlFor="hook-tools">{copy.tools}</FieldLabel>
