@@ -1,7 +1,8 @@
 //! Runs a hook inside the sandbox of the session that raised its event. Anything
 //! that cannot be contained does not start: there is no unsandboxed fallback.
 use crate::command_sandbox::{
-    self, Invocation, ProjectEntries, ProjectWritePreparation, SandboxError, ToolchainRoots,
+    self, Invocation, ProjectEntries, ProjectWritePreparation, SandboxError, ShellAccess,
+    ToolchainRoots,
 };
 use std::{
     collections::HashMap,
@@ -69,7 +70,7 @@ pub fn hook_invocation(
     own: &HashMap<String, String>,
 ) -> Result<Invocation, SandboxError> {
     let base = match command {
-        Some(text) => command_sandbox::hook_shell(text, environment),
+        Some(text) => command_sandbox::login_shell(text, ShellAccess::Full, environment)?,
         None => {
             let args = args.unwrap_or_default();
             Invocation {
@@ -110,8 +111,7 @@ pub fn powershell_literal(word: &str) -> String {
 }
 
 /// The Windows sandbox builds its own environment and launches shell scripts, so the
-/// script sets `own` first. A `command` runs in cmd, as its documentation says, and
-/// argv becomes literal PowerShell words.
+/// script sets `own` first, and argv becomes literal words.
 #[cfg(windows)]
 pub fn hook_invocation(
     command: Option<&str>,
@@ -119,14 +119,6 @@ pub fn hook_invocation(
     environment: &HashMap<String, String>,
     own: &HashMap<String, String>,
 ) -> Result<Invocation, SandboxError> {
-    if let Some(text) = command {
-        let mut script = String::new();
-        for (key, value) in sorted(own) {
-            script.push_str(&cmd_assignment(key, value)?);
-        }
-        script.push_str(text);
-        return Ok(command_sandbox::hook_shell(&script, environment));
-    }
     let mut script = String::new();
     for (key, value) in sorted(own) {
         script.push_str(&format!(
@@ -135,34 +127,18 @@ pub fn hook_invocation(
             powershell_literal(value)
         ));
     }
-    let args = args.unwrap_or_default();
-    let program = args.first().ok_or(SandboxError::ProjectWriteUnavailable)?;
-    script.push_str(&format!("& {}", powershell_literal(program)));
-    for argument in args.get(1..).unwrap_or_default() {
-        script.push(' ');
-        script.push_str(&powershell_literal(argument));
+    if let Some(text) = command {
+        script.push_str(text);
+    } else {
+        let args = args.unwrap_or_default();
+        let program = args.first().ok_or(SandboxError::ProjectWriteUnavailable)?;
+        script.push_str(&format!("& {}", powershell_literal(program)));
+        for argument in args.get(1..).unwrap_or_default() {
+            script.push(' ');
+            script.push_str(&powershell_literal(argument));
+        }
     }
-    command_sandbox::login_shell(&script, command_sandbox::ShellAccess::Full, environment)
-}
-
-/// `set "key=value"& ` for a cmd line. Quotes, percent signs and line breaks cannot
-/// be written literally there, so such a hook does not start rather than run with
-/// a different value.
-#[cfg(windows)]
-fn cmd_assignment(key: &str, value: &str) -> Result<String, SandboxError> {
-    let unsafe_text = |text: &str, extra: &[char]| {
-        text.contains(['"', '%', '!', '\r', '\n', '\0']) || text.contains(extra)
-    };
-    if key.is_empty()
-        || unsafe_text(key, &['=', '&', '|', '<', '>', '^'])
-        || unsafe_text(value, &[])
-    {
-        return Err(io_failure(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "A hook's environment value can't be written for cmd.exe",
-        )));
-    }
-    Ok(format!("set \"{key}={value}\"& "))
+    command_sandbox::login_shell(&script, ShellAccess::Full, environment)
 }
 
 fn scratch(data: &Path) -> Result<(PathBuf, PathBuf), SandboxError> {
