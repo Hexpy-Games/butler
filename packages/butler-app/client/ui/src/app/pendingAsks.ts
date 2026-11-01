@@ -49,9 +49,10 @@ function refresh(sessionId: string, reader: Reader) {
 export function publishPendingAsksEvent(event: TimelineEvent) {
   if (event.type === "stream.reconcile_required") {
     for (const [sessionId, reader] of readers) refresh(sessionId, reader);
-  } else if (event.type === "message.created") {
+  } else if (event.type === "message.created" || event.type === "message.updated") {
     // The gateway resolves an ask's source to the turn's latest assistant message, and falls back to
-    // the user message until one is saved. Saving a reply moves that source, so read it again.
+    // the user message until one is saved. A reply first reaches the client as message.created or
+    // message.updated; once the ask names it no further event matches, so streaming does not re-read.
     const message = event.payload?.message as { id?: string; chat_id?: string; role?: string; turn_id?: string } | undefined;
     const reader = message?.role === "assistant" && message.turn_id && message.chat_id ? readers.get(message.chat_id) : undefined;
     if (reader && (reader.loading || reader.page?.asks.some(ask => ask.source_turn_id === message!.turn_id && ask.source_message_id !== message!.id))) {
