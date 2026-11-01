@@ -260,6 +260,7 @@ fn question_record(
         .map_err(|_| AuthorityError::policy("question_input_invalid"))?;
     let schedule_client_message_id = format!("question-answer-{sha}");
     Ok(AuthorityRecord {
+        reusable: true,
         request_id: format!("question-{sha}"),
         request_ref: format!("question-ref-{sha}"),
         identity_sha256: sha,

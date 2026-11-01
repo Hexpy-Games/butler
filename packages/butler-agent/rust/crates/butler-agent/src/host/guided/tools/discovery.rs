@@ -205,9 +205,7 @@ async fn search(
     let result = search_native(
         catalog
             .builtin_tools()
-            .filter(|tool| {
-                !catalog.hidden_native_bridge_tool(tool.name, owner.binding.ledger_effects())
-            })
+            .filter(|tool| !catalog.hidden_native_bridge_tool(tool.name, owner.ledger_effects()))
             .map(|tool| projection(owner, tool)),
         &filtered,
     )
@@ -268,7 +266,7 @@ async fn describe(
             continue;
         };
         let catalog = owner.catalog.snapshot();
-        if catalog.hidden_native_bridge_tool(name, owner.binding.ledger_effects()) {
+        if catalog.hidden_native_bridge_tool(name, owner.ledger_effects()) {
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
             continue;
         }
@@ -335,7 +333,7 @@ fn projection<'a>(
 ) -> BridgeCatalogTool<'a> {
     let configured_disabled = owner.web_session.configured_disabled_reason(tool.name);
     let enabled = configured_disabled.is_none()
-        && owner.binding.authorized_names.contains(tool.name)
+        && (owner.authorized(tool.name) || super::permission_mode::approved_capability(tool.name))
         && GuidedTools::supports(tool.name)
         && !matches!(
             ToolName::parse(tool.name),

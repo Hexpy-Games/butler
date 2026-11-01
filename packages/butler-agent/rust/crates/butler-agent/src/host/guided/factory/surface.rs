@@ -86,3 +86,32 @@ pub(super) fn available(
         })
         .collect()
 }
+
+pub(in crate::host::guided) async fn for_owner(
+    phase: &mut GuidedPhaseSelection,
+    subsessions: &butler_turn::btcc::SubsessionService,
+    monitoring: &crate::host::MonitoringReaders,
+    catalog: &GuidedCatalogSnapshot,
+) -> Result<Vec<ModelRoundTool>, BtccError> {
+    if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
+        && phase.provider_tools.iter().any(|tool| {
+            tool.get("name").and_then(serde_json::Value::as_str) == Some("delegate_to_worker")
+        })
+    {
+        let profiles = subsessions.enabled_worker_profiles().await?;
+        with_worker_profile_choices(phase, &profiles)?;
+    }
+    if monitoring
+        .configuration
+        .image_model_settings()
+        .await
+        .ok()
+        .is_none_or(|v| v["selected"].is_null())
+    {
+        for name in ["generate_image", "edit_image"] {
+            phase.authorized_names.retain(|n| n != name);
+            phase.provider_tools.retain(|t| t["name"] != name);
+        }
+    }
+    available(phase, catalog)
+}

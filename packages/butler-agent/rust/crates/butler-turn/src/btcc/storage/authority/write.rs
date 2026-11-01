@@ -34,11 +34,11 @@ pub(super) fn insert(db: &mut Connection, record: &AuthorityRecord) -> Authority
         category, reason, executable, command_count, decision,
         schedule_client_message_id, schedule_input_text, private_alternative_input, outcome,
         outcome_receipt_json, close_reason, close_scope, closed_at,
-        created_at, updated_at, source_call_id
+        created_at, updated_at, source_call_id, reusable
       ) VALUES (
         ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
         ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-        ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32
+        ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33
       ) ON CONFLICT DO NOTHING",
             params![
                 record.request_id,
@@ -73,6 +73,7 @@ pub(super) fn insert(db: &mut Connection, record: &AuthorityRecord) -> Authority
                 record.created_at,
                 record.updated_at,
                 record.source_call_id,
+                record.reusable,
             ],
         )
         .map_err(query::sql)?;
@@ -94,6 +95,7 @@ pub(super) fn insert(db: &mut Connection, record: &AuthorityRecord) -> Authority
             return Err(AuthorityError::policy("authority_source_call_not_pending"));
         }
     }
+    super::access_revision::remember_request(&transaction, record)?;
     transaction.commit().map_err(query::sql)
 }
 pub(super) fn decide(
@@ -123,6 +125,7 @@ pub(super) fn decide(
         transaction.commit().map_err(query::sql)?;
         return Ok(None);
     }
+    super::access_revision::record(&transaction, &write)?;
     if let Some(grant) = write.permission {
         transaction.execute("INSERT INTO btcc_conversation_permissions \
             (grant_ref, owner_session_id, workspace_path, scope_key, title, description, created_at) \

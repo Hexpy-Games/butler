@@ -1,12 +1,13 @@
 use rusqlite::Connection;
 
-use super::{column_exists, table_definition};
+use super::{column_exists, ensure_column, table_definition};
 use crate::btcc::storage::schema::authority::AUTHORITY_SCHEMA;
 
 pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     let Some(definition) = table_definition(db, "btcc_authority_requests")? else {
         return Ok(());
     };
+    permission_columns(db)?;
     if !requires_rewrite(db, &definition)? {
         return Ok(());
     }
@@ -36,15 +37,30 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
          normalized_input_json, model_ref, reasoning_effort, category, reason, executable, \
          command_count, decision, schedule_client_message_id, schedule_input_text, \
          private_alternative_input, outcome, outcome_receipt_json, close_reason, close_scope, \
-         closed_at, created_at, updated_at, source_call_id, allow_scope) \
+         closed_at, created_at, updated_at, source_call_id, allow_scope, reusable, execution_access_mode, \
+         composer_access_mode, composer_root_turn_id, composer_revision) \
          SELECT request_id, request_ref, identity_sha256, owner_session_id, source_session_id, \
          source_turn_id, source_work_id, workspace_path, plan_revision_id, action_key, \
          authority_generation, capability, normalized_target, normalized_input_json, model_ref, \
          reasoning_effort, category, reason, executable, command_count, decision, \
          schedule_client_message_id, schedule_input_text, {private_alternative}, outcome, \
          outcome_receipt_json, {close_reason}, {close_scope}, {closed_at}, created_at, updated_at, \
-         {source_call_id}, {allow_scope} FROM {table} ORDER BY rowid; DROP TABLE {table};"
+         {source_call_id}, {allow_scope}, reusable, execution_access_mode, \
+         composer_access_mode, composer_root_turn_id, composer_revision FROM {table} ORDER BY rowid; DROP TABLE {table};"
     ))
+}
+
+fn permission_columns(db: &Connection) -> rusqlite::Result<()> {
+    for (name, declaration) in [
+        ("reusable", "INTEGER NOT NULL DEFAULT 1"),
+        ("execution_access_mode", "TEXT"),
+        ("composer_access_mode", "TEXT"),
+        ("composer_root_turn_id", "TEXT"),
+        ("composer_revision", "INTEGER"),
+    ] {
+        ensure_column(db, "btcc_authority_requests", name, declaration)?;
+    }
+    Ok(())
 }
 
 fn requires_rewrite(db: &Connection, definition: &str) -> rusqlite::Result<bool> {
@@ -86,7 +102,10 @@ pub(super) fn permission_indexes(db: &Connection) -> rusqlite::Result<()> {
         db.execute_batch("DROP INDEX IF EXISTS idx_btcc_permissions_active")?;
     }
     db.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_btcc_permission_sources
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_btcc_authority_composer_revision
+         ON btcc_authority_requests(composer_root_turn_id,composer_revision DESC)
+         WHERE composer_root_turn_id IS NOT NULL;
+         CREATE INDEX IF NOT EXISTS idx_btcc_permission_sources
          ON btcc_authority_requests(owner_session_id,created_at,workspace_path,capability,
          normalized_target,normalized_input_json,decision,allow_scope)
          WHERE decision='allowed' AND allow_scope='conversation';

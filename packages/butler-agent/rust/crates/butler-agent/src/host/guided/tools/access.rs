@@ -25,7 +25,7 @@ pub(super) async fn kind(
         &call.arguments,
         super::effect::is_managed_project_ledger_effect(&call.name),
     );
-    if owner.binding.access_mode == AccessMode::Auto
+    if owner.access_mode() == AccessMode::Auto
         && matches!(
             kind,
             CapabilityKind::CommandMutation { .. }
@@ -79,12 +79,12 @@ pub(super) async fn decision_for_kind(
     args: &Value,
     kind: CapabilityKind,
 ) -> Result<ClassifiedAccess, BtccError> {
-    let scope = if needs_scope(&owner.binding.access_mode, kind) {
+    let scope = if needs_scope(&owner.access_mode(), kind) {
         target_scope(owner, call, args).await?
     } else {
         TargetScope::NoTarget
     };
-    let mode = &owner.binding.access_mode;
+    let mode = &owner.access_mode();
     let mut decision = decide(
         mode,
         AccessRequest {
@@ -250,7 +250,7 @@ pub(super) fn resumes(owner: &GuidedTools, occurrence: &str) -> bool {
 /// Boundaries whose decision never depends on the filesystem.
 pub(super) fn for_kind(owner: &GuidedTools, kind: CapabilityKind) -> AccessDecision {
     decide(
-        &owner.binding.access_mode,
+        &owner.access_mode(),
         AccessRequest {
             kind,
             risk: ApprovalRisk::Medium,

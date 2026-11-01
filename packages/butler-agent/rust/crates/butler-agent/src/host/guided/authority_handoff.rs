@@ -286,19 +286,30 @@ impl AppAuthorityHandoff for AuthorityHandoff {
     }
 
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision> {
+        self.decide_with_access(input, None)
+    }
+
+    fn decide_with_access(
+        &self,
+        input: AppAuthorityDecisionInput,
+        mode: Option<butler_turn::btcc::AccessMode>,
+    ) -> ApplicationFuture<AppAuthorityDecision> {
         let owner = self.clone();
         Box::pin(async move {
             let timing = super::command::timing::CommandTiming::new("approval_handoff");
             let decision = owner
                 .authority
-                .decide(AuthorityDecisionInput {
-                    owner_session_id: input.owner_session_id,
-                    request_ref: input.request_ref,
-                    source_session_id: None,
-                    action: input.action,
-                    allow_scope: input.allow_scope,
-                    alternative_input: input.alternative_input,
-                })
+                .decide_with_access(
+                    AuthorityDecisionInput {
+                        owner_session_id: input.owner_session_id,
+                        request_ref: input.request_ref,
+                        source_session_id: None,
+                        action: input.action,
+                        allow_scope: input.allow_scope,
+                        alternative_input: input.alternative_input,
+                    },
+                    mode,
+                )
                 .await
                 .map_err(authority_error)?;
             timing.mark("decision_committed");

@@ -59,11 +59,19 @@ impl DefaultTurnPreparation {
             return resolve(current.clone(), Some(run)).await;
         }
         let turn = lineage["parent_turn_id"].as_str().ok_or_else(invalid)?;
+        self.admitted_access(turn, parent).await
+    }
+
+    async fn admitted_access(
+        &self,
+        turn: &str,
+        parent: &str,
+    ) -> Result<crate::btcc::AccessMode, BtccError> {
         let admitted = self
             .repositories
             .find_turn(turn)
             .await?
-            .filter(|t| t.session_id == parent)
+            .filter(|turn| turn.session_id == parent)
             .ok_or_else(invalid)?;
         Ok(GuidedExecutionPolicy::from_turn(&admitted, "")
             .map_err(|_| invalid())?
@@ -95,6 +103,10 @@ impl DefaultTurnPreparation {
                 mode = mode.narrower(self.run_access(&current, run, parent, lineage).await?);
                 break;
             }
+            let parent_turn = lineage["parent_turn_id"]
+                .as_str()
+                .ok_or_else(invalid)?
+                .to_owned();
             current = self
                 .binding_store
                 .get_by_session_id(parent)
@@ -106,11 +118,12 @@ impl DefaultTurnPreparation {
                 .as_ref()
                 .is_none_or(|m| !m.contains_key("subsession"))
             {
-                if let Some(resolve) = &self.parent_access {
-                    mode = mode.narrower(resolve(current.clone(), None).await?);
-                } else {
-                    mode = mode.narrower(stored_binding_access_mode(&current));
-                }
+                // This child belongs to the admitted parent run. Composer edits
+                // become runtime authority only when an approval answer commits.
+                mode = mode.narrower(
+                    self.admitted_access(&parent_turn, &current.session_id)
+                        .await?,
+                );
                 break;
             }
             mode = mode.narrower(stored_binding_access_mode(&current));
@@ -121,33 +134,36 @@ impl DefaultTurnPreparation {
                 .as_ref()
                 .is_some_and(|m| m.contains_key("subsession"))
         {
-            let metadata = binding.metadata.get_or_insert_default();
-            let policy = metadata.entry("runtimePolicy").or_insert_with(|| json!({}));
-            policy["accessMode"] = json!(mode);
-            // Required capabilities cannot override the current owner ceiling.
-            for field in ["requiredNativeTools", "required_tools"] {
-                if let Some(tools) = policy
-                    .get_mut(field)
-                    .and_then(serde_json::Value::as_array_mut)
-                {
-                    tools.retain(|v| {
-                        v.as_str()
-                            .is_none_or(|name| requirement_allowed(&mode, name))
-                    });
-                }
-            }
-            if binding.role == crate::workspace::SessionRole::Worker {
-                policy["requiredNativeToolProfiles"] =
-                    if mode == crate::btcc::AccessMode::FullAccess {
-                        json!(["workspace"])
-                    } else {
-                        json!([])
-                    };
-            }
+            apply_inherited_policy(&mut binding, &mode);
         }
         Ok(binding)
     }
 }
+fn apply_inherited_policy(binding: &mut StoredSessionBinding, mode: &crate::btcc::AccessMode) {
+    let metadata = binding.metadata.get_or_insert_default();
+    let policy = metadata.entry("runtimePolicy").or_insert_with(|| json!({}));
+    policy["accessMode"] = json!(mode);
+    // Required capabilities cannot override the current owner ceiling.
+    for field in ["requiredNativeTools", "required_tools"] {
+        if let Some(tools) = policy
+            .get_mut(field)
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            tools.retain(|v| {
+                v.as_str()
+                    .is_none_or(|name| requirement_allowed(mode, name))
+            });
+        }
+    }
+    if binding.role == crate::workspace::SessionRole::Worker {
+        policy["requiredNativeToolProfiles"] = if *mode == crate::btcc::AccessMode::FullAccess {
+            json!(["workspace"])
+        } else {
+            json!([])
+        };
+    }
+}
+
 fn invalid() -> BtccError {
     BtccError::relayed(
         "delegation_parent_policy_invalid",
