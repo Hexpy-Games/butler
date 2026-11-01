@@ -9,7 +9,7 @@ use crate::command_sandbox::mxc_policy::WinPath;
 use inventory::Inventory;
 use std::{
     collections::HashSet,
-    fs, io,
+    io,
     path::{Path, PathBuf},
     sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant},
