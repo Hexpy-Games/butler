@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useFileViewerState, useSessionFiles, type FileViewerEntry } from "@/app/fileViewerState";
-import { AdaptiveShellCard, Box, FileText, ImageIcon, Presence, Stack, TabStrip } from "@/butler-ds";
+import { AdaptiveShellCard, Box, FileText, ImageIcon, Presence, Stack, TabStrip, useHeldWhilePaneLeaves } from "@/butler-ds";
 import { artifactPreviewMode } from "../artifacts/artifactDisplay";
 import { FileViewerArtifact } from "./FileViewerArtifact";
 import { FileViewerDocument, type DocumentPageRenderer } from "./FileViewerDocument";
@@ -21,7 +21,7 @@ export function FileViewerPane({ sessionId, notice, onBack, documentPage }: {
   documentPage: DocumentPageRenderer;
 }) {
   useAppLocale();
-  const files = useSessionFiles(sessionId);
+  const files = useHeldWhilePaneLeaves(useSessionFiles(sessionId));
   const active = files.entries.find((entry) => entry.id === files.activeId) ?? files.entries[0];
   if (!active) return null;
   const c = appCopy.fileViewer;

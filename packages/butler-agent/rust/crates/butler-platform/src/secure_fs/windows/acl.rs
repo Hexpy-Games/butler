@@ -51,7 +51,7 @@ fn open(path: &Path, rights: AccessRights) -> io::Result<File> {
 }
 
 pub(super) fn protect(path: &Path) -> io::Result<()> {
-    let path = std::fs::canonicalize(path)?;
+    let path = crate::secure_fs::canonicalize_extended(path)?;
     let sid = current_sid()?;
     let mut file = open(&path, AccessRights::ReadControl | AccessRights::WriteDac)?;
     let current = wrappers::GetSecurityInfo(
@@ -93,7 +93,10 @@ pub(super) fn protect(path: &Path) -> io::Result<()> {
 }
 
 pub(super) fn inspect(path: &Path) -> io::Result<bool> {
-    let file = open(&std::fs::canonicalize(path)?, AccessRights::ReadControl)?;
+    let file = open(
+        &crate::secure_fs::canonicalize_extended(path)?,
+        AccessRights::ReadControl,
+    )?;
     let descriptor = wrappers::GetSecurityInfo(
         &file,
         SeObjectType::SE_FILE_OBJECT,

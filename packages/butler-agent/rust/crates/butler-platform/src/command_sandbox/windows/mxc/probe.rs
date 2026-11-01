@@ -86,10 +86,10 @@ fn execute_probe(report: &mut Value) -> Result<(), Error> {
         set(report.as_object_mut(), "reason", "mxc_disabled".into());
         return Ok(());
     }
-    let exe = dunce::canonicalize(std::env::current_exe()?)?;
+    let exe = crate::secure_fs::canonicalize(std::env::current_exe()?)?;
     let directory = exe.parent().ok_or("missing helper directory")?;
-    let system = dunce::canonicalize(std::env::var("SYSTEMROOT")?)?;
-    let local = dunce::canonicalize(std::env::var("LOCALAPPDATA")?)?;
+    let system = crate::secure_fs::canonicalize(std::env::var("SYSTEMROOT")?)?;
+    let local = crate::secure_fs::canonicalize(std::env::var("LOCALAPPDATA")?)?;
     let nonce = format!("butler-probe-{}", std::process::id());
     let request = mxc_policy::probe::request(
         &super::prepare::physical(&exe)?,

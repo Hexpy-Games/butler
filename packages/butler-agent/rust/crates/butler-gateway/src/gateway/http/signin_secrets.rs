@@ -49,6 +49,10 @@ fn service(root: &Path) -> String {
     service_in(root, SERVICE)
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "saved keychain services hash this spelling; another form would orphan them"
+)]
 pub(super) fn service_in(root: &Path, base: &str) -> String {
     use sha2::{Digest, Sha256};
     let default = butler_platform::user_dirs::home_dir().map(|home| home.join(".butler"));
