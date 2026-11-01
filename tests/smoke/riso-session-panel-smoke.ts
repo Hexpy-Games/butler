@@ -40,6 +40,9 @@ try {
       if (location && names.get(location) === "u_col" && (this.canvas as HTMLCanvasElement).matches('[data-test-class~="conversation-wallpaper"]')) {
         Object.assign(window, { risoColumn: [x, y, z, w] });
       }
+      if (location && names.get(location) === "u_contentRect2" && (this.canvas as HTMLCanvasElement).matches('[data-test-class~="conversation-wallpaper"]')) {
+        Object.assign(window, { risoComposer: [x, y, z, w] });
+      }
       upload.call(this, location, x, y, z, w);
     };
   }, session.id);
@@ -61,13 +64,13 @@ try {
     await capture(state);
     const measured = await geometry(page);
     results.push(measured);
-    if (!baseline) assert(measured.error < 1, `Riso follows ${state} without window resize: ${JSON.stringify(measured)}`);
+    if (!baseline) assert(measured.error < 1 && measured.composerError < 1, `Riso follows ${state} without window resize: ${JSON.stringify(measured)}`);
   }
   // Resize the content area without a viewport resize, including a fixed-width column.
   await page.locator('[data-test-class~="conversation"]').evaluate(node => { node.style.width = "1000px"; });
   await settle(page);
   const resized = await geometry(page);
-  if (!baseline) assert(resized.error < 1, `Riso follows container resize: ${JSON.stringify(resized)}`);
+  if (!baseline) assert(resized.error < 1 && resized.composerError < 1, `Riso follows container resize: ${JSON.stringify(resized)}`);
   assert.equal(page.viewportSize()!.width, 1440);
   console.log(JSON.stringify({ theme, motion, baseline, results, resized, screenshots: shots, stubModelCalls: server.stubModelCalls.length }));
 } finally {
@@ -93,6 +96,9 @@ async function geometry(page: Page) {
     const expected = [rect.left - canvas.left, Math.max(rect.right, aside?.right ?? 0) - canvas.left];
     const actual = (window as unknown as { risoColumn: number[] }).risoColumn;
     if (!actual) throw new Error("No riso column uniform captured");
-    return { expected, actual, error: Math.max(...expected.map((value, i) => Math.abs(value - actual[i]!))) };
+    const composer = document.querySelector('[data-test-class~="composer-card"]')!.getBoundingClientRect();
+    const keepOut = (window as unknown as { risoComposer: number[] }).risoComposer;
+    const composerError = Math.abs(keepOut[0]! / keepOut[2]! * composer.width - (composer.left - canvas.left));
+    return { expected, actual, composerError, error: Math.max(...expected.map((value, i) => Math.abs(value - actual[i]!))) };
   });
 }
