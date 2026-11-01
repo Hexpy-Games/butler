@@ -73,6 +73,17 @@ pub(super) fn login_shell(command: &str, environment: &HashMap<String, String>) 
     legacy_shell(command, false, &environment)
 }
 
+/// A user hook's `command` text runs in `cmd.exe /d /s /c`, the shell the hook
+/// documentation names, not in the PowerShell that model commands use: cmd
+/// syntax such as `echo {"decision":"deny"}` is a parse error in PowerShell.
+pub(super) fn hook_shell(command: &str, environment: &HashMap<String, String>) -> Invocation {
+    let environment = environment
+        .iter()
+        .map(|(key, value)| (key.clone(), Some(value.clone())))
+        .collect();
+    cmd::shell(command, &environment)
+}
+
 pub(super) fn legacy_shell(
     command: &str,
     _pipefail: bool,
