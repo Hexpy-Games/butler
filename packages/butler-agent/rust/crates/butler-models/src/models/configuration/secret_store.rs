@@ -267,6 +267,10 @@ pub fn fallback_file(root: &Path) -> SecretStore {
 }
 
 /// The key a provider credential is stored under in `backend`.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "saved keychain services hash this spelling; another form would orphan them"
+)]
 pub(super) fn key(
     root: &Path,
     backend: SecretBackend,

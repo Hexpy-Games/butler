@@ -9,7 +9,7 @@ use crate::command_sandbox::mxc_policy::WinPath;
 use inventory::Inventory;
 use std::{
     collections::HashSet,
-    fs, io,
+    io,
     path::{Path, PathBuf},
     sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant},
@@ -93,7 +93,7 @@ pub(in crate::command_sandbox) fn secrets(root: &Path) -> io::Result<Vec<PathBuf
     project_secrets(root, &state)
 }
 fn project_secrets(root: &Path, state: &State) -> io::Result<Vec<PathBuf>> {
-    let canonical = fs::canonicalize(root)?;
+    let canonical = crate::secure_fs::canonicalize_extended(root)?;
     Ok(state
         .inventory
         .secrets
