@@ -90,9 +90,11 @@ fn write(
             ),
             _ => Err(store::Error::Invalid("queue operation")),
         },
-        AppCanonOperation::StepTurnEnded { op_id, outcome } => {
-            store::queue::engine::turn_ended(tx, ctx, &op_id, &outcome)
-        }
+        AppCanonOperation::StepTurnEnded {
+            op_id,
+            outcome,
+            turn_id,
+        } => store::queue::engine::turn_ended(tx, ctx, &op_id, &outcome, turn_id.as_deref()),
         AppCanonOperation::SessionDeleted {
             session_hint,
             op_id,

@@ -15,6 +15,10 @@ pub(crate) struct Script {
     pub context_seen: AtomicBool,
     pub(crate) step_seen: AtomicBool,
     pub(crate) quick: AtomicBool,
+    /// Epics whose Turn just replies, whatever else this model is doing.
+    pub(crate) quick_epics: Mutex<Vec<String>>,
+    /// Epics this model works on directly while it delegates the others.
+    pub(crate) direct_epics: Mutex<Vec<String>>,
     pub(crate) plan_review_only: AtomicBool,
     /// Closes as completed right after a result review that asked for changes.
     pub(crate) reject_result: AtomicBool,
@@ -85,6 +89,8 @@ pub(super) async fn start(
         context_seen: AtomicBool::new(false),
         step_seen: AtomicBool::new(false),
         quick: AtomicBool::new(false),
+        quick_epics: Mutex::new(Vec::new()),
+        direct_epics: Mutex::new(Vec::new()),
         plan_review_only: AtomicBool::new(false),
         reject_result: AtomicBool::new(false),
         skip_all: AtomicBool::new(false),
@@ -153,12 +159,19 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         script.steward_release.acquire().await.unwrap().forget();
     }
     let n = outputs.len();
-    let delegated = script.delegate.load(Ordering::SeqCst);
     let key = butler_e2e::e2e::matching::key(
         "/codex/responses",
         &body,
         &butler_e2e::e2e::sanitize::Placeholders::default(),
     );
+    let names = |list: &Mutex<Vec<String>>| {
+        list.lock()
+            .unwrap()
+            .iter()
+            .any(|epic| key.user_request.contains(epic.as_str()))
+    };
+    let quick_epic = names(&script.quick_epics);
+    let delegated = script.delegate.load(Ordering::SeqCst) && !names(&script.direct_epics);
     let mut calls = if key.user_request == "Queue this epic" || key.user_request == "Run this plan"
     {
         script
@@ -168,7 +181,10 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
             .clone()
             .map(|args| vec![("canon_queue", args)])
             .unwrap_or_default()
-    } else if script.quick.load(Ordering::SeqCst) || key.user_request == "What does this mean?" {
+    } else if script.quick.load(Ordering::SeqCst)
+        || quick_epic
+        || key.user_request == "What does this mean?"
+    {
         Vec::new()
     } else if delegated {
         delegated::sequence(&script, &body, &outputs)
@@ -272,7 +288,10 @@ fn sequence(script: &Script, outputs: &[Value], request: &str) -> Vec<(&'static 
     let a = format!("canon:epic/{selected}");
     let b = format!("canon:epic/{}", epics[1]);
     let mut calls = Vec::new();
-    let plan = |refs: Value| json!({"objective":"Verify the release evidence","execution_mode":"direct","start_new":request.starts_with("canon:epic/"),"governing_refs":refs,"actions":[{"action_key":"verify","description":"Verify release evidence"}],"checks":["Evidence was read and checked"]});
+    // Another Work is open in this chat, so answering about this epic starts its own.
+    let start_new =
+        request.starts_with("canon:epic/") || !script.direct_epics.lock().unwrap().is_empty();
+    let plan = |refs: Value| json!({"objective":"Verify the release evidence","execution_mode":"direct","start_new":start_new,"governing_refs":refs,"actions":[{"action_key":"verify","description":"Verify release evidence"}],"checks":["Evidence was read and checked"]});
     if script.rejects {
         calls.push(("replace_work_plan", plan(json!([a, b]))));
         calls.push(("replace_work_plan", plan(json!(["canon:epic/unbound"]))));

@@ -139,7 +139,13 @@ fn resolve(tx: &Transaction<'_>, ctx: &Context, item: &Value, work: &str) -> Res
     changed(tx, ctx, session)?;
     Ok(())
 }
-pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) -> Result<Value> {
+pub fn turn_ended(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    op: &str,
+    outcome: &str,
+    turn: Option<&str>,
+) -> Result<Value> {
     if let Some(epic) = tx
         .query_row(
             "SELECT epic_id FROM canon_step_cancellations WHERE op_id=?1",
@@ -168,6 +174,7 @@ pub fn turn_ended(tx: &Transaction<'_>, ctx: &Context, op: &str, outcome: &str) 
                 item["started_at"]
                     .as_i64()
                     .ok_or(Error::Invalid("started_at"))?,
+                turn,
             )?
         {
             fail(tx, ctx, &item, UNFINISHED)?;
