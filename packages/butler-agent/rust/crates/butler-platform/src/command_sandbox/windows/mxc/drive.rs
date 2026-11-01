@@ -27,7 +27,7 @@ pub(super) struct Drive {
 impl Drive {
     pub(super) fn claim(data: &Path, target: &Path, policy: &Path) -> Result<Self, Error> {
         let _phase = super::timing::Phase::start("drive_claim");
-        let target = dunce::canonicalize(target)?;
+        let target = crate::secure_fs::canonicalize(target)?;
         let text = target.to_str().ok_or("invalid_project_path")?;
         if text.encode_utf16().count() > MAX_SUBST_TARGET_UNITS {
             return Err("subst_target_too_long".into());
@@ -91,7 +91,7 @@ impl Drive {
         scratch: &Path,
         policy: &Path,
     ) -> Result<(Option<Self>, String), Error> {
-        let path = dunce::canonicalize(scratch)?.join("t");
+        let path = crate::secure_fs::canonicalize(scratch)?.join("t");
         let text = path.to_str().ok_or("invalid_scratch_path")?;
         // The in-container bootstrap restores this exact path after MXC's
         // profile rewrite. A short physical path needs no extra subst process.
@@ -106,7 +106,7 @@ impl Drive {
         scratch: &Path,
         policy: &Path,
     ) -> Result<(Self, String), Error> {
-        let scratch = fs::canonicalize(scratch)?;
+        let scratch = crate::secure_fs::canonicalize_extended(scratch)?;
         // subst itself has a legacy target-length limit. Alias the nearest
         // usable ancestor; grants remain on the exact physical command scratch.
         // Keep the mapping target alive when invocation cleanup removes scratch

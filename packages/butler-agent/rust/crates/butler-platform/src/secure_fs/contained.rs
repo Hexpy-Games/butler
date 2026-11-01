@@ -57,7 +57,7 @@ impl Root {
         resolved.extend(
             extra
                 .iter()
-                .filter_map(|path| std::fs::canonicalize(path).ok()),
+                .filter_map(|path| super::canonicalize(path).ok()),
         );
         let protected_ids = extra
             .iter()

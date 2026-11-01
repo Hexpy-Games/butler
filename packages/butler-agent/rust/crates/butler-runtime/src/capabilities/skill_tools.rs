@@ -80,7 +80,7 @@ pub(super) async fn load(
 }
 
 fn resource_paths(root: &Path) -> std::io::Result<Vec<String>> {
-    let canonical = root.canonicalize()?;
+    let canonical = butler_platform::secure_fs::canonicalize(root)?;
     let mut pending = vec![root.to_owned()];
     let mut files = Vec::new();
     while let Some(folder) = pending.pop() {
@@ -90,7 +90,10 @@ fn resource_paths(root: &Path) -> std::io::Result<Vec<String>> {
             if entry.file_type()?.is_symlink() {
                 continue;
             }
-            if !path.canonicalize()?.starts_with(&canonical) {
+            if !butler_platform::secure_fs::is_within(
+                &butler_platform::secure_fs::canonicalize(&path)?,
+                &canonical,
+            ) {
                 continue;
             }
             if entry.file_type()?.is_dir() {

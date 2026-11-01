@@ -212,7 +212,8 @@ pub(in crate::command_sandbox) fn resolved_path(path: &Path) -> std::io::Result<
     use nix::{fcntl::OFlag, sys::stat::Mode};
     use std::os::fd::AsRawFd;
     let fd = nix::fcntl::open(path, OFlag::O_PATH | OFlag::O_CLOEXEC, Mode::empty())?;
-    std::fs::read_link(format!("/proc/self/fd/{}", fd.as_raw_fd())).or_else(|_| path.canonicalize())
+    std::fs::read_link(format!("/proc/self/fd/{}", fd.as_raw_fd()))
+        .or_else(|_| crate::secure_fs::canonicalize(&path))
 }
 
 pub(super) fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {

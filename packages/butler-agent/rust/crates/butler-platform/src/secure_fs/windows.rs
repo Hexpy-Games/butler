@@ -179,6 +179,10 @@ pub(super) fn sync_path(path: &Path) -> io::Result<()> {
     OpenOptions::new().write(true).open(path)?.sync_all()
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the implementation behind secure_fs::canonicalize"
+)]
 pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
     dunce::canonicalize(path)
 }
@@ -281,7 +285,7 @@ fn move_path(path: &Path) -> io::Result<PathBuf> {
     let name = path.file_name().ok_or_else(|| {
         io::Error::new(io::ErrorKind::InvalidInput, "rename requires a file name")
     })?;
-    Ok(fs::canonicalize(parent)?.join(name))
+    Ok(super::canonicalize_extended(parent)?.join(name))
 }
 
 pub(super) fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
@@ -375,7 +379,14 @@ pub(super) fn directory_writability(path: &Path) -> Writability {
 }
 
 pub(super) fn path_key(path: &Path) -> PathBuf {
-    PathBuf::from(path.to_string_lossy().replace('\\', "/").to_lowercase())
+    let key = path.to_string_lossy().replace('\\', "/").to_lowercase();
+    if let Some(share) = key.strip_prefix("//?/unc/") {
+        return PathBuf::from(format!("//{share}"));
+    }
+    match key.strip_prefix("//?/") {
+        Some(disk) if disk.as_bytes().get(1) == Some(&b':') => PathBuf::from(disk),
+        _ => PathBuf::from(key),
+    }
 }
 
 pub(super) fn symlink(target: &Path, link: &Path) -> io::Result<()> {
