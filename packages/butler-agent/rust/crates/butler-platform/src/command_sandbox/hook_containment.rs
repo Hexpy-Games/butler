@@ -105,22 +105,9 @@ pub fn hook_invocation(
     })
 }
 
-/// `word` as a single-quoted PowerShell string. PowerShell reads the typographic single
-/// quotes as delimiters too, so each of them is doubled like the plain one.
+/// `word` as a single-quoted PowerShell string; see [`crate::powershell_text::literal`].
 pub fn powershell_literal(word: &str) -> String {
-    let mut literal = String::with_capacity(word.len() + 2);
-    literal.push('\'');
-    for character in word.chars() {
-        if matches!(
-            character,
-            '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}'
-        ) {
-            literal.push(character);
-        }
-        literal.push(character);
-    }
-    literal.push('\'');
-    literal
+    crate::powershell_text::literal(word)
 }
 
 /// The Windows sandbox builds its own environment and launches shell scripts, so the

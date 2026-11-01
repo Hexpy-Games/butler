@@ -1,6 +1,7 @@
 //! Durable subsession orchestration and role-specific result routing.
 
 mod access;
+mod child_state;
 mod control;
 mod delegation;
 mod followup;

@@ -52,7 +52,7 @@ function ConfirmationDialog({ pending }: { pending: ConfirmationRequest }) {
           {pending.details && <Card padding="md"><Stack gap="sm">
             {pending.details.map((detail, index) => <Stack gap="none" key={index}>
               {detail.label && <Typo.Caption tone="secondary">{detail.label}</Typo.Caption>}
-              <Typo.Body as="div" wrap="pre">{detail.isolate ? isolated(detail.text) : detail.text}</Typo.Body>
+              <Typo.Body as="div" wrap="pre" literal>{detail.isolate ? isolated(detail.text) : detail.text}</Typo.Body>
               {detail.caption && <Typo.Caption tone="secondary" wrap="anywhere">{detail.caption}</Typo.Caption>}
             </Stack>)}
           </Stack></Card>}

@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 mod delegation;
+mod direction_workers;
 #[path = "canon_mcp/running.rs"]
 mod mcp_running;
 mod plans;
