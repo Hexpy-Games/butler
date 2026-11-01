@@ -36,7 +36,7 @@ async fn epic_delete_reindexes_middle_releases_dependents_and_starts_successor()
                 epics[0]["id"].as_str(),
             ),
         };
-        canon.execute("INSERT INTO canon_session_queue(session_id,epic_id,chain_id,step_index,stack_position,state,hold_reason,held_by_epic_id,origin) VALUES(?1,?2,?3,?4,0,?5,?6,?7,'detach')", rusqlite::params![owner,epic["id"].as_str(),chain,index,state,reason,held_by])?;
+        canon.execute("INSERT INTO canon_session_queue(session_id,epic_id,chain_id,step_index,stack_position,state,hold_reason,held_by_epic_id,origin,turn_ended_at) VALUES(?1,?2,?3,?4,0,?5,?6,?7,'detach',?8)", rusqlite::params![owner,epic["id"].as_str(),chain,index,state,reason,held_by,if i == 0 { Some(0) } else { None }])?;
     }
     assert_eq!(
         delete(&s, &epics[1], &epics[1]["revision"]).await?.status,

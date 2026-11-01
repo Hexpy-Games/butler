@@ -34,7 +34,18 @@ pub(super) fn running(db: &Connection, work: &Value) -> Result<bool> {
         )
         .optional()?
         .is_some();
-    Ok(own || child)
+    if own || child {
+        return Ok(true);
+    }
+    let awaiting = db
+        .query_row(
+            Query::QueueAwaitingDelegation.sql(),
+            params![session, text(work, "epic_id")?, work["linked_at"].as_i64()],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    Ok(awaiting && delegation_open(db, text(work, "work_id")?)?)
 }
 
 /// Only the latest linked Work in each conversation can still run for this step.
@@ -44,7 +55,8 @@ pub(super) fn current(works: &[Value], index: usize) -> bool {
         .any(|later| later["session_id"] == works[index]["session_id"])
 }
 
-/// Every hold reason stops the step, including an open Work left by Stop.
+/// Stop takes effect after the step's Turn ends. An undecided unfinished
+/// step can still finish through a live reply on its open Work.
 fn held(db: &Connection, work: &Value) -> Result<bool> {
     Ok(db
         .query_row(
@@ -279,17 +291,19 @@ pub(crate) fn step_unfinished(
         None => false,
     };
     let by_work = match work {
-        Some(work) => db
-            .query_row(
-                Query::WorkDelegationOpen.sql(),
-                [text(work, "work_id")?],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some(),
+        Some(work) => delegation_open(db, text(work, "work_id")?)?,
         None => false,
     };
     Ok(!by_turn && !by_work)
+}
+
+/// Open children and pending directions can finish this Work before a child
+/// Turn starts. Use the same rule for step settlement and its running indicator.
+fn delegation_open(db: &Connection, work: &str) -> Result<bool> {
+    Ok(db
+        .query_row(Query::WorkDelegationOpen.sql(), [work], |_| Ok(()))
+        .optional()?
+        .is_some())
 }
 
 /// Only links created in this run and this exact runtime session can settle it.

@@ -163,67 +163,70 @@ async fn epic_delete_unfinished_chat_last_step_stays_idle_after_restart() -> Res
     held_delete(true, true).await
 }
 
-/// A stopped Work stays open in BTCC, but a continued step or its replacement
-/// must not borrow the live Turn of a later conversation reply.
-async fn stopped_work_delete(replace: bool) -> Result<(), HarnessError> {
-    let (s, script, server, first, chat) =
-        crate::canon_link::setup("EPIC-DELETE-STOPPED-SCOPE", false, false).await?;
-    unfinished::run_plan(&s, &chat, &fixture::plan(&s, &script, &first).await?.0).await?;
+/// Stop leaves the actual Work open; no reopening or link timestamp edits.
+pub(super) async fn stopped_work(
+    s: &Scenario,
+    script: &crate::canon_link::stub::Script,
+    epic: &str,
+    chat: &str,
+) -> Result<(), HarnessError> {
+    let accepted =
+        s.gw.say(chat, &format!("Process canon:epic/{epic} now"))
+            .await?;
+    let turn = s.gw.accepted_turn(&accepted).await?;
     script.wait_held().await;
-    let turn = s.gw.turns(&chat).await?[0]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
     data(
         s.gw.post(&format!("/turns/{turn}/cancel"), json!({}))
             .await?,
         202,
     );
-    script.release();
-    s.gw.wait_terminal(&chat, &turn, Duration::from_secs(30))
+    s.gw.wait_terminal(chat, &turn, Duration::from_secs(30))
         .await?;
-    unfinished::wait_card(&s, "pending").await?;
-    let canon = db(&s)?;
-    let stopped: String = canon.query_row(
-        "SELECT btcc_work_id FROM canon_epic_work_links WHERE epic_id=?1",
-        [&first],
-        |r| r.get(0),
-    )?;
+    let canon = db(s)?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let state: String = canon.query_row(
+            "SELECT semantic_state FROM btcc_turns WHERE turn_id=?1",
+            [&turn],
+            |r| r.get(0),
+        )?;
+        if state == "cancelled" {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Stop has not settled: {state}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    script.release();
+    assert_eq!(canon.query_row::<String,_,_>("SELECT w.status FROM canon_epic_work_links l JOIN btcc_guided_works w ON w.work_id=l.btcc_work_id WHERE l.epic_id=?1", [epic], |r| r.get(0))?, "open");
+    Ok(())
+}
+
+#[tokio::test]
+async fn epic_delete_review_unfinished_linked_work_blocks_reply_then_settles()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, chat) =
+        crate::canon_link::setup("EPIC-DELETE-LINKED-REPLY", false, false).await?;
+    stopped_work(&s, &script, &first, &chat).await?;
+    script.quick.store(true, Ordering::SeqCst);
     data(
         s.gw.post(
-            &format!("/sessions/{chat}/canon/queue/holds/{first}"),
-            json!({"decision":if replace { "delete" } else { "continue" }}),
+            &format!("/sessions/{chat}/canon/queue"),
+            json!({"op":"start_now","epic_id":first}),
         )
         .await?,
         200,
     );
-    fixture::wait_done(&s, &chat, if replace { 2 } else { 3 }).await?;
-    if replace {
-        data(
-            s.gw.post(
-                &format!("/sessions/{chat}/canon/queue"),
-                json!({"op":"start_now","epic_id":first}),
-            )
-            .await?,
-            200,
-        );
-        fixture::wait_done(&s, &chat, 3).await?;
-    }
-    for turn in s.gw.turns(&chat).await? {
-        s.gw.wait_terminal(&chat, turn["id"].as_str().unwrap(), Duration::from_secs(30))
-            .await?;
-    }
-    // Starting the next Work abandons today's head. Recreate the persisted open
-    // predecessor that older stopped runs left behind, which canon must ignore.
-    assert_eq!(
-        canon.execute(
-            "UPDATE btcc_guided_works SET status='open' WHERE work_id=?1",
-            [&stopped]
-        )?,
-        1
-    );
-    assert_eq!(canon.query_row::<i64,_,_>("SELECT count(*) FROM canon_epic_work_links l JOIN btcc_guided_works w ON w.work_id=l.btcc_work_id WHERE l.epic_id=?1 AND w.status='open'", [&first], |r|r.get(0))?, 1);
-    script.quick.store(true, Ordering::SeqCst);
+    unfinished::wait_card(&s, "pending").await?;
+    let canon = db(&s)?;
+    let (source, reason): (String, String) = canon.query_row(
+        "SELECT question_message_id,hold_reason FROM canon_session_queue WHERE epic_id=?1 AND turn_ended_at IS NOT NULL AND decision IS NULL",
+        [&first], |r| Ok((r.get(0)?,r.get(1)?)))?;
+    assert_eq!(reason, "step_unfinished");
+    assert_eq!(count(&canon, "canon_epic_work_links", &first), 1);
     script.hold_report.store(true, Ordering::SeqCst);
     let accepted = s.gw.say(&chat, "What does this mean?").await?;
     let turn = s.gw.accepted_turn(&accepted).await?;
@@ -232,29 +235,31 @@ async fn stopped_work_delete(replace: bool) -> Result<(), HarnessError> {
         s.gw.get(&format!("/canon/epics/{first}/progress")).await?,
         200,
     );
-    assert_eq!(progress["running"], false, "{progress}");
+    assert_eq!(progress["running"], true, "{progress}");
     let epic = data(s.gw.get(&format!("/canon/epics/{first}")).await?, 200);
-    assert_eq!(epic["delete_blocked"], false, "{epic}");
-    let reply = delete(&s, &epic, &epic["revision"]).await?;
-    assert_eq!(reply.status, 200, "{}", reply.text);
+    assert_eq!(epic["running"], true, "{epic}");
+    let refusal = delete(&s, &epic, &epic["revision"]).await?;
+    assert_eq!(refusal.status, 409, "{}", refusal.text);
+    assert_eq!(refusal.body["error"]["code"], "running");
     script.finish_report();
     s.gw.wait_terminal(&chat, &turn, Duration::from_secs(30))
         .await?;
+    let progress = data(
+        s.gw.get(&format!("/canon/epics/{first}/progress")).await?,
+        200,
+    );
+    assert_eq!(progress["running"], false, "{progress}");
+    assert_eq!(canon.query_row::<String,_,_>("SELECT w.status FROM canon_epic_work_links l JOIN btcc_guided_works w ON w.work_id=l.btcc_work_id WHERE l.epic_id=?1", [&first], |r|r.get(0))?, "open");
+    assert_eq!(delete(&s, &epic, &epic["revision"]).await?.status, 200);
+    let app =
+        butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    panels::wait_settled(&app, &source).await?;
+    assert_deleted(&s, &chat, &first, &source).await?;
+    drop(app);
     drop(canon);
     s.finish().await?;
     server.abort();
     Ok(())
-}
-
-#[tokio::test]
-async fn epic_delete_continued_work_ignores_later_chat_turns() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    stopped_work_delete(false).await
-}
-#[tokio::test]
-async fn epic_delete_replaced_open_work_ignores_later_chat_turns() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    stopped_work_delete(true).await
 }
 
 /// An earlier closed Work cannot hide admission of new work in a bound chat.

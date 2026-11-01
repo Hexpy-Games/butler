@@ -1,6 +1,7 @@
 //! Epic deletion uses the same transaction for HTTP and approved chat drafts.
 use super::*;
 mod admission_failure;
+mod delegation_guard;
 mod delivery_failure;
 mod guards;
 mod held_steps;
@@ -8,6 +9,7 @@ mod lifecycle;
 mod panels;
 mod queue;
 mod receipts;
+mod requires_e2e_fixtures;
 mod terminal_events;
 
 async fn create(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
