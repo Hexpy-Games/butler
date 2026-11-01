@@ -128,10 +128,22 @@ pub(in crate::gateway::application) fn next_due(
 
 /// Runs waiting for their target session; served by the partial
 /// `app_automation_runs_queued_idx`.
+const QUEUED_PREDICATE: &str = "r.state='queued' AND a.state!='deleted'";
+
 pub(in crate::gateway::application) fn queued_sql() -> String {
     format!(
-        "SELECT r.id,r.trigger,r.queued_message_id,r.target_session_id,{COLUMNS} FROM app_automation_runs r JOIN app_automations a ON a.id=r.automation_id LEFT JOIN chats c ON c.id=a.target_session_id WHERE r.state='queued' AND a.state!='deleted' ORDER BY r.rowid LIMIT 20"
+        "SELECT r.id,r.trigger,r.queued_message_id,r.target_session_id,{COLUMNS} FROM app_automation_runs r JOIN app_automations a ON a.id=r.automation_id LEFT JOIN chats c ON c.id=a.target_session_id WHERE {QUEUED_PREDICATE} ORDER BY r.rowid LIMIT 20"
     )
+}
+
+pub(in crate::gateway::application) fn has_queued_general(
+    db: &Connection,
+) -> Result<bool, AppStorageError> {
+    db.query_row(
+        &format!("SELECT EXISTS(SELECT 1 FROM app_automation_runs r JOIN app_automations a ON a.id=r.automation_id WHERE {QUEUED_PREDICATE} AND r.trigger='scheduled' AND r.target_session_id='general')"),
+        [],
+        |r| r.get(0),
+    ).map_err(AppStorageError::sqlite)
 }
 
 pub(in crate::gateway::application) fn queued(
