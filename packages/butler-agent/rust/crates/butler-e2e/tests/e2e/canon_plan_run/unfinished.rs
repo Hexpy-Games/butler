@@ -281,3 +281,127 @@ async fn delegated_step_gets_no_card_while_its_steward_runs() -> Result<(), Harn
     server.abort();
     Ok(())
 }
+
+/// How the owner goes on from the card; the plan must continue either way.
+#[derive(Clone, Copy)]
+enum GoOn {
+    Reply,
+    Continue,
+}
+
+async fn go_on(
+    s: &Scenario,
+    script: &crate::canon_link::stub::Script,
+    chat: &str,
+    epic: &str,
+    how: GoOn,
+) -> Result<(), HarnessError> {
+    script.quick_epics.lock().unwrap().clear();
+    match how {
+        GoOn::Reply => {
+            s.gw.say(chat, &format!("Process canon:epic/{epic} now"))
+                .await?;
+            wait_card(s, "resolved").await?;
+        }
+        GoOn::Continue => {
+            data(
+                s.gw.post(
+                    &format!("/sessions/{chat}/canon/queue/holds/{epic}"),
+                    json!({"decision":"continue"}),
+                )
+                .await?,
+                200,
+            );
+            wait_card(s, "continued").await?;
+        }
+    }
+    Ok(())
+}
+
+/// A's Steward can close A's Work, not B's: in a 묶음 B still stops and asks.
+async fn stack_with_open_steward(name: &str, how: GoOn) -> Result<(), HarnessError> {
+    let (s, script, server, first, chat) = crate::canon_link::setup(name, false, false).await?;
+    let (plan, epics) = plan(&s, &script, &first).await?;
+    script.delegate.store(true, Ordering::SeqCst);
+    script.quick_epics.lock().unwrap().push(epics[1].clone());
+    script.direct_epics.lock().unwrap().push(epics[1].clone());
+    run_plan(&s, &chat, &plan).await?;
+    script.wait_held().await;
+    let turn = first_turn(&s, &chat).await?;
+    s.gw.wait_terminal(&chat, &turn, Duration::from_secs(30))
+        .await?;
+    let view = data(
+        s.gw.get(&format!("/sessions/{chat}/canon/queue")).await?,
+        200,
+    );
+    data(
+        s.gw.post(
+            &format!("/sessions/{chat}/canon/queue/edits"),
+            json!({"expected_graph_revision":view["graph_revision"],"op":"join_stack","epic_id":epics[1],"target_epic_id":epics[0]}),
+        )
+        .await?,
+        200,
+    );
+    assert_eq!(wait_card(&s, "pending").await?.len(), 1);
+    script.release();
+    // Starting a new Work in this chat would abandon the neighbour's while it is open.
+    wait_state(&s, &chat, &epics[0], "done").await?;
+    go_on(&s, &script, &chat, &epics[1], how).await?;
+    wait_done(&s, &chat, 3).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn stacked_step_asks_while_its_neighbours_steward_runs_then_a_reply_continues()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    stack_with_open_steward("CB-SCOPE-STACK-REPLY", GoOn::Reply).await
+}
+
+#[tokio::test]
+async fn stacked_step_asks_while_its_neighbours_steward_runs_then_continue_goes_on()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    stack_with_open_steward("CB-SCOPE-STACK-CONTINUE", GoOn::Continue).await
+}
+
+/// A Steward the owner started earlier in this chat says nothing about this step.
+async fn earlier_steward(name: &str, how: GoOn) -> Result<(), HarnessError> {
+    let (s, script, server, first, chat) = crate::canon_link::setup(name, false, false).await?;
+    let (plan, epics) = plan(&s, &script, &first).await?;
+    script.delegate.store(true, Ordering::SeqCst);
+    script.epics.lock().unwrap().swap(0, 1);
+    script.quick_epics.lock().unwrap().push(epics[0].clone());
+    script
+        .direct_epics
+        .lock()
+        .unwrap()
+        .extend([epics[0].clone(), epics[1].clone()]);
+    let accepted = s.gw.say(&chat, "Delegate the release verification").await?;
+    let earlier = s.gw.accepted_turn(&accepted).await?;
+    script.wait_held().await;
+    s.gw.wait_terminal(&chat, &earlier, Duration::from_secs(30))
+        .await?;
+    run_plan(&s, &chat, &plan).await?;
+    assert_eq!(wait_card(&s, "pending").await?.len(), 1);
+    script.release();
+    go_on(&s, &script, &chat, &epics[0], how).await?;
+    wait_done(&s, &chat, 3).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn step_asks_despite_an_earlier_steward_then_a_reply_continues() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    earlier_steward("CB-SCOPE-EARLIER-REPLY", GoOn::Reply).await
+}
+
+#[tokio::test]
+async fn step_asks_despite_an_earlier_steward_then_continue_goes_on() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    earlier_steward("CB-SCOPE-EARLIER-CONTINUE", GoOn::Continue).await
+}
