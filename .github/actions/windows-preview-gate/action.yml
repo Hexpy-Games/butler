@@ -40,7 +40,8 @@ runs:
         $harnesses = @{
           release = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
           hosted = @('cli_surface','gateway_remote','gateway_pairing','cli_remote','windows_commands','project_workspace',
-            'queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics','local_zone')
+            'queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics','local_zone',
+            'browser_outputs','deliverables','plugins')
         }
         $needs = ConvertFrom-Json $env:NEEDS_JSON -AsHashtable
         $selected = ConvertFrom-Json $needs.changes.outputs.jobs -AsHashtable

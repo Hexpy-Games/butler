@@ -185,13 +185,14 @@ class IntegrationProof(unittest.TestCase):
     def test_windows_partial_matrix_restores_complete_evidence(self):
         parts = proof.changes.ci_parts
         receipt = dict(run=7, job_inputs={'hosted': 'hash'},
-                       part_hashes={f'hosted/{name}': 'hash' for name in ['remote', 'recovery', 'basics']},
+                       part_hashes={f'hosted/{name}': 'hash' for name in ['remote', 'recovery', 'basics', 'outputs']},
                        part_results={f'hosted/{item["shard"]}': 'failure' if item['shard'] == 'data' else 'success' for item in parts.HOSTED})
         selected, reused, artifacts = parts.select('windows-preview-smoke.yml', {'hosted': 'hash'}, [receipt])
         self.assertEqual(selected['hosted'], [parts.HOSTED[2]])
-        self.assertEqual(len(reused), 3)
+        self.assertEqual(len(reused), 4)
         self.assertEqual({artifact['name'] for artifact in artifacts},
-                         {'windows-completed-remote', 'windows-completed-recovery', 'windows-completed-basics'})
+                         {'windows-completed-remote', 'windows-completed-recovery', 'windows-completed-basics',
+                          'windows-completed-outputs'})
         self.assertEqual(parts.key_for_name('Hosted Windows E2E (data)'), 'hosted/data')
 
     # test-category: pure-logic
