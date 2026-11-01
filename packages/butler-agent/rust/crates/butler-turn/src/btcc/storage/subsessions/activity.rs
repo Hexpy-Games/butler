@@ -141,6 +141,64 @@ impl SqliteSubsessionRepository {
 }
 
 impl SqliteSubsessionRepository {
+    /// Turns of a conversation suspended on delegated work. The App shows them as
+    /// delivered already, so only the runtime knows they are still live.
+    pub async fn turns_waiting_on_delegation(
+        &self,
+        session: String,
+    ) -> Result<Vec<String>, StorageError> {
+        self.storage
+            .read(move |db| {
+                db.prepare_cached(
+                    "SELECT turn_id FROM btcc_turns INDEXED BY idx_btcc_worker_live_turns
+                     WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed')
+                       AND suspension_reason='waiting_for_worker'",
+                )
+                .map_err(StorageError::sqlite)?
+                .query_map([session], |row| row.get(0))
+                .map_err(StorageError::sqlite)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
+    /// Delegations below a conversation with anything left to stop, as (parent,
+    /// relation): nearest first, newest siblings first. A direction continues a
+    /// child whose activity already ended, so its latest Turn and directions count.
+    pub async fn open_delegations_below(
+        &self,
+        root: String,
+    ) -> Result<Vec<(String, String)>, StorageError> {
+        self.storage
+            .read(move |db| {
+                db.prepare_cached(
+                    r"WITH RECURSIVE below(parent,session,relation,depth,created) AS (
+                    SELECT r.parent_session_id,r.child_session_id,r.relation_id,0,r.created_at
+                    FROM btcc_session_relations r
+                    WHERE r.parent_session_id=?1 AND r.activity_role IN ('steward','worker')
+                    UNION ALL
+                    SELECT r.parent_session_id,r.child_session_id,r.relation_id,b.depth+1,r.created_at
+                    FROM below b JOIN btcc_session_relations r ON r.parent_session_id=b.session
+                    WHERE r.activity_role IN ('steward','worker'))
+                SELECT b.parent,b.relation FROM below b
+                JOIN btcc_session_relations r ON r.relation_id=b.relation
+                WHERE r.activity_terminal=0
+                    OR (SELECT t.semantic_state FROM btcc_turns t WHERE t.session_id=b.session
+                        ORDER BY t.rowid DESC LIMIT 1) IN ('admitted','delivery_committed')
+                    OR EXISTS (SELECT 1 FROM btcc_subsession_directions i
+                        WHERE i.relation_id=b.relation AND i.status='pending')
+                ORDER BY b.depth,b.created DESC",
+                )
+                .map_err(StorageError::sqlite)?
+                .query_map([root], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map_err(StorageError::sqlite)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
     /// Indexed descendant execution candidates for visible parents. No messages,
     /// Work plans or historical activity are materialized on the navigation path.
     pub async fn running_descendants(

@@ -32,6 +32,36 @@ async fn cb_09_take_here_from_other_session() -> Result<(), HarnessError> {
     );
     assert_eq!(held["code"], "held_elsewhere");
     assert_eq!(held["other_session"], chat);
+    let running = data(
+        s.gw.post(
+            &format!("/sessions/{other}/canon/queue"),
+            json!({"op":"start_now","epic_id":epics[0]}),
+        )
+        .await?,
+        200,
+    );
+    assert_eq!(running["code"], "held_elsewhere");
+    let app = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let offers: Vec<String> = loop {
+        let mut query = app.prepare(
+            "SELECT text FROM app_initiated_messages WHERE kind='canon_take_here' AND chat_id=?1",
+        )?;
+        let offers = query
+            .query_map([other], |r| r.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        if offers.len() == 2 {
+            break offers;
+        }
+        assert!(std::time::Instant::now() < deadline, "{offers:?}");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    };
+    assert!(
+        offers.iter().any(|t| t.contains("is queued in"))
+            && offers.iter().any(|t| t.contains("is running in")),
+        "the offer names the real state: {offers:?}"
+    );
+    drop(app);
     script
         .quick
         .store(true, std::sync::atomic::Ordering::SeqCst);

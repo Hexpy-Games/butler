@@ -47,7 +47,12 @@ pub(super) fn sequence(
         )];
     }
     // A direction's own turn runs its fresh Work directly, without a Worker.
-    let direct = worker || (steward && key.user_request.starts_with(DIRECTION));
+    let direct = worker
+        || (steward
+            && key.user_request.starts_with(DIRECTION)
+            && !script
+                .direction_worker
+                .load(std::sync::atomic::Ordering::SeqCst));
     if !worker && !steward {
         return if returning {
             vec![]
