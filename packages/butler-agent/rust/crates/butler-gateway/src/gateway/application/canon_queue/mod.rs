@@ -82,27 +82,7 @@ async fn validate(
         ));
     }
     if let Some(plan) = args["plan_id"].as_str() {
-        let found = canon::execute(
-            app,
-            AppCanonRequest {
-                resource: AppCanonResource::Plan,
-                id: plan.to_owned(),
-                input: None,
-                delegate: None,
-            },
-        )
-        .await;
-        // The model can fix this itself: name the id's form and where to find it.
-        if let Err(GatewayApplicationError::Public { status: 404, .. }) = found {
-            return Err(public(
-                400,
-                "plan_id_unknown",
-                &format!(
-                    "No plan has the id {plan:?}. plan_id is a plan id of the form pl_…, not a title. Find a plan's id from its title in the plan run note or with canon_read {{\"view\":\"canon\"}}, which lists this project's plans with their ids."
-                ),
-            ));
-        }
-        found?;
+        known_plan(app, plan).await?;
     }
     let resource = if args["plan_id"].is_string() {
         AppCanonResource::Plan
@@ -181,6 +161,32 @@ pub(super) async fn apply(
                 .ok_or_else(GatewayApplicationError::internal)?,
         })
         .await?;
+    Ok(())
+}
+
+/// The model can fix an unknown plan_id itself: say the id's form and where to find it.
+async fn known_plan(app: &AppApplication, plan: &str) -> Result<(), GatewayApplicationError> {
+    let found = canon::execute(
+        app,
+        AppCanonRequest {
+            resource: AppCanonResource::Plan,
+            id: plan.to_owned(),
+            input: None,
+            delegate: None,
+        },
+    )
+    .await;
+    // The model can fix this itself: name the id's form and where to find it.
+    if let Err(GatewayApplicationError::Public { status: 404, .. }) = found {
+        return Err(public(
+            400,
+            "plan_id_unknown",
+            &format!(
+                "No plan has the id {plan:?}. plan_id is a plan id of the form pl_…, not a title. Find a plan's id from its title in the plan run note or with canon_read {{\"view\":\"canon\"}}, which lists this project's plans with their ids."
+            ),
+        ));
+    }
+    found?;
     Ok(())
 }
 
