@@ -13,9 +13,9 @@ mkdirSync(output, { recursive: true });
 
 const labels = {
   ko: { sidebar: "사이드바 보기", menu: "스페이스 메뉴", project: "새 프로젝트", choose: "폴더 선택", use: "이 폴더 사용", create: "만들기",
-    title: "이 폴더의 내용을 신뢰할까요?", deny: "신뢰 안 함", allow: "신뢰", receives: "프롬프트와 도구 결과를 받고, 출력이 모델에 전달될 수 있습니다" },
+    title: "이 폴더의 훅을 실행할까요?", deny: "실행 안 함", allow: "실행", receives: "프롬프트와 도구 결과를 받고, 출력이 모델에 전달될 수 있습니다" },
   en: { sidebar: "Show sidebar", menu: "Space menu", project: "New project", choose: "Choose folder", use: "Use this folder", create: "Create",
-    title: "Trust this folder's contents?", deny: "Don't trust", allow: "Trust", receives: "Receives your prompts and tool results; output can reach the model" },
+    title: "Run this folder's hooks?", deny: "Don't run", allow: "Run", receives: "Receives your prompts and tool results; output can reach the model" },
 };
 type Language = keyof typeof labels;
 
@@ -221,6 +221,17 @@ async function captures() {
         taken.push(name);
         await page.keyboard.press("Escape");
         await chatOpened();
+        if (list === "short") {
+          // The same question on the first message's card.
+          await page.locator('[data-test-class="composer-card"]').getByRole("textbox").fill("Hello");
+          await page.locator("[data-test-class~='composer-send-button']").click();
+          const card = page.locator('[data-test-class="composer-authority-decision"]').first();
+          await card.getByText(labels[language].title, { exact: true }).waitFor();
+          await shot(`card-${theme}-${device}-${language}`, card);
+          taken.push(`card-${theme}-${device}-${language}`);
+          await card.getByRole("button", { name: labels[language].deny, exact: true }).click();
+          await card.waitFor({ state: "hidden" });
+        }
       }
     }
   }

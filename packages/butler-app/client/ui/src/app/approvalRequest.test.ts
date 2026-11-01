@@ -49,7 +49,7 @@ test("each action kind reads as one question in English and Korean", () => {
     [summary("update_project", { targets: [{ kind: "project", path: "ledger:work" }], risk: "low" }),
       "Update the project records?", "프로젝트 기록을 업데이트할까요?"],
     [summary("start_conversation", { risk: "low" }), "Start a new conversation?", "새 대화를 시작할까요?"],
-    [summary("project_hooks", { targets: [{ kind: "folder", path: "/work/butler" }] }), "Trust this folder's contents?", "이 폴더의 내용을 신뢰할까요?"],
+    [summary("project_hooks", { targets: [{ kind: "folder", path: "/work/butler" }] }), "Run this folder's hooks?", "이 폴더의 훅을 실행할까요?"],
     [summary("restart_service", { targets: [{ kind: "service", path: "butler" }] }), "Restart Butler?", "버틀러를 다시 시작할까요?"],
     [summary("create_worktree", { targets: [folder("garden")], risk: "low" }),
       "Create a worktree for this conversation?", "이 대화용 워크트리를 만들까요?"],

@@ -207,15 +207,15 @@ success. Stdin is streamed in full.
 ### Project-folder hooks
 
 A project folder can define command hooks in `.butler/hooks.json`, in the same
-format. Butler asks once per folder whether to trust its contents, on one card however
+format. Butler asks once per folder whether to run its hooks, on one card however
 many hooks there are, listing the folder's full path and each hook's event, tools and
 command with its environment additions. Adding a project asks in a dialog; closing it
 is no answer. A folder that still has no answer asks on a card, before the first model
 round of the first turn that reaches it. A folder with no hooks is never asked about.
 
-After you trust a folder its hooks run, including ones added or changed later, with no
+After you say to run them, the folder's hooks run, including ones added or changed later, with no
 further question. If the file changed while the question waited, the answer saves
-nothing and a new card lists what is there now. If you don't trust it, nothing from that file
+nothing and a new card lists what is there now. If you don't, nothing from that file
 runs, whatever it says later.
 The answer covers that folder: a replaced or renamed one asks again. Answers are kept
 in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write. A
@@ -241,7 +241,7 @@ exit 2 still reach the model, because that is how a guard says why it refused. E
 kind of text marks the turn as having read outside content: in `auto`, what would send
 something out then asks first.
 
-SessionStart held back by the card runs after you trust the folder, and any text it
+SessionStart held back by the card runs after you say to run the hooks, and any text it
 adds is dropped and noted in the run log; UserPromptSubmit starts with your next
 message. A symlink at `.butler/hooks.json` or `.butler` and an invalid file are
 refused: nothing runs, and the reason is in the run log. Project hooks receive
