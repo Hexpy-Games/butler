@@ -89,6 +89,8 @@ export function ArchivesSettings() {
         },
       );
       await refresh();
+    } catch (error) {
+      notifyError(error, appCopy.settings.archiveErrors.remove);
     } finally {
       setBusyId(null);
     }
