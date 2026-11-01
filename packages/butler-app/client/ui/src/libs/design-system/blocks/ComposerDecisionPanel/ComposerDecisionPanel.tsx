@@ -20,6 +20,8 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   onOpen: () => void;
   /** Optional display formatting; the full title and detail text remain available. */
   renderText?: (text: string) => ReactNode;
+  /** The title and details are the exact action (commands, paths, URLs): drawn as their own characters (Typo `literal`). */
+  literal?: boolean;
   /** Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut. */
   details?: readonly string[];
   /** With `detailsShowLessLabel`, clamps long details to four lines behind an inline "Show more". */
@@ -58,7 +60,7 @@ function DecisionMedia({ content, label, onOpen }: ComposerDecisionMedia) {
 }
 
 /** A pending decision shown in place of the composer input: subject row, optional details and error, media, actions. */
-export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, media, renderText, placement, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
+export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, media, renderText, literal, placement, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
   const panel = useRef<HTMLDivElement>(null);
   const { defer, deferring } = useComposerPanelTransition(panel);
   const hasDetails = Boolean(details?.length);
@@ -66,10 +68,10 @@ export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, d
     onKeyDown={(event) => { if (deferring) { event.preventDefault(); event.stopPropagation(); return; } composerDecisionKeyboard(event); onKeyDown?.(event); }} {...props}>
     <ComposerPanelHeader icon={icon} eyebrow={eyebrow} dataSlot="composer-decision-subject" hasDetails={hasDetails}
       title={<Clickable variant="text" onClick={onOpen} title={title}>
-        <Typo.Label weight="medium" tone="primary" wrap="anywhere">{renderText ? renderText(title) : title}</Typo.Label>
+        <Typo.Label weight="medium" tone="primary" wrap="anywhere" literal={literal}>{renderText ? renderText(title) : title}</Typo.Label>
       </Clickable>} aside={aside} />
     {hasDetails && <ComposerPanelBody dataSlot="decision-details-scroll" single>
-      <ComposerDecisionDetails lines={details!} renderText={renderText} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
+      <ComposerDecisionDetails lines={details!} renderText={renderText} literal={literal} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
     </ComposerPanelBody>}
     {error && <FieldError className={dsClass(styles.error)}><Typo.Caption as="p" tone="inherit">{error}</Typo.Caption></FieldError>}
     {media && <DecisionMedia {...media} />}

@@ -4,6 +4,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Page } from "playwright";
+import { drawsSubstitutes } from "../support/exact-glyphs.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 
@@ -42,6 +43,8 @@ const long = [
   hook("format", "PostToolUse", "bunx prettier --write \"$TOOL_PATH\"", ["write_file", "edit_file"]),
   hook("report", "PostToolUse", "LOG_LEVEL=debug ./scripts/hooks/after-edit.sh --report build/hook-report.json --fail-on-warning", ["edit_file"]),
   hook("multi", "Stop", "./scripts/hooks/summary.sh\n./scripts/hooks/notify.sh"),
+  // The body font would draw this `x` as `×` and `->` as an arrow; the dialog shows the command as written.
+  hook("resize", "PostToolUse", "magick shot.png -resize 2876x6 out/a->b.png", ["write_file"]),
   ...Array.from({ length: 13 }, (_, index) => hook(`post-${index}`, "PostToolUse", `./scripts/hooks/check-${index + 1}.sh`, ["run_command"])),
   ...Array.from({ length: 12 }, (_, index) => hook(`pre-${index}`, "PreToolUse", `./scripts/hooks/before-${index + 1}.sh`, ["read_file"])),
 ];
@@ -138,6 +141,12 @@ async function exercise() {
   assert(text.includes("./scripts/hooks/summary.sh⏎./scripts/hooks/notify.sh"), "a real line break is marked");
   // The path and every hook line sit in their own left-to-right isolate.
   assert.equal(await asked().locator('bdi[dir="ltr"]').count(), long.length + 1);
+  // Every line draws its own characters (Typo literal), never the body font's `×` or arrow.
+  const exact = asked().locator('bdi[dir="ltr"]').filter({ hasText: "2876x6" });
+  assert.equal(await exact.count(), 1);
+  const glyphs = await drawsSubstitutes(exact, "hook line");
+  assert(!glyphs.substituted, `the hook line keeps x and ->: ${JSON.stringify(glyphs.width)}`);
+  assert.equal(glyphs.width.ligatures, "none");
   const buttons = asked().getByRole("button");
   assert.deepEqual(await buttons.allTextContents(), [copy.deny, copy.allow]);
   const denied = (await buttons.first().boundingBox())!;
