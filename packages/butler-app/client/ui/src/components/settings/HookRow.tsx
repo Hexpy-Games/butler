@@ -11,7 +11,7 @@ export function HookRow({ hook, busy, onToggle, onEdit, onTest, onRemove }: {
   return <CardListItem title={<Typo.Body as="span" wrap="anywhere">{hook.name || hook.id}</Typo.Body>}
     meta={hook.enabled ? copy.enabled : copy.disabled}
     description={<Stack gap="xs">
-      <Typo.Caption truncate>{[hook.event, hook.match.tools.join(", "), hook.command ?? hook.args?.join(" ")].filter(Boolean).join(" · ")}</Typo.Caption>
+      <Typo.Caption truncate literal>{[hook.event, hook.match.tools.join(", "), hook.command ?? hook.args?.join(" ")].filter(Boolean).join(" · ")}</Typo.Caption>
       <ButtonContainer size="icon-xs">
         <Tooltip label={busy ? appCopy.settings.saving : copy.test}><Button size="icon-xs" variant="outline" aria-label={copy.test} disabled={busy} onClick={onTest}><RefreshCcw size="sm" /></Button></Tooltip>
         <Switch aria-label={`${hook.name || hook.id}: ${copy.enabled}`} checked={hook.enabled} disabled={busy} onCheckedChange={onToggle} />

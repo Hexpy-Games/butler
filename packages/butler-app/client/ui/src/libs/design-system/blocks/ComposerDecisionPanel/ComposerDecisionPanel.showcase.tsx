@@ -78,18 +78,18 @@ function Authority({ context, error }: { context: ShowcaseRenderContext; error?:
   );
 }
 
-/** ComposerAuthorityDecisionSurface with a structured request: a question, examples and a risk Tag. */
+/** ComposerAuthorityDecisionSurface with a structured request: a question, examples and a risk Tag, drawn literally (`2876x6` stays `x`). */
 function ApprovalRequest({ context, command, placement }: { context: ShowcaseRenderContext; command?: boolean; placement?: Placement }) {
   const copy = labels[context.locale];
   return command ? (
     <ComposerDecisionPanel icon={<Terminal aria-hidden="true" size="lg" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"} title={copy.command} onOpen={() => undefined}
-      details={[`rm -rf build && npm run build -- --out ${"dist/".repeat(16)}and a long tail of arguments that wraps`]}
+      details={[`magick shot.png -resize 2876x6 build/a->b.png && npm run build -- --out ${"dist/".repeat(16)}and a long tail of arguments that wraps`]} literal
       detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
       aside={<><Tag tone="danger">{copy.high}</Tag></>}
       actions={<AuthorityActions copy={copy} />} />
   ) : (
     <ComposerDecisionPanel placement={placement} icon={<Folder aria-hidden="true" size="lg" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"} title={copy.rename} onOpen={() => undefined}
-      details={[...screenshots, copy.more]} detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
+      details={[...screenshots, copy.more]} literal detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
       aside={<><Tag tone="warning">{copy.medium}</Tag></>}
       actions={<AuthorityActions copy={copy} />} />
   );

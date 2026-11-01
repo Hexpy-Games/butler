@@ -93,30 +93,15 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // keeps its per-OS implementations as private children. The private
         // Windows process table serves instance identity and liveness.
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
-        "data_paths"
-        | "cpu"
-        | "memory"
-        | "desktop"
-        | "launcher"
-        | "network"
-        | "process_table"
-        | "storage_size"
-        | "stdio"
-        | "time_zone"
-        | "user_auth"
-        | "user_dirs"
-        | "diagnostics"
-        | "account_dirs"
-        | "process_priority"
-        | "download_mark"
-        | "plugin_files"
-        | "shared_locks"
-        | "change_notifications" => &[],
+        "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
+        | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
+        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files"
+        | "shared_locks" | "powershell_text" | "change_notifications" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
         "sqlite" | "fs_space" | "secrets" | "install_link" => &["secure_fs"],
-        "command_sandbox" => &["secure_fs", "account_dirs", "data_paths"],
+        "command_sandbox" => &["secure_fs", "account_dirs", "data_paths", "powershell_text"],
         "process_control" => &["process_table"],
         // The headless browser's DevTools pipe runs in a contained process tree.
         "browser_process" | "system_wake" => &["process_control"],
@@ -143,7 +128,13 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // with secure_fs; login-start definitions live under the user's home.
         "command_launcher" => &["launcher", "user_dirs"],
         // Manager definitions own private log destinations; E2E fixtures publish executables.
-        "service_registration" => &["instance", "user_dirs", "secure_fs", "launcher"],
+        "service_registration" => &[
+            "instance",
+            "user_dirs",
+            "secure_fs",
+            "launcher",
+            "powershell_text",
+        ],
         // Native import reads source profiles, wipes secrets and opens consented exports.
         "browser_transfer" => &["browser_profiles", "secrets", "user_dirs", "desktop"],
         _ => return None,

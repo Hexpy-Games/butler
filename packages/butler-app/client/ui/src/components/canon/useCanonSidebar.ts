@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCanonSidebar, orderCanonSidebar, editCanonEpic, type EpicCard } from "@/app/canonApi.ts";
-import { subscribeCanonChanges } from "@/app/canonEvents.ts";
+import { singleFlight, subscribeCanonChanges } from "@/app/canonEvents.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
@@ -10,7 +10,7 @@ export function useCanonSidebar(projectId: string, expanded: boolean) {
   const sidebar = useCanonSidebarState(state => state.projects[projectId]);
   const [busy, setBusy] = useState(false);
   const epoch = useRef(0), writing = useRef(false), mounted = useRef(true);
-  const refresh = useCallback(async () => {
+  const read = useCallback(async () => {
     if (writing.current || !mounted.current) return;
     const generation = ++epoch.current;
     try {
@@ -19,6 +19,7 @@ export function useCanonSidebar(projectId: string, expanded: boolean) {
       useCanonSidebarState.getState().rememberSidebar(data);
     } catch (error) { if (generation === epoch.current) notifyError(error, appCopy.interfaceFeedback.requestFailed); }
   }, [projectId]);
+  const refresh = useMemo(() => singleFlight(read), [read]);
   useEffect(() => {
     mounted.current = expanded;
     if (!expanded) return () => { mounted.current = false; epoch.current++; };
