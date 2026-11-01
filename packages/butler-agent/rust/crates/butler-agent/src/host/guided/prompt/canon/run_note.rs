@@ -64,7 +64,7 @@ fn render(note: &Value, step: Option<&str>) -> Result<String, BtccError> {
             .map_err(|error| BtccError::relayed("canon_run_note_invalid", error.to_string()))?
     ));
     out.push_str(&format!(
-        "\n\nTo change the run, call canon_queue with expected_revision {revision}: set_order {{steps:[[epic ids],...]}} sends the whole new order of the unfinished steps; after {{epic_id,target_epic_id}} moves an epic to the step after another; together {{epic_id,target_epic_id}} runs it with another; start_now {{epic_id}}; remove {{epic_id}}. Running steps stay where they are. This note is current: read the order here, never through a tool."
+        "\n\nTo change the run, call canon_queue with expected_revision {revision}: set_order {{steps:[[epic ids],...]}} sends the whole new order of the unfinished steps, and may leave out the pinned steps at the front; after {{epic_id,target_epic_id}} moves an epic to the step after another; together {{epic_id,target_epic_id}} runs it with another; start_now {{epic_id}}; remove {{epic_id}}. Pinned items, and the steps before them, stay where they are, so the earliest a waiting epic can go is the step right after the last pinned one; start_now runs a waiting epic at once on its own instead. This note is current: read the order here, never through a tool."
     ));
     Ok(out)
 }
@@ -95,7 +95,12 @@ fn line(item: &Value, step: Option<&str>) -> String {
         (None, _) => "unknown".to_owned(),
     };
     let this = if step == Some(id) { " (this Turn)" } else { "" };
-    format!("canon:epic/{id}: {state}{this}")
+    let pinned = if item["state"] == "running" {
+        ", pinned"
+    } else {
+        ""
+    };
+    format!("canon:epic/{id}: {state}{this}{pinned}")
 }
 
 fn next(steps: &[Value]) -> String {

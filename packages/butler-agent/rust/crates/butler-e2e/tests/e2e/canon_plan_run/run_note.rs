@@ -224,9 +224,15 @@ async fn set_order_replaces_the_unfinished_steps() -> Result<(), HarnessError> {
     )
     .await?;
     assert_ne!(missing.status, 200, "every unfinished epic is named");
+    // The pinned first step may be left out: it keeps its place.
     let view = data(
-        post(json!({"op":"set_order","expected_revision":revision,"steps":[[epics[0]],[epics[2],epics[1]]]})).await?,
+        post(json!({"op":"set_order","expected_revision":revision,"steps":[[epics[2],epics[1]]]}))
+            .await?,
         200,
+    );
+    assert_eq!(
+        view["chains"][0]["steps"][0]["items"][0]["epic_id"], epics[0],
+        "{view}"
     );
     let steps = &view["chains"][0]["steps"];
     assert_eq!(steps.as_array().unwrap().len(), 2, "{view}");

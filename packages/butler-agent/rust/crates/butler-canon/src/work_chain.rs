@@ -107,6 +107,19 @@ impl Chain {
             .take_while(|step| step.tasks.iter().all(|task| done.contains(task)));
         let mut steps: Vec<Step> = finished.cloned().collect();
         let named: BTreeSet<&EpicId> = unfinished.iter().flatten().collect();
+        // Pinned steps at the front may be left out; they keep their place.
+        let kept = self.steps[steps.len()..]
+            .iter()
+            .take_while(|step| {
+                step.tasks.iter().any(|task| running.contains(task))
+                    && step.tasks.iter().all(|task| !named.contains(task))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let named: BTreeSet<&EpicId> = named
+            .into_iter()
+            .chain(kept.iter().flat_map(|step| &step.tasks))
+            .collect();
         let open: BTreeSet<&EpicId> = self.steps[steps.len()..]
             .iter()
             .flat_map(|step| &step.tasks)
@@ -114,6 +127,7 @@ impl Chain {
         if named != open {
             return Err(ChainError::Membership);
         }
+        steps.extend(kept.clone());
         steps.extend(unfinished.into_iter().map(|tasks| Step { index: 0, tasks }));
         self.finish(Self { steps }, running)
     }
