@@ -46,17 +46,26 @@ pub(super) async fn tab_reads(session: &WebSession, endpoint: &str, paragraph: &
     assert_eq!(repeated["same_as"], whole["read_id"]);
     assert!(repeated.get("markdown").is_none());
     let mut changed = live();
-    changed.html = html.replace("Study results", "Study results moved to Sunday");
+    changed.html = html
+        .replace("Study results", "Study results moved to Sunday")
+        .replace(
+            "End of the document.",
+            "The result moved to Sunday. End of the document.",
+        );
     let refreshed = session
         .web_read_from(&whole_args, Some(changed), true, &CancellationToken::new())
         .await
         .unwrap();
     assert_ne!(refreshed["content_sha256"], whole["content_sha256"]);
+    assert_eq!(refreshed["title"], "Study results moved to Sunday");
+    assert_eq!(refreshed["returned_chunks"], refreshed["total_chunks"]);
+    assert_eq!(refreshed["content_has_more"], false);
     assert!(
         refreshed["markdown"]
             .as_str()
             .unwrap()
-            .contains("moved to Sunday")
+            .contains("moved to Sunday"),
+        "{refreshed}"
     );
     chunks(session, endpoint, &html, &first, &whole).await;
     continuation(session, endpoint, &html, &whole).await;
