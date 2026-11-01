@@ -1,6 +1,7 @@
 use super::{
     Plugins, Result, State, capabilities, error, inspect, manifest, overlay, sources, types::*,
 };
+use butler_platform::secure_fs;
 use serde_json::{Value, json};
 use std::{path::PathBuf, sync::Arc};
 
@@ -90,10 +91,9 @@ impl Plugins {
         if std::fs::symlink_metadata(path).is_ok_and(|m| m.is_symlink()) {
             return Err(error("plugin_symlink_refused"));
         }
-        let source = PathBuf::from(path)
-            .canonicalize()
-            .map_err(|_| error("plugin_path_unreadable"))?;
-        if source.starts_with(&self.root) || self.root.starts_with(&source) {
+        let source = secure_fs::canonicalize(path).map_err(|_| error("plugin_path_unreadable"))?;
+        let storage = secure_fs::canonicalize(&self.root).unwrap_or_else(|_| self.root.clone());
+        if secure_fs::is_within(&source, &storage) || secure_fs::is_within(&storage, &source) {
             return Err(error("plugin_source_overlaps_storage"));
         }
         Ok(source)

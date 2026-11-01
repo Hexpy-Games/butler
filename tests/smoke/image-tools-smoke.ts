@@ -1,4 +1,5 @@
 // Real gateway, scripted chat and fake image provider: no live model calls.
+import { watchLeavingPane } from "../support/split-motion-frames.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -217,6 +218,18 @@ try {
     await viewer.getByRole("button", { name: "편집", exact: true }).click();
     const editor = page.locator('[data-test-class="image-editor"]'); await editor.waitFor();
     await capture(page, "editor-open-1280");
+    // Closing the editor: the slot leaves with the editor still on it.
+    await page.waitForFunction(() => document.querySelector('[data-slot="adaptive-shell-split-pane"]')?.getAnimations().every((animation) => animation.playState !== "running"));
+    const leaving = watchLeavingPane(page, '[data-test-class="image-editor"]');
+    await editor.getByRole("button", { name: "닫기", exact: true }).click();
+    const leavingFrames = await leaving;
+    assert(leavingFrames.total > 0, "closing the editor moves the slot");
+    assert.equal(leavingFrames.missing, 0, `the leaving slot keeps showing the editor (${JSON.stringify(leavingFrames)})`);
+    await page.locator('[data-slot="adaptive-shell-split-pane"]').waitFor({ state: "detached" });
+    await card.getByRole("button").first().click();
+    await viewer.waitFor();
+    await viewer.getByRole("button", { name: "편집", exact: true }).click();
+    await editor.waitFor();
     const editorNode = await editor.elementHandle();
     const pane = page.locator('[data-slot="adaptive-shell-split-pane"]');
     const paneNode = await pane.elementHandle();

@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 
 const sidebar = '[data-test-class~="app-sidebar"]';
-const card = '[data-slot="adaptive-shell-workspace"] [data-slot="adaptive-shell-card"]';
+const card = '[data-slot="adaptive-shell-workspace"] :is([data-slot="adaptive-shell-card"], [data-slot="adaptive-shell-split-chat"])';
 
 /**
  * The sidebar's first row fill (selected, then hovered) starts on the same

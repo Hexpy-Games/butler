@@ -33,7 +33,7 @@ impl Harness {
             uuid::Uuid::new_v4().simple()
         ));
         fs::create_dir_all(&data).unwrap();
-        let data = fs::canonicalize(&data).unwrap();
+        let data = butler_platform::secure_fs::canonicalize(&data).unwrap();
         let root = data.join("project-ledger/projects").join(LEDGER_PROJECT);
         let collation = Arc::new(LocaleCollation::new("en-US").unwrap());
         let ledger = ProjectLedger::with_collation(&data, 2, collation);

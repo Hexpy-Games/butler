@@ -119,6 +119,10 @@ fn sorted_entries(directory: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(paths)
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "repository tool without butler-platform; compares only paths it resolves here"
+)]
 pub(crate) fn canonical(path: &Path) -> Result<PathBuf, String> {
     fs::canonicalize(path).map_err(|error| format!("cannot resolve {}: {error}", path.display()))
 }
