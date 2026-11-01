@@ -145,7 +145,8 @@ async fn edited_times_survive_dispatch_and_queued_runs_are_not_lost() -> Result<
 }
 
 #[tokio::test]
-async fn pause_and_delete_while_held_keep_main_delivery_semantics() -> Result<(), HarnessError> {
+async fn pause_and_delete_while_held_deliver_paused_and_settle_deleted() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     let (s, address) = setup("HOLD-STATE", "2026-10-27T04:29:00.000Z").await?;
     for id in ["paused", "deleted"] {
@@ -163,7 +164,10 @@ async fn pause_and_delete_while_held_keep_main_delivery_semantics() -> Result<()
     assert_eq!(schedule(&s, "paused").await?["state"], "paused");
     dispatch(&s).await?;
     assert_eq!(runs(&s, "deleted").await?.len(), 1);
-    assert_eq!(runs(&s, "deleted").await?[0]["state"], "queued");
+    assert_eq!(
+        runs(&s, "deleted").await?[0]["state"],
+        "skipped_target_unavailable"
+    );
     assert_eq!(reports(&s, "general", "deleted").await?, [] as [Value; 0]);
     let list = s.gw.get("/automations").await?;
     assert!(
