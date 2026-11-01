@@ -184,19 +184,7 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
     let mut reads = outputs
         .iter()
         .filter(|output| output["schema"] == "butler.browser-observation.v1")
-        .map(|output| {
-            (
-                output["untrusted_content"]["url"]
-                    .as_str()
-                    .unwrap()
-                    .to_owned(),
-                0,
-                output["untrusted_content"]["text"]
-                    .as_str()
-                    .unwrap()
-                    .to_owned(),
-            )
-        })
+        .map(read)
         .collect::<Vec<_>>();
     reads.sort();
     let next = |key: &str| {
@@ -224,6 +212,20 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
         instructions: last["instructions"].as_str().unwrap_or_default().to_owned(),
         guidance: [next("results"), next("tabs")],
     })
+}
+
+fn read(output: &Value) -> (String, u64, String) {
+    let url = output["untrusted_content"]["url"].as_str().unwrap();
+    let text = output["untrusted_content"]["text"].as_str().unwrap();
+    let prefix = format!("tab {} ", output["tab"].as_str().unwrap());
+    assert!(text.starts_with(&prefix), "{output}");
+    // Parallel opens assign different tab IDs; retain all text and metadata,
+    // replacing only the verified tab identity with its logical source URL.
+    (
+        url.to_owned(),
+        0,
+        text.replacen(&prefix, &format!("tab {url} "), 1),
+    )
 }
 
 /// Rounds, tokens and USD at the delegated demo model's catalog prices.
