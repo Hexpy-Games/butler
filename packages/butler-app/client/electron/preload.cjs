@@ -937,6 +937,11 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  getProjectFolderTrust: ({ projectId }) => requestJson(`/projects/${encodeURIComponent(projectId)}/folder-trust`),
+  answerProjectFolderTrust: ({ projectId, trusted, hooks }) => requestJson(`/projects/${encodeURIComponent(projectId)}/folder-trust`, {
+    method: "POST",
+    body: JSON.stringify({ trusted, hooks }),
+  }),
   pinProject: ({ projectId, pinned }) => requestJson(`/projects/${encodeURIComponent(projectId)}/pin`, {
     method: "POST",
     body: JSON.stringify({ pinned }),

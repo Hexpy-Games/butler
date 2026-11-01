@@ -269,11 +269,25 @@ async fn delegated_step_gets_no_card_while_its_steward_runs() -> Result<(), Harn
     let turn = first_turn(&s, &chat).await?;
     s.gw.wait_terminal(&chat, &turn, Duration::from_secs(30))
         .await?;
+    // The step is held open by its own Turn's delegation: BTCC records that Turn
+    // under the same id the App gives it.
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let parent: String = db.query_row(
+        "SELECT parent_turn_id FROM btcc_session_relations WHERE activity_role='steward'",
+        [],
+        |r| r.get(0),
+    )?;
+    drop(db);
+    assert_eq!(
+        parent, turn,
+        "the Steward's parent Turn is the step's App Turn"
+    );
     let view = data(
         s.gw.get(&format!("/sessions/{chat}/canon/queue")).await?,
         200,
     );
     assert_eq!(view["counts"]["failed"], 0, "{view}");
+    assert_eq!(cards(&s)?, [] as [(String, String); 0], "the step waits");
     script.release();
     wait_done(&s, &chat, 3).await?;
     assert_eq!(cards(&s)?, [] as [(String, String); 0]);

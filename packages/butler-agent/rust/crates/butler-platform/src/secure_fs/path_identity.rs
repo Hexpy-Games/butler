@@ -15,6 +15,24 @@ pub fn same_file(left: &Path, right: &Path) -> io::Result<bool> {
     }
 }
 
+/// A directory's stable identity: device and inode, or volume and file index on
+/// Windows. A replaced directory has another one, even at the same path.
+pub fn directory_id(path: &Path) -> io::Result<Option<super::FileId>> {
+    #[cfg(unix)]
+    {
+        Ok(super::identity(&std::fs::metadata(path)?).id)
+    }
+    #[cfg(windows)]
+    {
+        let handle = same_file::Handle::from_path(path)?;
+        let information = winapi_util::file::information(handle.as_file())?;
+        Ok(Some(super::FileId {
+            device: information.volume_serial_number(),
+            inode: information.file_index(),
+        }))
+    }
+}
+
 /// Whether two metadata describe the same file: the same [`FileId`]; without
 /// [`FILE_IDS`], the same length and modification time.
 pub fn same_metadata(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {

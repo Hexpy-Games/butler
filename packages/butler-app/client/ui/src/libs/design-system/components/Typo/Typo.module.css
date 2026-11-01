@@ -282,6 +282,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Exact values draw their own characters. Pretendard (from Inter) puts the
+   same substitutions in both `calt` and `clig`: `x` between digits becomes
+   `×`, and `->`, `=>`, `<-` become arrows. `none` turns off both features;
+   `no-contextual` alone leaves `clig` drawing them. */
+.typo[data-literal="true"] {
+  font-variant-ligatures: none;
+}
+
 /* Text sits on its letters, not on its line box. Every role's box is trimmed
    to cap height and the alphabetic baseline, then padded back by half the
    difference on both sides, so each line keeps the role's integer
