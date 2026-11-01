@@ -11,7 +11,9 @@ pub(in crate::host::guided) async fn read(
     state: &GuidedTextState,
     turn: &TurnRecord,
 ) -> Result<Option<String>, BtccError> {
-    if state.phase.execution_policy.role != butler_turn::btcc::PolicyRole::Butler {
+    if state.phase.execution_policy.role != butler_turn::btcc::PolicyRole::Butler
+        || state.phase.execution_policy.has_subsession()
+    {
         return Ok(None);
     }
     let session = turn.session_id.clone();

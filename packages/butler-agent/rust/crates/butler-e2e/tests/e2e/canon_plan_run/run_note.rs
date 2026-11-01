@@ -9,7 +9,7 @@ use std::sync::atomic::Ordering;
 const NOTE: &str = "## Plan run in this conversation";
 const UPDATED: &str = "Updated plan run; it changed since the last note.";
 
-fn requests(script: &crate::canon_link::stub::Script) -> Vec<String> {
+pub(super) fn requests(script: &crate::canon_link::stub::Script) -> Vec<String> {
     script
         .requests
         .lock()
@@ -29,6 +29,20 @@ fn step_request(script: &crate::canon_link::stub::Script, epic: &str) -> String 
         .unwrap_or_else(|| panic!("no request for {epic}"))
 }
 
+/// Copy the refs verbatim from the provider's latest note, just as the model does.
+pub(super) fn note_refs(script: &crate::canon_link::stub::Script) -> Vec<String> {
+    let body = requests(script).last().unwrap().replace("\\n", "\n");
+    body[body.rfind(NOTE).unwrap()..]
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("- ")
+                .and_then(|line| line.split_once(": "))
+                .map(|(reference, _)| reference.to_owned())
+        })
+        .collect()
+}
+
 /// Where each epic appears in the note's step list.
 fn step_of(body: &str, epic: &str) -> usize {
     let note = &body[body.rfind(NOTE).expect("note")..];
@@ -38,7 +52,7 @@ fn step_of(body: &str, epic: &str) -> usize {
     note[..at].matches("Step ").count()
 }
 
-async fn run_plan(s: &Scenario, chat: &str, plan: &str) -> Result<(), HarnessError> {
+pub(super) async fn run_plan(s: &Scenario, chat: &str, plan: &str) -> Result<(), HarnessError> {
     data(
         s.gw.post(
             &format!("/sessions/{chat}/canon/queue"),
@@ -50,7 +64,11 @@ async fn run_plan(s: &Scenario, chat: &str, plan: &str) -> Result<(), HarnessErr
     Ok(())
 }
 
-async fn edit(s: &Scenario, chat: &str, mut input: Value) -> Result<Value, HarnessError> {
+pub(super) async fn edit(
+    s: &Scenario,
+    chat: &str,
+    mut input: Value,
+) -> Result<Value, HarnessError> {
     let view = data(
         s.gw.get(&format!("/sessions/{chat}/canon/queue")).await?,
         200,
@@ -209,23 +227,35 @@ async fn set_order_replaces_the_unfinished_steps() -> Result<(), HarnessError> {
         200,
     );
     let revision = view["graph_revision"].clone();
+    let refs = note_refs(&script);
+    assert_eq!(refs.len(), 3);
     let path = format!("/sessions/{chat}/canon/queue");
     let post = |body: Value| s.gw.post(&path, body);
     let stale = post(
-        json!({"op":"set_order","expected_revision":0,"steps":[[epics[0]],[epics[2]],[epics[1]]]}),
+        json!({"op":"set_order","expected_revision":0,"steps":[[refs[0]],[refs[2]],[refs[1]]]}),
     )
     .await?;
     assert_eq!(stale.status, 409, "{}", stale.text);
-    let moved = post(json!({"op":"set_order","expected_revision":revision,"steps":[[epics[2]],[epics[0]],[epics[1]]]})).await?;
-    assert_ne!(moved.status, 200, "a running step stays where it is");
-    let missing = post(
-        json!({"op":"set_order","expected_revision":revision,"steps":[[epics[0]],[epics[2]]]}),
+    let stale_after = post(
+        json!({"op":"after","expected_revision":0,"epic_id":refs[2],"target_epic_id":refs[0]}),
     )
     .await?;
+    assert_eq!(stale_after.status, 409, "{}", stale_after.text);
+    let missing_revision = post(json!({"op":"set_order","steps":[[refs[2]],[refs[1]]]})).await?;
+    assert_eq!(missing_revision.status, 400, "{}", missing_revision.text);
+    let invalid_ref =
+        post(json!({"op":"after","epic_id":"canon:spec/wrong","target_epic_id":refs[0]})).await?;
+    assert_eq!(invalid_ref.status, 400, "{}", invalid_ref.text);
+    assert!(invalid_ref.text.contains("invalid_arguments"));
+    let moved = post(json!({"op":"set_order","expected_revision":revision,"steps":[[refs[2]],[refs[0]],[refs[1]]]})).await?;
+    assert_ne!(moved.status, 200, "a running step stays where it is");
+    let missing =
+        post(json!({"op":"set_order","expected_revision":revision,"steps":[[refs[0]],[refs[2]]]}))
+            .await?;
     assert_ne!(missing.status, 200, "every unfinished epic is named");
     // The pinned first step may be left out: it keeps its place.
     let view = data(
-        post(json!({"op":"set_order","expected_revision":revision,"steps":[[epics[2],epics[1]]]}))
+        post(json!({"op":"set_order","expected_revision":revision,"steps":[[refs[2],refs[1]]]}))
             .await?,
         200,
     );
@@ -236,6 +266,8 @@ async fn set_order_replaces_the_unfinished_steps() -> Result<(), HarnessError> {
     let steps = &view["chains"][0]["steps"];
     assert_eq!(steps.as_array().unwrap().len(), 2, "{view}");
     assert_eq!(steps[1]["items"].as_array().unwrap().len(), 2, "{view}");
+    let refs = note_refs(&script);
+    data(post(json!({"op":"after","expected_revision":view["graph_revision"],"epic_id":refs[1],"target_epic_id":refs[2]})).await?, 200);
     script.release();
     wait_done(&s, &chat, 3).await?;
     s.finish().await?;
@@ -285,10 +317,31 @@ async fn unknown_plan_id_says_how_to_find_it() -> Result<(), HarnessError> {
     assert_eq!(reply.status, 400, "{}", reply.text);
     assert!(reply.text.contains("plan_id_unknown"), "{}", reply.text);
     assert!(
-        reply.text.contains("pl_") && reply.text.contains("canon_read"),
+        reply.text.contains("pl_")
+            && reply.text.contains("canon_read")
+            && reply
+                .text
+                .contains("Each epic in this conversation's canon context names its plan_id"),
         "{}",
         reply.text
     );
+    script.quick.store(true, Ordering::SeqCst);
+    s.turn(&chat, "What does this mean?").await?;
+    let epics = {
+        let captured = script.requests.lock().unwrap();
+        let text = canon_text(captured.last().unwrap()).expect("canon context");
+        assert!(!text.contains(NOTE));
+        let text = &text[text.find("## Canon epics in this conversation").unwrap()..];
+        let context = &text[text.find("\n[").expect("canon context array") + 1..];
+        serde_json::Deserializer::from_str(context)
+            .into_iter::<Value>()
+            .next()
+            .unwrap()?
+    };
+    assert_eq!(epics[0]["plan_id"], plan);
+    assert_eq!(epics[0]["untrusted_content"]["plan_title"], "Release");
+    assert!(epics[0].get("plan_title").is_none());
+    script.quick.store(false, Ordering::SeqCst);
     script.release();
     data(
         s.gw.post(
@@ -304,4 +357,13 @@ async fn unknown_plan_id_says_how_to_find_it() -> Result<(), HarnessError> {
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+fn canon_text(value: &Value) -> Option<&str> {
+    match value {
+        Value::String(text) if text.contains("## Canon epics in this conversation") => Some(text),
+        Value::Array(values) => values.iter().find_map(canon_text),
+        Value::Object(values) => values.values().find_map(canon_text),
+        _ => None,
+    }
 }

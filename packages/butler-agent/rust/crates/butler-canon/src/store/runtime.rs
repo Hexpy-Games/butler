@@ -39,7 +39,7 @@ pub fn precheck(
             .collect::<Vec<_>>()
             .join(", ");
         return Ok(Some(
-            json!({"code":"canon_epic_refs_multiple","message":format!("governing_refs names {} epics ({list}); one Work serves one epic. Call replace_work_plan again with only the epic this Work processes, and process each other epic in its own Work in a later Turn.",epics.len())}),
+            json!({"code":"canon_epic_refs_multiple","message":format!("governing_refs names {} epics ({list}); one Work serves one epic. Call replace_work_plan again with only the epic this Work processes. To process the others too, queue them with canon_queue so each gets its own Turn and Work. If canon_queue is not among your tools, name them in your result instead.",epics.len())}),
         ));
     }
     let Some(epic) = epics.first() else {
@@ -136,6 +136,10 @@ fn epic_context(db: &Connection, epics: Vec<Value>) -> Result<Vec<Value>> {
         let nodes = rows(db, crate::work_queries::Query::WorkSpecNodes.sql(), [id])?;
         let mut data = json!({"epic_ref":format!("canon:epic/{id}"),"canon_status":epic["canon_status"],"untrusted_content":{"kind":"canon_epic","title":epic["title"]}});
         if epic["description"].as_str().is_some_and(|s| !s.is_empty()) { data["untrusted_content"]["description"] = epic["description"].clone(); }
+        if let Some(plan) = epic["plan_id"].as_str() {
+            data["plan_id"] = json!(plan);
+            data["untrusted_content"]["plan_title"] = read_plan(db, plan)?["title"].clone();
+        }
         let tags = rows(db, super::api::sql::EPIC_TAGS, [id])?;
         if !tags.is_empty() { data["untrusted_content"]["tags"] = json!(tags.iter().map(|tag| &tag["name"]).collect::<Vec<_>>()); }
         let mut specs = Vec::new();

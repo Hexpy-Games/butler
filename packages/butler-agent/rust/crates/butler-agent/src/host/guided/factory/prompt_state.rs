@@ -65,6 +65,7 @@ pub(super) async fn state(
     input: Inputs,
 ) -> Result<GuidedTextState, BtccError> {
     Ok(GuidedTextState {
+        last_run_note: tokio::sync::Mutex::new(None),
         skill_catalog: factory
             .skill_catalog(input.phase.execution_policy.project_id.clone())
             .await?,

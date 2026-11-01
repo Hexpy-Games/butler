@@ -18,6 +18,8 @@ mod holds;
 mod idle;
 mod lifecycle;
 mod locking;
+mod note_lifecycle;
+mod note_tool_refs;
 mod ordering;
 mod queries;
 mod replay_errors;

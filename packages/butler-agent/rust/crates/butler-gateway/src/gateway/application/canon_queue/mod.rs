@@ -2,6 +2,7 @@
 mod delete;
 mod holds;
 mod locks;
+mod refs;
 pub(in crate::gateway::application) mod steps;
 mod taking;
 use super::*;
@@ -182,7 +183,7 @@ async fn known_plan(app: &AppApplication, plan: &str) -> Result<(), GatewayAppli
             400,
             "plan_id_unknown",
             &format!(
-                "No plan has the id {plan:?}. plan_id is a plan id of the form pl_…, not a title. Find a plan's id from its title in the plan run note or with canon_read {{\"view\":\"canon\"}}, which lists this project's plans with their ids."
+                "No plan has the id {plan:?}. plan_id is a plan id of the form pl_…, never a title. Each epic in this conversation's canon context names its plan_id, and canon_read {{\"view\":\"canon\"}} lists this project's plans with their ids."
             ),
         ));
     }
@@ -252,5 +253,6 @@ async fn arguments(
             .map_err(app_error)?;
         args["origin_message_id"] = json!(message);
     }
+    refs::normalize(&mut args)?;
     Ok(args)
 }

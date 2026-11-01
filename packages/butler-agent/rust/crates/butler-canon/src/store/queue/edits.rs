@@ -2,15 +2,8 @@ use super::*;
 use crate::work_chain::Placement;
 
 pub fn edit(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -> Result<Value> {
-    let expected = input["expected_graph_revision"]
-        .as_i64()
-        .ok_or(Error::Invalid("expected_graph_revision"))?;
+    check_revision(tx, session, &input["expected_graph_revision"], true)?;
     let rev = revision(tx, session)?;
-    if expected != rev {
-        return Err(Error::Conflict {
-            current: json!({"graph_revision":rev}),
-        });
-    }
     let items = items(tx, session)?;
     let mut chains = chains(&items)?;
     let (order, ids) = selected(input, &items)?;
@@ -183,4 +176,24 @@ fn selection(input: &Value, items: &[Value]) -> Result<Vec<EpicId>> {
         result.push(EpicId(id.to_owned()));
     }
     Ok(result)
+}
+
+/// CAS shared by model operations and UI edits, inside the writer transaction.
+pub(super) fn check_revision(
+    db: &Connection,
+    session: &str,
+    value: &Value,
+    required: bool,
+) -> Result<()> {
+    if value.is_null() && !required {
+        return Ok(());
+    }
+    let expected = value.as_i64().ok_or(Error::QueueRevisionRequired)?;
+    let current = revision(db, session)?;
+    if expected != current {
+        return Err(Error::Conflict {
+            current: json!({"graph_revision":current,"expected_revision":expected}),
+        });
+    }
+    Ok(())
 }

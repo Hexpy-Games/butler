@@ -28,6 +28,8 @@ use butler_turn::btcc::{
 
 pub(crate) struct GuidedTextState {
     pub skill_catalog: String,
+    /// Outer None means this Turn has not rendered canon context.
+    pub(super) last_run_note: tokio::sync::Mutex<Option<Option<String>>>,
     pub(super) open_asks: Arc<parking_lot::Mutex<open_asks::Reminders>>,
     pub phase: GuidedPhaseSelection,
     pub work: GuidedWork,

@@ -3,6 +3,7 @@ pub const REVISION: &str =
     "SELECT graph_revision FROM canon_session_queue_heads WHERE session_id=?1";
 pub const ADVANCE_REVISION: &str = "INSERT INTO canon_session_queue_heads(session_id,graph_revision) VALUES(?1,1) ON CONFLICT(session_id) DO UPDATE SET graph_revision=graph_revision+1";
 pub const ITEMS: &str = "SELECT q.*,e.title,e.canon_status,c.plan_id FROM canon_session_queue q JOIN canon_epics e ON e.id=q.epic_id LEFT JOIN canon_session_queue_chains c ON c.session_id=q.session_id AND c.chain_id=q.chain_id WHERE q.session_id=?1 AND q.state<>'removed' ORDER BY q.chain_id,q.step_index,q.stack_position";
+pub const NOTE_ITEMS: &str = "SELECT q.*,e.title,e.canon_status,c.plan_id FROM canon_session_queue q JOIN canon_epics e ON e.id=q.epic_id LEFT JOIN canon_session_queue_chains c ON c.session_id=q.session_id AND c.chain_id=q.chain_id WHERE q.session_id=?1 AND q.chain_id IN (SELECT chain_id FROM canon_session_queue WHERE session_id=?1 AND state IN ('waiting','running','held')) AND q.state<>'removed' ORDER BY q.chain_id,q.step_index,q.stack_position";
 pub const PLACE: &str = "UPDATE canon_session_queue SET chain_id=?3,step_index=?4,stack_position=?5 WHERE session_id=?1 AND epic_id=?2";
 pub const INSERT_CHAIN: &str = "INSERT INTO canon_session_queue_chains(session_id,chain_id,plan_id) SELECT ?1,?2,plan_id FROM canon_epics WHERE id=?3 ON CONFLICT(session_id,chain_id) DO NOTHING";
 pub const RUNNING: &str = "SELECT step_op_id FROM canon_session_queue WHERE state='running' AND hold_reason IS NULL AND step_op_id IS NOT NULL";
@@ -44,6 +45,7 @@ pub const READS: &[&str] = &[
     REVISION,
     RUNNING,
     ITEMS,
+    NOTE_ITEMS,
     ELSEWHERE,
     PENDING,
     OWNER,

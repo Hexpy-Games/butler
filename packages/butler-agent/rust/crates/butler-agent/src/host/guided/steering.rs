@@ -13,8 +13,6 @@ use crate::host::guided::prompt::{GuidedTextState, work_context};
 pub(crate) struct GuidedSteering {
     state: Arc<GuidedTextState>,
     last_rendered: Mutex<Option<String>>,
-    /// The plan run note the model last saw; `None` until the first round.
-    last_run_note: Mutex<Option<Option<String>>>,
     subsessions: Arc<butler_turn::btcc::SubsessionService>,
     child_session_id: String,
     child_turn_id: String,
@@ -32,7 +30,6 @@ impl GuidedSteering {
         Self {
             state,
             last_rendered: Mutex::new(last_rendered),
-            last_run_note: Mutex::new(None),
             subsessions,
             child_session_id,
             child_turn_id,
@@ -113,7 +110,7 @@ impl GuidedSteering {
         invocation: &GuidedInvocation<'_>,
     ) -> Result<Option<SteeringObservation>, butler_turn::btcc::BtccError> {
         let current = crate::host::guided::prompt::run_note(&self.state, invocation.turn).await?;
-        let mut last = self.last_run_note.lock().await;
+        let mut last = self.state.last_run_note.lock().await;
         let seen = last.replace(current.clone());
         let Some(seen) = seen else {
             return Ok(None);
@@ -123,7 +120,7 @@ impl GuidedSteering {
         }
         let content = match current {
             Some(note) => format!("Updated plan run; it changed since the last note.\n{note}"),
-            None => "Updated plan run: this conversation no longer has a run.".to_owned(),
+            None => "Updated plan run: this conversation has no unfinished run now.".to_owned(),
         };
         Ok(Some(SteeringObservation {
             content,

@@ -91,6 +91,11 @@ impl SubsessionPolicy {
 }
 
 impl GuidedExecutionPolicy {
+    /// Whether this policy belongs to a delegated subsession.
+    pub fn has_subsession(&self) -> bool {
+        self.subsession.is_some()
+    }
+
     /// Root chats own their usage; legacy children retain unknown lineage.
     pub fn usage_root<'a>(&'a self, session_id: &'a str) -> Option<&'a str> {
         match &self.subsession {

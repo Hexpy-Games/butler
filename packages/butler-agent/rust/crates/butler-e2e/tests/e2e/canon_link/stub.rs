@@ -1,13 +1,16 @@
+mod compaction;
 pub(super) mod delegated;
 use super::*;
 use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
 use std::sync::{
     Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use tokio::sync::Semaphore;
 
 pub(crate) struct Script {
+    pub(crate) compaction: AtomicBool,
+    compaction_round: AtomicUsize,
     pub(crate) requests: Mutex<Vec<Value>>,
     pub epics: Mutex<Vec<String>>,
     pub path: Mutex<String>,
@@ -82,6 +85,8 @@ pub(super) async fn start(
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/codex", listener.local_addr()?);
     let script = Arc::new(Script {
+        compaction: AtomicBool::new(false),
+        compaction_round: AtomicUsize::new(0),
         requests: Mutex::new(Vec::new()),
         epics: Mutex::new(Vec::new()),
         path: Mutex::new(String::new()),
@@ -124,6 +129,15 @@ pub(super) async fn start(
 }
 async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> impl IntoResponse {
     script.requests.lock().unwrap().push(body.clone());
+    if script.compaction.load(Ordering::SeqCst)
+        && body.to_string().contains("Summarize the previous summary")
+    {
+        let item = json!({"type":"message","id":"summary","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Evidence read; continue the current Work.","annotations":[]}]});
+        return (
+            [("content-type", "text/event-stream")],
+            crate::token_cache::wire(&item),
+        );
+    }
     let outputs: Vec<Value> = body["input"]
         .as_array()
         .into_iter()
@@ -191,7 +205,14 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     } else {
         sequence(&script, &outputs, &key.user_request)
     };
-    let (name, args) = if n < calls.len() {
+    let n = if script.compaction.load(Ordering::SeqCst) {
+        script.compaction_round.fetch_add(1, Ordering::SeqCst)
+    } else {
+        n
+    };
+    let (name, args) = if script.compaction.load(Ordering::SeqCst) {
+        compaction::call(&script, n).await
+    } else if n < calls.len() {
         calls.remove(n)
     } else {
         ("", json!(null))

@@ -1,7 +1,13 @@
 use super::*;
 
+// test-category: race
 #[tokio::test]
-async fn factory_reads_physical_file_journals_result_and_continues_provider() {
+async fn factory_reads_journals_and_catches_prompt_steering_reorder() {
+    run_factory(false).await;
+    run_factory(true).await;
+}
+
+async fn run_factory(reorder: bool) {
     let fixture = TestStorageFixture::activated();
     let storage = BtccStorage::open(fixture.config("native-factory-read"))
         .await
@@ -299,6 +305,9 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         )),
         app_endpoint: Arc::new(crate::host::ActiveAppEndpoint::new()),
     };
+    if reorder {
+        super::run_note_race::seed(&factory.documents, &turn.session_id).await;
+    }
     let (endpoint, served) = loopback(&web_page_url).await;
     let model_catalog = Arc::new(ModelCatalog::new().unwrap());
     let snapshot = Arc::new(
@@ -331,7 +340,10 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             repositories.clone(),
             ModelRouteRetryConfig::new(0.0),
         )),
-        Arc::new(factory),
+        Arc::new(super::run_note_race::Factory {
+            inner: factory,
+            reorder,
+        }),
         None,
     );
     let progress = Progress::default();
@@ -357,6 +369,20 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         .await
         .unwrap()
         .unwrap();
+    if reorder {
+        assert!(
+            bodies[0]
+                .to_string()
+                .contains("Updated plan run; it changed since the last note."),
+            "first request missed the reorder"
+        );
+        let body = bodies[0].to_string();
+        let updated = &body[body.rfind("Updated plan run;").unwrap()..];
+        assert!(
+            updated.find("canon:epic/race_c:").unwrap()
+                < updated.find("canon:epic/race_b:").unwrap()
+        );
+    }
     assert_eq!(bodies.len(), 2);
     assert!(bodies[0].to_string().contains(marker));
     assert!(bodies[1].to_string().contains("native-file-proof"));

@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS canon_session_queue_chains (
 );
 CREATE INDEX IF NOT EXISTS canon_queue_running ON canon_session_queue(state,step_op_id) WHERE state='running' AND hold_reason IS NULL AND step_op_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS canon_queue_chain ON canon_session_queue(session_id,chain_id,step_index,stack_position);
+CREATE INDEX IF NOT EXISTS canon_queue_active_session_chain ON canon_session_queue(session_id,chain_id) WHERE state IN ('waiting','running','held');
 CREATE UNIQUE INDEX IF NOT EXISTS canon_queue_active_epic ON canon_session_queue(epic_id) WHERE state IN ('waiting','running','held');
 CREATE INDEX IF NOT EXISTS canon_queue_op ON canon_session_queue(step_op_id) WHERE step_op_id IS NOT NULL;
 -- Include state in the key so SQLite prefers the session seek over the replay state index.

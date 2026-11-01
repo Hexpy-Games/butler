@@ -3,7 +3,7 @@ use super::*;
 
 /// `None` when the conversation has no queue. Human text stays in `untrusted_content`.
 pub fn note(db: &Connection, session: &str) -> Result<Option<Value>> {
-    let items = items(db, session)?;
+    let items = rows(db, sql::NOTE_ITEMS, [session])?;
     if items.is_empty() {
         return Ok(None);
     }

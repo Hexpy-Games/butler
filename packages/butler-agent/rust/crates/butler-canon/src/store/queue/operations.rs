@@ -2,6 +2,7 @@ use super::*;
 
 pub fn request(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -> Result<Value> {
     let op = text(input, "op")?;
+    edits::check_revision(tx, session, &input["expected_revision"], op == "set_order")?;
     if op == "remove" {
         return remove_request(tx, ctx, session, input);
     }
