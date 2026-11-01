@@ -915,7 +915,7 @@ Groups a label, a control, help and errors so forms keep one vertical rhythm.
 
 `import { Input } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=components/Input`
 
-A single-line field for names, IDs, URLs, numbers and secrets. Use variant=default for a box, variant=underline for in-place entry, and compact for a short toolbar field.
+A single-line field for names, IDs, URLs, numbers and secrets. Use variant=default for a box, variant=underline for in-place entry, variant=quiet for a search that sits among navigation rows, and compact for a short toolbar field.
 
 - Use for: Enter a short value such as a name, ID or URL
 - Use for: Show a masked or read-only value that people can select

@@ -79,6 +79,7 @@ export function SettingsSidebar({
         <Input
           id="settings-navigation-search"
           type="search"
+          variant="quiet"
           aria-label={settingsCopy.searchLabel}
           placeholder={settingsCopy.searchPlaceholder}
           value={searchQuery}

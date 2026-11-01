@@ -16,6 +16,12 @@ function MaxWorkers() {
 }
 // #endregion
 
+// #region recipe: Quiet sidebar search
+function SidebarSearch() {
+  return <Input type="search" variant="quiet" aria-label="Search settings" placeholder="Search settings" />;
+}
+// #endregion
+
 // #region recipe: Underline in-place entry
 function InlineName() {
   return <Input variant="underline" aria-label="Display name" placeholder="Butler" />;
@@ -23,7 +29,7 @@ function InlineName() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "A single-line field for names, IDs, URLs, numbers and secrets. Use variant=default for a box, variant=underline for in-place entry, and compact for a short toolbar field.",
+  purpose: "A single-line field for names, IDs, URLs, numbers and secrets. Use variant=default for a box, variant=underline for in-place entry, variant=quiet for a search that sits among navigation rows, and compact for a short toolbar field.",
   whenToUse: ["Enter a short value such as a name, ID or URL", "Show a masked or read-only value that people can select"],
   whenNotToUse: [
     { when: "Several lines of text", use: "Textarea" },
@@ -33,6 +39,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Underline in-place entry", description: "variant=underline inherits text metrics and reserves only one line; textSize=label matches Typo.Label; use it where a row label becomes editable.", render: () => <InlineName /> },
+    { name: "Quiet sidebar search", description: "variant=quiet rests as its placeholder alone, so beside a selected row it never reads as selected; hover shows the row hover fill and focus the default field.", render: () => <SidebarSearch /> },
     { name: "Settings text setting", description: "In settings, the Input is the control of a SettingsField.", render: () => <DisplayName /> },
     { name: "Compact number in a header", description: "compact makes a short inline field for a number in a toolbar; coarse pointers keep the touch target.", render: () => <MaxWorkers /> },
   ],
