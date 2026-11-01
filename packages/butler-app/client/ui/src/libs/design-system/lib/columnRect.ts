@@ -19,11 +19,18 @@ function contentRight(frame: HTMLElement | null, columnRight: number, asideSlot:
   return aside ? Math.max(columnRight, aside.getBoundingClientRect().right) : columnRight;
 }
 
+/** Finite transforms can move a fixed-width column without resizing it. */
+function columnMotion(elements: HTMLElement[]): Animation[] {
+  return elements.flatMap(element => element.getAnimations()).filter(animation =>
+    animation.playState === "running" && animation.timeline === document.timeline
+    && Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)));
+}
+
 /**
  * Reports `column`'s rect once laid out and again only when it changes: on column or `frame` resizes
- * (ResizeObserver, read right after layout), window resizes and the aside docking or leaving
+ * (including intermediate containers), window resizes and the aside docking or leaving
  * (`dockedAsideSlot`: the docked aside's `data-slot`, `null` while none is docked). `top` is the frame's.
- * No scroll listener and no per-frame work; equal values are not reported twice.
+ * Rechecks after finite layout motion finishes. No scroll listener or idle polling; equal values are not reported twice.
  */
 export function useColumnRect(
   column: HTMLElement | null,
@@ -39,7 +46,23 @@ export function useColumnRect(
   useEffect(() => {
     if (!reporting || !column) return undefined;
     let last: ColumnRect | null = null;
+    let disposed = false;
+    let settling = false;
+    const containers: HTMLElement[] = [];
+    for (let element: HTMLElement | null = column; element; element = element.parentElement) {
+      containers.push(element);
+      if (element === frame) break;
+    }
     const update = () => {
+      if (disposed) return;
+      const motion = columnMotion(containers);
+      if (motion.length && !settling) {
+        settling = true;
+        void Promise.allSettled(motion.map(animation => animation.finished)).then(() => {
+          settling = false;
+          update();
+        });
+      }
       const { left, right } = column.getBoundingClientRect();
       const next = { left, right: contentRight(frame, right, dockedAsideSlot), top: (frame ?? column).getBoundingClientRect().top };
       if (sameRect(last, next)) return;
@@ -47,10 +70,10 @@ export function useColumnRect(
       callback.current?.(next);
     };
     const observer = new ResizeObserver(update);
-    observer.observe(column);
-    if (frame) observer.observe(frame);
+    for (const element of containers) observer.observe(element);
     window.addEventListener("resize", update);
     return () => {
+      disposed = true;
       observer.disconnect();
       window.removeEventListener("resize", update);
     };
