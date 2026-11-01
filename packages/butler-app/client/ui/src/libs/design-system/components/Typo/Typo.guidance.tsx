@@ -23,7 +23,7 @@ function ClampedTitle() {
 
 // #region recipe: Exact value
 function ExactValue() {
-  return <Typo.Body wrap="anywhere" literal>/Users/someone/shots/2876x6/a-&gt;b.png</Typo.Body>;
+  return <Typo.Body wrap="anywhere" literal>/Users/example/shots/2876x6/a-&gt;b.png</Typo.Body>;
 }
 // #endregion
 

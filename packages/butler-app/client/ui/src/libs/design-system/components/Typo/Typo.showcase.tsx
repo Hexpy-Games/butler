@@ -143,7 +143,7 @@ export const stories: ShowcaseStory[] = [
   },
   { name: "Inherited text", render: (context) => <Typo.Label>{text(context).label}{" · "}<Typo.Text tone="secondary" weight="regular">{text(context).inherited}</Typo.Text></Typo.Label> },
   { // Approval and confirmation lines: one path as prose (× and arrow), then literal (x and ->).
-    name: "Literal values", render: () => <Stack gap="xs">{[false, true].map((literal) => <Typo.Body key={String(literal)} wrap="anywhere" literal={literal}>/Users/someone/shots/2876x6/a-&gt;b.png</Typo.Body>)}</Stack> },
+    name: "Literal values", render: () => <Stack gap="xs">{[false, true].map((literal) => <Typo.Body key={String(literal)} wrap="anywhere" literal={literal}>/Users/example/shots/2876x6/a-&gt;b.png</Typo.Body>)}</Stack> },
   { // ProjectDescription (alignWith) and DeveloperLogRawBlock (as pre, wrap pre).
     name: "Beside a control and preformatted",
     render: () => (<Stack gap="md">
