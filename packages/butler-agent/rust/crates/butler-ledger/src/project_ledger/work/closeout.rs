@@ -79,6 +79,8 @@ impl ProjectWorkRepository {
         if let Some(checkpoint) = trail.latest.as_ref() {
             view.latest_checkpoint = Some(checkpoint.clone());
         }
+        // A disposition belongs to its original material; its child remains history.
+        view.latest_disposition = None;
         match command.input.subject {
             ReviewSubject::Plan => view.latest_plan_review = Some(review),
             ReviewSubject::Result => view.latest_result_review = Some(review),

@@ -3,7 +3,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
     order: {
       chain: { user_message: "요청한 과제", schedule: "예약 작업", detach: "바로 시작한 과제" },
-      status: { running: "진행 중", failed: "막힘", done: "완료" },
+      status: { running: "진행 중", failed: "막힘", unfinished: "답 기다림", done: "완료" },
       after: title => ({ word: "끝나면:", name: `‘${title}’` }), heldBy: "앞 과제가 막힘", join: "함께 진행", newStep: "새 단계로",
       afterStack: (title, count) => ({ word: "끝나면:", name: `‘${title} 외 ${count}건’` }),
       more: count => `외 ${count}건`, menu: title => `‘${title}’ 메뉴`,
@@ -25,10 +25,9 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
     queue: {
       stepEpic: epic => `과제 ‘${epic}’을(를) 처리합니다.`,
-      removed: "삭제했습니다", continued: "계속 진행합니다", taken: "여기서 진행합니다",
+      removed: "삭제했습니다", continued: "계속 진행합니다", resolved: "끝나서 이어서 진행합니다", taken: "여기서 진행합니다",
       step: (plan, epic) => `계획 ‘${plan}’의 과제 ‘${epic}’를 처리합니다.`,
       hold: epic => `‘${epic}’가 막혀 다음 과제를 멈췄습니다.`,
-      takeHere: (epic, conversation) => `‘${epic}’는 ‘${conversation}’ 대화에서 진행 중입니다(예정입니다). 여기서 할까요?`,
       remove: "삭제", proceed: "그래도 진행", openOther: "그 대화 열기", take: "여기서 하기",
     },
     criteriaCount: (confirmed, total) => `${confirmed}/${total} 확인`,
@@ -92,7 +91,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "en-US": {
     order: {
       chain: { user_message: "Requested", schedule: "Schedule", detach: "Started now" },
-      status: { running: "Running", failed: "Blocked", done: "Done" },
+      status: { running: "Running", failed: "Blocked", unfinished: "Needs reply", done: "Done" },
       after: title => ({ word: "After:", name: `‘${title}’` }), heldBy: "Blocked earlier", join: "Run together", newStep: "New step",
       afterStack: (title, count) => ({ word: "After:", name: `‘${title}’ +${count} more` }),
       more: count => `+${count} more`, menu: title => `${title} menu`,
@@ -113,11 +112,10 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
       deck: { expand: (count, front) => `${front} and ${count - 1} more. Show all.`, fold: item => `${item}. Stack the cards.` },
     },
     queue: {
-      stepEpic: epic => `Processing epic ‘${epic}’.`,
-      removed: "Deleted", continued: "Continuing", taken: "Continuing here",
-      step: (plan, epic) => `Processing epic ‘${epic}’ from plan ‘${plan}’.`,
-      hold: epic => `‘${epic}’ is blocked. Later epics are on hold.`,
-      takeHere: (epic, conversation) => `‘${epic}’ is running or queued in ‘${conversation}’. Do it here?`,
+      stepEpic: epic => `Processing task ‘${epic}’.`,
+      removed: "Deleted", continued: "Continuing", resolved: "Finished. Continuing", taken: "Continuing here",
+      step: (plan, epic) => `Processing task ‘${epic}’ from plan ‘${plan}’.`,
+      hold: epic => `‘${epic}’ is blocked. Later tasks are on hold.`,
       remove: "Delete", proceed: "Continue anyway", openOther: "Open that conversation", take: "Do it here",
     },
     criteriaCount: (confirmed, total) => `${confirmed}/${total} confirmed`,

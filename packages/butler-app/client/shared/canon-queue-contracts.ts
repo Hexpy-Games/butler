@@ -34,7 +34,8 @@ export interface CanonHoldPanel {
   session_id: string;
   epic_id: string;
   epic_title: string;
-  state: "pending" | "deleted" | "continued";
+  /** `resolved`: the reply to an unfinished step closed its Work. */
+  state: "pending" | "deleted" | "continued" | "resolved";
 }
 export interface CanonTakeHerePanel {
   kind: "canon_take_here";
