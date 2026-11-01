@@ -47,11 +47,9 @@ export async function verifyNativePendingAsks(browser: Browser, server: NativeAp
     assert.equal(pending.asks[0]?.kind, "question");
     if (pending.asks[0]?.source_message_id) {
       await aside.getByText("어떤 범위를 검토할까요?", { exact: true }).click();
-      // The row navigates the projection it rendered, not this later GET. Until the assistant
-      // message is persisted that projection names the user message, and a request asked before
-      // any reply has its own row (no data-request-source-message); afterwards it sits in the
-      // assistant message. Both are the conversation-request slot.
-      await page.locator('[data-test-class="conversation-request"]').filter({ hasText: "어떤 범위를 검토할까요?" }).waitFor({ state: "visible" });
+      // P1 may replace its user-message fallback once the assistant message is
+      // persisted. The row navigates the projection it rendered, not this later GET.
+      await page.locator("[data-request-source-message]").filter({ hasText: "어떤 범위를 검토할까요?" }).waitFor({ state: "visible" });
     }
     await question.getByText("변경 사항", { exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('[data-test-class="session-info-toggle"] [data-slot="icon-button-indicator"]'));
