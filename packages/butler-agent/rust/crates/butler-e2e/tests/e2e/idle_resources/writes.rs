@@ -79,9 +79,16 @@ impl Watch {
                             // write that caused it and reports that as a bare
                             // Modify of the directory, seconds later. Entries
                             // created, removed or rewritten are reported on
-                            // their own paths, so only this echo is ignored.
-                            if butler_platform::change_notifications::DIRECTORY_TIMESTAMP_ECHO
-                                && matches!(event.kind, notify::EventKind::Modify(_))
+                            // their own paths, and a directory rename is
+                            // `Modify(Name)`, so only this echo is ignored.
+                            if butler_platform::host_file_behavior::DIRECTORY_TIMESTAMP_ECHO
+                                && matches!(
+                                    event.kind,
+                                    notify::EventKind::Modify(
+                                        notify::event::ModifyKind::Any
+                                            | notify::event::ModifyKind::Metadata(_)
+                                    )
+                                )
                                 && path.is_dir()
                             {
                                 continue;

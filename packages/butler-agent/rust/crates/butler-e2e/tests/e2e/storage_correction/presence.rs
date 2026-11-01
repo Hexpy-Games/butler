@@ -16,7 +16,7 @@ use std::{
 /// Whether a change notification for the live file means it was removed.
 /// Windows signals every replace of an existing destination as a removal.
 pub(super) const REMOVE_EVENT_MEANS_ABSENT: bool =
-    !butler_platform::change_notifications::REPLACE_REPORTED_AS_REMOVE;
+    !butler_platform::host_file_behavior::REPLACE_REPORTED_AS_REMOVE;
 
 pub(super) struct Presence {
     absent: Arc<AtomicBool>,
@@ -33,8 +33,12 @@ impl Presence {
         let (seen, halt) = (absent.clone(), stop.clone());
         let thread = std::thread::spawn(move || {
             while !halt.load(Ordering::Relaxed) {
-                if matches!(std::fs::metadata(&target), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
-                {
+                // NotFound, or PermissionDenied: Windows answers that for an entry
+                // whose deletion is pending.
+                if matches!(std::fs::metadata(&target), Err(e) if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+                )) {
                     seen.store(true, Ordering::SeqCst);
                 }
                 std::thread::yield_now();

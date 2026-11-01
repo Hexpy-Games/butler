@@ -43,9 +43,7 @@ impl WorkBarrier {
                         .wait_for(|open: &Vec<(&str, u8)>| open.iter().any(|(s, _)| *s == stage))
                         .await
                         .ok()
-                        .and_then(|open| {
-                            open.iter().find(|(s, _)| *s == stage).map(|(_, a)| *a)
-                        })
+                        .and_then(|open| open.iter().find(|(s, _)| *s == stage).map(|(_, a)| *a))
                         .unwrap_or(1);
                     let _ = socket.write_u8(answer).await;
                 });

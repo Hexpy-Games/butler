@@ -135,15 +135,19 @@ fn assert_no_canary(root: &Path, canary: &[u8]) -> Result<(), HarnessError> {
         let path = entry?.path();
         if path.is_dir() {
             assert_no_canary(&path, canary)?;
-        } else if path
-            .file_name()
-            .is_some_and(|name| name.to_string_lossy().ends_with("-shm"))
-        {
-            // A WAL index is a table of page numbers, never row content, and
-            // a live database holds a byte-range lock on it that Windows
-            // enforces against readers.
         } else {
-            let bytes = fs::read(&path)?;
+            let bytes = match fs::read(&path) {
+                Ok(bytes) => bytes,
+                // Only a file a live database has byte-range locked (its WAL
+                // index, a table of page numbers) is skipped, and only where
+                // the host refuses the read; every other file is scanned.
+                Err(error)
+                    if butler_platform::host_file_behavior::is_byte_range_lock_conflict(&error) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
             assert!(
                 !bytes.windows(canary.len()).any(|w| w == canary),
                 "secret persisted in {}",
