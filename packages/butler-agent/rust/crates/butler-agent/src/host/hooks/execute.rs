@@ -135,18 +135,9 @@ async fn execute(
         Ok(input) => run_process(hooks, input, cancel).await,
         Err(error) => Err(error),
     };
-    let super::decision::Resolved {
-        outcome,
-        deny: reason,
-        failed,
-    } = super::decision::resolve(hook, &result);
-    if outcome == "approval_ignored" {
-        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
-    }
-    let reason = reason.map(|s| clean(&s, &redact));
-    if let Some(reason) = reason.as_ref().filter(|_| failed) {
-        hooks.blocked(hook, payload, reason);
-    }
+    let resolved = hooks.resolve_run(hook, payload, &result, &redact);
+    let outcome = resolved.outcome;
+    let reason = resolved.deny;
     let exit_code = result.as_ref().ok().and_then(|o| o.exit_code);
     let stdout = result
         .as_ref()
@@ -195,6 +186,25 @@ async fn execute(
     }
 }
 impl Hooks {
+    /// Resolves a run, redacts its refusal and publishes a failing hook's block.
+    fn resolve_run(
+        &self,
+        hook: &HookDefinition,
+        payload: &HookEnvelope,
+        result: &Result<HookOutput, HookProcessError>,
+        redact: &[String],
+    ) -> super::decision::Resolved {
+        let mut resolved = super::decision::resolve(hook, result);
+        if resolved.outcome == "approval_ignored" {
+            tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
+        }
+        resolved.deny = resolved.deny.map(|reason| clean(&reason, redact));
+        if let Some(reason) = resolved.deny.as_ref().filter(|_| resolved.failed) {
+            self.blocked(hook, payload, reason);
+        }
+        resolved
+    }
+
     /// Tells listeners that a failing hook blocked part of a running turn. A test run
     /// or an admission has no turn: whoever asked gets the refusal itself.
     fn blocked(&self, hook: &HookDefinition, payload: &HookEnvelope, reason: &str) {
