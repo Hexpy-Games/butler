@@ -110,6 +110,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "app_browser" => &["process_control", "user_dirs"],
         // Hook processes compose shell selection and tree containment.
         "hook_process" | "preview_process" => &["command_sandbox", "process_control"],
+        // Plugin source checkouts start git where a process may start on the host.
+        "plugin_git" => &["command_sandbox"],
         // Process naming owns verified executable aliases; instance queries
         // consume that identity without coupling general filesystem paths to it.
         "instance" => &["process_table", "process_names"],

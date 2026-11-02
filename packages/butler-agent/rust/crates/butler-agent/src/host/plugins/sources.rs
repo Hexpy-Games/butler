@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
 };
 
 pub(super) fn url(value: &str) -> Result<String> {
@@ -22,9 +22,14 @@ pub(super) fn hash(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
 pub(super) fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
-    let mut command = Command::new("git");
+    let mut command = butler_platform::plugin_git::command(root).map_err(|e| {
+        error(if e.kind() == std::io::ErrorKind::Unsupported {
+            "plugin_path_too_long"
+        } else {
+            "plugin_git_failed"
+        })
+    })?;
     command
-        .current_dir(root)
         .args([
             "-c",
             "core.askPass=",
