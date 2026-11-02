@@ -8,6 +8,7 @@ pub(super) use changed_files::without_details;
 pub(super) use output_image::admitted;
 mod exact;
 mod retained;
+mod web_read;
 mod work;
 
 #[cfg(test)]
@@ -47,7 +48,12 @@ pub(in crate::host) fn structured_raw(name: &str, raw: &str) -> Result<String, B
         )
     ) && candidate.trim_start().starts_with('{')
     {
-        retained::project(name, candidate)
+        let projected = retained::project(name, candidate)?;
+        if name == ToolName::WebRead {
+            web_read::project(&projected)
+        } else {
+            Ok(projected)
+        }
     } else {
         generic_output(name, candidate)
     }

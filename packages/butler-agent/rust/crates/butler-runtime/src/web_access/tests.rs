@@ -200,9 +200,9 @@ async fn page_read_returns_turn_evidence_and_drops_data_spool_with_session() {
         .await
         .unwrap();
     assert_eq!(second["ranked"], true);
-    assert_eq!(first["chunks"], second["chunks"]);
+    assert_eq!(first["passages"], second["passages"]);
     assert!(second.get("unchanged").is_none());
-    assert_eq!(first["chunks"][0]["text"], first["markdown"]);
+    assert_eq!(first["passages"][0]["text"], first["markdown"]);
     fidelity::tab_reads(&session, &endpoint, &paragraph).await;
     server.await.unwrap();
     let spool_dir = root.join("tmp/web-access-spool");
@@ -370,10 +370,11 @@ async fn disabled_reader_does_not_fetch_and_credentials_are_rejected() {
     let _ = fs::remove_dir_all(root);
 }
 
-// test-category: format-pin
+// test-category: pure-logic
 #[test]
 fn evidence_projection_matches_source_utf16_truncation_and_deduplicates_limitations() {
     use super::{page::extract_page, read::rank};
+    super::read::focused_tests::verify_passage_cases();
     let text = format!(
         "<html><title>Sources</title><article><p>{}</p><p>{}</p><p>{}</p></article></html>",
         "ordinary source context. ".repeat(100),
@@ -391,22 +392,23 @@ fn evidence_projection_matches_source_utf16_truncation_and_deduplicates_limitati
     )
     .unwrap();
     assert_eq!(rank::tokens("가격, PRICE 비교"), ["가격", "price", "비교"]);
-    let ranked = rank::result(&page, "가격 price", 1, 0);
+    let ranked = rank::result(&page, "가격 price", 1, 0, 2000);
     assert_eq!(ranked["ranked"], true);
-    let chunks = ranked["chunks"].as_array().unwrap();
-    assert!(chunks[0]["text"].as_str().unwrap().contains("가격"));
-    let index = usize::try_from(chunks[0]["index"].as_u64().unwrap()).unwrap();
-    assert_eq!(chunks[0]["text"], page.chunks[index].text);
-    let mut union = ranked["more_chunks"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| usize::try_from(v.as_u64().unwrap()).unwrap())
-        .collect::<Vec<_>>();
-    union.push(index);
-    union.sort_unstable();
-    assert_eq!(union, (0..page.chunks.len()).collect::<Vec<_>>());
-    let again = rank::result(&page, "가격 price", 1, 0);
+    let passages = ranked["passages"].as_array().unwrap();
+    assert!(passages[0]["text"].as_str().unwrap().contains("가격"));
+    let index = usize::try_from(passages[0]["chunk"].as_u64().unwrap()).unwrap();
+    let start = usize::try_from(passages[0]["span"][0].as_u64().unwrap()).unwrap();
+    let end = usize::try_from(passages[0]["span"][1].as_u64().unwrap()).unwrap();
+    assert_eq!(
+        passages[0]["text"],
+        page.chunks[index]
+            .text
+            .chars()
+            .skip(start)
+            .take(end - start)
+            .collect::<String>()
+    );
+    let again = rank::result(&page, "가격 price", 1, 0, 2000);
     assert_eq!(ranked, again);
 
     let input = "😀".repeat(12);

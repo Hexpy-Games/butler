@@ -1399,6 +1399,7 @@ dependencies = [
  "butler-turn",
  "bytes",
  "chrono",
+ "dom_query",
  "dom_smoothie",
  "flate2",
  "futures-util",
