@@ -1,4 +1,4 @@
-//! A failing hook blocks the events that can block, unless it sets `failClosed: false`.
+//! Failures follow each hook switch; explicit denies remain independent of it.
 use super::*;
 
 const CONTENT: &str = "Exact tool content";
@@ -19,6 +19,7 @@ fn reading(name: &str) -> Result<Setup, HarnessError> {
 fn printing(setup: &Setup, event: &str, text: &str, code: &str) -> Value {
     let mut hook = super::context::printing(setup, "guard", event, text);
     hook["name"] = json!("Command guard");
+    hook["failClosed"] = json!(true);
     hook["env"]["HOOK_EXIT"] = json!(code);
     if event.ends_with("ToolUse") {
         hook["match"] = json!({"tools":["read_file"]});
@@ -140,21 +141,55 @@ async fn hooks_failing_prompt_guard_rejects_send_naming_hook() -> Result<(), Har
 }
 
 #[tokio::test]
-async fn hooks_fail_closed_false_lets_events_continue() -> Result<(), HarnessError> {
+async fn hooks_fail_closed_default_off_lets_events_continue() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = reading("HOOK-FAIL-OPEN")?;
     let mut prompt = printing(&setup, "UserPromptSubmit", "", "1");
     prompt["id"] = json!("prompt");
-    prompt["failClosed"] = json!(false);
+    prompt.as_object_mut().unwrap().remove("failClosed");
     let mut tool = printing(&setup, "PreToolUse", "{\"decision\":", "0");
-    tool["failClosed"] = json!(false);
-    configure(&setup, &[prompt, tool])?;
+    tool.as_object_mut().unwrap().remove("failClosed");
+    let mut stop = printing(&setup, "Stop", "", "1");
+    stop["id"] = json!("stop");
+    stop.as_object_mut().unwrap().remove("failClosed");
+    let defaults = vec![prompt, tool, stop];
+    configure(&setup, &defaults)?;
     let s = setup.start().await?;
     let (_, turn) = s.turn("general", ASK).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     assert!(heard(&s)?.contains(CONTENT), "the tool did not run");
     assert_eq!(outcome(&s, "prompt").await?, "error");
     assert_eq!(outcome(&s, "guard").await?, "error");
+    assert_eq!(outcome(&s, "stop").await?, "error");
+    let expected = ["UserPromptSubmit", "PreToolUse", "Stop"];
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let events = s.gw.events_since(0).await?;
+        if expected.iter().all(|event| {
+            events.iter().any(|e| {
+                e["type"] == "hook.failed"
+                    && e["payload"]["event"] == *event
+                    && e["payload"]["hook"] == "Command guard"
+            })
+        }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "missing failure notifications: {events:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(blocks(&s).await?, [] as [Value; 0]);
+    let explicit = defaults
+        .into_iter()
+        .map(|mut hook| {
+            hook["failClosed"] = json!(false);
+            hook
+        })
+        .collect();
+    replace(&s, explicit).await?;
+    assert_eq!(s.turn("general", ASK).await?.1["state"], "delivered");
     assert_eq!(blocks(&s).await?, [] as [Value; 0]);
     s.finish().await
 }
@@ -181,4 +216,82 @@ async fn hooks_failing_observers_continue() -> Result<(), HarnessError> {
     assert_eq!(outcome(&s, "post").await?, "error");
     assert_eq!(blocks(&s).await?, [] as [Value; 0]);
     s.finish().await
+}
+
+/// Finishing retries after the failed hook; the same per-hook switch applies to children.
+async fn finish_failure(event: &str, closed: bool) -> Result<(), HarnessError> {
+    let (url, script, server) = child_stub::start(false).await?;
+    let setup = Setup::new("HOOK-FINISH-FAILURE")?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
+    let mut hook = printing(&setup, event, "", "1");
+    hook["env"]["HOOK_FAIL_ONCE"] = json!(setup.sandbox.home.join("failed-once"));
+    if !closed {
+        hook.as_object_mut().unwrap().remove("failClosed");
+    }
+    configure(&setup, &[hook])?;
+    let s = setup.start().await?;
+    s.turn("general", child_stub::OWNER).await?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let events = s.gw.events_since(0).await?;
+        let kind = if closed {
+            "hook.blocked"
+        } else {
+            "hook.failed"
+        };
+        if events
+            .iter()
+            .any(|e| e["type"] == kind && e["payload"]["event"] == event)
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no {kind} for {event}: {events:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    if closed {
+        loop {
+            let runs = api(&s, Method::GET, "/hooks/runs", None).await?;
+            if runs
+                .data()
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|r| r["hook_id"] == "guard" && r["outcome"] == "continue")
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "failed finish did not continue: {runs:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+    let requests = serde_json::to_string(&*script.requests.lock().unwrap())?;
+    assert_eq!(
+        requests.contains("Command guard: hook failed"),
+        closed,
+        "{requests}"
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn hooks_stop_failure_obeys_switch() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    finish_failure("Stop", false).await?;
+    finish_failure("Stop", true).await
+}
+
+#[tokio::test]
+async fn hooks_subagent_stop_failure_obeys_switch() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    finish_failure("SubagentStop", false).await?;
+    finish_failure("SubagentStop", true).await
 }

@@ -5,11 +5,11 @@ use butler_core::hooks::{
     HookAttachment, HookBlock, HookContext, HookEnvelope, HookEvent, HookPayload,
 };
 use rusqlite::params;
-/// A failing hook blocked part of a running turn; the App names it in a toast.
+/// A failing hook blocked an event; the App names it in a toast.
 pub(super) const BLOCKED_EVENT: &str = "hook.blocked";
 impl AppApplication {
-    /// Publishes each turn-time block by a failing hook as `hook.blocked`. A rejected
-    /// send needs none: its own response names the hook.
+    /// Publishes failures as `hook.blocked` or `hook.failed`. Rejected sends
+    /// need no duplicate notification: their response names the hook.
     pub fn observe_hook_blocks(&self) {
         let Some(port) = &self.dependencies.hooks else {
             return;
@@ -23,11 +23,15 @@ impl AppApplication {
             };
             let (storage, subscribers, now) =
                 (storage.clone(), subscribers.clone(), clock.now_iso());
+            let event = if block.blocked {
+                BLOCKED_EVENT
+            } else {
+                "hook.failed"
+            };
             tokio::spawn(async move {
                 let published = storage
                     .execute(move |db| {
-                        events::append(db, &subscribers, BLOCKED_EVENT, None, payload, &now)
-                            .map(drop)
+                        events::append(db, &subscribers, event, None, payload, &now).map(drop)
                     })
                     .await;
                 if let Err(error) = published {

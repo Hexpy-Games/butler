@@ -276,7 +276,9 @@ async fn hooks_crash_failclosed_prompt_deny_and_next_send() -> Result<(), Harnes
         s.turn("general", "First send.").await?.1["state"],
         "delivered"
     );
-    replace(&s, vec![hook("crash", "UserPromptSubmit", crash)]).await?;
+    let mut closed = hook("crash", "UserPromptSubmit", crash);
+    closed["failClosed"] = json!(true);
+    replace(&s, vec![closed]).await?;
     let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
     let count = || {
         db.query_row("SELECT COUNT(*) FROM session_queued_messages", [], |r| {
@@ -429,7 +431,7 @@ async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), Harness
     }
     let runs = api(&s, Method::GET, "/hooks/runs", None).await?;
     assert_eq!(runs.data()[0]["outcome"], "timeout");
-    hook.as_object_mut().unwrap().remove("failClosed");
+    hook["failClosed"] = json!(true);
     replace(&s, vec![hook]).await?;
     let blocked =
         s.gw.post(

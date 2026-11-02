@@ -1314,7 +1314,7 @@ export interface AppCopy {
       name: string; event: string; tools: string; command: string; args: string; timeout: string;
       failClosed: string; async: string; enabled: string; refresh: string; blocked: string; editTitle: string; disabled: string; emptyRuns: string; testSuccess: string; testFailure: string;
       exitCode: string; commandDisabled: string; commandRequired: string; deleteConfirm: (name: string) => string;
-      failedBlock: (hook: string, target: string) => string; finishTarget: string; };
+      failedBlock: (hook: string, target: string) => string; failedOpen: (hook: string) => string; finishTarget: string; };
 
     deleteSchedule: (name: string) => string;
     deleteMcpServer: (name: string) => string;

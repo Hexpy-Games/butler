@@ -22,7 +22,7 @@ pub(super) struct Resolved {
     pub(super) outcome: String,
     /// Why the event is blocked, if it is.
     pub(super) deny: Option<String>,
-    /// The block comes from the hook failing, not from its decision or a cancellation.
+    /// The hook failed, independently of whether its event is blocked.
     pub(super) failed: bool,
 }
 pub(super) fn resolve(
@@ -59,11 +59,6 @@ pub(super) fn resolve(
     let decision = match serde_json::from_str::<Decision>(raw) {
         Ok(decision) => decision,
         Err(_) if !raw.starts_with('{') && !raw.starts_with('[') => return proceed("continue"),
-        // Text may start with a bracket; a hook whose failure blocks has its stdout
-        // judged as a decision first.
-        Err(_) if super::context::can_add(hook) && !hook.fail_closed => {
-            return proceed("continue");
-        }
         Err(_) => return failure(hook, "error", "printed invalid JSON"),
     };
     let specific = decision.specific;
@@ -97,12 +92,6 @@ pub(super) fn added_context(raw: &str) -> Option<String> {
     let text = text.trim();
     (!text.is_empty()).then(|| text.to_owned())
 }
-/// Whether stdout looked like a decision but could only be read as text. A
-/// broken guard hook looks like this, so the run log says it.
-pub(super) fn fell_back_to_text(raw: &str) -> bool {
-    let raw = raw.trim();
-    (raw.starts_with('{') || raw.starts_with('[')) && serde_json::from_str::<Decision>(raw).is_err()
-}
 fn proceed(outcome: &str) -> Resolved {
     Resolved {
         outcome: outcome.into(),
@@ -128,12 +117,12 @@ fn deny(hook: &HookDefinition, reason: String) -> Resolved {
         failed: false,
     }
 }
-/// A failed hook blocks an event that can be blocked, unless it set `failClosed: false`.
+/// A failed hook blocks a blocking event only when its switch is on.
 fn failure(hook: &HookDefinition, outcome: &str, detail: &str) -> Resolved {
     let blocked = hook.fail_closed && hook.event.blocks();
     Resolved {
         outcome: outcome.into(),
         deny: blocked.then(|| format!("{}: hook failed ({detail})", hook.label())),
-        failed: blocked,
+        failed: true,
     }
 }

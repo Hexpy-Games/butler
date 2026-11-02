@@ -15,19 +15,20 @@ pub struct HookContext {
     pub text: String,
 }
 
-/// A hook failed and so blocked part of a running turn. Admission blocks are not
-/// told this way: the rejected request already carries them.
+/// A hook failed. Rejected admissions carry the refusal in their response.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HookBlock {
+    /// Whether this failure blocked the event.
+    pub blocked: bool,
     /// The failing hook's display name.
     pub hook: String,
-    /// The event it blocked.
+    /// The event that ran the hook.
     pub event: HookEvent,
-    /// The blocked tool, for tool events.
+    /// The tool, for tool events.
     pub tool: Option<String>,
     /// The turn's session.
     pub session_id: Option<String>,
-    /// The refusal the model got.
+    /// The refusal the model got, or empty when the event proceeded.
     pub reason: String,
 }
 

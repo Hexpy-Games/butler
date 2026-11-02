@@ -64,19 +64,22 @@ try {
       await page.locator("#hook-args").fill('["printf", "okay"]');
       assert.equal(await page.locator("#hook-command").isDisabled(), true);
       await page.locator("#hook-args").fill("");
-      // A guard's failure blocks by default; another event starts from its own default.
-      assert.equal(await page.locator("#hook-fail-closed").isChecked(), true);
+      // Every event starts with failure blocking off, including Stop.
+      assert.equal(await page.locator("#hook-fail-closed").isChecked(), false);
       await page.locator("#hook-event").selectOption("PostToolUse");
       assert.equal(await page.locator("#hook-fail-closed").count(), 0);
       await page.locator("#hook-event").selectOption("PreToolUse");
-      assert.equal(await page.locator("#hook-fail-closed").isChecked(), true);
+      assert.equal(await page.locator("#hook-fail-closed").isChecked(), false);
+      await page.locator("#hook-event").selectOption("Stop");
+      assert.equal(await page.locator("#hook-fail-closed").isChecked(), false);
+      await page.locator("#hook-event").selectOption("PreToolUse");
       await page.locator("#hook-name").fill("Test guard");
       await page.locator("#hook-command").fill("printf okay");
       await capture("add");
       await page.getByRole("button", { name: copy.common.save, exact: true }).click();
       await page.getByText("Test guard", { exact: true }).waitFor();
       assert.equal(hooks.length, 1);
-      assert.equal((hooks[0] as { failClosed: boolean }).failClosed, true);
+      assert.equal((hooks[0] as { failClosed: boolean }).failClosed, false);
       await capture("list");
       assert(await page.getByText("Test guard", { exact: true }).evaluate(node => node.parentElement!.scrollWidth <= node.parentElement!.clientWidth), "name is not truncated");
       await page.getByRole("button", { name: copy.settings.hooks.edit, exact: true }).click();
@@ -86,7 +89,7 @@ try {
       await page.locator("#hook-fail-closed").click();
       await page.getByRole("button", { name: copy.common.save, exact: true }).click();
       await page.getByText("Edited guard", { exact: true }).waitFor();
-      assert.equal((hooks[0] as { failClosed: boolean }).failClosed, false);
+      assert.equal((hooks[0] as { failClosed: boolean }).failClosed, true);
       await page.getByRole("button", { name: copy.settings.hooks.test, exact: true }).click();
       const success = page.locator('[data-sonner-toast][data-type="success"]').filter({ hasText: copy.settings.hooks.testSuccess }).last();
       await success.waitFor();
@@ -124,12 +127,15 @@ try {
       // A failing guard blocked a tool mid-turn: the live stream tells the open chat.
       const chat = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
       let sent = 0, releaseBlock = () => {};
+      let releaseFailure = () => {};
+      const failureReleased = new Promise<void>(resolve => { releaseFailure = resolve; });
       const blockReleased = new Promise<void>(resolve => { releaseBlock = resolve; });
       await chat.route("**/events/live**", async route => {
-        if (sent++) return route.fulfill({ status: 204 });
-        await blockReleased;
+        const index = sent++;
+        if (index > 1) return route.fulfill({ status: 204 });
+        await (index === 0 ? blockReleased : failureReleased);
         await route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: `data: ${JSON.stringify({
-          id: 900_000, type: "hook.blocked", created_at: new Date().toISOString(), payload: {
+          id: 900_000 + index, type: index === 0 ? "hook.blocked" : "hook.failed", created_at: new Date().toISOString(), payload: {
             hook: "Test guard", event: "PreToolUse", tool: "run_command", session_id: "general",
             reason: "Test guard: hook failed (exited with code 1)" } })}\n\n` });
       });
@@ -143,6 +149,10 @@ try {
       await chat.locator('[data-sonner-toast][data-type="error"]')
         .filter({ hasText: copy.settings.hooks.failedBlock("Test guard", "run_command") }).waitFor();
       await capture("hook-blocked", chat);
+      releaseFailure();
+      await chat.getByText(copy.settings.hooks.failedOpen("Test guard"), { exact: true }).waitFor();
+      assert.equal(await chat.locator('[data-sonner-toast][data-type="error"]').last().textContent(), copy.settings.hooks.failedOpen("Test guard"));
+      await capture("hook-failed-open", chat);
       await chat.close();
     }
   }

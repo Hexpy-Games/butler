@@ -143,7 +143,7 @@ async fn execute(
     }
 }
 impl Hooks {
-    /// Resolves a run, redacts its refusal and publishes a failing hook's block.
+    /// Resolves a run, redacts its refusal and reports failures independently of blocking.
     fn resolve_run(
         &self,
         hook: &HookDefinition,
@@ -156,16 +156,16 @@ impl Hooks {
             tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
         }
         resolved.deny = resolved.deny.map(|reason| clean(&reason, redact));
-        if let Some(reason) = resolved.deny.as_ref().filter(|_| resolved.failed) {
-            self.blocked(hook, payload, reason);
+        if resolved.failed {
+            self.blocked(hook, payload, resolved.deny.as_deref());
         }
         resolved
     }
 
-    /// Tells listeners that a failing hook blocked part of a running turn. A test run
-    /// or an admission has no turn: whoever asked gets the refusal itself.
-    fn blocked(&self, hook: &HookDefinition, payload: &HookEnvelope, reason: &str) {
-        if payload.turn_id.is_none() {
+    /// Reports failures for real events. Rejected admissions carry their own refusal;
+    /// hook test runs have no session and are reported by their caller.
+    fn blocked(&self, hook: &HookDefinition, payload: &HookEnvelope, reason: Option<&str>) {
+        if payload.session_id.is_none() || (reason.is_some() && payload.turn_id.is_none()) {
             return;
         }
         let block = HookBlock {
@@ -173,7 +173,8 @@ impl Hooks {
             event: hook.event,
             tool: payload.payload.tool_name.clone(),
             session_id: payload.session_id.clone(),
-            reason: reason.to_owned(),
+            reason: reason.unwrap_or_default().to_owned(),
+            blocked: reason.is_some(),
         };
         let listener = self.block_listener.read().clone();
         if let Some(listener) = listener {

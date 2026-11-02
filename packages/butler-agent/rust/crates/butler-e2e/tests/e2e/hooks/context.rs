@@ -292,7 +292,8 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
     assert_eq!(stored, 0);
 
     // A deny rejects the send, so nothing it printed exists anywhere.
-    for hook in [denied, closed, invalid] {
+    for mut hook in [denied, closed, invalid] {
+        hook["failClosed"] = json!(true);
         replace(&s, vec![hook]).await?;
         let blocked =
             s.gw.post("/messages", json!({"chat_id":chat,"text":"Rejected."}))
@@ -307,10 +308,9 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
     s.finish().await
 }
 
-/// Text starting with a bracket is text for a hook that set `failClosed: false`;
-/// otherwise a failure blocks the send, so stdout is judged as a decision.
+/// Unreadable JSON is a failure; only the switch decides whether it blocks.
 #[tokio::test]
-async fn hooks_context_bracketed_plain_text_reaches_the_model() -> Result<(), HarnessError> {
+async fn hooks_context_unreadable_json_follows_failure_switch() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = setup("HOOK-CONTEXT-BRACKET")?.env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
     let open = |id: &str, text: &str| {
@@ -325,16 +325,17 @@ async fn hooks_context_bracketed_plain_text_reaches_the_model() -> Result<(), Ha
             open("object", "{branch} is main"),
         ],
     )?;
-    let strict = printing(&setup, "strict", "UserPromptSubmit", "[branch] main");
+    let mut strict = printing(&setup, "strict", "UserPromptSubmit", "[branch] main");
+    strict["failClosed"] = json!(true);
     let s = setup.start().await?;
     assert_eq!(s.turn("general", "Which?").await?.1["state"], "delivered");
     let prompt = prompts(&s)?.pop().unwrap();
-    assert!(section(&prompt).contains("[branch] main"), "{prompt}");
-    assert!(section(&prompt).contains("{branch} is main"), "{prompt}");
+    assert!(!prompt.contains("[branch] main"), "{prompt}");
+    assert!(!prompt.contains("{branch} is main"), "{prompt}");
     let all = runs(&s).await?;
     for run in &all {
-        assert_eq!(run["outcome"], "continue", "{run}");
-        assert_eq!(run["reason"], "not valid JSON; treated as text", "{run}");
+        assert_eq!(run["outcome"], "error", "{run}");
+        assert!(run["context_bytes"].is_null(), "{run}");
     }
     replace(&s, vec![strict]).await?;
     let blocked =
