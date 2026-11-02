@@ -52,6 +52,33 @@
   border-color: var(--color-danger-border);
 }
 
+/* Quiet: the default field without its fill at rest (a sidebar search beside
+   selected rows): the default border and placeholder on the surface, so it
+   reads as a field and never as a selected row. The default field has no
+   hover treatment, so neither does quiet. Focus is the default field: the
+   raised surface fill, the accent border and, for keyboard focus, the ring.
+   The fill fades in on focus. */
+.input[data-variant="quiet"] {
+  background: transparent;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    border-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.input[data-variant="quiet"]:focus {
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+}
+
+.input[data-variant="quiet"]:disabled {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input[data-variant="quiet"] {
+    transition: none;
+  }
+}
+
 @media (width <= 640px) {
   .input:not(
     [data-variant="underline"],

@@ -39,7 +39,7 @@ pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &In
     }
     if let Some(text) = cmd::raw_argument(invocation) {
         command.arg("/d");
-        if invocation.arguments.iter().any(|a| a == "/v:on") {
+        if invocation.arguments.get(1).is_some_and(|a| a == "/v:on") {
             command.arg("/v:on");
         }
         command.args(["/s", "/c"]).raw_arg(text);
@@ -92,7 +92,7 @@ pub(super) fn hook_shell(command: &str, environment: &HashMap<String, String>) -
         .map(|(key, value)| (key.clone(), Some(value.clone())))
         .collect();
     let mut program = cmd::program(&environment);
-    if program.contains(['"', '\r', '\n', '\0']) {
+    if program.contains(['"', '\r', '\n', '\0', '!', '%']) {
         program = "cmd.exe".into();
     }
     Invocation {

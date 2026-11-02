@@ -37,7 +37,14 @@ async fn execute_mode(
     call_id: &str,
     executor: bool,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let mut arguments = Value::Object(call.arguments.clone());
+    let mut arguments = if call.name == ToolName::WebRead && owner.browser_available() {
+        match super::super::reader_surface::validate(owner, &call.arguments) {
+            Ok(arguments) => Value::Object(arguments),
+            Err(refused) => return super::encoded(&refused),
+        }
+    } else {
+        Value::Object(call.arguments.clone())
+    };
     let live = if call.name == ToolName::WebRead {
         match super::super::browser::live_page(owner, &invocation, &arguments).await {
             Ok(live) => live,

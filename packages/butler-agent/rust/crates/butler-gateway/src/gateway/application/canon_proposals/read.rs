@@ -65,6 +65,19 @@ pub(super) async fn attachments(
     session: &str,
     changes: &mut [Value],
 ) -> Result<(), GatewayApplicationError> {
+    for change in changes.iter_mut().filter(|c| c["op"] == "epic.delete") {
+        let epic = app
+            .dependencies
+            .canon
+            .execute(AppCanonRequest {
+                resource: AppCanonResource::Epic,
+                id: field(change, "id")?,
+                input: None,
+                delegate: None,
+            })
+            .await?;
+        change["title"] = epic["title"].clone();
+    }
     for change in changes
         .iter_mut()
         .filter(|c| matches!(c["op"].as_str(), Some("epic.create" | "epic.edit")))

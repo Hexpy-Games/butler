@@ -57,6 +57,7 @@ export const stories: ShowcaseStory[] = [
   },
   {
     // The same column once it scrolls: a classic scrollbar takes the lane only now, rows keep the column edge.
+    // An overlay scrollbar takes no width, so nothing is given back and rows keep the same edge.
     name: "Content overflows",
     render: (context) => <ColumnRows context={context} count={12} />,
   },

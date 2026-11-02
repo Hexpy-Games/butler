@@ -33,7 +33,7 @@ export function CanonTakeHere({ panel }: { panel: CanonTakeHerePanel }) {
     await takeCanonHere(panel.session_id, panel.epic_id);
     complete(() => setState("taken"));
   }, () => useButlerStore.getState().refreshSessionView(panel.session_id)); };
-  if (state !== "pending") return <Typo.Caption tone="secondary" data-test-class="canon-take-settled">{copy.taken}</Typo.Caption>;
+  if (state !== "pending") return <Typo.Caption tone="secondary" data-test-class="canon-take-settled">{state === "deleted" ? appCopy.canon.deletion.deleted : copy.taken}</Typo.Caption>;
   return <ComposerDecisionPanel placement="conversation" icon={<CircleAlert size="lg" />} title={panel.epic_title}
     data-test-class="canon-take-here" onOpen={() => useButlerStore.getState().openSession(panel.other_session_id)} actions={complete => <ButtonContainer size="sm" justify="end">
       <Button size="sm" variant="secondary" onClick={() => useButlerStore.getState().openSession(panel.other_session_id)}>{copy.openOther}</Button>

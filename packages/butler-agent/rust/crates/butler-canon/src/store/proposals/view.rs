@@ -22,7 +22,7 @@ pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
     }
     for change in &mut changes {
         if change["op"] == "epic.move" {
-            let current = read_work(db, text(change, "id")?)?;
+            let current = optional_work(db, text(change, "id")?)?.unwrap_or(Value::Null);
             change["current_plan_title"] = current["plan_id"]
                 .as_str()
                 .map(|id| read_plan(db, id).map(|p| p["title"].clone()))
@@ -37,10 +37,11 @@ pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
         if let Some(ids) = change["work_ids"].as_array() {
             change["order_titles"] = json!(
                 ids.iter()
-                    .map(
-                        |id| read_work(db, id.as_str().ok_or(Error::Invalid("work id required"))?)
-                            .map(|w| w["title"].clone())
+                    .map(|id| optional_work(
+                        db,
+                        id.as_str().ok_or(Error::Invalid("work id required"))?
                     )
+                    .map(|w| w.map(|w| w["title"].clone()).unwrap_or_else(|| id.clone())))
                     .collect::<Result<Vec<_>>>()?
             );
         }
@@ -69,8 +70,9 @@ pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
 fn epic(db: &Connection, change: &Value) -> Result<Value> {
     let old = change["id"]
         .as_str()
-        .map(|id| read_work(db, id))
-        .transpose()?;
+        .map(|id| optional_work(db, id))
+        .transpose()?
+        .flatten();
     let mut tags = Vec::new();
     if let Some(items) = change["tags"].as_array() {
         for tag in items {
@@ -128,4 +130,12 @@ pub fn open(
             "waiting_since":r["created_at"],"title":r["summary"],"summary":r["summary"],"target_label":detail["target_label"],
             "blocking":false,"state":"open","created_at":r["created_at"],"actions":["accept","decline","dismiss"]}))
     }).collect()
+}
+
+fn optional_work(db: &Connection, id: &str) -> Result<Option<Value>> {
+    match read_work(db, id) {
+        Ok(row) => Ok(Some(row)),
+        Err(Error::NotFound) => Ok(None),
+        Err(error) => Err(error),
+    }
 }

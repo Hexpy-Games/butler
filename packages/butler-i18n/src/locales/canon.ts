@@ -1,6 +1,7 @@
 import type { CanonCopy } from "../canon-copy.ts";
 export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
+    deletion: { changeDelete: "과제 변경 및 삭제", changed: "과제 변경을 반영했습니다", addDelete: "과제 등록 및 삭제", action: "과제 삭제", title: title => `‘${title}’ 과제 삭제`, detail: "이 기기에서 삭제합니다. 연결된 대화는 남습니다.", running: "진행 중에는 삭제할 수 없습니다", deleted: "과제를 삭제했습니다", missing: "이미 삭제된 과제입니다" },
     order: {
       chain: { user_message: "요청한 과제", schedule: "예약 작업", detach: "바로 시작한 과제" },
       status: { running: "진행 중", failed: "막힘", unfinished: "답 기다림", done: "완료" },
@@ -89,6 +90,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
+    deletion: { changeDelete: "Change and delete Epics", changed: "Epic changes applied", addDelete: "Add and delete Epics", action: "Delete Epic", title: title => `Delete Epic ‘${title}’`, detail: "Delete locally. Linked conversations stay.", running: "Cannot delete while running", deleted: "Epic deleted", missing: "Epic already deleted" },
     order: {
       chain: { user_message: "Requested", schedule: "Schedule", detach: "Started now" },
       status: { running: "Running", failed: "Blocked", unfinished: "Needs reply", done: "Done" },

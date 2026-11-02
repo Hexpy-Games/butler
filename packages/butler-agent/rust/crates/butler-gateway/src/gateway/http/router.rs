@@ -287,7 +287,6 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/project-folders", Handler::ProjectFolders),
     ("/projects/{id}", Handler::ProjectSession),
     ("/projects/{id}/archive", Handler::ProjectSession),
-    ("/projects/{id}/folder-trust", Handler::ProjectSession),
     ("/projects/{id}/dashboard", Handler::Dashboard),
     ("/projects/{id}/dashboard/{*path}", Handler::Dashboard),
     ("/projects/{id}/pin", Handler::ProjectSession),

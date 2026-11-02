@@ -138,20 +138,42 @@ pub fn run(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
-    runtime.block_on(async move {
-        let recovery = tokio::task::spawn_blocking(|| {
-            let executable =
-                butler_platform::process_names::current_exe().map_err(|e| e.to_string())?;
-            butler_platform::app_update::recover(&executable)
-        })
-        .await;
-        if !matches!(recovery, Ok(Ok(()))) {
-            eprintln!("app_update_recovery_failed: {recovery:?}");
-            return std::process::ExitCode::FAILURE;
+    // The host is polled by `block_on` on its own thread, not on the process's main
+    // thread, which Windows limits to 1 MiB (8 MiB on macOS and Linux). Startup
+    // recovery replays a decided question through the whole message-admission path,
+    // and a debug build of that chain needs 1.0 to 1.25 MiB of stack: the agent
+    // exited 0xc00000fd before it was ready. The runtime's workers stay free for
+    // the blocking calls the host makes while it runs.
+    let host = std::thread::Builder::new()
+        .name("butler-host".into())
+        .stack_size(HOST_STACK_BYTES)
+        .spawn(move || {
+            runtime.block_on(async move {
+                let recovery = tokio::task::spawn_blocking(|| {
+                    let executable =
+                        butler_platform::process_names::current_exe().map_err(|e| e.to_string())?;
+                    butler_platform::app_update::recover(&executable)
+                })
+                .await;
+                if !matches!(recovery, Ok(Ok(()))) {
+                    eprintln!("app_update_recovery_failed: {recovery:?}");
+                    return std::process::ExitCode::FAILURE;
+                }
+                main(args, build_info).await
+            })
+        });
+    match host.map(std::thread::JoinHandle::join) {
+        Ok(Ok(code)) => code,
+        Ok(Err(panic)) => std::panic::resume_unwind(panic),
+        Err(error) => {
+            eprintln!("host_thread_unavailable: {error}");
+            std::process::ExitCode::FAILURE
         }
-        main(args, build_info).await
-    })
+    }
 }
+
+/// Stack of the host thread: what the main thread has on macOS and Linux.
+const HOST_STACK_BYTES: usize = 8 * 1024 * 1024;
 /// The executable entry: the private embedding worker, or installation
 /// resolution followed by one classified command.
 pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode {

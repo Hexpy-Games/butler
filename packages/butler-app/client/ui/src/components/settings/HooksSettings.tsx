@@ -53,10 +53,10 @@ export function HooksSettings() {
     })) await save(hooks.filter((h) => h.id !== hook.id));
   }
   return <SettingsPage>
-    <SettingsSection id="hooks" kind="list"
+    <SettingsSection id="hooks" kind="list" title={appCopy.settings.pageSections.hooks}
       state={settings ? (hooks.length ? "ready" : "empty") : failed ? "error" : "loading"}
       emptyMessage={copy.empty} onRetry={() => void refresh()}
-      actions={<Button size="sm" disabled={busy} onClick={() => setEditing(emptyHook())}><Plus size="md" />{copy.add}</Button>}>
+      actions={<Button size="sm" variant="outline" disabled={busy} onClick={() => setEditing(emptyHook())}><Plus size="md" />{copy.add}</Button>}>
       <CardList>{hooks.map((hook) => <HookRow key={hook.id} hook={hook} busy={busy}
         onToggle={(enabled) => void save(hooks.map((h) => h.id === hook.id ? { ...h, enabled } : h))}
         onEdit={() => setEditing(hook)} onTest={() => void test(hook)} onRemove={() => void remove(hook)} />)}</CardList>
@@ -69,7 +69,7 @@ export function HooksSettings() {
       </DialogContent>
     </Dialog>
     <SettingsSection id="hook-runs" kind="list" title={copy.recent} state={runs.length ? "ready" : "empty"}
-      emptyMessage={copy.emptyRuns} actions={<Button size="sm" disabled={busy} onClick={() => void refresh()}>{copy.refresh}</Button>}>
+      emptyMessage={copy.emptyRuns} actions={<Button size="sm" variant="outline" disabled={busy} onClick={() => void refresh()}>{copy.refresh}</Button>}>
       <HookRuns runs={runs} />
     </SettingsSection>
   </SettingsPage>;
