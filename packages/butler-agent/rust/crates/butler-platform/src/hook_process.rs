@@ -1,10 +1,8 @@
-//! Bounded lifecycle command processes: under the user's privileges for the user's
-//! own hooks, inside the session's sandbox for a project folder's.
+//! Unsandboxed, bounded lifecycle command processes under the user's privileges.
 use crate::{
-    command_sandbox::{self, CommandOutputDecoder, ContainedHook},
+    command_sandbox::{self, CommandOutputDecoder},
     process_control::{self, GroupSignal},
 };
-pub use command_sandbox::{HookContainment, HookSandbox};
 use std::{collections::HashMap, path::PathBuf, process::Stdio, time::Duration};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
@@ -18,19 +16,14 @@ pub struct HookProcess {
     pub command: Option<String>,
     /// Executable plus literal arguments.
     pub args: Option<Vec<String>>,
-    /// What the process starts with: sanitized, plus explicit user additions when
-    /// nothing wraps it.
+    /// Sanitized environment plus explicit user additions.
     pub environment: HashMap<String, String>,
-    /// What a contained hook gets inside its sandbox, and whatever starts the sandbox never.
-    pub sandbox_environment: HashMap<String, String>,
     /// Project root or home.
     pub cwd: PathBuf,
     /// Full UTF-8 envelope, never truncated.
     pub stdin: Vec<u8>,
     /// Hard deadline.
     pub timeout: Duration,
-    /// How far the process may reach.
-    pub sandbox: HookSandbox,
     /// Stdout bound in bytes; stderr always uses `OUTPUT_LIMIT`.
     pub stdout_limit: usize,
 }
@@ -68,7 +61,7 @@ impl Drop for Tree {
 fn error(e: impl std::fmt::Display) -> HookProcessError {
     HookProcessError::Process(e.to_string())
 }
-fn prepare_unsandboxed(input: &HookProcess) -> Result<std::process::Command, HookProcessError> {
+fn prepare(input: &HookProcess) -> Result<std::process::Command, HookProcessError> {
     let invocation = input
         .command
         .as_ref()
@@ -82,18 +75,6 @@ fn prepare_unsandboxed(input: &HookProcess) -> Result<std::process::Command, Hoo
         command.args(args.iter().skip(1));
         command
     };
-    configure(&mut command, input)?;
-    if let Some(invocation) = &invocation {
-        command_sandbox::add_arguments(&mut command, invocation);
-    }
-    process_control::hide_console(&mut command);
-    process_control::isolate_group(&mut command);
-    Ok(command)
-}
-fn configure(
-    command: &mut std::process::Command,
-    input: &HookProcess,
-) -> Result<(), HookProcessError> {
     command
         .current_dir(command_sandbox::working_directory(&input.cwd).map_err(error)?)
         .env_clear()
@@ -101,59 +82,24 @@ fn configure(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    Ok(())
-}
-/// A hook that cannot be contained fails here and never starts.
-fn prepare_contained(
-    input: &HookProcess,
-) -> Result<(std::process::Command, ContainedHook), HookProcessError> {
-    let base = command_sandbox::hook_invocation(
-        input.command.as_deref(),
-        input.args.as_deref(),
-        &input.environment,
-        &input.sandbox_environment,
-    )
-    .map_err(error)?;
-    let contained = command_sandbox::contain_hook(base, &input.sandbox).map_err(error)?;
-    let mut command = std::process::Command::new(&contained.invocation.program);
-    configure(&mut command, input)?;
-    command.envs(contained.scratch.iter().map(|(key, value)| (*key, value)));
-    command_sandbox::add_arguments(&mut command, &contained.invocation);
+    if let Some(invocation) = &invocation {
+        command_sandbox::add_arguments(&mut command, invocation);
+    }
     process_control::hide_console(&mut command);
     process_control::isolate_group(&mut command);
-    Ok((command, contained))
+    Ok(command)
 }
-/// Starts one contained tree and finishes its containment on every exit path.
+/// Starts one contained tree and drains all pipes concurrently with stdin.
 pub async fn run(
     input: HookProcess,
     cancel: CancellationToken,
 ) -> Result<HookOutput, HookProcessError> {
     let timeout = input.timeout;
     let stdout_limit = input.stdout_limit;
-    let (command, payload, contained) = tokio::task::spawn_blocking(move || {
-        if matches!(input.sandbox, HookSandbox::None) {
-            prepare_unsandboxed(&input).map(|command| (command, input.stdin, None))
-        } else {
-            prepare_contained(&input)
-                .map(|(command, contained)| (command, input.stdin, Some(contained)))
-        }
-    })
-    .await
-    .map_err(error)??;
-    let result = Box::pin(supervise(command, payload, timeout, stdout_limit, cancel)).await;
-    if let Some(contained) = contained {
-        let _ = tokio::task::spawn_blocking(move || contained.finish()).await;
-    }
-    result
-}
-/// Drains all pipes concurrently with stdin, until the tree is gone.
-async fn supervise(
-    command: std::process::Command,
-    payload: Vec<u8>,
-    timeout: Duration,
-    stdout_limit: usize,
-    cancel: CancellationToken,
-) -> Result<HookOutput, HookProcessError> {
+    let (command, payload) =
+        tokio::task::spawn_blocking(move || prepare(&input).map(|command| (command, input.stdin)))
+            .await
+            .map_err(error)??;
     if cancel.is_cancelled() {
         return Err(HookProcessError::Cancelled);
     }

@@ -40,12 +40,22 @@ function refresh(sessionId: string, reader: Reader) {
         reader.page = page;
         for (const listener of reader.listeners) listener();
       }
-    }).catch(() => { /* An unavailable projection never fabricates a section or a dot. */ });
+    }).catch(() => { /* An unavailable projection never fabricates a section or a dot. */ }).finally(() => {
+      if (reader.controller === controller) reader.controller = undefined;
+    });
   });
 }
 export function publishPendingAsksEvent(event: TimelineEvent) {
   if (event.type === "stream.reconcile_required") {
     for (const [sessionId, reader] of readers) refresh(sessionId, reader);
+  } else if (event.type === "message.created" || event.type === "message.updated") {
+    const message = event.payload?.message;
+    if (message?.role !== "assistant" || typeof message.chat_id !== "string" || typeof message.turn_id !== "string") return;
+    // The server derives the source from the turn's latest assistant message, which can land after the ask opens.
+    for (const [sessionId, reader] of readers) {
+      if (reader.controller || reader.page?.asks.some(ask => ask.source_session_id === message.chat_id
+        && ask.source_turn_id === message.turn_id && ask.source_message_id !== message.id)) refresh(sessionId, reader);
+    }
   } else if (event.type === "pending_asks.changed" && typeof event.payload?.session_id === "string") {
     const reader = readers.get(event.payload.session_id);
     if (!reader) return;
