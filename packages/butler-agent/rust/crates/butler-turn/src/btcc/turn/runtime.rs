@@ -16,6 +16,7 @@ use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, DeliveredOutcome, ProgressDestination, TurnOutcome, TurnOutcomeKind};
 
 mod authority;
+mod stop_failure;
 
 pub(super) struct TurnRuntime {
     store: Arc<dyn TurnStore>,
@@ -117,14 +118,10 @@ impl TurnRuntime {
                     admission: None,
                 })
             }
-            Err(_) => {
+            Err(error) => {
                 self.supervisor.observe_stop_failure(&ticket);
-                Ok(TurnOutcome {
-                    result: TurnOutcomeKind::FencedPendingPersistence {
-                        turn_id: turn_id.to_owned(),
-                    },
-                    admission: None,
-                })
+                stop_failure::log(turn_id, &error);
+                Err(error)
             }
         }
     }

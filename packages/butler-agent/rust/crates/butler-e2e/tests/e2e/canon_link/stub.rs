@@ -13,6 +13,7 @@ pub(crate) struct Script {
     compaction_round: AtomicUsize,
     pub(crate) requests: Mutex<Vec<Value>>,
     pub epics: Mutex<Vec<String>>,
+    pub(crate) calls: Mutex<std::collections::HashMap<String, Vec<(&'static str, Value)>>>,
     pub path: Mutex<String>,
     pub codes: Mutex<Vec<String>>,
     pub context_seen: AtomicBool,
@@ -89,6 +90,7 @@ pub(super) async fn start(
         compaction_round: AtomicUsize::new(0),
         requests: Mutex::new(Vec::new()),
         epics: Mutex::new(Vec::new()),
+        calls: Mutex::new(std::collections::HashMap::new()),
         path: Mutex::new(String::new()),
         codes: Mutex::new(Vec::new()),
         context_seen: AtomicBool::new(false),
@@ -186,8 +188,17 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     };
     let quick_epic = names(&script.quick_epics);
     let delegated = script.delegate.load(Ordering::SeqCst) && !names(&script.direct_epics);
-    let mut calls = if key.user_request == "Queue this epic" || key.user_request == "Run this plan"
-    {
+    let scripted = script.calls.lock().unwrap().get(&key.user_request).cloned();
+    // Background extraction shares this endpoint but offers no function tools.
+    // It must neither run a Turn script nor consume its reporting checkpoint.
+    let has_tools = butler_e2e::e2e::chatgpt_wire::functions(&body)
+        .next()
+        .is_some();
+    let mut calls = if !has_tools {
+        Vec::new()
+    } else if let Some(calls) = scripted {
+        calls
+    } else if key.user_request == "Queue this epic" || key.user_request == "Run this plan" {
         script
             .queue_request
             .lock()
@@ -224,7 +235,7 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         script.held.add_permits(1);
         script.release.acquire().await.unwrap().forget();
     }
-    if name.is_empty() && script.hold_report.swap(false, Ordering::SeqCst) {
+    if has_tools && name.is_empty() && script.hold_report.swap(false, Ordering::SeqCst) {
         script.reporting.add_permits(1);
         script.report_release.acquire().await.unwrap().forget();
     }

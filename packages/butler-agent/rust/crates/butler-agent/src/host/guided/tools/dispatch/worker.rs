@@ -80,6 +80,16 @@ fn request(
         objective: required("objective")?,
         acceptance_criteria: acceptance,
         implementation_brief: required("implementation_brief")?,
+        target_path: call
+            .arguments
+            .get("target_path")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        replaces_relation_id: call
+            .arguments
+            .get("replaces_relation_id")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         safe_title: call
             .arguments
             .get("safe_title")
@@ -90,7 +100,7 @@ fn request(
             .get("profile_id")
             .and_then(Value::as_str)
             .map(str::to_owned),
-        access_mode: owner.binding.access_mode.clone(),
+        access_mode: owner.access_mode(),
         schedule_run: owner.inherited_run(),
     })
 }

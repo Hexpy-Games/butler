@@ -937,11 +937,6 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
-  getProjectFolderTrust: ({ projectId }) => requestJson(`/projects/${encodeURIComponent(projectId)}/folder-trust`),
-  answerProjectFolderTrust: ({ projectId, trusted, hooks }) => requestJson(`/projects/${encodeURIComponent(projectId)}/folder-trust`, {
-    method: "POST",
-    body: JSON.stringify({ trusted, hooks }),
-  }),
   pinProject: ({ projectId, pinned }) => requestJson(`/projects/${encodeURIComponent(projectId)}/pin`, {
     method: "POST",
     body: JSON.stringify({ pinned }),
@@ -1537,6 +1532,7 @@ const butlerApp = Object.freeze({
   orderCanonPlan: ({ id, body }) => requestCanonWrite(`/canon/plans/${encodeURIComponent(id)}/order`, "POST", body),
   orderCanonBacklog: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/backlog/order`, "POST", body),
   createCanonEpic: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/epics`, "POST", body),
+  deleteCanonEpic: ({ id, body }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}`, "DELETE", body),
   editCanonEpic: ({ id, body }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}`, "PATCH", body),
   getSessionTaskGraphs: (input) => requestTaskGraph("sessions", "task-graphs", input),
   getPlanTaskGraph: (input) => requestTaskGraph("plans", "task-graph", input),
@@ -1561,8 +1557,8 @@ const butlerApp = Object.freeze({
   exportDocument: (input) => ipcRenderer.invoke("butler:export-document", input),
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
-  openMessageFile: ({ fileId } = {}) =>
-    ipcRenderer.invoke("butler:open-message-file", { fileId }),
+  openMessageFile: ({ fileId, reveal } = {}) =>
+    ipcRenderer.invoke("butler:open-message-file", { fileId, reveal: reveal === true }),
   getContextDetails: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/context-details?${params.toString()}`);

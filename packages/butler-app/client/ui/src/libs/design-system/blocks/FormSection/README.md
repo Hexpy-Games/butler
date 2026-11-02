@@ -3,16 +3,17 @@
 ## What is this block
 
 FormSection is a Butler design-system block for a grouped settings section:
-a section header (title + optional description) above a bordered card that
-contains only fields (the macOS System Settings / iOS grouped list / Vercel
+a section header (required title, optional description, optional actions)
+above a bordered card that contains only fields (the macOS System Settings / iOS grouped list / Vercel
 and GitHub settings pattern).
 
 ## When to use this block
 
 Use FormSection in settings panels, configuration dialogs, or multi-section forms where fields need logical grouping.
 
-Use it as the top-level group of a settings page. Repeated editable items
-inside the card should be separate bordered rows or panels, not loose text.
+Use it as the top-level group of a settings page. Repeated items inside the
+card are list rows (`CardList`, which renders flush inside the card), never
+nested bordered cards or panels.
 
 ## Container vs Presenter
 
@@ -35,28 +36,20 @@ import { FormSection, SettingsField } from "@/butler-ds";
   <SettingsField id="theme" label="Theme" control={<Select>...</Select>} />
   <SettingsField id="density" label="Density" control={<Select>...</Select>} />
 </FormSection>
-
-// The page's single card, when a title would repeat the page title:
-<FormSection>
-  <SettingsField id="theme" label="Theme" control={<Select>...</Select>} />
-</FormSection>
 ```
 
-`title` is optional. Omit it when the section's title would repeat the page
-title (for example Appearance, General or MCP under a page titled the same).
-A description that differs from the page description may still sit above the
-card on its own; one that repeats the page description is dropped, so a
-section whose title and description both restate the page (MCP, Skills, Logs)
-renders the card alone. Title-only sections (Models "Model settings") use the
-same header-above-card pattern.
+`title` is required: every section has one, and it names what the card holds
+below the page title (MCP's server list is "Servers", Hooks' list is "Your
+hooks"). There is no untitled section, so a header action can never stretch
+across the header and read as a page-level button.
 
-Inside a `SettingsShell` with `pageTitle` / `pageDescription`, FormSection
-enforces this: a title or description that repeats the page header is not
-rendered (`repeatsSettingsCopy`: equal after NFKC, case, whitespace and end
-punctuation normalization, or, for descriptions of three or more words, the
-page description followed by more words). Short titles only match exactly, so
-"Model settings" stays on "Models" in every locale. Product pages still omit
-the repeated copy themselves; the check is a safety net.
+Inside a `SettingsShell` with `pageTitle` / `pageDescription`, a title that
+repeats the page title throws in dev builds (`repeatsSettingsCopy`: equal
+after NFKC, case, whitespace and end punctuation normalization; short titles
+only match exactly, so "Model settings" stays on "Models" in every locale).
+Production renders the title as given rather than dropping it. A description
+that repeats the page description (or the page description followed by more
+words, for descriptions of three or more words) is not rendered.
 
 ## Structure
 
@@ -137,12 +130,16 @@ like a form. A card whose content is all fields uses `kind="form"`.
 
 ### Header actions
 
-`actions` holds a list toolbar only: controls that act on the list as a
-whole (add an item, refresh or check, filter, a bulk action on every row),
-on a `kind="list"` section. Any other action, especially one that removes or
-resets something, is a `SettingsActionField` row in the card with a
-description of its effect. `bun run lint:ds` rejects `actions` on a section
-whose `kind` is not `"list"`.
+`actions` holds section actions only: add, refresh or check, filter
+(`Select size="sm"`) or period (`SegmentedControl size="sm"`), on a
+`kind="list"` or `kind="status"` section. Buttons are
+`variant="outline" size="sm"` (or `size="icon-sm"`). They sit at the inline
+end of the title and stay right-aligned when they wrap under it. The header
+never holds a setting (an input, a switch, a number): that is a
+`SettingsField` in the card. Any action that removes or resets something is
+a `SettingsActionField` row in the card with a description of its effect.
+`bun run lint:ds` rejects `actions` on `form` and `info` sections, setting
+controls in `actions`, and header buttons that are not outline and small.
 
 ## Accessibility
 
@@ -162,7 +159,8 @@ whose `kind` is not `"list"`.
 - Do not use for non-form content grouping
 - Do not use `Section` when the surface needs the settings card border
 - Do not put the section title or description inside the card, and do not add a divider under the header
-- Do not nest FormSections for repeated editable items; use a repeated row or panel
+- Do not nest FormSections, cards or panels for repeated items; use list rows (`CardList`)
+- Do not omit the title or repeat the page title
 
 ## Tags
 

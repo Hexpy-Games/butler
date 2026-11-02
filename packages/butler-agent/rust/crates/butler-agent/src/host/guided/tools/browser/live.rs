@@ -16,11 +16,18 @@ pub(in crate::host::guided::tools) async fn page(
 ) -> Result<Option<LivePage>, Value> {
     let named = args["tab"].as_str().filter(|tab| !tab.trim().is_empty());
     let url = args["url"].as_str().filter(|url| !url.trim().is_empty());
+    if owner.browser_available()
+        && let Some(error) = args
+            .as_object()
+            .and_then(super::super::reader_surface::tab_required)
+    {
+        return Err(error);
+    }
     if named.is_none() && url.is_none() {
         return Err(failure("web_read needs a url or an open tab."));
     }
     // Only a turn that may use the browser reads its tabs.
-    let browsing = owner.binding.authorized_names.contains("browser_open");
+    let browsing = owner.authorized("browser_open");
     let client = if browsing {
         Client::new(owner).await
     } else {
@@ -110,7 +117,7 @@ async fn find(
 fn unreadable(reason: &Value) -> Value {
     json!({"ok":false,"error":{"code":"tab_unreadable","message":"That tab could not be read.",
         "reason":reason,
-        "recovery":"Use an open tab id from browser_open or browser_tabs, or read the page by url."}})
+        "recovery":"Use an open tab id from browser_open or browser_tabs."}})
 }
 
 fn failure(message: &str) -> Value {

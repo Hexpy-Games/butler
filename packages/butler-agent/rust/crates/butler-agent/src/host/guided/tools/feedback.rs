@@ -154,7 +154,7 @@ pub(super) async fn contextual_result(
         .await
         .map_err(ToolExecutionError::Integrity)?;
     value["current_state"] = json!({
-        "access_mode":owner.binding.access_mode,
+        "access_mode":owner.access_mode(),
         "work_id":work.as_ref().map(|work| &work.work_id),
         "work_status":work.as_ref().map(|work| work.status),
         "execution_mode":work.as_ref().and_then(|work| work.current_plan.as_ref()).and_then(|plan| plan.execution_mode),

@@ -1,5 +1,7 @@
 # ImageViewer
 
+Glossary: 이미지 뷰어 / image viewer (`ImageViewer`).
+
 ## What is this block
 `ImageViewer` is the app's one lightbox: a modal that shows one picture of a
 set large on a scrim in the theme's surface tone (`--image-viewer-overlay-bg`,

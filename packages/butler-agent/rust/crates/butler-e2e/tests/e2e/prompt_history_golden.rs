@@ -49,8 +49,7 @@ fn capture_frame(
 }
 
 fn normalize(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> String {
-    paths
-        .hide(text)
+    portable_separators(&paths.hide(text))
         .replace(
             &butler_platform::launcher::runtime_prompt_environment(),
             "OS: {{HOST_OS}}\nShell: {{HOST_SHELL}}",
@@ -77,6 +76,20 @@ fn normalize(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Str
             line.to_owned()
         })
         .collect::<String>()
+}
+
+/// Windows spells a path below a hidden root with backslashes; the goldens use
+/// `/`. Rewrites only the path continuing a `{{NAME}}` placeholder.
+fn portable_separators(text: &str) -> String {
+    static BELOW_ROOT: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let below_root = BELOW_ROOT.get_or_init(|| {
+        regex::Regex::new(r"\{\{[A-Z_]+\}\}[\w./\\-]*").expect("placeholder path pattern")
+    });
+    below_root
+        .replace_all(text, |found: &regex::Captures<'_>| {
+            found[0].replace('\\', "/")
+        })
+        .into_owned()
 }
 
 fn blocks(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Value {

@@ -1,7 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ApprovalActionKind } from "@/app/approvalRequest.ts";
-import { visibleText } from "@/app/visibleText.ts";
+import { visibleCode, visibleText } from "@/app/visibleText.ts";
 import type { ApprovalRisk } from "@/app/types.ts";
 import {
   ImageIcon, Pencil, Button, ButtonContainer, Clock3, ComposerDecisionPanel, Folder, GitBranch, Globe2, ListChecks, McpServer,
@@ -14,19 +14,20 @@ import { ComposerBrowserHandoffSurface } from "./ComposerBrowserHandoffSurface";
 const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
   generate_image: ImageIcon, edit_image: Pencil, edit_files: Folder, run_command: Terminal, network_command: Globe2, web_request: Globe2, use_connector: McpServer,
   manage_schedule: Clock3, update_project: ListChecks, start_conversation: MessageSquarePlus,
-  restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, project_hooks: Terminal, other: ShieldCheck,
+  restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, other: ShieldCheck,
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
-
-const hookCopy = () => appCopy.interfaceTemplates.approvalRequest.projectHooks;
 
 /**
  * Display only. Every line, the title included, is the exact action: never shortened, only made
  * unambiguous. Hidden and reflowing characters show as escapes, and each line is its own left-to-right
  * isolate (which limits, but does not stop, bidi reordering). A short run of spaces keeps its width; a
- * long one shows as a count, so padding cannot push the rest of a command out of view.
+ * long one shows as a count, so padding cannot push the rest of a line out of view.
+ * A command body sits in the panel's code frame instead: its spaces, tabs and newlines stay real, and
+ * padding that pushes the rest sideways shows as the frame's horizontal scroll and edge fade.
  */
-function approvalText(text: string) {
+function approvalText(text: string, as: "text" | "code") {
+  if (as === "code") return <bdi dir="ltr">{visibleCode(text)}</bdi>;
   const escaped = visibleText(text).replace(/ {5,}/gu, (run) => `‹U+0020×${run.length}›`);
   // A run of spaces collapses under normal wrapping; a no-break space keeps each one's width (a real one is escaped above).
   const shown = escaped.replace(/ (?= )|^ | $/gu, "\u00A0");
@@ -57,12 +58,9 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
       {decision.pendingCount > 1 ? <Typo.Caption>+{decision.pendingCount - 1}</Typo.Caption> : null}
     </>}
     data-test-class="composer-authority-decision"
-    actions={(complete) => decision.actionKind === "project_hooks" ? <ButtonContainer size="sm" justify="end">
-      <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{hookCopy().deny}</Button>
-      <Button type="button" size="sm" disabled={decision.pending} onClick={() => complete(decision.onAllow)}>{hookCopy().allow}</Button>
-    </ButtonContainer> : <ButtonContainer size="sm" justify="end">
+    actions={(complete) => <ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{appCopy.interfaceDetails.deny}</Button>
-      <SplitButton size="sm" text={decision.allowSite ? appCopy.interfaceDetails.allowInChat : appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}
+      {!decision.scope && !decision.allowSite ? <Button type="button" size="sm" disabled={decision.pending} onClick={() => complete(decision.onAllow)}>{appCopy.interfaceDetails.allowOnce}</Button> : <SplitButton size="sm" text={decision.allowSite ? appCopy.interfaceDetails.allowInChat : appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}
         menuLabel={appCopy.interfaceDetails.allowScope} menuSide="top"
         items={decision.allowSite ? [{
           key: "site", label: decision.allowSite === "payment" ? appCopy.interfaceDetails.allowPaymentSite : appCopy.interfaceDetails.allowSite,
@@ -71,7 +69,7 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
         }] : [{
           key: "conversation", label: appCopy.interfaceDetails.allowConversation, disabled: !decision.scope,
           description: [decision.conversationScope, appCopy.interfaceDetails.allowDescription], onSelect: () => complete(decision.onAllowConversation),
-        }]} />
+        }]} />}
     </ButtonContainer>}
   />;
 }

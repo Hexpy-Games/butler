@@ -32,6 +32,10 @@ pub(super) fn login_shell(command: &str, _environment: &HashMap<String, String>)
     }
 }
 
+pub(super) fn hook_shell(command: &str, environment: &HashMap<String, String>) -> Invocation {
+    login_shell(command, environment)
+}
+
 pub(super) fn legacy_shell(
     command: &str,
     pipefail: bool,

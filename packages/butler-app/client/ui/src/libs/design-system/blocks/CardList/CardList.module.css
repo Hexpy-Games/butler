@@ -113,3 +113,30 @@
   align-items: center;
   align-self: start;
 }
+
+/* Settings flush variant. Inside a settings section card the section card is
+   the list's only surface: items drop their own border, fill, radius and
+   padding and sit flush in it, divided by the same hairline as every other
+   settings list row. It follows the DOM, so a list in a dialog opened from a
+   section (a portal) keeps its cards. The hairline rules come last and match
+   at least as strongly, so they win over the reset; a rounded row (a
+   DisclosureRow) squares its top corners so the hairline runs straight. */
+[data-slot="form-section-card"] .item[data-slot="card"] {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-slot="form-section-card"] .scroller {
+  gap: var(--space-md);
+}
+
+[data-slot="form-section-card"] .scroller > :not(:first-child),
+[data-slot="form-section-card"][data-kind="list"] > .item:not(:first-child) {
+  padding-top: var(--space-md);
+  border-top: var(--border-hairline) solid var(--line);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}

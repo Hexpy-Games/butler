@@ -51,12 +51,12 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["size sets the width (sm default, md, lg, xl, full); layout=\"scroll-body\" gives header, one ScrollArea fill body and footer; maxHeight=\"3/5\" caps a live transcript; height=\"full\" makes the cap the height, so a scroll-body with a short or empty body (an empty graph) keeps its size; DialogTitle visuallyHidden keeps the accessible name when the body shows its own heading.", "Title states the task (Rename conversation); buttons repeat the verb (Save, Archive).", "A confirmation that is only a header and its actions is never shorter than one with a one-line description: a title-only confirm (Save your changes?) keeps that height with its title centred. Add no spacer or padding for it.", "container anchors a page's own dialog inside the page card: the scrim covers only the card; pair it with Dialog modal={false} so the chat stays usable. Page text is quoted under a Butler title (Page message)."],
+  content: ["size sets the width (sm default, md, lg, xl, full); layout=\"scroll-body\" gives header, one ScrollArea fill body and footer; maxHeight=\"3/5\" caps a live transcript; height=\"full\" makes the cap the height, so a scroll-body with a short or empty body (an empty graph) keeps its size; DialogTitle visuallyHidden keeps the accessible name when the body shows its own heading.", "Title states the task (Rename conversation); buttons repeat the verb (Save, Archive).", "A confirmation that is only a header and its actions is never shorter than one with a one-line description: a title-only confirm (Save your changes?) keeps that height with its title centred. Add no spacer or padding for it.", "container anchors a page's own dialog inside the page card: the scrim covers only the card; pair it with Dialog modal={false} so the chat stays usable. Page text is quoted under a Butler title (Page message).", "With the close button shown, every title (DialogTitle, DialogForm's title) keeps the button's room free on its end, so a long title wraps before it; showCloseButton={false} reserves nothing. Add no padding or line breaks for it."],
   accessibility: [
     "Focus is trapped and returns to the trigger; Escape closes; pass closeLabel from app copy.",
     "Every dialog has a DialogTitle (sr-only when DialogForm shows the visible title).",
   ],
-  tokens: ["--dialog-overlay-bg", "--tinted-glass-bg", "--z-dialog", "--motion-fast", "--motion-scale-dialog"],
+  tokens: ["--dialog-overlay-bg", "--tinted-glass-bg", "--z-dialog", "--motion-fast", "--motion-scale-dialog", "--control-hit-target", "--focus-ring-room"],
   internalExports: {
     DialogPortal: "Rendered by DialogContent; exported for shells that need the portal alone.",
     DialogOverlay: "Rendered by DialogContent (backdrop fade); exported for custom shells.",

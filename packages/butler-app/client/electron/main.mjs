@@ -2616,6 +2616,8 @@ registerOpenMessageFile({
   ipcMain,
   serverFetch: appServerFetch,
   openPath: desktopShell.openPath,
+  showItemInFolder: desktopShell.showItemInFolder,
+  openedFilesRoot: join(butlerDataRoot, "tmp", "opened-files"),
   isTrustedSender: (event) => event.sender === mainWindow?.webContents,
 });
 

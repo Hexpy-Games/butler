@@ -1,3 +1,4 @@
+// test-category: race
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 /**
  * Conversation DS story smoke: work progress rows, the current-status line,
@@ -269,11 +270,68 @@ async function checkExternalReferences(page: Page, baseUrl: string): Promise<voi
   }
 }
 
+/** Check text, rather than heading blocks, since short titles retain their full layout width. */
+async function checkDialogTitleClearance(page: Page, baseUrl: string): Promise<void> {
+  let checked = 0;
+  for (const width of [1440, 390]) for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    for (const entry of ["components/Dialog", "blocks/DialogForm"]) {
+      await page.goto(`${baseUrl}?${new URLSearchParams({ visual: "design-system", page: entry, locale, theme, motion: "reduced" })}`);
+      await page.locator("[data-ds-story]").first().waitFor();
+      const triggers = page.locator('[data-ds-story] [data-ds-theme] button[aria-haspopup="dialog"]');
+      for (let index = 0; index < await triggers.count(); index++) {
+        await triggers.nth(index).click();
+        const dialogs = page.locator('[data-slot="dialog-content"]:visible:has(> [data-slot="dialog-close"]:visible)');
+        for (const dialog of await dialogs.all()) {
+          await dialog.evaluate(async element => {
+            await document.fonts.ready;
+            for (const animation of element.getAnimations({ subtree: true })) {
+              if (animation.effect?.getTiming().iterations !== Infinity) animation.finish();
+            }
+          });
+          const overlaps = await dialog.evaluate(element => {
+            const close = element.querySelector(':scope > [data-slot="dialog-close"]')!;
+            const box = close.getBoundingClientRect();
+            const probe = document.createElement("span");
+            probe.style.width = "var(--focus-ring-room)";
+            probe.style.position = "absolute";
+            element.appendChild(probe);
+            const room = probe.getBoundingClientRect().width;
+            probe.remove();
+            const titles = element.querySelectorAll('[data-slot="dialog-title"], form > :first-child > :first-child');
+            return [...titles].flatMap(title => {
+              if (getComputedStyle(title).clipPath !== "none" || title.classList.contains("sr-only")) return [];
+              const walker = document.createTreeWalker(title, NodeFilter.SHOW_TEXT);
+              const intersections = [];
+              while (walker.nextNode()) {
+                const range = document.createRange();
+                range.selectNodeContents(walker.currentNode);
+                for (const line of range.getClientRects()) {
+                  if (line.width && line.height && line.left < box.right + room && line.right > box.left - room &&
+                    line.top < box.bottom + room && line.bottom > box.top - room) intersections.push(line.toJSON());
+                }
+              }
+              return intersections;
+            });
+          });
+          assert(overlaps.length === 0, `dialog title text intersects close button: ${JSON.stringify(overlaps)}`);
+          checked++;
+        }
+        await page.keyboard.press("Escape");
+      }
+    }
+  }
+  assert(checked > 0, "dialog title clearance checked no dialogs");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  console.log(JSON.stringify({ check: "dialog-title-close-clearance", dialogs: checked, overlaps: 0 }));
+}
+
 const server = await createNativeAppServer({ uiRoot });
 const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await server.signIn(page);
+  await checkDialogTitleClearance(page, server.url);
   await checkExternalReferences(page, server.url);
   await checkActivityTurns(page, server.url);
   await checkWorkActivity(page, server.url);

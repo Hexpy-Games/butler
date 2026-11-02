@@ -16,6 +16,10 @@ const MAX_HTML: usize = 8 * 1024 * 1024;
 pub(in crate::gateway::http) struct ReaderPort(pub Weak<HttpState>);
 
 impl RenderPort for ReaderPort {
+    fn host_attached(&self) -> bool {
+        self.0.upgrade().is_some_and(|state| attached(&state))
+    }
+
     fn render(&self, url: String, wait: Duration) -> RenderFuture {
         let state = self.0.clone();
         Box::pin(async move { render(&state.upgrade()?, &url, wait).await })

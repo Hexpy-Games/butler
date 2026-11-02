@@ -1,10 +1,8 @@
-//! Process-owned hook registry; no workers, watchers or idle timers.
+//! Process-owned user hook registry; no workers, watchers or idle timers.
 mod context;
 mod decision;
 mod execute;
-mod project;
 mod registry;
-mod trust;
 use butler_core::hooks::*;
 use parking_lot::RwLock;
 use std::{
@@ -23,18 +21,9 @@ struct State {
     runs: VecDeque<HookRun>,
 }
 pub(crate) struct Dispatcher(Arc<Hooks>);
-/// A chat nobody answered for keeps its entry until restart; this bounds them.
-const MAX_HELD_STARTS: usize = 256;
 struct Hooks {
     plugins: Arc<super::plugins::Plugins>,
     path: PathBuf,
-    data: PathBuf,
-    /// Which folder each session works in.
-    bindings: butler_turn::workspace::SessionBindingStore,
-    /// One read-modify-write of the project folder answers at a time.
-    trust_writer: tokio::sync::Mutex<()>,
-    /// SessionStart events whose project hooks wait for an answer, by session.
-    held_starts: parking_lot::Mutex<HashMap<String, HookEnvelope>>,
     home: PathBuf,
     environment: HashMap<String, String>,
     events: AtomicU8,
@@ -43,24 +32,14 @@ struct Hooks {
     pool: Arc<tokio::sync::Semaphore>,
     /// Budgets output too large for one turn's context.
     output: butler_runtime::context::ToolOutput,
+    /// Told when a failing hook blocks part of a running turn.
+    block_listener: RwLock<Option<HookBlockListener>>,
     shutdown: CancellationToken,
 }
 impl Dispatcher {
-    pub(crate) async fn port(
+    pub(crate) async fn open(
         plugins: Arc<super::plugins::Plugins>,
         data: PathBuf,
-        bindings: butler_turn::workspace::SessionBindingStore,
-        environment: &HashMap<String, String>,
-        output: butler_runtime::context::ToolOutput,
-        shutdown: CancellationToken,
-    ) -> Arc<dyn HookPort> {
-        Arc::new(Self::open(plugins, data, bindings, environment, output, shutdown).await)
-    }
-
-    async fn open(
-        plugins: Arc<super::plugins::Plugins>,
-        data: PathBuf,
-        bindings: butler_turn::workspace::SessionBindingStore,
         environment: &HashMap<String, String>,
         output: butler_runtime::context::ToolOutput,
         shutdown: CancellationToken,
@@ -68,10 +47,6 @@ impl Dispatcher {
         let hooks = Arc::new(Hooks {
             plugins,
             path: data.join(butler_platform::data_paths::HOOKS),
-            data: data.clone(),
-            bindings,
-            trust_writer: tokio::sync::Mutex::new(()),
-            held_starts: parking_lot::Mutex::new(HashMap::new()),
             home: butler_platform::user_dirs::home_dir().unwrap_or_else(|| data.clone()),
             environment: butler_platform::command_sandbox::tool_environment(environment),
             events: AtomicU8::new(0),
@@ -90,6 +65,7 @@ impl Dispatcher {
             mutation: tokio::sync::Mutex::new(()),
             pool: Arc::new(tokio::sync::Semaphore::new(8)),
             output,
+            block_listener: RwLock::new(None),
             shutdown,
         });
         let _ = registry::reload(&hooks).await;
@@ -163,7 +139,7 @@ impl HookPort for Dispatcher {
         payload: HookEnvelope,
         cancel: CancellationToken,
     ) -> HookFuture<'_, HookDispatched> {
-        Box::pin(execute::dispatch(&self.0, payload, cancel, None))
+        Box::pin(execute::dispatch(&self.0, payload, cancel))
     }
     fn test(&self, id: String, cancel: CancellationToken) -> HookFuture<'_, HookRun> {
         Box::pin(execute::test(&self.0, id, cancel))
@@ -171,31 +147,7 @@ impl HookPort for Dispatcher {
     fn runs(&self) -> Vec<HookRun> {
         self.0.state.read().runs.iter().cloned().collect()
     }
-    fn review_project(
-        &self,
-        project_dir: String,
-        session_id: Option<String>,
-    ) -> HookFuture<'_, ProjectHookReview> {
-        Box::pin(project::review(&self.0, project_dir, session_id))
-    }
-    fn decide_project(&self, request: ProjectHookRequest, allowed: bool) -> HookFuture<'_, ()> {
-        Box::pin(project::decide(&self.0, request, allowed))
-    }
-    fn hold_session_start(&self, envelope: HookEnvelope) {
-        if let Some(session) = envelope.session_id.clone() {
-            let mut held = self.0.held_starts.lock();
-            if held.len() < MAX_HELD_STARTS {
-                held.insert(session, envelope);
-            }
-        }
-    }
-    fn release_session_start(
-        &self,
-        session_id: String,
-        _access_mode: String,
-        _cancel: CancellationToken,
-    ) -> HookFuture<'_, ()> {
-        self.0.held_starts.lock().remove(&session_id);
-        Box::pin(async { Ok(()) })
+    fn observe_blocks(&self, listener: HookBlockListener) {
+        *self.0.block_listener.write() = Some(listener);
     }
 }

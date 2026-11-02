@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS btcc_session_relations (
 );
 
 CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
+  access_limit_mode TEXT,
+  access_limit_recorded INTEGER NOT NULL DEFAULT 0,
   delegation_id TEXT PRIMARY KEY,
   relation_id TEXT NOT NULL UNIQUE,
   task_id TEXT NOT NULL UNIQUE,
@@ -25,6 +27,10 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
   created_at TEXT NOT NULL,
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_btcc_superseded_worker
+ON btcc_subsession_delegations(json_extract(packet_json,'$.superseded_by'))
+WHERE json_extract(packet_json,'$.superseded_by') IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_parent_turn
 ON btcc_session_relations(parent_session_id,parent_turn_id,ordinal);

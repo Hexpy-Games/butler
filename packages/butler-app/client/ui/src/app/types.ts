@@ -1193,6 +1193,14 @@ export interface StewardResultView {
 
 export type SubtaskState = "working" | "paused" | "needs_approval";
 
+/** One Worker of a subtask, finished ones included, in delegation order. */
+export interface SubtaskWorkerView {
+  session_id: string;
+  relation_id: string;
+  title: string;
+  status: "active" | "waiting" | "completed" | "failed" | "blocked" | "cancelled";
+}
+
 /** One unfinished delegated subtask (a steward child) of a conversation. */
 export interface SubtaskView {
   session_id: string;
@@ -1202,6 +1210,8 @@ export interface SubtaskView {
   plan_completed?: number;
   plan_total?: number;
   started_at: string;
+  /** Session view only; absent when the subtask has no Workers. */
+  workers?: SubtaskWorkerView[];
 }
 
 export interface StewardSessionSummaryView {
@@ -1614,6 +1624,8 @@ export interface ProjectDashboardView {
 }
 
 export interface SessionArtifactSummary {
+  /** Content hash; paired with source_label to identify repeated file deliveries. */
+  sha256?: string;
   id: string;
   session_id?: string;
   project_id?: string;
@@ -1948,14 +1960,10 @@ export interface ImageApprovalOperation {
   images: string[]; mask?: string | null; prompt: string;
 }
 
-export interface ProjectHookLine { event: string; tools: string[]; command: string }
-
 export interface ApprovalSummary {
   /** Exact local decision facts; do not apply workspace-label normalization. */
   operation?: { image?: ImageApprovalOperation; tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; allow_site?: "signed_in" | "payment"; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
-  /** The folder a trust card asks about, and every hook it would run, exactly as it would run. */
-  projectHooks?: { folder: string; unsandboxed?: boolean; hooks: ProjectHookLine[] };
   /** What a reviewed schedule create sets up: its name, timing and run mode; never its id. */
   schedule?: { title: string; scheduleType: "once" | "interval" | "daily" | "weekdays" | "update"; browserSignin?: boolean; browserPayment?: boolean; time?: string; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };
   actionKind: string;

@@ -27,6 +27,7 @@ export interface BrowserTab {
   saveOffer?: { username: string; host: string };
 }
 export interface BrowserSnapshot {
+  layoutRevision?: number;
   /** Saved tabs have finished loading; an empty list is authoritative only then. */
   restored: boolean; enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
 }

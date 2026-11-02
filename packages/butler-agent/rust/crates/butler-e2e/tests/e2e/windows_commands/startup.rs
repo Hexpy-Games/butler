@@ -129,6 +129,35 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
     Ok(())
 }
 
+/// One unit past the longest folder a Windows process starts in (258).
+#[test]
+fn working_directory_of_259_units_starts_a_process() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Windows working-directory limit"
+    );
+    let setup = Setup::new("CWD-259")?;
+    let units = |path: &std::path::Path| path.as_os_str().to_string_lossy().encode_utf16().count();
+    let mut directory = setup.sandbox.root.clone();
+    // Components longer than 8.3 names, so the folder has a shorter alias.
+    let component = "long-component-0123456789012345678901234";
+    while units(&directory) + 2 * (component.len() + 1) <= 259 {
+        directory.push(component);
+    }
+    let rest = 258 - units(&directory);
+    assert!(rest > 12, "sandbox root too long: {}", directory.display());
+    directory.push("x".repeat(rest));
+    assert_eq!(units(&directory), 259, "{}", directory.display());
+    std::fs::create_dir_all(&directory)?;
+    let status = std::process::Command::new("cmd")
+        .args(["/d", "/c", "exit 0"])
+        .current_dir(working_directory(&directory)?)
+        .status()?;
+    assert!(status.success(), "{status:?}");
+    Ok(())
+}
+
 #[test]
 fn shell_phase_timings_require_invocation_opt_in() -> Result<(), HarnessError> {
     butler_e2e::gate!();

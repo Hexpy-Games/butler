@@ -4,6 +4,9 @@ use crate::btcc::{AccessMode, TurnRecord};
 
 use super::super::work::GuidedPreparationError;
 
+mod access;
+pub use access::project_turn_access_mode;
+
 /// The role a guided turn runs as; other stored names are kept verbatim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PolicyRole {
@@ -102,6 +105,12 @@ impl GuidedExecutionPolicy {
             None => Some(session_id),
             Some(subsession) => subsession.root_session_id.as_deref(),
         }
+    }
+
+    /// Only the main chat's Butler may read and change canon; delegated
+    /// sessions never get the canon tools.
+    pub fn canon_writer(&self) -> bool {
+        self.role == PolicyRole::Butler && self.subsession.is_none()
     }
 
     /// Main chat usage or the writing session policy role verbatim.

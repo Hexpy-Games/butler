@@ -97,13 +97,12 @@ pub use agent_loop::{
     ModelRoundObserver, ModelRoundPort, ModelRoundRequest, ModelRoundResult, ModelRoundRole,
     ModelRoundTool, ModelRoundToolCall, ModelStop, OperationResultMessageReferences,
     OperationResultReplayFactory, OperationResultRuntime, OperationResultRuntimeFactory,
-    OperationResultScope, PendingTool, ProductionAgentLoop, ProjectHooksCard, PromptImages,
-    PromptPort, ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver,
-    RenderedGuidedPrompt, ReplayMode, RollingContextV1, RoundRequestOptions, SemanticTurn,
-    SteeringObservation, StreamRelay, TextCallDisposition, ToolCallOrigin, ToolChoice,
-    ToolExecutionError, ToolOutcome, ToolPort, ToolResult, ToolSurface, TurnContextProjection,
-    TurnSteeringPort, UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
-    latest_work_anchor_indices,
+    OperationResultScope, PendingTool, ProductionAgentLoop, PromptImages, PromptPort,
+    ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver, RenderedGuidedPrompt,
+    ReplayMode, RollingContextV1, RoundRequestOptions, SemanticTurn, SteeringObservation,
+    StreamRelay, TextCallDisposition, ToolCallOrigin, ToolChoice, ToolExecutionError, ToolOutcome,
+    ToolPort, ToolResult, ToolSurface, TurnContextProjection, TurnSteeringPort, UsageAttribution,
+    VerifiedImagePayloadPort, WorkFinalState, WorkPort, latest_work_anchor_indices,
 };
 pub use agent_loop::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, TrackingMode,
@@ -141,8 +140,8 @@ pub use guided_budget::{GuidedContinuationBudgetFactory, TurnContinuationBudgetP
 pub use guided_turn::{
     GuidedAuthorityDecision, GuidedCatalogRead, GuidedCatalogSnapshot, GuidedPhase,
     GuidedPhaseInput, GuidedPhaseSelection, GuidedPreparationError, GuidedWork, LedgerEffects,
-    PolicyRole, SurfaceMode, guided_authority_loop_decision, load_guided_turn_work, select_phase,
-    work_scope_for_turn,
+    PolicyRole, SurfaceMode, guided_authority_loop_decision, load_guided_turn_work,
+    project_turn_access_mode, select_phase, work_scope_for_turn,
 };
 pub use model_route::{
     ContextMeasurement, ContextSizing, ContextSizingRequest, GuidedSourceRevision,
@@ -295,3 +294,6 @@ pub use test_pause::reach as pause_for_test;
 
 pub use authority::pending_asks::{PendingAsk, PendingAskChange};
 pub use authority::resolve_ask::{ResolveAsk, guard as resolve_ask_guard};
+
+mod result_projection;
+pub use result_projection::ResultProjection;

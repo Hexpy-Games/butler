@@ -25,6 +25,7 @@ import { protectPartition, wireTab } from "./tab-events.mjs";
 import { clearOffer } from "./signin-offer.mjs";
 import { drainStills } from "./still-delivery.mjs";
 import { attachView, capturePage, detachView } from "./view-capture.mjs";
+import { createViewRecovery, failTab } from "./view-recovery.mjs";
 
 /** One registry per App; no web view before Browser activation. */
 class UserBrowser {
@@ -46,6 +47,7 @@ class UserBrowser {
   constructor(app, getWindow, getLanguage) {
     startMarkingHost();
     this.getWindow = getWindow;
+    this.viewRecovery = createViewRecovery(this);
     this.live = new BrowserLiveFrames(this);
     this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
@@ -62,7 +64,7 @@ class UserBrowser {
   snapshot() {
     const popups = new Map();
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
-    return { restored: this.opened, enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
+    return { restored: this.opened, enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest, layoutRevision: this.layoutRevision ?? 0,
       tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab) || Boolean(tab.stillJobs?.size), paused: Boolean(tab.pausedTurns), agentAt: tab.lastAgentCall ?? undefined, privacyFrozen: this.live.sensitive(tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
         signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
   }
@@ -71,6 +73,7 @@ class UserBrowser {
     this.pointer.sync(this.tabs.get(this.activeId));
     this.onState?.(this.snapshot());
     const win = this.getWindow();
+    this.viewRecovery.bind(win);
     if (win && this.boundWindow !== win) {
       this.boundWindow = win;
       win.webContents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => { if (mainFrame && !inPlace) this.hide(); });
@@ -96,7 +99,9 @@ class UserBrowser {
     const dragging = this.pointer.captures(tab?.id) && tab.id === this.activeId && !this.nativeCovers;
     if (tab?.id === this.activeId && !dragging) this.pointer.hide();
     if (tab?.attached && tab.view) {
-      void this.capture(tab);
+      // Preserve the visible frame once; repeated hidden layout passes must not
+      // keep starting readbacks while waiting to move this view.
+      if (tab.view.getVisible()) void this.capture(tab);
       detachView(tab, () => {
         if (this.tabs.get(tab.id) === tab && !tab.closing && !tab.closeRequested && tab.view && !tab.view.webContents.isDestroyed()) this.sync(tab);
       });
@@ -105,7 +110,7 @@ class UserBrowser {
   sync(tab) {
     if (tab?.popupWindow) { syncPopup(this, tab); return; }
     const win = this.getWindow();
-    const visible = win && !win.isDestroyed() && win.isVisible() && this.areaVisible && tab.id === this.activeId &&
+    const visible = win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && this.areaVisible && tab.id === this.activeId &&
       tab.slot?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
     if (!visible || !tab.view) { this.detach(tab); backgroundTab(this, tab); return; }
     viewedTab(this, tab, true);
@@ -179,7 +184,9 @@ class UserBrowser {
     attachNativeWorlds(tab);
     this.live.watch(tab);
     tab.afterCapture = image => this.live.changed(tab, image);
+    tab.onCaptureStalled = () => failTab(this, tab, true);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
+      fail: (item, stalled) => failTab(this, item, stalled),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       linkMenu: (url) => linkMenuItems(this, url, tab), language: this.getLanguage,
       window: this.getWindow, shortcut: (input) => {
@@ -331,7 +338,18 @@ class UserBrowser {
         if (tab.owner === "mine") this.restore.changed();
         void tab.identityReady.then(() => contents.loadURL(url)).catch(() => {});
       }
-    } else if (op === "reload") { tab.status = "loading"; contents.reload(); }
+    } else if (op === "reload") {
+      if (tab.surfaceStalled && !contents.isCrashed()) {
+        tab.surfaceStalled = false;
+        contents.once("render-process-gone", () => {
+          if (tab.closing || contents.isDestroyed()) return;
+          tab.status = "loading"; contents.reload(); this.sync(tab); this.publish();
+        });
+        contents.forcefullyCrashRenderer(); return;
+      }
+      tab.surfaceStalled = false;
+      tab.status = "loading"; contents.reload();
+    }
     else if (op === "stop") contents.stop();
     else if (op === "back" && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack();
     else if (op === "forward" && contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward();
@@ -413,6 +431,7 @@ class UserBrowser {
   }
   async dispose() {
     this.disposing = true;
+    this.viewRecovery.dispose();
     await this.drainStills();
     await disposeMarkingHost();
     this.live.dispose();

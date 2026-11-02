@@ -1,9 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { browserCall, connectBrowser, type BrowserTab } from "./browserBridge";
+import { browserCall, connectBrowser, useBrowserState, type BrowserTab } from "./browserBridge";
+
+/** A background/occluded document may stop rAF; it must still release a held pane transition. */
+function presentStill() {
+  if (document.hidden) return Promise.resolve();
+  return new Promise<void>(resolve => {
+    let frame = 0;
+    const done = () => {
+      clearTimeout(timer); cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", changed); resolve();
+    };
+    const changed = () => { if (document.hidden) done(); };
+    const timer = setTimeout(done, 1000);
+    document.addEventListener("visibilitychange", changed);
+    frame = requestAnimationFrame(() => { frame = requestAnimationFrame(done); });
+  });
+}
 
 /** Keep the still painted before detaching the native page for an App overlay. */
 export function useBrowserPage(tab?: BrowserTab) {
   const generation = useRef(0);
+  const layoutRevision = useBrowserState(state => state.layoutRevision);
+  // Native window events may resume a slot whose last animation frame was occluded.
+  // Feed the existing DS geometry/occlusion tracker, including when its rect is unchanged.
+  useEffect(() => { window.dispatchEvent(new Event("resize")); }, [layoutRevision]);
   const [still, setStill] = useState<{ id: string; src: string }>();
   useEffect(() => {
     let current = true;
@@ -33,7 +53,7 @@ export function useBrowserPage(tab?: BrowserTab) {
         if (revision !== generation.current) return;
         setStill({ id: tab.id, src });
       }
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await presentStill();
     }
     if (revision === generation.current) await browserCall("covered", { id: tab.id, value });
   };

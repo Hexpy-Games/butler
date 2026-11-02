@@ -10,10 +10,6 @@ pub use denial::{
     execution_timeout_exit, isolation_failure, isolation_failure_exit, sandbox_denial,
 };
 mod credentials;
-mod hook_containment;
-pub use hook_containment::{
-    ContainedHook, HookContainment, HookSandbox, contain_hook, hook_invocation, powershell_literal,
-};
 pub mod mxc_policy;
 mod project_secrets;
 pub use credentials::secret_name;
@@ -249,6 +245,13 @@ pub enum Protection {
     Unavailable(Invocation),
 }
 
+/// The shell of a user's lifecycle hook `command`: `/bin/sh -lc` on Unix and
+/// `%ComSpec% /d /s /c` on Windows, as the hook documentation says. Unlike
+/// [`login_shell`], Windows does not use PowerShell here.
+pub fn hook_shell(command: &str, environment: &HashMap<String, String>) -> Invocation {
+    shell::hook_shell(command, environment)
+}
+
 /// The login-shell invocation of a user command with `access`: `/bin/sh -lc`
 /// on Unix and Windows PowerShell 5.1 on Windows. Explicit `cmd /c` scripts
 /// use `%ComSpec% /d /s /c` (read from `environment`).
@@ -278,35 +281,6 @@ pub fn login_shell_contained(
         environment,
         deny_reads,
         allow_reads,
-    )
-}
-
-/// `invocation` inside the read-only sandbox, with `root` readable. Hosts without one
-/// refuse it. Never start the invocation unwrapped instead.
-pub(crate) fn read_only_invocation(
-    invocation: Invocation,
-    environment: &HashMap<String, String>,
-    root: &Path,
-) -> Result<Invocation, SandboxError> {
-    sandbox::read_only_contained(invocation, environment, &[], &[root])
-}
-
-/// `invocation` inside the project-write sandbox; see [`project_write_shell`].
-pub(crate) fn project_write_invocation(
-    invocation: Invocation,
-    environment: &HashMap<String, String>,
-    root: &Path,
-    writable: &[&Path],
-    denied: &[&Path],
-    toolchain_roots: Option<&ToolchainRoots>,
-) -> Result<Invocation, SandboxError> {
-    sandbox::project_write(
-        invocation,
-        environment,
-        root,
-        writable,
-        denied,
-        toolchain_roots,
     )
 }
 

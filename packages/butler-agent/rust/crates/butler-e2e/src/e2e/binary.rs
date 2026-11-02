@@ -136,3 +136,13 @@ pub fn fixture_binary(name: &str) -> Result<PathBuf, HarnessError> {
     }
     Ok(path)
 }
+
+/// What a program started with a cleared environment still needs to start:
+/// nothing on Unix; on Windows the system folders (Winsock fails without
+/// `SystemRoot`). Pass to `Command::envs` after `env_clear`.
+pub fn system_environment() -> Vec<(&'static str, std::ffi::OsString)> {
+    butler_platform::process_control::SYSTEM_ENVIRONMENT
+        .iter()
+        .filter_map(|name| std::env::var_os(name).map(|value| (*name, value)))
+        .collect()
+}
