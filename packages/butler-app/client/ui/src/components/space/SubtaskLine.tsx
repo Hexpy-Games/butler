@@ -11,7 +11,7 @@ import { openSubtask, subtaskStatus } from "../session-info/subtasks.ts";
  */
 function SubtaskLine({ parentId, subtask }: { parentId: string; subtask: SubtaskView }) {
   useAppLocale();
-  const open = () => void openSubtask(parentId, subtask);
+  const open = () => void openSubtask(parentId, subtask.session_id);
   const mark = <SubtaskMark parentId={parentId} subtask={subtask} size="sidebar" />;
   const actions = subtask.state === "paused" ? mark : (
     <NavRowSwap rest={mark}>
