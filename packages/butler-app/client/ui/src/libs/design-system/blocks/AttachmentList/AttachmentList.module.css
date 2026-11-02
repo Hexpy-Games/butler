@@ -69,6 +69,10 @@
   object-fit: cover;
 }
 
+.thumbnail img[data-fit="contain"] {
+  object-fit: contain;
+}
+
 .name {
   min-width: 0;
   overflow: hidden;

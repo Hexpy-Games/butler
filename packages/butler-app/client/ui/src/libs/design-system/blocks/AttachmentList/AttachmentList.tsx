@@ -21,6 +21,8 @@ export interface AttachmentListItem {
   thumbnail?: {
     src: string;
     alt?: string;
+    /** Image sizing inside its neutral thumbnail frame. Default cover. */
+    fit?: "cover" | "contain";
   };
   /** Kept but not sendable; a short reason (a few words) shown in the name tooltip. */
   blockedReason?: string;
@@ -120,6 +122,7 @@ export function AttachmentList({
               <img
                 alt={item.thumbnail.alt ?? item.name}
                 src={item.thumbnail.src}
+                data-fit={item.thumbnail.fit === "contain" ? "contain" : undefined}
               />
             </span>
           ) : (

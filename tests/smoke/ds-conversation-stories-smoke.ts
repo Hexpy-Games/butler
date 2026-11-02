@@ -1,4 +1,5 @@
 // test-category: race
+import { checkAttachmentFit } from "../support/attachment-fit-acceptance";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 /**
  * Conversation DS story smoke: work progress rows, the current-status line,
@@ -339,6 +340,7 @@ try {
   await checkCurrentStatusLine(page, server.url);
   await checkInlineImage(page, server.url);
   await checkAttachments(page, server.url);
+  await checkAttachmentFit(page, server.url);
   await checkConversationAside(page, server.url);
   console.log(JSON.stringify({
     ok: true,

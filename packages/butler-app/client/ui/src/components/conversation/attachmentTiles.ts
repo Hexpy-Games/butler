@@ -13,14 +13,16 @@ export function attachmentExtension(name: string): string {
 }
 
 /** The face of a tile for one stored file: its picture, its video's first frame, or its type. */
-export function attachmentTile(file: MessageFileRef): Omit<AttachmentListItem, "id" | "icon" | "blockedReason"> {
+export function attachmentTile(file: MessageFileRef, metadata?: unknown): Omit<AttachmentListItem, "id" | "icon" | "blockedReason"> {
   const kind = attachmentViewerKind(file);
   const src = messageFileUrl(file);
+  const source = metadata && typeof metadata === "object" && "untrusted_content" in metadata ? metadata.untrusted_content : undefined;
+  const capture = source && typeof source === "object" && "kind" in source && source.kind === "untrusted_web_page_data";
   return {
     name: file.safe_name,
     meta: formatFileSize(file.size_bytes),
     extension: attachmentExtension(file.safe_name),
-    thumbnail: kind === "image" ? { src, alt: file.safe_name } : undefined,
+    thumbnail: kind === "image" ? { src, alt: file.safe_name, fit: capture ? "contain" : undefined } : undefined,
     video: kind === "video" ? { src } : undefined,
   };
 }

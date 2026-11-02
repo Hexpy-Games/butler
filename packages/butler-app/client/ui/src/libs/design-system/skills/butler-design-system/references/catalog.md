@@ -765,6 +765,7 @@
 | Whenever the background comes from settings or an agent as a WallpaperSource | `Wallpaper` |  |
 | Which days something changed | `ActivityStrip` | `SpanBar` |
 | Who wrote a conversation message | `MessageAvatarBlock` | `Avatar` |
+| Whole-image previews (thumbnail.fit=contain) alongside cropped photos (default cover) | `AttachmentList` |  |
 | Work in progress | `Spinner` | `UnreadDot` |
 | Work that can also fail or be cancelled with no success | `Spinner` | `LoadingIndicator` |
 | WorkActivityDisclosure: a work card whose full timeline opens in place, collapsed to the latest activity | `WorkActivityBlock` |  |
@@ -2088,6 +2089,7 @@ Files attached to a message: square tiles (composer row, sent message), a list w
 
 - Use for: Files the user attached (composer tiles) or sent (message tiles)
 - Use for: Picked page elements in the composer (chips)
+- Use for: Whole-image previews (thumbnail.fit=contain) alongside cropped photos (default cover)
 - Not for: Files Butler produced → `ArtifactList`
 - Not for: Project documents → `DocumentTile`
 - Tokens: `--radius-pill`, `--line`, `--icon-size-sm`, `--radius-panel`, `--focus-ring-room`, `--motion-scale-press`, `--motion-scale-dialog`, `--danger`
