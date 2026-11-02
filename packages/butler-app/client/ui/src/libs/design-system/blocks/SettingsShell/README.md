@@ -1,5 +1,7 @@
 # SettingsShell
 
+Glossary: 설정 화면 / settings screen (`SettingsShell`).
+
 ## What is this component
 SettingsShell provides the two-region settings layout: navigation sidebar and scrollable detail area.
 

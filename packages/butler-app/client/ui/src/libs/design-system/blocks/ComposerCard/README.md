@@ -1,8 +1,10 @@
 # ComposerCard
 
+Glossary: 컴포저 / composer (`ComposerCard`); 메시지 입력칸 / message input (`ComposerCardEditor`).
+
 ## What is this component
 
-`ComposerCard` is the Butler chat composer surface. It owns the glass card,
+`ComposerCard` is the Butler composer surface. It owns the glass card,
 textarea rhythm, adjunct panel inset, toolbar row, plan toggle alignment, and
 send/stop control.
 

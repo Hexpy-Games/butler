@@ -1,7 +1,9 @@
 # QueuedMessage
 
+Glossary: 대기 메시지 행 / queued message row (`QueuedMessage`).
+
 ## What is this component
-A pending user-side message in the conversation: a status label (clock icon,
+A queued message row in the conversation: a status label (clock icon,
 "Queued · 2 of 3"), a bubble with a dashed hairline outline and a subdued
 fill, and a controls row with an optional "Send now" text button plus edit
 and delete icon buttons.

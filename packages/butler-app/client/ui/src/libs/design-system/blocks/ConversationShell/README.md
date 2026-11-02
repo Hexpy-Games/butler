@@ -77,7 +77,7 @@ and for the rest of that view once it has, the shell sets `data-rail="reserved"`
 - Narrower than 720px: the shelf strip sits on top, and the messages start below
   it (`--conversation-rail-top`).
 - Cards that come and go later never move the column back. Pass `rail={null}`
-  while the browser area is open. The column then returns, and a later rail
+  while the browser column is open. The column then returns, and a later rail
   reserves room again.
 
 The rail sits 16px into a shell card (`--conversation-top-reserve`), or under the
@@ -108,7 +108,7 @@ a scrollbar lane only while a classic scrollbar is drawn):
   `--conversation-column-width` and `--conversation-column-shift`.
   `onColumnRect` then reports the aside's far edge as `right`, so a background
   keeps the aside clear too.
-- Floating (narrower, e.g. beside the browser area): one TintedGlass panel over
+- Floating (narrower, e.g. beside the browser column): one TintedGlass panel over
   the conversation, ending above the composer, shown only while
   `asideFloatOpen`. The column does not move.
 

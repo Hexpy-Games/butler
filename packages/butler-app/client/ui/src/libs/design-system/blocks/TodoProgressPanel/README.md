@@ -1,6 +1,8 @@
 # TodoProgressPanel
 
-`TodoProgressPanel` renders a compact checklist-style progress panel.
+Glossary: 진행 내역 / progress log (`TodoProgressPanel`).
+
+`TodoProgressPanel` renders the progress log as a compact checklist.
 
 Use it inside `ComposerCard`'s `adjunct` slot for progress surfaces where each
 row is a step state, not a toolchain or work-block body. The fixture renders the
