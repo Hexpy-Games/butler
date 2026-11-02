@@ -56,6 +56,12 @@ async fn another_conversation_and_schedule_keep_their_modes() -> Result<(), Harn
 }
 
 async fn scheduled(s: &Scenario) -> Result<(), HarnessError> {
+    assert_eq!(
+        s.gw.patch("/settings", json!({"plan_mode_default":true}))
+            .await?
+            .status,
+        200
+    );
     let reply =
         s.gw.post(
             "/automations",

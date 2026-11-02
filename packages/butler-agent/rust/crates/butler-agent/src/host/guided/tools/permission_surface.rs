@@ -56,16 +56,7 @@ pub(super) async fn snapshot(
         return Ok(Some(snapshot.clone()));
     }
     let mut turn = turn.clone();
-    turn.model_selection
-        .controls
-        .insert("accessMode".into(), serde_json::json!(mode));
-    if let Some(policy) = turn
-        .context
-        .get_mut("executionPolicy")
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        policy.insert("accessMode".into(), serde_json::json!(mode));
-    }
+    butler_turn::btcc::project_turn_access_mode(&mut turn, mode);
     let config = &owner.binding.permission_config;
     let mut phase = select_phase(GuidedPhaseInput {
         turn: &turn,

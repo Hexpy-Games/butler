@@ -196,16 +196,7 @@ pub(in crate::btcc::storage) fn project(
     turn: &mut TurnRecord,
 ) -> AuthorityResult<()> {
     if let Some(mode) = effective(db, &turn.turn_id)? {
-        turn.model_selection
-            .controls
-            .insert("accessMode".into(), serde_json::json!(mode));
-        if let Some(policy) = turn
-            .context
-            .get_mut("executionPolicy")
-            .and_then(Value::as_object_mut)
-        {
-            policy.insert("accessMode".into(), serde_json::json!(mode));
-        }
+        crate::btcc::project_turn_access_mode(turn, &mode);
     }
     Ok(())
 }

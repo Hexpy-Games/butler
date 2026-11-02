@@ -67,24 +67,37 @@ fn configure(script: &Script) {
             command("child-first"),
             command("child-second"),
             disposition(&json!([{"action_key":"check","status":"done"}])),
+            json!({"type":"message","id":"worker-done","role":"assistant","status":"completed",
+                "content":[{"type":"output_text","text":"Worker checks completed.","annotations":[]}]}),
         ],
     );
 }
 
-async fn pending(s: &Scenario, count: usize) -> Result<Vec<Value>, HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let cards = s.gw.approval_requests("general").await?;
-        if cards.len() == count {
-            return Ok(cards);
-        }
-        assert!(
-            Instant::now() < deadline,
-            "approvals: {cards:?}\n{}",
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+fn result_script(s: &Scenario, script: &Script, cards: &[Value]) -> Result<(), HarnessError> {
+    let parent = cards
+        .iter()
+        .find(|card| card["approval"]["operation"]["command"] == "echo parent-first")
+        .unwrap();
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let work: String = db.query_row(
+        "SELECT work_id FROM btcc_guided_works WHERE origin_turn_id=?1",
+        [parent["source_turn_id"].as_str().unwrap()],
+        |row| row.get(0),
+    )?;
+    script.rounds.lock().unwrap().insert(
+        "Delegated result status: success summary: Worker checks completed. evidence_refs:".into(),
+        vec![
+            call("result-wait", "wait_for_worker", &json!({})),
+            call(
+                "result-done",
+                "record_work_disposition",
+                &json!({"work_id":work,"disposition":"completed",
+                "summary":"Checked","action_updates":[{"action_key":"first","status":"done"},
+                {"action_key":"future","status":"done"}],"remaining_actions":[],"followups":[]}),
+            ),
+        ],
+    );
+    Ok(())
 }
 
 #[tokio::test]
@@ -105,6 +118,7 @@ async fn existing_and_future_workers_and_parent_use_the_answered_revision()
             .iter()
             .any(|c| c["approval"]["operation"]["command"] == "echo parent-first")
     );
+    result_script(&s, &script, &cards)?;
     controls(&s, "full_access").await?;
     s.restart().await?;
     for card in &cards {

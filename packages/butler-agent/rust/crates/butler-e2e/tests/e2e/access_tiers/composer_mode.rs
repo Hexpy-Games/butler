@@ -19,6 +19,7 @@ async fn setup() -> Result<(Scenario, Arc<Script>, tokio::task::JoinHandle<()>),
     let (url, script, server) = stub::start().await?;
     let s = Setup::new("COMPOSER-PERMISSION")?
         .access(Access::Auto)
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
@@ -36,7 +37,7 @@ fn command(id: &str) -> Value {
         id,
         "run_command",
         &json!({"command":format!("echo {id}"),"cwd":".",
-        "sandbox":"none","state_effect":"read_only","summary":"Check status"}),
+        "sandbox":"none","state_effect":"mutation","summary":"Check status"}),
     )
 }
 
@@ -132,16 +133,15 @@ async fn non_reusable_approval_rejects_a_conversation_grant() -> Result<(), Harn
 async fn narrowing_at_the_next_answer_rechecks_the_following_command() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = setup().await?;
-    script.rounds.lock().unwrap().insert(
-        PROMPT.into(),
-        vec![
-            json!([command("first"), command("sibling")]),
-            command("third"),
-        ],
-    );
+    controls(&s, "ask_first").await?;
+    let reads = [read(&s, "first")?, read(&s, "sibling")?];
+    script
+        .rounds
+        .lock()
+        .unwrap()
+        .insert(PROMPT.into(), vec![json!(reads), command("third")]);
     let turn = paused(&s, "general", PROMPT).await?;
-    let cards = s.gw.approval_requests("general").await?;
-    assert_eq!(cards.len(), 2);
+    let cards = pending(&s, 2).await?;
     controls(&s, "full_access").await?;
     answer(&s, cards[1]["request_ref"].as_str().unwrap(), "allow").await?;
     controls(&s, "ask_first").await?;
@@ -163,6 +163,12 @@ async fn narrowing_at_the_next_answer_rechecks_the_following_command() -> Result
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
     delivered(&s, "general", &turn).await?;
+    let requests = script.requests_for(PROMPT);
+    let inputs = requests.last().unwrap()["input"].to_string();
+    assert!(
+        inputs.contains("first-read") && inputs.contains("sibling-read"),
+        "{inputs}"
+    );
     assert_counts(&s, &turn, 3, 0)?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let modes = db
@@ -176,6 +182,16 @@ async fn narrowing_at_the_next_answer_rechecks_the_following_command() -> Result
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+fn read(s: &Scenario, id: &str) -> Result<Value, HarnessError> {
+    let path = s.sandbox.data.join(format!("{id}.txt"));
+    std::fs::write(&path, format!("{id}-read"))?;
+    Ok(call(
+        id,
+        "read_file",
+        &json!({"requests":[{"path":path,"max_bytes":2048}]}),
+    ))
 }
 
 #[tokio::test]
@@ -239,5 +255,21 @@ fn write(id: &str, path: &str, bridge: bool) -> Value {
         )
     } else {
         call(id, "write_file", &args)
+    }
+}
+
+async fn pending(s: &Scenario, count: usize) -> Result<Vec<Value>, HarnessError> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let cards = s.gw.approval_requests("general").await?;
+        if cards.len() == count {
+            return Ok(cards);
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "approvals: {cards:?}\n{}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 }

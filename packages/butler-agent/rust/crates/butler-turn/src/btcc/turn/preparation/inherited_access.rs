@@ -38,7 +38,7 @@ impl DefaultTurnPreparation {
                 .extend(requirements(runtime, "required_tools"));
             resume
                 .released_tools
-                .retain(|name| !requirement_allowed(&mode, name));
+                .retain(|name| !GuidedExecutionPolicy::requirement_allowed(&mode, name));
             if binding.role == crate::workspace::SessionRole::Worker
                 && mode != crate::btcc::AccessMode::FullAccess
             {
@@ -151,7 +151,7 @@ fn apply_inherited_policy(binding: &mut StoredSessionBinding, mode: &crate::btcc
         {
             tools.retain(|v| {
                 v.as_str()
-                    .is_none_or(|name| requirement_allowed(mode, name))
+                    .is_none_or(|name| GuidedExecutionPolicy::requirement_allowed(mode, name))
             });
         }
     }
@@ -180,22 +180,4 @@ fn requirements(runtime: Option<&serde_json::Value>, field: &str) -> Vec<String>
         .filter_map(serde_json::Value::as_str)
         .map(str::to_owned)
         .collect()
-}
-
-fn requirement_allowed(mode: &crate::btcc::AccessMode, name: &str) -> bool {
-    use crate::btcc::{
-        AccessDecision, AccessRequest, ApprovalRisk, CapabilityKind, TargetScope, TurnTaint,
-    };
-    !matches!(
-        crate::btcc::decide(
-            mode,
-            AccessRequest {
-                kind: CapabilityKind::of_call(name, &serde_json::Map::new(), false),
-                risk: ApprovalRisk::High,
-                scope: TargetScope::NoTarget,
-                taint: TurnTaint::Clean,
-            }
-        ),
-        AccessDecision::Deny(_)
-    )
 }
