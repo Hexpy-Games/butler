@@ -270,9 +270,10 @@ fn epic_tool_tokens_stay_within_existing_budget() -> Result<(), HarnessError> {
     let description_tokens = tokenizer.encode_ordinary(description).len();
     let schema_tokens = tokenizer.encode_ordinary(&schema.to_string()).len();
     eprintln!(
-        "ANSWER_BLOCKS_TOKENS before=227+2776=3003 after={description_tokens}+{schema_tokens}={}",
+        "ANSWER_BLOCKS_TOKENS main=234+2776=3010 after={description_tokens}+{schema_tokens}={}",
         description_tokens + schema_tokens
     );
-    assert!(description_tokens + schema_tokens <= 3003);
+    // Ratchet: main measured 3010 before the epics block; counts may only go down.
+    assert!(description_tokens + schema_tokens <= 3009);
     Ok(())
 }

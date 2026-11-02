@@ -110,13 +110,13 @@ async function openAttachment(name: string, file: string) {
   const tile = `[data-test-class="message-attachment-list"] [data-slot="attachment-tile"] button[aria-label="${file}"]`;
   await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${tile}'))`), "sent attachments");
   await click(tile);
-  await waitBrowser(() => app.page.expression(`document.querySelector('${viewer}')?.closest('[data-test-class]') !== null && document.querySelector('${viewer}').textContent.length > 0`), `${file} in the inspector`);
+  await waitBrowser(() => app.page.expression(`(() => { const node = document.querySelector('${viewer}'); return Boolean(node?.closest('[data-test-class]')) && node.textContent.length > 0; })()`), `${file} in the inspector`);
   if (name) { await assertUnsupported("attachment"); await capture(`attachment-${name}`); }
 }
 
 /** The viewer shows the unsupported state with an enabled "open in app" (its header saves), and none of the zip's bytes. */
 async function assertUnsupported(label: string) {
-  const read = () => app.page.expression<string>(`document.querySelector('${viewer}').textContent`);
+  const read = () => app.page.expression<string>(`document.querySelector('${viewer}')?.textContent ?? ""`);
   await waitBrowser(async () => ![copy.artifacts.loading, ""].includes(await read()), `${label} loaded`);
   const text = await read();
   if (baseline) { console.log(`${label} (before): ${text.includes("PK") ? "zip bytes as text" : "no zip text"}`); return; }

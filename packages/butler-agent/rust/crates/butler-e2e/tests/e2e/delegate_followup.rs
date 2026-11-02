@@ -233,12 +233,17 @@ fn assert_followup(
         feedback["output"]["prior_context"]["result"]["status"],
         if stopped { "cancelled" } else { "success" }
     );
+    let child_request = format!(
+        "role: steward user_request (the user's own words, verbatim): {} request (Butler's reading): {}",
+        stub::FOLLOWUP,
+        stub::FOLLOWUP
+    );
     let child = requests[before..]
         .iter()
         .find(|body| {
             butler_e2e::e2e::matching::key("/v1/responses", body, &Default::default())
                 .user_request
-                .starts_with("role: steward request: 다시 조사해줄래?")
+                .starts_with(&child_request)
         })
         .unwrap()
         .to_string();
