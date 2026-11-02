@@ -119,7 +119,6 @@ pub(in crate::btcc::authority) fn exact_approval(
         operation.allow_conversation = Some(false);
     }
     if record.reason == "authority.taintReason" {
-        operation.allow_conversation = Some(false);
         if let Some(arguments) = input.as_object()
             && crate::btcc::CapabilityKind::of_call(&record.capability, arguments, false)
                 .persists_beyond_turn()

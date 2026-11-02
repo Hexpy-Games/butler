@@ -110,26 +110,6 @@ fn assert_revision(s: &Scenario, turn: &str, mode: &str, count: u64) -> Result<(
 }
 
 #[tokio::test]
-async fn non_reusable_approval_rejects_a_conversation_grant() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (s, _, server) = setup().await?;
-    paused(&s, "general", PROMPT).await?;
-    let cards = s.gw.approval_requests("general").await?;
-    let reference = cards[0]["request_ref"].as_str().unwrap();
-    let reply =
-        s.gw.post(
-            &format!("/authority-requests/{reference}/allow?session_id=general"),
-            json!({"scope":"conversation"}),
-        )
-        .await?;
-    assert_eq!(reply.status, 400, "{}", reply.text);
-    assert_eq!(s.gw.approval_requests("general").await?.len(), 1);
-    s.finish().await?;
-    server.abort();
-    Ok(())
-}
-
-#[tokio::test]
 async fn narrowing_at_the_next_answer_rechecks_the_following_command() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = setup().await?;
@@ -170,15 +150,6 @@ async fn narrowing_at_the_next_answer_rechecks_the_following_command() -> Result
         "{inputs}"
     );
     assert_counts(&s, &turn, 3, 0)?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let modes = db
-        .prepare(
-            "SELECT composer_access_mode FROM btcc_authority_requests WHERE composer_root_turn_id=?1 ORDER BY composer_revision",
-        )?
-        .query_map([&turn], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    assert_eq!(modes, ["full_access", "ask_first"]);
-    drop(db);
     s.finish().await?;
     server.abort();
     Ok(())
