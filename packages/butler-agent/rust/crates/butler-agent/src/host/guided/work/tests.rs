@@ -165,7 +165,7 @@ async fn real_sqlite_work_final_reconcile_persists_current_open_disposition() {
         service,
         scope,
         "local".into(),
-        "butler",
+        butler_turn::btcc::SqliteSubsessionRepository::new(storage.clone()),
         "English".into(),
         "finish work".into(),
     )
