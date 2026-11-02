@@ -321,6 +321,7 @@ mod canon_handoff;
 mod canon_link;
 mod canon_plan_run;
 mod canon_registration;
+mod delegation_handoff;
 mod one_call_delegation;
 
 mod chats_initiated;

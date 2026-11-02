@@ -5,6 +5,7 @@ pub(crate) async fn seed_test_assistant_attachment(
     session_id: &str,
     message_id: &str,
     file_id: &str,
+    deliverable: bool,
 ) -> Result<(), GatewayApplicationError> {
     let session_id = session_id.to_owned();
     let message_id = message_id.to_owned();
@@ -24,13 +25,14 @@ pub(crate) async fn seed_test_assistant_attachment(
             )
             .map_err(AppStorageError::sqlite)?;
             db.execute(
-                "INSERT INTO message_files(id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at) \
-                 VALUES(?1,?2,?3,'image','image/png','plot.png',7,'sha-artifact','plot.png',?4)",
+                "INSERT INTO message_files(id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at,deliverable) \
+                 VALUES(?1,?2,?3,'image','image/png','plot.png',7,'sha-artifact','plot.png',?4,?5)",
                 rusqlite::params![
                     file_id,
                     session_id,
                     message_id,
-                    "2026-09-14T00:00:00.000Z"
+                    "2026-09-14T00:00:00.000Z",
+                    deliverable
                 ],
             )
             .map_err(AppStorageError::sqlite)?;

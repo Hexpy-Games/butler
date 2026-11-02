@@ -399,14 +399,15 @@ async fn run(access: Access) -> Result<(), HarnessError> {
                     "A withheld file is not an unavailable attachment: {answer}"
                 );
             } else {
-                let artifacts = answer["artifacts"].as_array().unwrap();
+                let attachments = answer["attachments"].as_array().unwrap();
                 assert_eq!(
-                    artifacts.len(),
+                    attachments.len(),
                     1,
                     "Committed file must be downloadable: {answer}"
                 );
-                assert!(artifacts[0]["file_id"].is_string());
-                assert!(artifacts[0]["url"].is_string());
+                assert!(attachments[0]["file_id"].is_string());
+                assert!(attachments[0]["url"].is_string());
+                assert!(answer.get("artifacts").is_none(), "{answer}");
             }
         }
         butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(5), case.tool);

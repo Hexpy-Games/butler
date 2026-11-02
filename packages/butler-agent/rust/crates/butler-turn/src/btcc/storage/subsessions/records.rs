@@ -68,6 +68,14 @@ pub struct SubsessionPacket {
     pub access_mode: crate::btcc::AccessMode,
     pub execution_mode: PacketExecutionMode,
     pub objective: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_request: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub earlier_steps: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_by: Option<String>,
     /// Runtime-attached previous request and canonical result for a fresh follow-up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prior_context: Option<String>,
@@ -290,6 +298,10 @@ impl SubsessionPacket {
             access_mode: crate::btcc::AccessMode::FullAccess,
             execution_mode: PacketExecutionMode::Mutation,
             objective: objective.into(),
+            user_request: None,
+            target_path: None,
+            earlier_steps: Vec::new(),
+            superseded_by: None,
             prior_context: None,
             acceptance_criteria: Vec::new(),
             implementation_brief: None,
