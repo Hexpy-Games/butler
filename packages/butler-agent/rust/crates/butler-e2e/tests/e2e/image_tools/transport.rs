@@ -40,7 +40,7 @@ async fn offered_choices_follow_the_selected_image_model() -> Result<(), Harness
         let prompt = format!("Check the image choices for {provider}");
         f.run(&prompt).await?;
         let requests = f.script.requests_for(&prompt);
-        let tools = requests[0]["tools"].as_array().unwrap();
+        let tools: Vec<_> = butler_e2e::e2e::chatgpt_wire::functions(&requests[0]).collect();
         for name in ["generate_image", "edit_image"] {
             let tool = tools.iter().find(|t| t["name"] == name).unwrap();
             for (key, choices) in [("size", "sizes"), ("quality", "qualities")] {
