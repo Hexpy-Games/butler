@@ -38,7 +38,7 @@ pub(super) async fn prepare(
             .get("access_mode")
             .and_then(Value::as_str)
             .and_then(butler_turn::btcc::AccessMode::parse)
-            .is_some_and(|mode| mode.rank() > owner.binding.access_mode.rank())
+            .is_some_and(|mode| mode.rank() > owner.access_mode().rank())
     {
         return Err(BtccError::relayed(
             "schedule_access_exceeds_turn",

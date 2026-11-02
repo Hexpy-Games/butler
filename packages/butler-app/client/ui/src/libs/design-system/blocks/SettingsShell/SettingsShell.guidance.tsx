@@ -40,7 +40,7 @@ function Framed() {
 }
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The settings layout: navigation master, detail header and detail pane, single-pane on compact widths.",
+  purpose: "The settings screen layout: navigation master, detail header and detail pane, single-pane on compact widths.",
   whenToUse: ["The settings screen and settings-like editors"],
   whenNotToUse: [
     { when: "A management page (automations, dashboards)", use: "ManagementPage" },

@@ -1,13 +1,13 @@
 # TitlebarShell
 
 ## What is this component
-A compact titlebar composition for shell previews.
+A compact title bar composition for shell previews.
 
 ## When to use this component
 Use it for titlebar-like app chrome and viewer fixtures.
 
 ## Where to use this component
-Use it inside `ChromeFrame` or product titlebar presenters.
+Use it inside `ChromeFrame` or product title bar presenters.
 
 ## Why to use this component
 It standardizes app identity, subtitle, and trailing controls.
@@ -33,7 +33,7 @@ The control is pulled back by its inner inset so its label starts where the
 title would; the collapsed-sidebar inset on the bar is unchanged.
 
 ## Two groups that follow the browser split
-The conversation titlebar reads `[title subtitle ⋯ ······ 세션 정보][browser]`:
+The conversation title bar reads `[title subtitle ⋯ ······ 세션 정보][browser]`:
 
 - `titleActions`: controls after the whole title line, title then subtitle
   (the conversation's ⋯ menu), on screen and in reading order, so title and
@@ -73,7 +73,7 @@ request waits for an answer, pass `indicator` and say so in the label (“세션
 the dot reads the same over either tone.
 
 ## Tags
-titlebar, shell, chrome
+title bar, shell, chrome
 
 ## Back on nested screens
 Pass `back={{ label, onBack }}` on a nested screen (서랍 › 스크랩, a group in it, an item's detail): a back button

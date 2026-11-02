@@ -1,7 +1,9 @@
 # LibraryCard
 
+Glossary: 저장 자료 카드 / saved item card (`LibraryCard`).
+
 ## What is this block
-`LibraryCard` is one library (서랍) item on a `Card` with a media slot: an image,
+`LibraryCard` is one saved item card in the library (서랍), on a `Card` with a media slot: an image,
 a quote, a document or a block preview at 16:10, a kind tag, the title with its source
 and a ⋯ menu.
 

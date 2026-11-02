@@ -132,7 +132,10 @@ async fn hooks_context_over_the_read_bound_tells_model_and_run_log() -> Result<(
     let setup = setup("HOOK-CONTEXT-BOUND")?.env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
     let limit = butler_platform::hook_process::CONTEXT_OUTPUT_LIMIT;
     let body = format!("{HEAD}{}", "x".repeat(limit));
-    configure(&setup, &[from_file(&setup, "flood", &body)?])?;
+    // Overflow is a failure: only a hook that opted out lets the send go on to tell it.
+    let mut flood = from_file(&setup, "flood", &body)?;
+    flood["failClosed"] = json!(false);
+    configure(&setup, &[flood])?;
     let s = setup.start().await?;
     assert_eq!(s.turn("general", "Goes on.").await?.1["state"], "delivered");
     let prompt = prompts(&s)?.pop().unwrap();

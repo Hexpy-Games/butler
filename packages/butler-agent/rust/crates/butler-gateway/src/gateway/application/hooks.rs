@@ -1,9 +1,45 @@
 //! Admission lifecycle hooks, always outside the storage transaction.
 use super::*;
 use crate::gateway::MessageSendRequest;
-use butler_core::hooks::{HookAttachment, HookContext, HookEnvelope, HookEvent, HookPayload};
+use butler_core::hooks::{
+    HookAttachment, HookBlock, HookContext, HookEnvelope, HookEvent, HookPayload,
+};
 use rusqlite::params;
+/// A failing hook blocked an event; the App names it in a toast.
+pub(super) const BLOCKED_EVENT: &str = "hook.blocked";
 impl AppApplication {
+    /// Publishes failures as `hook.blocked` or `hook.failed`. Rejected sends
+    /// need no duplicate notification: their response names the hook.
+    pub fn observe_hook_blocks(&self) {
+        let Some(port) = &self.dependencies.hooks else {
+            return;
+        };
+        let storage = self.storage.clone();
+        let subscribers = self.subscribers.clone();
+        let clock = self.dependencies.identity_clock.clone();
+        port.observe_blocks(Arc::new(move |block: HookBlock| {
+            let Ok(Value::Object(payload)) = serde_json::to_value(&block) else {
+                return;
+            };
+            let (storage, subscribers, now) =
+                (storage.clone(), subscribers.clone(), clock.now_iso());
+            let event = if block.blocked {
+                BLOCKED_EVENT
+            } else {
+                "hook.failed"
+            };
+            tokio::spawn(async move {
+                let published = storage
+                    .execute(move |db| {
+                        events::append(db, &subscribers, event, None, payload, &now).map(drop)
+                    })
+                    .await;
+                if let Err(error) = published {
+                    tracing::warn!(event = "hook_block_not_published", %error);
+                }
+            });
+        }));
+    }
     pub(super) async fn session_start_hook(
         &self,
         id: String,

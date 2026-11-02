@@ -41,7 +41,7 @@ export function LibraryItemCard({ item, view, selection, onAttach }: { item: Lib
     ...(hasGroups(kind) ? [{ icon: <Folder size="sm" />, label: `${copy.groups[kind].moveTo}…`, onSelect: () => useLibraryDialogs.setState({ move: { kind, items: [item] } }) }] : []),
     { icon: <TagIcon size="sm" />, label: copy.editTags, onSelect: () => useLibraryDialogs.setState({ tagItems: [item] }) },
     { icon: <MessageSquarePlus size="sm" />, label: appCopy.browser.attach, onSelect: onAttach },
-    ...(item.block || documentKind(item) || item.file || item.output || hasWebSource(item) ? [{ icon: <Popup size="sm" />, label: appCopy.browser.openSource, onSelect: () => void openLibraryItem(item, true) }] : []),
+    ...(item.block || documentKind(item) || item.file || item.output || hasWebSource(item) ? [{ icon: <Popup size="sm" />, label: item.session && (item.file || item.output || documentKind(item)) ? appCopy.fileViewer.goToChat : appCopy.browser.openSource, onSelect: () => void openLibraryItem(item, true) }] : []),
     { icon: <Trash2 size="sm" />, label: copy.deleteItem, variant: "destructive" as const, onSelect: remove },
   ];
   return (
