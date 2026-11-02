@@ -54,11 +54,12 @@ impl SqliteSubsessionRepository {
             let delegation = read(db,"r.child_session_id=?1",&child_session)?.ok_or_else(|| StorageError::new(StorageCode::SubsessionRelationMissing,"Subsession relation is missing"))?;
             let result_id = turn_result_id(&child_session, &child_turn);
             let packet = &delegation.packet;
-            let (model, reasoning) = model_context(packet)?;
+            let model = packet.model_ref.as_str();
+            let reasoning = packet.reasoning_effort.as_str();
             let access = packet.access_mode.as_str();
             let parent_chat = packet.parent_chat_id.as_deref();
+            if model.is_empty() || reasoning.is_empty() { return Err(StorageError::new(StorageCode::SubsessionParentModelContextMissing,"Subsession model context is missing")); }
             let tx = db.transaction().map_err(StorageError::sqlite)?;
-            let summary = super::work_tasks::with_scope_errors(&tx, &child_turn, summary)?;
             let evidence_json=serde_json::to_string(&evidence_refs).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
             let code = failure_code.as_ref().map(|_| "steward_execution_failed")
                 .or(handoff.as_ref().map(|_| "capability_unavailable_in_child"));
@@ -108,7 +109,7 @@ impl SqliteSubsessionRepository {
                 super::directions::retire_with_stop(&tx, &delegation.relation_id, &child_turn, &now)?;
             }
             if packet.child_role == ChildRole::Worker {
-                super::work_tasks::settle_dispatch(&tx, &delegation.relation_id, &now)?;
+                tx.execute(super::worker_admission::COMPLETE_WORKER_SQL, params![delegation.relation_id]).map_err(StorageError::sqlite)?;
             }
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(())
@@ -201,16 +202,6 @@ fn append_relay(text: &mut String, role: ChildRole, status: &str, has_handoff: b
     if role == ChildRole::Steward && status == "success" && !has_handoff {
         text.push_str(RELAY);
     }
-}
-
-fn model_context(packet: &SubsessionPacket) -> Result<(&str, &str), StorageError> {
-    if packet.model_ref.is_empty() || packet.reasoning_effort.is_empty() {
-        return Err(StorageError::new(
-            StorageCode::SubsessionParentModelContextMissing,
-            "Subsession model context is missing",
-        ));
-    }
-    Ok((&packet.model_ref, &packet.reasoning_effort))
 }
 
 #[cfg(test)]

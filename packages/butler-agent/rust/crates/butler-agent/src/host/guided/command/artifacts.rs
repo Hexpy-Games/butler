@@ -31,19 +31,6 @@ pub(super) struct Artifact {
 #[derive(Default)]
 pub(super) struct Snapshot(HashMap<String, String>);
 
-pub(super) fn changed(before: &Snapshot, after: &Snapshot) -> Vec<String> {
-    let mut paths: Vec<_> = before
-        .0
-        .keys()
-        .chain(after.0.keys())
-        .filter(|path| before.0.get(*path) != after.0.get(*path))
-        .map(|path| format!("artifacts/generated/{path}"))
-        .collect();
-    paths.sort();
-    paths.dedup();
-    paths
-}
-
 pub(super) struct Publication {
     pub requested: usize,
     pub artifacts: Vec<Artifact>,

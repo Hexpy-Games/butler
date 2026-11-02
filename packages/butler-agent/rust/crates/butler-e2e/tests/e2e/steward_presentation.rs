@@ -395,7 +395,7 @@ fn assert_direction(
                 && item["name"] == "read_file"
                 && item["call_id"] == "read-b")
             .count(),
-        4 // Retained through delivery, closeout, and the final report.
+        3
     );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let applied: i64 = db.query_row(

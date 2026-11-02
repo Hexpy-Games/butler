@@ -120,6 +120,9 @@ fn normalize_effects(
 }
 
 fn normalize_scope(values: Vec<String>) -> Result<Vec<String>, BtccError> {
+    if values.is_empty() {
+        return Err(error(BtccCode::DelegationMutationScopeRequired));
+    }
     let mut paths = Vec::new();
     for value in values {
         let path = normalize_scope_path(&value)

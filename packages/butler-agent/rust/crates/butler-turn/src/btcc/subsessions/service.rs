@@ -17,8 +17,6 @@ mod projection;
 mod result_delivery;
 mod selection;
 mod subtasks;
-mod task_direction;
-mod task_scope;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
@@ -120,7 +118,6 @@ pub struct StewardDelegationRequest {
 /// A steward's request to delegate one plan action to a worker.
 #[derive(Clone, Debug)]
 pub struct WorkerDelegationRequest {
-    pub task: Option<crate::btcc::TaskContract>,
     pub parent_session_id: String,
     pub parent_turn_id: String,
     pub anchor_message_id: String,

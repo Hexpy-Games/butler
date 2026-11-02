@@ -362,10 +362,7 @@ fn work_id(body: &Value) -> String {
         })
         .unwrap_or_default()
 }
-fn call(name: &str, mut args: Value) -> Value {
-    if name == "delegate_to_worker" && args.get("task").is_none() {
-        args["task"] = json!({"scope":{"paths":[format!("tasks/{}", args["action_key"].as_str().unwrap_or("work"))]},"output":{"format":"text","fields":["summary"]}});
-    }
+fn call(name: &str, args: Value) -> Value {
     let mut output = json!({"type":"function_call","name":name});
     output["arguments"] = args;
     output

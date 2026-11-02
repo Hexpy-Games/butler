@@ -92,7 +92,7 @@ fn insert_plan_revision(
     let input = &command.input;
     let revision = common::next_revision(db, "btcc_guided_work_plan_revisions", work_id)?;
     let plan_id = common::record_id("plan", &input.mutation_call_id);
-    db.execute("INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id, revision, objective, governing_refs_json, execution_mode, actions_json, checks_json, origin_turn_id, created_at, subjects_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)", params![plan_id, work_id, revision, input.objective, common::stable(&command.governing_refs)?, input.execution_mode.map(common::enum_text).transpose()?, common::stable(&input.actions)?, common::stable(&input.checks)?, input.scope.turn_id, now, common::stable(&input.subjects)?]).map_err(StorageError::sqlite)?;
+    db.execute("INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id, revision, objective, governing_refs_json, execution_mode, actions_json, checks_json, origin_turn_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", params![plan_id, work_id, revision, input.objective, common::stable(&command.governing_refs)?, input.execution_mode.map(common::enum_text).transpose()?, common::stable(&input.actions)?, common::stable(&input.checks)?, input.scope.turn_id, now]).map_err(StorageError::sqlite)?;
     Ok(plan_id)
 }
 

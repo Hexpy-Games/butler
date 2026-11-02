@@ -48,7 +48,6 @@ async fn ready(name: &str) -> Ready {
         .unwrap();
     let plan = work_service
         .replace_plan(ReplacePlanInput {
-            subjects: Vec::new(),
             scope: scope(),
             mutation_call_id: "plan-authority".into(),
             start_new: None,

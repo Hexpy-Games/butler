@@ -112,7 +112,7 @@ fn steward(step: usize, work: &str) -> Value {
             } else {
                 ("beta", "Verify Beta")
             };
-            json!({"type":"function_call","name":"delegate_to_worker","arguments":{"task":{"scope":{"paths":[format!("tasks/{action}")]},"output":{"format":"text","fields":["summary"]}},"action_key":action,"objective":objective,"acceptance_criteria":["Evidence verified"],"implementation_brief":objective,"safe_title":objective}})
+            json!({"type":"function_call","name":"delegate_to_worker","arguments":{"action_key":action,"objective":objective,"acceptance_criteria":["Evidence verified"],"implementation_brief":objective,"safe_title":objective}})
         }
         3 | 5 => json!({"type":"function_call","name":"wait_for_worker","arguments":{}}),
         6 => {

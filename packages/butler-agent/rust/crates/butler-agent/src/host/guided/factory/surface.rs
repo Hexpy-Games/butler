@@ -138,20 +138,6 @@ pub(in crate::host::guided) async fn for_owner(
         let profiles = subsessions.enabled_worker_profiles().await?;
         with_worker_profile_choices(phase, &profiles)?;
     }
-    // Only the Steward partitions work into Tasks. Other roles retain their
-    // compact planning schema; the catalog still documents the full contract.
-    if phase.execution_policy.role != butler_turn::btcc::PolicyRole::Steward {
-        for definition in &mut phase.provider_tools {
-            if definition.get("name").and_then(serde_json::Value::as_str)
-                == Some("replace_work_plan")
-                && let Some(properties) = definition
-                    .pointer_mut("/parameters/properties")
-                    .and_then(serde_json::Value::as_object_mut)
-            {
-                properties.remove("subjects");
-            }
-        }
-    }
     let image_settings = monitoring.configuration.image_model_settings().await.ok();
     with_image_model_choices(phase, image_settings.as_ref());
     available(phase, catalog)

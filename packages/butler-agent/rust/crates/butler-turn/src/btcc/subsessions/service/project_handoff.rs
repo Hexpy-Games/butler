@@ -161,7 +161,6 @@ fn runtime_plan(
     refs: Vec<String>,
 ) -> ReplacePlanInput {
     ReplacePlanInput {
-        subjects: Vec::new(),
         scope,
         mutation_call_id: handoff_mutation("plan", call),
         start_new: None,

@@ -8,7 +8,7 @@ use butler_core::json;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 
-use super::manifest::{RUNTIME_TABLES, TABLES, digest, manifest_id};
+use super::manifest::{TABLES, digest, manifest_id};
 use super::{StorageError, StorageResult, error};
 use crate::btcc::StorageCode;
 
@@ -36,15 +36,7 @@ pub(super) fn canonical_schema(db: &Connection) -> StorageResult<()> {
         .map_err(StorageError::sqlite)?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(StorageError::sqlite)?;
-    let mut expected = TABLES.to_vec();
-    if actual
-        .iter()
-        .any(|table| RUNTIME_TABLES.contains(&table.as_str()))
-    {
-        expected.extend(RUNTIME_TABLES);
-        expected.sort_unstable();
-    }
-    if actual.iter().map(String::as_str).collect::<Vec<_>>() != expected {
+    if actual.iter().map(String::as_str).collect::<Vec<_>>() != TABLES {
         return Err(error(StorageCode::AgentBtccStorageManifestMismatch));
     }
     Ok(())

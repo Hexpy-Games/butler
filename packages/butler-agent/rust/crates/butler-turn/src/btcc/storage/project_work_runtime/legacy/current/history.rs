@@ -30,7 +30,7 @@ pub(super) fn plans(db: &Connection, work_id: &str) -> StorageResult<Vec<WorkPla
     let mut statement = db
         .prepare(
             "SELECT plan_revision_id,revision,objective,governing_refs_json,execution_mode, \
-         actions_json,checks_json,origin_turn_id,created_at,subjects_json FROM btcc_guided_work_plan_revisions \
+         actions_json,checks_json,origin_turn_id,created_at FROM btcc_guided_work_plan_revisions \
          WHERE work_id=?1 ORDER BY revision",
         )
         .map_err(StorageError::sqlite)?;
@@ -46,15 +46,13 @@ pub(super) fn plans(db: &Connection, work_id: &str) -> StorageResult<Vec<WorkPla
                 row.get::<_, String>(6)?,
                 row.get::<_, String>(7)?,
                 row.get::<_, String>(8)?,
-                row.get::<_, String>(9)?,
             ))
         })
         .map_err(StorageError::sqlite)?
         .map(|row| {
-            let (id, revision, objective, refs, mode, actions, checks, origin, at, subjects) =
+            let (id, revision, objective, refs, mode, actions, checks, origin, at) =
                 row.map_err(StorageError::sqlite)?;
             Ok(WorkPlan {
-                subjects: parse(&subjects)?,
                 plan_revision_id: id,
                 revision,
                 objective,

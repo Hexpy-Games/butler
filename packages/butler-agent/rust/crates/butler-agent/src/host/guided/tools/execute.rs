@@ -61,7 +61,7 @@ pub(super) async fn execute(
     let result = super::permission_mode::with_approval(
         approval_mode,
         effective_name.clone(),
-        super::task_writes::dispatch(owner, invocation, call, &call_id, &effective_name),
+        dispatch_result(owner, invocation, call, &call_id),
     )
     .await?;
     if let Some(timing) = &timing {
@@ -233,7 +233,7 @@ async fn complete(
     Ok(result)
 }
 
-pub(super) async fn dispatch_result(
+async fn dispatch_result(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,

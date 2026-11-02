@@ -1,7 +1,6 @@
 //! Durable direction revisions and cancellation over the shared native queue.
 
 use crate::btcc::storage::SubsessionDispatchState;
-mod validation;
 
 use serde_json::{Value, json};
 
@@ -188,16 +187,26 @@ impl SubsessionService {
 
     /// Sends new direction to a subsession.
     pub async fn steer(&self, request: SubsessionDirectionRequest) -> Result<Value, BtccError> {
-        let _admission = self.worker_delegation.lock().await;
-        self.steer_locked(request).await
-    }
-
-    pub(super) async fn steer_locked(
-        &self,
-        request: SubsessionDirectionRequest,
-    ) -> Result<Value, BtccError> {
-        let instruction = self.direction_instruction(&request).await?;
-        let instruction = instruction.as_str();
+        let instruction = butler_core::public_text::trim_js_whitespace(&request.instruction);
+        if instruction.is_empty() {
+            return Err(error(BtccCode::StewardDirectionInstructionRequired));
+        }
+        if instruction.chars().count() > 1_200 {
+            return Err(error(BtccCode::StewardDirectionInstructionTooLong));
+        }
+        if request.access_mode == "read_only"
+            || !self
+                .repository
+                .admitted_turn_matches(
+                    request.parent_session_id.clone(),
+                    request.parent_turn_id.clone(),
+                    request.source_message_id.clone(),
+                )
+                .await
+                .map_err(BtccError::from)?
+        {
+            return Err(error(BtccCode::StewardFollowupAuthorityMismatch));
+        }
         let relation = self
             .select_relation(RelationQuery {
                 parent: &request.parent_session_id,
@@ -213,9 +222,6 @@ impl SubsessionService {
             .await?
         {
             return self.closed_feedback(&relation).await;
-        }
-        if let Some(error) = self.task_direction_error(&relation).await? {
-            return Ok(error);
         }
         self.repository
             .restrict_instruction_context(

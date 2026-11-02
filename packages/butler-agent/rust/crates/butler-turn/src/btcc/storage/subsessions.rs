@@ -14,8 +14,6 @@ mod parents;
 mod prompt_result;
 mod records;
 mod subtasks;
-mod task_replacement;
-mod work_tasks;
 mod worker_admission;
 mod worker_cancel;
 mod worker_failure;
@@ -253,7 +251,6 @@ impl SqliteSubsessionRepository {
             let inserted = tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7)",params![instruction_id,relation,revision,source_turn,source_message,instruction,now]).map_err(StorageError::sqlite)?;
             // Preserve an already published continuation between enqueue and turn admission.
             if inserted == 1 {
-            tx.execute("UPDATE btcc_work_tasks SET status='pending',updated_at=?2 WHERE relation_id=?1 AND status IN ('done','cancelled')",params![relation,now]).map_err(StorageError::sqlite)?;
             tx.execute(worker_admission::RESET_DIRECTION_DISPATCH_SQL, params![relation,already_pending]).map_err(StorageError::sqlite)?;
             }
             let stored=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND source_message_id=?2",params![relation,source_message],direction_row).map_err(StorageError::sqlite)?;

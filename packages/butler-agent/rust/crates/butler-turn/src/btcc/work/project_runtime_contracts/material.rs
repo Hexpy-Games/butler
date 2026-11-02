@@ -42,8 +42,6 @@ impl From<&ActionProgress> for ProjectWorkMaterialProgress {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectWorkMaterialPlan {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub subjects: Vec<crate::btcc::PlanSubject>,
     pub plan_revision_id: String,
     pub revision: u64,
     pub objective: String,

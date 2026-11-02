@@ -52,7 +52,7 @@ pub(super) async fn execute(
             "Use only the changes this task allows.",
         ));
     }
-    if !arguments::scope(&requested, input.mutation_scope, &root) {
+    if !arguments::scope(&requested, input.mutation_scope) {
         return Ok(failure(
             &root,
             &requested,

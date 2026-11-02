@@ -9,18 +9,15 @@ pub(super) async fn assert_delegated_files(
         .rev()
         .find(|message| message["role"] == "assistant")
         .unwrap();
-    assert!(
-        answer["changed_files"].as_array().is_none_or(Vec::is_empty),
-        "Delivered files have one result card, without a duplicate diff: {answer}"
-    );
+    let changed = answer["changed_files"].as_array().unwrap();
+    assert_eq!(changed.len(), 1, "{answer}");
+    assert_eq!(changed[0]["path"], "report.html");
+    assert_eq!(changed[0]["additions"], 2);
     let artifacts = answer["artifacts"].as_array().unwrap();
     assert_eq!(artifacts.len(), 1, "{answer}");
     assert_eq!(artifacts[0]["title"], "report.html");
     assert!(artifacts[0]["file_id"].is_string());
     assert!(artifacts[0]["url"].is_string());
-    let report = s.gw.get(artifacts[0]["url"].as_str().unwrap()).await?;
-    assert_eq!(report.status, 200);
-    assert_eq!(report.text, "<!doctype html>\n<title>Approach B</title>\n");
     let view = s.gw.get("/session-view?session_id=general").await?;
     let rows = view.data()["steward_children"][0]["latest_turn"]["progress"]["safe_progress_rows"]
         .as_array()

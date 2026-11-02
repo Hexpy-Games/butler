@@ -7,7 +7,6 @@ pub(super) mod pending_asks;
 pub(super) mod subsession;
 pub(super) mod task_graphs;
 pub(super) mod work;
-pub(super) mod work_tasks;
 
 use rusqlite::Connection;
 

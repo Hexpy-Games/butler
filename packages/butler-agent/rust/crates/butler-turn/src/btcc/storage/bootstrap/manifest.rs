@@ -50,11 +50,6 @@ pub(super) const TABLES: [&str; 47] = [
     "btcc_wake_request_facts",
 ];
 
-// Additive runtime tables are created by the current-schema migration, after
-// activation validation. They were never part of the legacy import receipt;
-// keeping that immutable manifest preserves existing activation markers.
-pub(super) const RUNTIME_TABLES: [&str; 2] = ["btcc_work_task_waits", "btcc_work_tasks"];
-
 pub(super) fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }

@@ -78,25 +78,31 @@ pub(super) fn allowed(input: &CapabilityInvocation<'_>, effect: &str) -> bool {
         .is_none_or(|items| items.iter().any(|item| item == effect))
 }
 
-pub(super) fn scope(path: &str, scopes: Option<&[String]>, root: &Path) -> bool {
+pub(super) fn scope(path: &str, scopes: Option<&[String]>) -> bool {
+    if Path::new(path).is_absolute() {
+        return true;
+    }
     let Some(scopes) = scopes else {
         return true;
     };
-    let relative = if Path::new(path).is_absolute() {
-        let Ok(relative) = Path::new(path).strip_prefix(root) else {
-            return false;
-        };
-        relative.to_string_lossy().into_owned()
-    } else {
-        path.into()
-    };
-    let Some(target) = butler_turn::btcc::task_path(&relative) else {
+    let target = butler_core::public_text::trim_js_whitespace(path).replace('\\', "/");
+    let target = target.strip_prefix("./").unwrap_or(&target);
+    if target.is_empty()
+        || Path::new(target).is_absolute()
+        || target.split('/').any(|part| part == "..")
+    {
         return false;
-    };
-    scopes
-        .iter()
-        .filter_map(|s| butler_turn::btcc::task_path(s))
-        .any(|scope| butler_turn::btcc::task_path_contains(&scope, &target))
+    }
+    scopes.iter().any(|scope| {
+        let raw = butler_core::public_text::trim_js_whitespace(scope);
+        if raw == "." || raw == "./" {
+            return true;
+        }
+        let normalized = raw.replace('\\', "/");
+        let normalized = normalized.strip_prefix("./").unwrap_or(&normalized);
+        !normalized.is_empty()
+            && (target == normalized || normalized.ends_with('/') && target.starts_with(normalized))
+    })
 }
 
 pub(super) fn sha256(value: Option<&Value>) -> Result<Option<String>, ()> {

@@ -206,7 +206,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 )),
                 self.effects.clone(),
                 self.preparation.authority.clone(),
-                self.file_effects(&workspace, &phase),
+                self.file_effects(&workspace, &workspace_path),
                 self.memory_query.clone(),
                 self.memory_recall.clone(),
                 self.memory_writes.clone(),
@@ -264,7 +264,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     butler_data: self.butler_data.clone(),
                     protected_ledger_roots: self.protected_ledger_roots.clone(),
                     allowed_tools_and_effects: None,
-                    mutation_scope: policy.worker_mutation_scope().map(<[String]>::to_vec),
+                    mutation_scope: None,
                     installation_root: Some(self.installation_root.clone()),
                 },
             )?);

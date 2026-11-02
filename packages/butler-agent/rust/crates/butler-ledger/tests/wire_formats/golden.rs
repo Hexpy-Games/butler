@@ -1,7 +1,6 @@
 //! Golden snapshots: normalized text compared byte for byte with a checked-in
 //! file. `BUTLER_UPDATE_GOLDEN=1` rewrites the file; only do that for an
-//! intended format change and review the diff. Use a filename instead of `1`
-//! to update only that case.
+//! intended format change and review the diff.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -226,7 +225,7 @@ pub(crate) fn assert_golden(name: &str, actual: &str) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/golden")
         .join(name);
-    if std::env::var_os("BUTLER_UPDATE_GOLDEN").is_some_and(|value| value == "1" || value == name) {
+    if std::env::var_os("BUTLER_UPDATE_GOLDEN").is_some_and(|value| value == "1") {
         fs::write(&path, actual).unwrap();
         return;
     }

@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 async fn cb_11_historical_enqueued_continuations_respect_cap_on_restart() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    let (mut s, script, server) = setup("CB-11-HISTORICAL-CAP", 3).await?;
+    let (mut s, script, server) = setup("CB-11-HISTORICAL-CAP", 4).await?;
     script.steer.store(true, Ordering::SeqCst);
     script.followup.store(true, Ordering::SeqCst);
     script.hold_continuation.store(true, Ordering::SeqCst);
@@ -27,17 +27,11 @@ async fn cb_11_historical_enqueued_continuations_respect_cap_on_restart() -> Res
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert_pending_direction(&s, &rows[0])?;
-    recovery::steward_parked(&s, &parent).await?;
     s.agent.kill9()?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let first = rows[0]["relation"]["relation_id"].as_str().unwrap();
     let second = rows[1]["relation"]["relation_id"].as_str().unwrap();
     db.execute("INSERT INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES ('historical-direction',?1,1,'historical-turn','historical-message','Verify the updated source','pending',strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 second'))", [second])?;
-    // The injected direction reserves its existing Task just as create_direction does.
-    db.execute(
-        "UPDATE btcc_work_tasks SET status='pending' WHERE relation_id=?1 AND status='done'",
-        [second],
-    )?;
     db.execute("UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id IN (?1,?2)", rusqlite::params![first,second])?;
     drop(db);
     s.gw = s.agent.start_again().await?;

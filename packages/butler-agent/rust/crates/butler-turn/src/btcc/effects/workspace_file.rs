@@ -198,10 +198,7 @@ fn rejection(value: &Value) -> Option<EffectAdapterError> {
         .unwrap_or("registered_write_file_rejected");
     Some(adapter_error(
         code,
-        record
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or("The registered write_file tool rejected the target or input."),
+        "The registered write_file tool rejected the target or input.",
     ))
 }
 

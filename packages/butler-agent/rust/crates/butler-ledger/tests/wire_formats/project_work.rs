@@ -2,9 +2,6 @@
 //! their child records, publication claims and journals, the lock shard, and
 //! the dashboard projections over them.
 
-#[path = "project_work/subjects.rs"]
-pub(crate) mod subjects;
-
 use std::sync::Arc;
 
 use butler_ledger::project_ledger::{
@@ -133,7 +130,6 @@ fn plan_command(plan: Plan<'_>) -> ReplacePlanCommand {
     };
     ReplacePlanCommand {
         input: ReplacePlanInput {
-            subjects: Vec::new(),
             scope: turn(plan.turn),
             mutation_call_id: plan.call.into(),
             start_new: None,
