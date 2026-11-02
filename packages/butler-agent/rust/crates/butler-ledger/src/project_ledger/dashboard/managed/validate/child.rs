@@ -37,7 +37,7 @@ fn plan(item: &Value, record: &Record) -> Result<(), ProjectLedgerReadError> {
             "originTurnId",
             "createdAt",
         ],
-        &["governingRefs", "executionMode"],
+        &["governingRefs", "executionMode", "subjects"],
     )?;
     positive(item, "revision")?;
     for key in ["objective", "originTurnId", "createdAt"] {
@@ -50,6 +50,17 @@ fn plan(item: &Value, record: &Record) -> Result<(), ProjectLedgerReadError> {
     }
     if let Some(governing) = item.get("governingRefs") {
         strings(governing)?;
+    }
+    if let Some(subjects) = item.get("subjects").filter(|value| !value.is_null()) {
+        let mut keys = std::collections::HashSet::new();
+        for subject in array(Some(subjects))? {
+            exact(object(Some(subject))?, &["key", "label"], &[])?;
+            let key = required_string(subject, "key")?;
+            required_string(subject, "label")?;
+            if !keys.insert(key) {
+                return Err(invalid());
+            }
+        }
     }
     strings(item.get("checks").ok_or_else(invalid)?)?;
     for action in array(item.get("actions"))? {

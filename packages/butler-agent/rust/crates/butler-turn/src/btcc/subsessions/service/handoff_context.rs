@@ -31,6 +31,13 @@ impl SubsessionService {
                         .as_ref()
                         .is_some_and(|action| &action.action_key == key)
             }) {
+                if packet
+                    .task
+                    .as_ref()
+                    .is_some_and(|t| t.inputs.iter().any(|i| i.task == worker.task_id))
+                {
+                    continue;
+                }
                 let Some(result) = self
                     .repository
                     .result_for_relation(worker.relation_id.clone())
@@ -52,7 +59,6 @@ impl SubsessionService {
                         &worker.child_session_id
                     )
                 ));
-                break;
             }
         }
         Ok(())
@@ -62,14 +68,18 @@ impl SubsessionService {
         &self,
         request: &WorkerDelegationRequest,
         work: &WorkView,
-        new: &str,
     ) -> Result<Option<Value>, BtccError> {
         let workers = self
             .repository
             .workers_for_work(request.parent_session_id.clone(), work.work_id.clone())
             .await?;
         for worker in workers {
-            if worker.packet.superseded_by.is_some()
+            if request
+                .replaces_relation_id
+                .as_deref()
+                .is_some_and(|id| id != worker.relation_id)
+                || (request.replaces_relation_id.is_none() && worker.packet.task.is_some())
+                || worker.packet.superseded_by.is_some()
                 || worker
                     .packet
                     .plan_action
@@ -96,18 +106,6 @@ impl SubsessionService {
                     "code":"action_worker_running", "message": format!("Worker {id} is still running action {}. Wait for it with wait_for_worker, correct it with steer_worker, or pass replaces_relation_id {id} to stop it and assign this instead.", request.action_key)
                 }})));
             }
-            self.repository
-                .supersede_worker(id.clone(), new.into())
-                .await?;
-            self.cancel(SubsessionCancelRequest {
-                parent_session_id: request.parent_session_id.clone(),
-                parent_turn_id: request.parent_turn_id.clone(),
-                source_message_id: request.anchor_message_id.clone(),
-                relation_id: Some(id.clone()),
-                safe_title: None,
-                child_role: SessionRole::Worker,
-            })
-            .await?;
         }
         Ok(None)
     }

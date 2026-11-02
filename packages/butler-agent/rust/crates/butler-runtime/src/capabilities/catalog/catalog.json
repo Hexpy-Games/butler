@@ -4751,7 +4751,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_worker",
-        "description": "Assign one action of your accepted Plan to a Worker. Use Workers for actions that can run in parallel and for long actions (research across several sources, multi-file changes, long builds or test runs), so your own context stays on planning, integration and review. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. The Worker also gets the user's own request and the results of this action's finished dependencies: brief only what is new, and never ask it to re-verify facts those results confirmed unless verification is the action. One Worker per action: to replace one still running, pass its relation_id as replaces_relation_id. Steward remains responsible for integration, review, validation, and reporting.",
+        "description": "Assign an exclusive Task of your accepted Plan to a Worker. Include its scope, inputs, return contract and a compact implementation brief. Use parallel Workers for disjoint Tasks and long actions; integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4803,6 +4803,134 @@
               "minLength": 1,
               "maxLength": 500,
               "description": "Workspace path of the file or site this action creates or revises for delivery. The Worker revises and checks that path, and output_publish in this Work then refuses a different one."
+            },
+            "task": {
+              "type": "object",
+              "properties": {
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "owns": {
+                      "type": "array",
+                      "description": "Subjects from the Plan and the aspects this Worker alone covers (for example a product's price). Nothing else may own them while it runs.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "subject": {
+                            "type": "string"
+                          },
+                          "aspects": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "subject"
+                        ]
+                      }
+                    },
+                    "paths": {
+                      "type": "array",
+                      "description": "Files and folders only this Worker may change.",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "excludes": {
+                      "type": "array",
+                      "description": "Nearby things it must not touch.",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "inputs": {
+                  "type": "array",
+                  "description": "Earlier Tasks whose results it uses. use=facts: take them as confirmed; artifact: revise that output; verify: re-check, with a reason.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "task": {
+                        "type": "string"
+                      },
+                      "use": {
+                        "type": "string",
+                        "enum": [
+                          "facts",
+                          "artifact",
+                          "verify"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "task",
+                      "use"
+                    ]
+                  }
+                },
+                "output": {
+                  "type": "object",
+                  "description": "What it returns: format and fields, or files.",
+                  "properties": {
+                    "format": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "format"
+                  ]
+                },
+                "overlap": {
+                  "type": "object",
+                  "description": "When told of an overlap: merge, narrow, wait or verify, with a short reason.",
+                  "properties": {
+                    "resolution": {
+                      "type": "string",
+                      "enum": [
+                        "merge",
+                        "narrow",
+                        "wait",
+                        "verify"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resolution",
+                    "reason"
+                  ]
+                },
+                "merge_after": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "scope",
+                "output"
+              ]
             }
           },
           "required": [
@@ -5193,6 +5321,25 @@
                 "goal"
               ],
               "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request."
+            },
+            "subjects": {
+              "type": "array",
+              "description": "Stable keys for what this plan covers (products, places, sources); Tasks name them in owns.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "label"
+                ]
+              }
             }
           },
           "required": [
@@ -8671,6 +8818,25 @@
               "goal"
             ],
             "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request."
+          },
+          "subjects": {
+            "type": "array",
+            "description": "Stable keys for what this plan covers (products, places, sources); Tasks name them in owns.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "label"
+              ]
+            }
           }
         },
         "required": [
@@ -8919,7 +9085,7 @@
     "delegate_to_worker": {
       "type": "function",
       "name": "delegate_to_worker",
-      "description": "Assign one action of your accepted Plan to a Worker. Use Workers for actions that can run in parallel and for long actions (research across several sources, multi-file changes, long builds or test runs), so your own context stays on planning, integration and review. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. The Worker also gets the user's own request and the results of this action's finished dependencies: brief only what is new, and never ask it to re-verify facts those results confirmed unless verification is the action. One Worker per action: to replace one still running, pass its relation_id as replaces_relation_id. Steward remains responsible for integration, review, validation, and reporting.",
+      "description": "Assign an exclusive Task of your accepted Plan to a Worker. Include its scope, inputs, return contract and a compact implementation brief. Use parallel Workers for disjoint Tasks and long actions; integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -8971,6 +9137,134 @@
             "minLength": 1,
             "maxLength": 500,
             "description": "Workspace path of the file or site this action creates or revises for delivery. The Worker revises and checks that path, and output_publish in this Work then refuses a different one."
+          },
+          "task": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "owns": {
+                    "type": "array",
+                    "description": "Subjects from the Plan and the aspects this Worker alone covers (for example a product's price). Nothing else may own them while it runs.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "type": "string"
+                        },
+                        "aspects": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject"
+                      ]
+                    }
+                  },
+                  "paths": {
+                    "type": "array",
+                    "description": "Files and folders only this Worker may change.",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "excludes": {
+                    "type": "array",
+                    "description": "Nearby things it must not touch.",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "inputs": {
+                "type": "array",
+                "description": "Earlier Tasks whose results it uses. use=facts: take them as confirmed; artifact: revise that output; verify: re-check, with a reason.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "task": {
+                      "type": "string"
+                    },
+                    "use": {
+                      "type": "string",
+                      "enum": [
+                        "facts",
+                        "artifact",
+                        "verify"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "task",
+                    "use"
+                  ]
+                }
+              },
+              "output": {
+                "type": "object",
+                "description": "What it returns: format and fields, or files.",
+                "properties": {
+                  "format": {
+                    "type": "string"
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "format"
+                ]
+              },
+              "overlap": {
+                "type": "object",
+                "description": "When told of an overlap: merge, narrow, wait or verify, with a short reason.",
+                "properties": {
+                  "resolution": {
+                    "type": "string",
+                    "enum": [
+                      "merge",
+                      "narrow",
+                      "wait",
+                      "verify"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "resolution",
+                  "reason"
+                ]
+              },
+              "merge_after": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "scope",
+              "output"
+            ]
           }
         },
         "required": [

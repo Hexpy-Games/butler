@@ -141,6 +141,7 @@ fn material_progress(
 
 fn material_plan(plan: &crate::btcc::work::WorkPlan) -> StorageResult<ProjectWorkMaterialPlan> {
     Ok(ProjectWorkMaterialPlan {
+        subjects: plan.subjects.clone(),
         plan_revision_id: plan.plan_revision_id.clone(),
         revision: plan.revision,
         objective: plan.objective.clone(),

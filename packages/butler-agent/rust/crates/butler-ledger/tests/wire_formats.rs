@@ -35,4 +35,5 @@ async fn ledger_formats_match_their_goldens() {
     commands::ledger_commands_keep_their_files_and_envelopes().await;
     effects::record_effects_keep_their_journal_lock_shard_and_answers().await;
     project_work::project_work_keeps_its_records_and_projections().await;
+    project_work::subjects::project_work_keeps_subjects().await;
 }

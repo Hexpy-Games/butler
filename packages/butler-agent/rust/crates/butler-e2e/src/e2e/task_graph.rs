@@ -38,6 +38,7 @@ pub struct GraphBuilder {
     bindings: SessionBindingStore,
     pub work: Arc<DurableWorkService>,
     pub children: SubsessionService,
+    pub access_mode: Option<AccessMode>,
     queue: Arc<environment::Queue>,
     clock: Arc<Mutex<i64>>,
     sequence: usize,
