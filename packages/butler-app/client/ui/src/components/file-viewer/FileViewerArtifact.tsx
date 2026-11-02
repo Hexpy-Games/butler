@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { LIBRARY_VIEWER, useFileViewerState } from "@/app/fileViewerState";
 import { appCopy } from "@/app/copy";
 import { refreshSessionFileUrls } from "@/app/messageFileRefresh";
 import { useButlerStore } from "@/app/store";
@@ -23,17 +24,17 @@ export function FileViewerArtifact({ sessionId, artifact: latest, onClose, onBac
   const refreshFileUrls = useCallback(() => refreshSessionFileUrls(owner, { cursor }), [owner, cursor]);
   const meta = [artifactDescription(artifact), artifactMeta(artifact)].filter(Boolean).join(" · ");
   return <>
-    <FileViewerHeader title={artifact.title} meta={meta} onClose={onClose} onBack={onBack} actions={fileActions(latest, artifact)}
+    <FileViewerHeader title={artifact.title} meta={meta} onClose={onClose} onBack={onBack} actions={fileActions(latest, artifact, sessionId !== LIBRARY_VIEWER)}
       leading={<ArtifactRevisionSelect artifact={latest} index={index} onChange={setIndex} />} />
     <FileViewerPage fill={artifactPreviewMode(artifact) === "markdown"}><ArtifactBody artifact={artifact} refreshFileUrls={refreshFileUrls} surface="page" /></FileViewerPage>
   </>;
 }
 
-function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSummary): FileViewerAction[] {
+function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSummary, outsideLibrary: boolean): FileViewerAction[] {
   const c = appCopy.fileViewer;
   const actions: FileViewerAction[] = [];
   // Only a delivered file is filed in the 서랍 (as a document); the 문서 section opens searched to it.
-  if (latest.deliverable) actions.push({ id: "open-in-library", label: c.openInLibrary, ariaLabel: `${c.openInLibrary}: ${latest.title}`,
+  if (outsideLibrary && latest.deliverable) actions.push({ id: "open-in-library", label: c.openInLibrary, ariaLabel: `${c.openInLibrary}: ${latest.title}`,
     icon: <Library size="sm" />, labelIcon: true, run: () => openInLibrary(latest.title) });
   const save = artifactCardActions(artifact).find((action) => action.id === "save");
   if (save) actions.push({ id: "save", label: c.save, ariaLabel: save.ariaLabel, icon: <Save size="sm" />,
@@ -42,6 +43,7 @@ function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSu
 }
 
 function openInLibrary(title: string) {
+  useFileViewerState.getState().setShown(LIBRARY_VIEWER, false);
   clearFilters();
   setFilters({ text: title, q: title });
   openLibrary({ section: "document" });
