@@ -37,6 +37,18 @@ impl Policy {
             answer: None,
         }
     }
+    pub(super) fn unreadable(&self) -> Vec<Value> {
+        self.actors
+            .iter()
+            .flat_map(|(lane, actor)| {
+                actor
+                    .research
+                    .unreadable
+                    .iter()
+                    .map(move |(url, issue)| json!({"lane":lane,"url":url,"issue":issue}))
+            })
+            .collect()
+    }
     pub(super) fn reply(&mut self, body: &Value) -> Vec<Value> {
         let (lane, worker) = lane(body, &self.task.spec);
         let actor = self.actors.entry(lane.clone()).or_default();
@@ -242,11 +254,17 @@ pub(super) fn normalized(text: &str) -> String {
         .to_lowercase()
 }
 fn evidence(actor: &Actor, spec: &Value) -> String {
-    let lines = actor
+    let mut lines = actor
         .evidence
         .iter()
         .map(|(i, span)| format!("{} — {}", span, spec["facts"][*i]["page"].as_str().unwrap()))
         .collect::<Vec<_>>();
+    lines.extend(actor.research.unreadable.iter().map(|(url, issue)| {
+        format!(
+            "Unreadable page — {url}: {}",
+            issue["reason"].as_str().unwrap()
+        )
+    }));
     if lines.is_empty() {
         "No matching evidence received.".into()
     } else {

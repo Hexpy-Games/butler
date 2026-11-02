@@ -59,7 +59,13 @@ pub(super) fn measure(
     }
     largest.sort_by_key(|v| std::cmp::Reverse(v["tokens"].as_u64().unwrap()));
     largest.truncate(5);
-    Ok(task_row(task, set, answer, &calls, &requests, &largest))
+    let mut row = task_row(task, set, answer, &calls, &requests, &largest);
+    let unreadable = policy.unreadable();
+    row["unreadable_pages"] = json!(unreadable.len());
+    if !super::blind(set) {
+        row["unreadable"] = json!(unreadable);
+    }
+    Ok(row)
 }
 fn task_row(
     task: &Task,
@@ -176,6 +182,7 @@ pub(super) fn redact(row: &mut Value, set: &str, index: usize) {
         "runtime_models",
         "requests",
         "largest_tool_outputs",
+        "unreadable",
     ] {
         fields.remove(key);
     }
@@ -198,12 +205,12 @@ pub(super) fn summary(rows: &[Value]) -> Value {
 }
 pub(super) fn markdown(rows: &[Value]) -> String {
     use std::fmt::Write;
-    let mut text = "| Task | Shape | Facts | Calls | Input | Cached | Uncached | Output | Avg tools | USD | Cold USD |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n".to_owned();
+    let mut text = "| Task | Shape | Facts | Calls | Input | Cached | Uncached | Output | Avg tools | Unreadable | USD | Cold USD |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n".to_owned();
     for row in rows {
         let id = row["id"].as_str().unwrap().replace('|', "\\|");
         writeln!(
             text,
-            "| {} | {} | {}/{} | {} | {:.0} | {:.0} | {:.0} | {:.0} | {:.0} | {:.6} | {:.6} |",
+            "| {} | {} | {}/{} | {} | {:.0} | {:.0} | {:.0} | {:.0} | {:.0} | {} | {:.6} | {:.6} |",
             id,
             if super::blind(row["set"].as_str().unwrap()) {
                 "—"
@@ -218,6 +225,7 @@ pub(super) fn markdown(rows: &[Value]) -> String {
             row["uncached"].as_f64().unwrap(),
             row["output"].as_f64().unwrap(),
             row["average_tools_tokens"].as_f64().unwrap(),
+            row["unreadable_pages"].as_u64().unwrap_or(0),
             row["usd"].as_f64().unwrap(),
             row["usd_cold"].as_f64().unwrap()
         )
@@ -235,7 +243,7 @@ fn arbitrary_sets_keep_blind_reports_numeric() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut row = json!({"id":"private-task", "set":"new-holdout-set", "shape":"private-shape",
         "missed":["private-fact"], "largest_tool_outputs":["private-output"],
-        "runtime_models":["private-model"], "requests":["private-request"],
+        "runtime_models":["private-model"], "requests":["private-request"], "unreadable":["private-url"],
         "facts_found":1, "facts_total":2, "calls":3, "input":4.0, "cached":1.0,
         "uncached":3.0, "output":2.0, "average_tools_tokens":1.0, "usd":6.0, "usd_cold":7.0});
     redact(&mut row, "new-holdout-set", 2);
