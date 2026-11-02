@@ -59,9 +59,46 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
 
     // Page text and viewport inspection remain separate offered operations.
     assert_eq!(outputs[0]["status"], "ok", "{}", outputs[0]);
-    let read = &outputs[1];
-    assert_eq!(read["ok"], true, "{read}");
-    let text = read["markdown"].as_str().unwrap();
+    let reads: Vec<_> = outputs
+        .iter()
+        .skip(1)
+        .take_while(|output| output["markdown"].is_string())
+        .collect();
+    assert!(reads.len() > 1, "the long page requires continuation reads");
+    let text = reads
+        .iter()
+        .map(|read| read["markdown"].as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let total = reads[0]["total_chunks"].as_u64().unwrap();
+    let returned: u64 = reads
+        .iter()
+        .map(|read| {
+            assert_eq!(read["ok"], true, "{read}");
+            assert_eq!(read["markdown_truncated"], false, "{read}");
+            read["returned_chunks"].as_u64().unwrap()
+        })
+        .sum();
+    assert_eq!(returned, total, "all complete chunks arrive exactly once");
+    assert_eq!(reads.last().unwrap()["content_has_more"], false);
+    let mut end = 0;
+    for paragraph in host::detail_paragraphs() {
+        let offset = text
+            .find(&paragraph)
+            .expect("every long-page paragraph arrives");
+        assert!(offset >= end, "paragraph order is preserved");
+        end = offset + paragraph.len();
+    }
+    assert!(
+        text.len() > 20_000,
+        "full text extends beyond the short viewport observation"
+    );
+    eprintln!(
+        "tab full_page_bytes={} paragraphs=200 reads={} chunks={total} complete=true",
+        text.len(),
+        reads.len()
+    );
+    let read = reads[0];
     for lamp in ["Aurora", "Beacon", "Cinder"] {
         assert!(text.contains(lamp), "{read}");
     }
@@ -72,10 +109,22 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
         .filter_map(|frame| frame["op"].as_str().map(str::to_owned))
         .filter(|op| op != "tabs.list")
         .collect::<Vec<_>>();
-    assert_eq!(ops, ["tab.open", "tab.read", "tab.observe"], "{ops:?}");
-    assert_eq!(outputs[2]["schema"], "butler.browser-observation.v1");
+    let expected: Vec<_> = std::iter::once("tab.open")
+        .chain(std::iter::repeat_n("tab.read", reads.len()))
+        .chain(std::iter::once("tab.observe"))
+        .collect();
+    assert_eq!(ops, expected, "{ops:?}");
+    assert_eq!(
+        outputs[reads.len() + 1]["schema"],
+        "butler.browser-observation.v1"
+    );
     // (b) The comparison is on the delivered reply as blocks.
-    assert_eq!(outputs[3]["ok"], true, "{}", outputs[3]);
+    assert_eq!(
+        outputs[reads.len() + 2]["ok"],
+        true,
+        "{}",
+        outputs[reads.len() + 2]
+    );
     let messages = s.gw.messages("general").await?;
     let reply = messages
         .iter()

@@ -66,16 +66,27 @@ impl Drop for Fixture {
 /// The next step, from the tool outputs so far: `(tool, arguments)` or the
 /// final answer when `None`.
 fn next(outputs: &[Value]) -> Option<(&'static str, Value)> {
-    match outputs.len() {
-        0 => Some(("browser_open", json!({"url":super::PAGE}))),
-        1 => Some(("web_read", json!({"tab":outputs[0]["tab"]}))),
-        2 => Some((
+    if outputs.is_empty() {
+        return Some(("browser_open", json!({"url":super::PAGE})));
+    }
+    let last = outputs.last().unwrap();
+    if outputs.len() == 1 || last["content_has_more"] == true {
+        let mut args = json!({"tab":outputs[0]["tab"],"max_chars":8000,"max_chunks":8});
+        if last["content_has_more"] == true {
+            args["start_chunk"] = last["next_start_chunk"].clone();
+        }
+        return Some(("web_read", args));
+    }
+    if last["markdown"].is_string() {
+        return Some((
             "browser_observe",
             json!({"tab":outputs[0]["tab"],"scope":"text","look":"never"}),
-        )),
-        3 => Some(("answer_blocks", blocks(&outputs[1]))),
-        _ => None,
+        ));
     }
+    if last["schema"] == "butler.browser-observation.v1" {
+        return Some(("answer_blocks", blocks(&outputs[1])));
+    }
+    None
 }
 
 const ANSWER: &str = "The Beacon is the brightest of the three lamps.";

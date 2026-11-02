@@ -18,6 +18,22 @@ pub(super) struct Host {
 
 const SHELL: &str = "<!doctype html><html><head><title>Desk lamps</title></head><body><div id=\"app\"><h1>Desk lamps</h1><p>Loading products…</p></div></body></html>";
 
+pub(super) fn detail_paragraphs() -> Vec<String> {
+    (0..200)
+        .map(|index| format!("Measurement section {index:03}: A full-page study records light output, power usage, stability, and glare for the lamps."))
+        .collect()
+}
+
+fn page_html() -> String {
+    let details = detail_paragraphs()
+        .iter()
+        .map(|paragraph| format!("<p>{paragraph}</p>"))
+        .collect::<String>();
+    format!(
+        "<html><title>Desk lamps</title><article><h1>Desk lamps</h1><p>Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm.</p>{details}</article></html>"
+    )
+}
+
 impl Host {
     pub(super) async fn attach(admin: AdminClient, log: Log) -> Result<Self, HarnessError> {
         let stream = reqwest::Client::new()
@@ -118,7 +134,7 @@ impl Host {
             ("tabs.list", _) => json!({"tabs":self.tabs}),
             ("tab.read", Some(tab)) => {
                 json!({"status":"ok","tab":tab["id"],"url":tab["url"],"epoch":1,
-                "html":"<html><title>Desk lamps</title><article><h1>Desk lamps</h1><p>Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm.</p></article></html>"})
+                "html":page_html()})
             }
             ("tab.observe", Some(tab)) => {
                 json!({"status":"ok","tab":tab["id"],"url":tab["url"],"obs":"o1",
