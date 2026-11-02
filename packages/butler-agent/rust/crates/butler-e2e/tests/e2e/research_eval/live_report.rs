@@ -24,12 +24,19 @@ pub(super) fn row(traffic: &Traffic) -> Value {
             .sum::<u64>()
     };
     let mut row = json!({"calls":requests.len(),"calls_per_lane":calls,
+        "runaway":traffic.budget.runaway,"offline_misses":traffic.offline_misses.len(),
         "input":sum_usage("prompt_tokens"),"cached":sum_usage("prompt_cache_hit_tokens"),
         "uncached":sum_usage("prompt_cache_miss_tokens"),"output":sum_usage("completion_tokens"),
         "external_requests_refused":traffic.refused_hosts.len(),
+        "rejected_model_requests":traffic.rejected_model_requests,
+        "provider_errors":traffic.requests.iter().filter(|r|r["http_status"].as_u64().is_some_and(|s|s >= 400)).count(),
+        "provider_rejected_requests":traffic.requests.iter().filter(|r|r["rejected_before_inference"] == true).count(),
+        "unknown_host_ops":traffic.unknown_host_ops,
+        "host_executor_errors":traffic.host_errors.len(),
+        "host_reader_replies":traffic.host_reader_replies,
         "browser_page_outputs":traffic.browser_page_outputs,
         "nonbrowser_page_outputs":traffic.nonbrowser_page_outputs,
-        "usage_complete":traffic.requests.iter().all(|r| super::live_usage::valid(&r["usage"])),
+        "usage_complete":traffic.pending == 0 && traffic.requests.iter().all(super::live_usage::accounted),
         "requests":traffic.requests});
     for key in ["usd", "sol_usd"] {
         row[key] = json!(requests.iter().filter_map(|r| r[key].as_f64()).sum::<f64>());
@@ -92,17 +99,26 @@ pub(super) fn summary(rows: &[Value], spend: &Spend) -> Value {
         "total_real_usd_including_judge":spend.total,"judge_usd":spend.judge,
         "task_usd":spend.total-spend.judge,"spend_limit_usd":spend.max,
         "stopped_spend_guard":spend.stopped(),
+        "runaway_tasks":rows.iter().filter(|r|r["runaway"] == true).count(),
+        "offline_misses":rows.iter().filter_map(|r|r["offline_misses"].as_u64()).sum::<u64>(),
         "cost_accounting_complete":rows.iter().all(|r|r["usage_complete"] == true),
+        "asks_answered":rows.iter().filter_map(|r|r["asks_answered"].as_u64()).sum::<u64>(),
+        "approvals_given":rows.iter().filter_map(|r|r["approvals_given"].as_u64()).sum::<u64>(),
+        "host_executor_errors":rows.iter().filter_map(|r|r["host_executor_errors"].as_u64()).sum::<u64>(),
+        "unknown_host_ops":rows.iter().filter_map(|r|r["unknown_host_ops"].as_u64()).sum::<u64>(),
+        "provider_errors":rows.iter().filter_map(|r|r["provider_errors"].as_u64()).sum::<u64>(),
         "external_requests_refused":rows.iter().filter_map(|r|r["external_requests_refused"].as_u64()).sum::<u64>()})
 }
 pub(super) fn markdown(rows: &[Value], summary: &Value) -> String {
-    let mut text = "| Task | Status | Answered/received/total | Calls B/S/W | Input cached/uncached | Output | DeepSeek USD | Sol USD | Refused | Seconds |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|\n".to_owned();
+    let mut text = "| Task | Status | Runaway | Offline misses | Answered/received/total | Calls B/S/W | Input cached/uncached | Output | DeepSeek USD | Sol USD | Asks/approvals | Provider errors | Unknown host ops | Refused | Seconds |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n".to_owned();
     for r in rows {
         let lane = |l: &str| r["calls_per_lane"][l].as_u64().unwrap_or(0);
         text.push_str(&format!(
-            "| {} | {} | {}/{}/{} | {}/{}/{} | {}/{} | {} | {:.6} | {:.6} | {} | {:.1} |\n",
+            "| {} | {} | {} | {} | {}/{}/{} | {}/{}/{} | {}/{} | {} | {:.6} | {:.6} | {}/{} | {} | {} | {} | {:.1} |\n",
             r["id"].as_str().unwrap(),
             r["status"].as_str().unwrap(),
+            usize::from(r["runaway"] == true),
+            r["offline_misses"],
             r["facts_answered"],
             r["facts_received"],
             r["facts_total"],
@@ -114,6 +130,10 @@ pub(super) fn markdown(rows: &[Value], summary: &Value) -> String {
             r["output"],
             r["usd"].as_f64().unwrap_or(0.0),
             r["sol_usd"].as_f64().unwrap_or(0.0),
+            r["asks_answered"],
+            r["approvals_given"],
+            r["provider_errors"],
+            r["unknown_host_ops"],
             r["external_requests_refused"],
             r["wall_seconds"].as_f64().unwrap()
         ));
@@ -132,8 +152,11 @@ pub(super) async fn write(
     let summary = summary(rows, &spend.lock().unwrap());
     let markdown = markdown(rows, &summary);
     let report = json!({"tasks":rows,"summary":summary,
-        "measurement":"provider-reported usage; completion_tokens includes reasoning; judge excluded from task costs",
-        "offline":"Saved Brave results, exact query or ranked saved corpus. Page reader forced to browser; App host serves saved HTML and refuses unsupported operations. Agent HTTP(S)/ALL proxy refuses and counts external attempts."});
+        "task_limits":{"max_usd":super::live_limits::TaskBudget::from_env()?.max_usd,
+            "max_calls":super::live_limits::TaskBudget::from_env()?.max_calls},
+        "network_isolation":std::env::var("BUTLER_RESEARCH_EVAL_NETWORK_ISOLATION").ok(),
+        "measurement":"Provider-reported usage; completion_tokens includes reasoning; judge excluded from task costs. HTTP 400/401/402/422/429 are pre-inference rejections: absent usage is preserved and zero inference cost is recorded separately.",
+        "offline":"Saved Brave results, exact query or ranked saved corpus. Page reader forced to browser. The in-worktree App executor runs in isolated test Electron. HTTP(S) protocol handlers fulfill saved HTML; public host resolution is synthetic without DNS; missing snapshots return small HTTP 404 Not Found pages and are counted as offline_misses. The App private-address guards remain active. Lifecycle, observations, navigation and screenshots use the App implementation. Unknown host operations retain the product refusal and are counted. Agent HTTP(S)/ALL proxy refuses and counts requests reaching it. Private login-shell profile restores proxy variables filtered by command tools. Default read-only and project-write command sandboxes deny network. App and headless native-browser fallbacks are disabled in the E2E launcher."});
     let out = out.to_owned();
     tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
         save(

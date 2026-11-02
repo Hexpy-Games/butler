@@ -96,3 +96,9 @@ pub(super) fn valid(usage: &Value) -> bool {
                 .zip(usage["prompt_cache_miss_tokens"].as_u64())
                 .map(|(a, b)| a + b)
 }
+
+/// DeepSeek's documented pre-inference request/auth/balance/rate rejections
+/// have no generation usage. Preserve absent usage rather than invent tokens.
+pub(super) fn accounted(request: &Value) -> bool {
+    valid(&request["usage"]) || request["rejected_before_inference"] == true
+}

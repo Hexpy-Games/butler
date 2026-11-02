@@ -57,7 +57,7 @@ async fn live_forwarder_preserves_wire_accounts_usage_and_refuses_egress()
         spec: json!({"facts":[]}),
         pages: Default::default(),
     });
-    let proxy = Proxy::with_upstream(upstream, task, spend.clone()).await?;
+    let proxy = Proxy::with_upstream(upstream, task, spend.clone(), "arbitrary").await?;
     let result = check_proxy(&proxy, request.clone(), &wire).await;
     server.abort();
     result?;
@@ -169,6 +169,7 @@ async fn live_wait_collects_delegated_answer_after_admission_turn_delivers()
             max: 1.0,
             ..Spend::default()
         })),
+        "arbitrary",
     )
     .await?;
     let (_, initial) = s
@@ -193,5 +194,195 @@ async fn live_wait_collects_delegated_answer_after_admission_turn_delivers()
     let result = result.map_err(|_| HarnessError("delegated answer did not settle".into()))??;
     assert_eq!(result.status, "complete");
     assert_eq!(result.answer, "Approach B verified.");
+    Ok(())
+}
+
+// test-category: security
+#[tokio::test]
+async fn live_forwarder_refuses_a_different_model_before_any_upstream_call()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let task = Arc::new(Task {
+        spec: json!({"facts":[]}),
+        pages: Default::default(),
+    });
+    let spend = Arc::new(Mutex::new(Spend {
+        max: 1.0,
+        ..Spend::default()
+    }));
+    let proxy = Proxy::with_upstream(
+        "http://127.0.0.1:1".into(),
+        task,
+        spend.clone(),
+        "allowed-model",
+    )
+    .await?;
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .build()?
+        .post(format!("{}/chat/completions", proxy.base))
+        .json(&json!({"model":"different-model","messages":[]}))
+        .send()
+        .await?;
+    assert_eq!(response.status(), 400);
+    assert_eq!(proxy.traffic.lock().unwrap().rejected_model_requests, 1);
+    assert_eq!(proxy.traffic.lock().unwrap().requests, [] as [Value; 0]);
+    assert_eq!(spend.lock().unwrap().total, 0.0);
+    Ok(())
+}
+
+// test-category: security
+#[tokio::test]
+async fn live_forwarder_meters_disconnected_inflight_request_at_spend_guard()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    use futures_util::StreamExt;
+    use std::time::Duration;
+    let release = Arc::new(tokio::sync::Notify::new());
+    let gate = release.clone();
+    let usage = json!({"prompt_tokens":10,"prompt_cache_hit_tokens":2,
+        "prompt_cache_miss_tokens":8,"completion_tokens":3});
+    let wire = format!("data: {}\n\ndata: [DONE]\n\n", json!({"usage":usage}));
+    let app = Router::new().route(
+        "/chat/completions",
+        post(move || {
+            let gate = gate.clone();
+            let wire = wire.clone();
+            async move {
+                let first = futures_util::stream::once(async {
+                    Ok::<_, std::io::Error>(Bytes::from_static(b": ping\n\n"))
+                });
+                let last = futures_util::stream::once(async move {
+                    gate.notified().await;
+                    Ok::<_, std::io::Error>(Bytes::from(wire))
+                });
+                (
+                    [("content-type", "text/event-stream")],
+                    Body::from_stream(first.chain(last)),
+                )
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let upstream = format!("http://{}", listener.local_addr()?);
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    let task = Arc::new(Task {
+        spec: json!({"facts":[]}),
+        pages: Default::default(),
+    });
+    let spend = Arc::new(Mutex::new(Spend {
+        max: 1e-7,
+        ..Spend::default()
+    }));
+    let proxy = Proxy::with_upstream(upstream, task, spend.clone(), "arbitrary").await?;
+    let mut response = reqwest::Client::builder()
+        .no_proxy()
+        .build()?
+        .post(format!("{}/chat/completions", proxy.base))
+        .json(&json!({"model":"arbitrary","messages":[]}))
+        .send()
+        .await?;
+    assert_eq!(
+        response.chunk().await?.unwrap(),
+        Bytes::from_static(b": ping\n\n")
+    );
+    drop(response);
+    release.notify_one();
+    let settled = tokio::time::timeout(Duration::from_secs(5), proxy.settle()).await;
+    server.abort();
+    assert!(settled.map_err(|_| HarnessError("usage drain did not finish".into()))?);
+    let traffic = proxy.traffic.lock().unwrap();
+    assert_eq!(traffic.pending, 0);
+    assert_eq!(traffic.requests[0]["usage"], usage);
+    assert!(traffic.stopped);
+    let spend = spend.lock().unwrap();
+    assert!(spend.total > spend.max);
+    Ok(())
+}
+
+// test-category: security
+#[tokio::test]
+async fn live_forwarder_preserves_provider_rejection_and_allows_next_request()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    use axum::response::IntoResponse;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let calls = Arc::new(AtomicUsize::new(0));
+    let seen = calls.clone();
+    let rejected =
+        json!({"error":{"code":"invalid_request_error","message":"Invalid request format"}});
+    let error = rejected.clone();
+    let usage = json!({"prompt_tokens":10,"prompt_cache_hit_tokens":2,
+        "prompt_cache_miss_tokens":8,"completion_tokens":3});
+    let accepted = json!({"usage":usage});
+    let app = Router::new().route(
+        "/chat/completions",
+        post(move || {
+            let first = seen.fetch_add(1, Ordering::SeqCst) == 0;
+            let value = if first {
+                error.clone()
+            } else {
+                accepted.clone()
+            };
+            async move {
+                (
+                    if first {
+                        http::StatusCode::BAD_REQUEST
+                    } else {
+                        http::StatusCode::OK
+                    },
+                    axum::Json(value),
+                )
+                    .into_response()
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let upstream = format!("http://{}", listener.local_addr()?);
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    let task = Arc::new(Task {
+        spec: json!({"facts":[]}),
+        pages: Default::default(),
+    });
+    let spend = Arc::new(Mutex::new(Spend {
+        max: 1.0,
+        ..Spend::default()
+    }));
+    let proxy = Proxy::with_upstream(upstream, task, spend.clone(), "arbitrary").await?;
+    let client = reqwest::Client::builder().no_proxy().build()?;
+    let url = format!("{}/chat/completions", proxy.base);
+    let body = json!({"model":"arbitrary","messages":[]});
+    let first = client.post(&url).json(&body).send().await?;
+    assert_eq!(first.status(), 400);
+    assert_eq!(first.json::<Value>().await?, rejected);
+    let second = client
+        .post(&url)
+        .header("x-research-judge", "1")
+        .json(&body)
+        .send()
+        .await?;
+    assert_eq!(second.status(), 200);
+    assert_eq!(second.json::<Value>().await?["usage"], usage);
+    assert!(proxy.settle().await);
+    server.abort();
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    let traffic = proxy.traffic.lock().unwrap();
+    assert_eq!(traffic.requests[0]["usage"], Value::Null);
+    assert_eq!(traffic.requests[0]["provider_error"], rejected["error"]);
+    assert_eq!(traffic.requests[0]["rejected_request"], body);
+    assert_eq!(traffic.requests[0]["round"], 1);
+    assert_eq!(
+        serde_json::from_str::<Value>(traffic.requests[0]["provider_error_body"].as_str().unwrap())
+            .unwrap(),
+        rejected
+    );
+    assert!(live_usage::accounted(&traffic.requests[0]));
+    assert_eq!(traffic.requests[1]["lane"], "judge");
+    assert!(!traffic.usage_failed);
+    assert!(spend.lock().unwrap().judge > 0.0);
     Ok(())
 }

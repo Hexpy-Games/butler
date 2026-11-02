@@ -13,10 +13,20 @@ mod policy;
 mod report;
 mod steps;
 
+mod live_browser;
+#[cfg(test)]
+mod live_browser_checks;
 #[cfg(test)]
 mod live_checks;
 mod live_execute;
+#[cfg(test)]
+mod live_interaction_checks;
+mod live_interactions;
 mod live_judge;
+#[cfg(test)]
+mod live_limit_checks;
+mod live_limits;
+mod live_metrics;
 mod live_proxy;
 mod live_report;
 mod live_run;

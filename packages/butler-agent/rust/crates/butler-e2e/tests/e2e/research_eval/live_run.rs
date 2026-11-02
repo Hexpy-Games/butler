@@ -70,7 +70,10 @@ pub(super) async fn report(provider: LiveProvider) -> Result<(), HarnessError> {
             eprintln!("research_eval_live {label}: {}", row["status"]);
             rows.push(row);
             live_report::write(&rows, &out, spend.clone()).await?;
-            if spend.lock().unwrap().stopped() || rows.last().unwrap()["usage_complete"] != true {
+            if spend.lock().unwrap().stopped()
+                || rows.last().unwrap()["usage_complete"] != true
+                || rows.last().unwrap()["rejected_model_requests"] != 0
+            {
                 break 'sets;
             }
         }
@@ -103,10 +106,18 @@ async fn task_run(
             status: "incomplete".into(),
             answer: String::new(),
             host_reads: 0,
+            asks_answered: 0,
+            approvals_given: 0,
             error: Some(e.to_string()),
         });
-    let can_judge = !spend.lock().unwrap().stopped();
-    let answered = if can_judge {
+    let settled = proxy.settle().await;
+    if !settled {
+        outcome.status = "incomplete".into();
+    }
+    let can_judge = settled && !spend.lock().unwrap().stopped();
+    let answered = if outcome.status == "runaway" && outcome.answer.is_empty() {
+        Some(0)
+    } else if can_judge {
         match tokio::time::timeout(
             std::time::Duration::from_secs(300),
             super::live_judge::judge(&provider, &task, &outcome.answer, &proxy),
@@ -123,12 +134,17 @@ async fn task_run(
     } else {
         None
     };
+    if !proxy.settle().await {
+        outcome.status = "incomplete".into();
+    }
     let stopped = spend.lock().unwrap().stopped();
     let (mut row, captured) = {
         let traffic = proxy.traffic.lock().unwrap();
         let mut row = live_report::row(&traffic);
         if stopped {
             outcome.status = "stopped_spend_guard".into();
+        } else if traffic.budget.runaway {
+            outcome.status = "runaway".into();
         } else if row["usage_complete"] != true
             || traffic.nonbrowser_page_outputs > 0
             || (traffic.browser_page_outputs > 0 && outcome.host_reads == 0)
@@ -143,10 +159,16 @@ async fn task_run(
         row["facts_received"] = json!(traffic.received.len());
         row["facts_total"] = json!(task.spec["facts"].as_array().unwrap().len());
         row["wall_seconds"] = json!(started.elapsed().as_secs_f64());
+        row["asks_answered"] = json!(outcome.asks_answered);
+        row["approvals_given"] = json!(outcome.approvals_given);
         row["snapshot_host_reads"] = json!(outcome.host_reads);
         let captured = if super::blind(set) {
             None
         } else {
+            row["tool_call_histogram"] = traffic.budget.top_tools();
+            row["offline_miss_urls"] = json!(traffic.offline_misses);
+            row["host_executor_error_messages"] = json!(traffic.host_errors);
+            row["host_op_counts"] = json!(traffic.host_ops);
             row["refused_hosts"] = json!(traffic.refused_hosts);
             row["error"] = json!(outcome.error);
             Some(json!({"answer":outcome.answer,"requests":traffic.requests,"row":row}))

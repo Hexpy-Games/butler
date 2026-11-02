@@ -15,6 +15,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
+use tokio::sync::{Notify, mpsc, oneshot};
 
 #[derive(Default)]
 pub(super) struct Spend {
@@ -29,32 +30,64 @@ impl Spend {
 }
 
 pub(super) struct Traffic {
+    pub budget: super::live_limits::TaskBudget,
+    pub offline_misses: Vec<String>,
     pub requests: Vec<Value>,
     pub received: BTreeSet<usize>,
     pub refused_hosts: Vec<String>,
     pub last_request: Instant,
     pub stopped: bool,
     pub usage_failed: bool,
+    pub rejected_model_requests: usize,
+    pub pending: usize,
+    pub changed: Arc<Notify>,
     pub nonbrowser_page_outputs: usize,
     pub browser_page_outputs: usize,
+    pub host_ready: bool,
+    pub snapshot_reads: usize,
+    pub host_reader_replies: usize,
+    pub unknown_host_ops: usize,
+    pub host_errors: Vec<String>,
+    pub host_ops: std::collections::BTreeMap<String, usize>,
 }
 impl Default for Traffic {
     fn default() -> Self {
         Self {
+            budget: Default::default(),
+            offline_misses: Vec::new(),
             requests: Vec::new(),
             received: BTreeSet::new(),
             refused_hosts: Vec::new(),
             last_request: Instant::now(),
             stopped: false,
             usage_failed: false,
+            rejected_model_requests: 0,
+            pending: 0,
+            changed: Arc::new(Notify::new()),
             nonbrowser_page_outputs: 0,
             browser_page_outputs: 0,
+            host_ready: false,
+            snapshot_reads: 0,
+            host_reader_replies: 0,
+            unknown_host_ops: 0,
+            host_errors: Vec::new(),
+            host_ops: Default::default(),
         }
     }
 }
+type Pumps = Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>;
+
+struct Head {
+    status: http::StatusCode,
+    content_type: Option<http::HeaderValue>,
+    encoding: Option<http::HeaderValue>,
+}
+
 #[derive(Clone)]
 struct Forward {
     upstream: String,
+    expected_model: String,
+    pumps: Pumps,
     client: reqwest::Client,
     traffic: Arc<Mutex<Traffic>>,
     spend: Arc<Mutex<Spend>>,
@@ -65,6 +98,7 @@ pub(super) struct Proxy {
     pub sink: String,
     pub traffic: Arc<Mutex<Traffic>>,
     servers: Vec<tokio::task::JoinHandle<()>>,
+    pumps: Pumps,
 }
 impl Proxy {
     pub(super) async fn start(
@@ -72,25 +106,38 @@ impl Proxy {
         task: Arc<Task>,
         spend: Arc<Mutex<Spend>>,
     ) -> Result<Self, HarnessError> {
-        Self::with_upstream(
+        let budget = super::live_limits::TaskBudget::from_env()?;
+        let proxy = Self::with_upstream(
             provider.upstream_default().expect("upstream").into(),
             task,
             spend,
+            provider
+                .choice
+                .model
+                .split_once('/')
+                .expect("provider/model")
+                .1,
         )
-        .await
+        .await?;
+        proxy.traffic.lock().unwrap().budget = budget;
+        Ok(proxy)
     }
     pub(super) async fn with_upstream(
         upstream: String,
         task: Arc<Task>,
         spend: Arc<Mutex<Spend>>,
+        expected_model: &str,
     ) -> Result<Self, HarnessError> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let base = format!("http://{}", listener.local_addr()?);
         let sink_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let sink = format!("http://{}", sink_listener.local_addr()?);
         let traffic = Arc::new(Mutex::new(Traffic::default()));
+        let pumps = Arc::new(Mutex::new(Vec::new()));
         let state = Forward {
             upstream,
+            expected_model: expected_model.into(),
+            pumps: pumps.clone(),
             client: reqwest::Client::builder()
                 .no_proxy()
                 .no_gzip()
@@ -106,6 +153,10 @@ impl Proxy {
         let app = Router::new()
             .route("/chat/completions", post(forward))
             .route("/search", get(search))
+            .route(
+                "/host-events",
+                post(super::live_metrics::host_events).with_state(traffic.clone()),
+            )
             .layer(axum::extract::DefaultBodyLimit::disable())
             .with_state(state);
         let sink_app = Router::new().fallback(refuse).with_state(traffic.clone());
@@ -122,13 +173,36 @@ impl Proxy {
             sink,
             traffic,
             servers,
+            pumps,
         })
+    }
+}
+impl Proxy {
+    /// Finish metering requests already sent, even if the agent closed its stream.
+    pub(super) async fn settle(&self) -> bool {
+        let changed = self.traffic.lock().unwrap().changed.clone();
+        loop {
+            let signaled = changed.notified();
+            let remaining = {
+                let traffic = self.traffic.lock().unwrap();
+                if traffic.pending == 0 {
+                    return true;
+                }
+                std::time::Duration::from_secs(300).saturating_sub(traffic.last_request.elapsed())
+            };
+            if tokio::time::timeout(remaining, signaled).await.is_err() {
+                return false;
+            }
+        }
     }
 }
 impl Drop for Proxy {
     fn drop(&mut self) {
         for server in &self.servers {
             server.abort();
+        }
+        for pump in self.pumps.lock().unwrap().drain(..) {
+            pump.abort();
         }
     }
 }
@@ -165,10 +239,24 @@ async fn forward(State(state): State<Forward>, request: Request) -> Response {
         Ok(v) => v,
         Err(_) => return failure(),
     };
+    if body["model"].as_str() != Some(state.expected_model.as_str()) {
+        state.traffic.lock().unwrap().rejected_model_requests += 1;
+        return Response::builder()
+            .status(400)
+            .body(Body::from("unauthorized model"))
+            .unwrap();
+    }
     let index = {
         let mut traffic = state.traffic.lock().unwrap();
+        if !judge && traffic.budget.runaway {
+            return Response::builder()
+                .status(402)
+                .body(Body::from("task runaway cap"))
+                .unwrap();
+        }
         traffic.last_request = Instant::now();
         if !judge {
+            traffic.budget.admit();
             traffic
                 .received
                 .extend(live_usage::received(&body, &state.task));
@@ -189,21 +277,58 @@ async fn forward(State(state): State<Forward>, request: Request) -> Response {
             }
         }
         let index = traffic.requests.len();
+        traffic.pending += 1;
         traffic.requests.push(
             json!({"lane":if judge {"judge"} else {live_usage::lane(&body)},
-            "usage":null,"http_status":null}),
+            "round":index+1,"usage":null,"http_status":null}),
         );
         index
     };
-    relay(state, index, judge, bytes, authorization).await
+    let (head_tx, head_rx) = oneshot::channel();
+    let (body_tx, body_rx) = mpsc::channel(4);
+    let pumps = state.pumps.clone();
+    pumps.lock().unwrap().push(tokio::spawn(pump(
+        state,
+        index,
+        judge,
+        bytes,
+        authorization,
+        head_tx,
+        body_tx,
+    )));
+    let Ok(head) = head_rx.await else {
+        return failure();
+    };
+    let stream = stream::unfold(body_rx, |mut rx| async move {
+        rx.recv().await.map(|bytes| (bytes, rx))
+    });
+    let mut builder = Response::builder().status(head.status);
+    if let Some(value) = head.content_type {
+        builder = builder.header("content-type", value);
+    }
+    if let Some(value) = head.encoding {
+        builder = builder.header("content-encoding", value);
+    }
+    builder.body(Body::from_stream(stream)).unwrap()
 }
-async fn relay(
+async fn pump(
     state: Forward,
     index: usize,
     judge: bool,
     bytes: Bytes,
     authorization: Option<http::HeaderValue>,
-) -> Response {
+    head: oneshot::Sender<Head>,
+    body: mpsc::Sender<Result<Bytes, std::io::Error>>,
+) {
+    let mut observer = Observer {
+        state: state.clone(),
+        index,
+        judge,
+        buffer: Vec::new(),
+        error_body: None,
+        recorded: false,
+        tool_names: Default::default(),
+    };
     let mut outgoing = state
         .client
         .post(format!(
@@ -212,58 +337,51 @@ async fn relay(
         ))
         .header("content-type", "application/json")
         .header("accept-encoding", "identity")
-        .body(bytes);
+        .body(bytes.clone());
     if let Some(auth) = authorization {
         outgoing = outgoing.header("authorization", auth);
     }
-    let Ok(response) = outgoing.send().await else {
-        return failure();
+    let Ok(mut response) = outgoing.send().await else {
+        return;
     };
-    let status = response.status();
-    state.traffic.lock().unwrap().requests[index]["http_status"] = json!(status.as_u16());
-    let content_type = response.headers().get("content-type").cloned();
-    let encoding = response.headers().get("content-encoding").cloned();
-    let observer = Observer {
-        state,
-        index,
-        judge,
-        buffer: Vec::new(),
-        recorded: false,
-        failed: false,
-    };
-    let stream = stream::unfold(
-        (response, observer),
-        |(mut response, mut observer)| async move {
-            if observer.failed {
-                return None;
-            }
-            match response.chunk().await {
-                Ok(Some(bytes)) => {
-                    observer.feed(&bytes);
-                    Some((Ok::<Bytes, std::io::Error>(bytes), (response, observer)))
-                }
-                Ok(None) => {
-                    observer.finish();
-                    None
-                }
-                Err(_) => {
-                    observer.failed = true;
-                    Some((
-                        Err(std::io::Error::other("upstream stream failed")),
-                        (response, observer),
-                    ))
-                }
-            }
-        },
-    );
-    let mut builder = Response::builder().status(status);
-    if let Some(value) = content_type {
-        builder = builder.header("content-type", value);
+    if !response.status().is_success() {
+        observer.error_body = Some(Vec::new());
+        state.traffic.lock().unwrap().requests[index]["rejected_request"] =
+            serde_json::from_slice(&bytes).unwrap();
     }
-    if let Some(value) = encoding {
-        builder = builder.header("content-encoding", value);
+    state.traffic.lock().unwrap().requests[index]["http_status"] =
+        json!(response.status().as_u16());
+    // https://api-docs.deepseek.com/quick_start/error_codes/
+    if matches!(response.status().as_u16(), 400 | 401 | 402 | 422 | 429) {
+        let mut traffic = state.traffic.lock().unwrap();
+        traffic.requests[index]["rejected_before_inference"] = json!(true);
+        traffic.requests[index]["usd"] = json!(0.0);
+        traffic.requests[index]["sol_usd"] = json!(0.0);
     }
-    builder.body(Body::from_stream(stream)).unwrap()
+    let _ = head.send(Head {
+        status: response.status(),
+        content_type: response.headers().get("content-type").cloned(),
+        encoding: response.headers().get("content-encoding").cloned(),
+    });
+    loop {
+        match response.chunk().await {
+            Ok(Some(bytes)) => {
+                observer.feed(&bytes);
+                // A disconnected consumer must not discard the provider's final usage.
+                let _ = body.send(Ok(bytes)).await;
+            }
+            Ok(None) => {
+                observer.finish();
+                return;
+            }
+            Err(_) => {
+                let _ = body
+                    .send(Err(std::io::Error::other("upstream stream failed")))
+                    .await;
+                return;
+            }
+        }
+    }
 }
 fn failure() -> Response {
     Response::builder()
@@ -276,11 +394,15 @@ struct Observer {
     index: usize,
     judge: bool,
     buffer: Vec<u8>,
+    error_body: Option<Vec<u8>>,
     recorded: bool,
-    failed: bool,
+    tool_names: std::collections::BTreeMap<usize, String>,
 }
 impl Observer {
     fn feed(&mut self, bytes: &[u8]) {
+        if let Some(body) = &mut self.error_body {
+            body.extend_from_slice(bytes);
+        }
         self.buffer.extend_from_slice(bytes);
         // Parse complete SSE lines; preserve the original bytes for the client.
         while self.buffer.starts_with(b"data:")
@@ -298,6 +420,10 @@ impl Observer {
         }
     }
     fn finish(&mut self) {
+        if let Some(body) = self.error_body.take() {
+            self.state.traffic.lock().unwrap().requests[self.index]["provider_error_body"] =
+                json!(String::from_utf8_lossy(&body));
+        }
         let tail = std::mem::take(&mut self.buffer);
         self.observe(tail.strip_prefix(b"data:").unwrap_or(&tail));
     }
@@ -305,6 +431,13 @@ impl Observer {
         let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
             return;
         };
+        if !self.judge {
+            super::live_limits::collect_tools(&value, &mut self.tool_names);
+        }
+        if value["error"].is_object() {
+            self.state.traffic.lock().unwrap().requests[self.index]["provider_error"] =
+                value["error"].clone();
+        }
         let usage = &value["usage"];
         if self.recorded || !live_usage::valid(usage) {
             return;
@@ -318,6 +451,9 @@ impl Observer {
             spend.judge += usd;
         }
         let mut traffic = self.state.traffic.lock().unwrap();
+        if !self.judge {
+            traffic.budget.record_cost(usd);
+        }
         traffic.requests[self.index]["usage"] = usage.clone();
         traffic.requests[self.index]["usd"] = json!(usd);
         traffic.requests[self.index]["sol_usd"] = json!(sol);
@@ -338,8 +474,13 @@ async fn search(
 
 impl Drop for Observer {
     fn drop(&mut self) {
-        if !self.recorded {
-            self.state.traffic.lock().unwrap().usage_failed = true;
+        let mut traffic = self.state.traffic.lock().unwrap();
+        for name in self.tool_names.values().filter(|n| !n.is_empty()) {
+            *traffic.budget.tools.entry(name.clone()).or_default() += 1;
         }
+        traffic.usage_failed |= !live_usage::accounted(&traffic.requests[self.index]);
+        traffic.requests[self.index]["finished"] = json!(true);
+        traffic.pending -= 1;
+        traffic.changed.notify_one();
     }
 }
