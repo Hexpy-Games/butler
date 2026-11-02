@@ -1,5 +1,7 @@
 # SettingsHeader
 
+Glossary: 설정 제목 줄 / settings detail header (`SettingsHeader`).
+
 ## What is this component
 A responsive header for a settings detail page.
 
