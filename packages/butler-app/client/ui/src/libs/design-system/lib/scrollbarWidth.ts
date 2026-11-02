@@ -27,6 +27,35 @@ function remeasureOnZoom(doc: Document) {
   }, { once: true });
 }
 
+/** Per scroller: the width its own scrollbar takes from its content box now (`0px` when none is drawn or it overlays). */
+export const DRAWN_SCROLLBAR_PROPERTY = "--scroll-area-drawn-scrollbar";
+
+function writeDrawnScrollbar(element: HTMLElement) {
+  const style = getComputedStyle(element);
+  const borders = (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.borderRightWidth) || 0);
+  const next = `${Math.max(0, element.offsetWidth - borders - element.clientWidth)}px`;
+  if (element.style.getPropertyValue(DRAWN_SCROLLBAR_PROPERTY) !== next) element.style.setProperty(DRAWN_SCROLLBAR_PROPERTY, next);
+}
+
+/**
+ * Ref callback: publishes the width this scroller's scrollbar actually takes
+ * as `--scroll-area-drawn-scrollbar` on the scroller, so its content gives
+ * back exactly that width. The document-wide `--scrollbar-width` says how
+ * wide a classic scrollbar would be; it is measured once and can disagree
+ * with the scrollbar a scroller draws (macOS switches between overlay and
+ * classic scrollbars with the pointing device), and giving that width back
+ * while an overlay scrollbar takes none pushed the content past the column.
+ * A ResizeObserver on the scroller's content box fires when its scrollbar
+ * appears, goes or changes width; nothing runs while idle or on scroll.
+ */
+export function trackDrawnScrollbar(element: HTMLElement | null): (() => void) | void {
+  if (!element || typeof ResizeObserver === "undefined") return;
+  writeDrawnScrollbar(element);
+  const observer = new ResizeObserver(() => writeDrawnScrollbar(element));
+  observer.observe(element);
+  return () => observer.disconnect();
+}
+
 /**
  * Measures how much layout width a drawn thin native scrollbar takes and
  * publishes it on the root, so a scroller reserves a lane for an overlay
