@@ -27,9 +27,10 @@ export function populatedSession(view: SessionView): SessionView {
     pending_questions: [sessionQuestion(view.session_id)],
     branch: { workspace_label: "butler", branch_name: "feat/session-info-pane", workspace_binding: "project", workspace_status: "available" },
     context: sessionContext(view.session_id),
-    artifacts: HARNESS_SUMMARY.artifacts!.map(item => ({ ...item, session_id: view.session_id, title: "검토 결과.md" })),
+    artifacts: HARNESS_SUMMARY.artifacts!.map(item => ({ ...item, session_id: view.session_id, title: "검토 결과.md", deliverable: true })),
     automations: [{ automation_id: "session-schedule", title: "진행 상황 확인", schedule_type: "interval", interval_seconds: 3600 }],
-    messages: [{ id: "session-info-message", chat_id: view.session_id, role: "assistant", text: "검토를 시작했습니다.", created_at: new Date().toISOString(),
+    messages: [{ id: "session-info-message", chat_id: view.session_id, role: "assistant", text: "검토를 시작했습니다.", created_at: new Date().toISOString() },
+      { id: "session-info-upload", chat_id: view.session_id, role: "user", text: "이 자료를 검토해 주세요.", created_at: new Date().toISOString(),
       attachments: [{ file_id: "session-info-file", kind: "text", mime_type: "text/plain", safe_name: "검토 자료.txt", size_bytes: 42,
         sha256: "", url: "/message-files/session-info-file", created_at: new Date().toISOString() }] }],
   };

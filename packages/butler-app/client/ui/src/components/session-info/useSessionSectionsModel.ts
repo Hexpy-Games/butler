@@ -1,3 +1,4 @@
+import { sessionArtifacts } from "../artifacts/sessionArtifacts.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
@@ -25,10 +26,10 @@ export function useSessionSectionsModel() {
   const branch = summary?.branch_info;
   const folder = branch?.workspace_path || branch?.workspace_label;
   const artifacts = summary?.artifacts ?? [];
-  const attachments = [...new Map(messages.flatMap(message => message.attachments ?? []).map(file => [file.file_id, file])).values()];
+  const attachments = [...new Map(messages.filter(message => message.role === "user").flatMap(message => message.attachments ?? []).map(file => [file.file_id, file])).values()];
   const schedules = summary?.automation_targets ?? [];
   const subtasks = summary?.subtasks ?? [];
-  const hasArtifacts = artifacts.length > 0 || messages.some(message => message.artifacts?.length);
+  const hasArtifacts = sessionArtifacts(artifacts, messages).length > 0;
   const ids: string[] = [];
   // The summary's sections sit above the task: showing any section while it loads would push them down when it lands.
   // A failed load settles too, and then the sections that need no summary show.
