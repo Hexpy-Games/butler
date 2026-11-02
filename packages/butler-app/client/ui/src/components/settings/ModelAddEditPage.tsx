@@ -68,7 +68,7 @@ export function ModelAddEditPage({
     <ModelRouteFrame title={title}>
       <SettingsPage>
         {route.page !== "edit" && (
-          <SettingsSection id="model-provider" kind="form">
+          <SettingsSection id="model-provider" kind="form" title={appCopy.settings.pageSections.modelProvider}>
           <SettingsSelect
             settingId="model-provider"
             label={copy.provider}

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/app/api";
 import { appCopy, useAppLocale } from "@/app/copy";
 import type { UsageMonitorView } from "@/app/types";
-import { RefreshCcw, IconButton, Inline, SegmentedControl, Stack, Typo, UsageBars, type UsageBarsEmphasis } from "@/butler-ds";
+import { Button, RefreshCcw, Inline, SegmentedControl, Stack, Typo, UsageBars, type UsageBarsEmphasis } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { UsageReadout } from "../usage/UsageReadout";
 import { usageClock, usageParts, usageShare, usageReadout, usageSeries, usageTimeline, usageTokens } from "../usage/usageTimeline";
@@ -87,17 +87,16 @@ export function UsageSettings() {
 
   return <SettingsPage>
     <SettingsSection id="usage-overview" kind="status" title={copy.overviewTitle}
-      state={result.error && !result.view ? "error" : "ready"} errorMessage={appCopy.interfacePanels.usageFailed} onRetry={refresh}>
+      state={result.error && !result.view ? "error" : "ready"} errorMessage={appCopy.interfacePanels.usageFailed} onRetry={refresh}
+      actions={<>
+        <SegmentedControl ariaLabel={copy.period} size="sm" options={ranges} value={String(hours)} onValueChange={v => setHours(Number(v))} />
+        <Button type="button" size="sm" variant="outline" disabled={result.loading} onClick={refresh}><RefreshCcw size="sm" />{appCopy.common.refresh}</Button>
+      </>}>
       <Stack gap="lg">
-        <Inline justify="between" cross="start" gap="md" wrap>
+        <Inline justify="between" cross="center" gap="md" wrap>
           <Stack grow basis="md" gap="xs" minWidth="0" maxWidth="field">
             <UsageSessionSelect triggerRef={pickerTrigger} open={pickerOpen} onOpenChange={setPickerOpen} range={ranges.find(r => r.value === String(hours))!.label} sessions={sessions} value={session} onChange={setSession} /></Stack>
-          <Stack gap="xs" grow>
-            <Inline justify="between" cross="center" gap="md">
-              <SegmentedControl ariaLabel={copy.period} size="default" options={ranges} value={String(hours)} onValueChange={v => setHours(Number(v))} />
-              <Inline gap="xs" cross="center" wrap={false}><Typo.Caption>{result.view ? copy.updated(usageClock(Date.parse(result.view.generated_at))) : "—"}</Typo.Caption>
-                <IconButton label={appCopy.common.refresh} disabled={result.loading} onClick={refresh}><RefreshCcw size="sm" /></IconButton></Inline>
-            </Inline></Stack>
+          <Typo.Caption>{result.view ? copy.updated(usageClock(Date.parse(result.view.generated_at))) : "—"}</Typo.Caption>
         </Inline>
         <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label}
           panel selected={Boolean(bucket)} showCost delta={periodDelta(result.view, hours)} share={session && result.allView?.model.totalTokens
