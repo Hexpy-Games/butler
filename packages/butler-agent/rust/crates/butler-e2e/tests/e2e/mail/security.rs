@@ -101,7 +101,7 @@ async fn security_mail_secret_redaction_destination_refusal_and_remote_plaintext
         assert!(!result.to_string().contains(&password));
     }
     direct.close(&password).await?;
-    let result=tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("e2e-mail-connector")?).env_clear().env("BUTLER_CONNECTOR_FIELDS",json!({"address":"owner@example.test","imap_host":"192.0.2.1","imap_security":"plain","smtp_host":"127.0.0.1","smtp_security":"plain"}).to_string()).env("BUTLER_PLUGIN_DATA",s.sandbox.home.join("refused")).env("IMAP_PASSWORD",&password).stdin(std::process::Stdio::null()).output().await?;
+    let result=tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("e2e-mail-connector")?).env_clear().envs(butler_e2e::e2e::binary::system_environment()).env("BUTLER_CONNECTOR_FIELDS",json!({"address":"owner@example.test","imap_host":"192.0.2.1","imap_security":"plain","smtp_host":"127.0.0.1","smtp_security":"plain"}).to_string()).env("BUTLER_PLUGIN_DATA",s.sandbox.home.join("refused")).env("IMAP_PASSWORD",&password).stdin(std::process::Stdio::null()).output().await?;
     assert!(!result.status.success());
     assert!(!String::from_utf8_lossy(&result.stderr).contains(&password));
     // Refusal precedes opening a socket or creating state.
@@ -136,7 +136,18 @@ fn assert_no_canary(root: &Path, canary: &[u8]) -> Result<(), HarnessError> {
         if path.is_dir() {
             assert_no_canary(&path, canary)?;
         } else {
-            let bytes = fs::read(&path)?;
+            let bytes = match fs::read(&path) {
+                Ok(bytes) => bytes,
+                // Only a file a live database has byte-range locked (its WAL
+                // index, a table of page numbers) is skipped, and only where
+                // the host refuses the read; every other file is scanned.
+                Err(error)
+                    if butler_platform::host_file_behavior::is_byte_range_lock_conflict(&error) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
             assert!(
                 !bytes.windows(canary.len()).any(|w| w == canary),
                 "secret persisted in {}",
