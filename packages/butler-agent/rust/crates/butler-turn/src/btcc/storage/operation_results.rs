@@ -1,5 +1,6 @@
 mod authority;
 mod contracts;
+pub(crate) mod evidence;
 mod query;
 
 pub use contracts::*;

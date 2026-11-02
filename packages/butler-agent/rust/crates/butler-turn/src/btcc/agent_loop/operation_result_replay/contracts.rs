@@ -207,6 +207,7 @@ pub(crate) enum ExactReadSource {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ExactReadArguments {
+    pub evidence: Option<String>,
     pub source: ExactReadSource,
     pub result_ref: String,
     pub sha256: String,
@@ -219,6 +220,8 @@ pub(crate) struct ExactReadArguments {
 /// The `read_operation_results` arguments that read a referenced result.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExactReadArgumentsWire {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<String>,
     pub result_ref: String,
     pub sha256: String,
     pub revision: Option<f64>,

@@ -94,7 +94,7 @@ fn commit(
             now,
         )?;
     }
-    let input = result_input(&tx, &delegation, completion, &result, now, &evidence)?;
+    let input = result_input(&tx, &delegation, completion, &result, now)?;
     let input = serde_json::to_string(&input)
         .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;
     tx.execute("INSERT OR IGNORE INTO btcc_subsession_outbox (outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
@@ -138,7 +138,6 @@ fn result_input(
     completion: &ChildCompletion,
     result: &str,
     now: &str,
-    evidence: &str,
 ) -> Result<ParentResultInput, StorageError> {
     let packet = &delegation.packet;
     if packet.model_ref.is_empty() || packet.reasoning_effort.is_empty() {
@@ -149,10 +148,9 @@ fn result_input(
     }
     let feedback =
         delegation_feedback(tx, delegation, result, completion.failure_reason.as_deref())?;
-    let mut text = format!(
-        "Delegated result\nstatus: {}\nsummary: {}\nevidence_refs: {evidence}{feedback}",
-        completion.status, completion.summary
-    );
+    let mut text = super::prompt_result::delivery_text(
+        tx, result, &completion.status, &completion.summary, &completion.evidence_refs, &feedback,
+    )?;
     text.push_str(&super::assets::delivery_assets(tx, &completion.turn)?);
     text.push_str(&delivery_artifacts(
         tx,

@@ -20,10 +20,7 @@ pub(super) async fn tab_reads(session: &WebSession, endpoint: &str, paragraph: &
         .await
         .unwrap();
     assert!(first["total_chunks"].as_u64().unwrap() >= 3);
-    assert_ne!(
-        first["more_chunks"].as_array().unwrap().as_slice(),
-        [] as [Value; 0]
-    );
+    assert!(first["next_start_chunk"].is_number());
     // Reader fidelity stays covered independently of whether a model is offered it.
     let whole_args = json!({"url":endpoint,"max_chunks":8,"max_chars":8000});
     let whole = session
@@ -79,7 +76,7 @@ async fn chunks(session: &WebSession, endpoint: &str, html: &str, first: &Value,
         html: html.to_owned(),
     };
     let complete_args = json!({"url":endpoint,"query":"unmatched","max_chunks":8,"max_chars":8000});
-    let complete = session
+    let empty = session
         .web_read_from(
             &complete_args,
             Some(live()),
@@ -88,36 +85,30 @@ async fn chunks(session: &WebSession, endpoint: &str, html: &str, first: &Value,
         )
         .await
         .unwrap();
-    assert_eq!(
-        complete["chunks"].as_array().unwrap().len() as u64,
-        whole["total_chunks"].as_u64().unwrap()
-    );
-    assert_eq!(complete["more_chunks"], json!([]));
-    let selected = first["chunks"].as_array().unwrap();
-    let more = first["more_chunks"].as_array().unwrap();
-    let all: std::collections::BTreeSet<_> = selected
-        .iter()
-        .map(|c| c["index"].as_u64().unwrap())
-        .chain(more.iter().map(|i| i.as_u64().unwrap()))
-        .collect();
-    assert_eq!(all, (0..whole["total_chunks"].as_u64().unwrap()).collect());
-    for chunk in complete["chunks"].as_array().unwrap() {
-        assert!(
-            whole["markdown"]
-                .as_str()
-                .unwrap()
-                .contains(chunk["text"].as_str().unwrap())
-        );
-    }
-    for chunk in selected {
+    assert_eq!(empty["passages"], json!([]));
+    assert!(empty["next_start_chunk"].is_null());
+    for passage in first["passages"].as_array().unwrap() {
+        let chunk = usize::try_from(passage["chunk"].as_u64().unwrap()).unwrap();
+        let start = usize::try_from(passage["span"][0].as_u64().unwrap()).unwrap();
+        let end = usize::try_from(passage["span"][1].as_u64().unwrap()).unwrap();
+        let full = session
+            .web_read_from(
+                &json!({"url":endpoint,"start_chunk":chunk}),
+                Some(live()),
+                true,
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        let text = full["markdown"].as_str().unwrap();
         assert_eq!(
-            Some(chunk),
-            complete["chunks"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|c| c["index"] == chunk["index"])
+            passage["text"],
+            text.chars()
+                .skip(start)
+                .take(end - start)
+                .collect::<String>()
         );
+        assert!(whole["markdown"].as_str().unwrap().contains(text));
     }
 }
 

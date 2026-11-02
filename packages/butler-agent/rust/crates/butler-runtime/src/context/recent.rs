@@ -77,6 +77,7 @@ async fn assemble(
     // renderer below charges its final text with this model's token estimator.
     let options = render_options(f64::MAX, input.event_id);
     let plan = crate::context::compile_prompt_material_context_plan(&window.material, &options)?;
+    let mut results = butler_turn::btcc::ResultProjection::default();
     let (content, visible) = history::render(
         &window,
         &plan,
@@ -84,7 +85,13 @@ async fn assemble(
         &snapshot,
         input.model_ref,
         (&session.id, &owner.recent_history),
+        &mut results,
     )?;
+    for section in &mut assembly.current_input {
+        if let Some(body) = section.content.strip_prefix("Message Text: ") {
+            section.content = format!("Message Text: {}", results.project(body));
+        }
+    }
     owner.store().record_visible_history(&session.id, visible);
     if content.is_empty() {
         return Ok(assembly);
