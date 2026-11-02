@@ -23,15 +23,22 @@ pub(super) fn script(command: &str) -> Option<&str> {
     }
 }
 
-pub(super) fn shell(text: &str, environment: &HashMap<String, Option<String>>) -> Invocation {
-    let program = environment
+/// `ComSpec` from `environment`; with several spellings the smallest key wins,
+/// so the choice does not depend on the map's iteration order.
+pub(super) fn program(environment: &HashMap<String, Option<String>>) -> String {
+    environment
         .iter()
-        .find(|(key, _)| key.eq_ignore_ascii_case("ComSpec"))
+        .filter(|(key, _)| key.eq_ignore_ascii_case("ComSpec"))
+        .min_by(|(a, _), (b, _)| a.cmp(b))
         .and_then(|(_, value)| value.as_deref())
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or("cmd.exe")
-        .to_owned();
+        .to_owned()
+}
+
+pub(super) fn shell(text: &str, environment: &HashMap<String, Option<String>>) -> Invocation {
+    let program = program(environment);
     Invocation {
         program,
         arguments: vec![
@@ -48,7 +55,11 @@ pub(super) fn shell(text: &str, environment: &HashMap<String, Option<String>>) -
 pub(super) fn raw_argument(invocation: &Invocation) -> Option<String> {
     let text = match invocation.arguments.as_slice() {
         [d, s, c, text] if [d, s, c] == ["/d", "/s", "/c"] => text,
-        [d, v, s, c, text] if [d, v, s, c] == ["/d", "/v:off", "/s", "/c"] => text,
+        [d, v, s, c, text]
+            if d == "/d" && (v == "/v:off" || v == "/v:on") && s == "/s" && c == "/c" =>
+        {
+            text
+        }
         _ => return None,
     };
     let is_cmd = std::path::Path::new(&invocation.program)
