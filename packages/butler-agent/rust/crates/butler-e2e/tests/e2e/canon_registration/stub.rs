@@ -6,6 +6,9 @@ use std::sync::{Arc, Mutex};
 pub(crate) struct Script {
     pub replies: Mutex<std::collections::HashMap<String, Vec<Value>>>,
     pub requests: Mutex<Vec<Value>>,
+    pub hold_next: std::sync::atomic::AtomicBool,
+    pub held: tokio::sync::Notify,
+    pub release: tokio::sync::Notify,
 }
 pub(crate) async fn start()
 -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
@@ -25,6 +28,13 @@ pub(crate) async fn start()
 }
 async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> impl IntoResponse {
     script.requests.lock().unwrap().push(body.clone());
+    if script
+        .hold_next
+        .swap(false, std::sync::atomic::Ordering::SeqCst)
+    {
+        script.held.notify_one();
+        script.release.notified().await;
+    }
     let key = matching::key("/v1/responses", &body, &Placeholders::default());
     let n = key
         .round

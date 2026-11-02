@@ -41,6 +41,12 @@ pub fn apply(
                 transition(tx, ctx, id, "stale", by)?;
                 return Ok(conflict_result(&current));
             }
+            if matches!(error, Error::NotFound) {
+                transition(tx, ctx, id, "stale", by)?;
+                return Ok(
+                    json!({"ok":false,"error":{"code":"canon_not_found","message":"The target was deleted. Nothing was applied."}}),
+                );
+            }
             return Err(error);
         }
     };
@@ -74,9 +80,12 @@ fn batch(
         }
         applied.push(result);
     }
-    Ok(
-        json!({"ok":true,"state":"applied","applied":applied,"bound":bound,"message":APPLIED_MESSAGE}),
-    )
+    let message = if bound.is_empty() {
+        "Applied. Confirm briefly."
+    } else {
+        APPLIED_MESSAGE
+    };
+    Ok(json!({"ok":true,"state":"applied","applied":applied,"bound":bound,"message":message}))
 }
 
 /// Validate a draft against the same writers without retaining any mutations.
@@ -92,9 +101,15 @@ pub(super) fn validate(
         return Err(Error::Invalid("new project requires an epic"));
     }
     tx.execute_batch("SAVEPOINT proposal_validate")?;
-    let result = changes
-        .iter()
-        .try_for_each(|change| operations::execute(tx, ctx, project, change).map(|_| ()));
+    let result =
+        changes.iter().try_for_each(
+            |change| match operations::execute(tx, ctx, project, change) {
+                // Drafts may be requested by the very turn that blocks deletion.
+                // Scope and revision were already checked by the writer.
+                Err(Error::Running) if change["op"] == "epic.delete" => Ok(()),
+                result => result.map(|_| ()),
+            },
+        );
     tx.execute_batch("ROLLBACK TO proposal_validate; RELEASE proposal_validate")?;
     result
 }
