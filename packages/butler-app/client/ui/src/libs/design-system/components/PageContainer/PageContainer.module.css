@@ -19,6 +19,10 @@
   max-width: var(--page-container-default);
 }
 
+.page[data-width="document"] {
+  max-width: var(--page-container-document);
+}
+
 .page[data-width="full"] {
   max-width: none;
 }
