@@ -76,12 +76,12 @@ function useCompactHeader(node: HTMLElement | null): boolean {
 }
 
 /**
- * The file as a reading page in the pane's one scroll: at most the 760px reading width, 48px in from the
- * pane's sides, under the header line and above the page end (PageContainer gutter plus Box padding).
+ * The file in the pane's one scroll: documents fill the pane up to 1400px, centred beyond; other files keep
+ * the 760px reading page. Both keep 48px side gutters and page-end spacing (PageContainer gutter plus Box padding).
  */
-export function FileViewerPage({ children }: { children: ReactNode }) {
+export function FileViewerPage({ children, fill = false }: { children: ReactNode; fill?: boolean }) {
   return <ScrollArea fill dataTestClass="file-viewer-scroll">
-    <PageContainer width="narrow" gutter="2xl" id={FILE_VIEWER_PAGE_ID} data-test-class="file-viewer-page">
+    <PageContainer width={fill ? "document" : "narrow"} gutter="2xl" id={FILE_VIEWER_PAGE_ID} data-test-class="file-viewer-page">
       <Box paddingY="2xl"><Box padding="2xl">{children}</Box></Box>
     </PageContainer>
   </ScrollArea>;
