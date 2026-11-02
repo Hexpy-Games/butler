@@ -311,12 +311,93 @@ async fn hooks_crash_failclosed_prompt_deny_and_next_send() -> Result<(), Harnes
     drop(db);
     s.finish().await
 }
+/// Windows tree check without a slow-starting child: the fixture's cmd starts two
+/// `ping`s that carry a marker length, then writes `up`. PowerShell takes longer than
+/// the hook's budget to start, so it only runs here, after the hook is gone.
+fn windows_tree_is_gone(up: &Path) {
+    const QUERY: &str = "(Get-CimInstance Win32_Process -Filter 'Name=''ping.exe'' AND CommandLine LIKE ''% -l 1357 %''' | Measure-Object).Count";
+    let marked = || -> usize {
+        let out = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", QUERY])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().parse().unwrap()
+    };
+    assert_eq!(fs::read_to_string(up).unwrap().trim(), "up");
+    assert_eq!(marked(), 0, "hook descendants outlived the timeout");
+    // The query does see such a process while one lives.
+    let mut control = std::process::Command::new("ping")
+        .args(["-n", "5", "-l", "1357", "127.0.0.1"])
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    assert_eq!(marked(), 1);
+    control.kill().unwrap();
+    control.wait().unwrap();
+}
+#[tokio::test]
+async fn hooks_command_text_runs_in_the_documented_shell() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = setup("HOOK-SHELL")?.start().await?;
+    // The README's Windows `command` is cmd.exe syntax; returning to PowerShell breaks each.
+    let (json_deny, exit_two, exit_three, korean_deny) = if command_sandbox::POSIX_SHELL {
+        (
+            "echo '{\"decision\":\"deny\",\"reason\":\"No send\"}'",
+            "echo 'Guard reason' >&2; exit 2",
+            "exit 3",
+            "echo '{\"decision\":\"deny\",\"reason\":\"전송 금지\"}'",
+        )
+    } else {
+        (
+            "echo {\"decision\":\"deny\",\"reason\":\"No send\"}",
+            "echo Guard reason 1>&2 & exit /b 2",
+            "exit /b 3",
+            "echo {\"decision\":\"deny\",\"reason\":\"전송 금지\"}",
+        )
+    };
+    for (id, command, reason, exit_code, outcome) in [
+        ("json", json_deny, "No send", 0, "deny"),
+        ("two", exit_two, "Guard reason", 2, "deny"),
+        ("three", exit_three, "", 3, "error"),
+        // Output in the console code page would not be UTF-8 and the deny would be lost.
+        ("korean", korean_deny, "전송 금지", 0, "deny"),
+    ] {
+        replace(&s, vec![hook(id, "UserPromptSubmit", command)]).await?;
+        let tested = api(
+            &s,
+            Method::POST,
+            &format!("/hooks/{id}/test"),
+            Some(json!({})),
+        )
+        .await?;
+        let run = tested.data();
+        assert_eq!(run["outcome"], outcome, "{run}");
+        assert_eq!(run["exit_code"], exit_code, "{run}");
+        assert!(
+            run["reason"].as_str().unwrap_or("").contains(reason),
+            "{run}"
+        );
+    }
+    replace(&s, vec![hook("json", "UserPromptSubmit", json_deny)]).await?;
+    let blocked =
+        s.gw.post("/messages", json!({"chat_id":"general","text":"No send."}))
+            .await?;
+    assert_eq!(blocked.status, 422, "{blocked:?}");
+    assert_eq!(blocked.error_code(), Some("hook_blocked"));
+    s.finish().await
+}
 #[tokio::test]
 async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = setup("HOOK-TIMEOUT")?;
     let pids = setup.sandbox.home.join("hook-pids");
-    let mut hook = json!({"id":"tree","event":"UserPromptSubmit","type":"command","args":fixture(&setup,"tree"),
+    // The Windows fixture avoids PowerShell: its cold start would be the whole 300 ms budget.
+    let tree = if command_sandbox::POSIX_SHELL {
+        "tree"
+    } else {
+        "tree-fast"
+    };
+    let mut hook = json!({"id":"tree","event":"UserPromptSubmit","type":"command","args":fixture(&setup,tree),
         "timeout_ms":300,"env":{"HOOK_PIDS":pids}});
     configure(&setup, &[hook.clone()])?;
     let s = setup.start().await?;
@@ -324,17 +405,21 @@ async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), Harness
         s.turn("general", "Timeout proceeds.").await?.1["state"],
         "delivered"
     );
-    let pids: Vec<u32> = fs::read_to_string(&pids)?
-        .lines()
-        .map(|p| p.trim().parse().unwrap())
-        .collect();
-    assert_ne!(pids, [] as [u32; 0]);
-    for pid in pids {
-        assert_eq!(
-            process_control::liveness(pid),
-            Liveness::Gone,
-            "hook descendant {pid}"
-        );
+    if command_sandbox::POSIX_SHELL {
+        let pids: Vec<u32> = fs::read_to_string(&pids)?
+            .lines()
+            .map(|p| p.trim().parse().unwrap())
+            .collect();
+        assert_ne!(pids, [] as [u32; 0]);
+        for pid in pids {
+            assert_eq!(
+                process_control::liveness(pid),
+                Liveness::Gone,
+                "hook descendant {pid}"
+            );
+        }
+    } else {
+        windows_tree_is_gone(&pids);
     }
     let runs = api(&s, Method::GET, "/hooks/runs", None).await?;
     assert_eq!(runs.data()[0]["outcome"], "timeout");

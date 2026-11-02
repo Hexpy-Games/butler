@@ -120,22 +120,18 @@ async fn unparseable_manifests_skip_orphans_and_log_paths() -> Result<(), Harnes
     }
     let logs = s.agent.logs();
     for path in manifests {
+        // The diagnostic names the file in the host's own path form.
+        let logged = Path::new("outputs")
+            .join("manifests")
+            .join(path.file_name().unwrap())
+            .display()
+            .to_string();
         assert_eq!(
-            logs.matches(&format!(
-                "outputs/manifests/{}",
-                path.file_name().unwrap().to_str().unwrap()
-            ))
-            .count(),
+            logs.matches(&logged).count(),
             1,
             "uncertain manifest must be diagnosed once per batch: {logs}"
         );
-        assert!(
-            logs.contains(&format!(
-                "outputs/manifests/{}",
-                path.file_name().unwrap().to_str().unwrap()
-            )),
-            "missing diagnostic: {logs}"
-        );
+        assert!(logs.contains(&logged), "missing diagnostic: {logs}");
     }
     assert!(
         logs.contains("orphan pass skipped"),

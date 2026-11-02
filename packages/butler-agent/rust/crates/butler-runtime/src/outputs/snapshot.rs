@@ -34,7 +34,7 @@ fn checked(root: &Path, path: &Path) -> std::io::Result<()> {
             return Err(error("output_symlink_refused"));
         }
     }
-    if !std::fs::canonicalize(path)?.starts_with(root) {
+    if !secure_fs::is_within(&secure_fs::canonicalize(path)?, root) {
         return Err(error("unsafe_output_path"));
     }
     Ok(())

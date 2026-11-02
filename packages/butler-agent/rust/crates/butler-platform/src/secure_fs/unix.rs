@@ -170,6 +170,10 @@ pub(super) fn sync_path(path: &Path) -> io::Result<()> {
     File::open(path)?.sync_all()
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the implementation behind secure_fs::canonicalize"
+)]
 pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
     fs::canonicalize(path)
 }

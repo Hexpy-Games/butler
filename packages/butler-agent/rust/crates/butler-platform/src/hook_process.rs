@@ -1,6 +1,6 @@
 //! Unsandboxed, bounded lifecycle command processes under the user's privileges.
 use crate::{
-    command_sandbox::{self, CommandOutputDecoder, ShellAccess},
+    command_sandbox::{self, CommandOutputDecoder},
     process_control::{self, GroupSignal},
 };
 use std::{collections::HashMap, path::PathBuf, process::Stdio, time::Duration};
@@ -65,10 +65,7 @@ fn prepare(input: &HookProcess) -> Result<std::process::Command, HookProcessErro
     let invocation = input
         .command
         .as_ref()
-        .map(|text| {
-            command_sandbox::login_shell(text, ShellAccess::Full, &input.environment).map_err(error)
-        })
-        .transpose()?;
+        .map(|text| command_sandbox::hook_shell(text, &input.environment));
     let mut command = if let Some(invocation) = &invocation {
         std::process::Command::new(&invocation.program)
     } else {

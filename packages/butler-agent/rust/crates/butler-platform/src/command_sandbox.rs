@@ -245,6 +245,13 @@ pub enum Protection {
     Unavailable(Invocation),
 }
 
+/// The shell of a user's lifecycle hook `command`: `/bin/sh -lc` on Unix and
+/// `%ComSpec% /d /s /c` on Windows, as the hook documentation says. Unlike
+/// [`login_shell`], Windows does not use PowerShell here.
+pub fn hook_shell(command: &str, environment: &HashMap<String, String>) -> Invocation {
+    shell::hook_shell(command, environment)
+}
+
 /// The login-shell invocation of a user command with `access`: `/bin/sh -lc`
 /// on Unix and Windows PowerShell 5.1 on Windows. Explicit `cmd /c` scripts
 /// use `%ComSpec% /d /s /c` (read from `environment`).

@@ -36,7 +36,7 @@ pub(super) fn resolve_scope(
                 .with_source(source)
         })?
         .join(&scope.ledger_project_id);
-    if actual != expected
+    if !butler_platform::secure_fs::same_path(&actual, &expected)
         || actual.file_name().and_then(|name| name.to_str()) != Some(&scope.ledger_project_id)
     {
         return Err(ProjectWorkPublicationError::adapter(

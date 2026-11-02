@@ -74,7 +74,7 @@ fn execute(
     if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() == Ok("0") {
         return Err("mxc_disabled".into());
     }
-    let cwd = dunce::canonicalize(std::env::current_dir()?)?;
+    let cwd = crate::secure_fs::canonicalize(std::env::current_dir()?)?;
     let relative = cwd
         .strip_prefix(&payload.project)
         .map_err(|_| "cwd_outside_project")?;
