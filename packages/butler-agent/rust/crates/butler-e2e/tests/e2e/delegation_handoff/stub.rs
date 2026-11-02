@@ -133,6 +133,7 @@ fn assign(objective: &str, mode: Mode, replacement: Option<&str>) -> Value {
     let mut args = json!({"action_key":if objective == "next step" {"B"} else {"A"},"objective":objective,"acceptance_criteria":["Findings recorded"],"implementation_brief":"Use confirmed evidence and report gaps"});
     if mode == Mode::Publish {
         args["target_path"] = "site/index.html".into();
+        args["task"] = json!({"scope":{"owns":[{"subject":"report","aspects":["publication"]}],"paths":["site/index.html"]},"output":{"format":"html","files":["site/index.html"]}});
     }
     if let Some(relation) = replacement {
         args["replaces_relation_id"] = relation.into();
@@ -177,7 +178,7 @@ fn steward(script: &Script, stage: usize, body: &Value) -> Value {
             }
             call(
                 "replace_work_plan",
-                json!({"objective":"Research findings","execution_mode":"workers","actions":actions,"checks":["Findings recorded"]}),
+                json!({"objective":"Research findings","execution_mode":"workers","subjects":[{"key":"report","label":"Report"}],"actions":actions,"checks":["Findings recorded"]}),
             )
         }
         2 => review(),
@@ -221,6 +222,7 @@ fn steward(script: &Script, stage: usize, body: &Value) -> Value {
 }
 fn worker(mode: Mode, step: usize, body: &Value, user: &str) -> Value {
     match step {
+        0 if mode == Mode::Scope => call("tool_describe", json!({"ids":["native:run_command"]})),
         0 => describe(),
         1 => call(
             "replace_work_plan",
@@ -239,6 +241,21 @@ fn worker(mode: Mode, step: usize, body: &Value, user: &str) -> Value {
                 "read_conversation_session",
                 json!({"conversation_session_id":reference,"scope":"all_user_sessions","include_internal":true,"limit":80}),
             )
+        }
+        3 if mode == Mode::Scope => call(
+            "write_file",
+            json!({"path":"tasks/A/inside.txt","content":"complete in-scope content","overwrite":false,"create_parents":true}),
+        ),
+        4 if mode == Mode::Scope => call(
+            "write_file",
+            json!({"path":"outside.txt","content":"refused","overwrite":false}),
+        ),
+        5 if mode == Mode::Scope => call(
+            "run_command",
+            json!({"summary":"Create the two requested outputs","command":"printf workspace-change > outside-command.txt; printf scope-change > \"$BUTLER_ARTIFACTS_DIR/outside.txt\"","state_effect":"read_only"}),
+        ),
+        6 if mode == Mode::Scope => {
+            disposition(body, &[json!({"action_key":"research","status":"done"})])
         }
         3 if mode == Mode::Publish => call(
             "write_file",
@@ -287,10 +304,17 @@ pub(super) fn outputs(body: &Value) -> Vec<Value> {
         .map(|v| v["output"].clone())
         .collect()
 }
-fn call(name: &str, args: Value) -> Value {
+fn call(name: &str, mut args: Value) -> Value {
+    if name == "delegate_to_worker" && args.get("task").is_none() {
+        args["task"] = json!({"scope":{"paths":[format!("tasks/{}", args["action_key"].as_str().unwrap_or("work"))]},"output":{"format":"text","fields":["summary"]}});
+    }
     let (name, args) = if matches!(
         name,
-        "document_create" | "output_publish" | "read_file" | "read_conversation_session"
+        "document_create"
+            | "output_publish"
+            | "read_file"
+            | "read_conversation_session"
+            | "run_command"
     ) {
         (
             "tool_call",

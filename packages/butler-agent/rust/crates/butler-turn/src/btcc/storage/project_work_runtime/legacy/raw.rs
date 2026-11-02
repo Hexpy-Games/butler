@@ -183,6 +183,7 @@ fn project(
     let work_id = record_id("work", &import_id);
     ensure_unimported(db, input, source, &import_id, &work_id)?;
     let plan = (!projection.actions.is_empty()).then(|| WorkPlan {
+        subjects: Vec::new(),
         plan_revision_id: record_id("plan", &import_id),
         revision: 1,
         objective: projection.objective.clone(),

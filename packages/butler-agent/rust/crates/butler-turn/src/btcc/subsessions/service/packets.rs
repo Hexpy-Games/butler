@@ -34,8 +34,15 @@ pub(super) fn steward_identity<'a>(
 pub(super) fn worker_identity<'a>(
     request: &'a WorkerDelegationRequest,
     profile: &'a WorkerProfile,
+    reviewed: &'a WorkView,
+    plan: &'a WorkPlan,
 ) -> WorkerIdentity<'a> {
     WorkerIdentity {
+        task_plan: request
+            .task
+            .as_ref()
+            .map(|_| (reviewed.work_id.as_str(), plan.plan_revision_id.as_str())),
+        task: request.task.as_ref(),
         parent_session_id: &request.parent_session_id,
         parent_turn_id: &request.parent_turn_id,
         action_key: &request.action_key,
@@ -57,6 +64,9 @@ pub(super) fn steward(
     (plan, review): (&WorkPlan, Option<&WorkReview>),
 ) -> SubsessionPacket {
     SubsessionPacket {
+        task: None,
+        task_overlaps: Vec::new(),
+        task_context: String::new(),
         child_role: ChildRole::Steward,
         delegation_id: ids.delegation_id.clone(),
         source_tool_call_id: None,
@@ -103,6 +113,9 @@ pub(super) fn worker(
     (plan, review): Reviewed<'_>,
 ) -> SubsessionPacket {
     SubsessionPacket {
+        task: request.task.clone(),
+        task_overlaps: Vec::new(),
+        task_context: String::new(),
         child_role: ChildRole::Worker,
         delegation_id: ids.delegation_id.clone(),
         source_tool_call_id: Some(request.source_tool_call_id.clone()),
@@ -131,7 +144,12 @@ pub(super) fn worker(
             "Execute only this bounded Task and report to the Steward.".into(),
         ],
         allowed_tools_and_effects: allowed_effects(request.access_mode.as_str()),
-        mutation_scope: mutation_scope(request.access_mode.as_str()),
+        mutation_scope: request
+            .task
+            .as_ref()
+            .and_then(|t| t.scope.as_ref())
+            .map(|s| s.paths.clone())
+            .unwrap_or_default(),
         parent_work_ref: Some(parent_work_ref(
             reviewed,
             &request.parent_turn_id,
@@ -139,6 +157,7 @@ pub(super) fn worker(
             Some(review),
         )),
         worker_profile: Some(crate::btcc::PacketWorkerProfile {
+            prompt: profile.prompt.clone(),
             id: profile.id.clone(),
             job: profile.job.clone(),
         }),

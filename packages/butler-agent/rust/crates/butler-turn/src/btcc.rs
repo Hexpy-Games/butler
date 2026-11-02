@@ -206,6 +206,10 @@ pub use work::{
     ProjectWorkOperationKind, ProjectWorkResultRuntime, ProjectWorkRuntimeProjection,
     ReplacePlanCommand, ResolvedProjectWorkScope, ReviewCommand, StartWorkCommand,
 };
+pub use work::{
+    PlanSubject, TaskContract, TaskInput, TaskInputUse, TaskOutput, TaskOverlap, TaskOwnership,
+    TaskResolution, TaskScope, WorkTask, task_overlap, task_path, task_path_contains,
+};
 
 /// The SHA-256 hex digest used for BTCC identities.
 pub fn digest_identity(value: &str) -> String {

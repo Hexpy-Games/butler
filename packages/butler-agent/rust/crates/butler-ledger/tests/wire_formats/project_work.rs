@@ -130,6 +130,7 @@ fn plan_command(plan: Plan<'_>) -> ReplacePlanCommand {
     };
     ReplacePlanCommand {
         input: ReplacePlanInput {
+            subjects: Vec::new(),
             scope: turn(plan.turn),
             mutation_call_id: plan.call.into(),
             start_new: None,

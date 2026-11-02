@@ -81,6 +81,8 @@ pub struct ActionProgress {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkPlan {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subjects: Vec<super::super::PlanSubject>,
     pub plan_revision_id: String,
     pub revision: u64,
     pub objective: String,

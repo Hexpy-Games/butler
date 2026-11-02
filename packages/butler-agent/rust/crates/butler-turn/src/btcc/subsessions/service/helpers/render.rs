@@ -1,39 +1,11 @@
 //! Text of durable role packets.
 use super::*;
 
-/// A Worker cannot open tabs; another source and observing its own output are
-/// its routes, with the same bounded retry.
-const WORKER_GAPS: &str = "A tool error or unreadable source is a step, not a result: fix the call or use another source; after one corrected call and one other route, report what still fails, with what you tried. Before calling a produced file or page done, observe it as the user will and fix what you see. Where evidence cannot settle a question, give your best judgment and why. Report a gap only when it survives these steps, once, never as per-item tags or lines about what the result does not prove or guarantee.";
-
 pub(in crate::btcc::subsessions::service) fn render_input(
     packet: &SubsessionPacket,
     profile_prompt: Option<&str>,
 ) -> String {
-    let user = packet.user_request.as_ref().map(|text| format!(
-        "\nuser_request (the user's own words, verbatim; context for your action, keep within its scope and output form): {text}"
-    )).unwrap_or_default();
-    let mut context = String::new();
-    if let Some(path) = &packet.target_path {
-        context.push_str(&format!(
-            "\ntarget_path: {path}. Revise and check this path; it is the one that gets published."
-        ));
-    }
-    if !packet.earlier_steps.is_empty() {
-        context.push_str("\nearlier_steps: Results of the actions this one depends on. Use their facts as confirmed; research only the gaps they name and what this action newly needs, and re-check a confirmed fact only when this action is to verify it.");
-        for step in &packet.earlier_steps {
-            context.push_str(&format!("\n- {step}"));
-        }
-    }
-    let base = format!(
-        "role: worker{user}\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}{context}\nReport the bounded result to the Steward. {WORKER_GAPS}",
-        packet.objective,
-        criteria(packet),
-        packet.implementation_brief.as_deref().unwrap_or("")
-    );
-    match profile_prompt.filter(|value| !value.trim().is_empty()) {
-        Some(prompt) => format!("{base}\nworker_profile_prompt: {prompt}"),
-        None => base,
-    }
+    packet.render_worker_input(profile_prompt)
 }
 /// Facts the goal needs are worth getting, also behind a page control;
 /// operating controls or scrolling through image sections for details that
@@ -49,7 +21,7 @@ const CLOCK: &str =
 /// Delegated outcome criteria are met with evidence, a failed route is a step
 /// (a page the reader got only part of goes to a tab first), and the report
 /// carries only gaps that survived.
-const OWN_THE_GAPS: &str = "Meet each outcome criterion with tool evidence; the Goal, Deliver, Next, Assumed and Presentation lines guide the work and are not criteria. A tool error, a blocked, empty, script-built or image-only page, or a failed run is a step, not a result: follow its next_action or fix the call, and open a page the reader could not show in a browser tab before trying another source; report what still fails, with what you tried. Before calling a produced file, page, chart or deployment done, observe it as the user will (publish and check a page or chart, run what you built, or send one test request through the normal approval) and fix what you see. Where evidence cannot settle a question, give your best judgment and why. Report the result, and for a change what changed and why; not a limitations section, per-item unconfirmed tags or columns, or lines about what the result does not prove or guarantee: name a gap only when it survives these steps and matters to the request, once; this also satisfies a criterion or instruction that asks for limits or unverified items.";
+const OWN_THE_GAPS: &str = "Meet outcome criteria with tool evidence; Goal, Deliver, Next, Assumed and Presentation guide the work. Fix failed calls, follow next_action, and open unreadable pages in a browser before trying another source. Report surviving failures and attempts. Observe produced outputs as the user will: publish and check pages, run builds, or send one approved test request; fix what you see. Where evidence cannot settle a question, give your judgment and why. Report the outcome, what changed and why, with material surviving gaps once, without per-item caveats. Split each action into Tasks that do not overlap before you assign Workers. A Task owns its subjects and aspects, or its files; give it earlier results it builds on as inputs and say what it returns. If the runtime reports an overlap, merge into the running Task, narrow the new one, or wait for it, and say why.";
 
 pub(in crate::btcc::subsessions::service) fn render_steward_input(
     packet: &SubsessionPacket,

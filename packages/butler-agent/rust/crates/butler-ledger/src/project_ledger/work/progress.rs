@@ -340,7 +340,7 @@ fn new_plan(
     codec::typed(json!({
         "planRevisionId":plan_id, "revision":revision,
         "objective":command.input.objective, "governingRefs":command.governing_refs,
-        "executionMode":command.input.execution_mode, "actions":command.input.actions,
+        "subjects":command.input.subjects, "executionMode":command.input.execution_mode, "actions":command.input.actions,
         "checks":command.input.checks, "originTurnId":command.input.scope.turn_id, "createdAt":at,
     }))
 }

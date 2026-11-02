@@ -330,3 +330,5 @@ mod chats_work;
 mod canon_criteria;
 mod canon_mcp;
 mod shell_client;
+
+mod task_scope;
