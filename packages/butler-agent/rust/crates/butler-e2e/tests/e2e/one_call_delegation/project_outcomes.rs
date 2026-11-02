@@ -50,13 +50,7 @@ async fn outcome(cancelled: bool, twice: bool) -> Result<(), HarnessError> {
         wait_cancelled(&s).await?;
     }
     script.release.add_permits(1);
-    let expected = if cancelled {
-        "abandoned"
-    } else if twice {
-        "completed"
-    } else {
-        "abandoned"
-    };
+    let expected = if twice { "completed" } else { "abandoned" };
     let parents = parent_ids(&s)?;
     let deadline = Instant::now() + Duration::from_secs(40);
     loop {

@@ -96,7 +96,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
         {
-            self.stop_closed_turn(&session, &turn)?;
+            self.stop_closed_turn(&session, &turn).await?;
             self.repository
                 .terminal_control_dispatched(turn)
                 .await

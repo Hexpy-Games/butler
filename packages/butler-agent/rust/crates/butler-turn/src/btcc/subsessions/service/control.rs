@@ -285,9 +285,13 @@ impl SubsessionService {
     }
 
     /// Stop in-flight executor futures after their authority was durably fenced.
-    pub(super) fn stop_closed_turn(&self, session: &str, turn: &str) -> Result<(), BtccError> {
+    pub(super) async fn stop_closed_turn(
+        &self,
+        session: &str,
+        turn: &str,
+    ) -> Result<(), BtccError> {
         let request = format!("delegation-closed:{turn}");
-        self.queue.enqueue(super::SubsessionEnqueue {
+        self.enqueue_child(super::SubsessionEnqueue {
             envelope: json!({
                 "eventId":request,"transport":"app","accountId":"local",
                 "peer":{"kind":"dm","id":session},
@@ -297,7 +301,7 @@ impl SubsessionService {
                 "control":{"kind":"cancel_turn","requestId":request,"turnId":turn,"requestedAt":(self.now)()}
             }),
             metadata: serde_json::Map::new(),
-        })
+        }).await
     }
 
     /// Takes the next unconsumed direction for a child turn.

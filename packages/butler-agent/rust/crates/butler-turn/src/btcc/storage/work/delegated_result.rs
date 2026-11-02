@@ -37,36 +37,25 @@ pub(in crate::btcc::storage) fn settle(
     if plan.plan_revision_id != parent.plan_revision_id {
         return Ok(());
     }
-    let disposition = match status {
-        "success" | "completed" => "completed",
-        "cancelled" | "abandoned" => "abandoned",
-        _ => "abandoned",
+    let disposition = if matches!(status, "success" | "completed") {
+        "completed"
+    } else {
+        "abandoned"
     };
     let mut actions = work.action_progress.clone();
     for action in &mut actions {
-        action.status = match disposition {
-            "completed" => ActionStatus::Done,
-            "abandoned" => ActionStatus::Skipped,
-            _ => ActionStatus::Blocked,
+        action.status = if disposition == "completed" {
+            ActionStatus::Done
+        } else {
+            ActionStatus::Skipped
         };
         action.note = Some(summary.into());
     }
-    let condition = if disposition == "blocked" {
-        let child = common::work(db, &relation.root_work_id)?
-            .map(|_| read::view(db, &relation.root_work_id))
-            .transpose()?;
-        child
-            .and_then(|work| work.latest_disposition)
-            .and_then(|d| d.next_condition)
-            .or_else(|| Some(summary.into()))
-    } else {
-        None
-    };
     let material = Settlement {
         disposition,
         summary,
         actions: &actions,
-        condition: condition.as_deref(),
+        condition: None,
         evidence,
         now,
     };
