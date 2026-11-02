@@ -1,4 +1,5 @@
 //! Holds native cancellation after the App has persisted its durable outbox.
+//! Stop must also persist while another connection holds the BTCC write lock.
 use super::*;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -9,6 +10,56 @@ use tokio::{
 struct Barrier {
     events: mpsc::UnboundedReceiver<TcpStream>,
     server: tokio::task::JoinHandle<()>,
+}
+
+#[tokio::test]
+async fn stop_persists_when_another_connection_writes_during_it() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (mut stub, setup) = Stub::setup().await?;
+    let (mut barrier, address) = Barrier::start().await;
+    let s = setup.env("BUTLER_TEST_PAUSE_ADDR", address).start().await?;
+    stub.attach(&s)?;
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    db.execute(
+        "CREATE TABLE concurrent_writes (value INTEGER NOT NULL)",
+        [],
+    )?;
+    let running = s.gw.say_turn("general", ORIGINAL).await?;
+    let held = stub.next().await;
+    let stop =
+        s.gw.post(&format!("/turns/{running}/cancel"), json!({}))
+            .await?;
+    assert_eq!(stop.status, 202, "{}", stop.text);
+    let mut cancelling = barrier.held().await;
+    db.execute_batch("BEGIN IMMEDIATE; INSERT INTO concurrent_writes VALUES (1)")?;
+    cancelling.write_all(b"1").await?;
+    // Let Stop reach storage while the other writer still owns the write lock.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    db.execute_batch("COMMIT")?;
+    let terminal =
+        s.gw.wait_terminal("general", &running, Duration::from_secs(30))
+            .await;
+    let native: String = db.query_row(
+        "SELECT semantic_state FROM btcc_turns WHERE turn_id=?1",
+        [&running],
+        |r| r.get(0),
+    )?;
+    let stops: usize = db.query_row(
+        "SELECT count(*) FROM btcc_stop_requests WHERE turn_id=?1",
+        [&running],
+        |r| r.get(0),
+    )?;
+    eprintln!(
+        "Stop persistence: native={native}, stop_requests={stops}, app={:?}",
+        s.gw.turn("general", &running).await?
+    );
+    let turn = terminal?;
+    assert_eq!(turn_state(&turn), "cancelled", "{turn}");
+    assert_eq!(native, "cancelled");
+    assert_eq!(stops, 1);
+    assert_eq!(cancel_count(&s), 1);
+    held.answer();
+    s.finish().await
 }
 impl Drop for Barrier {
     fn drop(&mut self) {
