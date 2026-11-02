@@ -136,7 +136,7 @@ try {
   await waitBrowser(() => app.main(`${tab}.status==='idle' && !${tab}.failure && ${tab}.attached===${app.win} && ${tab}.view.getVisible()`), "slow readback live again");
   await nativeAligned(app);
   // A wedged surface never settles a readback: the window's return probe finds it with no user action.
-  await app.main(`(()=>{const t=${tab},c=t.view.webContents,w=${app.win};globalThis.recoveryCapture=c.capturePage;c.capturePage=()=>new Promise(()=>{});w.hide();w.show();w.focus();})()`);
+  await app.main(`(async()=>{const t=${tab},c=t.view.webContents,w=${app.win};w.hide();await new Promise(r=>setTimeout(r,500));globalThis.recoveryCapture=c.capturePage;c.capturePage=()=>new Promise(()=>{});w.show();w.focus();})()`);
   await waitBrowser(() => app.main(`${tab}.status==='crashed' && ${tab}.failure==='stalled'`), "wedged view found on return");
   await app.main(`(()=>{${tab}.view.webContents.capturePage=globalThis.recoveryCapture;})()`);
   await app.call("reload", { id });
