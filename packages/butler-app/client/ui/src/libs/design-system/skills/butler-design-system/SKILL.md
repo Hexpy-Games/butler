@@ -12,6 +12,8 @@ This skill is a component-selection and quality-gate guide, not a style
 description. It should make a new agent faster while preventing one-off CSS,
 domain-coupled blocks, or visually inconsistent UI.
 
+Call UI parts by their glossary name: references/glossary.md
+
 ## Hard Rules
 
 Product UI is assembled only from the design system. The type system and the

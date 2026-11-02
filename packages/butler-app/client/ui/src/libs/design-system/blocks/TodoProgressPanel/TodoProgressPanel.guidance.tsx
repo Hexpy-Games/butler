@@ -15,7 +15,7 @@ function PlanSteps() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The composer-attached plan checklist with a state and label per step.",
+  purpose: "The composer-attached progress log with a state and label per step.",
   whenToUse: ["A turn follows a plan with several steps"],
   whenNotToUse: [
     { when: "Workers", use: "WorkerActivityPanel" },

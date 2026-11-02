@@ -1,5 +1,7 @@
 # MessageAvatarBlock
 
+Glossary: 시스템 메시지 표식 / system message mark (`MessageAvatarBlock`).
+
 ## What is this component
 A role-aware avatar shell for conversation rows.
 
