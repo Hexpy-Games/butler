@@ -10,10 +10,6 @@ pub use denial::{
     execution_timeout_exit, isolation_failure, isolation_failure_exit, sandbox_denial,
 };
 mod credentials;
-mod hook_containment;
-pub use hook_containment::{
-    ContainedHook, HookContainment, HookSandbox, contain_hook, hook_invocation, powershell_literal,
-};
 pub mod mxc_policy;
 mod project_secrets;
 pub use credentials::secret_name;
@@ -285,35 +281,6 @@ pub fn login_shell_contained(
         environment,
         deny_reads,
         allow_reads,
-    )
-}
-
-/// `invocation` inside the read-only sandbox, with `root` readable. Hosts without one
-/// refuse it. Never start the invocation unwrapped instead.
-pub(crate) fn read_only_invocation(
-    invocation: Invocation,
-    environment: &HashMap<String, String>,
-    root: &Path,
-) -> Result<Invocation, SandboxError> {
-    sandbox::read_only_contained(invocation, environment, &[], &[root])
-}
-
-/// `invocation` inside the project-write sandbox; see [`project_write_shell`].
-pub(crate) fn project_write_invocation(
-    invocation: Invocation,
-    environment: &HashMap<String, String>,
-    root: &Path,
-    writable: &[&Path],
-    denied: &[&Path],
-    toolchain_roots: Option<&ToolchainRoots>,
-) -> Result<Invocation, SandboxError> {
-    sandbox::project_write(
-        invocation,
-        environment,
-        root,
-        writable,
-        denied,
-        toolchain_roots,
     )
 }
 

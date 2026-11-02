@@ -23,10 +23,6 @@ pub(super) async fn route(
     if uri.path() == "/sessions/general/clear" && request.method() == Method::POST {
         return clear_general(state, request).await.map(Some);
     }
-    if let Some(encoded) = action_id(uri.path(), "/projects/", "/folder-trust") {
-        let id = super::subsessions::decode_component(encoded)?;
-        return super::projects::folder_trust(state, request, id).await;
-    }
     if uri.path().starts_with("/projects/") {
         return project_route(state, request, uri).await;
     }

@@ -3,14 +3,14 @@ import { appCopy } from "./copy.ts";
 import type { AppCopy } from "./copy.ts";
 import { approvalTargetsFromTransport, isAbsolutePath } from "./approvalTargets.ts";
 import { scheduleTiming } from "./scheduleLabels.ts";
-import type { AccessMode, ApprovalRisk, ApprovalSummary, AuthorityApprovalCard, ProjectHookLine } from "./types.ts";
+import type { AccessMode, ApprovalRisk, ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
 
 type ApprovalRequestCopy = AppCopy["interfaceTemplates"]["approvalRequest"];
 
 /** The `approval.action_kind` values the agent sends (#277). */
 export const APPROVAL_ACTION_KINDS = [
   "generate_image", "edit_image", "edit_files", "run_command", "network_command", "web_request", "use_connector", "manage_schedule",
-  "update_project", "start_conversation", "restart_service", "create_worktree", "switch_folder", "project_hooks", "other",
+  "update_project", "start_conversation", "restart_service", "create_worktree", "switch_folder", "other",
 ] as const;
 export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
 
@@ -25,6 +25,8 @@ export interface ApprovalRequestView {
   details: string[];
   /** Path lines eligible for visual abbreviation; commands remain verbatim. */
   pathDetails?: string[];
+  /** The details that are command bodies (the operation's command, a command kind's examples as shown). */
+  commands?: string[];
   /** As the agent sent it; unknown or missing reads as high. */
   risk: ApprovalRisk;
   /** What "Always allow in this conversation" covers. */
@@ -65,10 +67,8 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
   });
   const operation = normalizeOperation(value.operation);
   const schedule = normalizeSchedule(value.schedule);
-  const projectHooks = normalizeProjectHooks(value.project_hooks);
   return {
     actionKind, targets, count, examples,
-    ...(projectHooks ? { projectHooks } : {}),
     ...(operation ? { operation } : {}),
     ...(schedule ? { schedule } : {}),
     ...(value.command_access === "read_only_unisolated" ? { commandAccess: value.command_access } : {}),
@@ -87,16 +87,6 @@ function normalizeBrowserSteps(value: unknown): BrowserStep[] | undefined {
     return [{ action: step.action, role: step.role, name: step.name, frame: step.frame,
       ...(typeof step.value_preview === "string" ? { value_preview: step.value_preview } : {}), addons: step.addons }];
   });
-}
-
-function normalizeProjectHooks(value: unknown): ApprovalSummary["projectHooks"] {
-  if (!isRecord(value) || typeof value.folder !== "string" || !Array.isArray(value.hooks)) return undefined;
-  const hooks = value.hooks.flatMap((hook): ProjectHookLine[] => {
-    if (!isRecord(hook) || typeof hook.event !== "string" || typeof hook.command !== "string") return [];
-    const tools = Array.isArray(hook.tools) ? hook.tools.filter((tool): tool is string => typeof tool === "string") : [];
-    return [{ event: hook.event, tools, command: hook.command }];
-  });
-  return { folder: value.folder, ...(value.unsandboxed === true ? { unsandboxed: true } : {}), hooks };
 }
 
 function normalizeSchedule(value: unknown): ApprovalSummary["schedule"] {
@@ -165,6 +155,8 @@ export function approvalRequestView(
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
       ...actionDetails(approval, actionKind, card, copy)],
+    commands: [...(operation?.command ? [operation.command] : []),
+      ...(COMMAND_KINDS.has(actionKind) ? operation ? approval.examples : shownExamples(approval) : [])],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -192,9 +184,7 @@ function knownActionKind(approval: ApprovalSummary): ApprovalActionKind {
 /** The action's details, separate from permission notices and card explanations. */
 function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
   card: Pick<AuthorityApprovalCard, "scope" | "reason">, copy: ApprovalRequestCopy): string[] {
-  const { schedule, operation, projectHooks } = approval;
-  if (projectHooks) return [projectHooks.folder, copy.projectHooks.receives,
-    ...(projectHooks.unsandboxed ? [copy.projectHooks.unsandboxed] : []), ...projectHooks.hooks.map(projectHookText)];
+  const { schedule, operation } = approval;
   if (schedule) return [schedule.title,
     ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)]
       : !schedule.accessMode && typeof schedule.browserSignin !== "boolean" && typeof schedule.browserPayment !== "boolean" ? [copy.scheduleUnavailable] : []),
@@ -207,14 +197,8 @@ function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
   return operation ? [...new Set([...operationDetails(operation, copy), ...examples])] : details(approval, kind, card, copy);
 }
 
-/** "Event (tools) · exact command". */
-export function projectHookText(hook: ProjectHookLine): string {
-  const tools = hook.tools.length ? ` (${hook.tools.join(", ")})` : "";
-  return `${hook.event}${tools} · ${hook.command}`;
-}
-
 /** Kinds whose own sentence names the action better than a tool label. */
-const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule", "project_hooks"]);
+const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule"]);
 
 /** The exact operation, as the local decision shows it. */
 function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): string[] {
@@ -252,7 +236,6 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace
     case "restart_service": return copy.restartService;
     case "create_worktree": return copy.createWorktree;
     case "switch_folder": return copy.switchFolder;
-    case "project_hooks": return copy.projectHooks.title;
     case "other": return copy.generic;
   }
 }
@@ -281,8 +264,7 @@ function details(
   copy: ApprovalRequestCopy,
 ): string[] {
   const notice = approval.commandAccess === "read_only_unisolated" ? [copy.readOnlyUnisolated] : [];
-  const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example, index) =>
-    approval.examplesTruncated?.[index] ? `${example}…` : example);
+  const shown = shownExamples(approval);
   const outside = approval.targets.filter(target => target.kind === "outside").map(target => target.path);
   if (shown.length) {
     const additionalOutside = outside.filter(path => !shown.includes(path));
@@ -295,6 +277,11 @@ function details(
   if (lines.length || kind !== "other") return lines;
   const fallback = (card.scope?.description ?? card.reason).trim();
   return fallback ? [fallback] : [];
+}
+
+/** Up to three examples as the card shows them: a capped one ends in `…`. */
+function shownExamples(approval: ApprovalSummary): string[] {
+  return approval.examples.slice(0, MAX_EXAMPLES).map((example, index) => approval.examplesTruncated?.[index] ? `${example}…` : example);
 }
 
 /** A step only the user can do in a tab (a sign-in step, a secure field, ...):

@@ -25,7 +25,10 @@ takes the free space in a flex column. There is no `UNSAFE_style`.
 The scroller opts into the shared scroll-fade primitive (`useScrollEdges` plus
 `scroll-fade.css`). An edge fades only while content is clipped there: no fade
 at a resting edge and none when content fits. Pass `orientation="x"` for a
-horizontal scroller; the fade follows the scrolling axis.
+horizontal scroller; the fade follows the scrolling axis. Content that
+overflows both ways inside a block (a code frame) calls `useScrollEdges("both")`
+instead: each of its four edges fades on its own, only while it hides content.
+Single-axis scrollers are unchanged by it.
 
 ## Scrollbar Lane
 

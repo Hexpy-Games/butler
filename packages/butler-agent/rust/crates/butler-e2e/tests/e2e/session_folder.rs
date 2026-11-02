@@ -12,8 +12,6 @@
     reason = "E2E assertions"
 )]
 
-#[path = "session_folder/project_hooks.rs"]
-mod project_hooks;
 #[path = "session_folder/stub.rs"]
 mod stub;
 

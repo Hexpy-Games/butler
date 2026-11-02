@@ -6,7 +6,6 @@
 
 mod command_risk;
 mod operation;
-mod project_hooks;
 mod schedule;
 mod tool;
 pub(super) use operation::exact_operation;
@@ -53,9 +52,6 @@ pub struct AuthorityApproval {
     /// What a reviewed schedule create sets up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedule: Option<schedule::ApprovalSchedule>,
-    /// The project folder a card asks about.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_hooks: Option<project_hooks::ApprovalProjectHooks>,
 }
 
 /// What kind of action waits for the user.
@@ -86,8 +82,6 @@ pub enum ApprovalActionKind {
     CreateWorktree,
     /// Move the conversation's working folder outside its current folder.
     SwitchFolder,
-    /// Trust a project folder, and run the hooks it defines.
-    ProjectHooks,
     /// Any other reviewed operation.
     Other,
 }
@@ -137,7 +131,6 @@ pub(super) struct ApprovalFacts<'a> {
 
 pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     match facts.capability {
-        butler_core::hooks::PROJECT_HOOKS_CAPABILITY => project_hooks::summarize(facts),
         "run_command" | "preview_start" => command(facts, ApprovalActionKind::RunCommand),
         "run_command_remote_observation" => command(facts, ApprovalActionKind::NetworkCommand),
         "web_read" | "web_search" => single(
@@ -257,7 +250,6 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     AuthorityApproval {
         operation: None,
         schedule: None,
-        project_hooks: None,
         command_access: None,
         action_kind: ApprovalActionKind::EditFiles,
         targets,
@@ -301,7 +293,6 @@ fn file_reads(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         examples: paths,
         risk: ApprovalRisk::Low,
         schedule: None,
-        project_hooks: None,
         command_access: None,
     }
 }
@@ -343,7 +334,6 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
     AuthorityApproval {
         operation: None,
         schedule: None,
-        project_hooks: None,
         command_access: (!butler_platform::command_sandbox::approval_free_reads()
             && matches!(
                 facts.input.get("state_effect").and_then(Value::as_str),
@@ -380,7 +370,6 @@ fn single(
     AuthorityApproval {
         operation: None,
         schedule: None,
-        project_hooks: None,
         command_access: None,
         action_kind,
         targets: vec![ApprovalTarget {

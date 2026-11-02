@@ -23,12 +23,16 @@ const labels = {
     projectSessions: ["Release checklist review", "Queued messages"], dashboard: "Dashboard",
     closed: "Archive", closedItems: ["Old notes"], menu: "Row actions", rename: "Rename", archive: "Archive",
     expand: "Expand", collapse: "Collapse", unread: "Unread", sidebar: "Sidebar",
+    nested: { project: "Sweet potato game", backlog: "Backlog", backlogItems: ["Sound pass"], milestone: "Build a prototype",
+      milestoneItems: ["Pick the game direction", "Bunny escape controls test"], next: "Playtest notes" },
   },
   "ko-KR": {
     folder: "디자인 시스템", sessions: ["토큰 페이지", "모션 추적", "설정 S7"], project: "butler",
     projectSessions: ["릴리스 체크리스트 검토", "대기 메시지"], dashboard: "대시보드",
     closed: "보관함", closedItems: ["이전 메모"], menu: "행 작업", rename: "이름 바꾸기", archive: "보관",
     expand: "펼치기", collapse: "접기", unread: "읽지 않음", sidebar: "사이드바",
+    nested: { project: "고구마 게임", backlog: "백로그", backlogItems: ["사운드 다듬기"], milestone: "프로토타입 만들기",
+      milestoneItems: ["게임 방향 정하기", "바니 탈출 조작감 시제품"], next: "플레이 테스트 메모" },
   },
 } as const;
 
@@ -120,7 +124,34 @@ function ProjectGroup({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
+/** Nested folders: the indent shows depth, so a group's last child keeps the row rhythm with no extra gap. */
+function NestedFolders({ context }: { context: ShowcaseRenderContext }) {
+  const copy = text(context);
+  const [open, setOpen] = useState<Record<string, boolean>>({ project: true, backlog: false, milestone: true });
+  const toggle = (key: string) => setOpen((value) => ({ ...value, [key]: !value[key] }));
+  const folder = (key: string, label: string, depth: number, children: ReactNode) => (
+    <CollapsibleNavGroup indented stickyDepth={depth} expanded={open[key] ?? false} icon={open[key] ? <FolderOpen size="md" /> : <Folder size="md" />}
+      label={label} onToggle={() => toggle(key)}>
+      {children}
+    </CollapsibleNavGroup>
+  );
+  const rows = (items: readonly string[]) => items.map((item) => <NavRow icon={<Notebook size="md" />} key={item} label={item} onClick={() => undefined} />);
+  return (
+    <Sidebar copy={copy}>
+      <Stack gap="xs">
+        {folder("project", copy.nested.project, 0, <>
+          {folder("backlog", copy.nested.backlog, 1, rows(copy.nested.backlogItems))}
+          {folder("milestone", copy.nested.milestone, 1, rows(copy.nested.milestoneItems))}
+          {rows([copy.nested.next])}
+        </>)}
+        {folder("closed", copy.closed, 0, rows(copy.closedItems))}
+      </Stack>
+    </Sidebar>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "Space folders (indented)", states: ["expanded", "collapsed"], widths: ["320", "375", "app"], render: (context) => <SpaceFolder context={context} /> },
+  { name: "Nested folders (indented)", states: ["expanded", "collapsed"], widths: ["320", "375", "app"], render: (context) => <NestedFolders context={context} /> },
   { name: "Project group with actions", states: ["expanded", "hover"], render: (context) => <ProjectGroup context={context} /> },
 ];
