@@ -4,37 +4,15 @@
  * while one of its capturePage calls is in flight: that capture can still return, but no later capture
  * of the view ever settles.
  */
-const READBACK_STALL_MS = 5000;
-
 export function capturePage(tab, rect, options = { stayHidden: true }, contents = tab.view.webContents) {
-  let finish, release;
-  const ended = new Promise((_, reject) => { finish = reason => reject(new Error(reason)); });
-  const barrier = new Promise(resolve => { release = resolve; });
+  const pending = contents.capturePage(rect, options);
+  // Each capture keeps how the page stood when it started: hidden out of a window (background
+  // throttling on) or visible there (off, as while media plays). The flag can flip while it runs.
   const captures = tab.captures ??= new Map();
-  captures.set(barrier, contents.getBackgroundThrottling());
-  const navigate = (event, _url, inPlace, mainFrame) => {
-    if ((event.isMainFrame ?? mainFrame) && !(event.isSameDocument ?? inPlace)) finish("capture_document_changed");
-  };
-  const gone = () => { finish("capture_renderer_gone"); settled(); };
-  const settled = () => {
-    captures.delete(barrier); clearTimeout(timer); release();
-    contents.removeListener("did-start-navigation", navigate);
-    contents.removeListener("render-process-gone", gone);
-    contents.removeListener("destroyed", gone);
-  };
-  contents.on("did-start-navigation", navigate);
-  contents.once("render-process-gone", gone);
-  contents.once("destroyed", gone);
-  const timer = setTimeout(() => {
-    finish("capture_surface_stalled");
-    tab.onCaptureStalled?.();
-  }, READBACK_STALL_MS);
-  let raw;
-  try { raw = contents.capturePage(rect, options); } catch (error) { raw = Promise.reject(error); }
-  // Caller cancellation must never release the native layout barrier: only a
-  // completed readback or renderer destruction makes moving this view safe.
-  raw.then(settled, settled);
-  return Promise.race([raw, ended]);
+  captures.set(pending, contents.getBackgroundThrottling());
+  const settled = () => { captures.delete(pending); };
+  pending.then(settled, settled);
+  return pending;
 }
 
 /** Null when no matching capture of the tab is in flight; otherwise settles once each current one has. */
@@ -82,7 +60,7 @@ export function detachView(tab, resync) {
  * Returns false while the attach waits.
  */
 export function attachView(tab, win, below, place, resync) {
-  if (tab.attached === win && win.contentView.children.includes(tab.view)) {
+  if (tab.attached === win) {
     tab.detachWait = null;
     tab.view.setVisible(true);
     if (!tab.placeHold) place();
@@ -105,7 +83,7 @@ export function attachView(tab, win, below, place, resync) {
   const hold = settled?.then(() => {
     if (tab.placeHold !== hold) return;
     tab.placeHold = null;
-    if (tab.attached === win && tab.view) resync();
+    if (tab.attached === win && tab.view) place();
   }) ?? null;
   tab.placeHold = hold;
   if (!hold) place();
