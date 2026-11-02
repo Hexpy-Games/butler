@@ -1651,7 +1651,7 @@ The window chrome regions (sidebar, titlebar, main, inspector) with single-hairl
 
 `import { ManagementPage } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ManagementPage`
 
-A scrolling management page (automations, project dashboard) with page width, gutters and an optional footer.
+A scrolling management page (schedules page, project dashboard) with page width, gutters and an optional footer.
 
 - Use for: A full page that lists and manages things in the workspace
 - Not for: A settings page → `SettingsShell`
@@ -1745,7 +1745,7 @@ A bordered panel surface with an elevation step for settings rows and grouped co
 
 `import { TitlebarShell } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/TitlebarShell`
 
-The window titlebar: leading toggle, title, its actions and subtitle, chat-card controls that follow the browser split, trailing actions and window controls, draggable.
+The window title bar: leading toggle, title, its actions and subtitle, chat-card controls that follow the browser split, trailing actions and window controls, draggable.
 
 - Use for: The top bar of the app window
 - Not for: A panel header → `PanelHeader`
@@ -1821,7 +1821,7 @@ Butler's own pointer for the transparent overlay layer above a page: where Butle
 
 `import { BrowserPane } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/BrowserPane`
 
-The browser sheet: tab row and toolbar on a tinted pane, and the page card filling the pane edge to edge under them.
+The browser column: tab row and toolbar on a tinted pane, and the page card filling the pane edge to edge under them.
 
 - Use for: The browser beside a conversation (the AdaptiveShellSplit pane)
 - Use for: The standalone Browser view under its title bar
@@ -1873,7 +1873,7 @@ A live preview of one Butler browser tab: title row, a 16:10 frame drawn from a 
 
 `import { PageBand } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/PageBand`
 
-One 40px line on a PageCard's top edge for page-scoped state: who holds the tab, an approval, your input, picking, a pop-up.
+The browser control band, one 40px line on a PageCard's top edge for page-scoped state: who holds the tab, an approval, your input, picking, a pop-up.
 
 - Use for: State that belongs to one page, with up to three actions on it
 - Use for: Butler's control verbs: Take over, Give back to Butler, Stop task
@@ -2069,7 +2069,7 @@ The More (…) button and menu for a row's actions, from a simple items array.
 
 `import { TabStrip } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/TabStrip`
 
-The Browser area's tab row: closable, reorderable pill tabs grouped as my tabs plus one muted, foldable outline pill per conversation. A tab's close button shows on hover or keyboard focus.
+The browser tab strip: closable, reorderable pill tabs grouped as my tabs plus one muted, foldable outline pill per conversation. A tab's close button shows on hover or keyboard focus.
 
 - Use for: Browser tabs over a page area (pair with NativeViewSlot)
 - Use for: Tabs the user and conversations open, grouped by owner
@@ -2153,7 +2153,7 @@ A bounded question form replacing the composer editor and toolbar, or shown in t
 
 `import { ContextDonutButton } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ContextDonutButton`
 
-A small donut button that shows how full the context window is and opens its details.
+The context usage button: a small donut that shows how full the context window is and opens its details.
 
 - Use for: Context usage in the composer toolbar
 - Not for: A labelled progress bar in a panel → `ProgressMeter`
@@ -2358,7 +2358,7 @@ A readable answer summary on the user side of the transcript, including skipped 
 
 `import { QueuedMessage } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/QueuedMessage`
 
-A pending user bubble for a follow-up sent while a turn runs, with its position, edit and delete.
+A queued message row for a follow-up sent while a turn runs, with its position, edit and delete.
 
 - Use for: Show queued or failed sends at the end of the conversation
 - Not for: A delivered message → `MessageRow`
@@ -2407,7 +2407,7 @@ Ordered chains of steps, each step one item or a flat 묶음 (StackDeck), reorde
 
 `import { TodoProgressPanel } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/TodoProgressPanel`
 
-The composer-attached plan checklist with a state and label per step.
+The composer-attached progress log with a state and label per step.
 
 - Use for: A turn follows a plan with several steps
 - Not for: Workers → `WorkerActivityPanel`
@@ -2734,7 +2734,7 @@ The structure of a settings page: SettingsPage holds only SettingsSections, each
 
 `import { SettingsShell } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/SettingsShell`
 
-The settings layout: navigation master, detail header and detail pane, single-pane on compact widths.
+The settings screen layout: navigation master, detail header and detail pane, single-pane on compact widths.
 
 - Use for: The settings screen and settings-like editors
 - Not for: A management page (automations, dashboards) → `ManagementPage`
@@ -2901,7 +2901,7 @@ Stacked usage columns over time (tokens per hour or day) with a keyboard- and po
 
 `import { ArtifactList } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ArtifactList`
 
-Files Butler produced in an answer: open the artifact, save it, or run another action.
+Message results, the files Butler produced in an answer: open the artifact, save it, or run another action.
 
 - Use for: Artifacts attached to an assistant message
 - Not for: Files the user attached → `AttachmentList`
@@ -2924,7 +2924,7 @@ The artifact viewer body: exactly one of text, image or frame (PDF/HTML), or a l
 
 `import { DocumentEditor } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/DocumentEditor`
 
-An editable document page: title row, one status line, header actions and the editable body in MarkdownContent's document typography, with block embeds and Butler's editing highlight.
+The document editor: title row, one status line, header actions and the editable body in MarkdownContent's document typography, with block embeds and Butler's editing highlight.
 
 - Use for: A 버틀러 document the user edits (서랍 문서, the side panel next to the chat)
 - Not for: Reading a file or artifact → `DocumentReader`
@@ -3006,7 +3006,7 @@ Lanes of cards side by side; inside a KanbanDragScope cards move within a lane, 
 
 `import { LibraryCard } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/LibraryCard`
 
-One library (서랍) item on a Card with a media slot: an image, quote or document preview, a kind tag, title, source and a ⋯ menu.
+One saved item card in the library (서랍), on a Card with a media slot: an image, quote or document preview, a kind tag, title, source and a ⋯ menu.
 
 - Use for: The library page and the new-tab page's recent scraps
 - Use for: Any grid of saved page pieces (elements, views, outputs)

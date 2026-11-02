@@ -1,7 +1,7 @@
 # TabStrip
 
 ## What is this component
-The Browser area's tab row. Tabs are pills with a favicon slot, a truncating title and a close button; only the selected tab is filled (`--selection-strong`). Thin dividers sit between tabs and hide next to a filled (selected, hovered or focused) tab. Tabs shrink from `--tab-strip-tab-max-width` to `--tab-strip-tab-min-width`; past that the row scrolls sideways with edge fades and keeps the active tab in view. The minimum keeps the favicon and about five Korean characters readable. Near the minimum, unselected tabs drop their close button; the selected tab keeps it.
+The browser tab strip. Tabs are pills with a favicon slot, a truncating title and a close button; only the selected tab is filled (`--selection-strong`). Thin dividers sit between tabs and hide next to a filled (selected, hovered or focused) tab. Tabs shrink from `--tab-strip-tab-max-width` to `--tab-strip-tab-min-width`; past that the row scrolls sideways with edge fades and keeps the active tab in view. The minimum keeps the favicon and about five Korean characters readable. Near the minimum, unselected tabs drop their close button; the selected tab keeps it.
 
 The close button shows only while its tab is hovered or has keyboard focus (`:focus-visible`), the selected tab included. It keeps its slot, so the title width never jumps; it fades on `--motion-fast` and appears at once under reduced motion. While hidden it takes no clicks. On touch layouts (`hover: none`) only the selected tab shows it. Middle-click, Delete/Backspace and Cmd/Ctrl+W still close any tab.
 
@@ -43,7 +43,7 @@ Do not use it for in-panel view switching; use `Tabs`.
 
 ## A conversation's own pane
 `hideChip` drops the title and outline when the strip shows a single group
-of any kind (a conversation's browser pane; the title bar names it) and shows
+of any kind (a conversation's browser column; the title bar names it) and shows
 its tabs at full strength as plain pills, with the row's +. `trailing` holds row-end controls (Bring in a tab); they stay
 out of the tab focus order. Keyboard moves and drag work as before.
 

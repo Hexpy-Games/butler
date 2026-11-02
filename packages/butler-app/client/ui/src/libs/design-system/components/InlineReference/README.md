@@ -1,5 +1,7 @@
 # InlineReference
 
+Glossary: 버틀러 정보 페이지 / about Butler page (`InlineReference`).
+
 Inline, token-colored reference inside running text. It participates in the surrounding text baseline without a chip background or control padding. Domain identity, navigation and data stay outside the DS.
 
 ## Mention (default kind)

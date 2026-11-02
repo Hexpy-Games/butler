@@ -1,5 +1,7 @@
 # SettingsActionField
 
+Glossary: 기억 설정 페이지 / memory settings page (`SettingsActionField`).
+
 ## What is this component
 A settings row whose control is an action: label, a one-line description of
 what the action does and what it changes, and the button under them.

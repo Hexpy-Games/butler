@@ -1,5 +1,7 @@
 # ButlerThinkingMark
 
+Glossary: 브라우저 제어 상태줄 / browser control band (`ButlerThinkingMark`).
+
 ## What is this component
 Butler's identity mark and its thinking animation (the riso halftone design),
 drawn on a canvas inside an `AspectFrame`. `state="idle"` draws the exact

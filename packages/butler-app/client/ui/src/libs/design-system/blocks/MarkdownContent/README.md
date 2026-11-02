@@ -1,5 +1,7 @@
 # MarkdownContent
 
+Glossary: 답변 본문 / answer body (`MarkdownLink`).
+
 ## What is this component
 MarkdownContent provides Butler document typography for rendered markdown.
 

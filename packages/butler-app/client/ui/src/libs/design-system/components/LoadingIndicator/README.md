@@ -1,5 +1,7 @@
 # LoadingIndicator
 
+Glossary: 진행 순서 섹션 / run order section (`LoadingIndicator`).
+
 ## What is this component
 LoadingIndicator is one icon slot for work that completes: `state="loading"` shows the `Spinner`, `state="done"` draws the ringed `SuccessCheck` at the same size.
 

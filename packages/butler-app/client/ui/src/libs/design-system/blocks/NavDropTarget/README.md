@@ -1,5 +1,7 @@
 # NavDropTarget
 
+Glossary: 서랍 버튼 / library button (`NavDropTarget`).
+
 ## What is this block
 `NavDropTarget` wraps one draggable sidebar tree item and shows where a dragged
 row would land: a line before or after the row header, or a ring for dropping

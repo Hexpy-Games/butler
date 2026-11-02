@@ -1,7 +1,9 @@
 # DocumentEditor
 
+Glossary: 문서 편집 영역 / document editor (`DocumentEditor`).
+
 ## What is this block
-An editable document page: a title row with header actions, one status line,
+The document editor: a title row with header actions, one status line,
 and the editable body in MarkdownContent's document typography, so a document
 reads the same while it is edited as when it is read. The caller owns the
 editor engine (Lexical in the app) and renders it into the page.

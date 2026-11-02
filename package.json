@@ -83,6 +83,7 @@
     "app:font:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/font-assets-check.ts",
     "app:sidebar-unread:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-sidebar-unread-smoke.ts",
     "render": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-render.ts",
+    "ds:glossary": "${BUTLER_BUN:-bun} run packages/butler-app/client/ui/src/libs/design-system/scripts/generate-glossary.ts",
     "ds:skill-catalog": "${BUTLER_BUN:-bun} run packages/butler-app/client/ui/src/libs/design-system/scripts/generate-skill-catalog.ts",
     "site:dev": "${BUTLER_BUN:-bun} run --cwd packages/butler-site dev",
     "site:build": "${BUTLER_BUN:-bun} run --cwd packages/butler-site build",

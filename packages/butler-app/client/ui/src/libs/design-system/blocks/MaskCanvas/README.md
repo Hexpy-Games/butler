@@ -1,5 +1,7 @@
 # MaskCanvas
 
+Glossary: 이미지 편집 영역 / image editor (`MaskCanvas`).
+
 ## What is this block
 A picture with a paint layer. The user paints the region an image edit may
 change (brush), removes paint (eraser) and steps back (undo). While the edit

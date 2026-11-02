@@ -1,5 +1,7 @@
 # Space
 
+Glossary: 메시지 결과물 목록 / message results (`Space`).
+
 ## What is this component
 Space is a Butler design-system component for building consistent client UI without reaching into domain components or raw implementation details.
 

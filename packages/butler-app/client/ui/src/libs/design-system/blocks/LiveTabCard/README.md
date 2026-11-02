@@ -1,5 +1,7 @@
 # LiveTabCard
 
+Glossary: 브라우저 섹션 / browser section (`LiveTabCard`).
+
 ## What is this component
 
 A live preview of one Butler browser tab. The full card has a 32px title row

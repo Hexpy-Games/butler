@@ -1,5 +1,7 @@
 # Skeleton
 
+Glossary: 답변 블록 / answer blocks (`Skeleton`).
+
 `Skeleton` is a primitive loading placeholder based on the shadcn/ui skeleton
 pattern. It uses Butler design tokens for surface color, radius, and shimmer
 animation, and sizes through props (never `className` or `style`):

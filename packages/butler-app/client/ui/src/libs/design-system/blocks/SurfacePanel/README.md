@@ -1,5 +1,7 @@
 # SurfacePanel
 
+Glossary: 기억 설정 페이지 / memory settings page (`SurfacePanel`).
+
 ## What is this block
 
 SurfacePanel is a Butler design-system block for card/panel containers with elevation and padding.
