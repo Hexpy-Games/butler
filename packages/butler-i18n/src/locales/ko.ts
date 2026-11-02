@@ -641,13 +641,6 @@ export const koKrCopy: AppCopy = {
       startConversation: "새 대화를 시작할까요?",
       restartService: "버틀러를 다시 시작할까요?",
       createWorktree: "이 대화용 워크트리를 만들까요?",
-      projectHooks: {
-        title: "이 폴더의 훅을 실행할까요?",
-        receives: "프롬프트와 도구 결과를 받고, 출력이 모델에 전달될 수 있습니다",
-        unsandboxed: "샌드박스 없이 실행됩니다",
-        deny: "실행 안 함",
-        allow: "실행",
-      },
       switchFolder: "작업 폴더를 옮길까요?",
       generic: "이 작업을 허용할까요?",
       more: count => `외 ${count}개`,
