@@ -155,7 +155,7 @@ async fn failed_direction_continuation_closes_and_refuses_later_steering()
     s.gw = s.agent.start_again().await?;
     first_failure_returned(&s, &script, &relation, &continuation, &held).await?;
     s.turn("general", stub::DIRECTION_2).await?;
-    second_direction_ran(&s, &script, &relation, &continuation, restarted).await?;
+    second_direction_ran(&s, &script, &relation, &continuation, restarted)?;
     // A closeout saved before directions settled with it recovers at startup.
     s.agent.kill9()?;
     reopen_first_direction(&s, &relation);
@@ -215,7 +215,7 @@ async fn first_failure_returned(
     Ok(())
 }
 
-async fn second_direction_ran(
+fn second_direction_ran(
     s: &Scenario,
     script: &stub::Script,
     relation: &str,
