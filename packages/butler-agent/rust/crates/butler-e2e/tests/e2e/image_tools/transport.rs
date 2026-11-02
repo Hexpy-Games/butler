@@ -143,7 +143,8 @@ async fn large_image_response(chunk_delay: std::time::Duration) -> Result<(), Ha
     assert_eq!(f.raw(&format!("/message-assets/{id}")).await?, bytes);
     assert_eq!(f.image.requests().len(), 1);
     assert_eq!(f.image.requests()[0].path, "/v1beta/interactions");
-    let minimum = chunk_delay * response_bytes.div_ceil(64 * 1024) as u32;
+    let chunks = u32::try_from(response_bytes.div_ceil(64 * 1024)).unwrap();
+    let minimum = chunk_delay * chunks;
     assert!(started.elapsed() >= minimum);
     eprintln!(
         "image response_bytes={response_bytes} image_bytes={} elapsed_ms={} chunk_delay_ms={} complete=true",
