@@ -94,6 +94,7 @@ impl GraphBuilder {
             .children
             .delegate_steward(
                 StewardDelegationRequest {
+                    user_request: None,
                     parent_session_id: parent.scope.session_id.clone(),
                     parent_turn_id: parent.scope.turn_id.clone(),
                     anchor_message_id: "anchor".into(),
@@ -132,26 +133,26 @@ impl GraphBuilder {
         brief: &str,
     ) -> Result<Attempt, Error> {
         self.tick();
-        let output = self
-            .children
-            .delegate_worker(
-                WorkerDelegationRequest {
-                    parent_session_id: work.scope.session_id.clone(),
-                    parent_turn_id: work.scope.turn_id.clone(),
-                    anchor_message_id: "anchor".into(),
-                    source_tool_call_id: format!("worker-{}", self.sequence),
-                    action_key: key.into(),
-                    objective: format!("Complete {key}"),
-                    acceptance_criteria: vec!["All checks pass".into()],
-                    implementation_brief: brief.into(),
-                    safe_title: Some(format!("Task {key}")),
-                    profile_id: None,
-                    access_mode: butler_turn::btcc::AccessMode::ReadOnly,
-                    schedule_run: None,
-                },
-                &work.view,
-            )
-            .await?;
+        let output = Box::pin(self.children.delegate_worker(
+            WorkerDelegationRequest {
+                target_path: None,
+                replaces_relation_id: None,
+                parent_session_id: work.scope.session_id.clone(),
+                parent_turn_id: work.scope.turn_id.clone(),
+                anchor_message_id: "anchor".into(),
+                source_tool_call_id: format!("worker-{}", self.sequence),
+                action_key: key.into(),
+                objective: format!("Complete {key}"),
+                acceptance_criteria: vec!["All checks pass".into()],
+                implementation_brief: brief.into(),
+                safe_title: Some(format!("Task {key}")),
+                profile_id: None,
+                access_mode: butler_turn::btcc::AccessMode::ReadOnly,
+                schedule_run: None,
+            },
+            &work.view,
+        ))
+        .await?;
         let session = output["child_session_id"]
             .as_str()
             .ok_or_else(|| format!("missing worker: {output}"))?;

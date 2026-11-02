@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_btcc_superseded_worker
+ON btcc_subsession_delegations(json_extract(packet_json,'$.superseded_by'))
+WHERE json_extract(packet_json,'$.superseded_by') IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_parent_turn
 ON btcc_session_relations(parent_session_id,parent_turn_id,ordinal);
 
