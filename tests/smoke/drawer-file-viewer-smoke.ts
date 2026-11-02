@@ -52,6 +52,7 @@ try {
       else await viewer.locator("img").evaluate((node: HTMLImageElement) => node.decode());
       await assertDrawer(page);
       await assertReadingWidth(page, item === drawerDoc);
+      if (item === drawerDoc) assert((await viewer.locator('[role="tab"]').count()) > 1, "closing also returns from a multi-file viewer");
       await capture(page, item.id);
       if (item === drawerOutput) {
         await viewer.getByRole("button", { name: "브라우저에서 열기", exact: true }).click();
@@ -152,8 +153,8 @@ async function capture(page: Page, name: string) {
 
 async function closeViewer(page: Page) {
   const viewer = page.locator('[data-test-class="file-viewer"]');
-  // Close each tab, as the conversation viewer does; the last close restores the drawer.
-  while (await viewer.count()) await viewer.locator('[data-test-class="file-viewer-close"]').click();
+  await viewer.locator('[data-test-class="file-viewer-close"]').click();
+  await viewer.waitFor({ state: "hidden" });
   await page.locator('[data-test-class="library-page"]').waitFor({ state: "visible" });
 }
 async function assertReadingWidth(page: Page, fill: boolean) {
