@@ -220,7 +220,20 @@ impl AppApplication {
         view.insert("session_id".into(), json!(session_id));
         view.insert("kind".into(), json!("chat"));
         view.insert("status".into(), json!(child_status(&projection)));
-        copy_child_view_fields(&mut view, &projection);
+        for key in [
+            "active_turn",
+            "latest_turn",
+            "messages",
+            "workers",
+            "relation",
+            "activity_rows",
+            "approved_plan_revision",
+            "approved_plan_total",
+            "approved_plan_completed",
+            "waiting_for_children",
+        ] {
+            copy(&mut view, key, &projection);
+        }
         steward_children::complete_view_turns(&mut view);
         view.insert(
             "message_window".into(),
@@ -251,7 +264,14 @@ impl AppApplication {
         let projection = self
             .dependencies
             .subsessions
-            .projection(session_id.clone(), None)
+            .projection(
+                session_id.clone(),
+                Some(AppSessionViewPage {
+                    after_cursor: None,
+                    before_cursor: None,
+                    limit: 200,
+                }),
+            )
             .await?;
         let mut projection = projection;
         steward_children::project_progress(
@@ -386,26 +406,5 @@ impl AppApplication {
             .read(move |db| super::read_model::latest_turn(db, &session_id))
             .await
             .map_err(super::app_error)
-    }
-}
-
-fn copy_child_view_fields(view: &mut Map<String, Value>, projection: &Value) {
-    for key in [
-        "active_turn",
-        "latest_turn",
-        "messages",
-        "workers",
-        "relation",
-        "activity_rows",
-        "activity_history",
-        "activity_window",
-        "result",
-        "terminal",
-        "approved_plan_revision",
-        "approved_plan_total",
-        "approved_plan_completed",
-        "waiting_for_children",
-    ] {
-        copy(view, key, projection);
     }
 }

@@ -126,10 +126,6 @@ fn session_page(
             butler_core::json::saturating_usize(value.floor()).clamp(1, 200)
         });
     Ok(AppSessionViewPage {
-        activity_after_cursor: parameters
-            .get("activity_cursor_token")
-            .map(|token| decode_cursor(token, &format!("{session_id}:activity"), secret))
-            .transpose()?,
         after_cursor: before.is_none().then_some(after).flatten(),
         before_cursor: before,
         limit,
@@ -143,7 +139,6 @@ pub(super) fn decorate_window(
     parameters: &std::collections::HashMap<String, String>,
     secret: &str,
 ) -> Result<Value, HttpError> {
-    decorate_activity_window(&mut data, session_id, page, parameters, secret)?;
     let window = data
         .get_mut("message_window")
         .and_then(Value::as_object_mut)
@@ -185,37 +180,6 @@ pub(super) fn decorate_window(
         }
     }
     Ok(data)
-}
-
-fn decorate_activity_window(
-    data: &mut Value,
-    session_id: &str,
-    page: &AppSessionViewPage,
-    parameters: &std::collections::HashMap<String, String>,
-    secret: &str,
-) -> Result<(), HttpError> {
-    let Some(window) = data
-        .get_mut("activity_window")
-        .and_then(Value::as_object_mut)
-    else {
-        return Ok(());
-    };
-    if let Some(cursor) = window.get("next_cursor").and_then(Value::as_u64) {
-        window.insert(
-            "next_cursor_token".into(),
-            json!(encode_cursor(
-                &format!("{session_id}:activity"),
-                cursor,
-                secret,
-            )?),
-        );
-    }
-    if page.activity_after_cursor.is_some()
-        && let Some(token) = parameters.get("activity_cursor_token")
-    {
-        window.insert("requested_cursor_token".into(), json!(token));
-    }
-    Ok(())
 }
 
 fn encode_cursor(session_id: &str, cursor: u64, secret: &str) -> Result<String, HttpError> {

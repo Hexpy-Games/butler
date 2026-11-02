@@ -7,7 +7,6 @@ import { create } from "zustand";
 import { leaveCanonEditor } from "./canonEditGuard.ts";
 import { useProjectDashboardState } from "./projectDashboardState.ts";
 import { useFileViewerState } from "./fileViewerState.ts";
-import { readSessionObserverPages } from "./sessionObserverPages.ts";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
@@ -1361,8 +1360,14 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
     if (!isServerBackedSessionId(sessionId)) return false;
     const isCurrentRequest = beginSessionViewRequest(sessionId, get, undefined, true);
     try {
-      return await readSessionObserverPages(sessionId, get().sessionViews[sessionId],
-        isCurrentRequest, data => set(state => applySessionView(state, data)));
+      const currentCursorToken =
+        get().sessionViews[sessionId]?.message_window.next_cursor_token;
+      const query = new URLSearchParams({ session_id: sessionId });
+      if (currentCursorToken) query.set("cursor_token", currentCursorToken);
+      const data = await api<SessionView>(`/session-view?${query.toString()}`);
+      if (!isCurrentRequest()) return false;
+      set((state) => applySessionView(state, data));
+      return true;
     } catch {
       return false;
     }

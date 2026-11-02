@@ -129,7 +129,6 @@ async fn post_source(state: Arc<HttpState>, request: Request<Body>) -> Result<Re
         .ok_or_else(|| HttpError::public(400, "session_required", "Session id is required."))?;
     let source = state.application.branch_source(session_id).await?;
     let page = AppSessionViewPage {
-        activity_after_cursor: None,
         after_cursor: None,
         before_cursor: Some(source.cursor.saturating_add(1)),
         limit: SOURCE_PAGE_LIMIT,

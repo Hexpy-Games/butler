@@ -1,4 +1,3 @@
-import { mergeActivityRows } from "@/app/sessionViewWindow.ts";
 import type { MessageRecord, SessionView } from "@/app/types.ts";
 
 /** Every turn whose activity rows a sub-session view carries, keyed by turn id. */
@@ -24,11 +23,7 @@ export function observerActivitySources(
     turn_id: latestTurn.id, created_at: latestTurn.created_at,
     rows: latestTurn.progress?.safe_progress_rows ?? [],
   });
-  for (const turn of [latestTurn, activeTurn]) {
-    if (!turn) continue;
-    const history = sources.get(turn.id);
-    sources.set(turn.id, { turn_id: turn.id, created_at: history?.created_at ?? turn.created_at,
-      rows: mergeActivityRows(history?.rows ?? [], turn.progress?.safe_progress_rows ?? []) });
-  }
+  if (activeTurn) sources.set(activeTurn.id, { turn_id: activeTurn.id,
+    created_at: activeTurn.created_at, rows: activeTurn.progress?.safe_progress_rows ?? [] });
   return sources;
 }

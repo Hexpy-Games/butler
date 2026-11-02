@@ -88,7 +88,6 @@ pub trait AppSubsessionPort: Send + Sync {
 
 #[derive(Clone, Debug, Default)]
 pub struct AppSessionViewPage {
-    pub activity_after_cursor: Option<u64>,
     pub after_cursor: Option<u64>,
     pub before_cursor: Option<u64>,
     pub limit: usize,

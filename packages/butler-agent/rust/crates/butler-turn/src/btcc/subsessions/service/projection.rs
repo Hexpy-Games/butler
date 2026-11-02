@@ -8,15 +8,6 @@ use super::SubsessionService;
 use crate::btcc::{BtccCode, StorageCode};
 use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
-struct ChildExecution {
-    latest: Option<(String, String)>,
-    result: Option<Value>,
-    waiting: bool,
-    continuing: bool,
-    retryable: bool,
-    status: &'static str,
-}
-
 impl SubsessionService {
     /// The user-facing session that owns decisions for this delegation chain.
     /// Resolve durable relations, never model-supplied parent identifiers.
@@ -182,15 +173,40 @@ impl SubsessionService {
         &self,
         relation: &StoredSubsessionDelegation,
     ) -> Result<Value, BtccError> {
-        let ChildExecution {
-            latest,
-            result,
-            waiting,
-            continuing,
-            retryable,
-            status,
-        } = self.child_execution(relation).await?;
+        let latest = self
+            .repository
+            .latest_turn(relation.child_session_id.clone())
+            .await
+            .map_err(BtccError::from)?;
+        let result = self
+            .repository
+            .result_for_relation(relation.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?;
         let role = relation.packet.child_role.as_str();
+        let waiting = relation.packet.child_role == crate::btcc::ChildRole::Worker
+            && relation.dispatch_state == SubsessionDispatchState::Pending;
+        let directed = relation.packet.child_role == crate::btcc::ChildRole::Steward
+            && result.is_some()
+            && self
+                .repository
+                .pending_direction(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                .is_some();
+        let continuing = directed || continuing(result.as_ref(), latest.as_ref());
+        let status = if waiting {
+            "waiting"
+        } else if continuing {
+            "active"
+        } else {
+            projected_status(result.as_ref(), latest.as_ref())
+        };
+        let retryable = if result.is_none() {
+            self.child_recoverable(relation).await?
+        } else {
+            false
+        };
         let turn=latest.as_ref().map(|(id,state)|json!({"id":id,"state":if retryable { "runtime_fault" } else { state },"retryable":retryable,"cancellable":state == "admitted" && !retryable,"created_at":relation.created_at,"updated_at":relation.created_at}));
         let title = super::helpers::delegation_title(
             Some(&relation.safe_title),
@@ -217,53 +233,6 @@ impl SubsessionService {
             self.plan_counters(id, &mut projection).await?;
         }
         Ok(projection)
-    }
-
-    async fn child_execution(
-        &self,
-        relation: &StoredSubsessionDelegation,
-    ) -> Result<ChildExecution, BtccError> {
-        let latest = self
-            .repository
-            .latest_turn(relation.child_session_id.clone())
-            .await
-            .map_err(BtccError::from)?;
-        let result = self
-            .repository
-            .result_for_relation(relation.relation_id.clone())
-            .await
-            .map_err(BtccError::from)?;
-        let waiting = relation.packet.child_role == crate::btcc::ChildRole::Worker
-            && relation.dispatch_state == SubsessionDispatchState::Pending;
-        let directed = relation.packet.child_role == crate::btcc::ChildRole::Steward
-            && result.is_some()
-            && self
-                .repository
-                .pending_direction(relation.relation_id.clone())
-                .await
-                .map_err(BtccError::from)?
-                .is_some();
-        let continuing = directed || continuing(result.as_ref(), latest.as_ref());
-        let status = if waiting {
-            "waiting"
-        } else if continuing {
-            "active"
-        } else {
-            projected_status(result.as_ref(), latest.as_ref())
-        };
-        let retryable = if result.is_none() {
-            self.child_recoverable(relation).await?
-        } else {
-            false
-        };
-        Ok(ChildExecution {
-            latest,
-            result,
-            waiting,
-            continuing,
-            retryable,
-            status,
-        })
     }
 }
 
