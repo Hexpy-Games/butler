@@ -13,7 +13,13 @@ struct ImageState {
     requests: Mutex<Vec<ImageRequest>>,
     error: Mutex<Option<(u16, String)>>,
     png: Vec<u8>,
-    response: Mutex<Option<(Vec<u8>, bool)>>,
+    response: Mutex<Option<ImageResponse>>,
+}
+#[derive(Clone)]
+struct ImageResponse {
+    bytes: Vec<u8>,
+    truncated: bool,
+    chunk_delay: std::time::Duration,
 }
 pub struct ImageServer {
     pub base: String,
@@ -56,7 +62,18 @@ impl ImageServer {
         self.state.png.clone()
     }
     pub fn respond(&self, bytes: Vec<u8>, truncated: bool) {
-        *lock(&self.state.response) = Some((bytes, truncated));
+        *lock(&self.state.response) = Some(ImageResponse {
+            bytes,
+            truncated,
+            chunk_delay: std::time::Duration::ZERO,
+        });
+    }
+    pub fn respond_slowly(&self, bytes: Vec<u8>, chunk_delay: std::time::Duration) {
+        *lock(&self.state.response) = Some(ImageResponse {
+            bytes,
+            truncated: false,
+            chunk_delay,
+        });
     }
     pub fn fail(&self, status: u16, message: &str) {
         *lock(&self.state.error) = Some((status, message.into()));
@@ -94,20 +111,11 @@ async fn image_reply(
     if let Some((status, message)) = lock(&state.error).as_ref() {
         return json_response(*status, &json!({"error":{"message":message}}));
     }
-    if let Some((bytes, truncated)) = lock(&state.response).clone() {
-        let body = if truncated {
-            let first = futures_util::stream::once(async move { Ok::<_, std::io::Error>(bytes) });
-            let failure = futures_util::stream::once(async {
-                tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-                Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof))
-            });
-            Body::from_stream(futures_util::StreamExt::chain(first, failure))
-        } else {
-            Body::from(bytes)
-        };
+    let response = lock(&state.response).clone();
+    if let Some(response) = response {
         return Response::builder()
             .header("content-type", "application/json")
-            .body(body)
+            .body(response_body(response))
             .expect("fixture response");
     }
     let data = STANDARD.encode(&state.png);
@@ -117,6 +125,36 @@ async fn image_reply(
         json!({"data":[{"b64_json":data}],"usage":{"input_tokens":30,"input_tokens_details":{"text_tokens":10,"image_tokens":20},"output_tokens":40}})
     };
     json_response(200, &body)
+}
+fn response_body(response: ImageResponse) -> Body {
+    let ImageResponse {
+        bytes,
+        truncated,
+        chunk_delay,
+    } = response;
+    if truncated {
+        let first = futures_util::stream::once(async move { Ok::<_, std::io::Error>(bytes) });
+        let failure = futures_util::stream::once(async {
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof))
+        });
+        return Body::from_stream(futures_util::StreamExt::chain(first, failure));
+    }
+    if chunk_delay.is_zero() {
+        return Body::from(bytes);
+    }
+    Body::from_stream(futures_util::stream::unfold(
+        (bytes, 0),
+        move |(bytes, offset)| async move {
+            if offset == bytes.len() {
+                return None;
+            }
+            tokio::time::sleep(chunk_delay).await;
+            let end = (offset + 64 * 1024).min(bytes.len());
+            let chunk = bytes[offset..end].to_vec();
+            Some((Ok::<_, std::io::Error>(chunk), (bytes, end)))
+        },
+    ))
 }
 fn multipart(bytes: &[u8], boundary: &str) -> Vec<(String, Vec<u8>)> {
     let delimiter = format!("--{boundary}");

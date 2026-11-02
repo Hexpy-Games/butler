@@ -96,6 +96,16 @@ async fn truncated_body_is_transport_but_complete_bad_json_is_invalid() -> Resul
 #[tokio::test]
 async fn complete_large_image_response_is_consumed_losslessly() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    large_image_response(std::time::Duration::ZERO).await
+}
+
+#[tokio::test]
+async fn slow_large_image_response_is_consumed_losslessly() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    large_image_response(std::time::Duration::from_millis(80)).await
+}
+
+async fn large_image_response(chunk_delay: std::time::Duration) -> Result<(), HarnessError> {
     let f = Fixture::start(Access::Auto, "google").await?;
     let bytes = tokio::task::spawn_blocking(|| {
         let mut seed = 42_u32;
@@ -119,7 +129,9 @@ async fn complete_large_image_response_is_consumed_losslessly() -> Result<(), Ha
     .to_string()
     .into_bytes();
     assert!(body.len() > 4 * 1024 * 1024);
-    f.image.respond(body, false);
+    let response_bytes = body.len();
+    f.image.respond_slowly(body, chunk_delay);
+    let started = std::time::Instant::now();
     f.script(
         "Large picture",
         vec![call("large", "generate_image", &json!({"prompt":"A kite"}))],
@@ -130,6 +142,15 @@ async fn complete_large_image_response_is_consumed_losslessly() -> Result<(), Ha
     let id = output["image"].as_str().unwrap();
     assert_eq!(f.raw(&format!("/message-assets/{id}")).await?, bytes);
     assert_eq!(f.image.requests().len(), 1);
+    assert_eq!(f.image.requests()[0].path, "/v1beta/interactions");
+    let minimum = chunk_delay * response_bytes.div_ceil(64 * 1024) as u32;
+    assert!(started.elapsed() >= minimum);
+    eprintln!(
+        "image response_bytes={response_bytes} image_bytes={} elapsed_ms={} chunk_delay_ms={} complete=true",
+        bytes.len(),
+        started.elapsed().as_millis(),
+        chunk_delay.as_millis()
+    );
     assert_eq!(f.stored_images().await?, 1);
     f.finish().await
 }
