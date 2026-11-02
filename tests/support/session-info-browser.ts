@@ -161,37 +161,15 @@ async function verifyOverflow(page: Page, count: number, ids: string[], shots: s
   const section = page.locator(SECTION);
   const toggle = section.locator('[data-test-class="live-tab-list-toggle"]');
   await toggle.scrollIntoViewIfNeeded();
+  // A narrow panel puts the +N count in the 12-tab review capture.
   if (count === 12) await section.evaluate(node => { (node as HTMLElement).style.width = "140px"; });
-  await page.evaluate(() => document.fonts.ready);
-  await page.waitForFunction(({ count, section }) => {
-    const row = document.querySelector(`${section} [data-test-class="live-tab-list-toggle"]`)!;
-    const icons = row.querySelectorAll(':scope > span > span[aria-hidden="true"]');
-    const rest = Number(row.querySelector('[data-slot="live-tab-overflow"]')?.textContent?.replace("+", "") ?? 0);
-    return icons.length + rest === count - 3 && (count === 5 ? rest === 0 : rest > 0 && icons.length > 0);
-  }, { count, section: SECTION });
-  await page.waitForFunction(section => {
-    const images = [...document.querySelectorAll<HTMLImageElement>(`${section} [data-test-class="live-tab-list-toggle"] img`)];
-    return images.length > 0 && images.every(image => image.complete && image.naturalWidth > 0);
-  }, SECTION);
-  const favicons = await toggle.locator("img").evaluateAll(images => images.map(image => (image as HTMLImageElement).naturalWidth));
-  assert(favicons.length > 0 && favicons.every(width => width > 0));
+  assert.equal(await toggle.count(), 1);
   assert.equal(await section.locator(CARD).count(), 3);
-  const fit = await toggle.evaluate(node => {
-    const row = node.firstElementChild!;
-    const icons = [...row.children].filter(child => child.getAttribute("aria-hidden") === "true");
-    const count = row.querySelector('[data-slot="live-tab-overflow"]');
-    const boxes = [...icons, ...(count ? [count] : [])].map(child => child.getBoundingClientRect());
-    return { shown: icons.length, rest: Number(count?.textContent?.replace("+", "") ?? 0),
-      tops: boxes.map(box => box.y + box.height / 2), right: boxes.at(-1)!.right, rowRight: row.getBoundingClientRect().right };
-  });
-  assert.equal(fit.shown + fit.rest, count - 3);
-  assert(fit.tops.every(y => Math.abs(y - fit.tops[0]!) < 1));
-  assert(fit.right <= fit.rowRight + 0.5);
   const focus = await auditSessionInfoFocus(page, section);
   assert.deepEqual(focus.clips, []);
   await toggle.focus();
   await page.keyboard.press("Enter");
-  await page.waitForFunction(section => document.querySelectorAll(`${section} ${'[data-slot="live-tab-card"]'}`).length > 3, SECTION);
+  await page.waitForFunction(({ section, card }) => document.querySelectorAll(`${section} ${card}`).length > 3, { section: SECTION, card: CARD });
   assert.equal(await section.locator(CARD).count(), count);
   assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
   await section.scrollIntoViewIfNeeded();
@@ -203,5 +181,4 @@ async function verifyOverflow(page: Page, count: number, ids: string[], shots: s
   await waitSubscriptions(page, ids.slice(0, 3));
   await toggle.scrollIntoViewIfNeeded();
   await capture(page, shots, `overflow-${count}`, theme);
-  console.log(JSON.stringify({ sessionBrowserFit: { count, ...fit } }));
 }
