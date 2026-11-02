@@ -91,14 +91,15 @@ async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Resu
     delivered(&s, "general", &turn).await?;
     assert_counts(&s, &turn, 2, 0)?;
     let requests = script.requests_for(PROMPT);
-    assert!(
-        !butler_e2e::e2e::chatgpt_wire::functions(requests.first().unwrap())
-            .any(|tool| tool["name"] == "web_read")
-    );
-    assert!(
-        butler_e2e::e2e::chatgpt_wire::functions(requests.last().unwrap())
-            .any(|tool| tool["name"] == "web_read")
-    );
+    let attached = butler_e2e::e2e::chatgpt_wire::functions(requests.first().unwrap())
+        .find(|tool| tool["name"] == "web_read")
+        .unwrap();
+    assert!(attached["parameters"]["properties"].get("url").is_none());
+    assert_eq!(attached["parameters"]["required"], json!(["tab"]));
+    let detached = butler_e2e::e2e::chatgpt_wire::functions(requests.last().unwrap())
+        .find(|tool| tool["name"] == "web_read")
+        .unwrap();
+    assert!(detached["parameters"]["properties"].get("url").is_some());
     let inputs = requests.last().unwrap()["input"].clone();
     for (id, asked) in [
         ("popup", false),

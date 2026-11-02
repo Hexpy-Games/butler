@@ -106,8 +106,8 @@ fn parent(round: usize) -> Value {
 }
 
 /// The steward's research. Serially every read is its own round; batched,
-/// all three independent observations share one round. The calls and
-/// their arguments are the same.
+/// the first reads of all three tabs share one round and their
+/// continuations the next. The calls and their arguments are the same.
 fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
     let outputs = outputs(body);
     let tabs = || {
@@ -119,14 +119,25 @@ fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
     };
     let read = |index: usize| {
         let tab = tabs()[index]["tab"].clone();
+        call(&format!("read-{index}"), "web_read", &json!({"tab":tab}))
+    };
+    let rest = |index: usize| {
+        let (tab, url) = (
+            tabs()[index]["tab"].clone(),
+            &tabs()[index]["untrusted_content"]["url"],
+        );
+        let first = outputs
+            .iter()
+            .find(|output| output["source_url"] == *url && output["start_chunk"] == 0)
+            .unwrap_or_else(|| panic!("first read of {url}: {outputs:?}"));
         call(
-            &format!("read-{index}"),
-            "browser_observe",
-            &json!({"tab":tab,"scope":"text","look":"never"}),
+            &format!("rest-{index}"),
+            "web_read",
+            &json!({"tab":tab,"start_chunk":first["next_start_chunk"],"max_chunks":8,"max_chars":8000}),
         )
     };
     let research = 2;
-    let reads = if batched { 1 } else { 3 };
+    let reads = if batched { 2 } else { 6 };
     match round {
         0 => vec![call("child-plan", "replace_work_plan", &plan("direct"))],
         1 => vec![call("child-review", "record_work_review", &review())],
@@ -147,9 +158,13 @@ fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
         n if n < research + 2 + reads => {
             let step = n - research - 2;
             if batched {
-                (0..3).map(read).collect()
+                (0..3)
+                    .map(|index| if step == 0 { read(index) } else { rest(index) })
+                    .collect()
+            } else if step % 2 == 0 {
+                vec![read(step / 2)]
             } else {
-                vec![read(step)]
+                vec![rest(step / 2)]
             }
         }
         n if n == research + 2 + reads => vec![call(

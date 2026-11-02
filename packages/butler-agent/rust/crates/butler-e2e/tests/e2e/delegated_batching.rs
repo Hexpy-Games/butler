@@ -49,10 +49,10 @@ async fn deleg_batch_01_batched_reads_take_fewer_rounds_with_the_same_content()
         batched.instructions
     );
     for next in &batched.guidance {
-        assert!(next.contains("browser_observe"), "{next}");
+        assert!(next.contains("web_read {tab}"), "{next}");
     }
     // The same facts: every page window, and the report Butler got.
-    assert_eq!(serial.reads.len(), 3, "{:?}", serial.reads);
+    assert_eq!(serial.reads.len(), 6, "{:?}", serial.reads);
     assert_eq!(batched.reads, serial.reads);
     for (tab, start, text) in &batched.reads {
         assert!(text.contains("6.1 m") || *start > 0, "{tab}: {text}");
@@ -65,8 +65,8 @@ async fn deleg_batch_01_batched_reads_take_fewer_rounds_with_the_same_content()
 
     // Fewer rounds and fewer input tokens; the prefix stays append-only.
     assert_eq!(serial.batched_rounds, 0);
-    assert_eq!(batched.batched_rounds, 1);
-    assert_eq!(serial.steward.len() - batched.steward.len(), 2);
+    assert_eq!(batched.batched_rounds, 2);
+    assert_eq!(serial.steward.len() - batched.steward.len(), 4);
     let input = |run: &Run| run.steward.iter().map(|r| r.0).sum::<usize>();
     assert!(input(&batched) < input(&serial));
     for run in [&serial, &batched] {
@@ -183,8 +183,14 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
     let outputs = model::outputs(last);
     let mut reads = outputs
         .iter()
-        .filter(|output| output["schema"] == "butler.browser-observation.v1")
-        .map(read)
+        .filter(|output| output["reader"] == "butler-browser-tab")
+        .map(|output| {
+            (
+                output["source_url"].as_str().unwrap().to_owned(),
+                output["start_chunk"].as_u64().unwrap(),
+                output["markdown"].as_str().unwrap().to_owned(),
+            )
+        })
         .collect::<Vec<_>>();
     reads.sort();
     let next = |key: &str| {
@@ -212,20 +218,6 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
         instructions: last["instructions"].as_str().unwrap_or_default().to_owned(),
         guidance: [next("results"), next("tabs")],
     })
-}
-
-fn read(output: &Value) -> (String, u64, String) {
-    let url = output["untrusted_content"]["url"].as_str().unwrap();
-    let text = output["untrusted_content"]["text"].as_str().unwrap();
-    let prefix = format!("tab {} ", output["tab"].as_str().unwrap());
-    assert!(text.starts_with(&prefix), "{output}");
-    // Parallel opens assign different tab IDs; retain all text and metadata,
-    // replacing only the verified tab identity with its logical source URL.
-    (
-        url.to_owned(),
-        0,
-        text.replacen(&prefix, &format!("tab {url} "), 1),
-    )
 }
 
 /// Rounds, tokens and USD at the delegated demo model's catalog prices.

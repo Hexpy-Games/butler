@@ -145,7 +145,16 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     let markdown = full["markdown"].as_str().unwrap();
     assert!(markdown.contains("Spring tides alpha"));
     assert!(markdown.contains("End of the tide table."));
-    assert_eq!(markdown.matches("Each entry lists the date").count(), 60);
+    // Evidence chunks intentionally overlap. Identify source entries rather
+    // than treating repeated context at a chunk boundary as another entry.
+    let mut previous = 0;
+    let entries = host::entries();
+    assert_eq!(entries.len(), 60);
+    for entry in &entries {
+        let offset = markdown.find(entry).expect("every source entry arrives");
+        assert!(offset >= previous, "source order is preserved");
+        previous = offset + entry.len();
+    }
     assert_eq!(log.iter().filter(|f| f["op"] == "tab.read").count(), 2);
     assert_eq!(
         outputs[6]["error"]["code"], "browser_tab_required",
@@ -163,9 +172,10 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     );
     assert!(!log.iter().any(|f| f["op"] == "reader.render"));
     eprintln!(
-        "long-page evidence: observe_chars={}, reader_chars={}, complete_entries=60, end_present=true",
+        "long-page evidence: observe_chars={}, reader_chars={}, complete_entries={}, end_present=true",
         read["untrusted_content"]["text"].as_str().unwrap().len(),
-        markdown.len()
+        markdown.len(),
+        entries.len()
     );
     assert!(read.get("image").is_none());
     if let Some(dir) = std::env::var_os("BUTLER_SEARCH_BROWSER_EVIDENCE") {
