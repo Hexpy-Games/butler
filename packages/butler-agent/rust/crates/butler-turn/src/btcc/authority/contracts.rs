@@ -271,6 +271,7 @@ pub struct AuthorityScopeProjection {
 }
 #[derive(Clone, Debug)]
 pub(crate) struct AuthorityRecord {
+    pub(crate) reusable: bool,
     pub(crate) request_id: String,
     pub(crate) request_ref: String,
     pub(crate) identity_sha256: String,
@@ -425,6 +426,7 @@ impl AuthorityAction {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DecisionWrite {
+    pub(crate) composer_mode: Option<crate::btcc::AccessMode>,
     pub(crate) request_ref: String,
     pub(crate) owner_session_id: String,
     pub(crate) source_session_id: String,

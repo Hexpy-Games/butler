@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AdaptiveShell, AdaptiveShellWorkspace, AdaptiveShellSidebar, Stack } from "@/butler-ds";
 import { Conversation } from "@/components/conversation/Conversation";
+import { AppToaster } from "@/components/common/AppToaster";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog";
 import { useLiveSessionEvents } from "@/hooks/live-session/useLiveSessionEvents";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses";
@@ -32,6 +33,6 @@ export function WinFixesHarness() {
   }, [language, theme]);
   return <AdaptiveShell leftOpen={false} rightOpen={false} theme={appShellTheme(settings)}>
     <AdaptiveShellSidebar open={false} />
-    <AdaptiveShellWorkspace><Stack fill data-harness-ready={ready}><Conversation /><SessionObserverDialog /></Stack></AdaptiveShellWorkspace>
+    <AdaptiveShellWorkspace><Stack fill data-harness-ready={ready}><Conversation /><SessionObserverDialog /><AppToaster /></Stack></AdaptiveShellWorkspace>
   </AdaptiveShell>;
 }

@@ -71,7 +71,7 @@ async fn run(
     if client.approval_handoff
         && (input["commit"] == true
             || input["always_confirm"] == true
-            || authority::reviews(&owner.binding.access_mode, &input))
+            || authority::reviews(&owner.access_mode(), &input))
     {
         return encoded(&handoff(&args, "approval_required"));
     }

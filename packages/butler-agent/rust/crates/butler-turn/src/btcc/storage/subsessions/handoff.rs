@@ -42,6 +42,8 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
             "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
             params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
         ).map_err(StorageError::sqlite)?;
+        super::super::authority::access_revision::restrict_delegation(db, input)
+            .map_err(|e| StorageError::new(StorageCode::SubsessionPacketInvalid, e.to_string()))?;
     }
     Ok(inserted)
 }
