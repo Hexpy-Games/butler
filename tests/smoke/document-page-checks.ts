@@ -53,6 +53,8 @@ export async function measureDocumentLayout(page: Page) {
       wrappers.push({ background: css.backgroundColor, border: css.borderWidth, shadow: css.boxShadow });
     }
     return { inset: parseFloat(getComputedStyle(host).paddingLeft) + parseFloat(getComputedStyle(column).paddingLeft),
+      viewerWidth: host.getAttribute("data-test-class") === "file-viewer-page"
+        ? node.closest('[data-test-class="file-viewer"]')!.clientWidth : undefined,
       maxWidth: getComputedStyle(host).maxWidth, bodyWidth: root.getBoundingClientRect().width, columnWidth: contentWidth,
       hostLeft: host.getBoundingClientRect().left, contentLeft, textLeft: root.getBoundingClientRect().left,
       pageLeft: node.getBoundingClientRect().left, wrappers };
@@ -60,8 +62,9 @@ export async function measureDocumentLayout(page: Page) {
 }
 export function assertDocumentLayout(layout: Awaited<ReturnType<typeof measureDocumentLayout>>, _width: number) {
   assert.equal(layout.inset, 48);
-  assert.equal(layout.maxWidth, "760px");
-  assert(layout.bodyWidth <= 760 && Math.abs(layout.bodyWidth - layout.columnWidth) <= 1, JSON.stringify(layout));
+  assert.equal(layout.maxWidth, layout.viewerWidth === undefined ? "760px" : "1400px");
+  const expected = layout.viewerWidth === undefined ? layout.columnWidth : Math.min(1400, layout.viewerWidth) - 96;
+  assert(Math.abs(layout.bodyWidth - expected) <= 1 && Math.abs(layout.bodyWidth - layout.columnWidth) <= 1, JSON.stringify(layout));
   assert(Math.abs(layout.textLeft - layout.contentLeft) <= 1, JSON.stringify(layout));
   assert(Math.abs(layout.pageLeft - layout.contentLeft) <= 1, "DocumentPage adds no inset: " + JSON.stringify(layout));
   assert(layout.wrappers.every(css => css.background === "rgba(0, 0, 0, 0)" && parseFloat(css.border) === 0 && css.shadow === "none"), JSON.stringify(layout));

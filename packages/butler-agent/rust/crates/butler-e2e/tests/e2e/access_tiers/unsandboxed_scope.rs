@@ -236,10 +236,18 @@ async fn standing_grants_never_cover_an_unresolved_scope() -> Result<(), Harness
         assert_eq!(cards[0]["reason"], REASON, "{cards:?}");
         assert_eq!(cards[0]["approval"]["operation"]["command"], command);
         let reference = cards[0]["request_ref"].as_str().unwrap();
+        let rejected =
+            s.gw.post(
+                &format!("/authority-requests/{reference}/allow?session_id={chat}"),
+                json!({"scope":"conversation"}),
+            )
+            .await?;
+        assert_eq!(rejected.status, 400, "{rejected:?}");
+        assert_eq!(s.gw.approval_requests(&chat).await?.len(), 1);
         let reply =
             s.gw.post(
                 &format!("/authority-requests/{reference}/{action}?session_id={chat}"),
-                json!({"scope":"conversation"}),
+                json!({"scope":"once"}),
             )
             .await?;
         assert_eq!(reply.status, 202, "{reply:?}");

@@ -56,8 +56,7 @@ async fn run(
 ) -> Result<Value, Value> {
     if name != "document_read"
         && !owner
-            .binding
-            .access_mode
+            .access_mode()
             .allows_without_approval(ApprovalExemptAction::DocumentWrite)
     {
         return Err(failure(

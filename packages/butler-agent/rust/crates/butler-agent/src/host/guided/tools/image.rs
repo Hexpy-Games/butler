@@ -47,7 +47,7 @@ pub(super) async fn execute(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    require_analysis_access(&owner.binding.access_mode)?;
+    require_analysis_access(&owner.access_mode())?;
     let file_id = required_text(
         &call.arguments,
         "file_id",

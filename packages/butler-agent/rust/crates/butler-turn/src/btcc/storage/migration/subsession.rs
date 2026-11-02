@@ -83,6 +83,18 @@ fn ensure_dispatch_intent(db: &Connection) -> rusqlite::Result<()> {
     ensure_column(
         db,
         "btcc_subsession_delegations",
+        "access_limit_mode",
+        "TEXT",
+    )?;
+    ensure_column(
+        db,
+        "btcc_subsession_delegations",
+        "access_limit_recorded",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        db,
+        "btcc_subsession_delegations",
         "instruction_run_context_json",
         "TEXT",
     )?;
