@@ -78,9 +78,15 @@ pub struct ActionProgress {
 }
 
 /// A revision of a Work's plan.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkPlan {
+    #[serde(
+        default,
+        deserialize_with = "super::plan::subjects",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub subjects: Vec<super::super::PlanSubject>,
     pub plan_revision_id: String,
     pub revision: u64,
     pub objective: String,

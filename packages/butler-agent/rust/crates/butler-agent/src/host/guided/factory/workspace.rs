@@ -69,8 +69,11 @@ impl GuidedTurnFactoryAdapter {
     pub(super) fn file_effects(
         &self,
         workspace: &butler_turn::workspace::WorkspaceReference,
-        workspace_path: &std::path::Path,
+        phase: &butler_turn::btcc::GuidedPhaseSelection,
     ) -> crate::host::GuidedFileEffects {
+        let policy = &phase.execution_policy;
+        let workspace_path = std::path::Path::new(&policy.workspace_path);
+        let mutation_scope = policy.worker_mutation_scope();
         crate::host::GuidedFileEffects::new(
             self.capabilities.clone(),
             crate::host::RegisteredWriteContext {
@@ -79,7 +82,7 @@ impl GuidedTurnFactoryAdapter {
                 butler_data: self.butler_data.clone(),
                 protected_ledger_roots: self.protected_ledger_roots.clone(),
                 allowed_tools_and_effects: None,
-                mutation_scope: None,
+                mutation_scope: mutation_scope.map(<[String]>::to_vec),
                 installation_root: Some(self.installation_root.clone()),
                 contained: false,
             },

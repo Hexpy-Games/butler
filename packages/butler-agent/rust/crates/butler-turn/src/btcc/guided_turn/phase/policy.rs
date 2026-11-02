@@ -99,6 +99,14 @@ impl GuidedExecutionPolicy {
         self.subsession.is_some()
     }
 
+    /// The file scope a delegated Worker alone owns; other roles have no Task scope.
+    pub fn worker_mutation_scope(&self) -> Option<&[String]> {
+        if self.role != PolicyRole::Worker {
+            return None;
+        }
+        self.subsession.as_ref()?.mutation_scope.as_deref()
+    }
+
     /// Root chats own their usage; legacy children retain unknown lineage.
     pub fn usage_root<'a>(&'a self, session_id: &'a str) -> Option<&'a str> {
         match &self.subsession {

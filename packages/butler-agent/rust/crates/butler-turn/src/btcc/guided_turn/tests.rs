@@ -71,6 +71,7 @@ async fn real_work_and_authority_resume_prepare_against_one_reopened_storage_own
     assert_eq!(initial.context.unwrap().work.work_id, started.work_id);
     let planned = service
         .replace_plan(ReplacePlanInput {
+            subjects: Vec::new(),
             scope: scope(),
             mutation_call_id: "guided-plan".into(),
             start_new: None,
