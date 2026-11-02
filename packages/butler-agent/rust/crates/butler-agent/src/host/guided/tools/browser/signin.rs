@@ -16,7 +16,7 @@ pub(super) async fn execute(
     client: client::Client,
     args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode == AccessMode::ReadOnly {
+    if owner.access_mode() == AccessMode::ReadOnly {
         return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
     }
     let tab = args["tab"].clone();

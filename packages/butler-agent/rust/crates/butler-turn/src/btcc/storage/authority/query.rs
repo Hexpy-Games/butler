@@ -12,7 +12,7 @@ pub(super) const ROW: &str = "SELECT request_id, request_ref, identity_sha256, o
     normalized_input_json, model_ref, reasoning_effort, category, reason, executable, \
     command_count, decision, allow_scope, schedule_client_message_id, schedule_input_text, \
     private_alternative_input, outcome, outcome_receipt_json, close_reason, close_scope, \
-    closed_at, created_at, updated_at FROM btcc_authority_requests";
+    closed_at, created_at, updated_at, reusable FROM btcc_authority_requests";
 
 pub(super) fn sql(error: rusqlite::Error) -> AuthorityError {
     AuthorityError::storage("sqlite_error", error.to_string()).with_source(error)
@@ -45,6 +45,7 @@ pub(super) fn stop_confirmed(db: &Connection, turn_id: &str) -> AuthorityResult<
 }
 fn hydrate(row: &Row<'_>) -> rusqlite::Result<AuthorityRecord> {
     Ok(AuthorityRecord {
+        reusable: row.get(33)?,
         request_id: row.get(0)?,
         request_ref: row.get(1)?,
         identity_sha256: row.get(2)?,

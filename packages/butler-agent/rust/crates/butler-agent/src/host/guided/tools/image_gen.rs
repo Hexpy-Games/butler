@@ -17,7 +17,7 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode == AccessMode::ReadOnly
+    if owner.access_mode() == AccessMode::ReadOnly
         || owner.binding.allowed_tools_and_effects.is_some()
     {
         return failure("image_access_denied", "Image calls are unavailable.");

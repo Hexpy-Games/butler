@@ -98,7 +98,7 @@ fn consent(owner: &GuidedTools, relation: FolderRelation) -> bool {
     if relation.contained() {
         owner.folder_consented()
     } else {
-        owner.binding.access_mode != AccessMode::FullAccess
+        owner.access_mode() != AccessMode::FullAccess
     }
 }
 

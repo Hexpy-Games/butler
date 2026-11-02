@@ -98,10 +98,55 @@ impl PrincipalAuthority {
         &self,
         input: AuthorityDecisionInput,
     ) -> AuthorityResult<AuthorityDecisionResult> {
+        self.decide_with_access(input, None).await
+    }
+    /// Atomically records an approval answer and the composer's explicit permission change.
+    pub async fn decide_with_access(
+        &self,
+        input: AuthorityDecisionInput,
+        mode: Option<crate::btcc::AccessMode>,
+    ) -> AuthorityResult<AuthorityDecisionResult> {
         let collation = self.collation.clone();
         let clock = self.clock.clone();
-        self.in_lane(move |repo| decision::decide(repo, &input, &collation, &*clock))
+        self.in_lane(move |repo| decision::decide(repo, &input, &collation, &*clock, mode))
             .await
+    }
+    /// Permission snapshot for one tool execution boundary.
+    pub async fn execution_access(
+        &self,
+        turn: String,
+    ) -> AuthorityResult<Option<crate::btcc::AccessMode>> {
+        self.storage
+            .read(move |db| {
+                Ok(crate::btcc::storage::authority::access_revision::effective(
+                    db, &turn,
+                ))
+            })
+            .await
+            .map_err(|e| AuthorityError::storage(e.code(), e.message()))?
+    }
+    /// The original mode of an allowed exact occurrence; its adapter still verifies the full input.
+    pub async fn approved_execution_access(
+        &self,
+        request: String,
+        turn: String,
+        occurrence: String,
+        capability: String,
+    ) -> AuthorityResult<Option<crate::btcc::AccessMode>> {
+        self.storage
+            .read(move |db| {
+                Ok(
+                    crate::btcc::storage::authority::access_revision::approved_execution(
+                        db,
+                        &request,
+                        &turn,
+                        &occurrence,
+                        &capability,
+                    ),
+                )
+            })
+            .await
+            .map_err(|e| AuthorityError::storage(e.code(), e.message()))?
     }
     /// Decided requests whose source turns have not resumed yet.
     pub async fn list_decided(&self) -> AuthorityResult<Vec<AuthorityDecisionResult>> {

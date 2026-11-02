@@ -17,14 +17,73 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let timing = Some(super::super::command::timing::CommandTiming::new("handler"));
-    owner
-        .same_turn(invocation)
-        .map_err(ToolExecutionError::Integrity)?;
-    if invocation.cancellation.is_cancelled() {
-        return Err(integrity("turn_cancelled"));
-    }
-    let index = next_index(owner);
     let (effective_name, presentation_args, catalog_id) = super::discovery::effective(call);
+    let (record, call_id) = restore_call(
+        owner,
+        call,
+        (&effective_name, &presentation_args, catalog_id.as_deref()),
+    )
+    .await?;
+    owner
+        .activity
+        .observe_tool(&owner.binding.turn_id, call, &call_id, invocation.progress)
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    let approval_mode = super::permission_mode::approved(owner, &call_id, &effective_name).await?;
+    if approval_mode.is_none() && (!owner.visible(&call.name) || !owner.authorized(&call.name)) {
+        return unavailable(
+            owner,
+            call,
+            record.as_ref(),
+            &call_id,
+            &effective_name,
+            &presentation_args,
+        )
+        .await;
+    }
+    if let Some(output) = replayed(
+        owner,
+        invocation,
+        call,
+        record.as_ref(),
+        (&effective_name, &presentation_args),
+    )
+    .await?
+    {
+        return Ok(output);
+    }
+    if record.is_none() {
+        start(owner, call, &call_id, &effective_name, &presentation_args).await?;
+    }
+    if let Some(timing) = &timing {
+        timing.mark("before_dispatch");
+    }
+    let result = super::permission_mode::with_approval(
+        approval_mode,
+        effective_name.clone(),
+        dispatch_result(owner, invocation, call, &call_id),
+    )
+    .await?;
+    if let Some(timing) = &timing {
+        timing.mark("result_returned");
+    }
+    observe(owner, call, (&effective_name, &presentation_args), &result)?;
+    if result.field("authority_pending").ok().flatten() == Some("true") {
+        // Authority admission atomically moved this call to awaiting_authority.
+        // The loop persists the pending result in its continuation, not as a
+        // completed tool-journal result before a decision exists.
+        return Ok(result);
+    }
+    complete(owner, invocation, call, call_id, result).await
+}
+
+/// Resolve the durable occurrence and claim its original suspended call exactly once.
+async fn restore_call(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    (effective_name, presentation_args, catalog_id): (&str, &Value, Option<&str>),
+) -> Result<(Option<ToolJournalRecord>, String), ToolExecutionError> {
+    let index = next_index(owner);
     let occurrence = occurrence(&owner.binding.turn_id, index, call)
         .map_err(|error| ToolExecutionError::Integrity(error.contract()))?;
     let mut record = resolve_record(owner, &occurrence).await?;
@@ -41,7 +100,7 @@ pub(super) async fn execute(
     } else if occurrence.permits_signature_resume(&call.name) {
         let claimed = resume
             .lock()
-            .claim(&effective_name, &presentation_args, catalog_id.as_deref())
+            .claim(effective_name, presentation_args, catalog_id)
             .map_err(ToolExecutionError::Integrity)?;
         if let Some(claimed) = claimed {
             record = owner
@@ -56,78 +115,76 @@ pub(super) async fn execute(
         }
     }
     remember_provider(owner, &occurrence, &call_id);
-    owner
-        .activity
-        .observe_tool(&owner.binding.turn_id, call, &call_id, invocation.progress)
-        .await
-        .map_err(ToolExecutionError::Integrity)?;
-    if !owner.binding.visible_names.contains(&call.name)
-        || !owner.binding.authorized_names.contains(&call.name)
-    {
-        let denied = json!({"ok":false,"error":{"code":"tool_not_authorized",
-            "message":format!("{} is not available for this Turn. Use an available tool or continue with known facts.",call.name)}});
-        let denied = encoded(&denied)?;
-        if record.is_none() {
-            start(owner, call, &call_id, &effective_name, &presentation_args).await?;
-            finish(
+    Ok((record, call_id))
+}
+
+async fn replayed(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    record: Option<&ToolJournalRecord>,
+    (effective_name, presentation_args): (&str, &Value),
+) -> Result<Option<JsonDocument>, ToolExecutionError> {
+    let Some(record) = record else {
+        return Ok(None);
+    };
+    match record.status.as_str() {
+        "completed" => {
+            let output = record_output(record)?;
+            observe(owner, call, (effective_name, presentation_args), &output)?;
+            if GuidedWorkTools::repairs_completed_relation(&call.name)
+                && output.field("ok").ok().flatten() == Some("true")
+            {
+                let repaired = super::dispatch::execute_work(owner, call, &record.call_id).await?;
+                if repaired.get("ok") != Some(&Value::Bool(true)) {
+                    return Err(integrity("guided_work_relation_repair_failed"));
+                }
+            }
+            super::dispatch::publish_work_result(
                 owner,
-                &call_id,
-                ToolJournalFinishStatus::Completed,
-                Some(&denied),
+                invocation,
+                &call.name,
+                &record.call_id,
+                &output,
             )
             .await?;
+            Ok(Some(output))
         }
-        return match record.as_ref().filter(|record| record.result.is_some()) {
-            Some(record) => record_output(record),
-            None => Ok(denied),
-        };
-    }
-    if let Some(record) = record.as_ref() {
-        match record.status.as_str() {
-            "completed" => {
-                let output = record_output(record)?;
-                observe(owner, call, (&effective_name, &presentation_args), &output)?;
-                if GuidedWorkTools::repairs_completed_relation(&call.name)
-                    && output.field("ok").ok().flatten() == Some("true")
-                {
-                    let repaired = super::dispatch::execute_work(owner, call, &call_id).await?;
-                    if repaired.get("ok") != Some(&Value::Bool(true)) {
-                        return Err(integrity("guided_work_relation_repair_failed"));
-                    }
-                }
-                super::dispatch::publish_work_result(
-                    owner, invocation, &call.name, &call_id, &output,
-                )
-                .await?;
-                return Ok(output);
-            }
-            "failed" | "cancelled" => return prior_failure(&call.name, &record.status),
-            "started" | "awaiting_authority"
-                if interrupted_call(call, &effective_name, &record.status) =>
-            {
-                return uncertain_mutation(&effective_name);
-            }
-            _ => {}
+        "failed" | "cancelled" => prior_failure(&call.name, &record.status).map(Some),
+        "started" | "awaiting_authority"
+            if interrupted_call(call, effective_name, &record.status) =>
+        {
+            uncertain_mutation(effective_name).map(Some)
         }
+        _ => Ok(None),
     }
+}
+
+async fn unavailable(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    record: Option<&ToolJournalRecord>,
+    call_id: &str,
+    effective_name: &str,
+    presentation_args: &Value,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let denied = json!({"ok":false,"error":{"code":"tool_not_authorized",
+            "message":format!("{} is not available for this Turn. Use an available tool or continue with known facts.",call.name)}});
+    let denied = encoded(&denied)?;
     if record.is_none() {
-        start(owner, call, &call_id, &effective_name, &presentation_args).await?;
+        start(owner, call, call_id, effective_name, presentation_args).await?;
+        finish(
+            owner,
+            call_id,
+            ToolJournalFinishStatus::Completed,
+            Some(&denied),
+        )
+        .await?;
     }
-    if let Some(timing) = &timing {
-        timing.mark("before_dispatch");
+    match record.filter(|record| record.result.is_some()) {
+        Some(record) => record_output(record),
+        None => Ok(denied),
     }
-    let result = dispatch_result(owner, invocation, call, &call_id).await?;
-    if let Some(timing) = &timing {
-        timing.mark("result_returned");
-    }
-    observe(owner, call, (&effective_name, &presentation_args), &result)?;
-    if result.field("authority_pending").ok().flatten() == Some("true") {
-        // Authority admission atomically moved this call to awaiting_authority.
-        // The loop persists the pending result in its continuation, not as a
-        // completed tool-journal result before a decision exists.
-        return Ok(result);
-    }
-    complete(owner, invocation, call, call_id, result).await
 }
 
 /// What a result (fresh or replayed) tells the turn: described catalog ids,

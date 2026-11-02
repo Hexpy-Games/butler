@@ -50,7 +50,7 @@ pub(super) async fn execute(
     if needs_approval && !butler_platform::command_sandbox::approval_free_reads() {
         approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
     }
-    if !needs_approval && owner.binding.access_mode.reviews_effects() {
+    if !needs_approval && owner.access_mode().reviews_effects() {
         if butler_platform::command_sandbox::approval_free_reads() {
             approved_scope.contained_reads = true;
         } else {
