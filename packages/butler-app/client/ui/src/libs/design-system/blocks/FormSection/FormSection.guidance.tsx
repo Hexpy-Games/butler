@@ -18,7 +18,7 @@ function SearchSection() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "A settings section: header (title, description) above its card, fields inside following the settings ramp.",
+  purpose: "A settings section: header (required title, description, actions on the right) above its card, fields inside following the settings ramp.",
   whenToUse: ["Group related settings on a settings page"],
   whenNotToUse: [
     { when: "A titled region in a panel", use: "Section" },
@@ -31,7 +31,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A title inside the card blurs where sections start.", render: () => <SettingsFieldScopeProvider><SurfacePanel><Typo.PanelTitle>Search</Typo.PanelTitle><SettingsField id="p2" label="Search provider" control={<Input id="p2" defaultValue="Tavily" />} /></SurfacePanel></SettingsFieldScopeProvider> },
     },
   ],
-  content: ["Section titles are nouns; descriptions one sentence, never repeating the page description."],
+  content: ["Every section has a title: a noun for what the card holds, never the page title again (that throws in dev builds). Descriptions are one sentence, never repeating the page description."],
   accessibility: ["The title is a heading for the section; the card is not a separate landmark."],
   tokens: ["--settings-section-header-gap", "--settings-section-padding", "--settings-field-gap", "--settings-section-gap"],
 };

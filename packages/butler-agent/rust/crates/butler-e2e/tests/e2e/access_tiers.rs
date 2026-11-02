@@ -3,6 +3,7 @@
 mod authority;
 mod auto;
 mod composer_mode;
+mod credential_stores;
 mod link_targets;
 pub(super) use authority::{approve, assert_counts, delivered, paused};
 mod sandbox_data_reads;

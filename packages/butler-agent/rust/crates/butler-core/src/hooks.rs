@@ -2,14 +2,9 @@
 mod config;
 mod context;
 mod event;
-mod project;
 pub use config::{HookConfig, HookDefinition, HookMatcher};
 pub use context::{HookContext, HookDispatched};
 pub use event::{HookAttachment, HookEnvelope, HookEvent, HookPayload, HookToolError};
-pub use project::{
-    PROJECT_HOOK_FILE, PROJECT_HOOK_ID_PREFIX, PROJECT_HOOKS_CAPABILITY, ProjectHookLine,
-    ProjectHookRequest, ProjectHookReview,
-};
 use serde::{Deserialize, Serialize};
 use std::{future::Future, pin::Pin};
 /// Asynchronous hook operation; errors are safe for Settings display.
@@ -77,29 +72,4 @@ pub trait HookPort: Send + Sync {
     ) -> HookFuture<'_, HookRun>;
     /// Snapshot of the last 200 runs, oldest first.
     fn runs(&self) -> Vec<HookRun>;
-    /// Reads a project's hook file once and compares it with the user's answers:
-    /// in the folder `session_id` works in, otherwise in `project_dir`.
-    fn review_project(
-        &self,
-        _project_dir: String,
-        _session_id: Option<String>,
-    ) -> HookFuture<'_, ProjectHookReview> {
-        Box::pin(async { Ok(ProjectHookReview::None) })
-    }
-    /// Remembers the user's answer for exactly this content.
-    fn decide_project(&self, _request: ProjectHookRequest, _allowed: bool) -> HookFuture<'_, ()> {
-        Box::pin(async { Ok(()) })
-    }
-    /// Keeps a SessionStart that could not run yet because its hooks wait for an answer.
-    fn hold_session_start(&self, _envelope: HookEnvelope) {}
-    /// Ends a session's hold. A port holding allowed project hooks runs them for the
-    /// held event, in the session's access mode now; any other port drops it.
-    fn release_session_start(
-        &self,
-        _session_id: String,
-        _access_mode: String,
-        _cancel: tokio_util::sync::CancellationToken,
-    ) -> HookFuture<'_, ()> {
-        Box::pin(async { Ok(()) })
-    }
 }
