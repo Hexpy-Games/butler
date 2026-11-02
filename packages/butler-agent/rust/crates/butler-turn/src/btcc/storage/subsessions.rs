@@ -10,6 +10,7 @@ mod files;
 mod handoff;
 mod instruction_context;
 mod parents;
+mod prompt_result;
 mod records;
 mod subtasks;
 mod worker_admission;

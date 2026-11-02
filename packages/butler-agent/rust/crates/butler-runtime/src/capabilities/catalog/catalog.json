@@ -2403,7 +2403,7 @@
       "definition": {
         "type": "function",
         "name": "read_operation_results",
-        "description": "Read an exact stored result or its original request (source=request). Find references with list_operation_results. Decode data from base64; continue at nextOffset until null. The last page may be shorter.",
+        "description": "Read stored result/request bytes (source=request). Copy exact_read from list_operation_results. Decode base64; continue at next_offset until null.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -2455,6 +2455,10 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 4096
+            },
+            "evidence": {
+              "type": "string",
+              "description": "Copy from exact_read for delegated evidence."
             }
           },
           "required": [
@@ -2485,7 +2489,7 @@
       "definition": {
         "type": "function",
         "name": "list_operation_results",
-        "description": "Find prior tool requests/results in this Turn and its existing Work without repeating the operation. Start with cursor=0 and through=null. Search a literal substring of request text (not separate keywords); leave query empty to filter only by tool/status. Use returned exact_read with read_operation_results. Continue with next_cursor and the returned through watermark; request previews may be shortened, originals remain readable.",
+        "description": "Find stored tool requests/results in this Turn, Work or evidence bundle. Use exact_read with read_operation_results. Start cursor=0, through=null; continue with next_cursor and through. Query is a literal request substring; empty searches all.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -2511,7 +2515,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Operation outcome: completed means success, failed includes returned tool errors, nonzero exit codes and timeouts; cancelled means cancelled execution. null searches all outcomes."
+              "description": "completed: success; failed: tool error, nonzero exit or timeout; cancelled: cancelled. null: all."
             },
             "cursor": {
               "type": "integer",
@@ -2533,6 +2537,10 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 10
+            },
+            "evidence": {
+              "type": "string",
+              "description": "An evidence bundle from a delegated result (evidence:<id>). Lists every item with its exact_read."
             }
           },
           "required": []
@@ -9261,7 +9269,7 @@
     "list_operation_results": {
       "type": "function",
       "name": "list_operation_results",
-      "description": "Find prior tool requests/results in this Turn and its existing Work without repeating the operation. Start with cursor=0 and through=null. Search a literal substring of request text (not separate keywords); leave query empty to filter only by tool/status. Use returned exact_read with read_operation_results. Continue with next_cursor and the returned through watermark; request previews may be shortened, originals remain readable.",
+      "description": "Find stored tool requests/results in this Turn, Work or evidence bundle. Use exact_read with read_operation_results. Start cursor=0, through=null; continue with next_cursor and through. Query is a literal request substring; empty searches all.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -9287,7 +9295,7 @@
                 "type": "null"
               }
             ],
-            "description": "Operation outcome: completed means success, failed includes returned tool errors, nonzero exit codes and timeouts; cancelled means cancelled execution. null searches all outcomes."
+            "description": "completed: success; failed: tool error, nonzero exit or timeout; cancelled: cancelled. null: all."
           },
           "cursor": {
             "type": "integer",
@@ -9309,6 +9317,10 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 10
+          },
+          "evidence": {
+            "type": "string",
+            "description": "An evidence bundle from a delegated result (evidence:<id>). Lists every item with its exact_read."
           }
         },
         "required": []
@@ -10745,7 +10757,7 @@
     "read_operation_results": {
       "type": "function",
       "name": "read_operation_results",
-      "description": "Read an exact stored result or its original request (source=request). Find references with list_operation_results. Decode data from base64; continue at nextOffset until null. The last page may be shorter.",
+      "description": "Read stored result/request bytes (source=request). Copy exact_read from list_operation_results. Decode base64; continue at next_offset until null.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10797,6 +10809,10 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 4096
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Copy from exact_read for delegated evidence."
           }
         },
         "required": [
