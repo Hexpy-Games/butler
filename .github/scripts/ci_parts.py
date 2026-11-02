@@ -8,6 +8,7 @@ HOSTED = [
     dict(shard='recovery', tests='queue_shutdown,service_supervision,service_diagnostics'),
     dict(shard='data', tests='cli_surface,migration,durable_configuration,project_workspace,queue_notifications'),
     dict(shard='basics', tests='windows_commands,local_zone'),
+    dict(shard='outputs', tests='browser_outputs,deliverables,plugins'),
 ]
 
 

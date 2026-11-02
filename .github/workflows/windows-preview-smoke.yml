@@ -544,6 +544,7 @@ jobs:
         env:
           SELECTED_HARNESSES: ${{ matrix.tests }}
           BUTLER_E2E_REQUIRE_LAN: ${{ matrix.shard == 'remote' && '1' || '' }}
+          BUTLER_E2E_TMP_ROOT: ${{ matrix.shard == 'outputs' && format('{0}\t', runner.temp) || '' }}
         run: |
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests $env:SELECTED_HARNESSES.Split(',')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -571,7 +572,9 @@ jobs:
           retention-days: 1
       - name: Remove temporary verification profiles
         if: always()
-        run: Remove-Item $env:PREVIEW_ROOT -Recurse -Force
+        run: |
+          Remove-Item $env:PREVIEW_ROOT -Recurse -Force
+          Remove-Item "$env:RUNNER_TEMP/t" -Recurse -Force -ErrorAction SilentlyContinue
   gate:
     name: Complete Windows preview verification
     if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
