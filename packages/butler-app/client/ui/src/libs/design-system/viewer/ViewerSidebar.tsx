@@ -109,6 +109,7 @@ export function ViewerSidebar({ entries, page, query, onQueryChange, onOpen }: V
         <>
           <NavSection title="Start">
             {row("overview", "Overview", <Sparkles size="md" />)}
+            {row("glossary", "Glossary / 용어 사전", <BookOpenText size="md" />)}
             {row("guide", "Decision guide", <MagicWand size="md" />)}
             {row("recipes", "Build a screen", <LayoutDashboard size="md" />)}
           </NavSection>

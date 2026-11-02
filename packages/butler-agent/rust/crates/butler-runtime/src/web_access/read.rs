@@ -9,8 +9,11 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 mod fetch;
+#[cfg(test)]
+pub(super) mod focused_tests;
 mod headless;
 pub(super) mod lightpanda;
+pub(super) mod passages;
 pub(super) mod rank;
 mod tab;
 
@@ -325,7 +328,7 @@ pub(super) fn read_result(
     query: Option<&str>,
 ) -> Value {
     match query {
-        Some(query) => rank::result(page, query, max_chunks, start),
+        Some(query) => rank::result(page, query, max_chunks, start, max_chars),
         None => bounded_result(page, max_chars, max_chunks, start),
     }
 }

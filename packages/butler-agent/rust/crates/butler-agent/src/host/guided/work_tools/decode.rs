@@ -424,6 +424,7 @@ fn replace(
         .map(|(index, value)| action(value, index))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Command::Replace(ReplacePlanInput {
+        subjects: subjects(args.get("subjects"))?,
         scope,
         mutation_call_id: id,
         start_new: Some(boolean(args.get("start_new"), "start_new")?),
@@ -434,4 +435,15 @@ fn replace(
         actions,
         checks: planned_checks(args)?,
     }))
+}
+
+fn subjects(
+    value: Option<&Value>,
+) -> Result<Vec<butler_turn::btcc::PlanSubject>, WorkArgumentError> {
+    value
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|e| WorkArgumentError::Required(format!("valid subjects: {e}")))
+        .map(Option::unwrap_or_default)
 }

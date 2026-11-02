@@ -1,5 +1,7 @@
 # TabRail
 
+Glossary: 브라우저 탭 미리보기 목록 / agent tab rail (`TabRail`).
+
 ## What is this component
 
 Live previews of Butler's tabs beside the conversation, made of

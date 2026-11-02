@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 mod extraction;
 #[cfg(test)]
+mod focused_tests;
+mod structure;
+mod tables;
+#[cfg(test)]
 pub(crate) use extraction::tests::article_extraction_matches_source_semantics_for_generic_content;
 
 pub(super) use extraction::extract_readable_html;
@@ -96,12 +100,9 @@ pub(super) fn strip_html(html: &str) -> String {
 }
 
 pub(super) fn title_from_html(html: &str) -> Option<String> {
-    let tags = parse_tags(html);
-    let index = tags
-        .iter()
-        .position(|tag| !tag.closing && tag.name == "title")?;
-    let inner = element_inner(html, &tags, index)?;
-    let title = strip_html(inner);
+    let document = dom_query::Document::from(html);
+    let title = document.select("title");
+    let title = compact(&title.nodes().first()?.text());
     (!title.is_empty()).then_some(title)
 }
 

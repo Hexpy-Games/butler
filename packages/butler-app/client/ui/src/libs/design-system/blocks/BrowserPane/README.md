@@ -1,7 +1,7 @@
 # BrowserPane
 
 ## What is this block
-`BrowserPane` is the browser sheet: a tinted pane (`--browser-pane-bg`) whose two
+`BrowserPane` is the browser column: a tinted pane (`--browser-pane-bg`) whose two
 top corners use the popover radius (`--browser-pane-radius`, 12px). It holds the
 tab row and the toolbar row, inset by `--browser-card-inset`, and the page card,
 which fills the sheet edge to edge under the toolbar: no margin around the page.
@@ -15,7 +15,7 @@ address field sits 7px below the tabs and centres with the 28px buttons.
 
 ## When to use this block
 - Beside a conversation: `placement="conversation"` inside the `AdaptiveShellSplit`
-  pane. It meets the chat column directly: its leading hairline is the
+  pane. It meets the conversation column directly: its leading hairline is the
   chat | pane divider, and its trailing edge tucks under the window frame (one
   edge, one hairline; see Foundations > Spacing > Borders).
 - The standalone Browser view: `placement="standalone"` under the view's

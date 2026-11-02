@@ -24,7 +24,13 @@ pub(super) async fn execute(
     let output = result?;
     owner.observe_result(&call.name, &args);
     browser::discover_reached(owner, &call.name, &output);
-    serde_json::from_str(output.as_str()).map_err(|error| {
+    let projected = if call.name == "web_read" {
+        super::super::message::structured_raw(&call.name, output.as_str())
+            .map_err(ToolExecutionError::Integrity)?
+    } else {
+        output.as_str().to_owned()
+    };
+    serde_json::from_str(&projected).map_err(|error| {
         ToolExecutionError::Integrity(
             butler_turn::btcc::BtccError::relayed("browse_tool_result_invalid", error.to_string())
                 .with_source(error),

@@ -87,6 +87,7 @@ mod embed_download;
 mod error_library;
 mod favicons;
 mod feature_models;
+mod focused_reading;
 mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]
@@ -173,6 +174,7 @@ mod quota_gating;
 mod reader_tab;
 mod recovery;
 mod reduce_motion;
+mod research_eval;
 mod sandbox_installation;
 mod schedule_calendar;
 mod schedule_chat;
@@ -320,6 +322,7 @@ mod canon_handoff;
 mod canon_link;
 mod canon_plan_run;
 mod canon_registration;
+mod delegation_handoff;
 mod one_call_delegation;
 
 mod chats_initiated;
@@ -329,3 +332,6 @@ mod chats_work;
 mod canon_criteria;
 mod canon_mcp;
 mod shell_client;
+
+mod evidence_bundle;
+mod task_scope;

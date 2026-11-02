@@ -50,6 +50,14 @@ pub(crate) fn validate_replace(input: &ReplacePlanInput) -> Result<(), BtccError
             required_text(reference, &format!("governingRefs[{index}]"))?;
         }
     }
+    let mut subjects = HashSet::new();
+    for subject in &input.subjects {
+        required_text(&subject.key, "subjects.key")?;
+        required_text(&subject.label, "subjects.label")?;
+        if !subjects.insert(&subject.key) {
+            return Err(error("Plan subjects must have unique keys"));
+        }
+    }
     let mut keys = HashSet::with_capacity(input.actions.len());
     for (index, action) in input.actions.iter().enumerate() {
         required_text(&action.action_key, &format!("actions[{index}].actionKey"))?;

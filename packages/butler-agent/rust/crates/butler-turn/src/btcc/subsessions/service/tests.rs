@@ -209,6 +209,8 @@ pub(crate) fn delegation_identities_are_byte_stable() {
         r#"{"parent_session_id":"ps","parent_turn_id":"pt","request":"req","work_id":"w","plan_revision_id":"p"}"#
     );
     let worker = super::helpers::WorkerIdentity {
+        task_plan: None,
+        task: None,
         parent_session_id: "ps",
         parent_turn_id: "pt",
         action_key: "a",
@@ -216,6 +218,8 @@ pub(crate) fn delegation_identities_are_byte_stable() {
         acceptance_criteria: &["c".to_owned()],
         implementation_brief: "b",
         profile_id: "id",
+        target_path: None,
+        replaces_relation_id: None,
     };
     assert_eq!(
         serde_json::to_string(&worker).unwrap(),

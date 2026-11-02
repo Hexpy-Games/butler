@@ -1,3 +1,4 @@
+import { sessionArtifacts } from "../artifacts/sessionArtifacts.ts";
 import { SessionSectionHeader } from "../session-info/SessionSection.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
@@ -21,10 +22,7 @@ export function ArtifactsPanel({
   useAppLocale();
   const openArtifact = useButlerStore((state) => state.openArtifact);
   const messages = useButlerStore((state) => state.messages);
-  const messageArtifacts = messages.flatMap(
-    (message) => message.artifacts ?? [],
-  );
-  const allArtifacts = dedupeArtifacts([...artifacts, ...messageArtifacts]);
+  const allArtifacts = sessionArtifacts(artifacts, messages);
 
   return (
     <>
@@ -57,17 +55,4 @@ export function ArtifactsPanel({
     </InspectorInset>
     </>
   );
-}
-
-function dedupeArtifacts(
-  artifacts: SessionArtifactSummary[],
-): SessionArtifactSummary[] {
-  const seen = new Set<string>();
-  return artifacts.filter((artifact) => {
-    const key =
-      artifact.id || artifact.file_id || artifact.url || artifact.title;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
