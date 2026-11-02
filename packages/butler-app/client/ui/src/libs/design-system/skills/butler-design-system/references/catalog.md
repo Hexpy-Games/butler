@@ -1229,12 +1229,12 @@ Layout item props (grow, shrink, basis, minWidth, alignSelf, span, invisible) th
 
 `import { PageContainer } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=components/PageContainer`
 
-Caps a page's width (narrow, default, full) with the adaptive gutter and optional start alignment.
+Caps a page's width (narrow, default, document, full) with the adaptive gutter and optional start alignment.
 
 - Use for: The outer frame of a settings, dashboard or document page
 - Not for: Spacing inside a page → `Stack`
 - Not for: A padded surface → `Box`
-- Tokens: `--page-max-width-reading`, `--page-max-width-wide`, `--page-container-gutter`
+- Tokens: `--page-max-width-reading`, `--page-max-width-wide`, `--page-max-width-document`, `--page-container-gutter`
 
 ### Section
 

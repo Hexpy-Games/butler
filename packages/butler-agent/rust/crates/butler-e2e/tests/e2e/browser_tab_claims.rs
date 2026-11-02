@@ -82,7 +82,10 @@ async fn run(mode: Mode) -> Result<(), HarnessError> {
             && m.to_string().contains("Done.")),
         "{messages:?}"
     );
-    if matches!(mode, Mode::Same | Mode::Bridge | Mode::Reverse) {
+    if matches!(
+        mode,
+        Mode::Same | Mode::Bridge | Mode::Reverse | Mode::Shared
+    ) {
         let snapshot = events.snapshot();
         let position = |call: &str, kind: &str| {
             snapshot
@@ -129,20 +132,24 @@ fn assert_outputs(request: &Value, mode: Mode) {
         if read {
             assert_eq!(output["ok"], true, "{output}");
             let output = &output["output"];
-            assert_eq!(output["ok"], true, "{output}");
-            assert_eq!(output["content_has_more"], false, "{output}");
-            assert_eq!(output["reader"], "butler-browser-tab", "{output}");
+            assert_eq!(
+                output["schema"], "butler.browser-observation.v1",
+                "{output}"
+            );
             let expected = if matches!(mode, Mode::Same | Mode::Bridge) {
                 "Updated page"
             } else {
                 "Original page"
             };
             assert!(
-                output["markdown"].as_str().unwrap().contains(
-                    format!("{expected} contains the full document and all its details. ")
-                        .repeat(8)
-                        .trim_end()
-                ),
+                output["untrusted_content"]["text"]
+                    .as_str()
+                    .unwrap()
+                    .contains(
+                        format!("{expected} contains the full document and all its details. ")
+                            .repeat(8)
+                            .trim_end()
+                    ),
                 "{output}"
             );
         } else {
@@ -155,7 +162,7 @@ fn cassette(mode: Mode) -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut result = Cassette::load("TOOL-01")?;
     result.exchanges.clear();
-    let act = json!({"tab":"A","observation":"obs-A","steps":[{"action":"click","ref":"e1"}]});
+    let act = json!({"tab":"A","observation":if matches!(mode, Mode::Reverse) {"obs-read"} else {"obs-A"},"steps":[{"action":"click","ref":"e1"}]});
     let action = if matches!(mode, Mode::Bridge) {
         (
             "tool_call",
@@ -165,11 +172,11 @@ fn cassette(mode: Mode) -> Result<Cassette, HarnessError> {
         ("browser_act", act)
     };
     let read = (
-        "web_read",
+        "browser_observe",
         json!({"tab":if matches!(mode, Mode::Different) {"B"} else {"A"}}),
     );
     let batch = match mode {
-        Mode::Shared => vec![read, ("web_read", json!({"tab":"A","max_chars":2500}))],
+        Mode::Shared => vec![read, ("browser_observe", json!({"tab":"A","full":true}))],
         Mode::Reverse => vec![read, action],
         _ => vec![action, read],
     };

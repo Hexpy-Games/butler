@@ -3,13 +3,13 @@ import type { HTMLAttributes, ReactNode, RefCallback } from "react";
 import styles from "./PageContainer.module.css";
 import { cn } from "../../lib/utils";
 
-export type PageContainerWidth = "narrow" | "default" | "full";
+export type PageContainerWidth = "narrow" | "default" | "document" | "full";
 export type PageContainerAlign = "center" | "start";
 export type PageContainerGutter = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 
 export interface PageContainerProps extends DsBaseProps<HTMLAttributes<HTMLElement>> {
   children?: ReactNode;
-  /** narrow: reading width (760px), default: wide page (72rem), full: no cap. */
+  /** narrow: reading width (760px), default: wide page (72rem), document: a document filling its pane (1400px), full: no cap. */
   width?: PageContainerWidth;
   /** Inline padding; omit for the adaptive page gutter. */
   gutter?: PageContainerGutter;

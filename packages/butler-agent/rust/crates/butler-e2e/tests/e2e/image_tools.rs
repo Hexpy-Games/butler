@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod edits;
 mod flows;
+mod transport;
 use super::access_tiers::{approve, delivered, paused, stub};
 use butler_e2e::e2e::{
     HarnessError,

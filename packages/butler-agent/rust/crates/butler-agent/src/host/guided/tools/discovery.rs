@@ -7,7 +7,7 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use butler_core::json::{JsonDocument, visit_raw_array, visit_raw_object};
-use butler_runtime::capabilities::{BridgeCatalogTool, describe_native, search_native};
+use butler_runtime::capabilities::{BridgeCatalogTool, search_native};
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
@@ -273,12 +273,10 @@ async fn describe(
             continue;
         }
         if let Some(tool) = catalog.builtin_tool(name) {
-            descriptions.push(describe_native(projection(owner, tool)).map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "guided_bridge_catalog_json",
-                    error.to_string(),
-                ))
-            })?);
+            descriptions.push(super::reader_surface::describe(
+                projection(owner, tool),
+                owner.browser_available(),
+            )?);
         } else {
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
         }
