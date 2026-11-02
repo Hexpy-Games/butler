@@ -75,7 +75,6 @@ impl AppApplication {
         turn.app_turn_context["documentEdits"] = json!(document_edits);
         if let Some(text) = hook.text {
             turn.app_turn_context["hookContext"] = text.into();
-            turn.app_turn_context["hookContextProject"] = hook.project.into();
         }
         Ok((self.with_canon_epics(turn).await?, hook.waiting))
     }

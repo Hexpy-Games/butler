@@ -3,7 +3,7 @@
 // digits stays `x` and `->` stays two characters, while the body font keeps its alternates in message prose.
 // The body font (Pretendard) draws `2876x6` with the `×` glyph and `a->b` with an arrow unless ligatures are off,
 // so each check compares the width the element draws against the same characters drawn one glyph each.
-// The real project-hook dialog is checked in app-folder-trust-smoke, which needs the native Agent.
+// The card is asked before Butler wrote anything, so it also checks that such a card gets a row of its own.
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -56,7 +56,15 @@ async function openRevokeDialog(page: Page) {
   return dialog;
 }
 
+/** The approval's ask, raised before Butler wrote anything: it points at the user's message. */
+function pendingAsk(view: SessionView) {
+  return { ask_id: "ask-review", kind: "approval", session_id: "butler-client", source_session_id: "butler-client", source_turn_id: "review-turn",
+    source_message_id: view.messages[0]!.id, source_call_id: null, deferred: false, waiting_since: "2026-10-01T00:00:00Z", title: "확인 필요",
+    blocking: true, state: "open", created_at: "2026-10-01T00:00:00Z", actions: ["allow", "deny"] };
+}
+
 let fixture: Record<string, unknown>;
+let asksServed = 0;
 const browser = await launchSmokeBrowser();
 const page = await browser.newPage({ reducedMotion: "reduce", deviceScaleFactor: 2 });
 const errors: string[] = [];
@@ -86,6 +94,10 @@ try {
     if (url.pathname === "/projects/butler/canon/sidebar") return route.fulfill({ json: { ok: true, data: { project_id: "butler", groups: [] } } });
     if (url.pathname === "/projects/butler/canon") return route.fulfill({ json: { ok: true, data: { project_id: "butler", plans: [], backlog: [], backlog_revision: 0 } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
+    if (url.pathname === "/sessions/butler-client/pending-asks") {
+      asksServed++;
+      return route.fulfill({ json: { ok: true, data: { session_id: "butler-client", open_count: 1, asks: [pendingAsk(view)] } } });
+    }
     const data = /^\/sessions\/[^/]+\/controls$/u.test(url.pathname) ? { session_id: "butler-client", revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-5.6-sol", access_mode: "full_access", reasoning_effort: "none", plan_mode: false } } : {};
     return route.fulfill({ json: { ok: true, data } });
   });
@@ -95,9 +107,24 @@ try {
     fixture = { messages: view.messages, sessionView: view, background: "plain",
       settings: { onboarding: { consent_version: 2, accepted_at: "2026-10-01T00:00:00Z", completed_at: "2026-10-01T00:00:00Z" } } };
     await page.setViewportSize({ width, height });
+    asksServed = 0;
     await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
     const panel = page.locator('[data-test-class="composer-authority-decision"]').first();
     await panel.waitFor();
+    // Asked before Butler wrote anything: the card gets a row of its own, never a place inside the user's bubble.
+    for (const deadline = Date.now() + 5_000; !asksServed;) {
+      assert(Date.now() < deadline, `${key}: the pending ask was read`);
+      await page.waitForTimeout(20);
+    }
+    await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+    const slot = page.locator('[data-test-class="conversation-request"]').filter({ has: panel });
+    assert.equal(await slot.count(), 1, `${key}: the card sits in a request row`);
+    assert.equal(await slot.getAttribute("data-request-source-message"), null, `${key}: the card is not inside the user's message`);
+    if (width === 1280) {
+      const composer = (await page.locator('[data-test-class="composer-card"]').boundingBox())!.width;
+      const card = (await panel.boundingBox())!.width;
+      assert(card >= composer * 0.9, `${key}: card ${card}px beside composer ${composer}px`);
+    }
     await page.evaluate(async () => { await document.fonts.ready; await new Promise(requestAnimationFrame); });
     assert(await page.evaluate(() => document.fonts.check('16px "Pretendard Variable"')), `${key}: the body font is loaded`);
     await page.evaluate(() => document.querySelectorAll("[data-sonner-toast]").forEach(node => node.remove()));

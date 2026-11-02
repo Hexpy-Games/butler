@@ -224,3 +224,15 @@ fn windows_task_script_keeps_typographic_quotes_inside_strings()
     assert!(!script.contains("O\u{2019}Brien"), "{script}");
     Ok(())
 }
+
+// test-category: pure-logic
+/// Each of PowerShell's four single quotes is doubled, so a value stays one string.
+#[test]
+fn powershell_literal_doubles_every_single_quote() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    assert_eq!(
+        butler_platform::powershell_text::literal("a'b\u{2018}c\u{2019}; calc; \u{201a}d\u{201b}e"),
+        "'a''b\u{2018}\u{2018}c\u{2019}\u{2019}; calc; \u{201a}\u{201a}d\u{201b}\u{201b}e'"
+    );
+    Ok(())
+}

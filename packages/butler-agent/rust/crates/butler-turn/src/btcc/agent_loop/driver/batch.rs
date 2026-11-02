@@ -380,32 +380,63 @@ pub(super) async fn suspend_for_authority(
                 BtccCode::AuthoritySourceCallMissing,
             ))
         })?;
-    super::park::suspend(
-        input,
-        state,
-        prepared,
-        super::park::Parked {
-            request_ref: parked.request_ref,
-            call_id,
-            iteration: batch.iteration,
-            project_hooks_card: false,
-            batch: AuthorityBatch {
-                tools: batch.tools.to_vec(),
-                calls: batch.calls.to_vec(),
-                next_call_index: parked.next_call_index,
-                results: parked.results,
-                concurrent_results: parked
-                    .concurrent_results
-                    .into_iter()
-                    .map(|executed| executed.result)
-                    .collect(),
-                concurrent_call_ids: parked.concurrent_call_ids,
-                pending_modifications: parked.pending_modifications,
-                first_suspension: parked.first_suspension,
-            },
+    let presentation = input
+        .policy
+        .presentation(GuidedInvocation::from(input))
+        .await
+        .map_err(propagated)?
+        .or_else(|| state.presentation.take());
+    // Rides on the continuation row the suspension writes anyway.
+    let mut extensions = input.policy.continuation_extensions();
+    for (key, value) in [
+        ("browserPruneWatermark", state.browser_prune.watermark),
+        ("browserPruneFloor", state.compacted_through),
+    ] {
+        if value > 0 {
+            extensions.insert(key.into(), serde_json::json!(value));
+        }
+    }
+    if let Some(diagnostics) = prepared
+        .request
+        .usage_attribution
+        .as_ref()
+        .and_then(|usage| usage.prompt_diagnostics.clone())
+    {
+        extensions.insert("promptDiagnostics".into(), diagnostics);
+    }
+    let continuation = AuthorityLoopContinuation {
+        request_ref: parked.request_ref,
+        call_id,
+        messages: std::mem::take(&mut state.messages),
+        next_item_ordinal: state.next_item_ordinal,
+        provider_continuation: state.provider_continuation.take(),
+        instructions: prepared.instructions.clone(),
+        stable_provider_cache_prefix: prepared.request.stable_provider_cache_prefix.clone(),
+        model_round_index: state.model_round_index,
+        iteration: batch.iteration,
+        empty_response_recovery_used: state.empty_recovery_used,
+        automatic_continuations: state.automatic_continuations,
+        stop_hook_active: state.stop_hook_active,
+        feedback_counts: std::mem::take(&mut state.feedback_counts),
+        tool_results: std::mem::take(&mut state.tool_results),
+        presentation,
+        batch: AuthorityBatch {
+            tools: batch.tools.to_vec(),
+            calls: batch.calls.to_vec(),
+            next_call_index: parked.next_call_index,
+            results: parked.results,
+            concurrent_results: parked
+                .concurrent_results
+                .into_iter()
+                .map(|executed| executed.result)
+                .collect(),
+            concurrent_call_ids: parked.concurrent_call_ids,
+            pending_modifications: parked.pending_modifications,
+            first_suspension: parked.first_suspension,
         },
-    )
-    .await
+        extensions,
+    };
+    finish(input, state, Ending::AwaitAuthority(Box::new(continuation))).await
 }
 
 /// Applies the policy's disposition for a settled batch.

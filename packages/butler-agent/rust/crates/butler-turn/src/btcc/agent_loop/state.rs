@@ -126,7 +126,7 @@ impl State {
             stop_hook_active: restored.stop_hook_active,
             feedback_counts: restored.feedback_counts,
             phase: LoopPhase::Working,
-            resumed_batch: (!restored.project_hooks_card).then_some(restored.batch),
+            resumed_batch: Some(restored.batch),
             resumed_call: prepared.resumed_tool_call.take(),
             presentation: restored.presentation,
             used_tools,
@@ -272,9 +272,7 @@ pub(super) fn validate_decision(
             BtccCode::AuthorityModifyInputMissing,
         )));
     }
-    if !continuation.project_hooks_card
-        && continuation.batch.next_call_index >= continuation.batch.calls.len()
-    {
+    if continuation.batch.next_call_index >= continuation.batch.calls.len() {
         return Err(propagated(super::invalid_contract(
             BtccCode::AuthorityContinuationCursorInvalid,
         )));

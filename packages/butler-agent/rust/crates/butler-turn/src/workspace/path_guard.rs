@@ -336,8 +336,8 @@ pub(crate) fn resolve_workspace_mutation_guard(
     Ok(out)
 }
 
-/// Butler's own credential stores, and the user's answers kept with them. No file
-/// tool writes there in any access mode: only the user's decisions reach them.
+/// Butler's own credential stores. No file tool writes there in any access mode:
+/// only the user's decisions reach them.
 fn butler_credential_store(target: &Path, data: Option<&Path>) -> bool {
     let Some(data) = data else {
         return false;

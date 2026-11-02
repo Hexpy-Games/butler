@@ -214,9 +214,6 @@ fn park_authority_call(
             "authority_source_call_mismatch",
         ));
     }
-    if continuation.project_hooks_card {
-        return Ok(()); // Parked before any tool call exists to journal.
-    }
     let pending = connection
         .execute(
             "UPDATE btcc_guided_tool_calls SET status = 'awaiting_authority' WHERE call_id = ?1 \

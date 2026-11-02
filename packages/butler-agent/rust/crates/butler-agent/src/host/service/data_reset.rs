@@ -199,21 +199,6 @@ impl Control {
         saved.map_err(GatewayApplicationError::internal_from)
     }
 }
-/// Runs `work` unless a reset has started, under the lock a reset publishes its
-/// journal with: what `work` records is either removed by that reset or never written.
-pub(crate) fn unless_resetting<T>(
-    root: &std::path::Path,
-    work: impl FnOnce() -> std::io::Result<T>,
-) -> std::io::Result<T> {
-    let _journal_change = journal::CHANGES
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let pending = journal::load(root)?;
-    if pending.is_some_and(|j| matches!(j.phase, Phase::Requested | Phase::RollingBack)) {
-        return Err(std::io::Error::other("full reset in progress"));
-    }
-    work()
-}
 pub(crate) fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128

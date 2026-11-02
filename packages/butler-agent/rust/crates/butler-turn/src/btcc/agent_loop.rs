@@ -78,9 +78,9 @@ pub use contracts::{
 };
 pub use guided_ports::{
     AuthorityPort, ContextPort, FinalSynthesis, GuidedHookBinding, GuidedInvocation,
-    GuidedPolicyDependencies, JournalCloseout, JournalPort, ProjectHooksCard, PromptImages,
-    PromptPort, RenderedGuidedPrompt, RoundRequestOptions, ToolPort, TurnContextProjection,
-    TurnSteeringPort, WorkFinalState, WorkPort,
+    GuidedPolicyDependencies, JournalCloseout, JournalPort, PromptImages, PromptPort,
+    RenderedGuidedPrompt, RoundRequestOptions, ToolPort, TurnContextProjection, TurnSteeringPort,
+    WorkFinalState, WorkPort,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use operation_result_replay::OperationResultReference;
