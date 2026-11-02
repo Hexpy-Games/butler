@@ -2,6 +2,7 @@ import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
 import { DecisionGuidePage } from "./pages/DecisionGuidePage";
 import { FoundationChapterPage } from "./pages/FoundationChapterPage";
 import { FoundationsPage } from "./pages/FoundationsPage";
+import { GlossaryPage } from "./pages/GlossaryPage";
 import { GalleryPage } from "./pages/GalleryPage";
 import { IconsPage } from "./pages/IconsPage";
 import { ItemPage } from "./pages/ItemPage";
@@ -28,6 +29,8 @@ export function ViewerContent({ page, anchor, entries, state, themes, onOpen, on
   switch (page.kind) {
     case "overview":
       return <OverviewPage entries={entries} onChange={onChange} onOpen={onOpen} state={state} themes={themes} />;
+    case "glossary":
+      return <GlossaryPage entries={entries} locale={state.locale} onOpen={onOpen} />;
     case "guide":
       return <DecisionGuidePage entries={entries} onOpen={onOpen} />;
     case "recipes":

@@ -14,7 +14,7 @@ function QueuedFollowUp() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "A pending user bubble for a follow-up sent while a turn runs, with its position, edit and delete.",
+  purpose: "A queued message row for a follow-up sent while a turn runs, with its position, edit and delete.",
   whenToUse: ["Show queued or failed sends at the end of the conversation"],
   whenNotToUse: [
     { when: "A delivered message", use: "MessageRow" },
