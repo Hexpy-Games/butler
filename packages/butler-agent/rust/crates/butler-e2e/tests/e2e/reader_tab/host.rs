@@ -25,12 +25,9 @@ pub(super) fn detail_paragraphs() -> Vec<String> {
 }
 
 fn page_html() -> String {
-    let details = detail_paragraphs()
-        .iter()
-        .map(|paragraph| format!("<p>{paragraph}</p>"))
-        .collect::<String>();
+    let details = detail_paragraphs().join("</p><p>");
     format!(
-        "<html><title>Desk lamps</title><article><h1>Desk lamps</h1><p>Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm.</p>{details}</article></html>"
+        "<html><title>Desk lamps</title><article><h1>Desk lamps</h1><p>Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm.</p><p>{details}</p></article></html>"
     )
 }
 

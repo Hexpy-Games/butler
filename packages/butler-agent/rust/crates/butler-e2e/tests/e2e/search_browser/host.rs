@@ -147,7 +147,7 @@ impl Host {
         match (op, tab) {
             ("tabs.list", _) => json!({"tabs":self.tabs}),
             ("tab.read", Some(tab)) => json!({"status":"ok","tab":tab["id"],"url":url,"epoch":1,
-                "html":format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p>{}<p>End of the tide table.</p></article></main></body></html>", entries().iter().map(|entry| format!("<p>{entry}</p>")).collect::<String>())}),
+                "html":format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p><p>{}</p><p>End of the tide table.</p></article></main></body></html>", entries().join("</p><p>"))}),
             ("tab.observe", Some(tab)) => {
                 json!({"status":"ok","tab":tab["id"],"obs":"o1","epoch":1,"url":url,
                 "frames":[{"id":"f0","url":url,"class":"main"}],
