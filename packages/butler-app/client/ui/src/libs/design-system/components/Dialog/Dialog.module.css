@@ -24,6 +24,20 @@
   z-index: var(--z-dialog);
   display: grid;
   --dialog-width: var(--dialog-width-sm);
+  --dialog-padding: var(--space-4);
+  /* The close button: its inset from the corner and its size (the icon-sm
+     Button's, which grows to the hit target on phones and touch screens). */
+  --dialog-close-inset: var(--space-2);
+  --dialog-close-size: var(--control-height-sm);
+  /* How far the close button and its focus ring reach into the content box
+     from its inline end, 0 without a close button. A classic scrollbar moves
+     the button inward by its width while the content takes that width back. */
+  --dialog-close-room: 0px;
+  /* Dialog titles (DialogTitle, DialogForm's title) keep that room free on
+     their inline end, so a long title wraps before the close button instead
+     of running under it. A header already insets its end; its title reserves
+     only what that inset leaves. */
+  --dialog-title-close-room: var(--dialog-close-room);
 
   width: min(var(--dialog-width), calc(100% - var(--space-4) * 2));
   max-width: calc(
@@ -44,7 +58,7 @@
   max-height: var(--dialog-max-height);
   gap: var(--space-4);
   overflow: auto;
-  padding: var(--space-4);
+  padding: var(--dialog-padding);
   outline: none;
   container-type: inline-size;
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
@@ -62,6 +76,14 @@
    frame. */
 .content > :not([data-slot="dialog-close"]) {
   margin-inline-end: calc(100% - 100cqw);
+}
+
+.content[data-close-button] {
+  --dialog-close-room: calc(
+    var(--dialog-close-inset) + var(--dialog-close-size) +
+      var(--focus-ring-room) + var(--scrollbar-width, 0px) -
+      var(--dialog-padding)
+  );
 }
 
 .content[data-state="open"] {
@@ -137,7 +159,13 @@
 .header {
   display: grid;
   gap: var(--space-2);
-  padding-right: var(--space-6);
+  --dialog-header-inset-end: var(--space-6);
+  --dialog-title-close-room: max(
+    0px,
+    var(--dialog-close-room) - var(--dialog-header-inset-end)
+  );
+
+  padding-right: var(--dialog-header-inset-end);
 }
 
 /* A dialog that is only a header and its actions (a confirmation) is never
@@ -160,6 +188,7 @@
 
 .title {
   margin: 0;
+  padding-inline-end: var(--dialog-title-close-room, 0);
   color: var(--text-primary);
   font-size: var(--typo-panel-title-size);
   font-weight: var(--typo-panel-title-weight);
@@ -175,8 +204,8 @@
 
 .close {
   position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
+  top: var(--dialog-close-inset);
+  right: var(--dialog-close-inset);
   border-radius: var(--radius-pill);
 }
 
@@ -193,6 +222,20 @@
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--line-strong) 70%, transparent);
   background-clip: content-box;
+}
+
+/* The icon-sm Button takes the hit target on phones and touch screens
+   (Button.module.css); the close room follows it. */
+@media (width <= 640px) {
+  .content:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    --dialog-close-size: var(--control-hit-target);
+  }
+}
+
+@media (pointer: coarse) {
+  .content {
+    --dialog-close-size: var(--control-hit-target);
+  }
 }
 
 /* Phones: the command palette is a full-width sheet from the top edge, below
