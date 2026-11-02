@@ -201,6 +201,15 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
         &call.arguments
     }
 
+    /// Whether a tool this round did not offer runs when the model calls it by its exact name.
+    fn runs_unoffered<'a>(
+        &'a self,
+        _invocation: GuidedInvocation<'a>,
+        _name: &'a str,
+    ) -> PortFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
+    }
+
     fn hooks(&self) -> Option<&super::guided_ports::GuidedHookBinding> {
         None
     }

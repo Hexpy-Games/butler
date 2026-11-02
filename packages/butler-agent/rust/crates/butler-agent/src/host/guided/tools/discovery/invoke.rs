@@ -82,6 +82,7 @@ pub(super) async fn run(
                 error["error"]["id"] = Value::String(id.into());
                 error["error"]["field"] = Value::String(path.clone());
                 error["error"]["path"] = Value::String(path);
+                error["error"]["schema"] = description["schema"].clone();
                 return encoded(&error);
             }
         }
@@ -210,6 +211,7 @@ async fn invoke_mcp(
                 error["error"]["id"] = Value::String(id.into());
                 error["error"]["field"] = Value::String(path.clone());
                 error["error"]["path"] = Value::String(path);
+                error["error"]["schema"] = schema.clone();
                 return encoded(&error);
             }
         };
