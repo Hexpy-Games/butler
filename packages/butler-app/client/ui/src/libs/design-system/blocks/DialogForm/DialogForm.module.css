@@ -18,5 +18,7 @@
 }
 
 .title {
+  /* Inside a dialog: the close button's room (Dialog.module.css); 0 elsewhere. */
+  padding-inline-end: var(--dialog-title-close-room, 0);
   color: var(--text-primary);
 }
