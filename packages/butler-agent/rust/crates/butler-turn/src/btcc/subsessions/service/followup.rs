@@ -23,7 +23,7 @@ impl SubsessionService {
     ) -> Result<Value, BtccError> {
         let result = self
             .repository
-            .result_for_relation(relation.relation_id.clone())
+            .prompt_result_for_relation(relation.relation_id.clone())
             .await
             .map_err(BtccError::from)?;
         Ok(
@@ -137,7 +137,7 @@ impl SubsessionService {
         }
         let result = self
             .repository
-            .result_for_relation(relation.relation_id.clone())
+            .prompt_result_for_relation(relation.relation_id.clone())
             .await
             .map_err(BtccError::from)?;
         let open = self
@@ -153,11 +153,10 @@ impl SubsessionService {
                 "closed: new requests use delegate_to_steward(previous_relation_id) in this turn"
             }
         };
+        let prior = result.map_or_else(|| "pending".into(), |result| result.to_string());
         Ok(format!(
-            "Most recent Steward delegation (model-only):\nrelation_id: {}\nstate: {state}\nprior_request: {}\nprior_result: {}",
-            relation.relation_id,
-            relation.packet.objective,
-            result.map_or_else(|| "pending".into(), |r| r.to_string())
+            "Most recent Steward delegation (model-only):\nrelation_id: {}\nstate: {state}\nprior_request: {}\nprior_result: {prior}",
+            relation.relation_id, relation.packet.objective,
         ))
     }
 }

@@ -8,11 +8,14 @@ mod decode;
 mod directions;
 mod files;
 mod handoff;
+mod handoff_context;
 mod instruction_context;
 mod parents;
+mod prompt_result;
 mod records;
-mod settlement;
 mod subtasks;
+mod task_replacement;
+mod work_tasks;
 mod worker_admission;
 mod worker_cancel;
 mod worker_failure;
@@ -25,7 +28,7 @@ pub use worker_admission::{
 pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
-pub use subtasks::OPEN_SUBTASKS_SQL;
+pub use subtasks::{OPEN_SUBTASKS_SQL, SUBTASK_WORKERS_SQL};
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
@@ -250,6 +253,7 @@ impl SqliteSubsessionRepository {
             let inserted = tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7)",params![instruction_id,relation,revision,source_turn,source_message,instruction,now]).map_err(StorageError::sqlite)?;
             // Preserve an already published continuation between enqueue and turn admission.
             if inserted == 1 {
+            tx.execute("UPDATE btcc_work_tasks SET status='pending',updated_at=?2 WHERE relation_id=?1 AND status IN ('done','cancelled')",params![relation,now]).map_err(StorageError::sqlite)?;
             tx.execute(worker_admission::RESET_DIRECTION_DISPATCH_SQL, params![relation,already_pending]).map_err(StorageError::sqlite)?;
             }
             let stored=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND source_message_id=?2",params![relation,source_message],direction_row).map_err(StorageError::sqlite)?;
@@ -298,18 +302,7 @@ impl SqliteSubsessionRepository {
         &self,
         session: String,
     ) -> Result<Option<(String, String)>, StorageError> {
-        self.storage.read(move |db| {
-            if let Some(turn) = settlement::settled_turn(db, &session)? {
-                return Ok(Some(turn));
-            }
-            let latest: Option<(String, String)> = db.query_row(
-                "SELECT turn_id,semantic_state FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1",
-                [&session], |row| Ok((row.get(0)?, row.get(1)?)),
-            ).optional().map_err(StorageError::sqlite)?;
-            let Some((turn, state)) = latest else { return Ok(None); };
-            Ok(settlement::read_result_turn(db, completion::turn_result_id(&session, &turn))?
-                .or(Some((turn, state))))
-        }).await
+        self.storage.execute(move |db| db.query_row("SELECT turn_id,semantic_state FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1",[session],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(StorageError::sqlite)).await
     }
 
     pub(crate) async fn latest_resume_turn(
@@ -347,12 +340,10 @@ impl SqliteSubsessionRepository {
         &self,
         relation: String,
     ) -> Result<Option<Value>, StorageError> {
-        self.storage.execute(move |db| {
-            let settled = settlement::settled_result_id(db, &relation)?;
-            db.query_row(
+        self.storage.execute(move |db| db.query_row(
             "SELECT r.result_id,r.child_turn_id,r.status,r.summary,r.acceptance_evidence_json,r.created_at,t.final_payload_json \
              FROM btcc_steward_results r LEFT JOIN btcc_turns t ON t.turn_id=r.child_turn_id \
-             WHERE r.relation_id=?1 AND (?2 IS NULL OR r.result_id=?2) ORDER BY r.created_at DESC,r.result_id DESC LIMIT 1", params![relation, settled], |r| {
+             WHERE r.relation_id=?1 ORDER BY r.created_at DESC LIMIT 1", [relation], |r| {
                 let evidence: String = r.get(4)?;
                 let mut result = serde_json::json!({"result_id":r.get::<_,String>(0)?,"child_turn_id":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"summary":r.get::<_,String>(3)?,"acceptance_evidence":serde_json::from_str::<Value>(&evidence).unwrap_or(Value::Array(vec![])),"created_at":r.get::<_,String>(5)?});
                 let payload = r.get::<_, Option<String>>(6)?
@@ -361,8 +352,7 @@ impl SqliteSubsessionRepository {
                     super::subsession_result::project_delivery(&mut result, &payload);
                 }
                 Ok(result)
-            }).optional().map_err(StorageError::sqlite)
-        }).await
+            }).optional().map_err(StorageError::sqlite)).await
     }
 
     pub(crate) async fn open_relation_by_work(
@@ -403,7 +393,26 @@ impl SqliteSubsessionRepository {
     /// Whether a child still owes its current turn result or has a pending direction.
     pub async fn has_active_child(&self, parent: String) -> Result<bool, StorageError> {
         self.storage
-            .read(move |db| settlement::has_active_child(db, &parent))
+            .execute(move |db| {
+                let unfinished: bool = db
+                    .query_row(
+                        "SELECT EXISTS (SELECT 1 FROM btcc_session_relations r
+                         JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
+                         WHERE r.parent_session_id=?1
+                           AND json_extract(d.packet_json,'$.superseded_by') IS NULL AND (
+                           EXISTS (SELECT 1 FROM btcc_subsession_directions i
+                             WHERE i.relation_id=r.relation_id AND i.status='pending')
+                           OR NOT EXISTS (SELECT 1 FROM btcc_steward_results x
+                             WHERE x.relation_id=r.relation_id AND x.child_turn_id=COALESCE(
+                               (SELECT t.turn_id FROM btcc_turns t
+                                WHERE t.session_id=r.child_session_id ORDER BY t.rowid DESC LIMIT 1),
+                               d.child_turn_id))))",
+                        [parent],
+                        |row| row.get(0),
+                    )
+                    .map_err(StorageError::sqlite)?;
+                Ok(unfinished)
+            })
             .await
     }
 

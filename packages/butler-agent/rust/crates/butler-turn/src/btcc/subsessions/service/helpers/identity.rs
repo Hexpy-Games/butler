@@ -19,6 +19,10 @@ pub(in crate::btcc::subsessions::service) struct StewardIdentity<'a> {
 /// The request identity a worker delegation id is derived from.
 #[derive(serde::Serialize)]
 pub(in crate::btcc::subsessions::service) struct WorkerIdentity<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(in crate::btcc::subsessions::service) task_plan: Option<(&'a str, &'a str)>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(in crate::btcc::subsessions::service) task: Option<&'a crate::btcc::TaskContract>,
     pub(in crate::btcc::subsessions::service) parent_session_id: &'a str,
     pub(in crate::btcc::subsessions::service) parent_turn_id: &'a str,
     pub(in crate::btcc::subsessions::service) action_key: &'a str,
@@ -26,6 +30,10 @@ pub(in crate::btcc::subsessions::service) struct WorkerIdentity<'a> {
     pub(in crate::btcc::subsessions::service) acceptance_criteria: &'a [String],
     pub(in crate::btcc::subsessions::service) implementation_brief: &'a str,
     pub(in crate::btcc::subsessions::service) profile_id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(in crate::btcc::subsessions::service) target_path: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(in crate::btcc::subsessions::service) replaces_relation_id: Option<&'a str>,
 }
 
 /// The reviewed parent Work a delegation executes.

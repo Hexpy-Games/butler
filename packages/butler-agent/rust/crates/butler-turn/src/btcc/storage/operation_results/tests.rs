@@ -136,6 +136,7 @@ async fn add_work(storage: &BtccStorage, kind: &str, ledger: Option<&str>, head:
 
 fn range_input(hash: String) -> ExactResultRangeInput {
     ExactResultRangeInput {
+        evidence: None,
         turn_id: "turn".into(),
         result_ref: "ref".into(),
         result_sha256: hash,
@@ -163,6 +164,7 @@ async fn direct_empty_project_ref_and_utf8_request_range_match_bun() {
     assert_eq!(reference.kind, "direct");
     let range = repository
         .read_exact_result_range(ExactResultRangeInput {
+            evidence: None,
             turn_id: "turn".into(),
             result_ref: "call".into(),
             result_sha256: expected["hash"].as_str().unwrap().into(),
@@ -181,6 +183,7 @@ async fn direct_empty_project_ref_and_utf8_request_range_match_bun() {
     assert_eq!(range.next_offset, Some(7));
     let error = repository
         .read_exact_result_range(ExactResultRangeInput {
+            evidence: None,
             turn_id: "other".into(),
             result_ref: "call".into(),
             result_sha256: expected["hash"].as_str().unwrap().into(),
@@ -266,6 +269,7 @@ async fn body_hash_failure_precedes_supplied_hash_and_range_checks() {
         .await
         .unwrap();
     let input = ExactResultRangeInput {
+        evidence: None,
         turn_id: "turn".into(),
         result_ref: "call".into(),
         result_sha256: "wrong".into(),
@@ -328,6 +332,7 @@ async fn managed_projection_requires_full_canonical_authority_match() {
     assert_eq!(resolved.scope_kind.as_deref(), Some("project"));
     let range = repository
         .read_exact_result_range(ExactResultRangeInput {
+            evidence: None,
             project_ref: Some("project".into()),
             ..range_input(identity.result_sha256.clone())
         })
@@ -336,6 +341,7 @@ async fn managed_projection_requires_full_canonical_authority_match() {
     assert_eq!(range.data, golden()["requestRange"]["data"]);
     let direct = repository
         .read_exact_result_range(ExactResultRangeInput {
+            evidence: None,
             turn_id: "turn".into(),
             result_ref: "call".into(),
             result_sha256: identity.result_sha256.clone(),
@@ -352,6 +358,7 @@ async fn managed_projection_requires_full_canonical_authority_match() {
     assert_eq!(direct.length, 1);
     let error = repository
         .read_exact_result_range(ExactResultRangeInput {
+            evidence: None,
             turn_id: "turn".into(),
             result_ref: "call".into(),
             result_sha256: identity.result_sha256.clone(),
@@ -391,6 +398,7 @@ async fn repository_reopens_the_same_durable_result_without_owning_storage_close
     let hash = golden()["hash"].as_str().unwrap().to_owned();
     let first = repository
         .read_exact_result_range(ExactResultRangeInput {
+            evidence: None,
             turn_id: "turn".into(),
             result_ref: "call".into(),
             result_sha256: hash.clone(),
@@ -411,6 +419,7 @@ async fn repository_reopens_the_same_durable_result_without_owning_storage_close
     let repository = OperationResultRepository::new(reopened.clone(), None);
     let second = repository
         .read_exact_result_range(ExactResultRangeInput {
+            evidence: None,
             turn_id: "turn".into(),
             result_ref: "call".into(),
             result_sha256: hash,

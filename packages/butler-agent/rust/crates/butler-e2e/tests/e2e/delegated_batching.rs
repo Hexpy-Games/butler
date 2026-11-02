@@ -186,7 +186,7 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
         .filter(|output| output["reader"] == "butler-browser-tab")
         .map(|output| {
             (
-                output["source_url"].as_str().unwrap().to_owned(),
+                output["final_url"].as_str().unwrap().to_owned(),
                 output["start_chunk"].as_u64().unwrap(),
                 output["markdown"].as_str().unwrap().to_owned(),
             )

@@ -1,13 +1,14 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { SubtaskView } from "@/app/types.ts";
 import { Clickable, Stack, Tooltip, Typo } from "@/butler-ds";
+import { SubtaskWorkerRows } from "./SubtaskWorkerRows.tsx";
 import { SubtaskMark } from "./SubtaskMark.tsx";
 import { openSubtask, subtaskLabel, subtaskStateLabel } from "./subtasks.ts";
 
 /** One line per unfinished subtask; a row opens that subtask's observer. */
 export function SubtaskRows({ parentId, subtasks }: { parentId: string; subtasks: SubtaskView[] }) {
-  return <Stack gap="none">{subtasks.map(subtask => <SubtaskRow key={subtask.session_id} parentId={parentId} subtask={subtask} />)}</Stack>;
+  return <Stack gap="none">{subtasks.map(subtask => <Fragment key={subtask.session_id}><SubtaskRow parentId={parentId} subtask={subtask} />{subtask.workers?.length ? <SubtaskWorkerRows parentId={parentId} subtask={subtask} workers={subtask.workers} /> : null}</Fragment>)}</Stack>;
 }
 
 function SubtaskRow({ parentId, subtask }: { parentId: string; subtask: SubtaskView }) {
@@ -19,7 +20,7 @@ function SubtaskRow({ parentId, subtask }: { parentId: string; subtask: SubtaskV
   // At rest the tooltip names the action; a cut title shows in full instead.
   const label = overAction ? undefined : truncated ? subtask.title : appCopy.interfaceDetails.progressDetails;
   return <Tooltip label={label} wrap={truncated}>
-    <Clickable bleed="inline" stretch onClick={() => void openSubtask(parentId, subtask)} aria-label={subtaskLabel(subtask)}
+    <Clickable bleed="inline" stretch onClick={() => void openSubtask(parentId, subtask.session_id)} aria-label={subtaskLabel(subtask)}
       data-test-class="subtask-row" data-subtask-state={subtask.state} onPointerEnter={() => {
         const node = titleRef.current;
         setTruncated(Boolean(node && node.scrollWidth > node.clientWidth));

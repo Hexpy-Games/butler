@@ -55,6 +55,7 @@ impl SqliteSubsessionRepository {
             });
             tx.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=?2,applied_child_turn_id=?3 WHERE relation_id=?1 AND status='pending'", params![relation,now,turn])
                 .map_err(StorageError::sqlite)?;
+            tx.execute("UPDATE btcc_work_tasks SET status='cancelled',updated_at=?2 WHERE relation_id=?1 AND status IN ('pending','active')",params![relation,now]).map_err(StorageError::sqlite)?;
             tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state=NULL WHERE relation_id=?1", [&relation])
                 .map_err(StorageError::sqlite)?;
             tx.commit().map_err(StorageError::sqlite)?;

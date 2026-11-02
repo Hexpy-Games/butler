@@ -153,7 +153,7 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
             .unwrap()
             .to_owned()
     };
-    assert!(description("web_read").contains("web_read {tab}"));
+    assert!(description("web_read").contains("Pass query with what you need"));
     assert!(description("answer_blocks").contains("with or without a Plan"));
     s.finish().await
 }

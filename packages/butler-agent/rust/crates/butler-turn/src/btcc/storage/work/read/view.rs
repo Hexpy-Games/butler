@@ -86,12 +86,13 @@ pub(super) fn hydrate(db: &Connection, row: &common::WorkRow) -> StorageResult<W
 }
 
 fn plan(db: &Connection, id: &str) -> StorageResult<Option<WorkPlan>> {
-    let row = db.query_row("SELECT plan_revision_id, revision, objective, governing_refs_json, execution_mode, actions_json, checks_json, origin_turn_id, created_at FROM btcc_guided_work_plan_revisions WHERE plan_revision_id = ?1", [id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, Option<String>>(4)?, row.get::<_, String>(5)?, row.get::<_, String>(6)?, row.get::<_, String>(7)?, row.get::<_, String>(8)?))
+    let row = db.query_row("SELECT plan_revision_id, revision, objective, governing_refs_json, execution_mode, actions_json, checks_json, origin_turn_id, created_at, subjects_json FROM btcc_guided_work_plan_revisions WHERE plan_revision_id = ?1", [id], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, Option<String>>(4)?, row.get::<_, String>(5)?, row.get::<_, String>(6)?, row.get::<_, String>(7)?, row.get::<_, String>(8)?, row.get::<_, String>(9)?))
     }).optional().map_err(StorageError::sqlite)?;
     row.map(
-        |(id, revision, objective, refs, mode, actions, checks, origin, created_at)| {
+        |(id, revision, objective, refs, mode, actions, checks, origin, created_at, subjects)| {
             Ok(WorkPlan {
+                subjects: common::parse_json(&subjects)?,
                 plan_revision_id: id,
                 revision,
                 objective,
