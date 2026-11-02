@@ -307,6 +307,7 @@ impl SubsessionService {
     /// Worker admission follows result delivery; one failure never hides peers.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
         self.recover_endings().await?;
+        self.recover_superseded_workers().await?;
         let mut failed_parents = std::collections::HashSet::new();
         for stored in self
             .repository

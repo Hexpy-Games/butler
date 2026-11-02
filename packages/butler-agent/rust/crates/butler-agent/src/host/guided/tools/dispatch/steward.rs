@@ -25,6 +25,7 @@ pub(super) async fn execute(
                 parent_turn_id: owner.binding.turn_id.clone(),
                 anchor_message_id: invocation.turn.original_message_id.clone(),
                 request,
+                user_request: None,
                 previous_relation_id: call
                     .arguments
                     .get("previous_relation_id")

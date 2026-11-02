@@ -12,6 +12,7 @@ impl SubsessionService {
         mut request: WorkerDelegationRequest,
         reviewed: &WorkView,
     ) -> Result<Value, BtccError> {
+        let _admission = self.worker_delegation.lock().await;
         request.access_mode = self
             .delegated_access(
                 &request.parent_session_id,
@@ -49,8 +50,29 @@ impl SubsessionService {
             );
         }
         let ids = delegation::DelegationIds::derive(&delegation::WORKER, delegation_id);
+        if let Some(error) = self
+            .replace_action_worker(&request, reviewed, &ids.relation_id)
+            .await?
+        {
+            return Ok(error);
+        }
         let now = (self.now)();
-        let packet = packets::worker(&ids, &request, action, &profile, reviewed, (plan, review));
+        let mut packet =
+            packets::worker(&ids, &request, action, &profile, reviewed, (plan, review));
+        self.worker_handoff_context(&mut packet, reviewed).await?;
+        self.dispatch_worker(request, parent, ids, packet, now, profile.prompt)
+            .await
+    }
+
+    async fn dispatch_worker(
+        &self,
+        request: WorkerDelegationRequest,
+        parent: crate::workspace::StoredSessionBinding,
+        ids: delegation::DelegationIds,
+        packet: crate::btcc::SubsessionPacket,
+        now: String,
+        profile_prompt: Option<String>,
+    ) -> Result<Value, BtccError> {
         let envelope = child_envelope(ChildEnvelopeInput {
             role: "worker",
             delegation: &ids.delegation_id,
@@ -58,9 +80,9 @@ impl SubsessionService {
             parent_id: &request.parent_session_id,
             turn: &ids.child_turn_id,
             parent: &parent,
-            model: &profile.model_ref,
-            reasoning: &profile.reasoning_effort,
-            text: render_input(&packet, profile.prompt.as_deref()),
+            model: &packet.model_ref,
+            reasoning: &packet.reasoning_effort,
+            text: render_input(&packet, profile_prompt.as_deref()),
             now: &now,
             schedule_run: packet.schedule_run.clone(),
         });
@@ -352,6 +374,10 @@ impl SubsessionService {
         let cap = self.cached_worker_cap();
         let waiting = stored.dispatch_state == SubsessionDispatchState::Pending;
         if waiting
+            && !self
+                .repository
+                .replacement_waiting(stored.relation_id.clone())
+                .await?
             && self
                 .repository
                 .running_worker_count(stored.parent_session_id.clone())

@@ -9,6 +9,7 @@ mod directions;
 mod endings;
 mod files;
 mod handoff;
+mod handoff_context;
 mod instruction_context;
 mod parents;
 mod records;
@@ -406,7 +407,9 @@ impl SqliteSubsessionRepository {
                 let unfinished: bool = db
                     .query_row(
                         "SELECT EXISTS (SELECT 1 FROM btcc_session_relations r
-                         WHERE r.parent_session_id=?1 AND r.activity_terminal=0)",
+                         JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
+                         WHERE r.parent_session_id=?1 AND r.activity_terminal=0
+                           AND json_extract(d.packet_json,'$.superseded_by') IS NULL)",
                         [parent],
                         |row| row.get(0),
                     )
