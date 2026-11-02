@@ -222,7 +222,7 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         n
     };
     let (name, args) = if script.compaction.load(Ordering::SeqCst) {
-        compaction::call(&script, n).await
+        compaction::call(&script, n, &outputs).await
     } else if n < calls.len() {
         calls.remove(n)
     } else {

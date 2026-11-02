@@ -58,14 +58,12 @@ async fn finished_runs_leave_the_note_while_another_run_remains() -> Result<(), 
         200,
     );
     super::holds::wait_state(&s, &chat, epic["id"].as_str().unwrap(), "running").await?;
-    let before = requests(&script).len();
     s.turn(&chat, "What does this mean?").await?;
-    let body = requests(&script)[before..].last().unwrap().clone();
-    let note = &body[body.rfind("## Plan run in this conversation").unwrap()..];
-    assert!(note.contains(epic["id"].as_str().unwrap()));
-    for epic in epics {
-        assert!(!note.contains(&format!("canon:epic/{epic}:")));
-    }
+    assert_eq!(
+        note_refs(&script),
+        vec![format!("canon:epic/{}", epic["id"].as_str().unwrap())],
+        "only the new unfinished run remains in the note"
+    );
     s.finish().await?;
     server.abort();
     Ok(())
@@ -123,9 +121,10 @@ async fn compaction_keeps_latest_plan_run_note() -> Result<(), HarnessError> {
             .iter()
             .any(|body| body.contains("Summarize the previous summary"))
     );
+    // The first post-compaction round must retain the edits before settlement
+    // changes the queue revision again.
     let body = bodies
         .iter()
-        .rev()
         .find(|body| body.contains("Earlier working history (summary"))
         .expect("post-compaction request");
     let update = &body[body

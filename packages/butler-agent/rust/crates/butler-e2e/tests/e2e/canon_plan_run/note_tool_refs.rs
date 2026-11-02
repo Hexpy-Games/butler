@@ -49,10 +49,26 @@ async fn model_queue_calls_copy_note_refs_unchanged() -> Result<(), HarnessError
             200,
         );
         assert!(next["graph_revision"].as_i64() > view["graph_revision"].as_i64());
-        assert_eq!(
-            next["chains"][0]["steps"][1]["items"][0]["epic_id"],
-            refs[2].strip_prefix("canon:epic/").unwrap()
-        );
+        let steps: Vec<Vec<String>> = next["chains"][0]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|step| {
+                step["items"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|item| format!("canon:epic/{}", item["epic_id"].as_str().unwrap()))
+                    .collect()
+            })
+            .collect();
+        // after joins the existing next step, preserving its earlier members.
+        let expected = if op == "set_order" {
+            json!([[refs[0]], [refs[2]], [refs[1]]])
+        } else {
+            json!([[refs[0]], [refs[1], refs[2]]])
+        };
+        assert_eq!(json!(steps), expected, "{op}: {next}");
     }
     s.finish().await?;
     server.abort();

@@ -29,10 +29,24 @@ fn step_request(script: &crate::canon_link::stub::Script, epic: &str) -> String 
         .unwrap_or_else(|| panic!("no request for {epic}"))
 }
 
-/// Copy the refs verbatim from the provider's latest note, just as the model does.
+/// Copy refs from the latest main-chat Butler request, excluding background calls.
 pub(super) fn note_refs(script: &crate::canon_link::stub::Script) -> Vec<String> {
-    let body = requests(script).last().unwrap().replace("\\n", "\n");
-    body[body.rfind(NOTE).unwrap()..]
+    let captured = script.requests.lock().unwrap();
+    let request = latest_butler_request(&captured);
+    let note = request["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .filter_map(|item| item["content"].as_array())
+        .flatten()
+        .filter_map(|part| part["text"].as_str())
+        .find_map(|text| text.rfind(NOTE).map(|start| &text[start..]))
+        .expect("the latest Butler request must carry the queue note");
+    let (steps, _) = note
+        .split_once("\n\nTitles and earlier steps' results")
+        .expect("the note's step list ends before its untrusted content");
+    steps
         .lines()
         .filter_map(|line| {
             line.trim()
@@ -41,6 +55,17 @@ pub(super) fn note_refs(script: &crate::canon_link::stub::Script) -> Vec<String>
                 .map(|(reference, _)| reference.to_owned())
         })
         .collect()
+}
+
+fn latest_butler_request(requests: &[Value]) -> &Value {
+    requests
+        .iter()
+        .rev()
+        .find(|body| {
+            butler_e2e::e2e::chatgpt_wire::functions(body)
+                .any(|tool| tool["name"] == "canon_queue")
+        })
+        .expect("a main-chat Butler request")
 }
 
 /// Where each epic appears in the note's step list.
@@ -329,7 +354,7 @@ async fn unknown_plan_id_says_how_to_find_it() -> Result<(), HarnessError> {
     s.turn(&chat, "What does this mean?").await?;
     let epics = {
         let captured = script.requests.lock().unwrap();
-        let text = canon_text(captured.last().unwrap()).expect("canon context");
+        let text = canon_text(latest_butler_request(&captured)).expect("canon context");
         assert!(!text.contains(NOTE));
         let text = &text[text.find("## Canon epics in this conversation").unwrap()..];
         let context = &text[text.find("\n[").expect("canon context array") + 1..];

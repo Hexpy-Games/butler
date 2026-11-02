@@ -8,7 +8,7 @@ pub(super) fn normalize(args: &mut Value) -> Result<(), GatewayApplicationError>
         }
     }
     for key in ["epic_ids", "steps"] {
-        if let Some(values) = args[key].as_array_mut() {
+        if let Some(values) = args.get_mut(key).and_then(Value::as_array_mut) {
             for value in values {
                 if key == "steps" {
                     if let Some(step) = value.as_array_mut() {
