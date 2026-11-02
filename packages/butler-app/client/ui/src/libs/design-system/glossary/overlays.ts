@@ -65,7 +65,7 @@ export const overlays: GlossaryPart[] = [
     desc: "동작의 결과를 잠깐 알려 줍니다.",
     ds: ["Toast"],
     app: ["packages/butler-app/client/ui/src/components/common/AppToaster.tsx"],
-    avoid: ["토스트"],
+    avoid: [],
   },
   {
     id: "overlays.observer",

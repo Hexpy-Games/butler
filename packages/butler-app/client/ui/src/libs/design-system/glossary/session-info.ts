@@ -10,7 +10,7 @@ export const session_info: GlossaryPart[] = [
     desc: "현재 대화의 요청·환경·과제·자료를 모은 옆 패널입니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/conversation/Conversation.tsx"],
-    avoid: ["세션 정보"],
+    avoid: [],
   },
   {
     id: "session-info.asks",
@@ -54,7 +54,7 @@ export const session_info: GlossaryPart[] = [
     desc: "과제의 실행 순서와 의존 관계를 보여 줍니다.",
     ds: ["StepSortableList"],
     app: ["packages/butler-app/client/ui/src/components/session-info/StepOrderSection.tsx"],
-    avoid: ["진행 순서"],
+    avoid: [],
   },
   {
     id: "session-info.browser",
@@ -76,7 +76,7 @@ export const session_info: GlossaryPart[] = [
     desc: "작업 폴더와 브랜치를 표시합니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/session-info/SessionSections.tsx"],
-    avoid: ["환경"],
+    avoid: [],
   },
   {
     id: "session-info.task",
@@ -98,7 +98,7 @@ export const session_info: GlossaryPart[] = [
     desc: "대화 컨텍스트 구성과 사용량을 펼쳐 보여 줍니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/session-info/ContextCompact.tsx"],
-    avoid: ["컨텍스트"],
+    avoid: [],
   },
   {
     id: "session-info.results",
@@ -109,7 +109,7 @@ export const session_info: GlossaryPart[] = [
     desc: "현재 대화에서 제공한 결과물을 모읍니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/inspector/ArtifactsPanel.tsx"],
-    avoid: ["결과물"],
+    avoid: [],
   },
   {
     id: "session-info.result-row",
@@ -131,7 +131,7 @@ export const session_info: GlossaryPart[] = [
     desc: "현재 대화의 메시지에 붙은 첨부 파일을 모읍니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/session-info/SessionSections.tsx"],
-    avoid: ["첨부"],
+    avoid: [],
   },
   {
     id: "session-info.schedules",

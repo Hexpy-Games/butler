@@ -120,7 +120,7 @@ export const composer: GlossaryPart[] = [
     desc: "모델과 추론 수준을 검색하고 선택합니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/conversation/ModelMenu.tsx"],
-    avoid: ["모델 선택"],
+    avoid: [],
   },
   {
     id: "composer.context",
@@ -131,7 +131,7 @@ export const composer: GlossaryPart[] = [
     desc: "현재 대화의 컨텍스트 사용량을 표시합니다.",
     ds: ["ContextDonutButton"],
     app: ["packages/butler-app/client/ui/src/components/conversation/ComposerContextControl.tsx"],
-    avoid: ["컨텍스트"],
+    avoid: [],
   },
   {
     id: "composer.context-popover",

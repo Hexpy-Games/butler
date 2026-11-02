@@ -164,7 +164,7 @@ export const conversation: GlossaryPart[] = [
     desc: "현재 진행 중인 활동을 한 줄로 표시합니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/conversation/CurrentTurnStatus.tsx"],
-    avoid: ["상태줄"],
+    avoid: [],
   },
   {
     id: "conversation.progress-panel",
@@ -230,7 +230,7 @@ export const conversation: GlossaryPart[] = [
     desc: "실행 중인 작업 뒤에 보낼 후속 메시지를 표시합니다.",
     ds: ["QueuedMessage"],
     app: ["packages/butler-app/client/ui/src/components/conversation/QueuedMessageItem.tsx"],
-    avoid: ["queued message"],
+    avoid: [],
   },
   {
     id: "conversation.empty-state",

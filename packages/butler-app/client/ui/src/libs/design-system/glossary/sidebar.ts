@@ -87,7 +87,7 @@ export const sidebar: GlossaryPart[] = [
     desc: "즐겨찾기로 지정한 대화·프로젝트를 모읍니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/space/SpaceHeader.tsx"],
-    avoid: ["즐겨찾기"],
+    avoid: [],
   },
   {
     id: "sidebar.view-tabs",

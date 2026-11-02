@@ -21,7 +21,7 @@ export const window: GlossaryPart[] = [
     desc: "대화 제목과 패널 전환 버튼이 놓인 맨 위 줄입니다.",
     ds: ["TitlebarShell"],
     app: ["packages/butler-app/client/ui/src/components/layout/Titlebar.tsx"],
-    avoid: ["titlebar"],
+    avoid: [],
   },
   {
     id: "window.traffic-lights",

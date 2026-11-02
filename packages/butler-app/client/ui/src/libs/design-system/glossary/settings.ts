@@ -153,7 +153,7 @@ export const settings: GlossaryPart[] = [
     desc: "모델·대화별 사용량을 확인합니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/settings/UsageSettings.tsx"],
-    avoid: ["사용량"],
+    avoid: [],
   },
   {
     id: "settings.logs",

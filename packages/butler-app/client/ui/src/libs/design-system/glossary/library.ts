@@ -10,7 +10,7 @@ export const library: GlossaryPart[] = [
     desc: "저장한 웹 자료·파일과 이미지 등을 찾아봅니다.",
     ds: [],
     app: ["packages/butler-app/client/ui/src/components/browser/LibraryPage.tsx"],
-    avoid: ["서랍"],
+    avoid: [],
   },
   {
     id: "library.toolbar",
