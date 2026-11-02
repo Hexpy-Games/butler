@@ -16,6 +16,7 @@ pub(super) struct Host {
     tabs: Vec<Value>,
     updated: bool,
     reads: usize,
+    observed: bool,
     held: Option<Value>,
 }
 
@@ -40,6 +41,7 @@ impl Host {
             tabs: Vec::new(),
             updated: false,
             reads: 0,
+            observed: false,
             held: None,
         })
     }
@@ -56,8 +58,11 @@ impl Host {
                 "tab.waiting" => json!({"status":"ok"}),
                 "tab.open" => self.open(&frame).await?,
                 "tabs.list" => json!({"tabs":self.tabs}),
-                "tab.observe" => json!({"status":"ok","tab":"A","obs":"obs-A",
-                    "url":"https://example.com/A","text":"button Update [e1]"}),
+                "tab.observe" if !self.observed => {
+                    self.observed = true;
+                    json!({"status":"ok","tab":"A","obs":"obs-A",
+                        "url":"https://example.com/A","text":"button Update [e1]"})
+                }
                 "tab.prepare" => json!({"status":"ok","tab":"A","url":"https://example.com/A",
                     "steps":[{"hit":{"role":"button","name":"Update","frame":""}}]}),
                 "tab.act" => {
@@ -68,25 +73,20 @@ impl Host {
                     self.action(&frame).await?;
                     continue;
                 }
-                "tab.read" => {
+                "tab.observe" => {
                     self.reads += 1;
-                    if matches!(self.mode, Mode::Shared) && self.reads == 1 {
-                        // Release only when the second same-tab read reaches the host.
-                        self.held = Some(frame);
-                        continue;
-                    }
                     let title = if self.updated {
                         "Updated page"
                     } else {
                         "Original page"
                     };
-                    let html = format!(
-                        "<html><head><title>{title}</title></head><body><main><h1>{title}</h1><p>{}</p></main></body></html>",
+                    let text = format!(
+                        "button Update [e1]\n{}",
                         format!("{title} contains the full document and all its details. ")
                             .repeat(8)
                     );
-                    let result = json!({"status":"ok","tab":frame["tab"],
-                        "url":format!("https://example.com/{}",frame["tab"].as_str().unwrap()),"epoch":1,"html":html});
+                    let result = json!({"status":"ok","tab":frame["tab"],"obs":"obs-read",
+                        "url":format!("https://example.com/{}",frame["tab"].as_str().unwrap()),"text":text});
                     self.reply(&frame, result.clone()).await?;
                     if let Some(held) = self.held.take() {
                         if matches!(self.mode, Mode::Shared) {
