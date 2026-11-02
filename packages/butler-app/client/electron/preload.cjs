@@ -1567,6 +1567,15 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/artifacts?${params.toString()}`);
   },
+  readMessageFileJson: async ({ fileId } = {}) => {
+    if (typeof fileId !== "string" || !/^file-[0-9a-f-]{36}$/iu.test(fileId)) throw new Error("Invalid file");
+    await ensureLocalServer();
+    const response = await fetch(new URL(`/message-files/${encodeURIComponent(fileId)}`, await currentServerUrl()), {
+      headers: await localAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Selection metadata is unavailable.");
+    return response.json();
+  },
   getMessageFileView: ({ fileId } = {}) => {
     if (typeof fileId !== "string" || !/^file-[0-9a-f-]{36}$/iu.test(fileId)) throw new Error("Invalid file");
     return requestBridgeResult(`/message-files/${encodeURIComponent(fileId)}/view`);

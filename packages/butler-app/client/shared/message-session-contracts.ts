@@ -77,6 +77,8 @@ export interface ProjectReferenceContentPart {
 export interface MessageContent {
   version: 1;
   parts: MessageContentPart[];
+  /** Quoted source data keyed by the attached image file id; never rendered as a file. */
+  attachment_metadata?: Record<string, unknown>;
 }
 
 export function isMessageContent(value: unknown): value is MessageContent {
