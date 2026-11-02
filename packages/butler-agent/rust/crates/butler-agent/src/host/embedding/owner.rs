@@ -25,6 +25,7 @@ use butler_memory::cognition::{
     EmbeddingRequest, EmbeddingRequestClass, EmbeddingResult, WorkerOperation, WorkerRequest,
 };
 
+mod drain_barrier;
 mod execute;
 mod queue;
 mod readiness;

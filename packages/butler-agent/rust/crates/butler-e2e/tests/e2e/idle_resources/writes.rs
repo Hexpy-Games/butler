@@ -75,6 +75,24 @@ impl Watch {
                             || event.kind.is_remove() =>
                     {
                         for path in event.paths {
+                            // NTFS commits a directory's own timestamp after the
+                            // write that caused it and reports that as a bare
+                            // Modify of the directory, seconds later. Entries
+                            // created, removed or rewritten are reported on
+                            // their own paths, and a directory rename is
+                            // `Modify(Name)`, so only this echo is ignored.
+                            if butler_platform::host_file_behavior::DIRECTORY_TIMESTAMP_ECHO
+                                && matches!(
+                                    event.kind,
+                                    notify::EventKind::Modify(
+                                        notify::event::ModifyKind::Any
+                                            | notify::event::ModifyKind::Metadata(_)
+                                    )
+                                )
+                                && path.is_dir()
+                            {
+                                continue;
+                            }
                             if path == marker {
                                 if event.kind.is_remove() {
                                     // Removal is ordered after all pre-barrier events, even

@@ -36,7 +36,7 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
     let (snapshot, active) = phase("seed/snapshot", seeded).await?;
     let baseline = s.sandbox.root.join("legacy.sqlite");
     std::fs::copy(&path, &baseline)?;
-    let (watcher, missing, sidecar_events) = watch(&path)?;
+    let (watcher, presence, missing, sidecar_events) = watch(&path)?;
     for point in [
         "reclaim_chunk",
         "before_vacuum",
@@ -149,7 +149,7 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
     drop(pinned);
     drop(watcher);
     assert!(
-        !missing.load(std::sync::atomic::Ordering::SeqCst),
+        !presence.was_absent() && !missing.load(std::sync::atomic::Ordering::SeqCst),
         "btcc.sqlite was absent"
     );
     s.finish().await
@@ -217,6 +217,7 @@ fn watch(
 ) -> Result<
     (
         notify::RecommendedWatcher,
+        super::presence::Presence,
         std::sync::Arc<std::sync::atomic::AtomicBool>,
         std::sync::Arc<std::sync::atomic::AtomicBool>,
     ),
@@ -227,6 +228,7 @@ fn watch(
         Arc,
         atomic::{AtomicBool, Ordering},
     };
+    let presence = super::presence::Presence::watch(path);
     let missing = Arc::new(AtomicBool::new(false));
     let sidecar = Arc::new(AtomicBool::new(false));
     let absent = missing.clone();
@@ -237,7 +239,10 @@ fn watch(
             absent.store(true, Ordering::SeqCst);
         }
         if let Ok(event) = event {
-            if matches!(event.kind, notify::EventKind::Remove(_)) && event.paths.contains(&db) {
+            if super::presence::REMOVE_EVENT_MEANS_ABSENT
+                && matches!(event.kind, notify::EventKind::Remove(_))
+                && event.paths.contains(&db)
+            {
                 absent.store(true, Ordering::SeqCst);
             }
             if event.paths.iter().any(|p| {
@@ -252,7 +257,7 @@ fn watch(
     watcher
         .watch(path.parent().unwrap(), notify::RecursiveMode::NonRecursive)
         .map_err(std::io::Error::other)?;
-    Ok((watcher, missing, sidecar))
+    Ok((watcher, presence, missing, sidecar))
 }
 
 #[tokio::test]
