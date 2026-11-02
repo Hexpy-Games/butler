@@ -1055,6 +1055,7 @@ dependencies = [
  "butler-vault",
  "bytes",
  "chrono",
+ "dom_query",
  "flate2",
  "futures-util",
  "h2",
