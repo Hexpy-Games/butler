@@ -90,7 +90,7 @@ fn request(
             .get("profile_id")
             .and_then(Value::as_str)
             .map(str::to_owned),
-        access_mode: owner.binding.access_mode.clone(),
+        access_mode: owner.access_mode(),
         schedule_run: owner.inherited_run(),
     })
 }

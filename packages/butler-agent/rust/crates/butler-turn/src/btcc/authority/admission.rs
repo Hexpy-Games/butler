@@ -143,6 +143,7 @@ fn pending_record(
     let executable = category.executable(&input);
     let required = |value: &str, label: &str| identity::required(value, label).map(str::to_owned);
     Ok(AuthorityRecord {
+        reusable: input.honor_standing_permission,
         request_id: request_id.clone(),
         request_ref,
         identity_sha256: identity_sha,

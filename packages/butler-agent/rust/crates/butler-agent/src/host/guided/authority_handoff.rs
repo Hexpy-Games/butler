@@ -286,19 +286,30 @@ impl AppAuthorityHandoff for AuthorityHandoff {
     }
 
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision> {
+        self.decide_with_access(input, None)
+    }
+
+    fn decide_with_access(
+        &self,
+        input: AppAuthorityDecisionInput,
+        mode: Option<butler_turn::btcc::AccessMode>,
+    ) -> ApplicationFuture<AppAuthorityDecision> {
         let owner = self.clone();
         Box::pin(async move {
             let timing = super::command::timing::CommandTiming::new("approval_handoff");
             let decision = owner
                 .authority
-                .decide(AuthorityDecisionInput {
-                    owner_session_id: input.owner_session_id,
-                    request_ref: input.request_ref,
-                    source_session_id: None,
-                    action: input.action,
-                    allow_scope: input.allow_scope,
-                    alternative_input: input.alternative_input,
-                })
+                .decide_with_access(
+                    AuthorityDecisionInput {
+                        owner_session_id: input.owner_session_id,
+                        request_ref: input.request_ref,
+                        source_session_id: None,
+                        action: input.action,
+                        allow_scope: input.allow_scope,
+                        alternative_input: input.alternative_input,
+                    },
+                    mode,
+                )
                 .await
                 .map_err(authority_error)?;
             timing.mark("decision_committed");
@@ -364,7 +375,7 @@ fn authority_error(error: AuthorityError) -> GatewayApplicationError {
         "authority_modify_input_missing" | "authority_modify_input_too_large" => {
             (400, error.code(), "Modify instruction is invalid.")
         }
-        "browser_confirm_once_required" => (400, error.code(), "Allow this browser action once."),
+        "browser_confirm_once_required" => (400, error.code(), "Allow this action once."),
         "site_scope_invalid" => (
             400,
             error.code(),

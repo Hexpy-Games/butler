@@ -15,6 +15,9 @@ export interface SessionFiles {
   raised: number;
 }
 
+/** Files opened from the drawer do not belong to the active conversation. */
+export const LIBRARY_VIEWER = "view:library";
+
 const EMPTY: SessionFiles = { entries: [], activeId: null, shown: false, raised: 0 };
 let lastRaise = 0;
 

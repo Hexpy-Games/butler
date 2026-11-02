@@ -41,7 +41,7 @@ pub(super) async fn execute(
         call,
         &args,
         !gated
-            && owner.binding.access_mode.reviews_effects()
+            && owner.access_mode().reviews_effects()
             && access.scope != butler_turn::btcc::TargetScope::Attachment,
     )
     .await;

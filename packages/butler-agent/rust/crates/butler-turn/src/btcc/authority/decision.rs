@@ -9,6 +9,7 @@ pub(super) fn decide(
     input: &AuthorityDecisionInput,
     collation: &butler_core::locale::LocaleCollation,
     clock: &dyn Fn() -> String,
+    composer_mode: Option<crate::btcc::AccessMode>,
 ) -> AuthorityResult<AuthorityDecisionResult> {
     let action = if input.action == "answer" {
         AuthorityAction::Modify
@@ -48,6 +49,32 @@ pub(super) fn decide(
             },
         ));
     }
+    commit_decision(
+        repository,
+        input,
+        current,
+        alternative.as_deref(),
+        action,
+        collation,
+        clock,
+        composer_mode,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the validated decision and its original identity commit together"
+)]
+fn commit_decision(
+    repository: &mut dyn AuthorityRepository,
+    input: &AuthorityDecisionInput,
+    current: AuthorityRecord,
+    alternative: Option<&str>,
+    action: AuthorityAction,
+    collation: &butler_core::locale::LocaleCollation,
+    clock: &dyn Fn() -> String,
+    composer_mode: Option<crate::btcc::AccessMode>,
+) -> AuthorityResult<AuthorityDecisionResult> {
     check_allow_scope(&current, input)?;
     let permission = if action == AuthorityAction::Allow
         && input.allow_scope.as_deref() == Some("conversation")
@@ -64,13 +91,18 @@ pub(super) fn decide(
         "once"
     };
     let write = DecisionWrite {
+        composer_mode: if matches!(action, AuthorityAction::Allow | AuthorityAction::Deny) {
+            composer_mode
+        } else {
+            None
+        },
         request_ref: input.request_ref.clone(),
         owner_session_id: input.owner_session_id.clone(),
         source_session_id: current.source_session_id,
         action,
         allow_scope: allow_scope.into(),
         permission,
-        alternative_input: alternative.clone(),
+        alternative_input: alternative.map(str::to_owned),
         now: clock(),
     };
     let decided = repository.decide(write)?;
@@ -78,7 +110,7 @@ pub(super) fn decide(
         return projection::decision(&record);
     }
     if let Some(raced) = repository.find_ref(&input.request_ref)?
-        && same(&raced, input, alternative.as_deref())
+        && same(&raced, input, alternative)
     {
         return projection::decision(&raced);
     }
@@ -175,8 +207,9 @@ fn check_allow_scope(
         return Err(AuthorityError::policy("site_scope_invalid"));
     }
     if input.allow_scope.as_deref() == Some("conversation")
-        && (normalized.get("always_confirm") == Some(&serde_json::Value::Bool(true))
-            || current.capability == "browser_wait_for_user")
+        && super::projection::exact_approval(current, &normalized)
+            .operation
+            .is_some_and(|operation| operation.allow_conversation == Some(false))
     {
         return Err(AuthorityError::policy("browser_confirm_once_required"));
     }
