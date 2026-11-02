@@ -37,7 +37,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A raw form with a global class skips the DS layout.", render: () => <Stack gap="md"><Typo.H3>New project</Typo.H3><Input aria-label="Project name" /></Stack> },
     },
   ],
-  content: ["Title is the task; the submit label repeats its verb (Create)."],
+  content: [
+    "Title is the task; the submit label repeats its verb (Create).",
+    "Inside a DialogContent with a close button the title keeps the button's room free on its end, so a long title (one quoting a name) wraps before the close button; short titles render unchanged. Add no padding or line breaks for it.",
+  ],
   accessibility: ["Renders a <form>; pair with a DialogTitle (sr-only) when DialogForm shows the visible title."],
-  tokens: ["--space-lg", "--settings-field-gap", "--typo-panel-title-size"],
+  tokens: ["--space-lg", "--settings-field-gap", "--typo-panel-title-size", "--dialog-title-close-room"],
 };
