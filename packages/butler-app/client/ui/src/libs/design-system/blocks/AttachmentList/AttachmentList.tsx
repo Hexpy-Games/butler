@@ -1,7 +1,7 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { Button } from "../../components/Button";
-import { FileText, X } from "../../components/Icons";
+import { X } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Tooltip } from "../../components/Tooltip";
 import { Typo } from "../../components/Typo";
@@ -9,7 +9,7 @@ import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag"
 import { ElementChip } from "../ElementChip";
 import styles from "./AttachmentList.module.css";
 import { AttachmentTiles } from "./AttachmentTiles";
-import { AttachmentStatusIcon, ItemName } from "./attachmentStatus";
+import { AttachmentPreview, ItemName } from "./attachmentStatus";
 import { dsClass } from "../../lib/internal";
 
 export interface AttachmentListItem {
@@ -115,25 +115,7 @@ export function AttachmentList({
           data-slot="attachment-item"
           key={item.id}
         >
-          {item.upload ? (
-            <span className={styles.icon} data-slot="attachment-icon" aria-hidden="true"><AttachmentStatusIcon status={item.upload} size="sm" /></span>
-          ) : item.thumbnail ? (
-            <span className={styles.thumbnail} data-slot="attachment-thumbnail">
-              <img
-                alt={item.thumbnail.alt ?? item.name}
-                src={item.thumbnail.src}
-                data-fit={item.thumbnail.fit === "contain" ? "contain" : undefined}
-              />
-            </span>
-          ) : (
-            <span
-              className={styles.icon}
-              data-slot="attachment-icon"
-              aria-hidden="true"
-            >
-              {item.icon ?? <FileText size="sm" />}
-            </span>
-          )}
+          <AttachmentPreview item={item} />
           <Tooltip label={item.blockedReason ?? item.name}>
             <ItemName item={item} onOpen={onOpen} />
           </Tooltip>
