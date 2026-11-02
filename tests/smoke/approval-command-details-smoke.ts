@@ -1,7 +1,7 @@
 // test-category: security
 // A pending command, and a web read with a query, show exactly what will run or be sent on the real conversation surface:
 // no clamp behind "Show more", nothing masked, Allow reachable. A command body sits in a code frame that keeps its
-// spaces, indentation and newlines (long lines scroll sideways under an edge fade); invisible characters show as escapes.
+// spaces, indentation and newlines (it scrolls both ways; each edge that hides content fades); invisible characters show as escapes.
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve, sep } from "node:path";
