@@ -8,6 +8,7 @@ mod decode;
 mod directions;
 mod files;
 mod handoff;
+mod handoff_context;
 mod instruction_context;
 mod parents;
 mod records;
@@ -391,7 +392,7 @@ impl SqliteSubsessionRepository {
             .execute(move |db| {
                 let count: i64 = db
                     .query_row(
-                        "SELECT COUNT(*) FROM btcc_session_relations r LEFT JOIN btcc_steward_results x ON x.relation_id=r.relation_id WHERE r.parent_session_id=?1 AND x.result_id IS NULL",
+                        "SELECT COUNT(*) FROM btcc_session_relations r LEFT JOIN btcc_steward_results x ON x.relation_id=r.relation_id WHERE r.parent_session_id=?1 AND x.result_id IS NULL AND NOT EXISTS (SELECT 1 FROM btcc_subsession_delegations d WHERE d.relation_id=r.relation_id AND json_extract(d.packet_json,'$.superseded_by') IS NOT NULL)",
                         [parent],
                         |row| row.get(0),
                     )

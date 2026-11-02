@@ -79,7 +79,7 @@ pub(super) async fn execute(
         return list_automations(owner, call).await;
     }
     if call.name == ToolName::DelegateToWorker {
-        return worker::execute(owner, invocation, call, call_id).await;
+        return Box::pin(worker::execute(owner, invocation, call, call_id)).await;
     }
     if matches!(
         ToolName::parse(call.name.as_str()),
