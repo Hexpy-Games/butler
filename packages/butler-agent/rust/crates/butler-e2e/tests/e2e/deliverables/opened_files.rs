@@ -3,6 +3,7 @@
 //! copy opened or revealed according to verified content; the copies go when the Agent stops.
 use super::*;
 use crate::attachment_types::{PDF, upload};
+use butler_platform::secure_fs::{OWNER_ONLY, is_owner_only};
 use butler_platform::{data_paths::TEMPORARY, download_mark};
 use std::io::{Cursor, Write as _};
 
@@ -168,11 +169,11 @@ async fn assert_copy(
             "{copy}: marked downloaded"
         );
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(std::fs::metadata(&path)?.permissions().mode() & 0o111, 0);
-    }
+    assert_eq!(
+        is_owner_only(&std::fs::metadata(&path)?),
+        OWNER_ONLY.then_some(true),
+        "{copy}: owner-only, never executable"
+    );
     Ok(())
 }
 
