@@ -89,7 +89,7 @@ export const guidance: ShowcaseGuidance = {
   recipes: [
     { name: "Plan waiting for acceptance", description: "Icon, clickable title, then a ButtonContainer justify=\"end\" of decisions.", render: () => <PlanDecision /> },
     { name: "Approval request with examples and risk", description: "A one-sentence question, up to three examples and a \"+N more\" line as details, a risk Tag in the aside; literal draws the exact characters.", render: () => <ApprovalRequest /> },
-    { name: "Command body in a code frame", description: "A { code } detail: the markdown code frame look, the command's own spaces, indentation and line breaks in the code font; a long line scrolls sideways under the edge fade; a script taller than the details area scrolls inside the frame.", render: () => <CommandBody /> },
+    { name: "Command body in a code frame", description: "A { code } detail: the markdown code frame look, the command's own spaces, indentation and line breaks in the code font; a long line scrolls sideways and a script taller than the details area scrolls inside the frame; each edge that hides content fades (useScrollEdges(\"both\")).", render: () => <CommandBody /> },
     { name: "Approval in the conversation", description: "placement=\"conversation\": its own flat Card radius=\"lg\", a 12px inset and control-radius buttons; no ComposerCard.", render: () => <ConversationApproval /> },
     { name: "Browser approval with the page", description: "media: the tab's 16:10 frame at the subject row's end; under 420px it spans the text column, cropped from the page's top to 140px. Clicking it opens the tab.", render: () => <BrowserApproval /> },
   ],
@@ -116,5 +116,5 @@ export const guidance: ShowcaseGuidance = {
     "media label names the target page (Open tab · Pine Grove Campground); a browser hand-off's primary action is 열어서 확인 / Open to check (butler-i18n browser.rail.openToCheck).",
   ],
   accessibility: ["The icon is decorative (aria-hidden); the title is a button that opens the source; details are plain text (a { code } detail is a left-to-right pre; when it scrolls it takes keyboard focus and draws its ring inset) and the Show more button carries aria-expanded and aria-controls; errors are announced with role=\"alert\"."],
-  tokens: ["--adaptive-composer-radius", "--radius-control", "--radius-popover", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-sm", "--text-secondary", "--decision-media-narrow-height", "--line", "--radius-panel", "--surface-raised", "--typo-code-font", "--focus-ring-width", "--focus-ring-color"],
+  tokens: ["--adaptive-composer-radius", "--radius-control", "--radius-popover", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-sm", "--text-secondary", "--decision-media-narrow-height", "--line", "--radius-panel", "--surface-raised", "--typo-code-font", "--scroll-fade-size", "--focus-ring-width", "--focus-ring-color"],
 };

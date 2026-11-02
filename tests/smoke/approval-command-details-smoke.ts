@@ -142,12 +142,21 @@ try {
         if (height >= 800) assert(reach.buttons, `${label}: Deny, Allow once and the allow menu on screen and not covered: ${JSON.stringify(reach.info)}`);
         else if (!reach.buttons) shortWindowsCovered.push(`${label}: ${JSON.stringify(reach.info)}`);
         if (item.code) {
-          // The command is in the code frame: monospace, whitespace kept, no ligatures (#1772), long lines scroll sideways.
-          const frame = await panel.locator('[data-slot="composer-decision-code"] pre').first().evaluate((pre, tail) => {
+          // The command is in the code frame: monospace, whitespace kept, no ligatures (#1772), scrolling on both axes,
+          // and a fade on exactly the edges that hide content: at rest, part way, and at the far end.
+          const frame = await panel.locator('[data-slot="composer-decision-code"] pre').first().evaluate(async (pre, tail) => {
             const style = getComputedStyle(pre);
+            const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const fades = () => ["x-start", "x-end", "y-start", "y-end"].map(edge => Number.parseFloat(getComputedStyle(pre).getPropertyValue(`--scroll-fade-${edge}`)) > 0);
             const wide = pre.scrollWidth > pre.clientWidth + 1, tall = pre.scrollHeight > pre.clientHeight + 1;
-            const fadeAtEnd = !wide || (pre.getAttribute("data-scroll-fade") === "x" && pre.getAttribute("data-at-end") === "false");
-            pre.scrollLeft = pre.scrollWidth; pre.scrollTop = pre.scrollHeight;
+            const expected = (start: boolean[], end: boolean[]) => [start[0] && wide, end[0] && wide, start[1] && tall, end[1] && tall];
+            const rest = fades();
+            pre.scrollLeft = (pre.scrollWidth - pre.clientWidth) / 2; pre.scrollTop = (pre.scrollHeight - pre.clientHeight) / 2; await settle();
+            const middle = fades();
+            pre.scrollLeft = pre.scrollWidth; pre.scrollTop = pre.scrollHeight; await settle();
+            const end = fades();
+            const fadesMatch = [[rest, expected([false, false], [true, true])], [middle, expected([true, true], [true, true])], [end, expected([true, true], [false, false])]]
+              .every(([seen, want]) => JSON.stringify(seen) === JSON.stringify(want));
             const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
             let node: Node | null = null;
             while (walker.nextNode()) if (walker.currentNode.textContent?.includes(tail)) node = walker.currentNode;
@@ -158,18 +167,20 @@ try {
               range.setStart(node, at); range.setEnd(node, at + tail.length);
               const box = pre.getBoundingClientRect(), rect = range.getBoundingClientRect();
               // The text-box trim lets a line box overhang the frame's text box, so the line's middle is checked vertically.
-              const middle = (rect.top + rect.bottom) / 2;
-              tailInside = rect.left >= box.left - 1 && rect.right <= box.right + 1 && middle >= box.top && middle <= box.bottom;
+              const line = (rect.top + rect.bottom) / 2;
+              tailInside = rect.left >= box.left - 1 && rect.right <= box.right + 1 && line >= box.top && line <= box.bottom;
             }
-            pre.scrollLeft = 0; pre.scrollTop = 0;
-            return { whiteSpace: style.whiteSpace, mono: style.fontFamily.includes("Plex Mono"), ligatures: style.fontVariantLigatures, wide, tall, fadeAtEnd, tailInside };
+            pre.scrollLeft = 0; pre.scrollTop = 0; await settle();
+            return { whiteSpace: style.whiteSpace, mono: style.fontFamily.includes("Plex Mono"), ligatures: style.fontVariantLigatures, wide, tall,
+              fadesMatch, fades: { rest, middle, end }, tailInside };
           }, item.tail);
           assert.equal(frame.whiteSpace, "pre", `${label}: the code frame keeps spaces and line breaks`);
           assert(frame.mono, `${label}: the code frame uses the code font`);
           assert.equal(frame.ligatures, "none", `${label}: the code frame draws its own characters`);
-          assert(frame.fadeAtEnd, `${label}: a line wider than the frame shows the end fade`);
+          assert(frame.fadesMatch, `${label}: only edges with hidden content fade (x-start, x-end, y-start, y-end): ${JSON.stringify(frame.fades)}`);
           assert(frame.tailInside, `${label}: scrolling the frame reaches the tail`);
           if (item.name === "padded-command") assert(frame.wide, `${label}: the padding runs sideways out of the frame`);
+          if (item.name === "tall-command") assert(frame.tall, `${label}: the tall script scrolls inside its frame`);
           if ((frame.wide || frame.tall) && height >= 800) {
             // A frame that scrolls is a keyboard stop; its ring is drawn inset and never clipped.
             await panel.focus();

@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 
 export type ScrollEdgeAxis = "x" | "y";
+/** A scroller's fade axes: one, or `both` for content that overflows in two directions (a code frame). */
+export type ScrollFadeAxis = ScrollEdgeAxis | "both";
 
 export interface ScrollEdges {
   overflowing: boolean;
@@ -25,31 +27,41 @@ export function readScrollEdges(
   };
 }
 
-function writeFlag(element: HTMLElement, key: keyof ScrollEdges, value: boolean) {
+function writeFlag(element: HTMLElement, key: string, value: boolean) {
   const next = String(value);
   if (element.dataset[key] !== next) element.dataset[key] = next;
 }
 
-function writeScrollEdges(element: HTMLElement, edges: ScrollEdges) {
-  writeFlag(element, "overflowing", edges.overflowing);
-  writeFlag(element, "atStart", edges.atStart);
-  writeFlag(element, "atEnd", edges.atEnd);
+function writeScrollEdges(element: HTMLElement, edges: ScrollEdges, suffix = "") {
+  writeFlag(element, `overflowing${suffix}`, edges.overflowing);
+  writeFlag(element, `atStart${suffix}`, edges.atStart);
+  writeFlag(element, `atEnd${suffix}`, edges.atEnd);
 }
 
 /**
- * Tracks scroll edges for one scroller and mirrors them to
- * data-overflowing / data-at-start / data-at-end. Scroll and resize work is
- * batched into one animation frame.
+ * One axis mirrors data-overflowing / data-at-start / data-at-end; `both`
+ * mirrors each axis on its own (data-overflowing-x, data-at-end-y, ...).
+ */
+function writeAxes(element: HTMLElement, axis: ScrollFadeAxis) {
+  if (axis !== "both") return writeScrollEdges(element, readScrollEdges(element, axis));
+  writeScrollEdges(element, readScrollEdges(element, "x"), "X");
+  writeScrollEdges(element, readScrollEdges(element, "y"), "Y");
+}
+
+/**
+ * Tracks scroll edges for one scroller and mirrors them to its data
+ * attributes (see writeAxes). Scroll and resize work is batched into one
+ * animation frame.
  */
 export function observeScrollEdges(
   element: HTMLElement,
-  axis: ScrollEdgeAxis,
+  axis: ScrollFadeAxis,
 ): () => void {
   let frame = 0;
   const observedChildren = new Set<Element>();
   const update = () => {
     frame = 0;
-    writeScrollEdges(element, readScrollEdges(element, axis));
+    writeAxes(element, axis);
   };
   const schedule = () => {
     if (frame === 0) frame = requestAnimationFrame(update);
@@ -110,9 +122,16 @@ function cssLength(style: CSSStyleDeclaration, name: string): number {
  */
 export function revealFocusInFades(
   element: HTMLElement,
-  axis: ScrollEdgeAxis,
+  axis: ScrollFadeAxis,
   target: Element,
 ) {
+  const moved = (axis === "both" ? (["x", "y"] as const) : [axis])
+    .map((each) => revealOnAxis(element, each, target)).some(Boolean);
+  // A focus scroll can clamp at an edge; refresh its mask before that frame paints.
+  if (moved) writeAxes(element, axis);
+}
+
+function revealOnAxis(element: HTMLElement, axis: ScrollEdgeAxis, target: Element): boolean {
   const scrollerStyle = getComputedStyle(element);
   const targetStyle = getComputedStyle(target);
   const outline = targetStyle.outlineStyle === "none" ? 0
@@ -127,19 +146,19 @@ export function revealFocusInFades(
   const first = start + fade;
   const last = start + size - fade;
   const delta = low < first || high - low > last - first ? low - first : high > last ? high - last : 0;
-  if (Math.abs(delta) < 0.5) return;
+  if (Math.abs(delta) < 0.5) return false;
   if (axis === "x") element.scrollLeft += delta;
   else element.scrollTop += delta;
-  // A focus scroll can clamp at an edge; refresh its mask before that frame paints.
-  writeScrollEdges(element, readScrollEdges(element, axis));
+  return true;
 }
 
 /**
  * Callback ref that opts an element into the shared scroll-fade mask
  * (see scroll-fade.css) and keeps keyboard focus clear of its fades. Pass
- * `enabled: false` to keep the scroller unmasked.
+ * `enabled: false` to keep the scroller unmasked. `both` fades each edge of
+ * either axis that has hidden content (data-scroll-fade="both").
  */
-export function useScrollEdges(axis: ScrollEdgeAxis, enabled = true) {
+export function useScrollEdges(axis: ScrollFadeAxis, enabled = true) {
   return useCallback(
     (element: HTMLElement | null) => {
       if (!element || !enabled) return undefined;

@@ -10,9 +10,9 @@ export type ComposerDecisionDetail = string | { code: string };
 /** Display formatting for the title and detail lines; `code` for a `{ code }` detail. */
 export type ComposerDecisionRenderText = (text: string, as: "text" | "code") => ReactNode;
 
-/** The markdown code frame's look: monospace, whitespace kept, long lines scroll sideways under an edge fade. */
+/** The markdown code frame's look: monospace, whitespace kept; every edge with hidden content fades (long lines, a tall script). */
 function DetailCode({ code, renderText, literal }: { code: string; renderText?: ComposerDecisionRenderText; literal?: boolean }) {
-  const fade = useScrollEdges("x");
+  const fade = useScrollEdges("both");
   return <div className={styles.code} data-slot="composer-decision-code">
     <Typo.Code as="pre" ref={fade} dir="ltr" tone="secondary" literal={literal} className={dsClass(styles.codeText)}>
       {renderText ? renderText(code, "code") : code}
