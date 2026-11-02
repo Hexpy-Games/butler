@@ -1193,6 +1193,14 @@ export interface StewardResultView {
 
 export type SubtaskState = "working" | "paused" | "needs_approval";
 
+/** One Worker of a subtask, finished ones included, in delegation order. */
+export interface SubtaskWorkerView {
+  session_id: string;
+  relation_id: string;
+  title: string;
+  status: "active" | "waiting" | "completed" | "failed" | "blocked" | "cancelled";
+}
+
 /** One unfinished delegated subtask (a steward child) of a conversation. */
 export interface SubtaskView {
   session_id: string;
@@ -1202,6 +1210,8 @@ export interface SubtaskView {
   plan_completed?: number;
   plan_total?: number;
   started_at: string;
+  /** Session view only; absent when the subtask has no Workers. */
+  workers?: SubtaskWorkerView[];
 }
 
 export interface StewardSessionSummaryView {
@@ -1614,6 +1624,8 @@ export interface ProjectDashboardView {
 }
 
 export interface SessionArtifactSummary {
+  /** Content hash; paired with source_label to identify repeated file deliveries. */
+  sha256?: string;
   id: string;
   session_id?: string;
   project_id?: string;

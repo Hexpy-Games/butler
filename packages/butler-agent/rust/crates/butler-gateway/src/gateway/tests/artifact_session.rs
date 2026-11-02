@@ -5,8 +5,9 @@ mod fixtures;
 use fixtures::{artifact_request, test_db_path};
 pub(super) use fixtures::{open_app, start_real};
 
+// test-category: pure-logic
 #[tokio::test]
-async fn artifacts_route_projects_attachment_and_survives_app_reopen() {
+async fn artifacts_route_projects_deliverable_only_and_survives_app_reopen() {
     let path = test_db_path();
     let application = Arc::new(open_app(&path).await);
     crate::gateway::application::seed_test_assistant_attachment(
@@ -14,6 +15,16 @@ async fn artifacts_route_projects_attachment_and_survives_app_reopen() {
         "general",
         "message-artifact",
         "file-artifact",
+        true,
+    )
+    .await
+    .unwrap();
+    crate::gateway::application::seed_test_assistant_attachment(
+        &application,
+        "general",
+        "message-working",
+        "file-working",
+        false,
     )
     .await
     .unwrap();
@@ -29,6 +40,8 @@ async fn artifacts_route_projects_attachment_and_survives_app_reopen() {
     assert!(first.contains("\"file_id\":\"file-artifact\""));
     assert!(first.contains("\"kind\":\"image\""));
     assert_eq!(first.matches("\"file_id\":\"file-artifact\"").count(), 1);
+    assert!(first.contains("\"deliverable\":true"));
+    assert!(!first.contains("file-working"));
     server.close().await.unwrap();
     application.close().await.unwrap();
 
@@ -38,6 +51,9 @@ async fn artifacts_route_projects_attachment_and_survives_app_reopen() {
     assert!(second.starts_with("HTTP/1.1 200 OK"));
     assert!(second.contains("\"id\":\"artifact-file-artifact\""));
     assert!(second.contains("\"file_id\":\"file-artifact\""));
+    assert_eq!(second.matches("\"file_id\":\"file-artifact\"").count(), 1);
+    assert!(second.contains("\"deliverable\":true"));
+    assert!(!second.contains("file-working"));
     server.close().await.unwrap();
     reopened.close().await.unwrap();
     let _ = std::fs::remove_file(path);

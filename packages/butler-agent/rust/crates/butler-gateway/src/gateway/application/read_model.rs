@@ -295,8 +295,12 @@ fn message(
 ) -> Result<MessageRecord, AppStorageError> {
     let files = attachments.get(&row.id).cloned().unwrap_or_default();
     let changed = files::pair_changes(changed.get(&row.id).cloned().unwrap_or_default(), &files);
-    let artifacts =
-        (row.role == "assistant").then(|| files.iter().map(|file| artifact(&row, file)).collect());
+    let artifacts = (row.role == "assistant").then(|| {
+        files
+            .iter()
+            .filter_map(|file| artifact(&row, file))
+            .collect()
+    });
     // Rows written by older builds have no mode, even after a previous upgrade.
     let legacy_resume = row.retry_mode.is_none()
         && row.retryable == 1

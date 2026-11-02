@@ -26,7 +26,7 @@ pub use worker_admission::{
 pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
-pub use subtasks::OPEN_SUBTASKS_SQL;
+pub use subtasks::{OPEN_SUBTASKS_SQL, SUBTASK_WORKERS_SQL};
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;

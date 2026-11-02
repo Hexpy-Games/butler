@@ -15,6 +15,8 @@ export interface FileViewerAction {
   icon: ReactNode;
   /** Show the icon beside the label in the wide header too. */
   labelIcon?: boolean;
+  /** Keep this action an icon button at every header width. */
+  iconOnly?: boolean;
   run: () => void;
 }
 
@@ -40,7 +42,7 @@ export function FileViewerHeader({ title, meta, leading, actions = [], onClose, 
           </Stack>
           {leading}
           <ButtonContainer size={compact ? "icon-sm" : "sm"} wrap={false} shrink={false}>
-            {actions.map((action) => compact
+            {actions.map((action) => compact || action.iconOnly
               ? <IconButton key={action.id} label={action.label} aria-label={action.ariaLabel ?? action.label} data-test-class={`file-viewer-${action.id}`}
                 onClick={action.run}>{action.icon}</IconButton>
               : <Button key={action.id} size="sm" variant="outline" iconStart={action.labelIcon ? action.icon : undefined} text={action.label}

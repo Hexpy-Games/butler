@@ -190,6 +190,8 @@ export interface ProjectSummary {
 }
 
 export interface SessionArtifactSummary {
+  /** Content hash; paired with source_label to identify repeated file deliveries. */
+  sha256?: string;
   id: string;
   session_id?: string;
   project_id?: string;
