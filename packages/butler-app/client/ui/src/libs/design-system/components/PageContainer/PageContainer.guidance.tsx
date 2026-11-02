@@ -18,7 +18,7 @@ function ReadingPage() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "Caps a page's width (narrow, default, full) with the adaptive gutter and optional start alignment.",
+  purpose: "Caps a page's width (narrow, default, document, full) with the adaptive gutter and optional start alignment.",
   whenToUse: ["The outer frame of a settings, dashboard or document page"],
   whenNotToUse: [
     { when: "Spacing inside a page", use: "Stack" },
@@ -31,7 +31,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A padded Box has no page max-width or gutters.", render: () => <Box padding="xl"><Typo.Body>Custom width</Typo.Body></Box> },
     },
   ],
-  content: ["No copy of its own.", "maxWidth caps the outer frame in CSS pixels, including gutters; use with width=full for a host-supplied reading cap."],
+  content: ["No copy of its own."],
   accessibility: ["as=\"main\" for the primary page region (once per screen)."],
-  tokens: ["--page-max-width-reading", "--page-max-width-wide", "--page-container-gutter"],
+  tokens: ["--page-max-width-reading", "--page-max-width-wide", "--page-max-width-document", "--page-container-gutter"],
 };

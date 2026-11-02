@@ -62,8 +62,8 @@ export async function measureDocumentLayout(page: Page) {
 }
 export function assertDocumentLayout(layout: Awaited<ReturnType<typeof measureDocumentLayout>>, _width: number) {
   assert.equal(layout.inset, 48);
-  assert.equal(layout.maxWidth, layout.viewerWidth === undefined ? "760px" : "1496px");
-  const expected = layout.viewerWidth === undefined ? layout.columnWidth : Math.min(1400, layout.viewerWidth - 96);
+  assert.equal(layout.maxWidth, layout.viewerWidth === undefined ? "760px" : "1400px");
+  const expected = layout.viewerWidth === undefined ? layout.columnWidth : Math.min(1400, layout.viewerWidth) - 96;
   assert(Math.abs(layout.bodyWidth - expected) <= 1 && Math.abs(layout.bodyWidth - layout.columnWidth) <= 1, JSON.stringify(layout));
   assert(Math.abs(layout.textLeft - layout.contentLeft) <= 1, JSON.stringify(layout));
   assert(Math.abs(layout.pageLeft - layout.contentLeft) <= 1, "DocumentPage adds no inset: " + JSON.stringify(layout));

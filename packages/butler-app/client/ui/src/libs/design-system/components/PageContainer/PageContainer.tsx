@@ -3,16 +3,14 @@ import type { HTMLAttributes, ReactNode, RefCallback } from "react";
 import styles from "./PageContainer.module.css";
 import { cn } from "../../lib/utils";
 
-export type PageContainerWidth = "narrow" | "default" | "full";
+export type PageContainerWidth = "narrow" | "default" | "document" | "full";
 export type PageContainerAlign = "center" | "start";
 export type PageContainerGutter = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 
 export interface PageContainerProps extends DsBaseProps<HTMLAttributes<HTMLElement>> {
   children?: ReactNode;
-  /** narrow: reading width (760px), default: wide page (72rem), full: no cap. */
+  /** narrow: reading width (760px), default: wide page (72rem), document: a document filling its pane (1400px), full: no cap. */
   width?: PageContainerWidth;
-  /** Optional outer-frame cap in CSS pixels, including the page gutter. */
-  maxWidth?: number;
   /** Inline padding; omit for the adaptive page gutter. */
   gutter?: PageContainerGutter;
   as?: "main" | "section" | "div";
@@ -26,11 +24,10 @@ export interface PageContainerProps extends DsBaseProps<HTMLAttributes<HTMLEleme
  * The page frame: centered, capped by page width tokens, and the `page`
  * inline-size container that Grid responsive columns and page layouts query.
  */
-export function PageContainer({ as: Component = "div", width = "default", maxWidth, gutter, align = "center", className, style, children, ...props }: PageContainerProps) {
+export function PageContainer({ as: Component = "div", width = "default", gutter, align = "center", className, children, ...props }: PageContainerProps) {
   return (
     <Component
       className={cn(styles.page, className)}
-      style={maxWidth === undefined ? style : { ...style, maxWidth }}
       data-slot="page-container"
       data-width={width}
       data-gutter={gutter}

@@ -22,7 +22,7 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
-const widths: PageContainerWidth[] = ["narrow", "default", "full"];
+const widths: PageContainerWidth[] = ["narrow", "default", "document", "full"];
 
 export const stories: ShowcaseStory[] = [
   {
@@ -41,13 +41,6 @@ export const stories: ShowcaseStory[] = [
         ))}
       </Stack>
     ),
-  },
-  {
-    name: "Custom cap",
-    widths: ["375", "app", "wide"],
-    render: () => <PageContainer width="full" maxWidth={600} gutter="2xl">
-      <Box surface="muted" padding="md"><Typo.Body>A centered frame capped at 600 CSS pixels.</Typo.Body></Box>
-    </PageContainer>,
   },
   {
     name: "Container query",

@@ -2,9 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { appCopy } from "@/app/copy";
 import { ArrowLeft, Box, Button, ButtonContainer, IconButton, PageContainer, ScrollArea, Separator, Stack, Typo, X } from "@/butler-ds";
 
-// 1400px content plus the existing 48px reading gutter on either side.
-const DOCUMENT_PAGE_MAX_WIDTH = 1400 + 2 * 48;
-
 export const FILE_VIEWER_PAGE_ID = "file-viewer-page";
 
 /** Below this header width the actions show as icons (with tooltips) so name, actions and close keep one row. */
@@ -79,11 +76,12 @@ function useCompactHeader(node: HTMLElement | null): boolean {
 }
 
 /**
- * Documents fill the pane minus reading gutters; other files keep the narrow reading page.
+ * The file in the pane's one scroll: documents fill the pane up to 1400px, centred beyond; other files keep
+ * the 760px reading page. Both keep 48px side gutters and page-end spacing (PageContainer gutter plus Box padding).
  */
 export function FileViewerPage({ children, fill = false }: { children: ReactNode; fill?: boolean }) {
   return <ScrollArea fill dataTestClass="file-viewer-scroll">
-    <PageContainer width={fill ? "full" : "narrow"} maxWidth={fill ? DOCUMENT_PAGE_MAX_WIDTH : undefined} gutter="2xl" id={FILE_VIEWER_PAGE_ID} data-test-class="file-viewer-page">
+    <PageContainer width={fill ? "document" : "narrow"} gutter="2xl" id={FILE_VIEWER_PAGE_ID} data-test-class="file-viewer-page">
       <Box paddingY="2xl"><Box padding="2xl">{children}</Box></Box>
     </PageContainer>
   </ScrollArea>;

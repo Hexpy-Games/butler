@@ -164,7 +164,7 @@ async function assertReadingWidth(page: Page, fill: boolean) {
     return { pane: viewer.clientWidth, page: frame.width, content: content.width,
       center: content.x + content.width / 2 - (frame.x + frame.width / 2) };
   });
-  const expected = fill ? Math.min(1400, geometry.pane - 96) : Math.min(760, geometry.pane) - 96;
+  const expected = Math.min(fill ? 1400 : 760, geometry.pane) - 96;
   assert(Math.abs(geometry.content - expected) <= 1, `reading width: ${JSON.stringify(geometry)}, expected ${expected}`);
   assert(Math.abs(geometry.center) <= 1, "reading content stays centered");
   console.log(JSON.stringify({ theme, width: page.viewportSize()!.width, fill, ...geometry }));

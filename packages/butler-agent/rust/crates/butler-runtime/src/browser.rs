@@ -24,7 +24,9 @@ pub use headless::{
     history::{HistoryPort, VisitFuture},
     reader as headless_reader,
 };
-pub use reader::{RenderFuture, RenderPort, render as reader_render, set_render_port};
+pub use reader::{
+    RenderFuture, RenderPort, host_attached, render as reader_render, set_render_port,
+};
 use serde_json::Value;
 use std::{collections::HashMap, net::IpAddr};
 mod signed_in;

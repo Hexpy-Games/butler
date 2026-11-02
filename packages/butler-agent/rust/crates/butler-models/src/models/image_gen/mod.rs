@@ -103,9 +103,13 @@ async fn execute(request: ImageGenRequest) -> Result<ImageGenResult, ImageGenErr
         .await
         .map_err(|_| ImageGenError::new("image_transport", "Image request failed."))?;
     let status = response.status().as_u16();
-    let value: Value = response
-        .json()
-        .await
+    let bytes = response.bytes().await.map_err(|_| {
+        ImageGenError::new(
+            "image_transport",
+            "Image response interrupted in transit. You may retry the request.",
+        )
+    })?;
+    let value: Value = serde_json::from_slice(&bytes)
         .map_err(|_| ImageGenError::new("image_response_invalid", "Invalid image response."))?;
     if !(200..300).contains(&status) {
         let message = value
