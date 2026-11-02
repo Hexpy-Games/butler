@@ -399,18 +399,19 @@ impl SqliteSubsessionRepository {
         self.storage.execute(decode::pending).await
     }
 
-    /// Whether the parent has a child without a result.
+    /// Whether a child still owes its current turn result or has a pending direction.
     pub async fn has_active_child(&self, parent: String) -> Result<bool, StorageError> {
         self.storage
             .execute(move |db| {
-                let count: i64 = db
+                let unfinished: bool = db
                     .query_row(
-                        "SELECT COUNT(*) FROM btcc_session_relations r WHERE r.parent_session_id=?1 AND r.activity_terminal=0",
+                        "SELECT EXISTS (SELECT 1 FROM btcc_session_relations r
+                         WHERE r.parent_session_id=?1 AND r.activity_terminal=0)",
                         [parent],
                         |row| row.get(0),
                     )
                     .map_err(StorageError::sqlite)?;
-                Ok(count > 0)
+                Ok(unfinished)
             })
             .await
     }

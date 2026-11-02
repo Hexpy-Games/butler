@@ -13,6 +13,8 @@ mod plans;
 pub(crate) mod recovery;
 #[path = "worker_cap/regressions.rs"]
 mod regressions;
+#[path = "worker_cap/waiting.rs"]
+mod requires_e2e_fixtures;
 #[path = "worker_cap/stub.rs"]
 pub(crate) mod stub;
 #[path = "worker_cap/user_flows.rs"]
