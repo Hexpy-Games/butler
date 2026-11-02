@@ -13,6 +13,7 @@ mod visible;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
+use visible::{assert_history_sidebar, assert_sidebar_work};
 
 #[tokio::test]
 async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), HarnessError> {
@@ -449,59 +450,4 @@ pub(crate) fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     Ok(setup
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1")))
-}
-
-async fn assert_sidebar_work(
-    s: &butler_e2e::e2e::scenario::Scenario,
-    running: bool,
-) -> Result<(), HarnessError> {
-    let navigation = s.gw.get("/navigation").await?;
-    let parent = navigation.data()["chats"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|session| session["id"] == "general")
-        .unwrap();
-    assert_eq!(parent["running_delegated_work"], running, "{parent}");
-    Ok(())
-}
-
-async fn assert_history_sidebar(
-    s: &butler_e2e::e2e::scenario::Scenario,
-) -> Result<(), HarnessError> {
-    let db =
-        rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
-    db.execute_batch(
-        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<7)
-        INSERT INTO chats(id,title,kind,created_at,updated_at)
-        SELECT 'busy-scale-'||i,'Idle chat '||i,'chat','2026-01-01','2026-01-01' FROM n;",
-    )
-    .unwrap();
-    let started = Instant::now();
-    let navigation = s.gw.get("/navigation").await?;
-    let elapsed = started.elapsed();
-    let chats = navigation.data()["chats"].as_array().unwrap();
-    assert_eq!(chats.len(), 9, "complete navigation with retained history");
-    assert_eq!(
-        chats
-            .iter()
-            .filter(|chat| chat["running_delegated_work"] == true)
-            .count(),
-        1
-    );
-    assert!(
-        chats
-            .iter()
-            .any(|chat| chat["id"] == "general" && chat["running_delegated_work"] == true)
-    );
-    butler_e2e::assert_wall_clock_budget!(
-        elapsed,
-        Duration::from_millis(500),
-        "9-chat delegated navigation"
-    );
-    println!(
-        "9-chat complete delegated navigation: {} ms",
-        elapsed.as_millis()
-    );
-    Ok(())
 }

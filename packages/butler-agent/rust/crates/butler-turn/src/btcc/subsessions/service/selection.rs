@@ -15,7 +15,7 @@ impl SubsessionService {
         let mut eligible = Vec::new();
         let mut closed = Vec::new();
         for candidate in owned {
-            if self.relation_is_eligible(&query, &candidate).await? {
+            if self.relation_is_eligible(&candidate).await? {
                 eligible.push(candidate);
             } else if query.purpose == RelationPurpose::Direct {
                 closed.push(candidate);
@@ -134,12 +134,9 @@ impl SubsessionService {
         Ok(owned)
     }
 
-    /// An unfinished relation is eligible; a finished one only for a
-    /// follow-up direction addressed by Work or relation id whose root Work
-    /// is still open.
+    /// An unfinished assignment remains eligible while its queue drains.
     pub(super) async fn relation_is_eligible(
         &self,
-        query: &RelationQuery<'_>,
         candidate: &StoredSubsessionDelegation,
     ) -> Result<bool, BtccError> {
         let terminal = self
@@ -168,7 +165,7 @@ impl SubsessionService {
 /// Why a parent addresses one of its subsession relations.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum RelationPurpose {
-    /// Send new direction; may follow up on a finished relation.
+    /// Send direction, returning feedback when the assignment has ended.
     Direct,
     /// Cancel an unfinished relation.
     Cancel,
@@ -182,17 +179,4 @@ pub(super) struct RelationQuery<'a> {
     pub(super) title: Option<&'a str>,
     pub(super) role: &'a SessionRole,
     pub(super) purpose: RelationPurpose,
-}
-
-impl<'a> RelationQuery<'a> {
-    pub(super) fn direction(request: &'a super::control::SubsessionDirectionRequest) -> Self {
-        Self {
-            parent: &request.parent_session_id,
-            relation_id: request.relation_id.as_deref(),
-            work_id: request.work_id.as_deref(),
-            title: request.safe_title.as_deref(),
-            role: &request.child_role,
-            purpose: RelationPurpose::Direct,
-        }
-    }
 }

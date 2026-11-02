@@ -222,7 +222,7 @@ impl SqliteSubsessionRepository {
         self.storage
             .execute(move |db| {
                 let tx = db.transaction().map_err(StorageError::sqlite)?;
-                let link = tx.query_row(
+                let link: Option<(String, String)> = tx.query_row(
                 "SELECT r.parent_session_id,r.child_session_id FROM btcc_subsession_outbox o \
                  JOIN btcc_session_relations r ON r.relation_id=o.relation_id \
                  WHERE o.result_id=?1 AND o.status='pending'",

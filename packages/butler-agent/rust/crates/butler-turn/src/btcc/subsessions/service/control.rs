@@ -123,10 +123,7 @@ impl SubsessionService {
                 purpose: RelationPurpose::Direct,
             })
             .await?;
-        if !self
-            .relation_is_eligible(&RelationQuery::direction(&request), &relation)
-            .await?
-        {
+        if !self.relation_is_eligible(&relation).await? {
             return self.closed_feedback(&relation).await;
         }
         if request.immediate && !self.child_turn_running(&relation.child_session_id).await? {
