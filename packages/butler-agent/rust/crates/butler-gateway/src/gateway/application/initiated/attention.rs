@@ -57,8 +57,8 @@ pub(in crate::gateway::application) fn enqueue_attention(
 fn capability_label(kind: butler_turn::btcc::ApprovalActionKind, language: &str) -> &'static str {
     use butler_turn::btcc::ApprovalActionKind::{
         CreateWorktree, EditFiles, EditImage, GenerateImage, ManageSchedule, NetworkCommand, Other,
-        ProjectHooks, RestartService, RunCommand, StartConversation, SwitchFolder, UpdateProject,
-        UseConnector, WebRequest,
+        RestartService, RunCommand, StartConversation, SwitchFolder, UpdateProject, UseConnector,
+        WebRequest,
     };
     let (ko, en) = match kind {
         EditFiles => ("파일 수정", "Edit files"),
@@ -74,7 +74,6 @@ fn capability_label(kind: butler_turn::btcc::ApprovalActionKind, language: &str)
         RestartService => ("버틀러 다시 시작", "Restart Butler"),
         CreateWorktree => ("워크트리 생성", "Create worktree"),
         SwitchFolder => ("작업 폴더 이동", "Move working folder"),
-        ProjectHooks => ("프로젝트 훅 실행", "Run project hooks"),
         Other => ("기타 동작", "Other action"),
     };
     if language.starts_with("ko") { ko } else { en }

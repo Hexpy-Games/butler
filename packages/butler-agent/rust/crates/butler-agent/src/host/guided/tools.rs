@@ -319,9 +319,6 @@ impl ToolPort for GuidedTools {
     ) -> &'a serde_json::Map<String, serde_json::Value> {
         hooks::input(call)
     }
-    fn project_hook_spoke(&self) {
-        self.mark_external();
-    }
     fn surface<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

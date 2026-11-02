@@ -148,7 +148,7 @@ describe("butler-ds/unsafe-style-allowlist", () => {
 });
 
 describe("butler-ds/settings-field-grouping", () => {
-  const ds = 'import { Button, Inline, SettingsActionField, SettingsField, SettingsFieldGroup, SettingsSection, Stack } from "@/butler-ds";';
+  const ds = 'import { Button, IconButton, Inline, Input, SegmentedControl, Select, SettingsActionField, SettingsField, SettingsFieldGroup, SettingsSection, Stack, Tooltip } from "@/butler-ds";';
   tester.run("settings-field-grouping", rules["settings-field-grouping"], {
     valid: [
       `${ds} const a = <SettingsSection id="s" kind="form"><SettingsField label="A" control={c} /><SettingsField label="B" control={c} /></SettingsSection>;`,
@@ -157,7 +157,9 @@ describe("butler-ds/settings-field-grouping", () => {
       `${ds} const a = <Stack gap="none"><SettingsField label="A" control={c} /></Stack>;`,
       `${ds} const a = <Stack align="row"><Stack.Item basis="lg"><SettingsFieldGroup><SettingsField label="A" control={c} /></SettingsFieldGroup></Stack.Item></Stack>;`,
       `${ds} const a = <Stack gap="sm"><Button>Copy</Button><Button>Paste</Button></Stack>;`,
-      `${ds} const a = <SettingsSection id="s" kind="list" actions={<Button>Add</Button>}>{rows}</SettingsSection>;`,
+      `${ds} const a = <SettingsSection id="s" kind="list" title="T" actions={<Button variant="outline" size="sm">Add</Button>}>{rows}</SettingsSection>;`,
+      `${ds} const a = <SettingsSection id="s" kind="status" title="T" actions={<><SegmentedControl options={o} value={v} /><Button variant="outline" size="icon-sm">R</Button></>}>{facts}</SettingsSection>;`,
+      `${ds} const a = <SettingsSection id="s" kind="list" title="T" actions={<><Select value={p} /><Tooltip label="x"><Button variant="outline" size="sm">Import</Button></Tooltip></>}>{rows}</SettingsSection>;`,
       `${ds} const a = <SettingsActionField label="Reset" description="Erases it." action={<Button>Reset</Button>} />;`,
     ],
     invalid: [
@@ -182,12 +184,24 @@ describe("butler-ds/settings-field-grouping", () => {
         errors: [{ messageId: "gapWrapper", data: { wrapper: "div", child: "SettingsField" } }],
       },
       {
-        code: `${ds} const a = <SettingsSection id="s" kind="status" actions={<Button>Reset</Button>}>{facts}</SettingsSection>;`,
+        code: `${ds} const a = <SettingsSection id="s" kind="form" title="T" actions={<Button variant="outline" size="sm">Reset</Button>}>{fields}</SettingsSection>;`,
         errors: [{ messageId: "headerAction" }],
       },
       {
-        code: `${ds} const a = <SettingsSection id="s" kind={kind} actions={<Button>Reset</Button>} />;`,
+        code: `${ds} const a = <SettingsSection id="s" kind={kind} title="T" actions={<Button variant="outline" size="sm">Reset</Button>} />;`,
         errors: [{ messageId: "headerAction" }],
+      },
+      {
+        code: `${ds} const a = <SettingsSection id="s" kind="list" title="T" actions={<Button size="sm">Add</Button>}>{rows}</SettingsSection>;`,
+        errors: [{ messageId: "headerButton" }],
+      },
+      {
+        code: `${ds} const a = <SettingsSection id="s" kind="status" title="T" actions={<IconButton label="Refresh">R</IconButton>}>{facts}</SettingsSection>;`,
+        errors: [{ messageId: "headerButton" }],
+      },
+      {
+        code: `${ds} const a = <SettingsSection id="s" kind="list" title="T" actions={<><Input type="number" value={n} /><Button variant="outline" size="sm">Add</Button></>}>{rows}</SettingsSection>;`,
+        errors: [{ messageId: "headerSetting", data: { control: "Input" } }],
       },
     ],
   });

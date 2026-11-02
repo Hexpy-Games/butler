@@ -2,17 +2,29 @@ import type { SessionPendingAsks } from "../../packages/butler-app/client/shared
 import { probeFocusRingFrames, type FocusRingClip } from "./focus-ring-clipping.ts";
 import type { Locator, Page, Route } from "playwright";
 import type { EpicProgressSnapshot } from "../../packages/butler-app/client/shared/canon-contracts.ts";
-import type { QueuedMessageRecord, SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
+import type { QueuedMessageRecord, SessionView, SessionViewTurn } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { HARNESS_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
+
+/** Running turn with public progress; replaySession supplies its queued follow-up. */
+export function runningSession(view: SessionView): SessionView {
+  const turn: SessionViewTurn = {
+    id: "session-info-turn", state: "thinking", cancellable: true, retryable: false,
+    created_at: view.updated_at, updated_at: view.updated_at,
+    progress: { turn_id: "session-info-turn", state: "thinking", safe_progress_rows: [
+      { id: "accepted", kind: "message", state: "completed", safe_label: "요청을 확인했습니다. 릴리스 노트와 변경 사항을 검토합니다." },
+      { id: "round-1", kind: "thinking", bridge_phase: "model_round_waiting", thinking_title: "검토할 변경 사항 정리", state: "completed", safe_label: "모델 응답 1 · 검토할 변경 사항 정리" },
+      { id: "tool-1", kind: "ran_command", bridge_phase: "btcc_operation", tool_call_id: "diff-stat", safe_tool_name: "run_command", state: "completed", safe_label: "변경 파일 읽기", safe_input_label: "git diff --stat" },
+      { id: "round-2", kind: "thinking", bridge_phase: "model_round_waiting", thinking_title: "변경 사항 검토", state: "running", safe_label: "모델 응답 2 · 변경 사항 검토" },
+    ] },
+  };
+  return { ...view, active_turn: turn, latest_turn: turn };
+}
 
 /** Canonical session-view replay: renderer-only coverage, never production fixtures. */
 export function populatedSession(view: SessionView): SessionView {
   return {
-    ...view,
+    ...runningSession(view),
     pending_questions: [sessionQuestion(view.session_id)],
-    latest_turn: { id: "session-info-turn", state: "running", cancellable: true, retryable: false,
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      progress: { safe_progress_rows: [{ id: "session-info-running", kind: "todo", state: "running", safe_label: "변경 사항 검토" }] } },
     branch: { workspace_label: "butler", branch_name: "feat/session-info-pane", workspace_binding: "project", workspace_status: "available" },
     context: sessionContext(view.session_id),
     artifacts: HARNESS_SUMMARY.artifacts!.map(item => ({ ...item, session_id: view.session_id, title: "검토 결과.md" })),

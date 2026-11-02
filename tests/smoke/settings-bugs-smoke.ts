@@ -155,7 +155,9 @@ async function paletteChecks(page: Page, prefix: string) {
 
 async function skillChecks(page: Page, prefix: string) {
   await openSection(page, copy.settings.sections.skills, copy.settings.sections.skills);
-  await page.getByRole("button", { name: copy.settings.actions.importSkill, exact: true }).click();
+  // Your skills and each project's skills both offer Import; this checks Your skills.
+  const userSkills = page.locator('[data-settings-section-id="user-skills"]');
+  await userSkills.getByRole("button", { name: copy.settings.actions.importSkill, exact: true }).click();
   let imports = 0;
   page.on("request", (request) => { if (request.url().includes("/skills/import")) imports += 1; });
   const file = { name: "invalid.zip", mimeType: "application/zip", buffer: Buffer.from("invalid zip") };
@@ -163,7 +165,7 @@ async function skillChecks(page: Page, prefix: string) {
   await page.getByText(copy.settings.skillErrors.invalid, { exact: true }).waitFor();
   await capture(page, prefix, "skill-import-error");
   assert.equal(await page.locator('input[type="file"]').inputValue(), "", "file input cleared for retry");
-  await page.getByRole("button", { name: copy.settings.actions.importSkill, exact: true }).click();
+  await userSkills.getByRole("button", { name: copy.settings.actions.importSkill, exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles(file);
   await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[type="file"]')?.value === "");
   assert.equal(imports, 2, "same file imports twice");

@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 pub(super) struct Trace {
     file: tokio::fs::File,
@@ -45,6 +45,16 @@ impl Trace {
 }
 
 async fn prepare(name: &str, held: bool) -> Result<(Scenario, String, PathBuf), HarnessError> {
+    prepare_with_barrier(name, held, None).await
+}
+
+/// With `barrier`, the restarted Agent holds each query drain at its start
+/// until the harness answers on that loopback address (stub fixtures only).
+async fn prepare_with_barrier(
+    name: &str,
+    held: bool,
+    barrier: Option<&DrainBarrier>,
+) -> Result<(Scenario, String, PathBuf), HarnessError> {
     let (setup, remember, code) = batch::setup(name)?;
     let release = setup.sandbox.root.join("embed-release");
     std::fs::write(&release, b"")?;
@@ -64,9 +74,48 @@ async fn prepare(name: &str, held: bool) -> Result<(Scenario, String, PathBuf), 
         s.agent.terminate().await?;
         std::fs::remove_file(&release)?;
         std::fs::remove_file(release.with_extension("held"))?;
+        if let Some(barrier) = barrier {
+            s.agent
+                .launch
+                .set_env("BUTLER_E2E_DRAIN_BARRIER", barrier.address.clone());
+        }
         s.gw = s.agent.start_again().await?;
     }
     Ok((s, code, release))
+}
+
+/// Answers the Agent's drain rendezvous: the drain waits, with its grace not
+/// yet running, until the scenario has placed its second request.
+struct DrainBarrier {
+    address: String,
+    listener: tokio::net::TcpListener,
+}
+
+impl DrainBarrier {
+    async fn start() -> Result<Self, HarnessError> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        Ok(Self {
+            address: listener.local_addr()?.to_string(),
+            listener,
+        })
+    }
+
+    /// Waits for a drain to start; it stays held until [`Self::release`].
+    async fn reached(&self) -> Result<tokio::net::TcpStream, HarnessError> {
+        let (mut socket, _) = tokio::time::timeout(Duration::from_secs(30), self.listener.accept())
+            .await
+            .expect("the query drain never reached its barrier")?;
+        let mut stage = [0_u8; 5];
+        socket.read_exact(&mut stage).await?;
+        assert_eq!(&stage, b"drain");
+        Ok(socket)
+    }
+
+    /// Lets the held drain start its real grace now.
+    async fn release(mut held: tokio::net::TcpStream) -> Result<(), HarnessError> {
+        held.write_u8(1).await?;
+        Ok(())
+    }
 }
 
 fn worker(s: &Scenario) -> Result<u32, HarnessError> {
@@ -150,7 +199,9 @@ async fn owner_close_during_query_drain_reaps_without_waiting_for_grace() -> Res
 #[tokio::test]
 async fn recall_arriving_during_drain_reuses_the_loaded_worker() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, code, release) = prepare("MEM-DRAIN-ARRIVAL", true).await?;
+    let barrier = DrainBarrier::start().await?;
+    let (s, code, release) =
+        prepare_with_barrier("MEM-DRAIN-ARRIVAL", true, Some(&barrier)).await?;
     let chat =
         s.gw.post(
             "/sessions",
@@ -164,11 +215,16 @@ async fn recall_arriving_during_drain_reuses_the_loaded_worker() -> Result<(), H
     let answer = s.provider()?.hold_after_tool(ASK);
     let arriving = async {
         let grace = trace.drain().await?;
+        // The drain is held at its start with its grace not yet running, so the
+        // second recall's arrival cannot depend on how fast the host is.
+        let held_drain = barrier.reached().await?;
         let pid = worker(&s)?;
         wait_output(&s, first_request).await?;
         let mut queued = Trace::open(&s, 2).await?;
         let release_after_arrival = async {
             queued.until("queued class=Interactive texts=1").await?;
+            // The real grace starts now, with the second request queued in it.
+            DrainBarrier::release(held_drain).await?;
             // Keep inference held while the admitted query waits, exposing any
             // queue-driven reap before allowing the original reply to drain.
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -198,6 +254,49 @@ async fn recall_arriving_during_drain_reuses_the_loaded_worker() -> Result<(), H
     };
     let (first, ()) = tokio::try_join!(batch::recall(&s, "general", ASK), arriving)?;
     assert_saved_instruction(&first, &code, 3);
+    s.finish().await
+}
+
+/// The other side of the boundary: a recall that arrives only after the drain's
+/// deadline finds the worker reaped; it is served without it and the reaped
+/// worker never comes back.
+#[tokio::test]
+async fn recall_arriving_after_the_drain_deadline_finds_the_worker_reaped()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, code, _release) = prepare("MEM-DRAIN-LATE", true).await?;
+    let chat =
+        s.gw.post(
+            "/sessions",
+            serde_json::json!({"kind":"chat","title":"Late recall"}),
+        )
+        .await?;
+    assert_eq!(chat.status, 201, "{}", chat.text);
+    let chat = chat.data()["session"]["id"].as_str().unwrap().to_owned();
+    let mut trace = Trace::open(&s, 2).await?;
+    let answer = s.provider()?.hold_after_tool(ASK);
+    let expire = async {
+        let grace = trace.drain().await?;
+        let pid = worker(&s)?;
+        trace.until("drain_end=deadline").await?;
+        reaped(pid, Duration::from_millis(grace + 200)).await?;
+        answer.release();
+        Ok::<_, HarnessError>(pid)
+    };
+    let (first, old) = tokio::try_join!(batch::recall(&s, "general", ASK), expire)?;
+    assert_saved_instruction(&first, &code, 3);
+    // Only now does the second recall ask: the deadline has passed and the
+    // worker is gone, so nothing queued could have reused it.
+    let second = batch::recall(&s, &chat, ASK).await?;
+    assert_saved_instruction(&second, &code, 4);
+    assert!(
+        process_start(old).unwrap().is_none(),
+        "the reaped worker came back"
+    );
+    eprintln!(
+        "DRAIN-LATE vectors={}",
+        second["output"]["coverage"]["vectors"]["state"]
+    );
     s.finish().await
 }
 

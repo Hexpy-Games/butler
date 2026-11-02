@@ -2,8 +2,7 @@
 use super::*;
 use crate::gateway::MessageSendRequest;
 use butler_core::hooks::{
-    HookAttachment, HookBlock, HookContext, HookEnvelope, HookEvent, HookPayload, HookPort,
-    ProjectHookLine, ProjectHookRequest, ProjectHookReview,
+    HookAttachment, HookBlock, HookContext, HookEnvelope, HookEvent, HookPayload,
 };
 use rusqlite::params;
 /// A failing hook blocked part of a running turn; the App names it in a toast.
@@ -46,11 +45,7 @@ impl AppApplication {
             return Ok(());
         };
         let _ = port.reload().await;
-        let review = self.project_review(&id, port).await;
-        let hold = matches!(&review, ProjectHookReview::Undecided(request)
-            if request.listens(HookEvent::SessionStart));
-        let port = scoped(port, review);
-        if !hold && !port.enabled(HookEvent::SessionStart, None) {
+        if !port.enabled(HookEvent::SessionStart, None) {
             return Ok(());
         }
         let payload = HookPayload {
@@ -65,12 +60,6 @@ impl AppApplication {
                 payload,
             )
             .await?;
-        if hold {
-            port.hold_session_start(envelope.clone());
-            if !port.enabled(HookEvent::SessionStart, None) {
-                return Ok(());
-            }
-        }
         let context = port
             .dispatch(envelope, self.dependencies.service_shutdown.child_token())
             .await
@@ -119,7 +108,6 @@ impl AppApplication {
             return Ok(None);
         };
         let _ = port.reload().await;
-        let port = scoped(port, self.project_review(chat, port).await);
         if !port.enabled(HookEvent::UserPromptSubmit, None) {
             return Ok(None);
         }
@@ -169,67 +157,6 @@ impl AppApplication {
         }
         stringify(&dispatched.context).map(Some)
     }
-    /// What adding a project asks: the hooks of its folder, if nobody answered for it.
-    /// An unusable file, a saved answer or no hooks at all ask nothing.
-    pub(super) async fn project_folder_question(
-        &self,
-        project_id: String,
-    ) -> Result<Option<ProjectHookRequest>, GatewayApplicationError> {
-        let project_dir = self
-            .project_workspace_path(Some(project_id))
-            .await
-            .map_err(|_| public(404, "project_not_found", "Project not found."))?;
-        let (Some(port), Some(project_dir)) = (&self.dependencies.hooks, project_dir) else {
-            return Ok(None);
-        };
-        Ok(match port.review_project(project_dir, None).await {
-            Ok(ProjectHookReview::Undecided(request)) => Some(*request),
-            _ => None,
-        })
-    }
-
-    /// Answers that question for the project's own folder. Only an open question can
-    /// be answered, and the list goes through the same comparison as a card's: a file
-    /// that changed saves nothing, and the first message asks about what is there.
-    pub(super) async fn answer_project_folder(
-        &self,
-        project_id: String,
-        hooks: Vec<ProjectHookLine>,
-        trusted: bool,
-    ) -> Result<(), GatewayApplicationError> {
-        let Some(mut request) = self.project_folder_question(project_id).await? else {
-            return Ok(());
-        };
-        let Some(port) = &self.dependencies.hooks else {
-            return Ok(());
-        };
-        request.hooks = hooks;
-        if let Err(failure) = port.decide_project(request, trusted).await {
-            // Nothing is remembered, so nothing runs: the first message asks.
-            tracing::warn!(event = "project_hook_answer_not_saved", error = %failure);
-        }
-        Ok(())
-    }
-
-    /// What the session's project folder holds right now. A failed lookup means
-    /// its hooks do not run, and does not stop the send that asked.
-    async fn project_review(&self, chat: &str, port: &Arc<dyn HookPort>) -> ProjectHookReview {
-        let id = chat.to_owned();
-        let session = self
-            .storage
-            .read(move |db| sessions::read_summary(db, &id))
-            .await;
-        let Ok(session) = session else {
-            return ProjectHookReview::None;
-        };
-        let Ok(Some(project_dir)) = self.project_workspace_path(session.project_id).await else {
-            return ProjectHookReview::None;
-        };
-        port.review_project(project_dir, Some(session.session_hint))
-            .await
-            .unwrap_or(ProjectHookReview::None)
-    }
-
     async fn hook_envelope(
         &self,
         chat: &str,
@@ -272,15 +199,5 @@ impl AppApplication {
             access_mode: Some(access_mode),
             payload,
         })
-    }
-}
-
-/// The port to dispatch with: it holds project hooks only if their content was allowed.
-fn scoped(port: &Arc<dyn HookPort>, review: ProjectHookReview) -> Arc<dyn HookPort> {
-    match review {
-        ProjectHookReview::Trusted(project) => project,
-        ProjectHookReview::None | ProjectHookReview::Denied | ProjectHookReview::Undecided(_) => {
-            port.clone()
-        }
     }
 }
