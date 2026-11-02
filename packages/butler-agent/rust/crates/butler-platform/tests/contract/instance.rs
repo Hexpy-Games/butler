@@ -90,7 +90,8 @@ fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
     match process_start(pid) {
         Ok(Some(started)) => {
             assert_eq!(process_start(pid).unwrap(), Some(started.clone()));
-            let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
+            let executable =
+                butler_platform::secure_fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
             let observed = process_executable(pid).unwrap().unwrap();
             assert!(same_executable(&executable.to_string_lossy(), &observed));
             assert!(matches!(

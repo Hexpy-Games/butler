@@ -192,7 +192,8 @@ pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode
 }
 
 fn print_version() -> ExitCode {
-    let Ok(executable) = std::env::current_exe().and_then(std::fs::canonicalize) else {
+    let Ok(executable) = std::env::current_exe().and_then(butler_platform::secure_fs::canonicalize)
+    else {
         eprintln!("Could not read Butler build ID.");
         return ExitCode::FAILURE;
     };

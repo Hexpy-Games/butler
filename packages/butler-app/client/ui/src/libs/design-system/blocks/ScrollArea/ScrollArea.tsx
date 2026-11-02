@@ -5,7 +5,7 @@ import type { ReactNode, Ref } from "react";
 import { cn } from "../../lib/utils";
 import { useComposedRefs } from "../../lib/composeRefs";
 import { useScrollEdges, type ScrollEdgeAxis } from "../../lib/useScrollEdges";
-import { publishScrollbarWidth } from "../../lib/scrollbarWidth";
+import { publishScrollbarWidth, trackDrawnScrollbar } from "../../lib/scrollbarWidth";
 import styles from "./ScrollArea.module.css";
 
 export interface ScrollAreaProps extends DsPrivateStyleProps, WindowDragProps {
@@ -49,7 +49,7 @@ export function ScrollArea({
   windowDrag,
 }: ScrollAreaProps) {
   const edgesRef = useScrollEdges(orientation);
-  const ref = useComposedRefs(scrollRef, edgesRef, publishScrollbarWidth);
+  const ref = useComposedRefs(scrollRef, edgesRef, publishScrollbarWidth, trackDrawnScrollbar);
   return (
     <div
       className={cn(styles.frame, fill && styles.fill, windowDragClassName(windowDrag), className)}
