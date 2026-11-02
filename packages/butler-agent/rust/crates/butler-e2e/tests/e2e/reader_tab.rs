@@ -57,11 +57,11 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
     assert_eq!(turn["state"], "delivered", "{turn}\n{}", s.agent.logs());
     let outputs = fixture.outputs.lock().unwrap().clone();
 
-    // The attached host is read directly through the offered browser tools.
+    // Page text and viewport inspection remain separate offered operations.
     assert_eq!(outputs[0]["status"], "ok", "{}", outputs[0]);
     let read = &outputs[1];
-    assert_eq!(read["schema"], "butler.browser-observation.v1", "{read}");
-    let text = read["untrusted_content"]["text"].as_str().unwrap();
+    assert_eq!(read["ok"], true, "{read}");
+    let text = read["markdown"].as_str().unwrap();
     for lamp in ["Aurora", "Beacon", "Cinder"] {
         assert!(text.contains(lamp), "{read}");
     }
@@ -72,9 +72,10 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
         .filter_map(|frame| frame["op"].as_str().map(str::to_owned))
         .filter(|op| op != "tabs.list")
         .collect::<Vec<_>>();
-    assert_eq!(ops, ["tab.open", "tab.observe"], "{ops:?}");
+    assert_eq!(ops, ["tab.open", "tab.read", "tab.observe"], "{ops:?}");
+    assert_eq!(outputs[2]["schema"], "butler.browser-observation.v1");
     // (b) The comparison is on the delivered reply as blocks.
-    assert_eq!(outputs[2]["ok"], true, "{}", outputs[2]);
+    assert_eq!(outputs[3]["ok"], true, "{}", outputs[3]);
     let messages = s.gw.messages("general").await?;
     let reply = messages
         .iter()
@@ -103,7 +104,7 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
             .unwrap()
             .to_owned()
     };
-    assert!(!butler_e2e::e2e::chatgpt_wire::tools(&first).any(|tool| tool["name"] == "web_read"));
+    assert!(description("web_read").contains("web_read {tab}"));
     assert!(description("answer_blocks").contains("with or without a Plan"));
     s.finish().await
 }

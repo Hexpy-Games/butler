@@ -116,6 +116,10 @@ impl Host {
                 "html_base64":base64::engine::general_purpose::STANDARD.encode(SHELL)})
             }
             ("tabs.list", _) => json!({"tabs":self.tabs}),
+            ("tab.read", Some(tab)) => {
+                json!({"status":"ok","tab":tab["id"],"url":tab["url"],"epoch":1,
+                "html":"<html><title>Desk lamps</title><article><h1>Desk lamps</h1><p>Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm.</p></article></html>"})
+            }
             ("tab.observe", Some(tab)) => {
                 json!({"status":"ok","tab":tab["id"],"url":tab["url"],"obs":"o1",
                 "text":"Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm."})

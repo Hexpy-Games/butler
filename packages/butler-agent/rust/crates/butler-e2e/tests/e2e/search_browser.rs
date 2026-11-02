@@ -133,6 +133,8 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     assert_eq!(log.iter().filter(|f| f["op"] == "tab.observe").count(), 1);
     assert!(!read.to_string().contains("End of the tide table."));
     assert_eq!(outputs[3]["ok"], false, "{}", outputs[3]);
+    assert_eq!(outputs[3]["error"]["code"], "browser_tab_required");
+    assert_eq!(outputs[3]["error"]["recoverable"], true);
     let refusal = outputs[3].to_string();
     assert!(refusal.contains("browser_open"), "{refusal}");
     assert!(refusal.contains("recoverable"), "{refusal}");

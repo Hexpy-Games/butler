@@ -1,5 +1,5 @@
 //! A model that follows the offered browser contracts on both provider wires:
-//! open the page, observe its content, show answer blocks, then answer.
+//! open the page, read its text, inspect the viewport, show blocks, then answer.
 use axum::{Json, Router, extract::State, response::Response, routing::post};
 use butler_e2e::e2e::HarnessError;
 use futures_util::StreamExt;
@@ -68,11 +68,12 @@ impl Drop for Fixture {
 fn next(outputs: &[Value]) -> Option<(&'static str, Value)> {
     match outputs.len() {
         0 => Some(("browser_open", json!({"url":super::PAGE}))),
-        1 => Some((
+        1 => Some(("web_read", json!({"tab":outputs[0]["tab"]}))),
+        2 => Some((
             "browser_observe",
             json!({"tab":outputs[0]["tab"],"scope":"text","look":"never"}),
         )),
-        2 => Some(("answer_blocks", blocks(&outputs[1]))),
+        3 => Some(("answer_blocks", blocks(&outputs[1]))),
         _ => None,
     }
 }
@@ -81,7 +82,7 @@ const ANSWER: &str = "The Beacon is the brightest of the three lamps.";
 
 /// The comparison of the read page's candidates, each value sourced to it.
 fn blocks(read: &Value) -> Value {
-    let source = read["untrusted_content"]["url"].clone();
+    let source = read["source_url"].clone();
     let checked = chrono::Utc::now().to_rfc3339();
     let lamps = [("Aurora", 450), ("Beacon", 1200), ("Cinder", 800)];
     let cards = lamps.map(|(name, lumens)| {
