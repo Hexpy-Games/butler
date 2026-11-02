@@ -22,13 +22,7 @@ pub(super) fn hash(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
 pub(super) fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
-    let mut command = butler_platform::plugin_git::command(root).map_err(|e| {
-        error(if e.kind() == std::io::ErrorKind::Unsupported {
-            "plugin_path_too_long"
-        } else {
-            "plugin_git_failed"
-        })
-    })?;
+    let mut command = butler_platform::plugin_git::command(root);
     command
         .args([
             "-c",
@@ -51,10 +45,21 @@ pub(super) fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
         .stdin(Stdio::null())
         .stderr(Stdio::null());
     butler_platform::process_control::hide_console(&mut command);
-    let output = super::git_process::output(command, args.first().copied())?;
-    if !output.status.success() {
-        return Err(error("plugin_git_failed"));
-    }
+    let output = super::git_process::output(command, args.first().copied())
+        .and_then(|output| {
+            if output.status.success() {
+                Ok(output)
+            } else {
+                Err(error("plugin_git_failed"))
+            }
+        })
+        .map_err(|e| match e.code {
+            // Name the cause when git could not open the checkout at all.
+            "plugin_git_failed" if !butler_platform::plugin_git::within_reach(root) => {
+                error("plugin_path_too_long")
+            }
+            _ => e,
+        })?;
     Ok(output.stdout)
 }
 pub(super) fn checkout(
