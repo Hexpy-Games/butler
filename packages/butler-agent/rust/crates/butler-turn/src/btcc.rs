@@ -298,3 +298,6 @@ pub use test_pause::reach as pause_for_test;
 
 pub use authority::pending_asks::{PendingAsk, PendingAskChange};
 pub use authority::resolve_ask::{ResolveAsk, guard as resolve_ask_guard};
+
+mod result_projection;
+pub use result_projection::ResultProjection;

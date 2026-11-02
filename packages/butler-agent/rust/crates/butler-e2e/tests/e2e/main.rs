@@ -331,4 +331,5 @@ mod canon_criteria;
 mod canon_mcp;
 mod shell_client;
 
+mod evidence_bundle;
 mod task_scope;

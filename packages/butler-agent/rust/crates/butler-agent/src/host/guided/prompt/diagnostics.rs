@@ -8,12 +8,68 @@ use sha2::{Digest, Sha256};
 pub(super) struct Sections {
     text: Vec<String>,
     digests: Vec<Value>,
+    current_result: Option<String>,
+    results: butler_turn::btcc::ResultProjection,
 }
 
 impl Sections {
-    pub(super) fn push(&mut self, id: &str, text: String) {
+    pub(super) fn for_turn(turn: &TurnRecord) -> Self {
+        Self {
+            current_result: butler_turn::btcc::ResultProjection::result_id(&turn.original_message)
+                .map(|_| turn.original_message.clone()),
+            ..Default::default()
+        }
+    }
+
+    pub(super) fn push(&mut self, id: &str, mut text: String) {
+        if id == "work-stream" {
+            text = self.snapshot(text);
+        }
+        if let Some(body) = &self.current_result
+            && text.contains(body)
+        {
+            let projected = self.results.project(body);
+            text = text.replace(body, &projected);
+        }
         self.digests.push(digest(id, &text));
         self.text.push(text);
+    }
+
+    fn snapshot(&mut self, text: String) -> String {
+        let Some((prefix, raw)) = text.rsplit_once("\nprior_result: ") else {
+            return text;
+        };
+        let Ok(result) = serde_json::from_str::<Value>(raw) else {
+            return text;
+        };
+        let Some(id) = result.get("result_id").and_then(Value::as_str) else {
+            return text;
+        };
+        let summary = result
+            .get("summary")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let evidence = result
+            .get("evidence")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let core = format!("summary: {summary}\n{evidence}");
+        let current = self
+            .current_result
+            .as_deref()
+            .and_then(butler_turn::btcc::ResultProjection::result_id)
+            == Some(id);
+        let carried = self.results.contains(id)
+            || current
+            || self.text.iter().any(|section| {
+                section.contains(&format!("result_id: {id}\n")) && section.contains(&core)
+            });
+        if carried {
+            format!("{prefix}\nprior_result_ref: {id}")
+        } else {
+            self.results.remember(id);
+            text
+        }
     }
 
     pub(super) fn documents(

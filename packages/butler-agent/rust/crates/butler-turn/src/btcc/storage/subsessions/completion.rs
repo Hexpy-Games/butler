@@ -73,7 +73,7 @@ impl SqliteSubsessionRepository {
                 super::super::work::settle_steward_parent(&tx, &delegation, (&result_id, &child_turn), &status, &summary, &evidence_refs, &now)?;
             }
             let feedback = delegation_feedback(&tx, &delegation, &result_id, failure_reason.as_deref())?;
-            let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}{feedback}");
+            let mut text = super::prompt_result::delivery_text(&tx, &result_id, &status, &summary, &evidence_refs, &feedback)?;
             text.push_str(&super::assets::delivery_assets(&tx, &child_turn)?);
             text.push_str(&delivery_artifacts(&tx, &child_turn, &status)?);
             if let Some(code) = failure_code.as_deref().or(code) { text.push_str(&format!("\ncode: {code}")); }
