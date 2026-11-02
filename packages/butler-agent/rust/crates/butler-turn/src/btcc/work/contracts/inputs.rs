@@ -34,6 +34,8 @@ pub struct ContinueWorkInput {
     #[serde(flatten)]
     pub scope: WorkTurnScope,
     pub mutation_call_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_key: Option<String>,
     pub work_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub backfill_tool_call_ids: Option<Vec<String>>,
@@ -71,6 +73,8 @@ pub struct CheckpointInput {
     #[serde(flatten)]
     pub scope: WorkTurnScope,
     pub mutation_call_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_action_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_stage: Option<WorkStage>,
     #[serde(skip_serializing_if = "Option::is_none")]

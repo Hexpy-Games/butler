@@ -1,4 +1,4 @@
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::common::{error, parse_state};
 use super::hydration::hydrate_final_payload;
@@ -21,7 +21,10 @@ pub(super) fn stop(
     connection: &mut Connection,
     turn_id: &str,
 ) -> StorageResult<StopPersistenceOutcome> {
-    let transaction = connection.transaction().map_err(StorageError::sqlite)?;
+    // The read decides the write; a deferred upgrade fails on a concurrent commit instead of waiting.
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(StorageError::sqlite)?;
     let turn = transaction
         .query_row(
             "SELECT session_id, semantic_state, revision, execution_fence, \

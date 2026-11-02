@@ -69,30 +69,21 @@ pub(super) fn command(
             backfill_tool_call_ids: backfill,
         }),
         "continue_work" => Command::Continue(ContinueWorkInput {
+            action_key: args
+                .get("action_key")
+                .map(|v| required(Some(v), "action_key"))
+                .transpose()?,
             scope,
             mutation_call_id: id,
             work_id: required(args.get("work_id"), "work_id")?,
             backfill_tool_call_ids: backfill,
         }),
-        "replace_work_plan" => {
-            let actions = nonempty_array(args.get("actions"), "actions")?
-                .iter()
-                .enumerate()
-                .map(|(index, value)| action(value, index))
-                .collect::<Result<Vec<_>, _>>()?;
-            Command::Replace(ReplacePlanInput {
-                scope,
-                mutation_call_id: id,
-                start_new: Some(boolean(args.get("start_new"), "start_new")?),
-                backfill_tool_call_ids: backfill,
-                objective: required(args.get("objective"), "objective")?,
-                governing_refs: Some(strings(args.get("governing_refs"), "governing_refs")?),
-                execution_mode: Some(execution_mode(args.get("execution_mode"))?),
-                actions,
-                checks: planned_checks(args)?,
-            })
-        }
+        "replace_work_plan" => replace(args, scope, id, backfill)?,
         "record_work_checkpoint" => Command::Checkpoint(CheckpointInput {
+            current_action_key: args
+                .get("current_action_key")
+                .map(|v| required(Some(v), "current_action_key"))
+                .transpose()?,
             scope,
             mutation_call_id: id,
             next_stage: None,
@@ -419,4 +410,28 @@ fn disposition(value: Option<&Value>) -> Result<DispositionStatus, WorkArgumentE
         "blocked" => Ok(DispositionStatus::Blocked),
         _ => Err(WorkArgumentError::Unsupported("disposition", value.clone())),
     }
+}
+
+fn replace(
+    args: &Map<String, Value>,
+    scope: WorkTurnScope,
+    id: String,
+    backfill: Option<Vec<String>>,
+) -> Result<Command, WorkArgumentError> {
+    let actions = nonempty_array(args.get("actions"), "actions")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| action(value, index))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Command::Replace(ReplacePlanInput {
+        scope,
+        mutation_call_id: id,
+        start_new: Some(boolean(args.get("start_new"), "start_new")?),
+        backfill_tool_call_ids: backfill,
+        objective: required(args.get("objective"), "objective")?,
+        governing_refs: Some(strings(args.get("governing_refs"), "governing_refs")?),
+        execution_mode: Some(execution_mode(args.get("execution_mode"))?),
+        actions,
+        checks: planned_checks(args)?,
+    }))
 }

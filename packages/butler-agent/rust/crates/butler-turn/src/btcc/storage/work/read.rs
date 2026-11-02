@@ -1,6 +1,8 @@
 //! Read models preserve source order and historical defaults.
 
 mod context;
+mod plan_steps;
+pub(super) use plan_steps::read as plan_steps;
 mod view;
 
 use rusqlite::Connection;

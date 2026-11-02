@@ -110,6 +110,14 @@ pub(in crate::btcc::authority) fn exact_approval(
     };
     let mut approval = approval::summarize(facts);
     let mut operation = approval::exact_operation(facts);
+    if !record.reusable
+        || matches!(
+            record.reason.as_str(),
+            "authority.taintReason" | "authority.unsandboxedReason"
+        )
+    {
+        operation.allow_conversation = Some(false);
+    }
     if record.reason == "authority.taintReason" {
         operation.allow_conversation = Some(false);
         if let Some(arguments) = input.as_object()

@@ -206,6 +206,7 @@ mod steward_direction_failure;
 mod steward_direction_finish;
 mod steward_direction_followup;
 mod steward_interrupted_queue;
+mod steward_plan_steps;
 mod steward_presentation;
 mod steward_results;
 mod stop_record_order;

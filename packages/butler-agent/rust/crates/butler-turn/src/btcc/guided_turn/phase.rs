@@ -8,7 +8,7 @@ mod visibility;
 
 pub use catalog::{GuidedCatalogRead, GuidedCatalogSnapshot, LedgerEffects};
 pub(crate) use policy::GuidedExecutionPolicy;
-pub use policy::PolicyRole;
+pub use policy::{PolicyRole, project_turn_access_mode};
 pub use selection::{
     GuidedPhase, GuidedPhaseInput, GuidedPhaseSelection, SurfaceMode, select_phase,
 };

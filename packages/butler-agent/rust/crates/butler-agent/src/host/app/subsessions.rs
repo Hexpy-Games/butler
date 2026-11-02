@@ -2,8 +2,12 @@
 
 mod control;
 mod lifecycle;
+mod progress;
 mod task_graphs;
+mod turn;
+use progress::with_progress;
 use std::sync::Arc;
+use turn::project_turn;
 
 use butler_gateway::gateway::{
     AppSessionViewPage, AppSubsessionPort, ApplicationFuture, GatewayApplicationError,
@@ -162,7 +166,16 @@ impl AppSubsessionPort for AppSubsessions {
                 .get("relation")
                 .is_some_and(serde_json::Value::is_object)
             {
-                with_child_messages(&conversations, &session_id, page, &mut projection).await?;
+                let (first, starts_at_beginning) =
+                    with_child_messages(&conversations, &session_id, page, &mut projection).await?;
+                progress::with_history(
+                    &progress,
+                    &session_id,
+                    first,
+                    starts_at_beginning,
+                    &mut projection,
+                )
+                .await?;
             }
             with_progress(&progress, &mut projection).await?;
             Ok(projection)
@@ -225,13 +238,14 @@ async fn with_child_messages(
     session_id: &str,
     page: Option<AppSessionViewPage>,
     projection: &mut serde_json::Value,
-) -> Result<(), GatewayApplicationError> {
+) -> Result<(Option<String>, bool), GatewayApplicationError> {
     let canonical_session_id = conversation_session_id_for_durable_session(session_id);
     let page = page.unwrap_or(AppSessionViewPage {
         after_cursor: None,
         before_cursor: None,
         limit: 200,
     });
+    let forward = page.after_cursor.is_some_and(|cursor| cursor > 0);
     let page = conversations
         .read_projection_message_page(
             &canonical_session_id,
@@ -241,6 +255,11 @@ async fn with_child_messages(
         )
         .await
         .map_err(GatewayApplicationError::internal_from)?;
+    let first = page
+        .messages
+        .first()
+        .and_then(|m| m.message.turn_id.clone());
+    let starts_at_beginning = !forward && !page.has_more;
     let request = projection
         .as_object_mut()
         .and_then(|object| object.remove("delegated_request"));
@@ -266,39 +285,9 @@ async fn with_child_messages(
     object.insert("messages".into(), serde_json::json!(messages));
     object.insert("messages_has_more".into(), serde_json::json!(page.has_more));
     if let Some(turn) = turn {
-        let recoverable = object
-            .get("latest_turn")
-            .and_then(|turn| turn.get("retryable"))
-            .and_then(serde_json::Value::as_bool)
-            == Some(true);
-        let state = if object
-            .get("latest_turn")
-            .and_then(|value| value.get("state"))
-            .and_then(serde_json::Value::as_str)
-            == Some("cancelled")
-        {
-            "cancelled"
-        } else if recoverable {
-            "runtime_fault"
-        } else {
-            turn_state(&turn.status)
-        };
-        let projected = serde_json::json!({
-            "id": turn.id, "state": state, "created_at": turn.started_at,
-            "updated_at": turn.completed_at.as_deref().unwrap_or(&turn.started_at),
-            "cancellable": state == "thinking", "retryable": recoverable,
-        });
-        object.insert("latest_turn".into(), projected.clone());
-        object.insert(
-            "active_turn".into(),
-            if state == "thinking" {
-                projected
-            } else {
-                serde_json::Value::Null
-            },
-        );
+        project_turn(object, &turn);
     }
-    Ok(())
+    Ok((first, starts_at_beginning))
 }
 
 fn project_message(
@@ -376,47 +365,6 @@ fn turn_state(status: &str) -> &'static str {
         "failed" | "runtime_fault" => "failed",
         _ => "delivered",
     }
-}
-
-async fn with_progress(
-    progress: &StorageProgressPublication,
-    projection: &mut serde_json::Value,
-) -> Result<(), GatewayApplicationError> {
-    for key in ["steward_children"] {
-        if let Some(children) = projection
-            .get_mut(key)
-            .and_then(serde_json::Value::as_array_mut)
-        {
-            for child in children {
-                child_progress(progress, child).await?;
-            }
-        }
-    }
-    if projection
-        .get("relation")
-        .is_some_and(serde_json::Value::is_object)
-    {
-        child_progress(progress, projection).await?;
-    }
-    Ok(())
-}
-
-async fn child_progress(
-    progress: &StorageProgressPublication,
-    child: &mut serde_json::Value,
-) -> Result<(), GatewayApplicationError> {
-    let Some(id) = child
-        .pointer("/latest_turn/id")
-        .and_then(serde_json::Value::as_str)
-    else {
-        return Ok(());
-    };
-    let events = progress
-        .read_child_progress_events(id.to_owned())
-        .await
-        .map_err(GatewayApplicationError::internal_from)?;
-    child["public_progress_events"] = serde_json::json!(events);
-    Ok(())
 }
 
 fn map_error(error: &butler_turn::btcc::BtccError) -> GatewayApplicationError {

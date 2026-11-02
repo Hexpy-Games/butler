@@ -4,6 +4,9 @@ use crate::btcc::{AccessMode, TurnRecord};
 
 use super::super::work::GuidedPreparationError;
 
+mod access;
+pub use access::project_turn_access_mode;
+
 /// The role a guided turn runs as; other stored names are kept verbatim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PolicyRole {

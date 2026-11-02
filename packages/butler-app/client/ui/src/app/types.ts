@@ -1021,6 +1021,7 @@ export interface ProgressDetailRow {
 }
 
 export interface ProgressRow {
+  action_key?: string | null;
   failure_code?: string;
   auth_type?: ProviderAuthMethod | null;
   id: string;
@@ -1204,7 +1205,33 @@ export interface SubtaskView {
   started_at: string;
 }
 
+export interface WorkPlanAction {
+  action_key: string;
+  order: number;
+  title: string;
+  purpose: string;
+  status: "pending" | "active" | "done" | "blocked" | "skipped";
+  started_at?: string;
+  finished_at?: string;
+  added_in_revision: number;
+}
+
+export interface WorkPlanRevision {
+  revision: number;
+  at: string;
+  added: string[];
+  removed: string[];
+  reason?: string;
+}
+
+export interface WorkPlan {
+  revision: number;
+  actions: WorkPlanAction[];
+  revisions: WorkPlanRevision[];
+}
+
 export interface StewardSessionSummaryView {
+  plan?: WorkPlan;
   relation: SessionRelationView;
   session_id: string;
   title: string;
@@ -1224,6 +1251,7 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
+  plan?: WorkPlan;
   epic_ids?: string[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
@@ -1667,6 +1695,7 @@ export type WorkerActivityPhase =
   | string;
 
 export interface WorkerActivitySummary {
+  action_key?: string;
   worker_id: string;
   activity_kind?: "planned" | "worker";
   worker_label: string;
