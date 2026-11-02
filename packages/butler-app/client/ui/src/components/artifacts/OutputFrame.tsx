@@ -9,7 +9,7 @@ import { ArtifactPreviewFrame, Button, ButtonContainer, NativeSelect, NativeSele
 interface OutputView { url: string; revision: number; revisions: number[] }
 
 /** Resolve a fresh capability on every open, reload and revision selection. */
-export function OutputFrame({ outputId, title, preview = false }: { outputId: string; title: string; preview?: boolean }) {
+export function OutputFrame({ outputId, title, preview = false, sessionId: ownerSession }: { outputId: string; title: string; preview?: boolean; sessionId?: string }) {
   useAppLocale();
   const [view, setView] = useState<OutputView | null>(null);
   const [revision, setRevision] = useState<number>();
@@ -17,7 +17,8 @@ export function OutputFrame({ outputId, title, preview = false }: { outputId: st
   const [failure, setFailure] = useState<string>();
   const copy = appCopy.artifacts;
   const browserEnabled = useBrowserState((state) => state.enabled);
-  const sessionId = useButlerStore((state) => state.activeChatId);
+  const activeSession = useButlerStore((state) => state.activeChatId);
+  const sessionId = ownerSession || activeSession;
   const load = useCallback(async () => {
     setFailure(undefined);
     try {
