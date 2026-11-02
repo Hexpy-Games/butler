@@ -181,42 +181,6 @@ pub(super) fn response(items: &[Value]) -> ResponseRecord {
     record
 }
 
-pub(super) fn ranked_cassette() -> Result<Cassette, HarnessError> {
-    let template = Cassette::load("TOOL-01")?;
-    let mut cassette = Cassette::load("TOOL-01")?;
-    cassette.exchanges.clear();
-    crate::browser_prefix::add_turn(
-        &mut cassette,
-        &template,
-        "Read ranked source windows",
-        vec![
-            ("tool_describe", json!({"ids":["native:browser_open"]})),
-            (
-                "browser_open",
-                json!({"url":"https://store.example/product-b"}),
-            ),
-            (
-                "web_read",
-                json!({"tab":"product-b","query":"가격 price","max_chunks":1}),
-            ),
-            (
-                "web_read",
-                json!({"tab":"product-b","query":"가격 price","max_chunks":1}),
-            ),
-            (
-                "web_read",
-                json!({"tab":"product-b","start_chunk":0,"max_chunks":8,"max_chars":8000}),
-            ),
-            (
-                "web_read",
-                json!({"tab":"product-b","query":"unmatched","start_chunk":0,"max_chunks":8}),
-            ),
-        ],
-        "Read every chunk.",
-    );
-    Ok(cassette)
-}
-
 pub(super) fn payment_cassette() -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut cassette = Cassette::load("TOOL-01")?;

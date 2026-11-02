@@ -133,19 +133,13 @@ impl GuidedTurnFactoryAdapter {
             let profiles = self.subsessions.enabled_worker_profiles().await?;
             surface::with_worker_profile_choices(phase, &profiles)?;
         }
-        if self
+        let image_settings = self
             .monitoring
             .configuration
             .image_model_settings()
             .await
-            .ok()
-            .is_none_or(|v| v["selected"].is_null())
-        {
-            for name in ["generate_image", "edit_image"] {
-                phase.authorized_names.retain(|n| n != name);
-                phase.provider_tools.retain(|t| t["name"] != name);
-            }
-        }
+            .ok();
+        surface::with_image_model_choices(phase, image_settings.as_ref());
         surface::available(phase, self.preparation.catalog.snapshot())
     }
 }
@@ -369,7 +363,7 @@ impl GuidedTurnFactoryAdapter {
             self.preparation.work.clone(),
             scope.clone(),
             policy.tracking_mode.clone(),
-            policy.role.as_str(),
+            self.preparation.subsessions.repository(),
             language,
             turn.original_message.clone(),
         )?
