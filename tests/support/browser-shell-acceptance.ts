@@ -34,10 +34,12 @@ export async function toggleState(app: ShellApp, tone: string | null, dot: boole
 /** No finite motion on the window, the workspace, inside the browser pane, or on anything that carries the page card. */
 export const sheetSettled = `(() => {
   const running = n => Boolean(n?.getAnimations().some(a => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity));
+  // A pane waiting for its still has not moved yet.
+  if (document.querySelector('[data-native-view-hold]')) return false;
   const root = document.querySelector('[data-test-class=mac-window]'), frame = document.querySelector('[data-slot=native-view-frame]');
   if (!frame || root.hasAttribute('data-track-switching') || running(root) || running(document.querySelector('[data-slot=adaptive-shell-workspace]'))) return false;
   if (document.querySelector('[data-slot=browser-pane]').getAnimations({ subtree: true }).some(a => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity)) return false;
-  // The split pane enters with its own animation (pane-in); the page card moves with it.
+  // The split pane moves on its own animation; the page card moves with it.
   for (let node = frame.parentElement; node; node = node.parentElement) if (running(node)) return false;
   return true;
 })()`;

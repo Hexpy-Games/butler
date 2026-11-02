@@ -133,6 +133,10 @@ pub(super) fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
 }
 
 #[cfg(target_os = "macos")]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the instance layer sits below secure_fs; Unix has one canonical form"
+)]
 pub(super) fn process_executable(pid: u32) -> Result<Option<String>, IdentityError> {
     use libproc::proc_pid::pidpath;
 

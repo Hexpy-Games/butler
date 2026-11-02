@@ -92,6 +92,10 @@ fn win32_trimmed_names_are_swept_as_named(
     before: &butler_platform::command_sandbox::ProjectEntries,
     data: &std::path::Path,
 ) {
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "only the extended form can name `sub.` apart from `sub`"
+    )]
     let verbatim = fs::canonicalize(project).unwrap().join("sub.");
     fs::create_dir(&verbatim).unwrap();
     fs::write(verbatim.join(".env"), "hidden").unwrap();

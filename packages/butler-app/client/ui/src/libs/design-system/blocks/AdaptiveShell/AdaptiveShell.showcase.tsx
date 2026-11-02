@@ -10,6 +10,7 @@ import { Typo } from "../../components/Typo";
 import { ConversationFrameDemo } from "../BrowserPane/fixtures/ConversationFrame";
 import { cardsStories } from "./fixtures/cardsStories";
 import { ShellFrameDemo } from "./fixtures/ShellFrameDemo";
+import { SplitWindowDemo } from "../TitlebarShell/fixtures/SplitTitlebarDemo";
 import {
   AdaptivePanelResizeHandle,
   AdaptivePanelTitlebar,
@@ -103,6 +104,13 @@ export const stories: ShowcaseStory[] = [
     name: "Conversation frame: chat | browser pane (resizable)",
     widths: ["app", "wide"],
     render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={900} />,
+  },
+  {
+    // AdaptiveShellSplit motion: the toggle opens and closes the pane on one motion (--motion-slow, emphasized);
+    // the pane travels, the chat card's edge and the title row's chat group move with it. A new contextKey places it at once.
+    name: "Pane open and close (live): one motion for pane, chat edge and title group",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <SplitWindowDemo locale={locale} paneOpen={false} />,
   },
   {
     // AdaptiveShellPeekEdge: the collapsed sidebar floats over the workspace while the pointer is on it.

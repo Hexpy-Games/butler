@@ -13,7 +13,7 @@ pub(super) fn open_root(path: &Path) -> io::Result<Directory> {
     // Keep the verbatim `\\?\` form: every child path joins names onto it, and
     // Win32 parsing would strip a trailing dot or space or map a device name,
     // so `sub.` or `.env ` would otherwise resolve to a different entry.
-    let root = fs::canonicalize(path)?;
+    let root = crate::secure_fs::canonicalize_extended(path)?;
     if !fs::symlink_metadata(&root)?.is_dir() {
         return Err(io::Error::other("project root is not a directory"));
     }
