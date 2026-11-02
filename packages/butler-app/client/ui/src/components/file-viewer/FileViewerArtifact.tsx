@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { LIBRARY_VIEWER, useFileViewerState } from "@/app/fileViewerState";
 import { appCopy } from "@/app/copy";
 import { refreshSessionFileUrls } from "@/app/messageFileRefresh";
 import { useButlerStore } from "@/app/store";
@@ -42,6 +43,7 @@ function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSu
 }
 
 function openInLibrary(title: string) {
+  useFileViewerState.getState().setShown(LIBRARY_VIEWER, false);
   clearFilters();
   setFilters({ text: title, q: title });
   openLibrary({ section: "document" });

@@ -1,3 +1,4 @@
+import { LibraryFileViewer } from "../library/LibraryFileViewer";
 import { DocumentReadingPage } from "../documents/DocumentReadingPage";
 import { useState } from "react";
 import { useAppLocale } from "@/app/copy";
@@ -11,6 +12,10 @@ import { LibraryAttachDialog } from "./LibraryAttachDialog";
 import type { LibraryItem } from "./libraryStore";
 export function LibraryPage() {
   useAppLocale();
+  return <><LibraryContent /><LibraryFileViewer /></>;
+}
+
+function LibraryContent() {
   const view = useButlerStore((state) => state.view);
   const [attachment, setAttachment] = useState<LibraryItem>();
   if (view.kind !== "library") return null;

@@ -95,8 +95,8 @@ async function open(page: Page, width = 1440, theme = "light", fullPage = false)
   await page.setViewportSize({ width, height: 1000 });
   await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
   if (fullPage) {
-    await drawer(page);
-    await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click();
+    // Explicit document links retain the full-page reader; drawer clicks use the shared viewer.
+    await page.goto(`${base}?visual=components&theme=${theme}&locale=ko&doc=${head.id}`);
   } else await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
   await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
   await page.evaluate(() => document.fonts.ready);
@@ -202,6 +202,7 @@ async function closeAndFlush(page: Page) {
   assert.equal(new URL(page.url()).searchParams.get("doc"), null);
 }
 async function drawer(page: Page) {
+  if (await page.locator('[data-test-class="library-file-viewer"]').count()) await page.keyboard.press("Escape");
   await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
   await page.locator('[data-library-item="doc_report"]').waitFor(); await page.locator('[data-library-item="file-report"]').waitFor();
 }
@@ -227,7 +228,8 @@ async function navigation(page: Page) {
   await drawer(page);
   await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
-  await page.reload(); await editor(page).waitFor();
+  await page.reload(); await drawer(page);
+  await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click(); await editor(page).waitFor();
   await clickDocumentAction(page, "원래 대화");
   assert.equal(new URL(page.url()).searchParams.get("doc"), null);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -451,8 +453,9 @@ async function matrix(page: Page) {
     await page.getByRole("button", { name: await page.getByRole("button", { name: "내보내기", exact: true }).isVisible() ? "내보내기" : "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: /PDF/u }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape"); await page.getByRole("menu").waitFor({ state: "hidden" });
     await drawer(page); await shot(page, "drawer", width, theme);
     await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-reopened", width, theme);
-    assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
-    await page.reload(); await editor(page).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("doc"), null);
+    assert.equal(await page.locator('[data-test-class="library-file-viewer"]').count(), 1);
+    await page.reload(); await drawer(page);
     await drawer(page); await page.locator('[data-library-item="file-report"]').getByText("File report", { exact: true }).click();
     await page.getByRole("combobox", { name: "버전", exact: true }).waitFor(); await page.locator('[data-test-class="artifact-viewer"]').waitFor();
     await shot(page, "file-viewer", width, theme);

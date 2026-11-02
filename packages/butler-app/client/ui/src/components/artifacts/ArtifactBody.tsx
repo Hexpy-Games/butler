@@ -50,7 +50,7 @@ export function ArtifactBody({ artifact, refreshFileUrls, surface = "card" }: {
   useFreshFrameSource(file, mode === "pdf", refreshFileUrls);
   return (
     <ArtifactPreview surface={surface} data-test-class="artifact-viewer" data-preview-mode={mode}>
-      {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} preview={artifact.url?.startsWith("/previews/")} /> : mode === "html" ? <HtmlFileFrame key={file.path} path={file.path} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file, save: surface === "page" ? <OpenInAppButton artifact={artifact} /> : <ArtifactSaveButton artifact={artifact} /> })}
+      {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} sessionId={artifact.session_id} preview={artifact.url?.startsWith("/previews/")} /> : mode === "html" ? <HtmlFileFrame key={file.path} path={file.path} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file, save: surface === "page" ? <OpenInAppButton artifact={artifact} /> : <ArtifactSaveButton artifact={artifact} /> })}
     </ArtifactPreview>
   );
 }
