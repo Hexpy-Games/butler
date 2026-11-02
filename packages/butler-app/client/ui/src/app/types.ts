@@ -1242,6 +1242,7 @@ export interface SessionView {
   latest_turn: SessionViewTurn | null;
   waiting_for_children?: boolean;
   messages: MessageRecord[];
+  activity_window?: { next_cursor_token?: string; requested_cursor_token?: string; has_more: boolean };
   activity_history?: Array<{ turn_id: string; created_at: string; rows: ProgressRow[] }>;
   message_window: SessionViewMessageWindow;
   workers: WorkerActivitySummary[];

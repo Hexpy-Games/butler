@@ -81,6 +81,7 @@ async fn message_and_turn_cursors_preserve_distinct_public_rules() {
         .session_view(
             "general".into(),
             AppSessionViewPage {
+                activity_after_cursor: None,
                 after_cursor: None,
                 before_cursor: None,
                 limit: 2,
@@ -98,6 +99,7 @@ async fn message_and_turn_cursors_preserve_distinct_public_rules() {
         .session_view(
             "general".into(),
             AppSessionViewPage {
+                activity_after_cursor: None,
                 after_cursor: None,
                 before_cursor: Some(204),
                 limit: 2,
@@ -113,6 +115,7 @@ async fn message_and_turn_cursors_preserve_distinct_public_rules() {
         .session_view(
             "general".into(),
             AppSessionViewPage {
+                activity_after_cursor: None,
                 after_cursor: Some(203),
                 before_cursor: None,
                 limit: 2,

@@ -1,6 +1,7 @@
 //! Host adapter from App session projection/control to the BTCC owner.
 
 mod control;
+mod history;
 mod lifecycle;
 mod task_graphs;
 use std::sync::Arc;
@@ -162,9 +163,15 @@ impl AppSubsessionPort for AppSubsessions {
                 .get("relation")
                 .is_some_and(serde_json::Value::is_object)
             {
-                with_child_messages(&conversations, &session_id, page, &mut projection).await?;
+                with_child_messages(&conversations, &session_id, page.clone(), &mut projection)
+                    .await?;
             }
             with_progress(&progress, &mut projection).await?;
+            if page.is_none() && projection["relation"].is_object() {
+                child_progress(&progress, &mut projection).await?;
+            } else {
+                history::enrich(&progress, &session_id, page.as_ref(), &mut projection).await?;
+            }
             Ok(projection)
         })
     }
@@ -228,6 +235,7 @@ async fn with_child_messages(
 ) -> Result<(), GatewayApplicationError> {
     let canonical_session_id = conversation_session_id_for_durable_session(session_id);
     let page = page.unwrap_or(AppSessionViewPage {
+        activity_after_cursor: None,
         after_cursor: None,
         before_cursor: None,
         limit: 200,
@@ -249,55 +257,9 @@ async fn with_child_messages(
         .iter()
         .filter_map(|message| project_message(message, session_id, request.as_ref()))
         .collect();
-    let turn_id = projection
-        .pointer("/latest_turn/id")
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_owned);
-    let turn = match turn_id {
-        Some(id) => conversations
-            .read_turn(&id)
-            .await
-            .map_err(GatewayApplicationError::internal_from)?,
-        None => None,
-    };
-    let object = projection
-        .as_object_mut()
-        .ok_or(GatewayApplicationError::internal())?;
-    object.insert("messages".into(), serde_json::json!(messages));
-    object.insert("messages_has_more".into(), serde_json::json!(page.has_more));
-    if let Some(turn) = turn {
-        let recoverable = object
-            .get("latest_turn")
-            .and_then(|turn| turn.get("retryable"))
-            .and_then(serde_json::Value::as_bool)
-            == Some(true);
-        let state = if object
-            .get("latest_turn")
-            .and_then(|value| value.get("state"))
-            .and_then(serde_json::Value::as_str)
-            == Some("cancelled")
-        {
-            "cancelled"
-        } else if recoverable {
-            "runtime_fault"
-        } else {
-            turn_state(&turn.status)
-        };
-        let projected = serde_json::json!({
-            "id": turn.id, "state": state, "created_at": turn.started_at,
-            "updated_at": turn.completed_at.as_deref().unwrap_or(&turn.started_at),
-            "cancellable": state == "thinking", "retryable": recoverable,
-        });
-        object.insert("latest_turn".into(), projected.clone());
-        object.insert(
-            "active_turn".into(),
-            if state == "thinking" {
-                projected
-            } else {
-                serde_json::Value::Null
-            },
-        );
-    }
+    projection["messages"] = serde_json::json!(messages);
+    projection["messages_has_more"] = serde_json::json!(page.has_more);
+    lifecycle::with_latest_turn(conversations, projection).await?;
     Ok(())
 }
 
@@ -369,15 +331,6 @@ fn project_message(
     }))
 }
 
-fn turn_state(status: &str) -> &'static str {
-    match status {
-        "running" => "thinking",
-        "cancelled" => "cancelled",
-        "failed" | "runtime_fault" => "failed",
-        _ => "delivered",
-    }
-}
-
 async fn with_progress(
     progress: &StorageProgressPublication,
     projection: &mut serde_json::Value,
@@ -391,12 +344,6 @@ async fn with_progress(
                 child_progress(progress, child).await?;
             }
         }
-    }
-    if projection
-        .get("relation")
-        .is_some_and(serde_json::Value::is_object)
-    {
-        child_progress(progress, projection).await?;
     }
     Ok(())
 }

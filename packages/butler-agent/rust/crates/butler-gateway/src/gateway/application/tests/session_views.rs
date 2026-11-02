@@ -25,6 +25,7 @@ async fn session_view_projects_progress_for_active_and_terminal_latest_turn() {
         .turn
         .unwrap();
     let page = AppSessionViewPage {
+        activity_after_cursor: None,
         after_cursor: None,
         before_cursor: None,
         limit: 20,

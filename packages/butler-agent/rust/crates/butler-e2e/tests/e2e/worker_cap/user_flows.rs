@@ -52,6 +52,15 @@ async fn cb_11_repeat_delegation_then_cancel_acknowledges_and_advances_fifo()
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    let own =
+        s.gw.get(&format!(
+            "/session-view?session_id={}",
+            rows[0]["session_id"].as_str().unwrap()
+        ))
+        .await?;
+    assert_eq!(own.data()["status"], "cancelled");
+    assert_eq!(own.data()["latest_turn"]["state"], "cancelled");
+    assert!(own.data()["active_turn"].is_null());
     started(&script, 3).await;
     assert_eq!(*script.started.lock().unwrap(), ["red-0", "red-1", "red-2"]);
     let (_, current) = workers(&s, "general", 4).await?;

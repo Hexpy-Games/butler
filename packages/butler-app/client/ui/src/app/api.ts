@@ -162,10 +162,11 @@ function sessionViewResyncPath(
   const url = new URL(path, "http://butler.local");
   if (url.pathname !== "/session-view") return null;
   const hasOpaqueCursor = url.searchParams.has("cursor_token") ||
-    url.searchParams.has("before_cursor_token");
+    url.searchParams.has("before_cursor_token") || url.searchParams.has("activity_cursor_token");
   if (!hasOpaqueCursor) return null;
   url.searchParams.delete("cursor_token");
   url.searchParams.delete("before_cursor_token");
+  url.searchParams.delete("activity_cursor_token");
   return `${url.pathname}${url.search}`;
 }
 

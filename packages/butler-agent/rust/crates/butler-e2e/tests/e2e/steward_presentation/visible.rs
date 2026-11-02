@@ -23,3 +23,22 @@ pub(super) async fn assert_delivered_messages(
     }
     Ok(())
 }
+
+pub(super) async fn assert_failed_child(
+    s: &Scenario,
+    child: &serde_json::Value,
+) -> Result<(), HarnessError> {
+    assert_eq!(child["status"], "failed", "{child}");
+    assert_eq!(child["latest_turn"]["state"], "failed");
+    assert!(child["active_turn"].is_null());
+    let own =
+        s.gw.get(&format!(
+            "/session-view?session_id={}",
+            child["session_id"].as_str().unwrap()
+        ))
+        .await?;
+    assert_eq!(own.data()["status"], "failed");
+    assert_eq!(own.data()["latest_turn"]["state"], "failed");
+    assert!(own.data()["active_turn"].is_null());
+    Ok(())
+}

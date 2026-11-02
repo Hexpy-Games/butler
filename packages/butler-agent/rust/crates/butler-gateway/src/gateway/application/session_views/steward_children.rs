@@ -94,34 +94,8 @@ pub(super) fn project_progress(child: &mut Map<String, Value>) {
     let events = child
         .remove("public_progress_events")
         .unwrap_or_else(|| json!([]));
-    let rows: Vec<Value> = events
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|event| {
-            let kind = event.get("kind")?.as_str()?;
-            let empty = Map::new();
-            let payload = event
-                .get("payload")
-                .and_then(Value::as_object)
-                .unwrap_or(&empty);
-            let id = event.get("id")?.as_str()?;
-            let now = event.get("createdAt").and_then(Value::as_str).or_else(|| {
-                child
-                    .get("latest_turn")
-                    .and_then(|turn| turn.get("updated_at"))
-                    .and_then(Value::as_str)
-            })?;
-            super::super::projection::row_from_runtime_event(
-                kind,
-                payload,
-                id,
-                now,
-                event.get("turnSequence").and_then(Value::as_u64),
-            )
-            .map(Value::Object)
-        })
-        .collect();
+    let rows = progress_rows(&events, child.get("latest_turn").unwrap_or(&Value::Null));
+    project_history(child);
     let summary = rows
         .iter()
         .rev()
@@ -209,4 +183,57 @@ fn complete_turn(turn: &mut Map<String, Value>) {
             "safe_progress_rows": [],
         })
     });
+}
+
+fn progress_rows(events: &Value, turn: &Value) -> Vec<Value> {
+    events
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|event| {
+            let kind = event.get("kind")?.as_str()?;
+            let empty = Map::new();
+            let payload = event
+                .get("payload")
+                .and_then(Value::as_object)
+                .unwrap_or(&empty);
+            let id = event.get("id")?.as_str()?;
+            let now = event
+                .get("createdAt")
+                .and_then(Value::as_str)
+                .or_else(|| turn.get("updated_at").and_then(Value::as_str))?;
+            super::super::projection::row_from_runtime_event(
+                kind,
+                payload,
+                id,
+                now,
+                event.get("turnSequence").and_then(Value::as_u64),
+            )
+            .map(Value::Object)
+        })
+        .collect()
+}
+
+fn project_history(child: &mut Map<String, Value>) {
+    let Some(events) = child.remove("public_activity_events") else {
+        return;
+    };
+    let mut history: Vec<Value> = Vec::new();
+    for event in events.as_array().into_iter().flatten() {
+        let Some(turn_id) = event.get("turnId").and_then(Value::as_str) else {
+            continue;
+        };
+        let rows = progress_rows(&json!([event]), &Value::Null);
+        if rows.is_empty() {
+            continue;
+        }
+        if let Some(entry) = history.iter_mut().find(|entry| entry["turn_id"] == turn_id) {
+            if let Some(existing) = entry["rows"].as_array_mut() {
+                existing.extend(rows);
+            }
+        } else {
+            history.push(json!({"turn_id":turn_id,"created_at":event["createdAt"],"rows":rows}));
+        }
+    }
+    child.insert("activity_history".into(), json!(history));
 }

@@ -7,6 +7,8 @@
 )]
 #[path = "worker_cap/historical.rs"]
 mod historical;
+#[path = "worker_cap/history.rs"]
+mod history;
 #[path = "worker_cap/plans.rs"]
 mod plans;
 #[path = "worker_cap/recovery.rs"]

@@ -7,6 +7,7 @@ use super::{BtccStorage, StorageError, StorageResult};
 use crate::btcc::StorageCode;
 use crate::btcc::{ProgressDestination, RuntimeTurnEventInput};
 
+mod child_history;
 #[cfg(test)]
 mod operation_output_tests;
 

@@ -59,12 +59,11 @@ async fn cb_11_direction_during_a_workers_final_report_opens_its_own_turn()
 }
 
 /// Only a direction starts a new Work: a Worker result that arrives after its
-/// Steward closed fails visibly instead of reopening the session.
+/// Steward closed cannot replace its delivered result or reopen the session.
 #[tokio::test]
-async fn cb_11_late_worker_result_on_a_closed_steward_work_fails_visibly()
--> Result<(), HarnessError> {
+async fn cb_11_late_worker_result_keeps_the_closed_steward_result() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, script, server) = setup("CB-11-LATE-WORKER", 1).await?;
+    let (mut s, script, server) = setup("CB-11-LATE-WORKER", 1).await?;
     script.close_before_worker.store(true, Ordering::SeqCst);
     s.gw.say("general", "Verify batch red").await?;
     let (steward, _) = workers(&s, "general", 1).await?;
@@ -84,19 +83,50 @@ async fn cb_11_late_worker_result_on_a_closed_steward_work_fails_visibly()
     }
     assert_eq!(saved(&database)?[0].1, "success", "{:?}", saved(&database)?);
     script.release("red-0");
-    while saved(&database)?.len() < 2 {
-        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+    let root = s.sandbox.data.join("runtime/inbound-events");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let ended = ["failed", "processed"].into_iter().any(|state| {
+            super::super::steward_interrupted_queue::records(&root, state)
+                .iter()
+                .any(|path| {
+                    let record = super::super::steward_interrupted_queue::read_record(path);
+                    record
+                        .pointer("/envelope/raw/source")
+                        .and_then(Value::as_str)
+                        == Some("btcc-worker-result")
+                        && record.pointer("/envelope/peer/id").and_then(Value::as_str)
+                            == Some(steward.as_str())
+                })
+        });
+        if ended {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "late input never settled: {}",
+            s.agent.logs()
+        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let rows = saved(&database)?;
-    assert!(rows[1].0.starts_with("worker-result-turn-"), "{rows:?}");
-    assert_eq!(rows[1].1, "failed", "{rows:?}");
-    assert!(
-        s.agent
-            .logs()
-            .contains("code=subsession_root_work_identity_mismatch"),
-        "{}",
-        s.agent.logs()
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let child =
+            s.gw.get(&format!("/session-view?session_id={steward}"))
+                .await?;
+        if child.data()["workers"][0]["result"]["status"] == "success" {
+            assert_eq!(child.data()["status"], "delivered", "{child:?}");
+            assert_eq!(child.data()["latest_turn"]["state"], "delivered");
+            assert!(child.data()["active_turn"].is_null());
+            break;
+        }
+        assert!(Instant::now() < deadline, "{child:?}");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        saved(&database)?.len(),
+        1,
+        "late input cannot replace the completed Work result"
     );
     let works: i64 = database.query_row(
         "SELECT count(*) FROM btcc_guided_works WHERE session_id=?1",
@@ -104,6 +134,7 @@ async fn cb_11_late_worker_result_on_a_closed_steward_work_fails_visibly()
         |row| row.get(0),
     )?;
     assert_eq!(works, 1, "a late Worker result starts no Work");
+    super::history::assert_legacy_late_failure(&mut s, &steward).await?;
     s.finish().await?;
     server.abort();
     Ok(())

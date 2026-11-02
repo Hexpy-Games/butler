@@ -53,6 +53,11 @@ impl SqliteSubsessionRepository {
         self.storage.execute(move |db| {
             let delegation = read(db,"r.child_session_id=?1",&child_session)?.ok_or_else(|| StorageError::new(StorageCode::SubsessionRelationMissing,"Subsession relation is missing"))?;
             let result_id = turn_result_id(&child_session, &child_turn);
+            if settlement::settled_result_id(db, &delegation.relation_id)?
+                .is_some_and(|settled| settled != result_id)
+            {
+                return Ok(());
+            }
             let packet = &delegation.packet;
             let model = packet.model_ref.as_str();
             let reasoning = packet.reasoning_effort.as_str();
@@ -104,13 +109,7 @@ impl SqliteSubsessionRepository {
             };
             let input = serde_json::to_string(&input).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
             tx.execute("INSERT OR IGNORE INTO btcc_subsession_outbox (outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",params![format!("outbox-{result_id}"),delegation.relation_id,result_id,delegation.parent_session_id,delegation.parent_turn_id,format!("subsession-result-message:{result_id}"),input,now]).map_err(StorageError::sqlite)?;
-            super::directions::settle_continued_direction(&tx, &delegation.relation_id, &child_turn, &now)?;
-            if packet.child_role == ChildRole::Steward && status == "cancelled" {
-                super::directions::retire_with_stop(&tx, &delegation.relation_id, &child_turn, &now)?;
-            }
-            if packet.child_role == ChildRole::Worker {
-                tx.execute(super::worker_admission::COMPLETE_WORKER_SQL, params![delegation.relation_id]).map_err(StorageError::sqlite)?;
-            }
+            settle_child_execution(&tx, &delegation, &child_turn, &status, &now)?;
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(())
         }).await
@@ -202,6 +201,27 @@ fn append_relay(text: &mut String, role: ChildRole, status: &str, has_handoff: b
     if role == ChildRole::Steward && status == "success" && !has_handoff {
         text.push_str(RELAY);
     }
+}
+
+fn settle_child_execution(
+    tx: &rusqlite::Transaction<'_>,
+    delegation: &StoredSubsessionDelegation,
+    turn: &str,
+    status: &str,
+    now: &str,
+) -> Result<(), StorageError> {
+    super::directions::settle_continued_direction(tx, &delegation.relation_id, turn, now)?;
+    if delegation.packet.child_role == ChildRole::Steward && status == "cancelled" {
+        super::directions::retire_with_stop(tx, &delegation.relation_id, turn, now)?;
+    }
+    if delegation.packet.child_role == ChildRole::Worker {
+        tx.execute(
+            super::worker_admission::COMPLETE_WORKER_SQL,
+            params![delegation.relation_id],
+        )
+        .map_err(StorageError::sqlite)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

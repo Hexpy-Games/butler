@@ -339,6 +339,7 @@ async fn interrupted_steward_returns_its_failure_to_the_parent() -> Result<(), H
     // The parent answers from the delegated result; nobody resumes the child.
     let child = wait_result(&s).await?;
     assert_eq!(child["result"]["status"], "failed", "{child}");
+    visible::assert_failed_child(&s, &child).await?;
     assert_eq!(child["terminal"], true, "{child}");
     assert_eq!(child["latest_turn"]["retryable"], false, "{child}");
     assert!(
