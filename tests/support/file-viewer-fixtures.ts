@@ -77,7 +77,7 @@ export function withResults(view: SessionView): SessionView {
   return { ...view, artifacts: [artifact(FILES.markdown, "document", true), artifact(FILES.code, "code", true)], messages: [...view.messages, answer] };
 }
 
-/** Geometry of the docked viewer: no sideways overflow anywhere, and the reading page within 760px and 48px in. */
+/** Geometry of the docked viewer: no sideways overflow anywhere, with the page and content widths and side insets. */
 export async function viewerGeometry(viewer: Locator) {
   return viewer.evaluate((root) => {
     const page = root.querySelector('[data-test-class="file-viewer-page"]')!.getBoundingClientRect();
@@ -86,8 +86,11 @@ export async function viewerGeometry(viewer: Locator) {
     const card = root.getBoundingClientRect();
     return {
       pageWidth: page.width,
-      insetStart: Math.round(content.left - card.left),
-      insetEnd: Math.round(card.right - content.right),
+      // Measure inside the card border, where the reading gutters start.
+      paneWidth: root.clientWidth,
+      contentWidth: content.width,
+      insetStart: content.left - card.left,
+      insetEnd: card.right - content.right,
       // What the user can scroll sideways: the pane's scroller and the window. The card clips its own edges.
       overflow: Math.max(scroll.scrollWidth - scroll.clientWidth, document.documentElement.scrollWidth - innerWidth),
       contentPastCard: Math.max(0, Math.round(content.right - card.right)),

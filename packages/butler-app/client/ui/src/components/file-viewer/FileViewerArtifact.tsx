@@ -7,7 +7,7 @@ import { Library, Save } from "@/butler-ds";
 import { ArtifactBody, revisionArtifact } from "../artifacts/ArtifactBody";
 import { ArtifactRevisionSelect } from "../artifacts/ArtifactViewer";
 import { artifactCardActions } from "../artifacts/artifactActions";
-import { artifactDescription, artifactMeta } from "../artifacts/artifactDisplay";
+import { artifactDescription, artifactMeta, artifactPreviewMode } from "../artifacts/artifactDisplay";
 import { clearFilters, setFilters } from "../library/libraryFilters";
 import { openLibrary } from "../library/libraryNav";
 import { FileViewerHeader, FileViewerPage, type FileViewerAction } from "./FileViewerFrame";
@@ -25,7 +25,7 @@ export function FileViewerArtifact({ sessionId, artifact: latest, onClose, onBac
   return <>
     <FileViewerHeader title={artifact.title} meta={meta} onClose={onClose} onBack={onBack} actions={fileActions(latest, artifact)}
       leading={<ArtifactRevisionSelect artifact={latest} index={index} onChange={setIndex} />} />
-    <FileViewerPage><ArtifactBody artifact={artifact} refreshFileUrls={refreshFileUrls} surface="page" /></FileViewerPage>
+    <FileViewerPage fill={artifactPreviewMode(artifact) === "markdown"}><ArtifactBody artifact={artifact} refreshFileUrls={refreshFileUrls} surface="page" /></FileViewerPage>
   </>;
 }
 

@@ -2,8 +2,9 @@
 // Files are uploaded to the isolated App and served by it; the session view is replayed with them as Butler's
 // results and an answer showing the picture. Covers: a 결과물 from 세션 정보 docks the viewer (세션 정보 floats),
 // a second file adds tabs, the browser toggle takes the slot with the viewer kept behind, '파일 보기' brings it
-// back, the answer image's 열기 opens it, closing every file hides the toggle, no sideways overflow, a reading
-// page of at most 760px 48px in, the reduced-motion path, and a phone (the viewer takes the workspace). Light and dark cells; screenshots at 1440 and 1024
+// back, the answer image's 열기 opens it, closing every file hides the toggle, no sideways overflow,
+// markdown capped at 1400px with 48px gutters and other reading pages capped at 760px, reduced motion, and a phone
+// (the viewer takes the workspace). Light and dark cells; screenshots at 1440 and 1024
 // (deviceScaleFactor 2, full window plus the pane crop) into BUTLER_SMOKE_SCREENSHOTS.
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
@@ -140,12 +141,34 @@ try {
   await verifyHeader(viewer, "image", { compact: false, library: false });
   await capture("image");
 
+  // Below the document cap, markdown fills the pane while other files keep the reading cap.
+  await page.setViewportSize({ width: 1800, height: 960 });
+  const widePane = (await viewerGeometry(viewer)).paneWidth;
+  assert(widePane > 760 && widePane < 1400, "the wide cell exercises 100% below the document cap");
+  await verifyGeometry(viewer, "image-wide");
+  await tabs.filter({ hasText: FILES.markdown }).click();
+  await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
+  await verifyGeometry(viewer, "markdown-wide");
+
+  // Above the document cap, the centred markdown page stops at 1400px; images still stop at 760px.
+  await page.setViewportSize({ width: 3200, height: 960 });
+  assert((await viewerGeometry(viewer)).paneWidth > 1400, "the capped cell exceeds the document cap");
+  await verifyGeometry(viewer, "markdown-capped");
+  await tabs.filter({ hasText: FILES.image }).click();
+  await viewer.locator("img").waitFor();
+  await verifyGeometry(viewer, "image-capped");
+
   await page.setViewportSize({ width: 1024, height: 768 });
   await tabs.filter({ hasText: FILES.markdown }).click();
   await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
   await verifyGeometry(viewer, "markdown-1024");
   await verifyHeader(viewer, "markdown-1024", { compact: false, library: true });
   await capture("markdown");
+  await tabs.filter({ hasText: FILES.image }).click();
+  await viewer.locator("img").waitFor();
+  await verifyGeometry(viewer, "image-1024");
+  await tabs.filter({ hasText: FILES.markdown }).click();
+  await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
   await page.setViewportSize({ width: 1440, height: 960 });
 
   // 서랍에서 열기 opens the 서랍's 문서 searched to this file; the conversation keeps its open files.
@@ -245,8 +268,13 @@ async function verifyGeometry(viewer: Locator, name: string) {
   const geometry = await viewerGeometry(viewer);
   console.log(JSON.stringify({ geometry: name, width: page.viewportSize()!.width, ...geometry }));
   assert(geometry.overflow <= 0 && geometry.contentPastCard === 0, `${name}: no sideways overflow (${geometry.overflow}px)`);
-  assert(geometry.pageWidth <= 760, `${name}: reading page ≤760px (${geometry.pageWidth}px)`);
+  const markdown = await viewer.locator('[data-test-class="artifact-viewer"]').getAttribute("data-preview-mode") === "markdown";
+  const expectedPageWidth = Math.min(markdown ? 1400 : 760, geometry.paneWidth);
+  assert(Math.abs(geometry.pageWidth - expectedPageWidth) <= 1, `${name}: page width ${geometry.pageWidth}px, expected ${expectedPageWidth}px`);
+  assert(Math.abs(geometry.contentWidth - (geometry.pageWidth - 96)) <= 1,
+    `${name}: content width ${geometry.contentWidth}px, expected ${geometry.pageWidth - 96}px`);
   assert(geometry.insetStart >= 48 && geometry.insetEnd >= 48, `${name}: 48px insets (${geometry.insetStart}/${geometry.insetEnd})`);
+  assert(Math.abs(geometry.insetStart - geometry.insetEnd) <= 1, `${name}: page centred (${geometry.insetStart}/${geometry.insetEnd})`);
   assert.equal(geometry.innerScrolls, 0, `${name}: no inner scroll`);
 }
 
