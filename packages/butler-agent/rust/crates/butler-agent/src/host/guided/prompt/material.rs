@@ -45,7 +45,7 @@ pub(super) async fn read(
         .await
         .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
     let images = super::attachments::provider_images(turn);
-    let canon = super::canon::read(state, turn).await?;
+    let canon = super::canon::section(state, turn).await?;
     let work_stream = super::work_stream_context(state, &turn.session_id).await?;
     Ok(Material {
         documents,
