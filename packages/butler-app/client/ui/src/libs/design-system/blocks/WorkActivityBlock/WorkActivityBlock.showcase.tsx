@@ -7,6 +7,8 @@ import { ScrollArea } from "../ScrollArea";
 import { WorkActivityBlock, type WorkActivityToolItem } from "./WorkActivityBlock";
 import { WorkActivityDisclosure } from "./WorkActivityDisclosure";
 
+import { stewardStepCardMockupStories } from "./StewardStepCardMockup.showcase";
+
 export const meta: ShowcaseMeta = {
   title: "WorkActivityBlock",
   category: "Conversation & Activity",
@@ -81,6 +83,7 @@ function tools({ locale }: ShowcaseRenderContext): WorkActivityToolItem[] {
 }
 
 export const stories: ShowcaseStory[] = [
+  ...stewardStepCardMockupStories,
   {
     name: "Running and done",
     states: ["running", "done", "expanded"],
