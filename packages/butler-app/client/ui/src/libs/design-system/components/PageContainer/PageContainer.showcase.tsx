@@ -43,6 +43,13 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    name: "Custom cap",
+    widths: ["375", "app", "wide"],
+    render: () => <PageContainer width="full" maxWidth={600} gutter="2xl">
+      <Box surface="muted" padding="md"><Typo.Body>A centered frame capped at 600 CSS pixels.</Typo.Body></Box>
+    </PageContainer>,
+  },
+  {
     name: "Container query",
     widths: ["375", "app", "wide"],
     render: (context) => (
