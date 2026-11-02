@@ -87,6 +87,7 @@ mod embed_download;
 mod error_library;
 mod favicons;
 mod feature_models;
+mod focused_reading;
 mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]
