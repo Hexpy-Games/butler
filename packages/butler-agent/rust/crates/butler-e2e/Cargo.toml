@@ -55,6 +55,7 @@ zstd = "0.13.3"
 
 [dev-dependencies]
 dom_query = "=0.28.0"
+pulldown-cmark = { version = "0.13.0", default-features = false }
 age.workspace = true
 anyhow = "1"
 butler-shell-client = { path = "../butler-shell-client" }

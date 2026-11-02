@@ -1064,6 +1064,7 @@ dependencies = [
  "image",
  "lancedb",
  "notify",
+ "pulldown-cmark",
  "regex",
  "regress",
  "reqwest 0.12.28",

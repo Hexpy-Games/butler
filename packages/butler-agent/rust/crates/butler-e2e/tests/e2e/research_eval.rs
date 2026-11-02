@@ -5,8 +5,10 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod diag;
 mod fixture;
 mod host;
+mod markup;
 mod policy;
 mod report;
 mod steps;
@@ -66,6 +68,7 @@ async fn research_eval_report() -> Result<(), HarnessError> {
 }
 
 async fn run(task: Arc<fixture::Task>, set: &str) -> Result<Value, HarnessError> {
+    let diagnostic = diag::directory(&task, set);
     let fixture = fixture::Fixture::start(task.clone()).await?;
     let s = Setup::new("RESEARCH-EVAL")?
         .stub_cassette(Cassette::load("TOOL-01")?)
@@ -85,7 +88,8 @@ async fn run(task: Arc<fixture::Task>, set: &str) -> Result<Value, HarnessError>
     .await?;
     configure_search(&s, &fixture.base).await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
-    let browser = host::Host::attach(admin, task.clone()).await?;
+    let browser = host::Host::attach(admin, task.clone(), diagnostic.is_some()).await?;
+    let browser_log = browser.log.clone();
     let served = browser.start();
     s.turn("general", task.spec["request"].as_str().unwrap())
         .await?;
@@ -110,6 +114,15 @@ async fn run(task: Arc<fixture::Task>, set: &str) -> Result<Value, HarnessError>
             "research task did not complete (fixture details suppressed)".into(),
         )),
     };
+    if let Some(directory) = diagnostic {
+        let captured = {
+            let state = fixture.state.lock().unwrap();
+            json!({"exchanges":state.exchanges,
+                "browser":browser_log.unwrap().lock().unwrap().clone(),
+                "answer":state.answer,"row":row.as_ref().ok()})
+        };
+        diag::save(&task, directory, captured).await?;
+    }
     s.finish().await?;
     row
 }

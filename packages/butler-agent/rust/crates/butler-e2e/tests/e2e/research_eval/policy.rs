@@ -6,10 +6,13 @@ use std::{
     sync::Arc,
 };
 
+#[derive(serde::Serialize)]
 pub(super) struct Exchange {
     pub lane: String,
     pub body: Value,
     pub items: Vec<Value>,
+    pub research: Value,
+    pub evidence: BTreeMap<usize, String>,
 }
 #[derive(Default)]
 struct Actor {
@@ -74,6 +77,8 @@ impl Policy {
             lane,
             body: body.clone(),
             items: items.clone(),
+            research: json!(actor.research),
+            evidence: actor.evidence.clone(),
         });
         items
     }
@@ -308,7 +313,11 @@ fn page_text(page: &Value) -> String {
         text.push('\n');
         text.push_str(chunk["text"].as_str().unwrap_or_default());
     }
-    normalized(&text)
+    format!(
+        "{}\n{}",
+        normalized(&text),
+        normalized(&super::markup::visible(&text))
+    )
 }
 pub(super) fn output_text(item: &Value) -> String {
     item["output"]

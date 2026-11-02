@@ -3,14 +3,14 @@ use crate::steward_presentation::stub::call;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
-#[derive(Default)]
+#[derive(Default, serde::Serialize)]
 pub(super) struct Research {
     step: usize,
     sequence: usize,
     pending: bool,
     reads: BTreeMap<String, Read>,
 }
-#[derive(Default)]
+#[derive(Default, serde::Serialize)]
 struct Read {
     started: bool,
     done: bool,

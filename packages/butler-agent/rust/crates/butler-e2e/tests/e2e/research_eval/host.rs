@@ -4,7 +4,7 @@ use base64::Engine;
 use butler_e2e::e2e::{HarnessError, security::AdminClient};
 use reqwest::Method;
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub(crate) struct Host {
     stream: reqwest::Response,
@@ -12,12 +12,14 @@ pub(crate) struct Host {
     admin: AdminClient,
     tabs: Vec<Value>,
     task: Arc<super::fixture::Task>,
+    pub(super) log: Option<Arc<Mutex<Vec<Value>>>>,
 }
 
 impl Host {
     pub(super) async fn attach(
         admin: AdminClient,
         task: Arc<super::fixture::Task>,
+        capture: bool,
     ) -> Result<Self, HarnessError> {
         let stream = reqwest::Client::new()
             .get(format!("{}/internal/browser-host", admin.gw.base))
@@ -32,6 +34,7 @@ impl Host {
             admin,
             tabs: Vec::new(),
             task,
+            log: capture.then(|| Arc::new(Mutex::new(Vec::new()))),
         })
     }
 
@@ -51,6 +54,11 @@ impl Host {
     }
 
     async fn reply(&self, frame: &Value, result: Value) -> Result<(), HarnessError> {
+        if let Some(log) = &self.log {
+            log.lock()
+                .unwrap()
+                .push(json!({"frame":frame,"reply":result}));
+        }
         let route = if matches!(frame["op"].as_str(), Some("tab.read" | "reader.render")) {
             "renders"
         } else {
