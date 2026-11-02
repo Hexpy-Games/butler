@@ -307,13 +307,26 @@ async fn resolved_project_commands_keep_plain_behavior() -> Result<(), HarnessEr
         assert_eq!(body["exit_code"], 0, "{body}");
         assert!(!output.contains("protected_path"), "{output}");
     }
-    assert_eq!(
-        std::fs::read_to_string(project.join("out.txt"))?.trim(),
-        "hi"
-    );
+    assert_eq!(shell_written_text(&project.join("out.txt"))?.trim(), "hi");
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+/// Text a command's `>` redirection wrote. Windows PowerShell 5.1, the Windows
+/// command shell, redirects as UTF-16LE with a byte-order mark.
+fn shell_written_text(path: &Path) -> Result<String, HarnessError> {
+    let bytes = std::fs::read(path)?;
+    let Some(utf16) = bytes.strip_prefix(&[0xFF, 0xFE]) else {
+        return Ok(String::from_utf8(bytes).map_err(std::io::Error::other)?);
+    };
+    let units: Vec<u16> = utf16
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
+        .collect();
+    Ok(String::from_utf16(&units).map_err(std::io::Error::other)?)
 }
 
 #[tokio::test]

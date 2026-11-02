@@ -214,7 +214,7 @@ async fn root_only_exact_names_and_symlink_rejection() -> Result<(), HarnessErro
         "CHILD_SENTINEL",
         "Project Operating Instructions",
     ] {
-        assert!(!text.contains(marker));
+        assert!(!text.contains(marker), "unexpected {marker}: {text}");
     }
     // The spelling probe aliases AGENTS.md on a case-insensitive filesystem.
     // Finish that scenario before creating the separate symlink fixture.
