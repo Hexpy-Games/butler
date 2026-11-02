@@ -165,7 +165,9 @@ pub(crate) fn snapshot(root: &Path) -> Result<Vec<(String, u64, SystemTime)>, st
     let mut result = Vec::new();
     for entry in std::fs::read_dir(root)? {
         let entry = entry?;
-        let meta = entry.metadata()?;
+        // Opens the entry: Windows serves directory-entry metadata from a
+        // cached copy whose directory timestamps lag the real ones.
+        let meta = std::fs::metadata(entry.path())?;
         result.push((
             entry.path().display().to_string(),
             meta.len(),
