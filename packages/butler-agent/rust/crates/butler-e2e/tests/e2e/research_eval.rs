@@ -33,6 +33,7 @@ async fn research_eval_report() -> Result<(), HarnessError> {
     );
     let sets = std::env::var("BUTLER_RESEARCH_EVAL_SETS")
         .unwrap_or("tasks,holdout,deep,deep-holdout".into());
+    let only = std::env::var("BUTLER_RESEARCH_EVAL_ONLY").ok();
     let mut rows = Vec::new();
     for set in sets.split(',').map(str::trim) {
         assert!(
@@ -55,6 +56,9 @@ async fn research_eval_report() -> Result<(), HarnessError> {
             } else {
                 path.file_name().unwrap().to_string_lossy().into_owned()
             };
+            if only.as_ref().is_some_and(|only| only != &label) {
+                continue;
+            }
             eprintln!("research_eval {label}: started");
             let task = tokio::task::spawn_blocking(move || fixture::Task::load(&path)).await;
             let mut row = match task {
@@ -72,6 +76,7 @@ async fn research_eval_report() -> Result<(), HarnessError> {
             report::write(&rows, &out, false).await?;
         }
     }
+    assert!(!rows.is_empty(), "no evaluation tasks matched");
     report::write(&rows, &out, true).await?;
     report::require_complete(&rows)
 }

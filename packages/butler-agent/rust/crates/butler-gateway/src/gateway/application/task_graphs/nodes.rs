@@ -133,7 +133,7 @@ fn attempt(child: &ChildRecord, times: &Value, facts: &AppSettingsFacts) -> Valu
         }
     });
     json!({"task_id":child.task_id,"session_id":child.session_id,"ordinal":child.ordinal,"status":status,
-        "summary":child.result_summary.as_deref().map(task_graph_label),"model_display_name":model,
+        "task":child.packet["task_diagnostics"],"summary":child.result_summary.as_deref().map(task_graph_label),"model_display_name":model,
         "started_at":lifecycle["started_at"].as_str().unwrap_or(&child.created_at),
         "finished_at":lifecycle["finished_at"].as_str().or(child.result_at.as_deref())})
 }

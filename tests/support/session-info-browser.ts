@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import { installPendingAskEvents, installSessionBrowser, replaySession } from "./session-info-fixtures.ts";
+import { auditSessionInfoFocus, installPendingAskEvents, installSessionBrowser, replaySession } from "./session-info-fixtures.ts";
 
 const ASIDE = '[data-slot="conversation-aside"]';
 const SECTION = '[data-session-section="browser"]';
@@ -18,10 +18,10 @@ type BrowserProof = Window & {
   __browserCalls: { method: string; input?: { id?: string } }[];
 };
 
-function browserTabs(session: string) {
-  return ["자료 검토", "확인 요청"].map((title, index) => ({
-    id: `session-browser-${index}`, owner: `conversation:${session}`, title, url: `https://example.com/${index}`,
-    favicon: "", agent: true, holder: "agent", agentAt: 1_760_000_000_000 - index, status: "idle",
+function browserTabs(session: string, count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `session-browser-${index}`, owner: `conversation:${session}`, title: ["자료 검토", "확인 요청"][index] ?? `검토 자료 ${index + 1}`, url: `https://example.com/${index}`,
+    favicon: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="7" fill="hsl(${index * 31} 55% 40%)"/><text x="16" y="22" font-size="17" font-weight="700" text-anchor="middle" fill="white">${String.fromCharCode(65 + index)}</text></svg>`)}`, agent: true, holder: "agent", agentAt: 1_760_000_000_000 - index, status: "idle",
     canBack: false, canForward: false, ...(index ? { waiting: true } : { busy: true }),
   }));
 }
@@ -117,12 +117,14 @@ async function verifyTwoTabs(page: Page, ids: string[], shots: string, theme: st
 
 /** Real live-frame decoding, section order, shared right slot, stream lifetime and review captures. */
 export async function verifySessionInfoBrowser(browser: Browser, server: NativeAppServerHandle, view: SessionView, shots: string, theme: string) {
-  for (const count of [0, 1, 2]) {
+  for (const count of [0, 1, 2, 3, 5, 12]) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     try {
-      const tabs = browserTabs(view.session_id).slice(0, count);
+      const tabs = browserTabs(view.session_id, count);
+      // Waiting tabs precede the busy tab in the panel.
+      const orderedIds = [...tabs.slice(1), ...tabs.slice(0, 1)].map(tab => tab.id);
       await installSessionBrowser(page, tabs);
       await installPendingAskEvents(page);
       await replaySession(page, () => view);
@@ -136,16 +138,70 @@ export async function verifySessionInfoBrowser(browser: Browser, server: NativeA
       await page.locator(`${ASIDE} [data-session-section="environment"]`).waitFor();
       if (count) {
         await page.locator(SECTION).scrollIntoViewIfNeeded();
-        await waitSubscriptions(page, tabs.map(tab => tab.id));
-        await page.waitForFunction(({ section, count }) => document.querySelectorAll(`${section} [data-slot="live-tab-canvas"]`).length === count, { section: SECTION, count });
+        await waitSubscriptions(page, orderedIds.slice(0, 3));
+        await page.waitForFunction(({ section, count }) => document.querySelectorAll(`${section} [data-slot="live-tab-canvas"]`).length === count, { section: SECTION, count: Math.min(count, 3) });
       } else {
         assert.equal(await page.locator(SECTION).count(), 0);
       }
-      await capture(page, shots, ["none", "one", "two"][count]!, theme);
+      if (count <= 3) {
+        assert.equal(await page.locator(`${SECTION} [data-test-class="live-tab-list-toggle"]`).count(), 0);
+        assert.equal(await page.locator(`${SECTION} ${CARD}`).count(), count);
+      }
+      await capture(page, shots, String(count), theme);
+      if (count > 3) await verifyOverflow(page, count, orderedIds, shots, theme);
       if (count === 2) await verifyTwoTabs(page, tabs.map(tab => tab.id), shots, theme);
       assert.deepEqual(errors, []);
     } finally {
       await page.close();
     }
   }
+}
+
+async function verifyOverflow(page: Page, count: number, ids: string[], shots: string, theme: string) {
+  const section = page.locator(SECTION);
+  const toggle = section.locator('[data-test-class="live-tab-list-toggle"]');
+  await toggle.scrollIntoViewIfNeeded();
+  if (count === 12) await section.evaluate(node => { (node as HTMLElement).style.width = "140px"; });
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(({ count, section }) => {
+    const row = document.querySelector(`${section} [data-test-class="live-tab-list-toggle"]`)!;
+    const icons = row.querySelectorAll(':scope > span > span[aria-hidden="true"]');
+    const rest = Number(row.querySelector('[data-slot="live-tab-overflow"]')?.textContent?.replace("+", "") ?? 0);
+    return icons.length + rest === count - 3 && (count === 5 ? rest === 0 : rest > 0 && icons.length > 0);
+  }, { count, section: SECTION });
+  await page.waitForFunction(section => {
+    const images = [...document.querySelectorAll<HTMLImageElement>(`${section} [data-test-class="live-tab-list-toggle"] img`)];
+    return images.length > 0 && images.every(image => image.complete && image.naturalWidth > 0);
+  }, SECTION);
+  const favicons = await toggle.locator("img").evaluateAll(images => images.map(image => (image as HTMLImageElement).naturalWidth));
+  assert(favicons.length > 0 && favicons.every(width => width > 0));
+  assert.equal(await section.locator(CARD).count(), 3);
+  const fit = await toggle.evaluate(node => {
+    const row = node.firstElementChild!;
+    const icons = [...row.children].filter(child => child.getAttribute("aria-hidden") === "true");
+    const count = row.querySelector('[data-slot="live-tab-overflow"]');
+    const boxes = [...icons, ...(count ? [count] : [])].map(child => child.getBoundingClientRect());
+    return { shown: icons.length, rest: Number(count?.textContent?.replace("+", "") ?? 0),
+      tops: boxes.map(box => box.y + box.height / 2), right: boxes.at(-1)!.right, rowRight: row.getBoundingClientRect().right };
+  });
+  assert.equal(fit.shown + fit.rest, count - 3);
+  assert(fit.tops.every(y => Math.abs(y - fit.tops[0]!) < 1));
+  assert(fit.right <= fit.rowRight + 0.5);
+  const focus = await auditSessionInfoFocus(page, section);
+  assert.deepEqual(focus.clips, []);
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(section => document.querySelectorAll(`${section} ${'[data-slot="live-tab-card"]'}`).length > 3, SECTION);
+  assert.equal(await section.locator(CARD).count(), count);
+  assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
+  await section.scrollIntoViewIfNeeded();
+  await waitSubscriptions(page, ids);
+  await page.keyboard.press("Enter");
+  assert.equal(await section.locator(CARD).count(), 3);
+  assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
+  await section.scrollIntoViewIfNeeded();
+  await waitSubscriptions(page, ids.slice(0, 3));
+  await toggle.scrollIntoViewIfNeeded();
+  await capture(page, shots, `overflow-${count}`, theme);
+  console.log(JSON.stringify({ sessionBrowserFit: { count, ...fit } }));
 }

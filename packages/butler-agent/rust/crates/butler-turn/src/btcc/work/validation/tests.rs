@@ -26,6 +26,7 @@ fn plan_requires_objective_and_existing_non_self_dependencies() {
     let mut missing = action("a");
     missing.dependency_keys = vec!["missing".into()];
     let input = ReplacePlanInput {
+        subjects: Vec::new(),
         scope: scope(),
         mutation_call_id: "call".into(),
         start_new: None,

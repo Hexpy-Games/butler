@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { api, uploadMessageFile } from "@/app/api";
 import { libraryChanged } from "@/app/libraryEvents";
 import { normalizeComposerDraft, readCachedComposerDraft, writeLocalComposerDraft } from "@/app/composerDraftCache";
-import { readMessageFileJson } from "@/app/messageFileContent";
 import { useComposerStore } from "../conversation/composerStore";
 import type { ElementAttachment } from "../../../../shared/browser-element";
 export type { ElementAttachment } from "../../../../shared/browser-element";
@@ -19,11 +18,11 @@ export const useElementDraft = create<{ session: string; items: ElementAttachmen
 export async function restoreElementDraft(session: string) {
   useElementDraft.setState({ session, items: [] });
   const draft = await readCachedComposerDraft(session);
-  const items = await Promise.all((draft?.element_attachments ?? []).map(restoreCapture));
+  const items = (draft?.element_attachments ?? []).map(restoreCapture);
   if (useElementDraft.getState().session === session) useElementDraft.setState({ items });
 }
 async function persist(session: string, items: ElementAttachment[]) {
-  items = await Promise.all(items.map(restoreCapture));
+  items = items.map(restoreCapture);
   const composer = useComposerStore.getState();
   const draft = await readCachedComposerDraft(session);
   const snapshot = { schema: "butler.composer-draft.v1" as const, session_id: session,
@@ -99,8 +98,6 @@ export function attachLibraryReference(session: string, item: ElementAttachment)
 }
 
 /** Older drafts stored the metadata file as the visible file and kept its image separately. */
-async function restoreCapture(item: ElementAttachment): Promise<ElementAttachment> {
-  if (!item.crop || item.kind === "library" || item.file.kind === "image") return item;
-  const metadata = await readMessageFileJson(item.file.file_id);
-  return { ...item, file: item.crop, metadata };
+function restoreCapture(item: ElementAttachment): ElementAttachment {
+  return item.crop && item.kind !== "library" && item.file.kind !== "image" ? { ...item, file: item.crop } : item;
 }

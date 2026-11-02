@@ -21,7 +21,7 @@ export function ComposerElements() {
       element: item.kind === "library" || refusal ? undefined : { site: item.site },
       meta: item.site,
       blockedReason: refusal ? imageRefusalLabel(refusal) : undefined,
-      thumbnail: image ? { src: messageFileUrl(image) } : undefined,
+      thumbnail: image ? { src: messageFileUrl(image), fit: "contain" } : undefined,
     };
   });
   return <AttachmentList variant="chips" windowDrag="no-drag" removeLabel={appCopy.browser.remove}

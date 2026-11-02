@@ -42,10 +42,11 @@ export function wireTab(tab, actions) {
       tab.documentIcon = true;
       if (!icons.includes(tab.favicon)) { tab.favicon = ""; update(); }
     };
-    contents.executeJavaScript(DOCUMENT_ICONS).then(keep, () => keep([]));
+    contents.mainFrame.executeJavaScript(DOCUMENT_ICONS).then(keep, () => keep([]));
   });
   contents.on("did-stop-loading", () => void actions.capture(tab));
-  contents.on("render-process-gone", () => { tab.status = "crashed"; actions.detach(tab); actions.publish(); });
+  contents.on("render-process-gone", () => actions.fail(tab, false));
+  contents.on("unresponsive", () => actions.fail(tab, true));
   for (const name of ["will-frame-navigate", "will-redirect"]) {
     contents.on(name, (event, url) => {
       const destination = typeof url === "string" ? url : event.url;

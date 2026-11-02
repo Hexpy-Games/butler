@@ -5,6 +5,7 @@ mod child_state;
 mod control;
 mod delegation;
 mod followup;
+mod handoff_context;
 #[cfg(feature = "e2e-fixtures")]
 mod handoff_hold;
 mod helpers;
@@ -16,6 +17,8 @@ mod projection;
 mod result_delivery;
 mod selection;
 mod subtasks;
+mod task_direction;
+mod task_scope;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
@@ -104,6 +107,7 @@ pub struct StewardDelegationRequest {
     pub parent_turn_id: String,
     pub anchor_message_id: String,
     pub request: String,
+    pub user_request: Option<String>,
     pub previous_relation_id: Option<String>,
     pub safe_title: Option<String>,
     pub model_ref: String,
@@ -116,6 +120,7 @@ pub struct StewardDelegationRequest {
 /// A steward's request to delegate one plan action to a worker.
 #[derive(Clone, Debug)]
 pub struct WorkerDelegationRequest {
+    pub task: Option<crate::btcc::TaskContract>,
     pub parent_session_id: String,
     pub parent_turn_id: String,
     pub anchor_message_id: String,
@@ -124,6 +129,8 @@ pub struct WorkerDelegationRequest {
     pub objective: String,
     pub acceptance_criteria: Vec<String>,
     pub implementation_brief: String,
+    pub target_path: Option<String>,
+    pub replaces_relation_id: Option<String>,
     pub safe_title: Option<String>,
     pub profile_id: Option<String>,
     pub access_mode: crate::btcc::AccessMode,
@@ -140,6 +147,7 @@ pub struct SubsessionService {
     profiles: Arc<dyn WorkerProfileReader>,
     work: Arc<DurableWorkService>,
     now: Arc<dyn Fn() -> String + Send + Sync>,
+    worker_delegation: Arc<tokio::sync::Mutex<()>>,
     worker_cap: Arc<std::sync::atomic::AtomicU64>,
     worker_cap_error_logged: Arc<std::sync::atomic::AtomicBool>,
     changes: tokio::sync::broadcast::Sender<(String, String)>,
@@ -162,6 +170,7 @@ impl SubsessionService {
             profiles,
             work,
             now,
+            worker_delegation: Arc::new(tokio::sync::Mutex::new(())),
             worker_cap: Arc::new(std::sync::atomic::AtomicU64::new(10)),
             worker_cap_error_logged: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             changes: tokio::sync::broadcast::channel(256).0,

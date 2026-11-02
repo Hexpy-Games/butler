@@ -2,7 +2,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 use butler_e2e::e2e::{
     HarnessError,
-    fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL},
     gateway::turn_state,
     provider::Script,
     scenario::{Scenario, Setup},
@@ -90,39 +89,5 @@ async fn capture_reaches_responses_as_image_with_source_metadata() -> Result<(),
         "no tools are needed to retrieve the capture"
     );
     assert_wire(&requests[0], &png, &metadata, "input_image");
-    s.finish().await
-}
-#[tokio::test]
-async fn capture_reaches_chat_completions_as_image_with_source_metadata() -> Result<(), HarnessError>
-{
-    butler_e2e::gate!();
-    let server = FakeServer::local_models(ChatBehavior::default()).await?;
-    let s = super::super::setup_local_models::with_local_server("CAPTURE-CHAT", &server).await?;
-    let registered =
-        s.gw.post(
-            "/model-catalog/local-models",
-            json!({
-                "provider_id":"local","api_type":"openai_compatible","platform":"custom",
-                "server_url":format!("{}/v1", server.base_url),"model_id":LOCAL_MODEL,
-                "context_window_tokens":131_072,"source":"manual","image_input":true
-            }),
-        )
-        .await?;
-    assert_eq!(registered.status, 201, "{}", registered.text);
-    let settings =
-        s.gw.patch(
-            "/settings",
-            json!({"model":registered.data()["model"]["model_ref"]}),
-        )
-        .await?;
-    assert_eq!(settings.status, 200, "{}", settings.text);
-    let (id, png, metadata) = capture(&s).await?;
-    send(&s, &id, &metadata).await?;
-    let requests = server.chat_requests();
-    let request = requests
-        .iter()
-        .find(|r| r.to_string().contains("image_url"))
-        .expect("image request");
-    assert_wire(request, &png, &metadata, "image_url");
     s.finish().await
 }

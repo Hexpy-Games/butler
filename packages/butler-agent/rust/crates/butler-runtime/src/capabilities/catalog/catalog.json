@@ -55,7 +55,7 @@
       "definition": {
         "type": "function",
         "name": "answer_blocks",
-        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. For other layouts or interactions, use output_publish.",
+        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. Use output_publish only for a requested page or one needing its own layout or interactions.",
         "parameters": {
           "$ref": "answer-blocks.schema.json"
         },
@@ -140,14 +140,14 @@
       "definition": {
         "type": "function",
         "name": "web_read",
-        "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried. With query, the chunks that best match it come first; read the others with start_chunk.",
+        "description": "Read a page as evidence. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. url reads a static document (article, docs, PDF); tab reads an open tab as it shows now and returns unchanged when the page is the same. Script-built pages (stores, listings, dashboards) show their content only in a tab: open them with browser_open first. Navigation, ads and repeated blocks come after the main content. Request reads of different pages, and their continuations, together in one round. ok:false with next_action open_in_tab: read the tab before using anything from it; use another source only if the tab fails too, and report what failed.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "tab": {
               "type": "string",
-              "description": "Open tab id (from browser_open) to read as it shows now."
+              "description": "Open tab id."
             },
             "url": {
               "type": "string",
@@ -158,23 +158,24 @@
               "minimum": 1500,
               "maximum": 8000,
               "default": 2000,
-              "description": "Maximum markdown characters returned for the selected chunk window (1500-8000, default 2000). The minimum fits one built-in evidence chunk. Use start_chunk, not a larger max_chars, to continue reading later chunks."
+              "description": "Text character limit."
             },
             "max_chunks": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8,
               "default": 1,
-              "description": "Maximum evidence chunks returned from start_chunk (1-8, default 1)."
+              "description": "Passage or chunk limit."
             },
             "start_chunk": {
               "type": "integer",
               "minimum": 0,
               "default": 0,
-              "description": "Zero-based chunk offset for continuing through the page (default 0). Use next_start_chunk from the previous result."
+              "description": "Where to continue: next_start_chunk from the previous result (with query, the next ranked passages)."
             },
             "query": {
-              "type": "string"
+              "type": "string",
+              "description": "What you need from the page. Returns the matching passages first, with spans."
             }
           },
           "required": []
@@ -2403,7 +2404,7 @@
       "definition": {
         "type": "function",
         "name": "read_operation_results",
-        "description": "Read an exact stored result or its original request (source=request). Find references with list_operation_results. Decode data from base64; continue at nextOffset until null. The last page may be shorter.",
+        "description": "Read stored result/request bytes (source=request). Copy exact_read from list_operation_results. Decode base64; continue at next_offset until null.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -2455,6 +2456,10 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 4096
+            },
+            "evidence": {
+              "type": "string",
+              "description": "Copy from exact_read for delegated evidence."
             }
           },
           "required": [
@@ -2485,7 +2490,7 @@
       "definition": {
         "type": "function",
         "name": "list_operation_results",
-        "description": "Find prior tool requests/results in this Turn and its existing Work without repeating the operation. Start with cursor=0 and through=null. Search a literal substring of request text (not separate keywords); leave query empty to filter only by tool/status. Use returned exact_read with read_operation_results. Continue with next_cursor and the returned through watermark; request previews may be shortened, originals remain readable.",
+        "description": "Find stored tool requests/results in this Turn, Work or evidence bundle. Use exact_read with read_operation_results. Start cursor=0, through=null; continue with next_cursor and through. Query is a literal request substring; empty searches all.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -2511,7 +2516,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Operation outcome: completed means success, failed includes returned tool errors, nonzero exit codes and timeouts; cancelled means cancelled execution. null searches all outcomes."
+              "description": "completed: success; failed: tool error, nonzero exit or timeout; cancelled: cancelled. null: all."
             },
             "cursor": {
               "type": "integer",
@@ -2533,6 +2538,10 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 10
+            },
+            "evidence": {
+              "type": "string",
+              "description": "An evidence bundle from a delegated result (evidence:<id>). Lists every item with its exact_read."
             }
           },
           "required": []
@@ -4684,7 +4693,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
+        "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also gets the user's own message verbatim, project context and bounded conversation; write request as your reading of it, keeping the user's scope and output form: add no format they did not ask for, such as a styled page for a summary. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4742,7 +4751,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_worker",
-        "description": "Assign one action of your accepted Plan to a Worker. Use Workers for actions that can run in parallel and for long actions (research across several sources, multi-file changes, long builds or test runs), so your own context stays on planning, integration and review. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
+        "description": "Assign an exclusive Task of your accepted Plan to a Worker. Include its scope, inputs, return contract and a compact implementation brief. Use parallel Workers for disjoint Tasks and long actions; integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4782,6 +4791,146 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 48
+            },
+            "replaces_relation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "description": "The Worker still running this action that this assignment replaces. The runtime stops it and marks any late result superseded."
+            },
+            "target_path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "Workspace path of the file or site this action creates or revises for delivery. The Worker revises and checks that path, and output_publish in this Work then refuses a different one."
+            },
+            "task": {
+              "type": "object",
+              "properties": {
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "owns": {
+                      "type": "array",
+                      "description": "Subjects from the Plan and the aspects this Worker alone covers (for example a product's price). Nothing else may own them while it runs.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "subject": {
+                            "type": "string"
+                          },
+                          "aspects": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "subject"
+                        ]
+                      }
+                    },
+                    "paths": {
+                      "type": "array",
+                      "description": "Files and folders only this Worker may change.",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "excludes": {
+                      "type": "array",
+                      "description": "Nearby things it must not touch.",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "inputs": {
+                  "type": "array",
+                  "description": "Earlier Tasks whose results it uses. use=facts: take them as confirmed; artifact: revise that output; verify: re-check, with a reason.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "task": {
+                        "type": "string"
+                      },
+                      "use": {
+                        "type": "string",
+                        "enum": [
+                          "facts",
+                          "artifact",
+                          "verify"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "task",
+                      "use"
+                    ]
+                  }
+                },
+                "output": {
+                  "type": "object",
+                  "description": "What it returns: format and fields, or files.",
+                  "properties": {
+                    "format": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "format"
+                  ]
+                },
+                "overlap": {
+                  "type": "object",
+                  "description": "When told of an overlap: merge, narrow, wait or verify, with a short reason.",
+                  "properties": {
+                    "resolution": {
+                      "type": "string",
+                      "enum": [
+                        "merge",
+                        "narrow",
+                        "wait",
+                        "verify"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resolution",
+                    "reason"
+                  ]
+                },
+                "merge_after": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "scope",
+                "output"
+              ]
             }
           },
           "required": [
@@ -5172,6 +5321,25 @@
                 "goal"
               ],
               "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request."
+            },
+            "subjects": {
+              "type": "array",
+              "description": "Stable keys for what this plan covers (products, places, sources); Tasks name them in owns.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "label"
+                ]
+              }
             }
           },
           "required": [
@@ -5917,7 +6085,7 @@
       "definition": {
         "type": "function",
         "name": "output_publish",
-        "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
+        "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. Use it only for a requested page or site or one needing its own layout or interactions; research and comparisons go in document_create. Publish the path last revised and checked. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -7148,7 +7316,7 @@
       "definition": {
         "type": "function",
         "name": "document_create",
-        "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; for a page with its own layout or interactions use output_publish.",
+        "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief; the default for research findings and comparisons. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; use output_publish only for a requested page or one needing its own layout or interactions.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -7951,7 +8119,7 @@
     "answer_blocks": {
       "type": "function",
       "name": "answer_blocks",
-      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. For other layouts or interactions, use output_publish.",
+      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. Use output_publish only for a requested page or one needing its own layout or interactions.",
       "parameters": {
         "$ref": "answer-blocks.schema.json"
       },
@@ -8650,6 +8818,25 @@
               "goal"
             ],
             "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request."
+          },
+          "subjects": {
+            "type": "array",
+            "description": "Stable keys for what this plan covers (products, places, sources); Tasks name them in owns.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "label"
+              ]
+            }
           }
         },
         "required": [
@@ -8898,7 +9085,7 @@
     "delegate_to_worker": {
       "type": "function",
       "name": "delegate_to_worker",
-      "description": "Assign one action of your accepted Plan to a Worker. Use Workers for actions that can run in parallel and for long actions (research across several sources, multi-file changes, long builds or test runs), so your own context stays on planning, integration and review. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
+      "description": "Assign an exclusive Task of your accepted Plan to a Worker. Include its scope, inputs, return contract and a compact implementation brief. Use parallel Workers for disjoint Tasks and long actions; integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -8938,6 +9125,146 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 48
+          },
+          "replaces_relation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "The Worker still running this action that this assignment replaces. The runtime stops it and marks any late result superseded."
+          },
+          "target_path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Workspace path of the file or site this action creates or revises for delivery. The Worker revises and checks that path, and output_publish in this Work then refuses a different one."
+          },
+          "task": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "owns": {
+                    "type": "array",
+                    "description": "Subjects from the Plan and the aspects this Worker alone covers (for example a product's price). Nothing else may own them while it runs.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "type": "string"
+                        },
+                        "aspects": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject"
+                      ]
+                    }
+                  },
+                  "paths": {
+                    "type": "array",
+                    "description": "Files and folders only this Worker may change.",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "excludes": {
+                    "type": "array",
+                    "description": "Nearby things it must not touch.",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "inputs": {
+                "type": "array",
+                "description": "Earlier Tasks whose results it uses. use=facts: take them as confirmed; artifact: revise that output; verify: re-check, with a reason.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "task": {
+                      "type": "string"
+                    },
+                    "use": {
+                      "type": "string",
+                      "enum": [
+                        "facts",
+                        "artifact",
+                        "verify"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "task",
+                    "use"
+                  ]
+                }
+              },
+              "output": {
+                "type": "object",
+                "description": "What it returns: format and fields, or files.",
+                "properties": {
+                  "format": {
+                    "type": "string"
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "format"
+                ]
+              },
+              "overlap": {
+                "type": "object",
+                "description": "When told of an overlap: merge, narrow, wait or verify, with a short reason.",
+                "properties": {
+                  "resolution": {
+                    "type": "string",
+                    "enum": [
+                      "merge",
+                      "narrow",
+                      "wait",
+                      "verify"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "resolution",
+                  "reason"
+                ]
+              },
+              "merge_after": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "scope",
+              "output"
+            ]
           }
         },
         "required": [
@@ -9261,7 +9588,7 @@
     "list_operation_results": {
       "type": "function",
       "name": "list_operation_results",
-      "description": "Find prior tool requests/results in this Turn and its existing Work without repeating the operation. Start with cursor=0 and through=null. Search a literal substring of request text (not separate keywords); leave query empty to filter only by tool/status. Use returned exact_read with read_operation_results. Continue with next_cursor and the returned through watermark; request previews may be shortened, originals remain readable.",
+      "description": "Find stored tool requests/results in this Turn, Work or evidence bundle. Use exact_read with read_operation_results. Start cursor=0, through=null; continue with next_cursor and through. Query is a literal request substring; empty searches all.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -9287,7 +9614,7 @@
                 "type": "null"
               }
             ],
-            "description": "Operation outcome: completed means success, failed includes returned tool errors, nonzero exit codes and timeouts; cancelled means cancelled execution. null searches all outcomes."
+            "description": "completed: success; failed: tool error, nonzero exit or timeout; cancelled: cancelled. null: all."
           },
           "cursor": {
             "type": "integer",
@@ -9309,6 +9636,10 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 10
+          },
+          "evidence": {
+            "type": "string",
+            "description": "An evidence bundle from a delegated result (evidence:<id>). Lists every item with its exact_read."
           }
         },
         "required": []
@@ -10297,7 +10628,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
+      "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also gets the user's own message verbatim, project context and bounded conversation; write request as your reading of it, keeping the user's scope and output form: add no format they did not ask for, such as a styled page for a summary. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10745,7 +11076,7 @@
     "read_operation_results": {
       "type": "function",
       "name": "read_operation_results",
-      "description": "Read an exact stored result or its original request (source=request). Find references with list_operation_results. Decode data from base64; continue at nextOffset until null. The last page may be shorter.",
+      "description": "Read stored result/request bytes (source=request). Copy exact_read from list_operation_results. Decode base64; continue at next_offset until null.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10797,6 +11128,10 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 4096
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Copy from exact_read for delegated evidence."
           }
         },
         "required": [
@@ -10902,14 +11237,14 @@
     "web_read": {
       "type": "function",
       "name": "web_read",
-      "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried. With query, the chunks that best match it come first; read the others with start_chunk.",
+      "description": "Read a page as evidence. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. url reads a static document (article, docs, PDF); tab reads an open tab as it shows now and returns unchanged when the page is the same. Script-built pages (stores, listings, dashboards) show their content only in a tab: open them with browser_open first. Navigation, ads and repeated blocks come after the main content. Request reads of different pages, and their continuations, together in one round. ok:false with next_action open_in_tab: read the tab before using anything from it; use another source only if the tab fails too, and report what failed.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "tab": {
             "type": "string",
-            "description": "Open tab id (from browser_open) to read as it shows now."
+            "description": "Open tab id."
           },
           "url": {
             "type": "string",
@@ -10920,20 +11255,20 @@
             "minimum": 1500,
             "maximum": 8000,
             "default": 2000,
-            "description": "Maximum markdown characters returned for the selected chunk window (1500-8000, default 2000). The minimum fits one built-in evidence chunk. Use start_chunk, not a larger max_chars, to continue reading later chunks."
+            "description": "Text character limit."
           },
           "max_chunks": {
             "type": "integer",
             "minimum": 1,
             "maximum": 8,
             "default": 1,
-            "description": "Maximum evidence chunks returned from start_chunk (1-8, default 1)."
+            "description": "Passage or chunk limit."
           },
           "start_chunk": {
             "type": "integer",
             "minimum": 0,
             "default": 0,
-            "description": "Zero-based chunk offset for continuing through the page (default 0). Use next_start_chunk from the previous result."
+            "description": "Where to continue: next_start_chunk from the previous result (with query, the next ranked passages)."
           },
           "backend": {
             "type": "string",
@@ -10948,7 +11283,8 @@
             "description": "Optional page reader backend override."
           },
           "query": {
-            "type": "string"
+            "type": "string",
+            "description": "What you need from the page. Returns the matching passages first, with spans."
           }
         },
         "required": []
@@ -12500,7 +12836,7 @@
     "output_publish": {
       "type": "function",
       "name": "output_publish",
-      "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
+      "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. Use it only for a requested page or site or one needing its own layout or interactions; research and comparisons go in document_create. Publish the path last revised and checked. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -13451,7 +13787,7 @@
     "document_create": {
       "type": "function",
       "name": "document_create",
-      "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; for a page with its own layout or interactions use output_publish.",
+      "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief; the default for research findings and comparisons. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; use output_publish only for a requested page or one needing its own layout or interactions.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

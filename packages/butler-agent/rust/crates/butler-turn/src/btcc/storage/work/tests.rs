@@ -82,6 +82,7 @@ pub(super) async fn journal_result(
 
 pub(super) fn plan(call: &str) -> ReplacePlanInput {
     ReplacePlanInput {
+        subjects: Vec::new(),
         scope: scope(),
         mutation_call_id: call.into(),
         start_new: None,

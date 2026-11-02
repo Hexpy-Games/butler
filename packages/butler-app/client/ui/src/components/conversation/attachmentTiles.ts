@@ -12,12 +12,10 @@ export function attachmentExtension(name: string): string {
   return match ? match[1]!.toLocaleUpperCase("en-US") : appCopy.conversation.attachmentFileType;
 }
 
-/** The face of a tile for one stored file: its picture, its video's first frame, or its type. */
-export function attachmentTile(file: MessageFileRef, metadata?: unknown): Omit<AttachmentListItem, "id" | "icon" | "blockedReason"> {
+/** The face of a tile for one stored file: its picture (a browser capture whole), its video's first frame, or its type. */
+export function attachmentTile(file: MessageFileRef, capture = false): Omit<AttachmentListItem, "id" | "icon" | "blockedReason"> {
   const kind = attachmentViewerKind(file);
   const src = messageFileUrl(file);
-  const source = metadata && typeof metadata === "object" && "untrusted_content" in metadata ? metadata.untrusted_content : undefined;
-  const capture = source && typeof source === "object" && "kind" in source && source.kind === "untrusted_web_page_data";
   return {
     name: file.safe_name,
     meta: formatFileSize(file.size_bytes),

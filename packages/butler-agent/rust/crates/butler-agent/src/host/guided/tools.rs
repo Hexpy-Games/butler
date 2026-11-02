@@ -24,6 +24,7 @@ mod image;
 mod image_gen;
 mod library;
 mod memory_write;
+mod task_writes;
 pub(crate) use memory_write::MemoryWriteServices;
 mod browse;
 mod browser;

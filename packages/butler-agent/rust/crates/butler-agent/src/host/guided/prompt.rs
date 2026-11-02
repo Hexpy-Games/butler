@@ -68,7 +68,7 @@ fn source_prompt(
     material: &material::Material,
     budget_only: bool,
 ) -> Result<(String, Value), BtccError> {
-    let mut entries = diagnostics::Sections::default();
+    let mut entries = diagnostics::Sections::for_turn(turn);
     if budget_only {
         for (id, text) in [
             ("project-instructions", &documents.project_instructions),

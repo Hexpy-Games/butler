@@ -1557,8 +1557,8 @@ const butlerApp = Object.freeze({
   exportDocument: (input) => ipcRenderer.invoke("butler:export-document", input),
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
-  openMessageFile: ({ fileId } = {}) =>
-    ipcRenderer.invoke("butler:open-message-file", { fileId }),
+  openMessageFile: ({ fileId, reveal } = {}) =>
+    ipcRenderer.invoke("butler:open-message-file", { fileId, reveal: reveal === true }),
   getContextDetails: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/context-details?${params.toString()}`);
@@ -1566,15 +1566,6 @@ const butlerApp = Object.freeze({
   listArtifacts: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/artifacts?${params.toString()}`);
-  },
-  readMessageFileJson: async ({ fileId } = {}) => {
-    if (typeof fileId !== "string" || !/^file-[0-9a-f-]{36}$/iu.test(fileId)) throw new Error("Invalid file");
-    await ensureLocalServer();
-    const response = await fetch(new URL(`/message-files/${encodeURIComponent(fileId)}`, await currentServerUrl()), {
-      headers: await localAuthHeaders(),
-    });
-    if (!response.ok) throw new Error("Selection metadata is unavailable.");
-    return response.json();
   },
   getMessageFileView: ({ fileId } = {}) => {
     if (typeof fileId !== "string" || !/^file-[0-9a-f-]{36}$/iu.test(fileId)) throw new Error("Invalid file");

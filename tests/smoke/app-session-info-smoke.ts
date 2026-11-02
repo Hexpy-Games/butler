@@ -1,3 +1,4 @@
+import { verifySessionInfoWorkers } from "../support/session-info-workers.ts";
 import { verifySessionInlineEdit } from "../support/session-inline-edit.ts";
 import { verifyNewChatSessionInfo } from "../support/session-info-new-chat.ts";
 import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
@@ -45,6 +46,7 @@ try {
   if (!before) await verifySessionPaneMotion(browser, server, view);
   if (!before) await verifyRailBesidePane(browser, server, view);
   if (!before) await verifySessionViewFailure(browser, server, view);
+  if (!before) await verifySessionInfoWorkers(browser, server, original, shots, theme);
   if (!before) await verifySessionInfoBrowser(browser, server, view, shots, theme);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
   const errors: string[] = [];

@@ -39,7 +39,7 @@ export function MessageAttachments({
         variant="tiles"
         tileLayout="wrap"
         tileAlign={tileAlign}
-        items={attachments.map((file) => ({ id: file.file_id, ...attachmentTile(file, attachmentMetadata?.[file.file_id]) }))}
+        items={attachments.map((file) => ({ id: file.file_id, ...attachmentTile(file, Boolean(attachmentMetadata?.[file.file_id])) }))}
         // A refused load (a revoked or expired signature) re-signs the file once; the new URL loads again.
         onMediaError={(item) => void retryMessageFileOnce(messageFilePath(files.get(item.id)?.url), refresh)}
         onOpen={(item) => {

@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_plan_revisions (
   objective TEXT NOT NULL,
   governing_refs_json TEXT NOT NULL,
   execution_mode TEXT CHECK (execution_mode IN ('direct', 'steward', 'workers')),
+  subjects_json TEXT NOT NULL DEFAULT '[]',
   actions_json TEXT NOT NULL,
   checks_json TEXT NOT NULL,
   origin_turn_id TEXT NOT NULL,
