@@ -52,25 +52,20 @@
   border-color: var(--color-danger-border);
 }
 
-/* Quiet: a field that rests as its placeholder alone (a sidebar search
-   beside selected rows), so at rest it never reads as a selected row. Hover
-   takes the surface's row hover fill (the shell's --nav-hover-bg, else the
-   --selection shade); focus is the default field (surface, accent border,
-   ring). The border stays as a transparent hairline, so nothing moves. */
+/* Quiet: the default field without its fill at rest (a sidebar search beside
+   selected rows): the default border and placeholder on the surface, so it
+   reads as a field and never as a selected row. The default field has no
+   hover treatment, so neither does quiet. Focus is the default field: the
+   raised surface fill, the accent border and, for keyboard focus, the ring.
+   The fill fades in on focus. */
 .input[data-variant="quiet"] {
-  border-color: transparent;
   background: transparent;
   transition:
     background-color var(--motion-fast) var(--motion-ease-standard),
     border-color var(--motion-fast) var(--motion-ease-standard);
 }
 
-.input[data-variant="quiet"]:hover:not(:focus, :disabled) {
-  background: var(--nav-hover-bg, var(--selection));
-}
-
 .input[data-variant="quiet"]:focus {
-  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
   background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
 }
 

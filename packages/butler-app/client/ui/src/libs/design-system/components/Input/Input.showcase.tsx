@@ -114,7 +114,7 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
-    // The settings sidebar search: placeholder only at rest; hover fills, focus is the default field.
+    // The settings sidebar search: the default border without a fill at rest; focus is the default field.
     name: "Quiet · sidebar search",
     widths: ["375", "app"],
     states: ["hover", "focus-visible"],

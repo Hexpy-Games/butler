@@ -36,12 +36,12 @@ read-only uses secondary text and remains selectable and keyboard focusable.
 There is no transition, so reduced motion is respected without an override.
 
 `variant="quiet"` is a search among navigation rows (the settings sidebar).
-At rest it shows only its placeholder: a transparent hairline border and no
-fill, so it never reads as a selected row beside one. Hover takes the
-surface's row hover fill (`--nav-hover-bg`, else `--selection`), and focus is
-the default field: the raised surface, the accent border and, for keyboard
-focus, `--focus-ring`. The fill fades on `--motion-fast`; reduced motion drops
-the fade.
+At rest it is the default field without its fill: the default `--line`
+border and the placeholder on the surface, so it still reads as a field but
+never as a selected row beside one. Like the default field it has no hover
+treatment. Focus is the default field: the raised surface fill, the accent
+border and, for keyboard focus, `--focus-ring`. The fill fades in on
+`--motion-fast`; reduced motion drops the fade.
 
 Keyboard focus is the bottom line only: `--focus-ring-width` thickens the
 bottom border with `--focus-ring-color`, without a shadow or other-side outline.

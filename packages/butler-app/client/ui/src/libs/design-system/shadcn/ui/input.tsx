@@ -17,8 +17,8 @@ function Input({
   compact?: boolean;
   /**
    * `underline`: bottom-border field for in-place entry, aligned with surrounding labels.
-   * `quiet`: no border or fill at rest (a sidebar search), the row hover fill on hover and the
-   * default field look while focused, so it never reads as a selected row.
+   * `quiet`: the default border without the fill at rest (a sidebar search), so it reads as a
+   * field and never as a selected row; while focused it is the default field.
    */
   variant?: "default" | "underline" | "quiet";
   /** Underline text metrics: inherit the surrounding text or match Typo.Label. */
