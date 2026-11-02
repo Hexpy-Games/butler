@@ -59,6 +59,15 @@ async fn held_delete(chat_approval: bool, last: bool) -> Result<(), HarnessError
     script.wait_reporting().await;
     script.quick.store(false, Ordering::SeqCst);
     if chat_approval {
+        assert_eq!(
+            canon.query_row::<i64, _, _>(
+                "SELECT count(*) FROM btcc_guided_tool_calls WHERE turn_id=?1 AND tool_name='canon_propose' AND status='completed'",
+                [&turn],
+                |r| r.get(0),
+            )?,
+            1,
+            "the deletion Turn proposed its change before reporting"
+        );
         let page = asks(&s, &chat).await?;
         assert_eq!(
             page["open_count"],
