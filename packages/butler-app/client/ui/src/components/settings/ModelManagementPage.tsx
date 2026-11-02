@@ -50,7 +50,7 @@ export function ModelManagementPage() {
         state={models.length === 0 ? "empty" : "ready"}
         emptyMessage={copy.emptyRegistered}
         actions={
-          <Button type="button" onClick={openAdd} size="sm">
+          <Button type="button" onClick={openAdd} size="sm" variant="outline">
             <Plus size="md" /> {copy.addButton}
           </Button>
         }

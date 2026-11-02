@@ -73,6 +73,7 @@ export function UpdatesSettings() {
       <SettingsSection
         id="updates"
         kind="list"
+        title={copy.pageSections.updateVersions}
         state={view ? "ready" : loadFailed ? "error" : "loading"}
         errorMessage={copy.errors.loadUpdates}
         onRetry={() => void load()}

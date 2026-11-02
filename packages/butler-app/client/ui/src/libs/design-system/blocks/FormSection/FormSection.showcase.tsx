@@ -92,19 +92,11 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
-    name: "No header (page title names the card)",
+    name: "Description that repeats the page is dropped (the title stays)",
     render: (context) => (
-      <FormSection>
-        <SettingsField id="bare-theme" label={text(context).theme} control={<Input id="bare-theme" defaultValue="Bloom" />} />
-      </FormSection>
-    ),
-  },
-  {
-    name: "Header that repeats the page is dropped",
-    render: (context) => (
-      <SettingsPageProvider title={text(context).search} description={text(context).searchDescription}>
+      <SettingsPageProvider title={text(context).general} description={text(context).searchDescription}>
         <FormSection title={text(context).search} description={text(context).searchDescription}>
-          <Fields context={context} id="repeats-page" />
+          <SettingsField id="repeats-theme" label={text(context).theme} control={<Input id="repeats-theme" defaultValue="Bloom" />} />
         </FormSection>
       </SettingsPageProvider>
     ),
@@ -115,7 +107,7 @@ export const stories: ShowcaseStory[] = [
     render: (context) => <Stacked context={context} />,
   },
   {
-    name: "Header toolbar and list rows (kind list)",
+    name: "Header action and list rows (kind list)",
     widths: ["375", "app"],
     render: (context) => (
       <FormSection kind="list" title={text(context).model} actions={<Button size="sm" variant="outline">+</Button>}>

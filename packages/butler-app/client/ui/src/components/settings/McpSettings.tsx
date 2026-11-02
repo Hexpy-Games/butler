@@ -8,7 +8,7 @@ import type {
   McpServerListView,
   McpServerView,
 } from "@/app/types.ts";
-import { Button, CardList, Plus, Typo } from "@/butler-ds";
+import { Button, CardList, Plus } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { useMcpSettingsActions } from "./useMcpSettingsActions";
 import { McpServerForm } from "./McpServerForm";
@@ -65,6 +65,7 @@ export function McpSettings() {
       <SettingsSection
         id="mcp-servers"
         kind="list"
+        title={copy.pageSections.mcpServers}
         description={status || undefined}
         state={servers === null ? (loadFailed ? "error" : "loading") : servers.length === 0 ? "empty" : "ready"}
         emptyMessage={appCopy.interfaceDetails.noMcp}
@@ -74,6 +75,7 @@ export function McpSettings() {
             disabled={busy}
             type="button"
             size="sm"
+            variant="outline"
             onClick={() => {
               clearErrors();
               setEditingId(null);
@@ -85,7 +87,7 @@ export function McpSettings() {
           </Button>
         }
       >
-        <CardList empty={<Typo.Caption>{appCopy.interfaceDetails.noMcp}</Typo.Caption>}>
+        <CardList>
           {(servers ?? []).map((server) => (
             <McpServerRow
               key={server.id}

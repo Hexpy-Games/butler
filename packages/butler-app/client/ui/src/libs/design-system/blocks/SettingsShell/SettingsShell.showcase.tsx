@@ -20,13 +20,13 @@ export const meta: ShowcaseMeta = {
 
 const copy = {
   "en-US": {
-    general: "General", mcp: "MCP", mcpDescription: "Manage MCP servers and their connection settings.",
+    general: "General", region: "Language & region", servers: "Servers", mcp: "MCP", mcpDescription: "Manage MCP servers and their connection settings.",
     generalDescription: "Configure language, timezone, conversation input, and search defaults.",
     notifications: "Notifications", language: "Language", smartGroups: "Smart groups", replies: "New replies",
     server: "Server URL",
   },
   "ko-KR": {
-    general: "일반", mcp: "MCP", mcpDescription: "MCP 서버와 연결 정보를 관리합니다.",
+    general: "일반", region: "언어 및 지역", servers: "서버", mcp: "MCP", mcpDescription: "MCP 서버와 연결 정보를 관리합니다.",
     generalDescription: "언어, 시간대, 대화 입력과 검색 기본값을 설정합니다.",
     notifications: "알림", language: "언어", smartGroups: "스마트 그룹", replies: "새 답변",
     server: "서버 URL",
@@ -51,8 +51,7 @@ function Page({ locale, page, onPage }: ShowcaseRenderContext & { page: "general
         detailHeader={<SettingsHeader title={title} description={description} />}
         detail={page === "general" ? (
           <>
-            {/* The first card's title repeats the page title: FormSection drops it. */}
-            <FormSection title={text.general}>
+            <FormSection title={text.region}>
               <SettingsField id={`${locale}-language`} label={text.language} control={<Input id={`${locale}-language`} defaultValue="English" />} />
               <SettingsField id={`${locale}-groups`} label={text.smartGroups} control={<Switch id={`${locale}-groups`} defaultChecked />} />
             </FormSection>
@@ -61,7 +60,8 @@ function Page({ locale, page, onPage }: ShowcaseRenderContext & { page: "general
             </FormSection>
           </>
         ) : (
-          <FormSection title={text.mcp} description={description}>
+          // The description repeats the page description: FormSection drops it; the title stays.
+          <FormSection title={text.servers} description={description}>
             <SettingsField id={`${locale}-server`} label={text.server} control={<Input id={`${locale}-server`} defaultValue="http://127.0.0.1:8931" />} />
           </FormSection>
         )}
@@ -72,7 +72,7 @@ function Page({ locale, page, onPage }: ShowcaseRenderContext & { page: "general
 
 export const stories: ShowcaseStory[] = [
   { name: "Start-aligned page (narrow PageContainer)", widths: ["app", "wide"], render: (context) => <Page {...context} page="general" /> },
-  { name: "Single card whose header repeats the page", render: (context) => <Page {...context} page="mcp" /> },
+  { name: "Single card whose description repeats the page", render: (context) => <Page {...context} page="mcp" /> },
   {
     // Docked cards frame: the nav sits on the shell and takes its row fills,
     // the white family on the light macOS shell (dark keeps the shades). The

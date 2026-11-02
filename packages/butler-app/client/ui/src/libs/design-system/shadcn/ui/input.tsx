@@ -15,8 +15,12 @@ function Input({
 }: DsBaseProps<React.ComponentPropsWithoutRef<"input">> & {
   /** A short inline field (numbers in a toolbar): content width, small control height. */
   compact?: boolean;
-  /** Bottom-border field for in-place entry, aligned with surrounding labels. */
-  variant?: "default" | "underline";
+  /**
+   * `underline`: bottom-border field for in-place entry, aligned with surrounding labels.
+   * `quiet`: the default border without the fill at rest (a sidebar search), so it reads as a
+   * field and never as a selected row; while focused it is the default field.
+   */
+  variant?: "default" | "underline" | "quiet";
   /** Underline text metrics: inherit the surrounding text or match Typo.Label. */
   textSize?: "inherit" | "label";
 }) {

@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, apiErrorCode, importSkillZip } from "@/app/api.ts";
 import { settingsErrorCopy } from "@/app/settingsErrors";
 import { appCopy } from "@/app/copy.ts";
@@ -9,18 +9,12 @@ import type {
   SkillProjectView,
   SkillSettingsView,
 } from "@/app/types.ts";
-import {
-  NavRow,
-  Stack,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/butler-ds";
+import { FieldError } from "@/butler-ds";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { SkillActions } from "./SkillActions";
 import { SkillGroup } from "./SkillGroup";
+import { ProjectSkillsSection } from "./ProjectSkillsSection";
 
 export function SkillsSettings() {
   useAppLocale();
@@ -31,7 +25,7 @@ export function SkillsSettings() {
   );
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [view, setView] = useState<SkillSettingsView | null>(null);
-  const [tab, setTab] = useState("default");
+  const userErrorId = useId();
   const [projectId, setProjectId] = useState<string>("");
   const [importProjectId, setImportProjectId] = useState<string | undefined>();
   const [importError, setImportError] = useState<{ code: string; project?: string }>();
@@ -82,73 +76,36 @@ export function SkillsSettings() {
     closeSettings();
   }
   const importMessage = importError ? settingsErrorCopy(importError, appCopy.settings.skillErrors.import) : undefined;
+  const userError = importError && !importError.project ? importMessage : undefined;
   const selectedProject =
     view?.projects.find((project) => project.id === projectId) ??
     view?.projects[0];
+  const state = view === null ? (loadFailed ? "error" : "loading") : "ready";
+  const sections = appCopy.settings.pageSections;
   return (
     <SettingsPage>
-      <SettingsSection
-        id="skills"
-        kind="list"
-        state={view === null ? (loadFailed ? "error" : "loading") : "ready"}
-        onRetry={() => void refresh()}
-      >
-      <Stack gap="md">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="default">{appCopy.interfaceDetails.default}</TabsTrigger>
-            <TabsTrigger value="project">{appCopy.interfaceDetails.project}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="default">
-            <Stack gap="md">
-              <SkillActions
-                error={importError && !importError.project ? importMessage : undefined}
-                onImport={() => void importSkill()}
-                onCreate={() => void createSkillChat()}
-              />
-              <SkillGroup
-                title={appCopy.interfaceDetails.coreSkills}
-                skills={view?.core ?? []}
-                maxVisibleRows={4}
-              />
-              <SkillGroup title={appCopy.interfaceDetails.userSkills} skills={view?.user ?? []} />
-            </Stack>
-          </TabsContent>
-          <TabsContent value="project">
-            <Stack align="row" gap="md">
-              <Stack gap="xs">
-                {(view?.projects ?? []).map((project) => (
-                  <NavRow
-                    key={project.id}
-                    label={project.display_name}
-                    active={project.id === selectedProject?.id}
-                    onClick={() => setProjectId(project.id)}
-                  />
-                ))}
-              </Stack>
-              <Stack gap="md" grow basis="0">
-                <SkillActions
-                  error={importError?.project === selectedProject?.id ? importMessage : undefined}
-                  onImport={() => void importSkill(selectedProject?.id)}
-                  onCreate={() => void createSkillChat(selectedProject)}
-                />
-                <SkillGroup
-                  title={selectedProject?.display_name ?? appCopy.interfaceDetails.projectSkills}
-                  skills={selectedProject?.skills ?? []}
-                />
-              </Stack>
-            </Stack>
-          </TabsContent>
-        </Tabs>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".zip,application/zip"
-          hidden
-          onChange={(event) => void onFile(event.target.files?.[0])}
-        />
-      </Stack>
+      <SettingsSection id="core-skills" kind="list" title={sections.coreSkills}
+        state={state === "ready" && !view?.core.length ? "empty" : state}
+        emptyMessage={appCopy.interfaceDetails.noSkills} onRetry={() => void refresh()}>
+        <SkillGroup skills={view?.core ?? []} maxVisibleRows={4} />
       </SettingsSection>
+      <SettingsSection id="user-skills" kind="list" title={sections.userSkills}
+        state={state === "ready" && !view?.user.length && !userError ? "empty" : state}
+        emptyMessage={appCopy.interfaceDetails.noSkills} onRetry={() => void refresh()}
+        actions={<>
+          <SkillActions errorId={userError ? userErrorId : undefined}
+            onImport={() => void importSkill()} onCreate={() => void createSkillChat()} />
+          {/* The one file picker for every skills import; the header is always mounted, whatever the list state. */}
+          <input ref={inputRef} type="file" accept=".zip,application/zip" hidden
+            onChange={(event) => void onFile(event.target.files?.[0])} />
+        </>}>
+        {userError ? <FieldError id={userErrorId}>{userError}</FieldError> : null}
+        {view?.user.length ? <SkillGroup skills={view.user} /> : null}
+      </SettingsSection>
+      <ProjectSkillsSection state={state} projects={view?.projects ?? []} project={selectedProject}
+        error={importError?.project && importError.project === selectedProject?.id ? importMessage : undefined}
+        onProject={setProjectId} onImport={(project) => void importSkill(project.id)}
+        onCreate={(project) => void createSkillChat(project)} onRetry={() => void refresh()} />
     </SettingsPage>
   );
 }

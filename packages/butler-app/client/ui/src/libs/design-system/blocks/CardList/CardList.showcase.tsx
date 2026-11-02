@@ -2,7 +2,9 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { FileText, Sparkles } from "../../components/Icons";
+import { Switch } from "../../components/Switch";
 import { Typo } from "../../components/Typo";
+import { SettingsPage, SettingsSection } from "../SettingsSection";
 import { CardList, CardListItem } from "./CardList";
 
 export const meta: ShowcaseMeta = {
@@ -14,7 +16,7 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": {
-    skills: "Project skills", noSkills: "No skills yet.", noMcp: "No MCP servers yet.", probe: "Test", enable: "Turn on", disable: "Turn off",
+    skills: "Project skills", servers: "Servers", add: "Add server", noSkills: "No skills yet.", noMcp: "No MCP servers yet.", probe: "Test", enable: "Turn on", disable: "Turn off",
     enabled: "On", disabled: "Off", skillRows: [
       ["project-ledger", "Inspect, query, render, and validate project records.", "core", true],
       ["browser", "Open and inspect local web targets.", "user", false],
@@ -23,7 +25,7 @@ const labels = {
     ],
   },
   "ko-KR": {
-    skills: "프로젝트 스킬", noSkills: "아직 스킬이 없습니다.", noMcp: "아직 MCP 서버가 없습니다.", probe: "테스트", enable: "켜기", disable: "끄기",
+    skills: "프로젝트 스킬", servers: "서버", add: "서버 추가", noSkills: "아직 스킬이 없습니다.", noMcp: "아직 MCP 서버가 없습니다.", probe: "테스트", enable: "켜기", disable: "끄기",
     enabled: "켜짐", disabled: "꺼짐", skillRows: [
       ["project-ledger", "프로젝트 기록을 살펴보고 조회하고 검증합니다.", "core", true],
       ["browser", "로컬 웹 대상을 열어 살펴봅니다.", "user", false],
@@ -63,4 +65,22 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   { name: "Empty", render: (context) => <CardList empty={<Typo.Caption>{text(context).noMcp}</Typo.Caption>}>{null}</CardList> },
+  {
+    // Settings flush variant: inside a section card the rows drop their own card and share hairlines.
+    name: "In a settings section (flush rows)",
+    widths: ["375", "app"],
+    render: (context) => (
+      <SettingsPage>
+        <SettingsSection id="cardlist-servers" kind="list" title={text(context).servers}
+          actions={<Button size="sm" variant="outline" text={text(context).add} />}>
+          <CardList>
+            <CardListItem title="GitHub" description="stdio · npx @modelcontextprotocol/server-github" meta={text(context).enabled}
+              actions={<ButtonContainer size="xs"><Button size="xs" variant="outline" text={text(context).probe} /><Switch aria-label="GitHub" defaultChecked /></ButtonContainer>} />
+            <CardListItem title="Linear" description="http · https://mcp.linear.app/sse" meta={text(context).disabled}
+              actions={<ButtonContainer size="xs"><Button size="xs" variant="outline" text={text(context).probe} /><Switch aria-label="Linear" /></ButtonContainer>} />
+          </CardList>
+        </SettingsSection>
+      </SettingsPage>
+    ),
+  },
 ];

@@ -15,13 +15,13 @@ const labels = {
     serverId: "Server ID", serverName: "Display name", placeholder: "Placeholder only", apiKey: "API key",
     // Keys are a local file today; only claim Keychain storage once #217 lands.
     apiKeyHint: "Stays on this computer; only the last four characters are shown.",
-    modelId: "Model ID", context: "Context window", oauth: "Sign-in link", invalid: "Must be a number", maxWorkers: "Max simultaneous Workers",
+    modelId: "Model ID", context: "Context window", oauth: "Sign-in link", invalid: "Must be a number", maxWorkers: "Max simultaneous Workers", search: "Search settings",
     values: { id: "github", name: "GitHub", key: "sk-…4f2a", model: "qwen2.5-coder:14b", context: "32768" },
   },
   "ko-KR": {
     serverId: "서버 ID", serverName: "표시 이름", placeholder: "플레이스홀더만", apiKey: "API 키",
     apiKeyHint: "이 컴퓨터에만 저장되며 마지막 네 글자만 보입니다.",
-    modelId: "모델 ID", context: "컨텍스트 창", oauth: "로그인 링크", invalid: "숫자를 입력하세요", maxWorkers: "최대 동시 Worker 수",
+    modelId: "모델 ID", context: "컨텍스트 창", oauth: "로그인 링크", invalid: "숫자를 입력하세요", maxWorkers: "최대 동시 Worker 수", search: "설정 검색",
     values: { id: "github", name: "깃허브", key: "sk-…4f2a", model: "qwen2.5-coder:14b", context: "32768" },
   },
 } as const;
@@ -113,14 +113,23 @@ export const stories: ShowcaseStory[] = [
       </Field>
     ),
   },
+  {
+    // The settings sidebar search: the default border without a fill at rest; focus is the default field.
+    name: "Quiet · sidebar search",
+    widths: ["375", "app"],
+    states: ["hover", "focus-visible"],
+    render: (context) => (
+      <Input type="search" variant="quiet" aria-label={text(context).search} placeholder={text(context).search} />
+    ),
+  },
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "disabled", "invalid", "read-only"],
-  variants: ["value", "placeholder", "underline value", "underline placeholder"],
+  variants: ["value", "placeholder", "underline value", "underline placeholder", "quiet value", "quiet placeholder"],
   render: (context) => (
     <Input
-      variant={context.variant?.startsWith("underline") ? "underline" : "default"}
+      variant={context.variant?.startsWith("underline") ? "underline" : context.variant?.startsWith("quiet") ? "quiet" : "default"}
       readOnly={context.state === "read-only"}
       aria-invalid={context.state === "invalid" ? "true" : undefined}
       aria-label={text(context).modelId}

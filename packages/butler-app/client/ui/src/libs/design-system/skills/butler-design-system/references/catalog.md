@@ -203,7 +203,7 @@
 | A setting that is on or off and takes effect at once | `Switch` | `CheckCard` |
 | A setting that is only an action (free up space, reset, clear) | `SettingsActionField` | `SettingsField` |
 | A settings list of configured things with per-item actions | `CardList` |  |
-| A settings list that loads, can fail or can be empty (kind list or status) | `SettingsSection` |  |
+| A settings list that loads, can fail, can be empty or loads more (kind list or status) | `SettingsSection` |  |
 | A settings or inspector panel | `SurfacePanel` | `Box` |
 | A settings page | `SettingsHeader` | `DashboardHeader` |
 | A settings page | `FormSection` | `DialogForm` |
@@ -314,6 +314,7 @@
 | An action that opens, toggles or navigates | `IconButton` | `DoneIconButton` |
 | An action that runs once | `Button` | `Switch` |
 | An action whose icon is universally understood (close, back, panel toggles) | `IconButton` |  |
+| An add, refresh or filter control (section actions) | `SettingsSection` | `SettingsHeader` |
 | An agent, model or provider on its own | `ProviderLogo` | `Avatar` |
 | An approval with scope options (Allow once / for this conversation) | `SplitButton` |  |
 | An artifact file preview | `ArtifactPreview` | `DocumentReader` |
@@ -914,7 +915,7 @@ Groups a label, a control, help and errors so forms keep one vertical rhythm.
 
 `import { Input } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=components/Input`
 
-A single-line field for names, IDs, URLs, numbers and secrets. Use variant=default for a box, variant=underline for in-place entry, and compact for a short toolbar field.
+A single-line field for names, IDs, URLs, numbers and secrets. Use variant=default for a box, variant=underline for in-place entry, variant=quiet for a search that sits among navigation rows, and compact for a short toolbar field.
 
 - Use for: Enter a short value such as a name, ID or URL
 - Use for: Show a masked or read-only value that people can select
@@ -2590,7 +2591,7 @@ Provider usage in a popover or panel: quota windows as meters, token counts and 
 
 `import { CardList } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/CardList`
 
-A bordered list of item cards (skills, MCP servers) with a title, empty state and a scroll cap.
+A list of item cards (skills, MCP servers) with a title, empty state and a scroll cap; flush rows divided by hairlines inside a settings section card.
 
 - Use for: A settings list of configured things with per-item actions
 - Not for: Reordering by drag → `SortableCardList`
@@ -2639,7 +2640,7 @@ The body of a dialog task: title, description, fields and a footer, submitted as
 
 `import { FormSection } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/FormSection`
 
-A settings section: header (title, description) above its card, fields inside following the settings ramp.
+A settings section: header (required title, description, actions on the right) above its card, fields inside following the settings ramp.
 
 - Use for: Group related settings on a settings page
 - Not for: A titled region in a panel → `Section`
@@ -2685,11 +2686,12 @@ One setting: label, description, control and optional meta on the settings spaci
 
 `import { SettingsHeader } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/SettingsHeader`
 
-The settings detail header: page title, description, a secondary line and one action slot.
+The settings detail header: page title, description and, on a subpage, its breadcrumb as the secondary line. Settings pages put no action in it.
 
 - Use for: The top of a settings detail page
 - Not for: A dashboard or management page title → `DashboardHeader`
 - Not for: A section inside the page → `FormSection`
+- Not for: An add, refresh or filter control (section actions) → `SettingsSection`
 - Tokens: `--typo-app-title-size`, `--text-secondary`, `--space-sm`
 
 ### SettingsNav
@@ -2718,10 +2720,10 @@ Editable key/value secret rows with a value source per row and a shared toolbar.
 
 `import { SettingsSection } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/SettingsSection`
 
-The structure of a settings page: SettingsPage holds only SettingsSections, each one header above one card that owns its loading, error and empty states.
+The structure of a settings page: SettingsPage holds only SettingsSections, each one titled header (actions on its right) above one card that owns its loading, error and empty states.
 
 - Use for: Every settings page and settings subpage
-- Use for: A settings list that loads, can fail or can be empty (kind list or status)
+- Use for: A settings list that loads, can fail, can be empty or loads more (kind list or status)
 - Use for: Read-only app information (kind info with KeyValueRow)
 - Not for: A titled form outside the settings window → `FormSection`
 - Not for: A form inside a dialog → `DialogForm`

@@ -15,7 +15,7 @@ export function Spring({ copy, live }: { copy: MotionCopy; live: boolean }) {
   );
   return (
     <div className={s.spring} data-m={t("spring")}>
-      <SettingsSection id={live ? "motion-hero-spring" : "motion-hero-spring-tile"} kind="form">
+      <SettingsSection id={live ? "motion-hero-spring" : "motion-hero-spring-tile"} kind="form" title={copy.section}>
         <SettingsField control={control} description={copy.fieldHint} label={copy.field} />
       </SettingsSection>
       <span className={s.springNote}>--motion-ease-spring · --motion-base</span>

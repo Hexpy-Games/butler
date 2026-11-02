@@ -385,9 +385,13 @@ only sections, and each section (`kind` form, list, status or info) owns its
 loading, error and empty states. `SettingsField` must render inside a
 `SettingsSection`, `FormSection` or `DialogForm`. Use `FormSection` directly
 only outside settings pages; it is the bordered card SettingsSection composes. Use `Section` only for unframed grouping inside a larger surface.
+Every section has a title; section actions (add, refresh, filter, period)
+go in its header, outline and small, on list and status sections only; the
+settings page header shows only the title and description.
 
-Use `SurfacePanel` for repeated editable settings entities inside a
-`FormSection`, such as worker rules or registered local-model rows.
+Use `CardList` rows for repeated settings entities inside a section card:
+they render flush there (no nested bordered cards). Use `SurfacePanel`
+inside a section only as a details surface of one field (memory facts).
 
 Use `TokenInputControl` for token-like setting inputs where parsing is owned by the caller.
 

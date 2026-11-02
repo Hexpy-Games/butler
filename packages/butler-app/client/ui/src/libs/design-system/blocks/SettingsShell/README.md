@@ -33,9 +33,12 @@ between fields inside a card.
 ### Page header and sections
 
 Pass `pageTitle` and `pageDescription` (the copy `detailHeader` shows). The
-detail content is wrapped in a `SettingsPageProvider`, so `FormSection` drops a
-section title or description that repeats the page header and a page never
-reads its title twice (`repeatsSettingsCopy`).
+detail content is wrapped in a `SettingsPageProvider`: a section title that
+repeats the page title throws in dev builds and a section description that
+repeats the page description is dropped, so a page never reads its title
+twice (`repeatsSettingsCopy`). The page header shows only the title and
+description (plus a subpage breadcrumb); section actions live in section
+headers.
 
 ## Who can use this component
 Butler client settings containers and design-system fixtures.

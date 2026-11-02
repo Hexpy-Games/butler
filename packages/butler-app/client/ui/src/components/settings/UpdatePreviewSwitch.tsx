@@ -30,7 +30,7 @@ export function UpdatePreviewSwitch({ disabled, onChanged }: {
     }
   }
   return (
-    <SettingsSection id="update-channel" kind="form">
+    <SettingsSection id="update-channel" kind="form" title={appCopy.settings.pageSections.updateChannel}>
       <SettingsSwitch settingId="update-previews"
         label={appCopy.settings.actions.receivePreviewVersions}
         description={appCopy.settings.actions.receivePreviewVersionsDescription}
