@@ -1,7 +1,5 @@
 # VersionHistory
 
-Glossary: 문서 편집 영역 / document editor (`VersionHistory`).
-
 ## What is this block
 A document's version history: one dense row per version, newest first, with
 who made it (나, or 버틀러 with the Butler-ink mark) and when. Picking a row

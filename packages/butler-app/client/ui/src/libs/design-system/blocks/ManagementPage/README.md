@@ -6,7 +6,7 @@ ManagementPage is a padded page surface for workspace management views.
 
 ## When to use this component
 
-Use it for full-page management areas such as schedules pages, project dashboards,
+Use it for full-page management areas such as automations, project dashboards,
 and other workspace views that sit below the app titlebar.
 
 ## Where to use this component

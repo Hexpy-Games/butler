@@ -1651,7 +1651,7 @@ The window chrome regions (sidebar, titlebar, main, inspector) with single-hairl
 
 `import { ManagementPage } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ManagementPage`
 
-A scrolling management page (schedules page, project dashboard) with page width, gutters and an optional footer.
+A scrolling management page (automations, project dashboard) with page width, gutters and an optional footer.
 
 - Use for: A full page that lists and manages things in the workspace
 - Not for: A settings page → `SettingsShell`
@@ -2069,7 +2069,7 @@ The More (…) button and menu for a row's actions, from a simple items array.
 
 `import { TabStrip } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/TabStrip`
 
-The browser tab strip: closable, reorderable pill tabs grouped as my tabs plus one muted, foldable outline pill per conversation. A tab's close button shows on hover or keyboard focus.
+The Browser area's tab row: closable, reorderable pill tabs grouped as my tabs plus one muted, foldable outline pill per conversation. A tab's close button shows on hover or keyboard focus.
 
 - Use for: Browser tabs over a page area (pair with NativeViewSlot)
 - Use for: Tabs the user and conversations open, grouped by owner

@@ -4,7 +4,7 @@
 A responsive heading block for dashboard pages.
 
 ## When to use this component
-Use it for project dashboards, schedules pages, and management views.
+Use it for project, automation, and management dashboards.
 
 ## Where to use this component
 Use it at the top of dashboard main content.

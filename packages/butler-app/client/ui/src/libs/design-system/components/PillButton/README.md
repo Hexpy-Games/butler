@@ -1,7 +1,5 @@
 # Pill Button
 
-Glossary: 답변 블록 / answer blocks (`PillButton`).
-
 ## What is this component
 Pill Button is a borderless command button with fully rounded ends, matching Butler composer toolbar controls.
 

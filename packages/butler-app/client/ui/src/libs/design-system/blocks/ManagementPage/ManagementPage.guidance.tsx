@@ -38,7 +38,7 @@ function WallpaperDashboard() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "A scrolling management page (schedules page, project dashboard) with page width, gutters and an optional footer.",
+  purpose: "A scrolling management page (automations, project dashboard) with page width, gutters and an optional footer.",
   whenToUse: ["A full page that lists and manages things in the workspace"],
   whenNotToUse: [
     { when: "A settings page", use: "SettingsShell" },

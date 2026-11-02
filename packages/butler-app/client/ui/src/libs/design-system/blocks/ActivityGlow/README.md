@@ -1,11 +1,9 @@
 # ActivityGlow
 
-Glossary: 브라우저 토글 버튼 / browser toggle button (`ActivityGlow`).
-
 ## What is this component
 
 A halo and a status dot around an `IconButton`. It tells what Butler is doing
-with the surface the button opens (the browser column) while that surface stays
+with the surface the button opens (the browser area) while that surface stays
 closed. `IconButton` itself does not change.
 
 | State | Default | Reduced motion |

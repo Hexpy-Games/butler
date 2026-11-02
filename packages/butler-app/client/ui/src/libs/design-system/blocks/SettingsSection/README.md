@@ -1,7 +1,5 @@
 # SettingsSection
 
-Glossary: 기억 설정 페이지 / memory settings page (`SettingsSection`).
-
 ## What is this block
 
 `SettingsPage` and `SettingsSection` are the structure of every settings

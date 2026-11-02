@@ -57,7 +57,7 @@ tile (danger tone on a list row's icon). Clear `upload` once the upload ends.
 
 ## Opening a file
 `onOpen(item)` opens a file inside the app (the image viewer over the
-conversation, or the session info pane). With it the tile (or the list/chip name) is a
+conversation, or the inspector). With it the tile (or the list/chip name) is a
 button and `href` is not used; without it a `href` stays a link. Product
 attachments always pass `onOpen`: a link would leave the conversation.
 

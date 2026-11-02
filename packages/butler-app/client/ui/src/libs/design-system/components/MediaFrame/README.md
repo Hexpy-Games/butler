@@ -1,7 +1,5 @@
 # MediaFrame
 
-Glossary: 답변 카드 / answer card (`MediaFrame`).
-
 ## What is this component
 A picture in a fixed-shape frame (`1:1`, `4:5`, `3:4`, `16:10` default, `16:9`)
 on the `--muted` matte, with the control radius.

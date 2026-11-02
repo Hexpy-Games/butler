@@ -1,6 +1,6 @@
 # Toast
 
-Glossary: 토스트 알림 / toast (`Toaster`).
+Glossary: 토스트 알림 / toast (`Toast`).
 
 ## What is this component
 

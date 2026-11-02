@@ -1,7 +1,5 @@
 # DialogForm
 
-Glossary: 다이얼로그 / dialog (`DialogForm`).
-
 ## What is this component
 A form shell for dialog content.
 

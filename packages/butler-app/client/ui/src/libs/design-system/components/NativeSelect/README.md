@@ -1,7 +1,5 @@
 # Native Select
 
-Glossary: 과제 상세 패널 / task detail pane (`NativeSelect`).
-
 ## What is this component
 Native Select is a Butler design-system component for building consistent client UI without reaching into domain components or raw implementation details.
 

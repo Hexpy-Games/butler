@@ -1,7 +1,5 @@
 # SuggestionList
 
-Glossary: 참조 선택 메뉴 / mention menu (`SuggestionList`).
-
 ## What is this component
 The listbox under a combobox field. `SuggestionList` is the list; `SuggestionRow` is one option on one line: favicon (or a kind glyph), title, the muted host and path, typed terms in bold, and a star for bookmarks. `SuggestionItemRow` is the same row for app items: a type glyph, the title and muted meta (a project name or a type), typed terms in bold.
 

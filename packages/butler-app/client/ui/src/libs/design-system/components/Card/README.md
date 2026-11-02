@@ -1,7 +1,5 @@
 # Card
 
-Glossary: 프로젝트 개요 섹션 / project overview section (`Card`).
-
 `Card` is the primitive visual container for repeated card rows and compact
 surfaces. Its base silhouette follows the existing Project Dashboard document
 cards: medium padding, `var(--line)` border, `var(--radius-control)`, and

@@ -22,7 +22,7 @@ function ReadOnlyTabs() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The browser tab strip: closable, reorderable pill tabs grouped as my tabs plus one muted, foldable outline pill per conversation. A tab's close button shows on hover or keyboard focus.",
+  purpose: "The Browser area's tab row: closable, reorderable pill tabs grouped as my tabs plus one muted, foldable outline pill per conversation. A tab's close button shows on hover or keyboard focus.",
   whenToUse: [
     "Browser tabs over a page area (pair with NativeViewSlot)",
     "Tabs the user and conversations open, grouped by owner",

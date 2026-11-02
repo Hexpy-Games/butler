@@ -1,7 +1,5 @@
 # SplitButton
 
-Glossary: 승인 카드 / approval card (`SplitButton`).
-
 ## What is this block
 `SplitButton` joins a primary action to a menu of related actions: the left
 half runs the action, the right half (a chevron) opens a `DropdownMenu`.

@@ -1,24 +1,12 @@
 import { Box } from "../../components/Box";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
-import { Section } from "../../components/Section";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { areas, parts } from "../../glossary/glossary";
 import type { GlossaryPart } from "../../glossary/types";
 import type { ShowcaseEntry } from "../../showcase/collectShowcaseEntries";
 import { PageHeader } from "../parts";
-
-// Secondary exports (ComposerCardEditor, Toaster, etc.) open their owning item.
-const barrels = import.meta.glob<string>("../../{components,blocks}/*/index.ts", { query: "?raw", import: "default", eager: true });
-
-function itemPage(name: string, entries: ShowcaseEntry[]): string | undefined {
-  const direct = entries.find((entry) => entry.name === name);
-  if (direct) return direct.id;
-  const barrel = Object.entries(barrels).find(([, source]) => new RegExp(`\\b${name}\\b`, "u").test(source));
-  const id = barrel?.[0].replace(/^\.\.\/\.\.\//u, "").replace(/\/index\.ts$/u, "");
-  return entries.find((entry) => entry.id === id)?.id;
-}
 
 interface PartNode extends GlossaryPart {
   children: PartNode[];
@@ -32,18 +20,18 @@ const roots = areas.map((area) => ({ ...area, parts: [...nodes.values()].filter(
 
 type GlossaryProps = { entries: ShowcaseEntry[]; locale: "ko" | "en"; onOpen: (page: string) => void };
 
-function PartEntry({ part, entries, locale, onOpen }: GlossaryProps & { part: PartNode }) {
+function PartEntry({ part, entries, locale, onOpen, root = false }: GlossaryProps & { part: PartNode; root?: boolean }) {
   const ko = locale === "ko";
   return (
-    <Stack as="li" gap="lg" id={part.id} data-ds-glossary-part={part.id}>
+    <Stack as={root ? "div" : "li"} gap="lg" id={part.id} data-ds-glossary-part={part.id}>
       <Stack gap="sm">
-        <Typo.H3 wrap="anywhere" lang="ko">{part.ko}</Typo.H3>
+        {root ? null : <Typo.H3 wrap="anywhere" lang="ko">{part.ko}</Typo.H3>}
         <Typo.Body tone="secondary" wrap="anywhere" lang="en">{part.en}</Typo.Body>
         <Typo.Body wrap="anywhere" lang="ko">{part.desc}</Typo.Body>
         {part.ds.length > 0 ? (
           <ButtonContainer size="sm" aria-label="DS">
             {part.ds.map((name) => {
-              const target = itemPage(name, entries);
+              const target = entries.find((entry) => entry.name === name)?.id;
               return target ? <Button key={name} size="sm" variant="outline" text={name} onClick={() => onOpen(target)} />
                 : <Typo.Caption key={name} wrap="anywhere">{name}</Typo.Caption>;
             })}
@@ -75,11 +63,12 @@ export function GlossaryPage({ entries, locale, onOpen }: GlossaryProps) {
       <PageHeader title={ko ? "용어 사전 / Glossary" : "Glossary / 용어 사전"}
         lead={ko ? "UI 부분은 사전의 한국어·영어 이름으로 부릅니다. 이전 이름은 사용하지 않습니다." : "Call UI parts by their Korean or English glossary name. Do not use previous names."} />
       {roots.map((area) => (
-        <Section key={area.id} title={`${area.ko} / ${area.en}`} titleAs="h2" data-ds-glossary-area={area.id}>
-          <Stack as="ul" gap="xl">
-            {area.parts.map((part) => <PartEntry key={part.id} part={part} entries={entries} locale={locale} onOpen={onOpen} />)}
-          </Stack>
-        </Section>
+        <Stack as="section" key={area.id} gap="lg" aria-labelledby={`${area.id}-heading`} data-ds-glossary-area={area.id}>
+          <Typo.H2 id={`${area.id}-heading`} wrap="anywhere">{`${area.ko} / ${area.en}`}</Typo.H2>
+          {area.parts.map((part) => (
+            <PartEntry key={part.id} root={part.id === area.id} part={part} entries={entries} locale={locale} onOpen={onOpen} />
+          ))}
+        </Stack>
       ))}
     </Stack>
   );

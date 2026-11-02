@@ -1,7 +1,5 @@
 # ItemCard
 
-Glossary: 답변 카드 / answer card (`ItemCard`).
-
 ## What is this block
 `ItemCard` is one found item of any subject (a paper, a place, a recipe, a
 product, a code library) on a `Card padding="sm"` inside an `article`:

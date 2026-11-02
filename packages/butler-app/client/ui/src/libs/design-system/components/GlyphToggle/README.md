@@ -1,7 +1,5 @@
 # GlyphToggle
 
-Glossary: 대화 행 / session row (`GlyphToggle`).
-
 ## What is this component
 A row glyph that doubles as a toggle (pin, favorite): the glyph keeps its column width and swaps to the toggle glyph on hover and keyboard focus.
 

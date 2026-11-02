@@ -1,7 +1,5 @@
 # ComposerControl
 
-Glossary: 작업 위치 선택 버튼 / workspace picker button (`ComposerSelectControl`).
-
 ## What is this component
 A compact pill command for composer toolbars.
 

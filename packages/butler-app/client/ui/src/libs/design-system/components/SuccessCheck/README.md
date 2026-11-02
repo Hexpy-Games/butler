@@ -1,7 +1,5 @@
 # SuccessCheck
 
-Glossary: 완료 기준 섹션 / acceptance criteria section (`SuccessCheck`).
-
 ## What is this component
 SuccessCheck is the DS completion mark: a check, optionally inside a ring, whose stroke draws in with a subtle scale and fade. The finished shape matches `CheckIcon` (plain) and `CheckCircle2` (ring).
 
