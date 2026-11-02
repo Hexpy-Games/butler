@@ -196,7 +196,8 @@
   min-height: 0;
   height: 100%;
   grid-template-rows: var(--titlebar-safe-area-top) minmax(0, 1fr);
-  overflow: hidden;
+  /* Descendant focus must not scroll this frame; content panes own scrolling. */
+  overflow: clip;
   border: 1px solid var(--line);
   border-radius: var(--workspace-left-radius) 0 0 var(--workspace-left-radius);
   background: var(--workspace-bg);
