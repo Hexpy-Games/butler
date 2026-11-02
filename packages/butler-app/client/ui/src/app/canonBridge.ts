@@ -31,7 +31,7 @@ export function canonBridgeInput(url: URL, verb: string, body: () => Record<stri
   if (entity) {
     const plan = entity[1] === "plans";
     const method = entity[3] === "/progress" ? verb === "GET" && !plan ? "getEpicProgress" : undefined : entity[3] ? verb === "POST" ? (plan && entity[3] === "/order" ? "orderCanonPlan" : !plan && entity[3] === "/conversation" ? "linkCanonConversation" : undefined) : undefined :
-      verb === "GET" ? plan ? "getCanonPlan" : "getCanonEpic" : verb === "PATCH" ? plan ? "editCanonPlan" : "editCanonEpic" : undefined;
+      verb === "GET" ? plan ? "getCanonPlan" : "getCanonEpic" : verb === "PATCH" ? plan ? "editCanonPlan" : "editCanonEpic" : verb === "DELETE" && !plan ? "deleteCanonEpic" : undefined;
     if (!method) return null;
     const input = body();
     return { method, input: { id: decodeURIComponent(entity[2]!), ...(method === "linkCanonConversation" ? { sessionId: input.session_id } : { body: input }) } };

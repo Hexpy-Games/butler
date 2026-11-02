@@ -146,6 +146,7 @@ pub fn turn_ended(
     outcome: &str,
     turn: Option<&str>,
 ) -> Result<Value> {
+    let mut changed_epics = BTreeSet::new();
     if let Some(epic) = tx
         .query_row(
             "SELECT epic_id FROM canon_step_cancellations WHERE op_id=?1",
@@ -155,8 +156,21 @@ pub fn turn_ended(
         .optional()?
     {
         tx.execute("DELETE FROM canon_step_cancellations WHERE op_id=?1", [op])?;
+        changed_epics.insert(epic.clone());
         for owner in rows(tx, sql::OWNER, [&epic])? {
             ready(tx, ctx, text(&owner, "session_id")?)?;
+        }
+    }
+    if matches!(
+        outcome,
+        "delivered" | "cancelled" | "failed" | "turn_interrupted"
+    ) {
+        for row in rows(
+            tx,
+            "UPDATE canon_session_queue SET turn_ended_at=COALESCE(turn_ended_at,?2),step_turn_id=COALESCE(step_turn_id,?3) WHERE step_op_id=?1 AND (turn_ended_at IS NULL OR (step_turn_id IS NULL AND ?3 IS NOT NULL)) RETURNING epic_id",
+            params![op, ctx.now, turn],
+        )? {
+            changed_epics.insert(text(&row, "epic_id")?.to_owned());
         }
     }
     let item = rows(tx, sql::STEP, [op])?.into_iter().next();
@@ -179,6 +193,9 @@ pub fn turn_ended(
         {
             fail(tx, ctx, &item, UNFINISHED)?;
         }
+    }
+    for epic in changed_epics {
+        runtime::progress_event(tx, ctx, &epic)?;
     }
     Ok(json!({"ok":true}))
 }

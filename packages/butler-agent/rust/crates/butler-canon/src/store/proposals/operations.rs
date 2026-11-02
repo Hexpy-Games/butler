@@ -17,6 +17,7 @@ pub(super) fn execute(
     }
     let resource = match op {
         "epic.create" => Resource::CreateEpic,
+        "epic.delete" => Resource::DeleteEpic,
         "epic.edit" | "epic.move" => Resource::EditEpic,
         "plan.create" => Resource::CreatePlan,
         "plan.edit" => Resource::EditPlan,
@@ -40,10 +41,15 @@ pub(super) fn execute(
     for key in ["op", "id", "project_ref", "attachments"] {
         fields.remove(key);
     }
+    if op == "epic.delete" {
+        fields.remove("title");
+    }
     let new_tags = normalize_tags(tx, ctx, project, &mut fields)?;
     let value = write(tx, ctx, resource, id, json!(fields))?;
     let mut result = json!({"op":op,"id":value["id"]});
-    if op.starts_with("epic.") {
+    if op == "epic.delete" {
+        result["title"] = value["title"].clone();
+    } else if op.starts_with("epic.") {
         result["epic_ref"] = json!(format!("canon:epic/{}", text(&value, "id")?));
         result["title"] = value["title"].clone();
         result["plan"] = match value["plan_id"].as_str() {

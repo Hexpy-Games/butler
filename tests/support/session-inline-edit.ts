@@ -163,7 +163,7 @@ async function verifyGeometry(page: Page, server: NativeAppServerHandle, id: str
     const value = name === "two" ? "변경 사항을 정리합니다.\n\n릴리스 노트를 검토합니다." : name === "one" ? "변경 사항을 정리합니다." : original.title;
     const current = await read(server, id);
     await server.api(`/canon/epics/${id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: current.revision, [field]: value }) });
-    await detail(page).getByText(value.split("\n")[0]!, { exact: true }).waitFor();
+    await detail(page).getByText(value.split("\n").at(-1)!, { exact: true }).waitFor();
     await page.mouse.move(0, 0);
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
     const target = field === "title" ? trigger(page, field) : detail(page).getByRole("group", { name: triggers[field], exact: true });
@@ -183,6 +183,8 @@ async function verifyGeometry(page: Page, server: NativeAppServerHandle, id: str
   }
   const current = await read(server, id);
   await server.api(`/canon/epics/${id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: current.revision, title: original.title, description: original.description }) });
+  // The next edit starts from the revision on screen; wait until the panel shows this write.
+  await detail(page).getByText(original.description.split("\n")[0]!, { exact: true }).waitFor();
   writeFileSync(join(review, `after-measurements-${theme}.json`), JSON.stringify(measurements, null, 2));
   console.log(JSON.stringify({ inlineGeometry: measurements, theme }));
 }

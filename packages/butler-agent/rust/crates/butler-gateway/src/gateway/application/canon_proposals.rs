@@ -42,6 +42,7 @@ async fn propose(app: &AppApplication, input: Value) -> Result<Value, GatewayApp
     if let Some(name) = &new_name {
         super::projects::validate_branch_name(name)?;
     }
+    let requires_confirmation = changes.iter().any(|change| change["op"] == "epic.delete");
     args["changes"] = json!(changes);
     args["new_name"] = json!(new_name);
     let id = app.dependencies.identity_clock.new_uuid();
@@ -55,7 +56,7 @@ async fn propose(app: &AppApplication, input: Value) -> Result<Value, GatewayApp
         "summary":summary,"document":args,"created_at":app.dependencies.identity_clock.now_iso()}),
         )
         .await?;
-    if input["apply"] == true && result["ok"] == true {
+    if input["apply"] == true && !requires_confirmation && result["ok"] == true {
         drop(files);
         return resolve(app, json!({"id":id,"outcome":"accepted","by":null})).await;
     }
@@ -75,6 +76,14 @@ pub(super) async fn resolve(
         .canon
         .proposal("raw".into(), json!({"id":id}))
         .await?;
+    if input["by"] == "chat"
+        && input["outcome"] == "accepted"
+        && row["document"]["changes"]
+            .as_array()
+            .is_some_and(|changes| changes.iter().any(|change| change["op"] == "epic.delete"))
+    {
+        return Err(public(409, "approval_card_only", "Use the approval card."));
+    }
     if let Some(session) = input["session_id"].as_str() {
         let owner = app.runtime_hint(session).await?;
         if row["session_id"] != owner {
@@ -82,29 +91,8 @@ pub(super) async fn resolve(
         }
     }
     let by = input.get("by").cloned().unwrap_or(json!("card"));
-    if matches!(
-        input["outcome"].as_str(),
-        Some("declined" | "dropped" | "dismiss")
-    ) {
-        let row = app
-            .dependencies
-            .canon
-            .proposal("cancel".into(), json!({"id":id,"by":by}))
-            .await?;
-        return Ok(json!({"ok":true,"ask_id":format!("canon:{id}"),"state":row["state"]}));
-    }
-    if input["outcome"] != "accepted" {
-        return Err(public(400, "invalid_outcome", "Use accepted or declined."));
-    }
-    if row["state"] == "applied" {
-        return Ok(row["document"]["result"].clone());
-    }
-    if row["state"] != "open" {
-        return Err(public(
-            409,
-            "ask_not_open",
-            "This proposal is no longer open.",
-        ));
+    if let Some(result) = resolved(app, &id, &input, &row, &by).await? {
+        return Ok(result);
     }
     if input.get("project_id").is_some() || input.get("new_name").is_some() {
         if let Some(name) = input["new_name"].as_str() {
@@ -153,4 +141,40 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         message: message.into(),
         source: None,
     }
+}
+
+async fn resolved(
+    app: &AppApplication,
+    id: &str,
+    input: &Value,
+    row: &Value,
+    by: &Value,
+) -> Result<Option<Value>, GatewayApplicationError> {
+    if matches!(
+        input["outcome"].as_str(),
+        Some("declined" | "dropped" | "dismiss")
+    ) {
+        let row = app
+            .dependencies
+            .canon
+            .proposal("cancel".into(), json!({"id":id,"by":by}))
+            .await?;
+        return Ok(Some(
+            json!({"ok":true,"ask_id":format!("canon:{id}"),"state":row["state"]}),
+        ));
+    }
+    if input["outcome"] != "accepted" {
+        return Err(public(400, "invalid_outcome", "Use accepted or declined."));
+    }
+    if row["state"] == "applied" {
+        return Ok(Some(row["document"]["result"].clone()));
+    }
+    if row["state"] != "open" {
+        return Err(public(
+            409,
+            "ask_not_open",
+            "This proposal is no longer open.",
+        ));
+    }
+    Ok(None)
 }

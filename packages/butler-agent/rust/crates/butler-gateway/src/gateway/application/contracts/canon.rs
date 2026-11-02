@@ -22,6 +22,7 @@ pub enum AppCanonResource {
     EditPlan,
     CreateEpic,
     EditEpic,
+    DeleteEpic,
     PlanOrder,
     BacklogOrder,
     Tags,

@@ -13,16 +13,20 @@ export async function inlineBleedGeometry(target: Locator) {
     const range = document.createRange(); range.selectNodeContents(text);
     const y = range.getClientRects()[0]!.y;
     const slot = { y: box.y - top, height: box.height + top + bottom };
-    const wrapper = element.parentElement!;
-    const fields = wrapper.parentElement!;
-    const next = wrapper.nextElementSibling ?? fields.nextElementSibling;
-    const neighbours = [wrapper.previousElementSibling, wrapper.nextElementSibling,
-      ...Array.from(wrapper.children).filter(child => child !== element), fields.nextElementSibling]
-      .filter((node): node is Element => Boolean(node) && !node!.contains(element));
+    // Every sibling row or control between the field and the detail root, however deep the field sits.
+    const root = element.closest('[data-test-class="canon-epic-detail"]')!;
+    const neighbours: Element[] = [];
+    for (let node = element.parentElement!; root.contains(node); node = node.parentElement!) {
+      neighbours.push(...Array.from(node.children).filter(child => !child.contains(element)));
+    }
     const overlaps = neighbours.map(node => {
       const rect = node.getBoundingClientRect();
-      return Math.max(0, Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top));
+      const width = Math.min(box.right, rect.right) - Math.max(box.left, rect.left);
+      const height = Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top);
+      return width > 0 && height > 0 ? width * height : 0;
     });
+    const slotBottom = slot.y + slot.height;
+    const nextY = Math.min(...neighbours.map(node => node.getBoundingClientRect().y).filter(top => top >= slotBottom));
     const clipping = [];
     for (let node = element.parentElement; node; node = node.parentElement) {
       const style = getComputedStyle(node), rect = node.getBoundingClientRect();
@@ -35,7 +39,7 @@ export async function inlineBleedGeometry(target: Locator) {
         ...(vertical || shape ? [box.top - 2 - rect.top - node.clientTop,
           rect.top + node.clientTop + node.clientHeight - box.bottom - 2] : [])) });
     }
-    return { y, height: box.height, fillY: box.y, slot, nextY: next!.getBoundingClientRect().y,
+    return { y, height: box.height, fillY: box.y, slot, nextY,
       padding: parseFloat(css.paddingTop), baselineHeight: parseFloat(css.getPropertyValue("--clickable-min-height")),
       expectedTextY: slot.y + (slot.height - content.height) / 2 + y - content.y,
       overlap: Math.max(0, ...overlaps), clipping };
@@ -58,6 +62,7 @@ export async function verifyInlineBleed(target: Locator) {
   assert.equal(measured.fillY, measured.slot.y - measured.padding);
   assert.equal(measured.height, measured.slot.height + 2 * measured.padding);
   assert.equal(measured.y, measured.expectedTextY, "First-line text remains centered in the original slot");
+  assert(Number.isFinite(measured.nextY), "A row follows the field");
   assert.equal(measured.overlap, 0, "The enlarged fill does not overlap neighbouring rows");
   for (const clip of measured.clipping) assert(clip.clearance >= 0, JSON.stringify(clip));
   return measured;

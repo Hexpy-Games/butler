@@ -47,7 +47,7 @@ pub(super) async fn setup_at(
     setup_env(name, rejects, revise, now, None).await
 }
 
-async fn setup_env(
+pub(crate) async fn setup_env(
     name: &str,
     rejects: bool,
     revise: bool,

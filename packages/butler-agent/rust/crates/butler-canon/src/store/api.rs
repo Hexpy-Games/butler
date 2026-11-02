@@ -1,6 +1,7 @@
 //! Local API operations, called inside the BTCC read or writer lane.
 mod canon;
 pub mod canon_conversation;
+mod epic_delete;
 mod outbox;
 pub(super) use outbox::append as outbox;
 mod reads;
@@ -14,8 +15,8 @@ use crate::{
 };
 use Resource::{
     Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
-    CreateTag, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, Grants, List, Plan,
-    PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+    CreateTag, DeleteEpic, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, Grants, List,
+    Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
 };
 pub use reads::{canon, epic, epic_only, plan};
 
@@ -38,6 +39,7 @@ pub enum Resource {
     EditPlan,
     CreateEpic,
     EditEpic,
+    DeleteEpic,
     PlanOrder,
     BacklogOrder,
     Tags,
@@ -53,7 +55,7 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
         Spec | ProposeSpec | CheckCriterion => {
             "SELECT scope_ref FROM canon_spec_nodes WHERE node_id=?1 AND scope_kind='project' AND visibility='canon'"
         }
-        Activity | Comment | Epic | EditEpic => sql::EPIC_SCOPE,
+        Activity | Comment | Epic | EditEpic | DeleteEpic => sql::EPIC_SCOPE,
         Plan | EditPlan | PlanOrder => sql::PLAN_SCOPE,
         EditTag | DeleteTag => sql::TAG_SCOPE,
         Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => {
@@ -75,8 +77,10 @@ pub fn read(db: &Connection, resource: Resource, id: &str) -> Result<Value> {
         Canon => canon(db, id),
         Plan => plan(db, id),
         Epic => epic(db, id),
-        CreatePlan | EditPlan | CreateEpic | EditEpic | PlanOrder | BacklogOrder | CreateTag
-        | EditTag | DeleteTag => Err(Error::Invalid("read requires a readable resource")),
+        CreatePlan | EditPlan | CreateEpic | EditEpic | DeleteEpic | PlanOrder | BacklogOrder
+        | CreateTag | EditTag | DeleteTag => {
+            Err(Error::Invalid("read requires a readable resource"))
+        }
     }
 }
 pub fn read_query(db: &Connection, resource: Resource, id: &str, input: &Value) -> Result<Value> {
@@ -112,6 +116,7 @@ pub fn write(
         EditPlan => canon::edit_plan(tx, ctx, id, input),
         CreateEpic => canon::create_epic(tx, ctx, id, input),
         EditEpic => canon::edit_epic(tx, ctx, id, input),
+        DeleteEpic => epic_delete::delete(tx, ctx, id, input),
         PlanOrder => canon::order(tx, ctx, Some(id), id, input),
         BacklogOrder => canon::order(tx, ctx, None, id, input),
         Canon | Plan | Epic | Tags => Err(Error::Invalid("write requires an editable resource")),

@@ -65,6 +65,7 @@ fn create_tables(connection: &Connection) -> Result<(), AppStorageError> {
             op_id TEXT NOT NULL UNIQUE,
             PRIMARY KEY(session_id,epic_id)
          );
+         CREATE INDEX IF NOT EXISTS app_canon_conversations_epic ON app_canon_conversations(epic_id);
          CREATE INDEX IF NOT EXISTS app_canon_conversations_project
          ON app_canon_conversations(project_id,session_id);
          CREATE TABLE IF NOT EXISTS app_canon_sidebar_order (
@@ -77,6 +78,7 @@ fn create_tables(connection: &Connection) -> Result<(), AppStorageError> {
          );
          CREATE INDEX IF NOT EXISTS app_canon_sidebar_order_position
          ON app_canon_sidebar_order(project_id,group_key,position);
+         CREATE INDEX IF NOT EXISTS app_canon_sidebar_order_work ON app_canon_sidebar_order(work_id);
          CREATE UNIQUE INDEX IF NOT EXISTS app_canon_sidebar_order_op
          ON app_canon_sidebar_order(op_id) WHERE op_id IS NOT NULL;",
         )

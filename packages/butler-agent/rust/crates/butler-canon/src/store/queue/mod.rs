@@ -1,5 +1,7 @@
 //! Session-local epic chains. Caller owns the canon write transaction.
 mod edits;
+mod epic_delete;
+pub(crate) use epic_delete::epic_deleted;
 pub mod engine;
 mod operations;
 pub mod sql;
@@ -132,7 +134,7 @@ fn ordinal(value: usize) -> Result<i64> {
     i64::try_from(value).map_err(|_| Error::Invalid("index"))
 }
 
-/// Startup examines only unresolved running steps, through the live-state index.
+/// Startup reconciles live steps and held steps missing a terminal receipt.
 pub fn running(db: &Connection) -> Result<Value> {
     Ok(json!(rows(db, sql::RUNNING, [])?))
 }

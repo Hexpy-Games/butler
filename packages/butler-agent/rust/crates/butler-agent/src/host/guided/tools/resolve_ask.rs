@@ -22,7 +22,12 @@ pub(super) async fn execute(
                 } else {
                     super::canon::request(owner,"resolve",json!({"id":input.ask_id.trim_start_matches("canon:"),"outcome":input.outcome,"by":"chat"})).await
                 };
-                if result["ok"] == true || result["error"]["code"] == "canon_conflict" {
+                if result["ok"] == true
+                    || matches!(
+                        result["error"]["code"].as_str(),
+                        Some("canon_conflict" | "canon_not_found")
+                    )
+                {
                     owner.binding.open_asks.lock().remove(&id);
                 }
                 return JsonDocument::from_value(&result).map_err(super::effect::wire_error);

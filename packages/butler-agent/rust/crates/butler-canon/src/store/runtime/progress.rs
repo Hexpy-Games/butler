@@ -8,7 +8,7 @@ fn latest(db: &Connection, query: Query, work: &str) -> Result<Option<Value>> {
 }
 
 pub(super) fn running(db: &Connection, work: &Value) -> Result<bool> {
-    if work["status"] != "open" {
+    if work["status"] != "open" || held(db, work)? {
         return Ok(false);
     }
     let session = text(work, "session_id")?;
@@ -34,7 +34,39 @@ pub(super) fn running(db: &Connection, work: &Value) -> Result<bool> {
         )
         .optional()?
         .is_some();
-    Ok(own || child)
+    if own || child {
+        return Ok(true);
+    }
+    let awaiting = db
+        .query_row(
+            Query::QueueAwaitingDelegation.sql(),
+            params![session, text(work, "epic_id")?, work["linked_at"].as_i64()],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    Ok(awaiting && delegation_open(db, text(work, "work_id")?)?)
+}
+
+/// Only the latest linked Work in each conversation can still run for this step.
+pub(super) fn current(works: &[Value], index: usize) -> bool {
+    !works[index + 1..]
+        .iter()
+        .any(|later| later["session_id"] == works[index]["session_id"])
+}
+
+/// Stop takes effect after the step's Turn ends. An undecided unfinished
+/// step can still finish through a live reply on its open Work, unless another
+/// unheld step owns the chat's Turn.
+fn held(db: &Connection, work: &Value) -> Result<bool> {
+    Ok(db
+        .query_row(
+            Query::QueueHeld.sql(),
+            params![text(work, "session_id")?, text(work, "epic_id")?],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
 }
 
 fn actions(db: &Connection, work: &str) -> Result<Vec<Value>> {
@@ -77,10 +109,7 @@ pub fn progress(db: &Connection, epic: &str, views: &ProjectViews) -> Result<Val
     let mut active = None;
     for (index, work) in works.iter().enumerate() {
         let id = text(work, "work_id")?;
-        // A later Work in the same conversation replaced this one, even if it was left open.
-        let current = !works[index + 1..]
-            .iter()
-            .any(|later| later["session_id"] == work["session_id"]);
+        let current = current(&works, index);
         if current && running(db, work)? {
             result["running"] = json!(true);
         }
@@ -125,7 +154,9 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
             if object.contains_key("epic_id") {
                 object.insert("progress".into(), progress);
             } else {
+                let delete_blocked = super::epic_delete_running(db, id)?;
                 let queue = queue_item(db, id, object.get("home_session_id"))?;
+                object.insert("delete_blocked".into(), json!(delete_blocked));
                 object.insert("queue".into(), queue);
                 object.insert("task_counts".into(), progress["counts"].clone());
                 object.insert("running".into(), progress["running"].clone());
@@ -261,17 +292,19 @@ pub(crate) fn step_unfinished(
         None => false,
     };
     let by_work = match work {
-        Some(work) => db
-            .query_row(
-                Query::WorkDelegationOpen.sql(),
-                [text(work, "work_id")?],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some(),
+        Some(work) => delegation_open(db, text(work, "work_id")?)?,
         None => false,
     };
     Ok(!by_turn && !by_work)
+}
+
+/// Open children and pending directions can finish this Work before a child
+/// Turn starts. Use the same rule for step settlement and its running indicator.
+fn delegation_open(db: &Connection, work: &str) -> Result<bool> {
+    Ok(db
+        .query_row(Query::WorkDelegationOpen.sql(), [work], |_| Ok(()))
+        .optional()?
+        .is_some())
 }
 
 /// Only links created in this run and this exact runtime session can settle it.

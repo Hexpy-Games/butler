@@ -100,7 +100,10 @@ fn require(
     if ctx.actor["origin"] != "mcp" {
         return Ok(());
     }
-    if resource == AppCanonResource::CheckCriterion {
+    if matches!(
+        resource,
+        AppCanonResource::CheckCriterion | AppCanonResource::DeleteEpic
+    ) {
         return Err(store::Error::Permission);
     }
     let capability = match resource {

@@ -40,11 +40,14 @@ pub(in crate::store) fn append(
         if let (Some(payload), Some(details)) = (payload.as_object_mut(), details.as_object()) {
             payload.extend(details.clone());
         }
-        if kind == "work" {
+        if kind == "work" && details["deleted"] != true {
             let row = read_work(tx, id)?;
             payload["attachments"] = json!(crate::store::attachments::references_lenient(
                 row["description"].as_str().unwrap_or_default(),
             ));
+        }
+        if details["deleted"] == true {
+            payload["attachments"] = json!([]);
         }
         tx.execute(
             super::super::sql::OUTBOX,
