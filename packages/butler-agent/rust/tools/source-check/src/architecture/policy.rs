@@ -101,7 +101,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
         "sqlite" | "fs_space" | "secrets" | "install_link" => &["secure_fs"],
-        "command_sandbox" => &["secure_fs", "account_dirs", "data_paths", "powershell_text"],
+        "command_sandbox" => &["secure_fs", "account_dirs", "data_paths"],
         "process_control" => &["process_table"],
         // The headless browser's DevTools pipe runs in a contained process tree.
         "browser_process" | "system_wake" => &["process_control"],
