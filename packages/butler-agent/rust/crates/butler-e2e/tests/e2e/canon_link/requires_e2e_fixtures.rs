@@ -4,10 +4,7 @@
 use super::stub::delegated::{DIRECTION, STEER};
 use super::*;
 use rusqlite::Connection;
-use std::{
-    path::{Path, PathBuf},
-    sync::atomic::Ordering,
-};
+use std::sync::atomic::Ordering;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::{mpsc, watch},
@@ -16,11 +13,12 @@ use tokio::{
 const BEFORE_WORK: &str = "before-work";
 const WORK_STARTED: &str = "work-started";
 
-/// Answers the agent's barrier: each stage waits until the test opens it.
+/// Answers the agent's barrier: each stage waits until the test opens it, or
+/// fails it (the agent refuses to continue past that stage).
 struct WorkBarrier {
     address: String,
     reached: tokio::sync::Mutex<mpsc::UnboundedReceiver<String>>,
-    open: watch::Sender<Vec<&'static str>>,
+    open: watch::Sender<Vec<(&'static str, u8)>>,
 }
 
 impl WorkBarrier {
@@ -41,10 +39,13 @@ impl WorkBarrier {
                     };
                     let stage = String::from_utf8_lossy(&stage[..read]).into_owned();
                     let _ = reached_tx.send(stage.clone());
-                    let _ = gate
-                        .wait_for(|open: &Vec<&str>| open.iter().any(|s| *s == stage))
-                        .await;
-                    let _ = socket.write_u8(1).await;
+                    let answer = gate
+                        .wait_for(|open: &Vec<(&str, u8)>| open.iter().any(|(s, _)| *s == stage))
+                        .await
+                        .ok()
+                        .and_then(|open| open.iter().find(|(s, _)| *s == stage).map(|(_, a)| *a))
+                        .unwrap_or(1);
+                    let _ = socket.write_u8(answer).await;
                 });
             }
         });
@@ -63,7 +64,11 @@ impl WorkBarrier {
     }
 
     fn open(&self, stage: &'static str) {
-        self.open.send_modify(|open| open.push(stage));
+        self.open.send_modify(|open| open.push((stage, 1)));
+    }
+
+    fn fail(&self, stage: &'static str) {
+        self.open.send_modify(|open| open.push((stage, 0)));
     }
 }
 
@@ -300,61 +305,14 @@ async fn blocked_direction_keeps_the_epic_short_of_review() -> Result<(), Harnes
     flow.finish().await
 }
 
-/// Directories of one project Ledger stay read-only until this is dropped.
-struct ReadOnlyLedger(Vec<(PathBuf, std::fs::Permissions)>);
-
-impl ReadOnlyLedger {
-    fn set(root: &Path) -> std::io::Result<Self> {
-        let mut pending = vec![root.to_owned()];
-        let mut directories = Vec::new();
-        while let Some(directory) = pending.pop() {
-            for entry in std::fs::read_dir(&directory)? {
-                let entry = entry?;
-                if entry.file_type()?.is_dir() {
-                    pending.push(entry.path());
-                }
-            }
-            let writable = std::fs::metadata(&directory)?.permissions();
-            directories.push((directory, writable));
-        }
-        for (directory, writable) in &directories {
-            let mut read_only = writable.clone();
-            read_only.set_readonly(true);
-            std::fs::set_permissions(directory, read_only)?;
-        }
-        Ok(Self(directories))
-    }
-}
-
-impl Drop for ReadOnlyLedger {
-    fn drop(&mut self) {
-        for (directory, writable) in &self.0 {
-            let _ = std::fs::set_permissions(directory, writable.clone());
-        }
-    }
-}
-
 #[tokio::test]
 async fn failed_work_start_leaves_the_relation_on_its_real_work() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let flow = direction_pending("CANON-DIRECTION-FAULT", false).await?;
-    let ledger: String = flow.db.query_row(
-        "SELECT ledger_project_id FROM btcc_guided_works WHERE work_id=?1",
-        [&flow.root],
-        |row| row.get(0),
-    )?;
-    let fault = ReadOnlyLedger::set(
-        &flow
-            .s
-            .sandbox
-            .data
-            .join("project-ledger/projects")
-            .join(ledger),
-    )?;
-    flow.barrier.open(BEFORE_WORK);
-    flow.barrier.open(WORK_STARTED);
+    // The agent refuses to start the direction's Work: the same outcome on
+    // every OS, without relying on directory permissions.
+    flow.barrier.fail(BEFORE_WORK);
     flow.delivered(2).await?;
-    drop(fault);
     assert_eq!(flow.statuses()?, ["success", "failed"]);
     assert_eq!(flow.pending()?, 0, "the parent has the direction's failure");
     assert_eq!(

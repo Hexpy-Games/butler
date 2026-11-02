@@ -208,18 +208,21 @@ async fn during_admission(before_dispatch: bool) -> Result<(), HarnessError> {
                     > previous
             })
             .await;
-            stream.get_mut().write_all(b"x").await?;
+            // The agent may already have closed this wait; Windows reports the
+            // reset on write where Unix accepts the bytes. The acknowledgement
+            // is moot then, so a gone peer is not a failure.
+            let _ = stream.get_mut().write_all(b"x").await;
             // Keep the actual admission lock until exit. Acknowledge every expired
             // wait so the fixture itself cannot block shutdown or failure settlement.
             loop {
                 tokio::select! {
                     () = done.notified() => break,
                     accepted = observer.accept() => {
-                        let (stream, _) = accepted?;
+                        let Ok((stream, _)) = accepted else { continue };
                         let mut stream = BufReader::new(stream);
                         let mut purpose = String::new();
-                        stream.read_line(&mut purpose).await?;
-                        stream.get_mut().write_all(b"x").await?;
+                        let _ = stream.read_line(&mut purpose).await;
+                        let _ = stream.get_mut().write_all(b"x").await;
                     }
                 }
             }
