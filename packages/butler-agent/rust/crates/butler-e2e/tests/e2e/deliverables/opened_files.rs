@@ -1,12 +1,11 @@
 //! OPEN-IN-APP: an Office file in the drawer is stored as a binary file (the
 //! App shows it as unsupported with save), and "open in app" gets a marked
-//! copy of an allowlisted document only; the copies go when the Agent stops.
+//! copy opened or revealed according to verified content; the copies go when the Agent stops.
 use super::*;
 use crate::attachment_types::{PDF, upload};
 use butler_platform::{data_paths::TEMPORARY, download_mark};
 use std::io::{Cursor, Write as _};
 
-const DOCX: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const DOCX_MAIN: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
 const XLSX_MAIN: &str =
@@ -82,74 +81,17 @@ async fn office_file_opens_only_as_marked_allowlisted_copy() -> Result<(), Harne
     let saved = s.gw.get(file["url"].as_str().unwrap()).await?;
     assert_eq!(saved.status, 200);
 
-    let (status, body) = open(&s, file["file_id"].as_str().unwrap()).await?;
-    if download_mark::supported() {
-        assert_eq!(status, 201, "{body}");
-        let path = std::path::PathBuf::from(body["data"]["path"].as_str().unwrap());
-        assert!(path.starts_with(opened_dir(&s)), "{}", path.display());
-        assert_eq!(path.file_name().unwrap(), "plan.docx");
-        assert_eq!(
-            std::fs::read(&path)?,
-            docx,
-            "the copy holds the stored bytes"
-        );
-        assert!(
-            download_mark::is_marked(&path)?,
-            "the copy is marked downloaded"
-        );
-    } else {
-        assert_eq!(
-            (status, body["error"]["code"].as_str()),
-            (501, Some("open_unsupported"))
-        );
-    }
+    assert_copy(
+        &s,
+        file["file_id"].as_str().unwrap(),
+        "plan.docx",
+        &docx,
+        download_mark::supported(),
+    )
+    .await?;
 
-    // Chat attachments: only allowlisted content under its own extension.
-    let refused = [
-        (
-            "macro.docm",
-            package(DOCM_MAIN, "word/document.xml", &[]),
-            "open_type_not_allowed",
-        ),
-        (
-            "renamed.docx",
-            package(DOCM_MAIN, "word/document.xml", &[]),
-            "open_type_not_allowed",
-        ),
-        (
-            "vba.docx",
-            package(DOCX_MAIN, "word/document.xml", &["word/vbaProject.bin"]),
-            "open_type_not_allowed",
-        ),
-        (
-            "sheet.docx",
-            package(XLSX_MAIN, "xl/workbook.xml", &[]),
-            "open_type_mismatch",
-        ),
-        ("scan.docx", PDF.to_vec(), "open_type_mismatch"),
-        (
-            "legacy.hwp",
-            compound(b"Microsoft Word document"),
-            "open_type_not_allowed",
-        ),
-        ("plan.docx.exe", docx.clone(), "open_type_not_allowed"),
-        ("notes.txt", b"plain text".to_vec(), "open_type_not_allowed"),
-    ];
-    for (name, bytes, code) in &refused {
-        let attached = upload(&s, name, DOCX, bytes).await?;
-        let (status, body) = open(&s, attached["file_id"].as_str().unwrap()).await?;
-        if download_mark::supported() {
-            assert_eq!(
-                (status, body["error"]["code"].as_str()),
-                (415, Some(*code)),
-                "{name}: {body}"
-            );
-        } else {
-            assert_eq!(status, 501, "{name}: {body}");
-        }
-    }
     let allowed = [
-        ("REPORT.DOCX", docx.clone(), "REPORT.docx"),
+        ("REPORT.DOCX", docx, "REPORT.docx"),
         (
             "deck.pptx",
             package(PPTX_MAIN, "ppt/presentation.xml", &[]),
@@ -164,29 +106,124 @@ async fn office_file_opens_only_as_marked_allowlisted_copy() -> Result<(), Harne
         ("form.hwp", compound(b"HWP Document File"), "form.hwp"),
         ("form.hwpx", hwpx(), "form.hwpx"),
     ];
-    if download_mark::supported() {
-        for (name, bytes, copy) in &allowed {
-            let attached = upload(&s, name, "application/octet-stream", bytes).await?;
-            let (status, body) = open(&s, attached["file_id"].as_str().unwrap()).await?;
-            assert_eq!(status, 201, "{name}: {body}");
-            let path = std::path::PathBuf::from(body["data"]["path"].as_str().unwrap());
-            assert_eq!(path.file_name().unwrap(), *copy, "{name}");
-            assert!(
-                download_mark::is_marked(&path)?,
-                "{name}: the copy is marked downloaded"
-            );
-        }
-        let folders = std::fs::read_dir(opened_dir(&s))?.count();
-        assert_eq!(folders, 1 + allowed.len(), "one folder per opened copy");
-        let (status, _) = open(&s, "file-00000000-0000-0000-0000-000000000000").await?;
-        assert_eq!(status, 404, "an unknown id opens nothing");
+    for (name, bytes, copy) in &allowed {
+        let copy = if download_mark::supported() {
+            copy
+        } else {
+            name
+        };
+        check_upload(&s, name, bytes, copy, download_mark::supported()).await?;
     }
-
-    s.restart().await?;
-    assert!(
-        !opened_dir(&s).exists(),
-        "copies are removed when the Agent stops"
+    let (status, _) = open(&s, "file-00000000-0000-0000-0000-000000000000").await?;
+    assert_eq!(status, 404, "an unknown id opens nothing");
+    assert_eq!(
+        std::fs::read_dir(opened_dir(&s))?.count(),
+        1 + allowed.len()
     );
+    s.restart().await?;
+    assert!(!opened_dir(&s).exists(), "copies are removed on restart");
     server.abort();
+    Ok(())
+}
+
+async fn check_upload(
+    s: &Scenario,
+    name: &str,
+    bytes: &[u8],
+    copy: &str,
+    may_open: bool,
+) -> Result<(), HarnessError> {
+    let attached = upload(s, name, "application/octet-stream", bytes).await?;
+    assert_copy(
+        s,
+        attached["file_id"].as_str().unwrap(),
+        copy,
+        bytes,
+        may_open,
+    )
+    .await
+}
+
+async fn assert_copy(
+    s: &Scenario,
+    file_id: &str,
+    copy: &str,
+    bytes: &[u8],
+    may_open: bool,
+) -> Result<(), HarnessError> {
+    let (status, body) = open(s, file_id).await?;
+    assert_eq!(status, 201, "{copy}: {body}");
+    assert_eq!(body["data"]["open"], may_open, "{copy}: {body}");
+    let path = std::path::PathBuf::from(body["data"]["path"].as_str().unwrap());
+    assert!(path.starts_with(opened_dir(s)), "{}", path.display());
+    assert_eq!(path.file_name().unwrap(), copy);
+    assert_eq!(
+        std::fs::read(&path)?,
+        bytes,
+        "the copy holds all stored bytes"
+    );
+    if download_mark::supported() {
+        assert!(
+            download_mark::is_marked(&path)?,
+            "{copy}: marked downloaded"
+        );
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&path)?.permissions().mode() & 0o111, 0);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn images_and_text_open_but_active_or_mismatched_files_are_revealed()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("OPEN-OR-REVEAL")?.start().await?;
+    let allowed: &[(&str, &[u8])] = &[
+        ("image.png", b"\x89PNG\r\n\x1a\nimage"),
+        ("image.jpg", b"\xff\xd8\xffimage"),
+        ("image.jpeg", b"\xff\xd8\xffimage"),
+        ("image.gif", b"GIF89aimage"),
+        ("image.webp", b"RIFF\x04\x00\x00\x00WEBPimage"),
+        ("notes.md", b"# Notes"),
+        ("notes.markdown", b"# Notes"),
+        ("notes.txt", b"plain text"),
+        ("table.csv", b"a,b\n1,2"),
+    ];
+    for (name, bytes) in allowed {
+        check_upload(&s, name, bytes, name, true).await?;
+    }
+    let revealed = [
+        ("macro.docm", package(DOCM_MAIN, "word/document.xml", &[])),
+        ("renamed.docx", package(DOCM_MAIN, "word/document.xml", &[])),
+        (
+            "vba.docx",
+            package(DOCX_MAIN, "word/document.xml", &["word/vbaProject.bin"]),
+        ),
+        ("sheet.docx", package(XLSX_MAIN, "xl/workbook.xml", &[])),
+        ("scan.docx", PDF.to_vec()),
+        ("legacy.hwp", compound(b"Microsoft Word document")),
+        ("x.docx.exe", package(DOCX_MAIN, "word/document.xml", &[])),
+        ("script.sh", b"#!/bin/sh\necho hello".to_vec()),
+        ("script.py", b"print('hello')".to_vec()),
+        (
+            "page.html",
+            b"<html><script>alert(1)</script></html>".to_vec(),
+        ),
+        (
+            "image.svg",
+            b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec(),
+        ),
+        ("image.png", b"plain text".to_vec()),
+        ("notes.txt", b"text\x00hidden".to_vec()),
+        ("invalid.txt", vec![0xff, 0xfe]),
+        ("archive.zip", hwpx()),
+        ("unknown.bin", vec![0, 1, 2, 3]),
+    ];
+    for (name, bytes) in &revealed {
+        check_upload(&s, name, bytes, name, false).await?;
+    }
     Ok(())
 }

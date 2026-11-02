@@ -1556,8 +1556,8 @@ const butlerApp = Object.freeze({
   exportDocument: (input) => ipcRenderer.invoke("butler:export-document", input),
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
-  openMessageFile: ({ fileId } = {}) =>
-    ipcRenderer.invoke("butler:open-message-file", { fileId }),
+  openMessageFile: ({ fileId, reveal } = {}) =>
+    ipcRenderer.invoke("butler:open-message-file", { fileId, reveal: reveal === true }),
   getContextDetails: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/context-details?${params.toString()}`);

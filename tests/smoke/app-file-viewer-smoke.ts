@@ -84,6 +84,7 @@ try {
   // Size and age only: the stored kind ("document") is an internal value and never shows.
   await viewer.locator('[data-test-class="file-viewer-header"]').getByText(/^\d+(\.\d)? (B|KB) · 지금$/u).waitFor();
   assert.equal(await viewer.locator('[data-test-class="file-viewer-header"]').getByText(/document/u).count(), 0);
+  assert.equal(await viewer.locator('[data-test-class="file-viewer-header"] [data-test-class="file-viewer-open-external"]').count(), 0, "web viewer hides desktop actions");
   await verifyHeader(viewer, "markdown", { compact: false, library: true });
   await verifyGeometry(viewer, "markdown");
   await infoToggle.click();
