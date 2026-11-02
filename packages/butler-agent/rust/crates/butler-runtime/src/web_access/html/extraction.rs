@@ -1,6 +1,6 @@
 use dom_smoothie::{Config, Readability};
 
-use super::{decode_entities, matching_close, parse_tags, strip_html};
+use super::{decode_entities, matching_close, parse_tags};
 
 pub(in crate::web_access) struct HtmlExtraction {
     pub(in crate::web_access) title: Option<String>,
@@ -13,26 +13,45 @@ pub(in crate::web_access) fn extract_readable_html(
     html: &str,
     document_url: &str,
 ) -> HtmlExtraction {
-    let raw_text = compact_text(&strip_html(html));
+    let mut blocks = super::structure::blocks(html);
+    let raw_text = blocks
+        .iter()
+        .map(|b| b.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
     let article = Readability::new(html, Some(document_url), Some(Config::default()))
         .ok()
-        .and_then(|mut readability| readability.parse().ok());
-    if let Some(article) = article {
-        let text = compact_text(&article.text_content);
-        if readable_enough(&text, &raw_text) {
-            return HtmlExtraction {
-                markdown: markdown_from_html(&article.content),
-                text,
-                title: nonempty(&article.title),
-                method: "readability",
-            };
+        .and_then(|mut reader| reader.parse().ok())
+        .filter(|article| readable_enough(&compact_text(&article.text_content)));
+    if let Some(article) = &article {
+        let article_text = compact_text(&article.text_content);
+        for block in &mut blocks {
+            block.main = article_text.contains(&block.text);
         }
     }
+    // Stable ordering preserves source order inside each region. Deduplication
+    // happened before sorting, so the first source occurrence always survives.
+    blocks.sort_by_key(|b| if b.chrome { 2 } else { usize::from(!b.main) });
+    let mut markdown = String::new();
+    let mut in_chrome = false;
+    for block in blocks {
+        if block.chrome && !in_chrome {
+            markdown.push_str("\n\n## Page chrome (navigation, ads, repeated blocks)\n\n");
+            in_chrome = true;
+        }
+        markdown.push_str(&markdown_from_html(&block.html));
+        markdown.push_str("\n\n");
+    }
+    let markdown = markdown.trim().to_owned();
     HtmlExtraction {
-        title: None,
-        markdown: raw_text.clone(),
+        title: article.as_ref().and_then(|a| nonempty(&a.title)),
         text: raw_text,
-        method: "raw-html",
+        markdown,
+        method: if article.is_some() {
+            "readability"
+        } else {
+            "raw-html"
+        },
     }
 }
 
@@ -45,10 +64,10 @@ fn compact_text(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn readable_enough(candidate: &str, raw: &str) -> bool {
-    let candidate = candidate.encode_utf16().count();
-    let raw = raw.encode_utf16().count();
-    candidate >= 200 || candidate.saturating_mul(4) >= raw
+fn readable_enough(candidate: &str) -> bool {
+    // Use Readability's standard minimum article size, including on retries
+    // where the library can return a smaller fragment. Smaller pages use density.
+    candidate.chars().count() >= Config::default().char_threshold
 }
 
 fn markdown_from_html(html: &str) -> String {
@@ -66,7 +85,7 @@ fn markdown_from_html(html: &str) -> String {
             && let Some(close) = matching_close(&tags, index)
         {
             output.push_str("\n\n");
-            output.push_str(&html[tag.start..tags[close].end]);
+            output.push_str(&super::tables::render(&html[tag.start..tags[close].end]));
             output.push_str("\n\n");
             cursor = tags[close].end;
             index = close + 1;
@@ -81,64 +100,82 @@ fn markdown_from_html(html: &str) -> String {
             continue;
         }
         if tag.closing {
-            match tag.name.as_str() {
-                "a" => {
-                    if let Some(Some(href)) = links.pop() {
-                        output.push_str("](");
-                        output.push_str(&href);
-                        output.push(')');
-                    }
-                }
-                "pre" => {
-                    pre_depth = pre_depth.saturating_sub(1);
-                    while output.ends_with('\n') {
-                        output.pop();
-                    }
-                    output.push_str("\n```\n\n");
-                }
-                "code" if pre_depth == 0 => output.push('`'),
-                "p" | "div" | "article" | "main" | "section" | "blockquote" | "ul" | "ol"
-                | "li" | "tr" => output.push_str("\n\n"),
-                name if super::is_heading(name) => output.push_str("\n\n"),
-                "td" | "th" => output.push_str(" | "),
-                _ => {}
-            }
+            close_tag(tag, &mut output, &mut links, &mut pre_depth);
         } else {
-            match tag.name.as_str() {
-                "a" => {
-                    let href = tag.attributes.get("href").and_then(|href| safe_link(href));
-                    if href.is_some() {
-                        output.push('[');
-                    }
-                    links.push(href);
-                }
-                "pre" => {
-                    output.push_str("\n\n```\n");
-                    pre_depth += 1;
-                }
-                "code" if pre_depth == 0 => output.push('`'),
-                name if super::is_heading(name) => {
-                    output.push_str("\n\n");
-                    let level = tag.name[1..].parse::<usize>().unwrap_or(1);
-                    output.push_str(&"#".repeat(level.min(6)));
-                    output.push(' ');
-                }
-                "p" | "div" | "article" | "main" | "section" | "ul" | "ol" | "tr" => {
-                    output.push_str("\n\n");
-                }
-                "li" => output.push_str("\n- "),
-                "blockquote" => output.push_str("\n\n> "),
-                "br" => output.push_str("  \n"),
-                "hr" => output.push_str("\n\n---\n\n"),
-                "td" | "th" => output.push_str(" | "),
-                _ => {}
-            }
+            open_tag(tag, &mut output, &mut links, &mut pre_depth);
         }
         cursor = tag.end;
         index += 1;
     }
     output.push_str(&decode_entities(&html[cursor..]));
     normalize_markdown(&output)
+}
+
+fn close_tag(
+    tag: &super::HtmlTag,
+    output: &mut String,
+    links: &mut Vec<Option<String>>,
+    pre_depth: &mut usize,
+) {
+    match tag.name.as_str() {
+        "a" => {
+            if let Some(Some(href)) = links.pop() {
+                output.push_str("](");
+                output.push_str(&href);
+                output.push(')');
+            }
+        }
+        "pre" => {
+            *pre_depth = pre_depth.saturating_sub(1);
+            while output.ends_with('\n') {
+                output.pop();
+            }
+            output.push_str("\n```\n\n");
+        }
+        "code" if *pre_depth == 0 => output.push('`'),
+        "p" | "div" | "article" | "main" | "section" | "blockquote" | "ul" | "ol" | "li" | "tr" => {
+            output.push_str("\n\n");
+        }
+        name if super::is_heading(name) => output.push_str("\n\n"),
+        "td" | "th" => output.push_str(" | "),
+        _ => {}
+    }
+}
+fn open_tag(
+    tag: &super::HtmlTag,
+    output: &mut String,
+    links: &mut Vec<Option<String>>,
+    pre_depth: &mut usize,
+) {
+    match tag.name.as_str() {
+        "a" => {
+            let href = tag.attributes.get("href").and_then(|href| safe_link(href));
+            if href.is_some() {
+                output.push('[');
+            }
+            links.push(href);
+        }
+        "pre" => {
+            output.push_str("\n\n```\n");
+            *pre_depth += 1;
+        }
+        "code" if *pre_depth == 0 => output.push('`'),
+        name if super::is_heading(name) => {
+            output.push_str("\n\n");
+            let level = tag.name[1..].parse::<usize>().unwrap_or(1);
+            output.push_str(&"#".repeat(level.min(6)));
+            output.push(' ');
+        }
+        "p" | "div" | "article" | "main" | "section" | "ul" | "ol" | "tr" => {
+            output.push_str("\n\n");
+        }
+        "li" => output.push_str("\n- "),
+        "blockquote" => output.push_str("\n\n> "),
+        "br" => output.push_str("  \n"),
+        "hr" => output.push_str("\n\n---\n\n"),
+        "td" | "th" => output.push_str(" | "),
+        _ => {}
+    }
 }
 
 fn safe_link(value: &str) -> Option<String> {
@@ -194,18 +231,18 @@ pub(crate) mod tests {
         let result = extract_readable_html(&body, "https://example.com/article");
 
         assert_eq!(result.method, "readability");
-        assert!(!result.text.contains("nav-only"));
-        assert!(!result.text.contains("ad-only"));
-        assert!(!result.text.contains("footer-only"));
+        assert!(result.text.contains("nav-only"));
+        assert!(result.text.contains("ad-only"));
+        assert!(result.text.contains("footer-only"));
         assert!(
             result
                 .markdown
                 .contains("[primary source](https://example.com/source)")
         );
         assert!(result.markdown.contains("```\nlet answer = 42;\n```"));
-        assert!(result.markdown.contains("<table>"));
-        assert!(result.markdown.contains("<th>Key</th>"));
-        assert!(result.markdown.contains("<tbody>"));
+        assert!(result.markdown.contains("| Key | Value |"));
+        assert!(result.markdown.contains("| answer | 42 |"));
         assert_eq!(result.title.as_deref(), Some("Story title"));
+        super::super::focused_tests::verify_extraction_cases();
     }
 }

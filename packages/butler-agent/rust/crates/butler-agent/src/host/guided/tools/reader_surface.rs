@@ -9,7 +9,7 @@ pub(super) fn tab_only(parameters: &mut Map<String, Value>, description: &mut St
         properties.remove("url");
     }
     parameters.insert("required".into(), json!(["tab"]));
-    *description = "Read an open tab's full page text as bounded evidence with web_read {tab}. Open the page with browser_open first; URL reads are unavailable while the Butler browser host is attached. Tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different tabs and their continuations are independent: request them together in one round. With query, the chunks that best match it come first; read the others with start_chunk.".into();
+    *description = "Read a page as evidence. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. url reads a static document (article, docs, PDF); tab reads an open tab as it shows now and returns unchanged when the page is the same. Script-built pages (stores, listings, dashboards) show their content only in a tab: open them with browser_open first. Navigation, ads and repeated blocks come after the main content. Request reads of different pages, and their continuations, together in one round. ok:false with next_action open_in_tab: read the tab before using anything from it; use another source only if the tab fails too, and report what failed.".into();
 }
 
 /// Validate the original reader contract before its host-aware routing guard.
