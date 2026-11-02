@@ -22,14 +22,22 @@
    raised surface). The command keeps its own spaces and line breaks; the
    shared two-axis fade (useScrollEdges("both")) fades every edge with hidden
    content, so a long line or a tall script still reads as more. The block
-   inset sits on the frame because the Typo trim owns the text's own block
-   padding. The scroller is a keyboard stop, so it is never taller than the
-   part of the details scroll area that its fades leave clear (a taller
-   script scrolls inside it): focus can always reveal its whole ring. A
-   focused scroller draws that ring inset (the frame clips outside it) and
-   drops its fade mask, which would cut the ring. */
+   inset sits on the frame. The whole frame, border and inset included, is
+   capped to the part of the details scroll area that its edge fades and
+   ring room leave clear (the scroller's inherited --scroll-fade-size): its
+   bottom edge never sits under the details fade, and a scrolling frame
+   focused from the keyboard always shows its whole ring. Only the text
+   shrinks under the cap and scrolls inside; a short command keeps its
+   natural height. A focused scroller draws that ring inset (the frame clips
+   outside it) and drops its fade mask, which would cut the ring. */
 .code {
+  display: flex;
   min-width: 0;
+  max-height: calc(
+    var(--scroll-area-max-height-xs) - 2 *
+      (var(--scroll-fade-size) + var(--focus-ring-room))
+  );
+  flex-direction: column;
   margin-block: var(--space-xs);
   padding-block: var(--space-sm);
   overflow: hidden;
@@ -39,13 +47,21 @@
 }
 
 .codeText {
-  max-height: calc(
-    var(--scroll-area-max-height-xs) - 2 *
-      (var(--scroll-fade-size) + var(--focus-ring-room))
-  );
+  min-height: 0;
   padding-inline: var(--space-md);
   overflow: auto;
   white-space: pre;
+}
+
+/* The scroller keeps whole line boxes. Typo's cap/baseline trim leaves each
+   line overhanging the trimmed box, which a scroll container counts as
+   overflow: a one-line command would scroll and fade its bottom edge. The
+   frame's padding is the block inset instead. */
+@supports (text-box: trim-both cap alphabetic) {
+  .code > pre.codeText[data-trim] {
+    padding-block: 0;
+    text-box: normal;
+  }
 }
 
 .codeText:focus-visible {

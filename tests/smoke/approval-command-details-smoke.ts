@@ -33,6 +33,7 @@ const command = (name: string, text: string, tail: string, escapes: string[] = [
   ({ name, kind: "run_command", tool: "run_command", command: text, examples: [text], targets: [{ kind: "folder", path: "garden" }], opTargets: ["garden"],
     shown: text, tail, escapes, code: true, ...extra });
 const cases: Case[] = [
+  command("short-command", "ls -la garden", "ls -la garden"),
   command("long-command", `./build.sh ${options(60)} --last-argument-marker`, "--last-argument-marker"),
   // Newlines stay line breaks; the bidi override and the zero-width space still show as escapes.
   command("newline-command", "./run --password\n./evil.sh ‮x​z", "./evil.sh", ["‹U+202E›", "‹U+200B›"], { shown: "./run --password\n./evil.sh ‹U+202E›x‹U+200B›z" }),
@@ -147,6 +148,19 @@ try {
           const frame = await panel.locator('[data-slot="composer-decision-code"] pre').first().evaluate(async (pre, tail) => {
             const style = getComputedStyle(pre);
             const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const code = pre.closest('[data-slot="composer-decision-code"]') as HTMLElement;
+            const details = pre.closest('[data-slot="decision-details-scroll"]') as HTMLElement;
+            const scroll = [details, ...details.querySelectorAll<HTMLElement>("[data-scroll-fade]")]
+              .find(node => node.hasAttribute("data-scroll-fade") && /auto|scroll|hidden|clip/u.test(getComputedStyle(node).overflowY))!;
+            scroll.scrollTop = 0; pre.scrollTop = 0; pre.scrollLeft = 0; await settle();
+            const box = code.getBoundingClientRect(), scrollBox = scroll.getBoundingClientRect();
+            const top = scrollBox.top + scroll.clientTop, bottom = top + scroll.clientHeight;
+            const fade = Number.parseFloat(getComputedStyle(scroll).getPropertyValue("--scroll-fade-size"));
+            const codeStyle = getComputedStyle(code);
+            const inset = [codeStyle.paddingTop, codeStyle.paddingBottom, codeStyle.borderTopWidth, codeStyle.borderBottomWidth]
+              .reduce((sum, value) => sum + Number.parseFloat(value), 0);
+            const geometry = { top: box.top, bottom: box.bottom, scrollTop: top, scrollBottom: bottom, fade,
+              height: box.height, naturalHeight: (pre.textContent ?? "").split("\n").length * Number.parseFloat(style.lineHeight) + inset };
             const fades = () => ["x-start", "x-end", "y-start", "y-end"].map(edge => Number.parseFloat(getComputedStyle(pre).getPropertyValue(`--scroll-fade-${edge}`)) > 0);
             const wide = pre.scrollWidth > pre.clientWidth + 1, tall = pre.scrollHeight > pre.clientHeight + 1;
             const expected = (start: boolean[], end: boolean[]) => [start[0] && wide, end[0] && wide, start[1] && tall, end[1] && tall];
@@ -172,8 +186,14 @@ try {
             }
             pre.scrollLeft = 0; pre.scrollTop = 0; await settle();
             return { whiteSpace: style.whiteSpace, mono: style.fontFamily.includes("Plex Mono"), ligatures: style.fontVariantLigatures, wide, tall,
-              fadesMatch, fades: { rest, middle, end }, tailInside };
+              fadesMatch, fades: { rest, middle, end }, tailInside, geometry };
           }, item.tail);
+          assert(frame.geometry.top >= frame.geometry.scrollTop && frame.geometry.bottom <= frame.geometry.scrollBottom - frame.geometry.fade,
+            `${label}: the whole code frame stays above the details bottom fade: ${JSON.stringify(frame.geometry)}`);
+          if (item.name === "short-command") {
+            assert(!frame.tall, `${label}: the short command does not scroll vertically`);
+            assert(Math.abs(frame.geometry.height - frame.geometry.naturalHeight) <= 1, `${label}: the short frame keeps its natural height: ${JSON.stringify(frame.geometry)}`);
+          }
           assert.equal(frame.whiteSpace, "pre", `${label}: the code frame keeps spaces and line breaks`);
           assert(frame.mono, `${label}: the code frame uses the code font`);
           assert.equal(frame.ligatures, "none", `${label}: the code frame draws its own characters`);
