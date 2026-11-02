@@ -5,6 +5,8 @@ mod access;
 mod answer_blocks;
 mod answer_blocks_stream;
 mod canon;
+mod permission_mode;
+pub(super) mod permission_surface;
 pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
 mod deliver;
 mod direct_approval;
@@ -69,11 +71,12 @@ use resume::ResumePool;
 use tokio::sync::OnceCell;
 
 pub(crate) struct GuidedToolBinding {
+    pub permission_config: permission_surface::Config,
     pub turn_id: String,
     pub(super) open_asks: Arc<Mutex<super::prompt::open_asks::Reminders>>,
     pub app_session_id: Option<String>,
     pub access_mode: butler_turn::btcc::AccessMode,
-    pub enable_project_ledger_effects: bool,
+    pub ledger_tracking: bool,
     pub current_user_message: String,
     pub memory: CanonicalMemoryReadBinding,
     pub project_id: Option<String>,
@@ -102,15 +105,6 @@ pub(crate) struct GuidedToolBinding {
 }
 
 impl GuidedToolBinding {
-    /// Whether project ledger effects are enabled for this turn.
-    pub(crate) fn ledger_effects(&self) -> butler_turn::btcc::LedgerEffects {
-        if self.enable_project_ledger_effects {
-            butler_turn::btcc::LedgerEffects::Enabled
-        } else {
-            butler_turn::btcc::LedgerEffects::Disabled
-        }
-    }
-
     fn validate_surface(&self) -> Result<(), BtccError> {
         for name in self
             .required_names
@@ -181,6 +175,7 @@ pub(crate) struct GuidedTools {
     app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
     browser_http: OnceCell<butler_log::http::Client>,
     binding: GuidedToolBinding,
+    permission_surface: Mutex<Option<Arc<permission_surface::Snapshot>>>,
     state: Mutex<State>,
     resume: OnceCell<Mutex<ResumePool>>,
     authority_consumed: Mutex<bool>,
@@ -219,9 +214,20 @@ impl GuidedToolError {
 }
 
 impl GuidedTools {
+    /// Work storage and the current permission snapshot jointly authorize ledger effects.
+    fn ledger_effects(&self) -> butler_turn::btcc::LedgerEffects {
+        if self.binding.ledger_tracking
+            && self.access_mode() != butler_turn::btcc::AccessMode::ReadOnly
+        {
+            butler_turn::btcc::LedgerEffects::Enabled
+        } else {
+            butler_turn::btcc::LedgerEffects::Disabled
+        }
+    }
+
     fn browser_available(&self) -> bool {
         let admitted = |name: &str| {
-            self.binding.authorized_names.contains(name)
+            self.authorized(name)
                 && self
                     .binding
                     .allowed_tools_and_effects
@@ -302,6 +308,7 @@ impl GuidedTools {
             attention_sent: Mutex::new(Default::default()),
             instruction_run: Mutex::new(None),
             binding,
+            permission_surface: Mutex::new(None),
             state: Mutex::new(resume::restored_state(restored)),
             resume: OnceCell::new(),
             authority_consumed: Mutex::new(false),
@@ -354,7 +361,7 @@ impl ToolPort for GuidedTools {
                 ));
             }
             self.resume_pool().await?;
-            let mut tools = self.binding.surface.clone();
+            let mut tools = permission_surface::surface(self, invocation.turn).await?;
             // Resolve the live host each round, just as browser calls do on
             // dispatch. Keep admitted executors for in-flight/internal reads.
             if self.browser_available() {
@@ -390,7 +397,7 @@ impl ToolPort for GuidedTools {
     > {
         Box::pin(async move {
             self.refresh_instruction_context().await?;
-            Box::pin(execute::execute(self, invocation, call)).await
+            permission_mode::execute(self, invocation, call).await
         })
     }
 

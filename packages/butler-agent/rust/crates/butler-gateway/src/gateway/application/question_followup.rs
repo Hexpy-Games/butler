@@ -54,7 +54,22 @@ impl AppApplication {
         let question = input.action == "answer";
         let session = self.owner_chat(input.owner_session_id.clone()).await?;
         timing.mark("owner_resolved");
-        let result = self.dependencies.authority_handoff.decide(input).await?;
+        let mode = if matches!(input.action.as_str(), "allow" | "deny") {
+            let controls = self
+                .get_session_controls_view_owned(session.clone())
+                .await?;
+            Some(
+                butler_turn::btcc::AccessMode::parse(&controls.controls.access_mode)
+                    .ok_or_else(GatewayApplicationError::internal)?,
+            )
+        } else {
+            None
+        };
+        let result = self
+            .dependencies
+            .authority_handoff
+            .decide_with_access(input, mode)
+            .await?;
         timing.mark("handoff_done");
         if let Some(followup) = &result.question_followup {
             super::question_followup::send(self, &session, &result.request_ref, followup).await?;
