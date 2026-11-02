@@ -130,7 +130,7 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
         assert!(read.get("authority_pending").is_none(), "{read}");
         assert!(!read.to_string().contains("authority_request"), "{read}");
     }
-    assert!(outputs[10].to_string().contains("tool_unavailable"));
+    assert!(outputs[10].to_string().contains("browser_open"));
     crate::access_tiers::assert_counts(&s, &turn, 2, 0)?;
     s.finish().await
 }

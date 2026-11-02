@@ -64,6 +64,7 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     let tools = fixture.tools.lock().unwrap().clone();
     for name in [
         "web_search",
+        "web_read",
         "browser_open",
         "browser_observe",
         "browser_act",
@@ -73,8 +74,13 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
             "{name} offered: {tools:?}"
         );
     }
-    assert!(!tools.iter().any(|tool| tool["name"] == "web_read"));
-    for index in [0, 2] {
+    let reader = tools
+        .iter()
+        .find(|tool| tool["name"] == "web_read")
+        .unwrap();
+    assert!(reader["parameters"]["properties"].get("url").is_none());
+    assert_eq!(reader["parameters"]["required"], json!(["tab"]));
+    for index in [0, 2, 4] {
         for key in [
             "evidence_receipts",
             "evidence_capability_receipts",
@@ -125,9 +131,39 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
             .contains("Spring tides alpha")
     );
     assert_eq!(log.iter().filter(|f| f["op"] == "tab.observe").count(), 1);
+    assert!(!read.to_string().contains("End of the tide table."));
+    assert_eq!(outputs[3]["ok"], false, "{}", outputs[3]);
+    let refusal = outputs[3].to_string();
+    assert!(refusal.contains("browser_open"), "{refusal}");
+    assert!(refusal.contains("recoverable"), "{refusal}");
+    let full = &outputs[4];
+    assert_eq!(full["ok"], true, "{full}");
+    assert_eq!(full["content_has_more"], false, "{full}");
+    assert_eq!(full["returned_chunks"], full["total_chunks"]);
+    let markdown = full["markdown"].as_str().unwrap();
+    assert!(markdown.contains("Spring tides alpha"));
+    assert!(markdown.contains("End of the tide table."));
+    assert_eq!(markdown.matches("Each entry lists the date").count(), 60);
+    assert_eq!(log.iter().filter(|f| f["op"] == "tab.read").count(), 2);
+    assert_eq!(
+        outputs[6]["error"]["code"], "browser_tab_required",
+        "{}",
+        outputs[6]
+    );
+    assert_eq!(outputs[6]["error"]["recoverable"], true);
+    assert!(outputs[6].to_string().contains("browser_open"));
+    assert_eq!(outputs[7]["ok"], true, "{}", outputs[7]);
     assert!(
-        !log.iter()
-            .any(|f| matches!(f["op"].as_str(), Some("tab.read" | "reader.render")))
+        outputs[7]["markdown"]
+            .as_str()
+            .unwrap()
+            .contains("End of the tide table.")
+    );
+    assert!(!log.iter().any(|f| f["op"] == "reader.render"));
+    eprintln!(
+        "long-page evidence: observe_chars={}, reader_chars={}, complete_entries=60, end_present=true",
+        read["untrusted_content"]["text"].as_str().unwrap().len(),
+        markdown.len()
     );
     assert!(read.get("image").is_none());
     if let Some(dir) = std::env::var_os("BUTLER_SEARCH_BROWSER_EVIDENCE") {

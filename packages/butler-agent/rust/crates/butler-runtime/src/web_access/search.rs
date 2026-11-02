@@ -18,7 +18,7 @@ use super::{
 
 pub(super) use super::providers::contracts::SearchResult;
 
-const OPEN_RESULTS: &str = "When the Butler browser host is available, open useful results with browser_open {results:[ids]} and read them with browser_observe; otherwise read result URLs with web_read.";
+const OPEN_RESULTS: &str = "When the Butler browser host is available, open useful results with browser_open {results:[ids]} and read them with web_read {tab}; otherwise read result URLs with web_read.";
 use crate::web_access::WebAccessCode;
 pub(super) use parse::{is_duckduckgo_challenge, parse_results};
 

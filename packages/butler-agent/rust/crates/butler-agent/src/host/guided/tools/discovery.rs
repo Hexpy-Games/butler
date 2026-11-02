@@ -7,7 +7,7 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use butler_core::json::{JsonDocument, visit_raw_array, visit_raw_object};
-use butler_runtime::capabilities::{BridgeCatalogTool, describe_native, search_native};
+use butler_runtime::capabilities::{BridgeCatalogTool, search_native};
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
@@ -273,12 +273,10 @@ async fn describe(
             continue;
         }
         if let Some(tool) = catalog.builtin_tool(name) {
-            descriptions.push(describe_native(projection(owner, tool)).map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "guided_bridge_catalog_json",
-                    error.to_string(),
-                ))
-            })?);
+            descriptions.push(super::reader_surface::describe(
+                projection(owner, tool),
+                owner.browser_available(),
+            )?);
         } else {
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
         }
@@ -333,14 +331,7 @@ fn projection<'a>(
     owner: &GuidedTools,
     tool: butler_turn::btcc::GuidedCatalogRead<'a>,
 ) -> BridgeCatalogTool<'a> {
-    let configured_disabled = if tool.name == "web_read" && owner.browser_available() {
-        Some((
-            "browser_available",
-            "Open the page with browser_open and read it with browser_observe.",
-        ))
-    } else {
-        owner.web_session.configured_disabled_reason(tool.name)
-    };
+    let configured_disabled = owner.web_session.configured_disabled_reason(tool.name);
     let enabled = configured_disabled.is_none()
         && owner.binding.authorized_names.contains(tool.name)
         && GuidedTools::supports(tool.name)

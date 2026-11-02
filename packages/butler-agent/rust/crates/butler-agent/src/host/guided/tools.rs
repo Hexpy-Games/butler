@@ -30,6 +30,7 @@ mod monitoring;
 mod occurrence;
 mod outputs;
 mod question;
+mod reader_surface;
 mod resolve_ask;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod attention;
@@ -360,7 +361,12 @@ impl ToolPort for GuidedTools {
             // Resolve the live host each round, just as browser calls do on
             // dispatch. Keep admitted executors for in-flight/internal reads.
             if self.browser_available() {
-                tools.retain(|tool| tool.name != "web_read");
+                for tool in &mut tools {
+                    if tool.name == "web_read" {
+                        reader_surface::tab_only(&mut tool.parameters, &mut tool.description);
+                        tool.handler_validates_arguments = Some(true);
+                    }
+                }
             }
             let encoded = serde_json::to_string(&tools).map_err(|error| {
                 BtccError::relayed("guided_tool_surface_invalid", error.to_string())

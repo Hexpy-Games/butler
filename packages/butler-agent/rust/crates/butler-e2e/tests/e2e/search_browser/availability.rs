@@ -21,7 +21,7 @@ fn offered(request: &Value, name: &str) -> bool {
 }
 
 #[tokio::test]
-async fn attached_host_offers_browser_reading_without_web_read() -> Result<(), HarnessError> {
+async fn attached_host_offers_tab_reader_through_discovery() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let script = vec![
         call(0, "browser_open", &json!({"url":"https://example.com/"})),
@@ -45,7 +45,19 @@ async fn attached_host_offers_browser_reading_without_web_read() -> Result<(), H
         ] {
             assert!(offered(request, name), "{name}: {request}");
         }
-        assert!(!offered(request, "web_read"), "{request}");
+        assert!(offered(request, "web_read"), "{request}");
+        let reader = request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "web_read")
+            .unwrap();
+        assert!(
+            reader["function"]["parameters"]["properties"]
+                .get("url")
+                .is_none()
+        );
+        assert_eq!(reader["function"]["parameters"]["required"], json!(["tab"]));
     }
     assert_eq!(
         ops.iter()
@@ -68,8 +80,9 @@ async fn attached_host_offers_browser_reading_without_web_read() -> Result<(), H
                 .or_else(|| output.pointer("/output/descriptions/0"))
         })
         .expect("web_read description");
-    assert_eq!(described["enabled"], false, "{described}");
-    assert_eq!(described["disabled_reason"], "browser_available");
+    assert_eq!(described["enabled"], true, "{described}");
+    assert!(described["schema"]["properties"].get("url").is_none());
+    assert_eq!(described["schema"]["required"], json!(["tab"]));
     let results = outputs
         .iter()
         .find_map(|output| {
@@ -79,7 +92,7 @@ async fn attached_host_offers_browser_reading_without_web_read() -> Result<(), H
         })
         .expect("tool search results");
     assert!(
-        !results
+        results
             .as_array()
             .unwrap()
             .iter()
