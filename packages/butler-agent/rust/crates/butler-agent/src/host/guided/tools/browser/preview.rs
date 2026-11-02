@@ -19,7 +19,7 @@ pub(super) async fn execute(
     occurrence: &str,
     client: Client,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode == AccessMode::ReadOnly {
+    if owner.access_mode() == AccessMode::ReadOnly {
         return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
     }
     let input = match prepare_input(owner, call, occurrence).await {

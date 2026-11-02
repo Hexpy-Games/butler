@@ -69,7 +69,9 @@ impl SubsessionService {
                         "Previous work is missing.",
                     )
                 })?;
-            mode = mode.narrower(prior.packet.access_mode);
+            if let Some(limit) = self.repository.access_limit(prior).await? {
+                mode = mode.narrower(limit);
+            }
         }
         Ok(mode)
     }

@@ -177,7 +177,7 @@ pub(super) async fn act_gate(
     let tainted_review =
         owner.taint() == TurnTaint::ConnectorEvent && matches!(decision, AccessDecision::Ask(_));
     if tainted_review
-        || reviews(&owner.binding.access_mode, input)
+        || reviews(&owner.access_mode(), input)
         || resume_reference(owner, occurrence).is_some()
     {
         gate(owner, call, occurrence, input, target).await

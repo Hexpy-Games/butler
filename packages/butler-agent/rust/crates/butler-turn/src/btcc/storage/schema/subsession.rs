@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS btcc_session_relations (
 );
 
 CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
+  access_limit_mode TEXT,
+  access_limit_recorded INTEGER NOT NULL DEFAULT 0,
   delegation_id TEXT PRIMARY KEY,
   relation_id TEXT NOT NULL UNIQUE,
   task_id TEXT NOT NULL UNIQUE,

@@ -2,6 +2,11 @@
 pub(in crate::btcc::storage) const AUTHORITY_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   request_id TEXT PRIMARY KEY,
+  reusable INTEGER NOT NULL DEFAULT 1,
+  execution_access_mode TEXT,
+  composer_access_mode TEXT,
+  composer_root_turn_id TEXT,
+  composer_revision INTEGER,
   request_ref TEXT NOT NULL UNIQUE,
   identity_sha256 TEXT NOT NULL UNIQUE,
   owner_session_id TEXT NOT NULL,

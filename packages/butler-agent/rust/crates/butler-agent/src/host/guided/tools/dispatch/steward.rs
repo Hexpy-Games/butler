@@ -38,7 +38,7 @@ pub(super) async fn execute(
                     .map(str::to_owned),
                 model_ref: owner.binding.model_ref.clone(),
                 reasoning_effort: owner.binding.reasoning_effort.clone(),
-                access_mode: owner.binding.access_mode.clone(),
+                access_mode: owner.access_mode(),
                 schedule_run: owner.inherited_run(),
             },
             owner.work.scope(),

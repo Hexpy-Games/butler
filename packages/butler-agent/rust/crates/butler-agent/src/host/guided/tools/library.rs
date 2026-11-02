@@ -72,8 +72,7 @@ async fn search(owner: &GuidedTools, args: &Map<String, Value>) -> Value {
 
 async fn organize(owner: &GuidedTools, args: &Map<String, Value>) -> Value {
     if !owner
-        .binding
-        .access_mode
+        .access_mode()
         .allows_without_approval(ApprovalExemptAction::LibraryOrganize)
     {
         return failure(
