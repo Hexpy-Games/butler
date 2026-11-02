@@ -65,6 +65,7 @@ async fn pending_direction(worker: bool) -> Result<(), HarnessError> {
             work_id: None,
             safe_title: None,
             instruction: "Check the remaining evidence".into(),
+            immediate: true,
             child_role: role,
             access_mode: "full_access".into(),
             schedule_run: None,

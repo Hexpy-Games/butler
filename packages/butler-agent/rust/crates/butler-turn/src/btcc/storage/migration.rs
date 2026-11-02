@@ -35,6 +35,18 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     authority::migrate(&transaction)?;
     subsession::migrate(&transaction)?;
+    ensure_column(
+        &transaction,
+        "btcc_subsession_directions",
+        "immediate",
+        "INTEGER NOT NULL DEFAULT 1",
+    )?;
+    ensure_column(
+        &transaction,
+        "btcc_subsession_directions",
+        "admission_version",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
     ensure_legacy_work_import_provenance(&transaction)?;
     ensure_guided_tool_journal_order(&transaction)?;
     ensure_guided_work_result_order(&transaction)?;
@@ -53,6 +65,8 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     migrate_guided_work_review_constraints(&transaction)?;
     restore_stable_work_objectives(&transaction)?;
     monitoring::indexes(&transaction)?;
+    transaction.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_live_session_turn ON btcc_turns(session_id) WHERE semantic_state IN ('admitted','delivery_committed');
+        CREATE INDEX IF NOT EXISTS idx_btcc_live_session_work ON btcc_guided_works(session_id) WHERE status IN ('open','blocked');")?;
     subsession::ensure_worker_admission(&transaction)?;
     // Add after the legacy column/table migrations; idle polls must never walk
     // terminal history, including databases opened before suspension_reason existed.

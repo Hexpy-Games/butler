@@ -85,6 +85,7 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
     assert!(
         repository
             .create(SubsessionCreate {
+                previous_relation_id: None,
                 relation_id: "relation-cancel".into(),
                 delegation_id: "delegation".into(),
                 task_id: "task".into(),

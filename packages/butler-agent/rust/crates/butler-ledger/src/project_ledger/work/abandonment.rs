@@ -109,6 +109,15 @@ impl ProjectWorkRepository {
         }
         let mut view = fresh.view.clone();
         view.status = WorkStatus::Abandoned;
+        for action in &mut view.action_progress {
+            if !matches!(
+                action.status,
+                butler_turn::btcc::ActionStatus::Done | butler_turn::btcc::ActionStatus::Skipped
+            ) {
+                action.status = butler_turn::btcc::ActionStatus::Skipped;
+                action.note = Some("Work ended.".into());
+            }
+        }
         // The earlier disposition describes its old material and stays in history.
         view.latest_disposition = None;
         view.updated_at = self.recorded_at(identity.clone()).await?;

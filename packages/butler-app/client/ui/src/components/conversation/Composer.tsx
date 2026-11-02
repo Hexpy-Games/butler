@@ -1,5 +1,6 @@
 import { ConversationRequestPortal, useConversationDecision } from "./ConversationRequestContext.tsx";
 import { useRef, useState } from "react";
+import { ComposerNotices } from "./ComposerNotices";
 import { ComposerAdjunctPanels, composerHasAdjunct } from "./ComposerAdjunctPanels";
 import { ComposerInputSurface } from "./ComposerInputSurface";
 import { useComposerStore } from "./composerStore";
@@ -19,7 +20,6 @@ import { composerImagePolicy } from "./composerImagePolicy";
 import { runtimeModels } from "@/app/utils.ts";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard, type WallpaperContentRect } from "@/butler-ds";
-import { GitDependencyNotice } from "./GitDependencyNotice";
 import { useComposerDecoration } from "./hooks/useComposerDecoration";
 interface ComposerProps {
   onWallpaperRect?: (rect: WallpaperContentRect) => void;
@@ -136,7 +136,7 @@ export function Composer({ large, onReserveChange, scope, onWallpaperRect }: Com
       large={large}
       expanded={Boolean(scope || decision.plan || decision.authority || decision.question) || presentation.expanded}
       floating
-      notice={<GitDependencyNotice />}
+      notice={<ComposerNotices child={state.activeSteward} />}
       adjunct={
         composerHasAdjunct(state.workers.length, state.taskRows.length) ? (
           <ComposerAdjunctPanels showWorkers={state.workers.length > 0}

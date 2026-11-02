@@ -26,7 +26,12 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
         CASE WHEN json_valid(d.packet_json) THEN COALESCE(json_extract(d.packet_json,'$.child_role'), \
         CASE WHEN child_session_id GLOB 'worker-*' THEN 'worker' ELSE 'steward' END) END \
         FROM btcc_subsession_delegations d WHERE d.relation_id=btcc_session_relations.relation_id), \
-        activity_terminal=EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id)";
+        activity_terminal=EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id) \
+        AND NOT EXISTS(SELECT 1 FROM btcc_subsession_end_members e WHERE e.session_id=btcc_session_relations.child_session_id) \
+        AND NOT EXISTS(SELECT 1 FROM btcc_subsession_directions i WHERE i.relation_id=btcc_session_relations.relation_id AND i.status='pending') \
+        AND NOT EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=btcc_session_relations.child_session_id \
+          AND t.semantic_state IN ('admitted','delivery_committed') \
+          AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id AND x.child_turn_id=t.turn_id))";
     let identity =
         "UPDATE btcc_session_relations SET activity_worker_id=activity_role||'-'||relation_id";
     if needs_backfill(db)? {
@@ -34,12 +39,37 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
             "{update} WHERE activity_worker_id IS NULL; {identity} WHERE {BACKFILL};"
         ))?;
     }
+    let upgraded: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='idx_btcc_activity_terminal_v2')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !upgraded {
+        db.execute_batch(&format!("{update}; CREATE INDEX idx_btcc_activity_terminal_v2 ON btcc_session_relations(child_session_id) WHERE activity_terminal=1;"))?;
+    }
     // Build after the first repair: an adopted DB leaves a sparse candidate set.
     db.execute_batch(&format!(
         "CREATE INDEX IF NOT EXISTS idx_btcc_activity_backfill
          ON btcc_session_relations(relation_id) WHERE {BACKFILL};"
     ))?;
-    for table in ["btcc_subsession_delegations", "btcc_steward_results"] {
+    activity_triggers(db, update, identity)?;
+    db.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_activity_page \
+       ON btcc_session_relations(created_at DESC,activity_worker_id,relation_id); \
+       CREATE INDEX IF NOT EXISTS idx_btcc_activity_identity ON btcc_session_relations(activity_worker_id); \
+       CREATE INDEX IF NOT EXISTS idx_btcc_activity_open_page \
+       ON btcc_session_relations(created_at DESC,activity_worker_id,relation_id) WHERE activity_terminal=0; \
+       CREATE INDEX IF NOT EXISTS idx_btcc_activity_parent_page \
+       ON btcc_session_relations(parent_session_id,created_at DESC,activity_worker_id,relation_id); \
+       CREATE INDEX IF NOT EXISTS idx_btcc_activity_parent_open_page \
+       ON btcc_session_relations(parent_session_id,created_at DESC,activity_worker_id,relation_id) WHERE activity_terminal=0;")
+}
+
+fn activity_triggers(db: &Connection, update: &str, identity: &str) -> rusqlite::Result<()> {
+    for table in [
+        "btcc_subsession_delegations",
+        "btcc_steward_results",
+        "btcc_subsession_directions",
+    ] {
         for (op, rows) in [
             ("INSERT", vec!["NEW"]),
             ("UPDATE", vec!["OLD", "NEW"]),
@@ -58,15 +88,14 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
             db.execute_batch(&format!("DROP TRIGGER IF EXISTS activity_{table}_{op}; CREATE TRIGGER activity_{table}_{op} AFTER {op} ON {table} BEGIN {body} END;"))?;
         }
     }
-    db.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_activity_page \
-       ON btcc_session_relations(created_at DESC,activity_worker_id,relation_id); \
-       CREATE INDEX IF NOT EXISTS idx_btcc_activity_identity ON btcc_session_relations(activity_worker_id); \
-       CREATE INDEX IF NOT EXISTS idx_btcc_activity_open_page \
-       ON btcc_session_relations(created_at DESC,activity_worker_id,relation_id) WHERE activity_terminal=0; \
-       CREATE INDEX IF NOT EXISTS idx_btcc_activity_parent_page \
-       ON btcc_session_relations(parent_session_id,created_at DESC,activity_worker_id,relation_id); \
-       CREATE INDEX IF NOT EXISTS idx_btcc_activity_parent_open_page \
-       ON btcc_session_relations(parent_session_id,created_at DESC,activity_worker_id,relation_id) WHERE activity_terminal=0;")
+    for (op, row) in [("INSERT", "NEW"), ("DELETE", "OLD")] {
+        db.execute_batch(&format!("DROP TRIGGER IF EXISTS activity_ending_{op}; CREATE TRIGGER activity_ending_{op} AFTER {op} ON btcc_subsession_end_members BEGIN {update} WHERE child_session_id={row}.session_id; END;"))?;
+    }
+    for op in ["INSERT", "UPDATE"] {
+        let body = format!("{update} WHERE child_session_id=NEW.session_id;");
+        db.execute_batch(&format!("DROP TRIGGER IF EXISTS activity_turn_{op}; CREATE TRIGGER activity_turn_{op} AFTER {op} ON btcc_turns BEGIN {body} END;"))?;
+    }
+    Ok(())
 }
 
 fn needs_backfill(db: &Connection) -> rusqlite::Result<bool> {

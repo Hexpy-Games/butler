@@ -163,6 +163,7 @@ async fn child_creation_binds_work(
     assert!(
         repository
             .create(SubsessionCreate {
+                previous_relation_id: None,
                 relation_id: format!("relation-{child_role_name}"),
                 delegation_id: format!("delegation-{child_role_name}"),
                 task_id: format!("task-{child_role_name}"),

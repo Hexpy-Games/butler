@@ -1,5 +1,23 @@
 // Source-compatible SQLite schema; additive `IF NOT EXISTS` statements preserve deployed data.
 pub(in crate::btcc::storage) const SUBSESSION_SCHEMA: &str = r"
+CREATE TABLE IF NOT EXISTS btcc_subsession_endings (
+  session_id TEXT PRIMARY KEY,
+  completion_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS btcc_subsession_end_members (
+  session_id TEXT PRIMARY KEY,
+  root_session_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_btcc_subsession_end_root ON btcc_subsession_end_members(root_session_id);
+CREATE TABLE IF NOT EXISTS btcc_subsession_stop_outbox (
+  turn_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  dispatched INTEGER NOT NULL DEFAULT 0 CHECK(dispatched IN (0,1))
+);
+CREATE INDEX IF NOT EXISTS idx_btcc_subsession_stop_pending
+ON btcc_subsession_stop_outbox(turn_id) WHERE dispatched=0;
+
 CREATE TABLE IF NOT EXISTS btcc_session_relations (
   relation_id TEXT PRIMARY KEY,
   parent_session_id TEXT NOT NULL,
@@ -40,10 +58,13 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_directions (
   created_at TEXT NOT NULL,
   applied_at TEXT,
   applied_child_turn_id TEXT,
+  admission_version INTEGER NOT NULL DEFAULT 0,
   UNIQUE(relation_id, revision),
   UNIQUE(relation_id, source_message_id),
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_btcc_subsession_direction_recovery ON btcc_subsession_directions(relation_id,created_at) WHERE status='pending';
 
 CREATE INDEX IF NOT EXISTS idx_btcc_subsession_directions_pending
 ON btcc_subsession_directions(relation_id, status, revision);

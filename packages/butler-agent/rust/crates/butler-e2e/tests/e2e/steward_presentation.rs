@@ -18,6 +18,9 @@ use std::time::{Duration, Instant};
 async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
+    script
+        .immediate_direction
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     let setup = setup("STEWARD-PRESENTATION", &url)?.env("BUTLER_E2E_HOLD_TOOL", "read_file");
     std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
     std::fs::write(setup.sandbox.data.join("b.txt"), "Approach B")?;
@@ -124,8 +127,15 @@ async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessEr
         )
         .unwrap();
     assert_eq!(
-        status, "blocked",
-        "Work must retain its unfinished disposition"
+        status, "abandoned",
+        "a terminal card must close its unfinished Work"
+    );
+    assert!(
+        butler_turn::btcc::storage::terminal_card_invariant(
+            &db,
+            child["session_id"].as_str().unwrap()
+        )
+        .unwrap()
     );
     drop(db);
     s.finish().await?;

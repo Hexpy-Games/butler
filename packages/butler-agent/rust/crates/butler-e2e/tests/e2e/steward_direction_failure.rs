@@ -96,14 +96,11 @@ fn drained(s: &Scenario) -> bool {
 }
 
 #[tokio::test]
-async fn failed_direction_continuation_settles_and_the_next_direction_runs()
+async fn failed_direction_continuation_closes_and_refuses_later_steering()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    // A blocked first result keeps the Work open, so the idle relation takes
-    // the direction as a continuation turn.
-    script.blocked_disposition.store(true, Ordering::SeqCst);
-    script.release.notify_one();
+    script.plan_continuation.store(true, Ordering::SeqCst);
     let setup = steward_presentation::setup("STEWARD-DIRECTION-FAILED", &url)?;
     for name in ["a.txt", "b.txt"] {
         std::fs::write(setup.sandbox.data.join(name), name)?;
@@ -111,8 +108,11 @@ async fn failed_direction_continuation_settles_and_the_next_direction_runs()
     *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
     let mut s = setup.start().await?;
     s.turn("general", stub::OWNER).await?;
-    let child = steward_presentation::wait_result(&s).await?;
-    assert_eq!(child["result"]["status"], "blocked", "{child}");
+    tokio::time::timeout(Duration::from_secs(30), script.held.notified())
+        .await
+        .unwrap();
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    let child = &view.data()["steward_children"][0];
     let relation = child["relation"]["relation_id"]
         .as_str()
         .unwrap()
@@ -120,6 +120,7 @@ async fn failed_direction_continuation_settles_and_the_next_direction_runs()
     *script.relation.lock().unwrap() = relation.clone();
     script.hold_direction.store(true, Ordering::SeqCst);
     s.turn("general", stub::DIRECTION).await?;
+    script.release.notify_one();
     tokio::time::timeout(Duration::from_secs(20), script.direction_held.notified())
         .await
         .unwrap_or_else(|_| {
@@ -221,43 +222,23 @@ async fn second_direction_ran(
     continuation: &str,
     restarted: usize,
 ) -> Result<(), HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let second = loop {
-        let rows = directions(s, relation);
-        if let [_, (_, status, Some(turn))] = &rows[..]
-            && status == "applied"
-            && result_status(s, relation, turn).is_some()
-            && delivered(s, "Approach B verified.").await? == 3
-            && drained(s)
-        {
-            break turn.clone();
-        }
-        assert!(
-            Instant::now() < deadline,
-            "second direction never ran: directions={rows:?}\n{}",
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    };
-    let rows = directions(s, relation);
     assert_eq!(
-        rows[0],
-        (
-            stub::DIRECTION.to_owned(),
-            "applied".to_owned(),
-            Some(continuation.to_owned())
-        )
+        directions(s, relation).len(),
+        1,
+        "an ended assignment accepts no new direction"
     );
-    assert_eq!(rows[1].0, stub::DIRECTION_2);
-    assert_ne!(second, continuation);
     assert_eq!(
-        child_requests(script, restarted, stub::DIRECTION),
-        0,
-        "first direction ran again"
+        result_status(s, relation, continuation).as_deref(),
+        Some("failed")
     );
+    assert_eq!(child_requests(script, restarted, stub::DIRECTION_2), 0);
     assert!(
-        child_requests(script, restarted, stub::DIRECTION_2) >= 1,
-        "second direction never reached the child"
+        script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|r| r.to_string().contains("delegated_session_closed"))
     );
     assert_settled_once(s, script, relation);
     Ok(())
@@ -292,18 +273,18 @@ async fn reopened_direction_settles(
     Ok(())
 }
 
-/// Three child results (first turn, failed continuation, second direction),
+/// Two child results (first turn and failed continuation),
 /// each delivered to the parent exactly once.
 fn assert_settled_once(s: &Scenario, script: &stub::Script, relation: &str) {
     let db = db(s);
     let one = |sql: &str| count(&db, sql, relation);
     assert_eq!(
         one("SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1"),
-        3
+        2
     );
     assert_eq!(
         one("SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1"),
-        3
+        2
     );
     assert_eq!(
         one(

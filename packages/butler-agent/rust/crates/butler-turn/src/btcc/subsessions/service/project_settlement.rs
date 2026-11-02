@@ -50,6 +50,11 @@ impl SubsessionService {
         self.work
             .disposition(input, Some(pending.result_id.clone()))
             .await?;
+        if !matches!(result["status"].as_str(), Some("success" | "completed")) {
+            self.work
+                .abandon_bound_work_for_turn(relation.parent_turn_id.clone())
+                .await?;
+        }
         Ok(())
     }
 }

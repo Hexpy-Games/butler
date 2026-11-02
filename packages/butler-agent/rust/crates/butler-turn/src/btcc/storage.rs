@@ -75,6 +75,7 @@ pub use subsessions::{
     StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionCreate,
     SubsessionDispatchState, SubsessionPacket, WAITING_WORKERS_SQL, WORKER_RESULT_MARKER_SQL,
     WORKER_TURN_UNSETTLED_SQL, WorkerResultInput, enqueued_workers_sql, subsession_result_id,
+    terminal_card_invariant,
 };
 pub use tool_journal::{
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,

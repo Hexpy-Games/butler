@@ -229,8 +229,7 @@ try {
     });
     const row = page.locator('[data-test-class="app-sidebar"] [data-test-class="tree-row"]').first();
     const spinner = row.locator('[data-slot="spinner"]');
-    // The transcript card's observer action; the composer capsule is gone.
-    const pill = page.locator('[data-test-class="steward-observer-action"]').first();
+    const pill = page.locator(baseline ? '[data-test-class="steward-observer-action"]' : '[data-test-class="steward-composer-pill"]').first();
     const dialog = page.locator('[data-test-class="steward-observer-dialog"]');
     const capture = async (state: string) => {
       await page.evaluate(() => document.fonts.ready);
@@ -348,6 +347,7 @@ try {
       }), child.session_id);
       await spinner.waitFor({ state: "detached" });
       assert.equal(await spinner.count(), 0, `${terminal} clears the row`);
+      if (!baseline) await pill.waitFor({ state: "detached" });
     }
     assert.deepEqual(pageErrors, [], "no uncaught bridge errors");
     assert.deepEqual(await page.evaluate(() => (window as unknown as { __uiCrashes: unknown[] }).__uiCrashes), [], "no contained view crashes");

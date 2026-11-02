@@ -97,7 +97,14 @@ fn activity_child(
         )
         .optional()
         .map_err(StorageError::sqlite)?;
-    let status = match result.as_deref() {
+    let terminal: bool = db
+        .query_row(
+            "SELECT activity_terminal FROM btcc_session_relations WHERE relation_id=?1",
+            [&r.relation_id],
+            |row| row.get(0),
+        )
+        .map_err(StorageError::sqlite)?;
+    let status = match result.as_deref().filter(|_| terminal) {
         Some("success") => "completed",
         Some("cancelled") => "cancelled",
         Some("blocked") => "blocked",

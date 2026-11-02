@@ -61,8 +61,7 @@ async fn cb_11_direction_during_a_workers_final_report_opens_its_own_turn()
 /// Only a direction starts a new Work: a Worker result that arrives after its
 /// Steward closed fails visibly instead of reopening the session.
 #[tokio::test]
-async fn cb_11_late_worker_result_on_a_closed_steward_work_fails_visibly()
--> Result<(), HarnessError> {
+async fn cb_11_steward_completion_closes_workers_without_a_late_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = setup("CB-11-LATE-WORKER", 1).await?;
     script.close_before_worker.store(true, Ordering::SeqCst);
@@ -84,20 +83,20 @@ async fn cb_11_late_worker_result_on_a_closed_steward_work_fails_visibly()
     }
     assert_eq!(saved(&database)?[0].1, "success", "{:?}", saved(&database)?);
     script.release("red-0");
-    while saved(&database)?.len() < 2 {
+    loop {
+        let open: i64 = database.query_row("SELECT count(*) FROM btcc_session_relations WHERE parent_session_id=?1 AND activity_terminal=0", [&steward], |r| r.get(0))?;
+        if open == 0 {
+            break;
+        }
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let rows = saved(&database)?;
-    assert!(rows[1].0.starts_with("worker-result-turn-"), "{rows:?}");
-    assert_eq!(rows[1].1, "failed", "{rows:?}");
-    assert!(
-        s.agent
-            .logs()
-            .contains("code=subsession_root_work_identity_mismatch"),
-        "{}",
-        s.agent.logs()
+    assert_eq!(
+        saved(&database)?.len(),
+        1,
+        "an ended Steward receives no late result turn"
     );
+    assert!(butler_turn::btcc::storage::terminal_card_invariant(&database, &steward).unwrap());
     let works: i64 = database.query_row(
         "SELECT count(*) FROM btcc_guided_works WHERE session_id=?1",
         [&steward],
@@ -126,18 +125,23 @@ async fn cancel_continuation(running: bool) -> Result<(), HarnessError> {
     script.steer.store(true, Ordering::SeqCst);
     script.followup.store(true, Ordering::SeqCst);
     script.hold_continuation.store(true, Ordering::SeqCst);
+    script.hold_worker_report.store(true, Ordering::SeqCst);
     s.gw.say("general", "Verify batch red").await?;
     let (parent, rows) = workers(&s, "general", 3).await?;
     started(&script, 2).await;
     script.release("red-0");
-    closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
-    started(&script, 3).await;
+    tokio::time::timeout(Duration::from_secs(30), script.worker_reporting.wait())
+        .await
+        .unwrap();
     script.direction.add_permits(1);
     let deadline = Instant::now() + Duration::from_secs(30);
     while !script.steered.load(Ordering::SeqCst) {
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    script.worker_report_release.add_permits(1);
+    closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
+    started(&script, 3).await;
     assert_pending_direction(&s, &rows[0])?;
     if running {
         script.release("red-1");

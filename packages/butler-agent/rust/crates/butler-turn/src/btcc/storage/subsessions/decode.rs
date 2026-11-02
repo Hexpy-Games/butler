@@ -234,9 +234,21 @@ fn dispatchable(
 }
 
 fn close_undecodable(db: &rusqlite::Connection, raw: &RawDelegation) -> Result<(), StorageError> {
+    if !db.is_autocommit() {
+        return close_undecodable_in_transaction(db, raw);
+    }
+    let tx = db.unchecked_transaction().map_err(StorageError::sqlite)?;
+    close_undecodable_in_transaction(&tx, raw)?;
+    tx.commit().map_err(StorageError::sqlite)
+}
+
+fn close_undecodable_in_transaction(
+    db: &rusqlite::Connection,
+    raw: &RawDelegation,
+) -> Result<(), StorageError> {
     db.execute(
         "INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,'failed','delegation_context_incomplete','The delegation record is unreadable.','[]','[]',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-        params![format!("result-unreadable-{}", raw.relation_id), raw.relation_id, raw.task_id, raw.child_session_id, raw.child_turn_id],
+        params![super::completion::turn_result_id(&raw.child_session_id, &raw.child_turn_id), raw.relation_id, raw.task_id, raw.child_session_id, raw.child_turn_id],
     )
     .map_err(StorageError::sqlite)?;
     db.execute(
@@ -245,6 +257,27 @@ fn close_undecodable(db: &rusqlite::Connection, raw: &RawDelegation) -> Result<(
     )
     .map_err(StorageError::sqlite)?;
     db.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE relation_id=?1 AND status='pending' AND EXISTS (SELECT 1 FROM btcc_session_relations WHERE relation_id=?1 AND activity_role='worker')", [&raw.relation_id]).map_err(StorageError::sqlite)?;
+    let now: String = db
+        .query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')", [], |r| {
+            r.get(0)
+        })
+        .map_err(StorageError::sqlite)?;
+    if !super::terminal::invariant(db, &raw.child_session_id)? {
+        super::endings::stage(
+            db,
+            &ChildCompletion {
+                session: raw.child_session_id.clone(),
+                turn: raw.child_turn_id.clone(),
+                status: "failed".into(),
+                summary: "The delegation record is unreadable.".into(),
+                failure_reason: None,
+                failure_code: None,
+                evidence_refs: Vec::new(),
+                handoff: None,
+            },
+            &now,
+        )?;
+    }
     Ok(())
 }
 

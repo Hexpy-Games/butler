@@ -55,7 +55,7 @@ async fn outcome(cancelled: bool, twice: bool) -> Result<(), HarnessError> {
     } else if twice {
         "completed"
     } else {
-        "blocked"
+        "abandoned"
     };
     let parents = parent_ids(&s)?;
     let deadline = Instant::now() + Duration::from_secs(40);

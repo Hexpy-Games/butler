@@ -9,11 +9,29 @@ impl SubsessionService {
         relation: &StoredSubsessionDelegation,
     ) -> Result<Value, BtccError> {
         let prior = self.prior_context(relation).await?;
+        let worker = relation.packet.child_role == crate::btcc::ChildRole::Worker;
+        if prior["result"].is_null()
+            || self
+                .repository
+                .has_pending_direction(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+        {
+            return Ok(
+                json!({"ok":false,"error":{"code":"delegated_session_not_running","recoverable":true,
+                "message":"Immediate steering requires a running child turn. Queue this instruction instead."},
+                "next_action":{"tool":if worker {"steer_worker"} else {"steer_steward"},"mode":"queue","relation_id":relation.relation_id}}),
+            );
+        }
+        let next = if worker {
+            json!({"tool":"delegate_to_worker","instruction":"Use the current reviewed Plan/action for a new assignment."})
+        } else {
+            json!({"tool":"delegate_to_steward","previous_relation_id":relation.relation_id})
+        };
         Ok(json!({"ok":false,"error":{
             "code":"delegated_session_closed","recoverable":true,
-            "message":"The prior delegated Work is closed. For a new user request, continue in this same turn: call delegate_to_steward with previous_relation_id; it records the new Work itself. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered."
-        },"next_action":{"tool":"delegate_to_steward",
-            "previous_relation_id":relation.relation_id},
+            "message":if worker { "The Worker is not running. Queue work for a running assignment or delegate new work with a revised Plan/action; this ended task cannot restart." } else { "The prior delegated Work is closed. For a new user request, continue in this same turn: call delegate_to_steward with previous_relation_id; it records the new Work itself. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered." }
+        },"next_action":next,
             "prior_context":prior}))
     }
 
@@ -51,14 +69,13 @@ impl SubsessionService {
             .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
         let terminal = self
             .repository
-            .result_for_relation(id.clone())
+            .followup_ready(id.clone(), request.parent_session_id.clone())
             .await
-            .map_err(BtccError::from)?
-            .is_some();
+            .map_err(BtccError::from)?;
         if !terminal {
             return Err(BtccError::detected(
                 BtccCode::StewardRelationNotActive,
-                "The previous child has no terminal outcome yet. Wait for its result or steer its existing owner; do not replace a running assignment.",
+                "The previous child has no terminal outcome yet. Wait for closeout or queue work for its existing owner; do not replace a running assignment.",
             ));
         }
         Ok(Some(self.prior_context(&relation).await?.to_string()))
@@ -140,18 +157,10 @@ impl SubsessionService {
             .result_for_relation(relation.relation_id.clone())
             .await
             .map_err(BtccError::from)?;
-        let open = self
-            .repository
-            .open_relation_by_work(relation.root_work_id.clone())
-            .await
-            .map_err(BtccError::from)?
-            .is_some();
-        let state = match (result.is_some(), open) {
-            (false, _) => "active: steer_steward for related follow-ups",
-            (true, true) => "reported, Work open/blocked: steer_steward to its retained owner",
-            (true, false) => {
-                "closed: new requests use delegate_to_steward(previous_relation_id) in this turn"
-            }
+        let state = if result.is_none() || self.steward_continuing(&relation).await? {
+            "active: queue related follow-ups; mode=steer only for an immediate correction to a running turn"
+        } else {
+            "closed: new requests use delegate_to_steward(previous_relation_id) in this turn"
         };
         Ok(format!(
             "Most recent Steward delegation (model-only):\nrelation_id: {}\nstate: {state}\nprior_request: {}\nprior_result: {}",

@@ -179,22 +179,17 @@ impl SubsessionService {
         );
         evidence_refs.sort();
         evidence_refs.dedup();
-        self.repository
-            .commit_result(
-                crate::btcc::storage::ChildCompletion {
-                    session: session.into(),
-                    turn: turn.into(),
-                    status: status.into(),
-                    summary,
-                    failure_reason,
-                    failure_code,
-                    evidence_refs,
-                    handoff,
-                },
-                (self.now)(),
-            )
-            .await
-            .map_err(BtccError::from)?;
+        self.commit_completion(crate::btcc::storage::ChildCompletion {
+            session: session.into(),
+            turn: turn.into(),
+            status: status.into(),
+            summary,
+            failure_reason,
+            failure_code,
+            evidence_refs,
+            handoff,
+        })
+        .await?;
         self.deliver_child_result(session, status).await
     }
 
@@ -218,9 +213,6 @@ impl SubsessionService {
         }
         if status != "cancelled" || self.work.bound_work_for_turn(turn.into()).await?.is_some() {
             self.bind_result_work(session, turn, failure_code).await?;
-        }
-        if status == "cancelled" {
-            self.work.abandon_bound_work_for_turn(turn.into()).await?;
         }
         Ok(self
             .work
@@ -273,7 +265,11 @@ impl SubsessionService {
         }
     }
 
-    async fn deliver_child_result(&self, session: &str, status: &str) -> Result<(), BtccError> {
+    pub(super) async fn deliver_child_result(
+        &self,
+        session: &str,
+        status: &str,
+    ) -> Result<(), BtccError> {
         self.notify_execution_changed(session).await?;
         let relation = self
             .repository
@@ -310,6 +306,7 @@ impl SubsessionService {
     /// Main's recovery order: dispatches, directions, then parent results.
     /// Worker admission follows result delivery; one failure never hides peers.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
+        self.recover_endings().await?;
         let mut failed_parents = std::collections::HashSet::new();
         for stored in self
             .repository
@@ -332,6 +329,7 @@ impl SubsessionService {
                 self.replay(&stored).await?;
             }
         }
+        self.recover_endings().await?;
         self.recover_directions().await?;
         if let Err(error) = self.deliver_worker_results().await {
             butler_core::diagnostic!(

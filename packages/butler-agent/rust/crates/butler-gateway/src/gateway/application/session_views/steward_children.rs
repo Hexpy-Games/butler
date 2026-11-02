@@ -63,13 +63,13 @@ fn complete_child(child: &mut Map<String, Value>, now_ms: i64) {
         .and_then(Value::as_bool)
         == Some(true)
     {
-        "failed"
+        "waiting"
     } else {
         child_status(&raw)
     };
     if is_orphan(&raw, now_ms) {
-        status = "failed";
-        child.insert("terminal".into(), json!(true));
+        status = "waiting";
+        child.insert("terminal".into(), json!(false));
         child.insert("result_missing".into(), json!(true));
     }
     child.insert("status".into(), json!(status));

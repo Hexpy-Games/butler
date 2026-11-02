@@ -201,6 +201,7 @@ impl SubsessionService {
                 .fail_worker_publish(stored.relation_id.clone(), marker, error.code().into())
                 .await
                 .map_err(BtccError::from)?;
+            self.finish_pending_ending(&stored.child_session_id).await?;
         } else {
             self.repository
                 .worker_publish_failed(stored.relation_id.clone(), marker)

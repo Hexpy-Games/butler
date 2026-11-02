@@ -36,6 +36,10 @@ impl SqliteSubsessionRepository {
                 .map_err(StorageError::sqlite)?;
             tx.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE relation_id=?1 AND status='pending'", [&relation])
                 .map_err(StorageError::sqlite)?;
+            let now: String = tx.query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')", [], |r| r.get(0)).map_err(StorageError::sqlite)?;
+            super::endings::stage(&tx, &ChildCompletion { session: stored.child_session_id, turn,
+                status: "failed".into(), summary: format!("The Worker could not be dispatched: {code}."),
+                failure_reason: None, failure_code: None, evidence_refs: Vec::new(), handoff: None }, &now)?;
             tx.commit().map_err(StorageError::sqlite)
         }).await
     }

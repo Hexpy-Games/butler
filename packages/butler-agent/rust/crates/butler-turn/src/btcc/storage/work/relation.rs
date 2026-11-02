@@ -416,6 +416,7 @@ pub(super) fn abandon(
     clock: &dyn Fn() -> String,
 ) -> StorageResult<()> {
     let now = clock();
+    super::terminal::close_actions(db, work_id, &now)?;
     let changed = db.execute("UPDATE btcc_guided_works SET status = 'abandoned', updated_at = ?1 WHERE work_id = ?2 AND status IN ('open', 'blocked')", params![now, work_id]).map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(common::error(

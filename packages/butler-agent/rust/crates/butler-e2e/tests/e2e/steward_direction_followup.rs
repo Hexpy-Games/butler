@@ -138,8 +138,8 @@ fn steer_answers(script: &stub::Script) -> Vec<Value> {
 }
 
 #[tokio::test]
-async fn next_direction_stays_on_the_work_a_continuation_left_blocked() -> Result<(), HarnessError>
-{
+async fn blocked_continuation_closes_its_task_and_retires_queued_directions()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server, relation, session) =
         hold_continuation("STEWARD-DIRECTION-BLOCKED", "message", true).await?;
@@ -163,28 +163,18 @@ async fn next_direction_stays_on_the_work_a_continuation_left_blocked() -> Resul
     }
     assert_eq!(answers[0]["instruction_id"], answers[1]["instruction_id"]);
     script.item_release.notify_one();
-    let saved = wait_reports(&s, &relation, 3).await?;
+    let saved = wait_reports(&s, &relation, 2).await?;
     let statuses: Vec<_> = saved.iter().map(|(_, status)| status.as_str()).collect();
-    assert_eq!(statuses, ["success", "blocked", "success"]);
-    assert_eq!(works(&s, &session), ["completed", "completed"]);
-    let second = script
-        .requests
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|r| {
-            let text = request_text(r);
-            text.starts_with(stub::DIRECTION_2) && text != stub::DIRECTION_2
-        })
-        .expect("the second direction opened no turn")
-        .to_string();
-    // The Work's own original request may still say how that Work began.
-    let (_, current) = second
-        .rsplit_once("## Current request")
-        .expect("the turn states its request");
-    assert!(
-        !current.contains("runs on a new Work") && current.contains("Continue the existing Work"),
-        "the blocked Work is re-bound, not replaced: {current}"
+    assert_eq!(statuses, ["success", "blocked"]);
+    assert_eq!(works(&s, &session), ["completed", "abandoned"]);
+    assert!(butler_turn::btcc::storage::terminal_card_invariant(&db(&s), &session).unwrap());
+    assert_eq!(
+        count(
+            &db(&s),
+            "SELECT count(*) FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'",
+            &relation
+        ),
+        0
     );
     s.finish().await?;
     server.abort();
@@ -276,6 +266,41 @@ async fn read_prior_delegation_mid_turn_keeps_the_packet_context() -> Result<(),
         Value::Null,
         "a first delegation has no prior one, even once its Work closed: {output}"
     );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn running_continuation_cannot_be_replaced_using_its_earlier_result()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, relation, _) =
+        hold_continuation("FOLLOWUP-STILL-RUNNING", "direction-write", false).await?;
+    assert_eq!(results(&s, &relation).len(), 1);
+    let spec = json!({"name":"delegate_to_steward","arguments":{
+        "request":"Compare the remaining source", "previous_relation_id":relation,
+        "checks":["Compare the source evidence"]}});
+    s.turn("general", &format!("fixture-call:{spec}")).await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.data()["steward_children"].as_array().unwrap().len(), 1);
+    assert_eq!(view.data()["steward_children"][0]["terminal"], false);
+    let rejected = script.requests.lock().unwrap().iter().any(|request| {
+        request["input"].as_array().unwrap().iter().any(|item| {
+            item["type"] == "function_call_output"
+                && item["call_id"] == "call_connector"
+                && item["output"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("steward_relation_not_active")
+        })
+    });
+    assert!(
+        rejected,
+        "a saved result must not authorize replacing running work"
+    );
+    script.item_release.notify_one();
+    wait_reports(&s, &relation, 2).await?;
     s.finish().await?;
     server.abort();
     Ok(())

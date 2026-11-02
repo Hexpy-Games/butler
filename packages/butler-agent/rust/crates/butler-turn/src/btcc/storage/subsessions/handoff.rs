@@ -20,6 +20,24 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
         params![input.relation_id,input.parent_session_id,input.parent_turn_id,input.child_session_id,input.anchor_message_id,ordinal,input.safe_title,input.created_at],
     ).map_err(StorageError::sqlite)? == 1;
     if inserted {
+        if let Some(prior) = &input.previous_relation_id
+            && !followup_ready(db, prior, &input.parent_session_id)?
+        {
+            return Err(StorageError::new(
+                StorageCode::SubsessionRelationMissing,
+                "The previous assignment has not finished closing",
+            ));
+        }
+        let closed: bool = db.query_row(
+            "SELECT EXISTS (SELECT 1 FROM btcc_session_relations WHERE child_session_id=?1 AND activity_terminal=1) OR EXISTS(SELECT 1 FROM btcc_subsession_end_members WHERE session_id=?1)",
+            [&input.parent_session_id], |row| row.get(0),
+        ).map_err(StorageError::sqlite)?;
+        if closed {
+            return Err(StorageError::new(
+                StorageCode::SubsessionRelationMissing,
+                "The parent delegated assignment has ended",
+            ));
+        }
         db.execute(
             "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
             params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
@@ -28,7 +46,28 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
     Ok(inserted)
 }
 
+fn followup_ready(db: &Connection, relation: &str, parent: &str) -> StorageResult<bool> {
+    let child: Option<String> = db.query_row(
+        "SELECT r.child_session_id FROM btcc_session_relations r WHERE r.relation_id=?1 AND r.parent_session_id=?2 AND r.activity_terminal=1 AND NOT EXISTS(SELECT 1 FROM btcc_subsession_end_members e WHERE e.session_id=r.child_session_id)",
+        params![relation,parent], |r| r.get(0),
+    ).optional().map_err(StorageError::sqlite)?;
+    match child {
+        Some(child) => super::terminal::invariant(db, &child),
+        None => Ok(false),
+    }
+}
+
 impl SqliteSubsessionRepository {
+    pub(crate) async fn followup_ready(
+        &self,
+        relation: String,
+        parent: String,
+    ) -> StorageResult<bool> {
+        self.storage
+            .read(move |db| followup_ready(db, &relation, &parent))
+            .await
+    }
+
     pub(crate) async fn settled_parent_source(
         &self,
         session: String,

@@ -17,14 +17,7 @@ impl SubsessionService {
         for candidate in owned {
             if self.relation_is_eligible(&query, &candidate).await? {
                 eligible.push(candidate);
-            } else if query.purpose == RelationPurpose::Direct
-                && self
-                    .repository
-                    .open_relation_by_work(candidate.root_work_id.clone())
-                    .await
-                    .map_err(BtccError::from)?
-                    .is_none()
-            {
+            } else if query.purpose == RelationPurpose::Direct {
                 closed.push(candidate);
             }
         }
@@ -158,35 +151,17 @@ impl SubsessionService {
         if !terminal {
             return Ok(true);
         }
-        // A Steward's saved result ends one turn, not a direction still running.
-        if candidate.packet.child_role == crate::btcc::ChildRole::Steward
-            && self.steward_continuing(candidate).await?
-        {
-            return Ok(true);
-        }
-        if query.purpose == RelationPurpose::Cancel
-            && candidate.packet.child_role == crate::btcc::ChildRole::Worker
-        {
-            return self
-                .repository
-                .worker_cancellable(candidate.relation_id.clone())
-                .await
-                .map_err(BtccError::from);
-        }
-        if query.purpose != RelationPurpose::Direct
-            || (query.work_id.is_none() && query.relation_id.is_none())
-        {
-            return Ok(false);
-        }
-        if candidate.packet.child_role == crate::btcc::ChildRole::Worker {
-            return Ok(true);
-        }
-        Ok(self
+        if self
             .repository
-            .open_relation_by_work(candidate.root_work_id.clone())
+            .has_pending_direction(candidate.relation_id.clone())
             .await
             .map_err(BtccError::from)?
-            .is_some())
+        {
+            return Ok(true);
+        }
+        // Results end assignments. A queued continuation remains eligible only
+        // while its own latest turn is actually running.
+        self.child_turn_running(&candidate.child_session_id).await
     }
 }
 
