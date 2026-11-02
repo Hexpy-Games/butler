@@ -222,7 +222,13 @@ async fn readonly_change_keeps_the_allowed_exact_action_and_denies_the_next()
         let denial = if bridge {
             "disabled_tool"
         } else {
-            "tool_not_authorized"
+            // A refreshed read-only surface rejects native writes before dispatch.
+            assert!(
+                !butler_e2e::e2e::chatgpt_wire::tools(requests.last().unwrap())
+                    .any(|tool| tool["name"] == "write_file"),
+                "read-only must not offer write_file"
+            );
+            "tool_unavailable"
         };
         assert!(outputs[1].contains(denial), "{outputs:?}");
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
