@@ -1,7 +1,68 @@
 //! Completed runs disappear; rolling context preserves the current run status.
-use super::run_note::{edit, note_refs, requests, run_plan};
+use super::run_note::{edit, latest_butler_request, note, note_refs, requests, run_plan};
 use super::*;
 use std::sync::atomic::Ordering;
+
+#[tokio::test]
+async fn deleting_a_queued_epic_drops_it_from_the_next_note() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let revision = |text: &str| {
+        text.lines()
+            .find_map(|line| line.strip_prefix("Revision "))
+            .unwrap()
+            .trim_end_matches('.')
+            .parse::<u64>()
+            .unwrap()
+    };
+    let (s, script, server, first, chat) =
+        crate::canon_link::setup("CB-NOTE-EPIC-DELETE", false, false).await?;
+    let (plan_id, epics) = plan(&s, &script, &first).await?;
+    script.blocked.lock().unwrap().push(epics[0].clone());
+    script.release();
+    run_plan(&s, &chat, &plan_id).await?;
+    super::holds::wait_state(&s, &chat, &epics[1], "held").await?;
+    script.quick.store(true, Ordering::SeqCst);
+    s.turn(&chat, "What does this mean?").await?;
+    assert_eq!(
+        note_refs(&script),
+        epics
+            .iter()
+            .map(|id| format!("canon:epic/{id}"))
+            .collect::<Vec<_>>()
+    );
+    let before_revision = {
+        let captured = script.requests.lock().unwrap();
+        revision(note(latest_butler_request(&captured)))
+    };
+    let epic = data(s.gw.get(&format!("/canon/epics/{}", epics[2])).await?, 200);
+    data(
+        s.gw.send(
+            reqwest::Method::DELETE,
+            &format!("/canon/epics/{}", epics[2]),
+            Some(json!({"expected_revision":epic["revision"]}).to_string()),
+        )
+        .await?,
+        200,
+    );
+    let before = requests(&script).len();
+    s.turn(&chat, "What does this mean?").await?;
+    assert_eq!(
+        note_refs(&script),
+        vec![
+            format!("canon:epic/{}", epics[0]),
+            format!("canon:epic/{}", epics[1])
+        ]
+    );
+    {
+        let captured = script.requests.lock().unwrap();
+        let text = note(latest_butler_request(&captured[before..]));
+        assert!(revision(text) > before_revision, "{text}");
+        assert!(!text.contains(&epics[2]), "{text}");
+    }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
 
 #[tokio::test]
 async fn finished_runs_leave_the_note_while_another_run_remains() -> Result<(), HarnessError> {

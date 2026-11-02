@@ -33,16 +33,7 @@ fn step_request(script: &crate::canon_link::stub::Script, epic: &str) -> String 
 pub(super) fn note_refs(script: &crate::canon_link::stub::Script) -> Vec<String> {
     let captured = script.requests.lock().unwrap();
     let request = latest_butler_request(&captured);
-    let note = request["input"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .filter_map(|item| item["content"].as_array())
-        .flatten()
-        .filter_map(|part| part["text"].as_str())
-        .find_map(|text| text.rfind(NOTE).map(|start| &text[start..]))
-        .expect("the latest Butler request must carry the queue note");
+    let note = note(request);
     let (steps, _) = note
         .split_once("\n\nTitles and earlier steps' results")
         .expect("the note's step list ends before its untrusted content");
@@ -57,13 +48,25 @@ pub(super) fn note_refs(script: &crate::canon_link::stub::Script) -> Vec<String>
         .collect()
 }
 
-fn latest_butler_request(requests: &[Value]) -> &Value {
+pub(super) fn note(request: &Value) -> &str {
+    request["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .filter_map(|item| item["content"].as_array())
+        .flatten()
+        .filter_map(|part| part["text"].as_str())
+        .find_map(|text| text.rfind(NOTE).map(|start| &text[start..]))
+        .expect("the latest Butler request must carry the queue note")
+}
+
+pub(super) fn latest_butler_request(requests: &[Value]) -> &Value {
     requests
         .iter()
         .rev()
         .find(|body| {
-            butler_e2e::e2e::chatgpt_wire::functions(body)
-                .any(|tool| tool["name"] == "canon_queue")
+            butler_e2e::e2e::chatgpt_wire::functions(body).any(|tool| tool["name"] == "canon_queue")
         })
         .expect("a main-chat Butler request")
 }
