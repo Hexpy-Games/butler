@@ -74,6 +74,7 @@ pub mod data_paths;
 pub mod desktop;
 pub mod download_mark;
 pub mod fs_space;
+pub mod host_file_behavior;
 pub mod install_link;
 pub mod instance;
 pub mod launcher;
