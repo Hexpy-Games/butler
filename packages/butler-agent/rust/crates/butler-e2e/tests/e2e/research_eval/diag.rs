@@ -76,3 +76,46 @@ pub(super) async fn save(
     .await
     .map_err(|e| HarnessError(e.to_string()))?
 }
+
+pub(super) fn tail(state: &super::policy::Policy, row: &Value) -> Value {
+    let start = state.exchanges.len().saturating_sub(3);
+    let requests: Vec<_> = state
+        .exchanges
+        .iter()
+        .enumerate()
+        .skip(start)
+        .map(|(index, e)| {
+            json!({"request_index":index,"elapsed_ms":e.elapsed_ms,"lane":e.lane,
+            "request":e.body,"reply_items":e.items,"research":e.research,"evidence":e.evidence})
+        })
+        .collect();
+    json!({"id":state.task.spec["id"],"status":row["status"],"last_lane_state":row["last_lane_state"],
+        "terminal":row["terminal"],"error":row["error"],"last_three_requests":requests})
+}
+pub(super) async fn save_tail(
+    task: &Task,
+    set: &str,
+    out: &std::path::Path,
+    captured: Value,
+) -> Result<(), HarnessError> {
+    if super::blind(set) {
+        return Ok(());
+    }
+    let id = task.spec["id"].as_str().unwrap();
+    assert!(
+        std::path::Path::new(id)
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
+    );
+    let directory = out.join("diag").join(set).join(id);
+    tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
+        std::fs::create_dir_all(&directory)?;
+        std::fs::write(
+            directory.join("tail.json"),
+            serde_json::to_vec_pretty(&captured)?,
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| HarnessError(e.to_string()))?
+}

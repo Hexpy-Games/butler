@@ -1,8 +1,12 @@
+mod render;
+#[cfg(test)]
+mod tests;
 use super::{
     fixture::Task,
     policy::{Policy, normalized, output_text},
 };
 use butler_e2e::e2e::HarnessError;
+pub(super) use render::markdown;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -94,7 +98,7 @@ fn task_row(
         "runtime_models":requests.iter().filter_map(|r|r["model"].as_str()).collect::<std::collections::BTreeSet<_>>(),
         "facts_found":facts.len()-missed.len(),"facts_total":facts.len(),"missed":missed,
         "calls_per_lane":calls,"calls":requests.len(),"completed":true,
-        "average_tools_tokens":requests.iter().map(|r|r["tools"].as_u64().unwrap()).sum::<u64>() as f64 / requests.len() as f64});
+        "average_tools_tokens":requests.iter().map(|r|r["tools"].as_u64().unwrap()).sum::<u64>() as f64 / requests.len().max(1) as f64});
     for key in ["input", "cached", "uncached", "output", "usd", "usd_cold"] {
         row[key] = json!(
             requests
@@ -175,6 +179,10 @@ fn median(mut values: Vec<f64>) -> Option<f64> {
 }
 pub(super) fn redact(row: &mut Value, set: &str, index: usize) {
     row["id"] = json!(format!("{set}/{index}"));
+    if row["status"] == "incomplete" {
+        *row = json!({"id":format!("{set}/{index}"),"set":set,"status":"incomplete"});
+        return;
+    }
     let fields = row.as_object_mut().unwrap();
     for key in [
         "shape",
@@ -183,6 +191,9 @@ pub(super) fn redact(row: &mut Value, set: &str, index: usize) {
         "requests",
         "largest_tool_outputs",
         "unreadable",
+        "last_lane_state",
+        "terminal",
+        "error",
     ] {
         fields.remove(key);
     }
@@ -190,77 +201,70 @@ pub(super) fn redact(row: &mut Value, set: &str, index: usize) {
 pub(super) fn summary(rows: &[Value]) -> Value {
     let mut sets = BTreeMap::<&str, Vec<f64>>::new();
     for row in rows {
-        sets.entry(row["set"].as_str().unwrap())
-            .or_default()
-            .push(row["usd"].as_f64().unwrap());
+        let costs = sets.entry(row["set"].as_str().unwrap()).or_default();
+        if let Some(usd) = row["usd"].as_f64() {
+            costs.push(usd);
+        }
     }
     let per_set: BTreeMap<_, _> = sets
         .into_iter()
         .map(|(set, costs)| (set, median(costs)))
         .collect();
-    json!({"median_usd":median(rows.iter().map(|r|r["usd"].as_f64().unwrap()).collect()),
-        "median_blind_usd":median(rows.iter().filter(|r|super::blind(r["set"].as_str().unwrap())).map(|r|r["usd"].as_f64().unwrap()).collect()),
+    json!({"median_usd":median(rows.iter().filter_map(|r|r["usd"].as_f64()).collect()),
+        "median_blind_usd":median(rows.iter().filter(|r|super::blind(r["set"].as_str().unwrap())).filter_map(|r|r["usd"].as_f64()).collect()),
         "median_usd_per_set":per_set,
-        "all_facts_kept":rows.iter().all(|r|r["facts_found"] == r["facts_total"])})
-}
-pub(super) fn markdown(rows: &[Value]) -> String {
-    use std::fmt::Write;
-    let mut text = "| Task | Shape | Facts | Calls | Input | Cached | Uncached | Output | Avg tools | Unreadable | USD | Cold USD |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n".to_owned();
-    for row in rows {
-        let id = row["id"].as_str().unwrap().replace('|', "\\|");
-        writeln!(
-            text,
-            "| {} | {} | {}/{} | {} | {:.0} | {:.0} | {:.0} | {:.0} | {:.0} | {} | {:.6} | {:.6} |",
-            id,
-            if super::blind(row["set"].as_str().unwrap()) {
-                "—"
-            } else {
-                row["shape"].as_str().unwrap()
-            },
-            row["facts_found"],
-            row["facts_total"],
-            row["calls"],
-            row["input"].as_f64().unwrap(),
-            row["cached"].as_f64().unwrap(),
-            row["uncached"].as_f64().unwrap(),
-            row["output"].as_f64().unwrap(),
-            row["average_tools_tokens"].as_f64().unwrap(),
-            row["unreadable_pages"].as_u64().unwrap_or(0),
-            row["usd"].as_f64().unwrap(),
-            row["usd_cold"].as_f64().unwrap()
-        )
-        .unwrap();
-    }
-    let summary = summary(rows);
-    writeln!(text, "\nMedian USD: {}. Blind median USD: {}. Per-set median USD: {}. All facts kept: {}.\n\nToken estimates: o200k over serialized instructions, tools, input and reply items. Cached tokens are the common token prefix with the previous request in that lane. Prices are estimates from the static catalog, including per-request prompt tiers.",
-        summary["median_usd"], summary["median_blind_usd"], summary["median_usd_per_set"], if summary["all_facts_kept"] == true { "yes" } else { "no" }).unwrap();
-    text
+        "completed_tasks":rows.iter().filter(|r|r["status"] != "incomplete").count(),
+        "incomplete_tasks":rows.iter().filter(|r|r["status"] == "incomplete").count(),
+        "priced_tasks":rows.iter().filter(|r|r["usd"].is_number()).count(),
+        "all_facts_kept":rows.iter().all(|r|r["status"] != "incomplete" && r["facts_found"] == r["facts_total"])})
 }
 
-// test-category: pure-logic
-#[test]
-fn arbitrary_sets_keep_blind_reports_numeric() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let mut row = json!({"id":"private-task", "set":"new-holdout-set", "shape":"private-shape",
-        "missed":["private-fact"], "largest_tool_outputs":["private-output"],
-        "runtime_models":["private-model"], "requests":["private-request"], "unreadable":["private-url"],
-        "facts_found":1, "facts_total":2, "calls":3, "input":4.0, "cached":1.0,
-        "uncached":3.0, "output":2.0, "average_tools_tokens":1.0, "usd":6.0, "usd_cold":7.0});
-    redact(&mut row, "new-holdout-set", 2);
-    assert_eq!(row["id"], "new-holdout-set/2");
-    assert!(!row.to_string().contains("private-"));
-    assert!(!markdown(&[row.clone()]).contains("private-"));
-    assert!(super::blind("new-holdout-set"));
-    assert!(!super::blind("new-visible-set"));
-    let totals = summary(&[
-        row,
-        json!({"set":"new-visible-set", "usd":2.0, "facts_found":1, "facts_total":1}),
-        json!({"set":"new-visible-set", "usd":4.0, "facts_found":1, "facts_total":1}),
-        json!({"set":"other-holdout", "usd":10.0, "facts_found":1, "facts_total":1}),
-    ]);
-    assert_eq!(totals["median_usd"], 5.0);
-    assert_eq!(totals["median_blind_usd"], 8.0);
-    assert_eq!(totals["median_usd_per_set"]["new-visible-set"], 3.0);
-    assert_eq!(totals["all_facts_kept"], false);
-    Ok(())
+pub(super) fn outcome(row: &mut Value, state: &Value, terminal: &Value, error: Option<&str>) {
+    row["status"] = json!(if error.is_none() {
+        "complete"
+    } else {
+        "incomplete"
+    });
+    row["completed"] = json!(error.is_none());
+    row["last_lane_state"] = state.clone();
+    row["terminal"] = terminal.clone();
+    if let Some(error) = error {
+        row["error"] = json!(error);
+    }
+}
+pub(super) fn require_complete(rows: &[Value]) -> Result<(), HarnessError> {
+    let count = rows.iter().filter(|r| r["status"] == "incomplete").count();
+    if count == 0 {
+        Ok(())
+    } else {
+        Err(HarnessError(format!(
+            "{count} research tasks incomplete; reports written"
+        )))
+    }
+}
+pub(super) async fn write(
+    rows: &[Value],
+    out: &std::path::Path,
+    print: bool,
+) -> Result<(), HarnessError> {
+    let markdown = markdown(rows);
+    let output = json!({"pricing_model":"openai/gpt-6.1-sol","tasks":rows,"summary":summary(rows)});
+    let out = out.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
+        std::fs::create_dir_all(&out)?;
+        for (name, bytes) in [
+            ("report.json", serde_json::to_vec_pretty(&output)?),
+            ("report.md", markdown.as_bytes().to_vec()),
+        ] {
+            let temporary = out.join(format!("{name}.tmp"));
+            std::fs::write(&temporary, bytes)?;
+            std::fs::rename(temporary, out.join(name))?;
+        }
+        if print {
+            eprintln!("{markdown}");
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| HarnessError(e.to_string()))?
 }

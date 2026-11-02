@@ -4,10 +4,12 @@ use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
+    time::Instant,
 };
 
 #[derive(serde::Serialize)]
 pub(super) struct Exchange {
+    pub elapsed_ms: u64,
     pub lane: String,
     pub body: Value,
     pub items: Vec<Value>,
@@ -27,6 +29,7 @@ pub(super) struct Policy {
     actors: BTreeMap<String, Actor>,
     pub exchanges: Vec<Exchange>,
     pub answer: Option<String>,
+    started: Instant,
 }
 impl Policy {
     pub(super) fn new(task: Arc<Task>) -> Self {
@@ -35,7 +38,29 @@ impl Policy {
             actors: BTreeMap::new(),
             exchanges: Vec::new(),
             answer: None,
+            started: Instant::now(),
         }
+    }
+    pub(super) fn butler_view(&self) -> String {
+        self.actors
+            .get("butler")
+            .map(|a| evidence(a, &self.task.spec))
+            .unwrap_or_default()
+    }
+    pub(super) fn snapshot(&self) -> Value {
+        let now = self
+            .started
+            .elapsed()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX);
+        let lanes: BTreeMap<_, _> = self.actors.iter().map(|(lane, a)| (lane,
+            json!({"phase":a.phase,"deliveries":a.deliveries.len(),"research":a.research,"evidence":a.evidence}))).collect();
+        json!({"last_lane":self.exchanges.last().map(|e|&e.lane),"lanes":lanes,
+            "progress":{"elapsed_ms":now,"requests":self.exchanges.len(),
+                "last_request_ms":self.exchanges.last().map(|e|e.elapsed_ms),
+                "requests_last_10s":self.exchanges.iter().filter(|e|now.saturating_sub(e.elapsed_ms)<=10_000).count(),
+                "requests_last_60s":self.exchanges.iter().filter(|e|now.saturating_sub(e.elapsed_ms)<=60_000).count()}})
     }
     pub(super) fn unreadable(&self) -> Vec<Value> {
         self.actors
@@ -86,6 +111,12 @@ impl Policy {
             }
         }
         self.exchanges.push(Exchange {
+            elapsed_ms: self
+                .started
+                .elapsed()
+                .as_millis()
+                .try_into()
+                .unwrap_or(u64::MAX),
             lane,
             body: body.clone(),
             items: items.clone(),
@@ -184,6 +215,7 @@ fn research_actor(
     if workers
         && actor.phase < 5
         && actor.deliveries.len() < spec["workers"].as_array().unwrap().len()
+        && !no_active_worker(body)
     {
         return vec![call("wait", "wait_for_worker", &json!({}))];
     }
@@ -211,6 +243,13 @@ fn research_actor(
         )];
     }
     vec![message(&evidence(actor, spec))]
+}
+fn no_active_worker(body: &Value) -> bool {
+    outputs(body)
+        .iter()
+        .rev()
+        .find(|o| o["tool_name"] == "wait_for_worker")
+        .is_some_and(|o| o["ok"] == true && o["status"] == "no_active_worker")
 }
 fn bookkeeping(
     actor: &mut Actor,
@@ -378,5 +417,34 @@ fn native_reader_title_counts_without_query_metadata() -> Result<(), butler_e2e:
     assert!(text.contains("electric kettle 1.25 l"));
     assert!(text.contains("care instructions"));
     assert!(!text.contains("900 watts"));
+    Ok(())
+}
+
+// test-category: pure-logic
+#[test]
+fn supervisor_stops_when_runtime_has_no_active_worker() -> Result<(), butler_e2e::e2e::HarnessError>
+{
+    butler_e2e::gate!();
+    let spec = json!({"shape":"workers","workers":[{},{},{}],"facts":[]});
+    let mut actor = Actor {
+        phase: 3,
+        ..Actor::default()
+    };
+    let mut body = json!({"input":[{"role":"user","content":"Explicit relation Work id (model-only; never report to user): example-work"}]});
+    let tools = vec![
+        json!({"name":"wait_for_worker"}),
+        json!({"name":"record_work_disposition"}),
+    ];
+    assert_eq!(
+        research_actor(&mut actor, &body, &tools, &spec, None, true)[0]["name"],
+        "wait_for_worker"
+    );
+    body["input"].as_array_mut().unwrap().push(json!({"type":"function_call_output","call_id":"wait",
+        "output":json!({"ok":true,"output":{"tool_name":"wait_for_worker","ok":true,"status":"no_active_worker"}}).to_string()}));
+    let result = research_actor(&mut actor, &body, &tools, &spec, None, true);
+    assert_eq!(result[0]["name"], "record_work_disposition");
+    let arguments: Value = serde_json::from_str(result[0]["arguments"].as_str().unwrap())?;
+    assert_eq!(arguments["summary"], "No matching evidence received.");
+    assert!(actor.evidence.is_empty());
     Ok(())
 }
