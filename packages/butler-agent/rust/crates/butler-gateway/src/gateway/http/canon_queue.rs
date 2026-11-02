@@ -42,7 +42,30 @@ pub(super) async fn route(
         input["epic_id"] = serde_json::json!(subsessions::decode_component(parts[5])?);
     }
     let session = input["session_id"].clone();
-    match state.application.canon_proposal(action.into(), input).await {
+    let tool_call = action == "queue"
+        && input["arguments"].is_object()
+        && input["turn_id"].is_string()
+        && input["call_id"].is_string();
+    let result = state.application.canon_proposal(action.into(), input).await;
+    respond(state, session, result, tool_call).await
+}
+
+async fn respond(
+    state: Arc<HttpState>,
+    session: serde_json::Value,
+    result: Result<serde_json::Value, GatewayApplicationError>,
+    tool_call: bool,
+) -> Result<Response, HttpError> {
+    match result {
+        // Expected tool refusals are data for the next model round. UI clients
+        // retain their existing HTTP status and conflict response.
+        Err(GatewayApplicationError::Public { code, message, .. }) if tool_call => json(
+            StatusCode::OK,
+            ApiEnvelope {
+                protocol_version: APP_PROTOCOL_VERSION,
+                data: serde_json::json!({"ok":false,"error":{"code":code,"message":message}}),
+            },
+        ),
         Ok(data) => json(
             StatusCode::OK,
             ApiEnvelope {

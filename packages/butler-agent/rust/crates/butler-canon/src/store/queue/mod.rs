@@ -1,6 +1,7 @@
 //! Session-local epic chains. Caller owns the canon write transaction.
 mod edits;
 pub mod engine;
+mod note;
 mod operations;
 pub mod sql;
 mod view;
@@ -8,6 +9,7 @@ use super::*;
 use crate::work_chain::{Chain, Step};
 use crate::work_types::EpicId;
 pub use edits::edit;
+pub use note::note;
 pub use operations::{bound_sessions, decide_hold, owner, request, session_deleted, take_here};
 use rusqlite::params;
 use std::collections::{BTreeMap, BTreeSet};

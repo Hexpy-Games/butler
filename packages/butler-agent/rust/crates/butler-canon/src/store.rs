@@ -27,11 +27,12 @@ pub use proposals::{
     turn_cards as canon_proposal_turn_cards,
 };
 pub mod queue;
+pub use queue::note as queue_note;
 pub mod runtime;
 pub use api::{mark_outbox_published, read as read_api, write as write_api};
 pub use runtime::{
     context as session_epic_context, link as link_work, precheck as precheck_epic_link,
-    runtime_context,
+    runtime_context, steward_context,
 };
 mod entities;
 mod intents;
@@ -49,7 +50,7 @@ pub use transaction::Transaction;
 pub enum Error {
     #[error(transparent)]
     Id(#[from] crate::work_ids::IdError),
-    #[error("conflict: {current}")]
+    #[error("{}", conflict_message(.current))]
     Conflict { current: Value },
     #[error("tag already exists")]
     TagExists { existing: Value },
@@ -61,6 +62,8 @@ pub enum Error {
     NotFound,
     #[error("invalid fractional rank")]
     InvalidRank,
+    #[error("expected_revision required: pass the revision from the latest plan run note.")]
+    QueueRevisionRequired,
     #[error("invalid operation: {0}")]
     Invalid(&'static str),
     #[error(transparent)]
@@ -186,4 +189,17 @@ pub(super) fn count(
 ) -> Result<()> {
     tx.execute(sql::COUNT, rusqlite::params![scope.0, scope.1, key, delta])?;
     Ok(())
+}
+
+fn conflict_message(current: &Value) -> String {
+    if let (Some(expected), Some(current)) = (
+        current["expected_revision"].as_i64(),
+        current["graph_revision"].as_i64(),
+    ) {
+        format!(
+            "The run changed since revision {expected}; it is now at revision {current}. Read the order in the latest plan run note and send the change again with that revision."
+        )
+    } else {
+        format!("conflict: {current}")
+    }
 }

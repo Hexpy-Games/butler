@@ -2,6 +2,7 @@
 mod delete;
 mod holds;
 mod locks;
+mod refs;
 pub(in crate::gateway::application) mod steps;
 mod taking;
 use super::*;
@@ -81,6 +82,9 @@ async fn validate(
             "This conversation is read-only. Change its permission level to queue tasks.",
         ));
     }
+    if let Some(plan) = args["plan_id"].as_str() {
+        known_plan(app, plan).await?;
+    }
     let resource = if args["plan_id"].is_string() {
         AppCanonResource::Plan
     } else {
@@ -106,10 +110,17 @@ async fn validate(
         )
         .await?;
     }
+    let ordered = args["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+        .flatten();
     for id in args["epic_ids"]
         .as_array()
         .into_iter()
         .flatten()
+        .chain(ordered)
         .filter_map(Value::as_str)
     {
         canon::execute(
@@ -151,6 +162,32 @@ pub(super) async fn apply(
                 .ok_or_else(GatewayApplicationError::internal)?,
         })
         .await?;
+    Ok(())
+}
+
+/// The model can fix an unknown plan_id itself: say the id's form and where to find it.
+async fn known_plan(app: &AppApplication, plan: &str) -> Result<(), GatewayApplicationError> {
+    let found = canon::execute(
+        app,
+        AppCanonRequest {
+            resource: AppCanonResource::Plan,
+            id: plan.to_owned(),
+            input: None,
+            delegate: None,
+        },
+    )
+    .await;
+    // The model can fix this itself: name the id's form and where to find it.
+    if let Err(GatewayApplicationError::Public { status: 404, .. }) = found {
+        return Err(public(
+            400,
+            "plan_id_unknown",
+            &format!(
+                "No plan has the id {plan:?}. plan_id is a plan id of the form pl_…, never a title. Each epic in this conversation's canon context names its plan_id, and canon_read {{\"view\":\"canon\"}} lists this project's plans with their ids."
+            ),
+        ));
+    }
+    found?;
     Ok(())
 }
 
@@ -216,5 +253,6 @@ async fn arguments(
             .map_err(app_error)?;
         args["origin_message_id"] = json!(message);
     }
+    refs::normalize(&mut args)?;
     Ok(args)
 }

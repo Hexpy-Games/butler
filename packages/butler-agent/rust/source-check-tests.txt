@@ -4,7 +4,8 @@
 # marker. Counts may only shrink; after deleting tests regenerate with
 #   cargo run -p butler-source-check -- --bless .
 # package<TAB>tests<TAB>unmarked
-crates/butler-agent	40	27
+crates/butler-agent	40	26
+crates/butler-canon	39	0
 crates/butler-core	8	2
 crates/butler-gateway	43	24
 crates/butler-ledger	5	1
@@ -13,5 +14,4 @@ crates/butler-models	61	35
 crates/butler-platform	20	11
 crates/butler-runtime	75	54
 crates/butler-turn	110	70
-crates/butler-canon	39	0
 tools/source-check	16	13

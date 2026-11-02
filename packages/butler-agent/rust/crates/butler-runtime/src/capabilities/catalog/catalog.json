@@ -4684,7 +4684,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
+        "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart. For several canon epics or a whole plan, never delegate them together: queue them with canon_queue; each step's Turn processes its one epic and may delegate it.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -7701,7 +7701,7 @@
       "definition": {
         "type": "function",
         "name": "canon_queue",
-        "description": "Queue canon epics in this conversation only when the user explicitly asks to process them. plan_run processes the plan's unfinished epics in canon order. after places an epic in the step following target_epic_id; together joins its step. start_now starts a new head; remove removes a waiting epic. Each step starts its own Butler turn; linked Work is created by that turn, starting at Conception. No approval card is needed for this local act; read-only refuses it. Never call this merely because an epic is bound, a plan exists, or work completed. A held_elsewhere result offers the user a choice; do not take another conversation's epic without that choice.",
+        "description": "Runs canon epics one after another in this conversation, each in its own Turn and Work. Use it when the user asks for several epics or a whole plan; don't queue merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id on its own now; after puts epic_id in the step following target_epic_id; together adds it to target_epic_id's step, so they run at once; remove takes out a waiting epic. To queue chosen epics, start_now the first, then after for each next. set_order replaces the whole order of one run: steps lists its unfinished steps in order. Pinned steps at the front stay where they are and may be left out. Every change to an existing run passes expected_revision from the current plan run note and is refused if the run moved on since. The current order and states arrive in the conversation's plan run note; read that, no call is needed to learn them. Each step starts its own Butler Turn, which creates its linked Work starting at Conception and may delegate it. No approval card is needed for this local act; read-only refuses it. A held_elsewhere result offers the user a choice; do not take another conversation's epic without that choice.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -7713,17 +7713,35 @@
                 "after",
                 "together",
                 "start_now",
-                "remove"
+                "remove",
+                "set_order"
               ]
             },
             "plan_id": {
-              "type": "string"
+              "type": "string",
+              "description": "A plan id of the form pl_…, from the canon context, the plan run note or canon_read; never a plan title."
             },
             "epic_id": {
-              "type": "string"
+              "type": "string",
+              "description": "An epic id, or its canon:epic/ ref."
             },
             "target_epic_id": {
-              "type": "string"
+              "type": "string",
+              "description": "An epic id, or its canon:epic/ ref."
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "description": "The run's unfinished steps in order; each step lists its epic ids or canon:epic/ refs."
+            },
+            "expected_revision": {
+              "type": "integer",
+              "description": "The revision from the current plan run note."
             }
           },
           "required": [
@@ -10295,7 +10313,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
+      "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart. For several canon epics or a whole plan, never delegate them together: queue them with canon_queue; each step's Turn processes its one epic and may delegate it.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -14086,7 +14104,7 @@
     "canon_queue": {
       "type": "function",
       "name": "canon_queue",
-      "description": "Queue canon epics in this conversation only when the user explicitly asks to process them. plan_run processes the plan's unfinished epics in canon order. after places an epic in the step following target_epic_id; together joins its step. start_now starts a new head; remove removes a waiting epic. Each step starts its own Butler turn; linked Work is created by that turn, starting at Conception. No approval card is needed for this local act; read-only refuses it. Never call this merely because an epic is bound, a plan exists, or work completed. A held_elsewhere result offers the user a choice; do not take another conversation's epic without that choice.",
+      "description": "Runs canon epics one after another in this conversation, each in its own Turn and Work. Use it when the user asks for several epics or a whole plan; don't queue merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id on its own now; after puts epic_id in the step following target_epic_id; together adds it to target_epic_id's step, so they run at once; remove takes out a waiting epic. To queue chosen epics, start_now the first, then after for each next. set_order replaces the whole order of one run: steps lists its unfinished steps in order. Pinned steps at the front stay where they are and may be left out. Every change to an existing run passes expected_revision from the current plan run note and is refused if the run moved on since. The current order and states arrive in the conversation's plan run note; read that, no call is needed to learn them. Each step starts its own Butler Turn, which creates its linked Work starting at Conception and may delegate it. No approval card is needed for this local act; read-only refuses it. A held_elsewhere result offers the user a choice; do not take another conversation's epic without that choice.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -14098,17 +14116,35 @@
               "after",
               "together",
               "start_now",
-              "remove"
+              "remove",
+              "set_order"
             ]
           },
           "plan_id": {
-            "type": "string"
+            "type": "string",
+            "description": "A plan id of the form pl_…, from the canon context, the plan run note or canon_read; never a plan title."
           },
           "epic_id": {
-            "type": "string"
+            "type": "string",
+            "description": "An epic id, or its canon:epic/ ref."
           },
           "target_epic_id": {
-            "type": "string"
+            "type": "string",
+            "description": "An epic id, or its canon:epic/ ref."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "The run's unfinished steps in order; each step lists its epic ids or canon:epic/ refs."
+          },
+          "expected_revision": {
+            "type": "integer",
+            "description": "The revision from the current plan run note."
           }
         },
         "required": [
