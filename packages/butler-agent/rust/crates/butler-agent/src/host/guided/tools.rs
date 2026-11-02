@@ -227,7 +227,7 @@ impl GuidedTools {
 
     fn browser_available(&self) -> bool {
         let admitted = |name: &str| {
-            self.binding.authorized_names.contains(name)
+            self.authorized(name)
                 && self
                     .binding
                     .allowed_tools_and_effects

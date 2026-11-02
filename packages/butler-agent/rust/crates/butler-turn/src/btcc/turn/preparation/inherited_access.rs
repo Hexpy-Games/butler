@@ -103,10 +103,7 @@ impl DefaultTurnPreparation {
                 mode = mode.narrower(self.run_access(&current, run, parent, lineage).await?);
                 break;
             }
-            let parent_turn = lineage["parent_turn_id"]
-                .as_str()
-                .ok_or_else(invalid)?
-                .to_owned();
+            let parent_turn = lineage["parent_turn_id"].as_str().map(str::to_owned);
             current = self
                 .binding_store
                 .get_by_session_id(parent)
@@ -120,10 +117,13 @@ impl DefaultTurnPreparation {
             {
                 // This child belongs to the admitted parent run. Composer edits
                 // become runtime authority only when an approval answer commits.
-                mode = mode.narrower(
-                    self.admitted_access(&parent_turn, &current.session_id)
-                        .await?,
-                );
+                let parent_mode = match parent_turn {
+                    Some(turn) => self.admitted_access(&turn, &current.session_id).await?,
+                    // Legacy bindings have no admitted run reference. Preserve
+                    // their existing parent ceiling without inventing a run.
+                    None => stored_binding_access_mode(&current),
+                };
+                mode = mode.narrower(parent_mode);
                 break;
             }
             mode = mode.narrower(stored_binding_access_mode(&current));

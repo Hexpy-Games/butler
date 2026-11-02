@@ -17,14 +17,18 @@ fn parse(value: &str) -> AuthorityResult<AccessMode> {
         .ok_or_else(|| crate::btcc::AuthorityError::policy("permission_mode_invalid"))
 }
 
-fn admitted(db: &Connection, turn: &str) -> AuthorityResult<(String, AccessMode, bool)> {
-    let (session, controls, context): (String, String, String) = db
+fn admitted(db: &Connection, turn: &str) -> AuthorityResult<Option<(String, AccessMode, bool)>> {
+    let row: Option<(String, String, String)> = db
         .query_row(
             "SELECT session_id,model_selection_json,context_json FROM btcc_turns WHERE turn_id=?1",
             [turn],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
+        .optional()
         .map_err(sql)?;
+    let Some((session, controls, context)) = row else {
+        return Ok(None);
+    };
     let decode = |text: &str| {
         serde_json::from_str::<Value>(text).map_err(|e| {
             crate::btcc::AuthorityError::policy("permission_context_invalid").with_source(e)
@@ -52,14 +56,14 @@ fn admitted(db: &Connection, turn: &str) -> AuthorityResult<(String, AccessMode,
             .unwrap_or(mode.as_str()),
     )?;
     let mode = mode.narrower(policy);
-    Ok((
+    Ok(Some((
         session,
         mode,
         context.get("scheduleRun").is_some_and(|v| !v.is_null()),
-    ))
+    )))
 }
 
-fn lineage(db: &Connection, turn: &str) -> AuthorityResult<Lineage> {
+fn lineage(db: &Connection, turn: &str) -> AuthorityResult<Option<Lineage>> {
     let mut id = turn.to_owned();
     let mut seen = std::collections::HashSet::new();
     let mut ceiling = AccessMode::FullAccess;
@@ -69,7 +73,11 @@ fn lineage(db: &Connection, turn: &str) -> AuthorityResult<Lineage> {
                 "permission_lineage_invalid",
             ));
         }
-        let (session, mode, scheduled) = admitted(db, &id)?;
+        // Legacy relations can outlive their parent admission. Without that
+        // authority, retain the child's persisted tier rather than projecting it.
+        let Some((session, mode, scheduled)) = admitted(db, &id)? else {
+            return Ok(None);
+        };
         let parent: Option<(String, String, String)> = db
             .query_row(
                 "SELECT r.parent_turn_id,r.relation_id,d.packet_json FROM btcc_session_relations r
@@ -80,12 +88,12 @@ fn lineage(db: &Connection, turn: &str) -> AuthorityResult<Lineage> {
             .optional()
             .map_err(sql)?;
         if scheduled || parent.is_none() {
-            return Ok(Lineage {
+            return Ok(Some(Lineage {
                 root: id,
                 mode,
                 ceiling,
                 scheduled,
-            });
+            }));
         }
         let (parent, relation, packet) = parent
             .ok_or_else(|| crate::btcc::AuthorityError::policy("permission_lineage_invalid"))?;
@@ -131,7 +139,10 @@ fn legacy_limit(
             .and_then(Value::as_str)
             .unwrap_or("read_only"),
     )?;
-    let (_, inherited, _) = admitted(db, parent)?;
+    let Some((_, inherited, _)) = admitted(db, parent)? else {
+        // A legacy packet remains its own ceiling if no parent admission exists.
+        return Ok(Some(mode));
+    };
     Ok((mode.rank() < inherited.rank()).then_some(mode))
 }
 
@@ -139,7 +150,9 @@ pub(in crate::btcc) fn effective(
     db: &Connection,
     turn: &str,
 ) -> AuthorityResult<Option<AccessMode>> {
-    let lineage = lineage(db, turn)?;
+    let Some(lineage) = lineage(db, turn)? else {
+        return Ok(None);
+    };
     if lineage.scheduled {
         return Ok(None);
     }
@@ -161,7 +174,7 @@ pub(super) fn record(db: &Connection, write: &DecisionWrite) -> AuthorityResult<
             |row| row.get(0),
         )
         .map_err(sql)?;
-    let lineage = lineage(db, &turn)?;
+    let lineage = lineage(db, &turn)?.ok_or_else(missing_admission)?;
     if lineage.scheduled {
         return Ok(());
     }
@@ -179,10 +192,16 @@ pub(in crate::btcc::storage) fn restrict_delegation(
     db: &Connection,
     input: &super::super::subsessions::SubsessionCreate,
 ) -> AuthorityResult<()> {
-    let (_, admitted, _) = admitted(db, &input.parent_turn_id)?;
-    let inherited = effective(db, &input.parent_turn_id)?.unwrap_or(admitted);
     let requested = &input.packet.access_mode;
-    let limit = (requested.rank() < inherited.rank()).then_some(requested.as_str());
+    let limit = match admitted(db, &input.parent_turn_id)? {
+        Some((_, admitted, _)) => {
+            let inherited = effective(db, &input.parent_turn_id)?.unwrap_or(admitted);
+            (requested.rank() < inherited.rank()).then_some(requested.as_str())
+        }
+        // Storage may restore a delegation before its parent admission. Pin
+        // the packet's tier so later parent changes cannot widen that grant.
+        None => Some(requested.as_str()),
+    };
     db.execute(
         "UPDATE btcc_subsession_delegations SET access_limit_mode=?2,access_limit_recorded=1 WHERE relation_id=?1",
         params![input.relation_id, limit],
@@ -206,7 +225,7 @@ pub(super) fn remember_request(
     db: &Connection,
     record: &crate::btcc::authority::contracts::AuthorityRecord,
 ) -> AuthorityResult<()> {
-    let (_, admitted, _) = admitted(db, &record.source_turn_id)?;
+    let (_, admitted, _) = admitted(db, &record.source_turn_id)?.ok_or_else(missing_admission)?;
     let mode = effective(db, &record.source_turn_id)?.unwrap_or(admitted);
     db.execute("UPDATE btcc_authority_requests SET execution_access_mode=COALESCE(execution_access_mode,?2) WHERE request_ref=?1",
         params![record.request_ref,mode.as_str()]).map_err(sql)?;
@@ -233,6 +252,10 @@ pub(in crate::btcc) fn approved_execution(
     match mode {
         None => Ok(None),
         Some(Some(mode)) => parse(&mode).map(Some),
-        Some(None) => admitted(db, turn).map(|(_, mode, _)| Some(mode)),
+        Some(None) => admitted(db, turn).map(|value| value.map(|(_, mode, _)| mode)),
     }
+}
+
+fn missing_admission() -> crate::btcc::AuthorityError {
+    crate::btcc::AuthorityError::policy("permission_admission_missing")
 }
