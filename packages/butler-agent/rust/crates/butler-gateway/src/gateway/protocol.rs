@@ -158,6 +158,8 @@ pub struct SessionArtifactSummary {
     pub source_label: Option<String>,
     #[serde(default)]
     pub deliverable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
