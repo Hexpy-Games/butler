@@ -342,27 +342,32 @@ async fn hooks_command_text_runs_in_the_documented_shell() -> Result<(), Harness
     butler_e2e::gate!();
     let s = setup("HOOK-SHELL")?.start().await?;
     // The README's Windows `command` is cmd.exe syntax; returning to PowerShell breaks each.
-    let (json_deny, exit_two, exit_three, korean_deny) = if command_sandbox::POSIX_SHELL {
-        (
-            "echo '{\"decision\":\"deny\",\"reason\":\"No send\"}'",
-            "echo 'Guard reason' >&2; exit 2",
-            "exit 3",
-            "echo '{\"decision\":\"deny\",\"reason\":\"전송 금지\"}'",
-        )
-    } else {
-        (
-            "echo {\"decision\":\"deny\",\"reason\":\"No send\"}",
-            "echo Guard reason 1>&2 & exit /b 2",
-            "exit /b 3",
-            "echo {\"decision\":\"deny\",\"reason\":\"전송 금지\"}",
-        )
-    };
+    let (json_deny, exit_two, exit_three, korean_deny, special_deny) =
+        if command_sandbox::POSIX_SHELL {
+            (
+                "echo '{\"decision\":\"deny\",\"reason\":\"No send\"}'",
+                "echo 'Guard reason' >&2; exit 2",
+                "exit 3",
+                "echo '{\"decision\":\"deny\",\"reason\":\"전송 금지\"}'",
+                "echo '{\"decision\":\"deny\",\"reason\":\"a!b%%c^^d\"}'",
+            )
+        } else {
+            (
+                "echo {\"decision\":\"deny\",\"reason\":\"No send\"}",
+                "echo Guard reason 1>&2 & exit /b 2",
+                "exit /b 3",
+                "echo {\"decision\":\"deny\",\"reason\":\"전송 금지\"}",
+                "echo {\"decision\":\"deny\",\"reason\":\"a!b%%c^^d\"}",
+            )
+        };
     for (id, command, reason, exit_code, outcome) in [
         ("json", json_deny, "No send", 0, "deny"),
         ("two", exit_two, "Guard reason", 2, "deny"),
         ("three", exit_three, "", 3, "error"),
         // Output in the console code page would not be UTF-8 and the deny would be lost.
         ("korean", korean_deny, "전송 금지", 0, "deny"),
+        // cmd's own metacharacters reach the hook's output untouched.
+        ("special", special_deny, "a!b%%c^^d", 0, "deny"),
     ] {
         replace(&s, vec![hook(id, "UserPromptSubmit", command)]).await?;
         let tested = api(
@@ -375,10 +380,9 @@ async fn hooks_command_text_runs_in_the_documented_shell() -> Result<(), Harness
         let run = tested.data();
         assert_eq!(run["outcome"], outcome, "{run}");
         assert_eq!(run["exit_code"], exit_code, "{run}");
-        assert!(
-            run["reason"].as_str().unwrap_or("").contains(reason),
-            "{run}"
-        );
+        if outcome == "deny" {
+            assert_eq!(run["reason"], format!("{id}: {reason}"), "{run}");
+        }
     }
     replace(&s, vec![hook("json", "UserPromptSubmit", json_deny)]).await?;
     let blocked =
