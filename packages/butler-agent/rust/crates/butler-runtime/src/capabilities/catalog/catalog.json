@@ -55,7 +55,7 @@
       "definition": {
         "type": "function",
         "name": "answer_blocks",
-        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. For other layouts or interactions, use output_publish.",
+        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. Use output_publish only for a requested page or one needing its own layout or interactions.",
         "parameters": {
           "$ref": "answer-blocks.schema.json"
         },
@@ -4692,7 +4692,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
+        "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also gets the user's own message verbatim, project context and bounded conversation; write request as your reading of it, keeping the user's scope and output form: add no format they did not ask for, such as a styled page for a summary. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4750,7 +4750,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_worker",
-        "description": "Assign one action of your accepted Plan to a Worker. Use Workers for actions that can run in parallel and for long actions (research across several sources, multi-file changes, long builds or test runs), so your own context stays on planning, integration and review. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
+        "description": "Assign one action of your accepted Plan to a Worker. Use Workers for actions that can run in parallel and for long actions (research across several sources, multi-file changes, long builds or test runs), so your own context stays on planning, integration and review. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. The Worker also gets the user's own request and the results of this action's finished dependencies: brief only what is new, and never ask it to re-verify facts those results confirmed unless verification is the action. One Worker per action: to replace one still running, pass its relation_id as replaces_relation_id. Steward remains responsible for integration, review, validation, and reporting.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4790,6 +4790,18 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 48
+            },
+            "replaces_relation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "description": "The Worker still running this action that this assignment replaces. The runtime stops it and marks any late result superseded."
+            },
+            "target_path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "Workspace path of the file or site this action creates or revises for delivery. The Worker revises and checks that path, and output_publish in this Work then refuses a different one."
             }
           },
           "required": [
@@ -5925,7 +5937,7 @@
       "definition": {
         "type": "function",
         "name": "output_publish",
-        "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
+        "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. Use it only for a requested page or site or one needing its own layout or interactions; research and comparisons go in document_create. Publish the path last revised and checked. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -7156,7 +7168,7 @@
       "definition": {
         "type": "function",
         "name": "document_create",
-        "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; for a page with its own layout or interactions use output_publish.",
+        "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief; the default for research findings and comparisons. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; use output_publish only for a requested page or one needing its own layout or interactions.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -7959,7 +7971,7 @@
     "answer_blocks": {
       "type": "function",
       "name": "answer_blocks",
-      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. For other layouts or interactions, use output_publish.",
+      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. Use output_publish only for a requested page or one needing its own layout or interactions.",
       "parameters": {
         "$ref": "answer-blocks.schema.json"
       },
@@ -8906,7 +8918,7 @@
     "delegate_to_worker": {
       "type": "function",
       "name": "delegate_to_worker",
-      "description": "Assign one action of your accepted Plan to a Worker. Use Workers for actions that can run in parallel and for long actions (research across several sources, multi-file changes, long builds or test runs), so your own context stays on planning, integration and review. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
+      "description": "Assign one action of your accepted Plan to a Worker. Use Workers for actions that can run in parallel and for long actions (research across several sources, multi-file changes, long builds or test runs), so your own context stays on planning, integration and review. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. The Worker also gets the user's own request and the results of this action's finished dependencies: brief only what is new, and never ask it to re-verify facts those results confirmed unless verification is the action. One Worker per action: to replace one still running, pass its relation_id as replaces_relation_id. Steward remains responsible for integration, review, validation, and reporting.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -8946,6 +8958,18 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 48
+          },
+          "replaces_relation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "The Worker still running this action that this assignment replaces. The runtime stops it and marks any late result superseded."
+          },
+          "target_path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Workspace path of the file or site this action creates or revises for delivery. The Worker revises and checks that path, and output_publish in this Work then refuses a different one."
           }
         },
         "required": [
@@ -10309,7 +10333,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. Pass the user's request unchanged. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance; the child excludes Butler persona, receives immutable project context and bounded parent conversation, has only granted tools, and returns a canonical terminal result that settles the Work. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
+      "description": "Hand substantial work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Keep quick answers, single lookups, one schedule action (even when its future task is research), one setting change, and one edit, rename or move whose exact content or target the user gave yourself, even when it touches a file. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also gets the user's own message verbatim, project context and bounded conversation; write request as your reading of it, keeping the user's scope and output form: add no format they did not ask for, such as a styled page for a summary. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12516,7 +12540,7 @@
     "output_publish": {
       "type": "function",
       "name": "output_publish",
-      "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
+      "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. Use it only for a requested page or site or one needing its own layout or interactions; research and comparisons go in document_create. Publish the path last revised and checked. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -13467,7 +13491,7 @@
     "document_create": {
       "type": "function",
       "name": "document_create",
-      "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; for a page with its own layout or interactions use output_publish.",
+      "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief; the default for research findings and comparisons. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; use output_publish only for a requested page or one needing its own layout or interactions.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

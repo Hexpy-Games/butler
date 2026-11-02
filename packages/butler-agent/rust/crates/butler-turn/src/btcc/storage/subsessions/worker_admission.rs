@@ -28,6 +28,15 @@ pub const WAITING_WORKERS_SQL: &str = "SELECT d.relation_id FROM btcc_session_re
  LEFT JOIN btcc_subsession_directions i ON i.instruction_id=(
    SELECT instruction_id FROM btcc_subsession_directions WHERE relation_id=d.relation_id AND status='pending' ORDER BY revision LIMIT 1)
  WHERE r.parent_session_id=?1 AND r.activity_role='worker' AND d.dispatch_state='pending'
+ AND NOT EXISTS (SELECT 1 FROM btcc_session_relations oldr
+   JOIN btcc_subsession_delegations old ON old.relation_id=oldr.relation_id
+   WHERE oldr.parent_session_id=r.parent_session_id
+     AND json_extract(old.packet_json,'$.superseded_by') IS NOT NULL
+     AND json_extract(old.packet_json,'$.parent_work_ref.work_id')=json_extract(d.packet_json,'$.parent_work_ref.work_id')
+     AND json_extract(old.packet_json,'$.plan_action.action_key')=json_extract(d.packet_json,'$.plan_action.action_key')
+     AND (NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=old.relation_id)
+       OR EXISTS (SELECT 1 FROM btcc_turns t WHERE t.session_id=oldr.child_session_id
+         AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=old.relation_id AND x.child_turn_id=t.turn_id))))
  AND NOT EXISTS (SELECT 1 FROM btcc_turns t WHERE t.session_id=r.child_session_id
    AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id AND x.child_turn_id=t.turn_id))
  ORDER BY CASE WHEN EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id) THEN i.created_at ELSE d.created_at END,
