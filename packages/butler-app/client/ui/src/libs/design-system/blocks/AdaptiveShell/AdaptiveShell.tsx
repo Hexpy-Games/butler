@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { useComposedRefs } from "../../lib/composeRefs";
 import { cn } from "../../lib/utils";
 import { useAdaptiveDrawer } from "../../responsive";
+import workspace from "./AdaptiveShellWorkspace.module.css";
 import styles from "./AdaptiveShell.module.css";
 import frame from "./AdaptiveShellFrame.module.css";
 import cards from "./AdaptiveShellCards.module.css";
@@ -129,7 +130,7 @@ export function AdaptiveShellWorkspace({
 }: DsBaseProps<HTMLAttributes<HTMLElement>>) {
   return (
     <main
-      className={cn(styles.workspace, className)}
+      className={cn(workspace.workspace, styles.workspace, className)}
       data-slot="adaptive-shell-workspace"
       {...props}
     >

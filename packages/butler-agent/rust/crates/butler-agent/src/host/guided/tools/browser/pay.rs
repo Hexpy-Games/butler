@@ -50,7 +50,7 @@ pub(super) async fn execute(
     {
         return encoded(&refused);
     }
-    if owner.binding.access_mode == AccessMode::ReadOnly {
+    if owner.access_mode() == AccessMode::ReadOnly {
         return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
     }
     if let Some(input) = authority::bound(owner, call, occurrence).await?
