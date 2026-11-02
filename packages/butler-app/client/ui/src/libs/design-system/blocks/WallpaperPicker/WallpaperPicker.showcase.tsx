@@ -20,8 +20,8 @@ export const meta: ShowcaseMeta = {
 
 /** Settings > Appearance field labels as the App passes them. */
 const FIELD_COPY = {
-  "en-US": { wallpaper: "Wallpaper", wallpaperHint: "The new chat screen's background.", conversation: "Conversation background" },
-  "ko-KR": { wallpaper: "월페이퍼", wallpaperHint: "새 채팅 화면의 배경입니다.", conversation: "대화창 배경" },
+  "en-US": { homeScreen: "Home screen", conversationSection: "Conversation", wallpaper: "Wallpaper", wallpaperHint: "The new chat screen's background.", conversation: "Conversation background" },
+  "ko-KR": { homeScreen: "홈 화면", conversationSection: "대화창", wallpaper: "월페이퍼", wallpaperHint: "새 채팅 화면의 배경입니다.", conversation: "대화창 배경" },
 } as const;
 
 /** The picker as Settings renders it: the control of a SettingsField in a form section. */
@@ -32,7 +32,7 @@ function InSettings({ locale, field = "wallpaper", children }: {
   const home = field === "wallpaper";
   return (
     <SettingsPage>
-      <SettingsSection id={home ? "home-screen" : "conversation"} kind="form">
+      <SettingsSection id={home ? "home-screen" : "conversation"} kind="form" title={home ? copy.homeScreen : copy.conversationSection}>
         <SettingsField settingId={home ? "main-screen-wallpaper" : "conversation-background"} label={home ? copy.wallpaper : copy.conversation}
           description={home ? copy.wallpaperHint : undefined} control={<Stack gap="sm">{children}</Stack>} />
       </SettingsSection>

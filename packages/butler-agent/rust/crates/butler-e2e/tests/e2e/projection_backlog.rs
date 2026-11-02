@@ -43,6 +43,14 @@ const LEGACY_TRAILING_BYTES: usize = 8 * 1024 * 1024;
 const TRAILING_LIMIT_CHARS: i64 = 2 * 64 * 1024 * 4 / 3 + 4;
 const DEADLINE: Duration = Duration::from_secs(150);
 
+/// The transcript's path spelled as the Agent spells it: the checkpoint is
+/// matched by exact path text, so one separator style throughout.
+fn transcript_path(data: &Path) -> std::path::PathBuf {
+    TRANSCRIPT
+        .split('/')
+        .fold(data.to_path_buf(), |path, part| path.join(part))
+}
+
 fn is_action(index: usize) -> bool {
     index % 100 == 7
 }
@@ -80,7 +88,7 @@ fn write_transcript(data: &Path, records: usize) -> (Vec<u8>, usize) {
         }
         write!(text, "{}", record(index)).unwrap();
     }
-    let path = data.join(TRANSCRIPT);
+    let path = transcript_path(data);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, &text).unwrap();
     (text.into_bytes(), seeded)
@@ -89,7 +97,7 @@ fn write_transcript(data: &Path, records: usize) -> (Vec<u8>, usize) {
 /// Stores a checkpoint at `at` holding `trailing`, under a device and inode
 /// number `id_shift` away from the file's own.
 fn seed_checkpoint(data: &Path, bytes: &[u8], at: usize, trailing: &[u8], id_shift: u64) {
-    let path = data.join(TRANSCRIPT);
+    let path = transcript_path(data);
     let (device, inode) = file_ids(&path);
     let db = sqlite::open(data.join(DATABASE)).unwrap();
     db.execute(
@@ -226,7 +234,7 @@ async fn proj_device_change_resumes_at_the_recorded_offset() -> Result<(), Harne
     seed_checkpoint(&s.sandbox.data, &bytes, bytes.len(), &[], 1);
     s.gw = s.agent.start_again().await?;
 
-    let (device, _) = file_ids(&s.sandbox.data.join(TRANSCRIPT));
+    let (device, _) = file_ids(&transcript_path(&s.sandbox.data));
     let started = Instant::now();
     loop {
         let stored: Option<(i64, i64)> = read_only(&s.sandbox.data)

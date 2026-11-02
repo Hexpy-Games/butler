@@ -49,12 +49,21 @@ a drawn scrollbar's width back:
   scrollbar out, so `100% - 100cqw` is minus the drawn scrollbar's width (0
   when none is drawn), resolved in the same layout that draws the scrollbar:
   no read, not even a forced one mid-frame, sees the content move.
-- ScrollArea: the scroller is a `scroll-state` container
-  (`@container scroll-state(scrollable: block)`). Size containment would drop
-  its content from a content-sized parent's width (the model picker is sized
-  by its longest row), so it does not use the rule above. The painted frame
-  never moves, but a layout read inside `requestAnimationFrame` in the frame
-  where overflow starts can see the content one scrollbar narrower.
+- ScrollArea: the scroller publishes the width its own scrollbar takes
+  (`offsetWidth - clientWidth`) as `--scroll-area-drawn-scrollbar` on its
+  frame, from a ResizeObserver on its content box. It reports on mount and
+  whenever the scrollbar appears, goes or changes width, before that frame
+  paints; nothing runs while idle or on scroll. The content keeps clear of the
+  lane less that width: `100% - max(0px, lane - drawn)`. Size containment
+  would drop its content from a content-sized parent's width (the model picker
+  is sized by its longest row), so it does not use the rule above. It never gives back the
+  document-wide `--scrollbar-width`: that is measured once, and macOS switches
+  scrollbars between overlay and classic with the pointing device, so it can
+  name a classic width while the scroller draws an overlay one. Giving that
+  width back ran the settings navigation's selected row to the sidebar's edge.
+  The lane is `max(--scrollbar-width, drawn)`, so it is never narrower than
+  the scrollbar the scroller draws; with a stale `--scrollbar-width` the
+  content still ends on the column and never runs under a drawn scrollbar.
 
 Inset rule: the content's inline end sits on the column edge whether the
 content fits or overflows, with overlay or classic scrollbars, so nothing moves
