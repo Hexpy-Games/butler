@@ -62,7 +62,7 @@ pub(super) fn list(
     artifacts.reverse();
     Ok(artifacts
         .into_iter()
-        .filter_map(|(_, message_id, chat_id, turn_id, file, delivered_at)| {
+        .map(|(_, message_id, chat_id, turn_id, file, delivered_at)| {
             artifact_summary(
                 &chat_id,
                 &message_id,
@@ -94,13 +94,15 @@ fn delivery_file(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageFileRef> {
 }
 
 pub(super) fn artifact(row: &MessageRow, file: &MessageFileRef) -> Option<SessionArtifactSummary> {
-    artifact_summary(
-        &row.chat_id,
-        &row.id,
-        row.turn_id.as_deref(),
-        &row.updated_at,
-        file,
-    )
+    file.deliverable.then(|| {
+        artifact_summary(
+            &row.chat_id,
+            &row.id,
+            row.turn_id.as_deref(),
+            &row.updated_at,
+            file,
+        )
+    })
 }
 
 fn artifact_summary(
@@ -109,11 +111,8 @@ fn artifact_summary(
     turn_id: Option<&str>,
     delivered_at: &str,
     file: &MessageFileRef,
-) -> Option<SessionArtifactSummary> {
-    if !file.deliverable {
-        return None;
-    }
-    Some(SessionArtifactSummary {
+) -> SessionArtifactSummary {
+    SessionArtifactSummary {
         sha256: Some(file.sha256.clone()),
         id: format!("artifact-{}", file.file_id),
         source_label: file.source_label.clone(),
@@ -130,7 +129,7 @@ fn artifact_summary(
         size_bytes: Some(file.size_bytes),
         created_at: delivered_at.to_owned(),
         open_action: Some(ArtifactOpenAction::Route),
-    })
+    }
 }
 
 fn artifact_kind(file: &MessageFileRef) -> ArtifactKind {

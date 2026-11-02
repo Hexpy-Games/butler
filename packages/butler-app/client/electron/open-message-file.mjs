@@ -37,7 +37,7 @@ export function registerOpenMessageFile({ ipcMain, serverFetch, openPath, showIt
     const target = await verifiedPath(path, openedFilesRoot);
     if (!target) return { opened: false, code: "open_path_refused" };
     try {
-      if (body.data.open === true && input?.reveal !== true) {
+      if (body.data.open === true) {
         const failure = await openPath(target);
         return failure ? { opened: false, code: "open_failed" } : { opened: true };
       }

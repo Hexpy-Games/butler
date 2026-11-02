@@ -97,9 +97,9 @@ export function OpenInAppButton({ artifact }: { artifact: SessionArtifactSummary
   );
 }
 
-export async function openInApp(fileId: string, reveal = false): Promise<void> {
+export async function openInApp(fileId: string): Promise<void> {
   try {
-    const result = await window.butlerApp?.openMessageFile?.({ fileId, reveal }) as { opened?: boolean; code?: unknown } | undefined;
+    const result = await window.butlerApp?.openMessageFile?.({ fileId }) as { opened?: boolean; code?: unknown } | undefined;
     if (result?.opened) return;
     notifyStatus(appCopy.artifacts.openInAppFailed, { tone: "error" });
   } catch (error) {

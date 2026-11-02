@@ -61,7 +61,7 @@ pub(super) async fn route(
     let handling = kind::verify(&download.file.safe_name, &download.bytes);
     let open = matches!(handling, kind::Handling::Open(_));
     let name = match handling {
-        kind::Handling::Open(extension) => copy_name(&download.file.safe_name, extension),
+        kind::Handling::Open(extension) => copy_name(&download.file.safe_name, &extension),
         kind::Handling::Reveal => download.file.safe_name.replace(['/', '\\'], "_"),
     };
     let path = tokio::task::spawn_blocking(move || write_marked(&root, &name, &download.bytes))

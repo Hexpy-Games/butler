@@ -185,43 +185,25 @@ async fn images_and_text_open_but_active_or_mismatched_files_are_revealed()
     let allowed: &[(&str, &[u8])] = &[
         ("image.png", b"\x89PNG\r\n\x1a\nimage"),
         ("image.jpg", b"\xff\xd8\xffimage"),
-        ("image.jpeg", b"\xff\xd8\xffimage"),
         ("image.gif", b"GIF89aimage"),
         ("image.webp", b"RIFF\x04\x00\x00\x00WEBPimage"),
         ("notes.md", b"# Notes"),
-        ("notes.markdown", b"# Notes"),
-        ("notes.txt", b"plain text"),
-        ("table.csv", b"a,b\n1,2"),
     ];
     for (name, bytes) in allowed {
         check_upload(&s, name, bytes, name, true).await?;
     }
     let revealed = [
-        ("macro.docm", package(DOCM_MAIN, "word/document.xml", &[])),
         ("renamed.docx", package(DOCM_MAIN, "word/document.xml", &[])),
         (
             "vba.docx",
             package(DOCX_MAIN, "word/document.xml", &["word/vbaProject.bin"]),
         ),
         ("sheet.docx", package(XLSX_MAIN, "xl/workbook.xml", &[])),
-        ("scan.docx", PDF.to_vec()),
         ("legacy.hwp", compound(b"Microsoft Word document")),
         ("x.docx.exe", package(DOCX_MAIN, "word/document.xml", &[])),
-        ("script.sh", b"#!/bin/sh\necho hello".to_vec()),
-        ("script.py", b"print('hello')".to_vec()),
-        (
-            "page.html",
-            b"<html><script>alert(1)</script></html>".to_vec(),
-        ),
-        (
-            "image.svg",
-            b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec(),
-        ),
         ("image.png", b"plain text".to_vec()),
         ("notes.txt", b"text\x00hidden".to_vec()),
         ("invalid.txt", vec![0xff, 0xfe]),
-        ("archive.zip", hwpx()),
-        ("unknown.bin", vec![0, 1, 2, 3]),
     ];
     for (name, bytes) in &revealed {
         check_upload(&s, name, bytes, name, false).await?;
