@@ -172,12 +172,6 @@ pub(crate) fn manifest(
         "evidence: evidence:{result} — {} items ({counts})",
         refs.len()
     );
-    if line.len() > 3 * 1024 {
-        return Err(StorageError::new(
-            StorageCode::SubsessionResultInvalid,
-            "Evidence manifest exceeds 3 KB",
-        ));
-    }
     let cited = cited(db, result, refs, summary)?;
     Ok(format!(
         "{line}{}\nEvidence is bundled; read any item exactly with list_operation_results evidence=<id>.",
