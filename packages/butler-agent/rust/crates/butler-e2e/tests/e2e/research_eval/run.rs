@@ -125,7 +125,7 @@ async fn drive(
         "direct browser tools",
     )
     .await?;
-    configure_search(s, &fixture.base).await?;
+    configure_search(s, &fixture.base, false).await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let browser_task = fixture.state.lock().unwrap().task.clone();
     let browser = super::host::Host::attach(admin, browser_task, false).await?;
@@ -162,12 +162,16 @@ async fn wait_for_answer(s: &Scenario, fixture: &Fixture) -> Result<(), HarnessE
     }
 }
 
-async fn configure_search(s: &Scenario, base: &str) -> Result<(), HarnessError> {
+pub(super) async fn configure_search(
+    s: &Scenario,
+    base: &str,
+    planning: bool,
+) -> Result<(), HarnessError> {
     let path = s.sandbox.data.join("butler.config.json");
     let base = base.to_owned();
     tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
         let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
-        config["webSearch"] = json!({"provider":"brave", "readerBackend":"browser", "planning":{"enabled":false},
+        config["webSearch"] = json!({"provider":"brave", "readerBackend":"browser", "planning":{"enabled":planning},
             "braveApiBase":format!("{base}/search")});
         std::fs::write(path, serde_json::to_vec(&config)?)?;
         Ok(())

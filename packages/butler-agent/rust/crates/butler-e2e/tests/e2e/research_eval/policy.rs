@@ -448,3 +448,10 @@ fn supervisor_stops_when_runtime_has_no_active_worker() -> Result<(), butler_e2e
     assert!(actor.evidence.is_empty());
     Ok(())
 }
+
+/// Apply the same native-reader evidence matcher without running scripted steps.
+pub(super) fn received(body: &Value, spec: &Value) -> std::collections::BTreeSet<usize> {
+    let mut actor = Actor::default();
+    absorb(&mut actor, body, spec);
+    actor.evidence.into_keys().collect()
+}

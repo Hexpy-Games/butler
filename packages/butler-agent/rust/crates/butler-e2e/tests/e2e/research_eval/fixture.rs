@@ -86,12 +86,45 @@ async fn search(
     Query(query): Query<HashMap<String, String>>,
 ) -> Json<Value> {
     let state = state.lock().unwrap();
-    let results = state.task.spec["searches"]
+    Json(search_response(
+        &state.task,
+        query.get("q").map(String::as_str),
+        false,
+    ))
+}
+
+/// Exact recorded search when available; otherwise rank the saved result corpus.
+/// Real model queries need not equal the simulator's query. Never contact the web.
+pub(super) fn search_response(task: &Task, query: Option<&str>, flexible: bool) -> Value {
+    let searches = task.spec["searches"]
         .as_array()
         .into_iter()
         .flatten()
-        .find(|s| s["query"].as_str() == query.get("q").map(String::as_str))
-        .map(|s| s["results"].clone())
-        .unwrap_or(json!([]));
-    Json(json!({"web":{"results":results}}))
+        .collect::<Vec<_>>();
+    let exact = searches.iter().find(|s| s["query"].as_str() == query);
+    let results = if let Some(search) = exact {
+        search["results"].clone()
+    } else if flexible {
+        let words = query
+            .unwrap_or_default()
+            .to_lowercase()
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let mut seen = std::collections::HashSet::new();
+        let mut results = searches
+            .iter()
+            .flat_map(|s| s["results"].as_array().into_iter().flatten())
+            .filter(|r| seen.insert(r["url"].clone().to_string()))
+            .cloned()
+            .collect::<Vec<_>>();
+        results.sort_by_cached_key(|r| {
+            let text = r.to_string().to_lowercase();
+            std::cmp::Reverse(words.iter().filter(|w| text.contains(w.as_str())).count())
+        });
+        json!(results)
+    } else {
+        json!([])
+    };
+    json!({"web":{"results":results}})
 }

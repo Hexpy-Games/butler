@@ -35,3 +35,9 @@ slow-timeout = { period = "12m", terminate-after = 1 }
 [[profile.default.overrides]]
 filter = 'test(/^idle_resources::perf_idle_history_reads_and_footprint$/)'
 slow-timeout = { period = "15m", terminate-after = 1 }
+
+# Live research ends on its 300s model-request inactivity window or USD guard.
+# An active benchmark has no total wall-clock cap.
+[[profile.default.overrides]]
+filter = 'binary(=e2e) and test(=research_eval::research_eval_live_report)'
+slow-timeout = { period = "60s" }

@@ -13,6 +13,14 @@ mod policy;
 mod report;
 mod steps;
 
+#[cfg(test)]
+mod live_checks;
+mod live_execute;
+mod live_judge;
+mod live_proxy;
+mod live_report;
+mod live_run;
+mod live_usage;
 mod run;
 
 use butler_e2e::e2e::HarnessError;
@@ -77,4 +85,14 @@ async fn research_eval_report() -> Result<(), HarnessError> {
 }
 fn blind(set: &str) -> bool {
     set.contains("holdout")
+}
+
+#[tokio::test]
+#[ignore = "LIVE tier; owner-authorized research benchmark"]
+async fn research_eval_live_report() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let Some(provider) = butler_e2e::e2e::live::gate("RESEARCH-EVAL-LIVE")? else {
+        return Ok(());
+    };
+    live_run::report(provider).await
 }
