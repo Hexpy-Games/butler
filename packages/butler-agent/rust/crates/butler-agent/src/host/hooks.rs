@@ -32,6 +32,8 @@ struct Hooks {
     pool: Arc<tokio::sync::Semaphore>,
     /// Budgets output too large for one turn's context.
     output: butler_runtime::context::ToolOutput,
+    /// Told when a failing hook blocks part of a running turn.
+    block_listener: RwLock<Option<HookBlockListener>>,
     shutdown: CancellationToken,
 }
 impl Dispatcher {
@@ -63,6 +65,7 @@ impl Dispatcher {
             mutation: tokio::sync::Mutex::new(()),
             pool: Arc::new(tokio::sync::Semaphore::new(8)),
             output,
+            block_listener: RwLock::new(None),
             shutdown,
         });
         let _ = registry::reload(&hooks).await;
@@ -143,5 +146,8 @@ impl HookPort for Dispatcher {
     }
     fn runs(&self) -> Vec<HookRun> {
         self.0.state.read().runs.iter().cloned().collect()
+    }
+    fn observe_blocks(&self, listener: HookBlockListener) {
+        *self.0.block_listener.write() = Some(listener);
     }
 }
