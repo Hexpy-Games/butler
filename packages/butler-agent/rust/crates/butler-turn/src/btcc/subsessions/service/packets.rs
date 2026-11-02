@@ -50,7 +50,6 @@ pub(super) fn worker_identity<'a>(
         acceptance_criteria: &request.acceptance_criteria,
         implementation_brief: &request.implementation_brief,
         profile_id: &profile.id,
-        target_path: request.target_path.as_deref(),
         replaces_relation_id: request.replaces_relation_id.as_deref(),
     }
 }
@@ -79,8 +78,6 @@ pub(super) fn steward(
         execution_mode: PacketExecutionMode::for_access(request.access_mode.as_str()),
         objective: request.request.clone(),
         user_request: request.user_request.clone(),
-        target_path: None,
-        earlier_steps: Vec::new(),
         superseded_by: None,
         prior_context: None,
         acceptance_criteria: plan.checks.clone(),
@@ -128,8 +125,6 @@ pub(super) fn worker(
         execution_mode: PacketExecutionMode::for_access(request.access_mode.as_str()),
         objective: request.objective.clone(),
         user_request: None,
-        target_path: request.target_path.clone(),
-        earlier_steps: Vec::new(),
         superseded_by: None,
         prior_context: None,
         acceptance_criteria: request.acceptance_criteria.clone(),
