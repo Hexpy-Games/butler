@@ -93,11 +93,9 @@ async fn execute(
         Ok(input) => run_process(hooks, input, cancel).await,
         Err(error) => Err(error),
     };
-    let (outcome, reason) = super::decision::resolve(hook, &result);
-    if outcome == "approval_ignored" {
-        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
-    }
-    let reason = reason.map(|s| clean(&s, &redact));
+    let resolved = hooks.resolve_run(hook, payload, &result, &redact);
+    let outcome = resolved.outcome;
+    let reason = resolved.deny;
     let exit_code = result.as_ref().ok().and_then(|o| o.exit_code);
     let stdout = result
         .as_ref()
@@ -142,6 +140,46 @@ async fn execute(
         run: record,
         deny: reason,
         context: added.context,
+    }
+}
+impl Hooks {
+    /// Resolves a run, redacts its refusal and reports failures independently of blocking.
+    fn resolve_run(
+        &self,
+        hook: &HookDefinition,
+        payload: &HookEnvelope,
+        result: &Result<HookOutput, HookProcessError>,
+        redact: &[String],
+    ) -> super::decision::Resolved {
+        let mut resolved = super::decision::resolve(hook, result);
+        if resolved.outcome == "approval_ignored" {
+            tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
+        }
+        resolved.deny = resolved.deny.map(|reason| clean(&reason, redact));
+        if resolved.failed {
+            self.blocked(hook, payload, resolved.deny.as_deref());
+        }
+        resolved
+    }
+
+    /// Reports failures for real events. Rejected admissions carry their own refusal;
+    /// hook test runs have no session and are reported by their caller.
+    fn blocked(&self, hook: &HookDefinition, payload: &HookEnvelope, reason: Option<&str>) {
+        if payload.session_id.is_none() || (reason.is_some() && payload.turn_id.is_none()) {
+            return;
+        }
+        let block = HookBlock {
+            hook: hook.label().to_owned(),
+            event: hook.event,
+            tool: payload.payload.tool_name.clone(),
+            session_id: payload.session_id.clone(),
+            reason: reason.unwrap_or_default().to_owned(),
+            blocked: reason.is_some(),
+        };
+        let listener = self.block_listener.read().clone();
+        if let Some(listener) = listener {
+            listener(block);
+        }
     }
 }
 pub(super) fn clean(text: &str, redact: &[String]) -> String {
