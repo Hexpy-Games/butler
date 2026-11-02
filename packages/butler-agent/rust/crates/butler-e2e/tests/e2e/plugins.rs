@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 mod git;
+mod git_long_paths;
 mod git_support;
 mod git_timeout;
 mod growth;
