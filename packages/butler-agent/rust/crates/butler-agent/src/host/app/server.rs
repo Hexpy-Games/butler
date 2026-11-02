@@ -289,6 +289,7 @@ async fn open_application(
     owners
         .queue
         .observe_settlements(application.inbound_settlement_listener());
+    application.observe_hook_blocks();
     Ok(application)
 }
 

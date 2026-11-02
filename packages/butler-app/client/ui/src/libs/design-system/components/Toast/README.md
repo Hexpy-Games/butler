@@ -1,5 +1,7 @@
 # Toast
 
+Glossary: 토스트 알림 / toast (`Toast`).
+
 ## What is this component
 
 Butler's transient notification: the DS `Toaster` wraps sonner once (top

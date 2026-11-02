@@ -87,6 +87,13 @@ pub trait AppAuthorityHandoff: Send + Sync + 'static {
     fn list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;
     fn revoke(&self, owner_session_id: String, grant_ref: String) -> ApplicationFuture<()>;
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision>;
+    fn decide_with_access(
+        &self,
+        input: AppAuthorityDecisionInput,
+        _mode: Option<butler_turn::btcc::AccessMode>,
+    ) -> ApplicationFuture<AppAuthorityDecision> {
+        self.decide(input)
+    }
     fn retry_decided(&self) -> ApplicationFuture<Vec<(String, String, String)>>;
     fn settle_question_followup(&self, request_ref: String) -> ApplicationFuture<()>;
     fn delete_session_context(&self, _runtime_session_id: String) -> ApplicationFuture<()> {

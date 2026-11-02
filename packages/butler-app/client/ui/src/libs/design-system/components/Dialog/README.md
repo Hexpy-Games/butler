@@ -45,6 +45,14 @@ Product engineers, design-system maintainers, and coding agents can use it when 
   line, with the title centred in it. A header with a description already fills
   it and renders unchanged. Do not add spacers or padding to make a short
   confirm taller.
+- With the close button shown (`showCloseButton`, the default), a title keeps
+  the button's room free on its inline end: `--dialog-close-room` is the
+  button's inset and size (the hit target on phones and touch screens), its
+  `--focus-ring-room` and a classic scrollbar's width, less the dialog's
+  padding. `DialogTitle` and `DialogForm`'s title reserve it (a
+  `DialogHeader` title only what the header's own end inset leaves), so a
+  long title wraps before the close button; short titles render unchanged.
+  Without a close button nothing is reserved.
 - Use ScrollArea for independently scrolling bodies. Do not mask the entire
   modal surface, which would also fade its border, header and shadow.
 - A dialog reserves no scrollbar gutter. When one that scrolls itself

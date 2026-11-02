@@ -1,4 +1,4 @@
-import { useFileViewerState } from "../../app/fileViewerState";
+import { LIBRARY_VIEWER, useFileViewerState } from "../../app/fileViewerState";
 import { api } from "../../app/api";
 import { libraryChanged } from "../../app/libraryEvents";
 import { useButlerStore } from "../../app/store";
@@ -19,9 +19,13 @@ export async function restoreDocument(id: string, rev: number) {
     } catch (error) { if ((error as { code?: string }).code !== "revision_conflict") throw error; }
   }
 }
-/** Chat documents share the file viewer; drawer opens retain their full-page reader. */
+/** Documents share the viewer; the current surface owns the open files. */
 export function openDocument(doc: Pick<EditableDocument, "id" | "title" | "chat_id" | "message_id">) {
   const store = useButlerStore.getState();
+  if (store.view.kind === "library") {
+    useFileViewerState.getState().open(LIBRARY_VIEWER, { kind: "document", id: doc.id, title: doc.title });
+    return;
+  }
   if (doc.chat_id && store.view.kind === "session") {
     useFileViewerState.getState().open(doc.chat_id, { kind: "document", id: doc.id, title: doc.title });
     return;

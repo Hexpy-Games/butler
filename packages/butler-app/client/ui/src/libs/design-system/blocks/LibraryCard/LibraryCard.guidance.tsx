@@ -21,7 +21,7 @@ function LibraryGrid() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "One library (서랍) item on a Card with a media slot: an image, quote or document preview, a kind tag, title, source and a ⋯ menu.",
+  purpose: "One saved item card in the library (서랍), on a Card with a media slot: an image, quote or document preview, a kind tag, title, source and a ⋯ menu.",
   whenToUse: ["The library page and the new-tab page's recent scraps", "Any grid of saved page pieces (elements, views, outputs)"],
   whenNotToUse: [
     { when: "A file or output in the inspector", use: "ArtifactList" },

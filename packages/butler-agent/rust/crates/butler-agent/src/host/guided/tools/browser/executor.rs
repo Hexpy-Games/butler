@@ -6,7 +6,7 @@ pub(in crate::host::guided::tools) async fn execute_executor(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if !admitted(owner, &call.name) || !owner.binding.authorized_names.contains(&call.name) {
+    if !admitted(owner, &call.name) || !owner.authorized(&call.name) {
         return encoded(&json!({"status":"not_dispatched","reason":"tool_not_admitted"}));
     }
     let Some(mut client) = client::Client::new(owner).await else {
