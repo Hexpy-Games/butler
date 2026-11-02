@@ -15,6 +15,10 @@ export function createViewRecovery(browser) {
           if (browser.disposing || win.isDestroyed()) return;
           browser.layoutRevision = (browser.layoutRevision ?? 0) + 1;
           browser.syncAll(); browser.publish();
+          const tab = browser.tabs.get(browser.activeId);
+          if (["focus", "show", "restore"].includes(event) && tab?.attached === win && tab.view.getVisible()) {
+            tab.view.webContents.invalidate();
+          }
         };
         win.on(event, listener); listeners.push([event, listener]);
       }

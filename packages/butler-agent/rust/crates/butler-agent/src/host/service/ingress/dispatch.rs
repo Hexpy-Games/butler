@@ -141,6 +141,9 @@ async fn one_traced(item: ClaimedInboundEvent, deps: DispatchDependencies) -> In
     match result {
         Ok(executed) => handled(&item, executed, &queue, &restart_handoff).await,
         Err(error) => {
+            if errors::defer_stop_persistence(&item, &queue, &error).await {
+                return IngressPoll::default();
+            }
             tracing::error!(category = "turn", event = "turn.failed", error = %error, "Turn dispatch failed");
             let subsessions = subsessions.as_ref();
             let poll = failed(
@@ -225,17 +228,6 @@ async fn failed(
     rejected::reject(item, queue, bindings, delivery, subsessions, error.code).await
 }
 
-/// A BTCC error as a queue error: a rejection no replacement process can
-/// change fails the item; any other error interrupts the turn.
-fn turn_error(error: &butler_turn::btcc::BtccError) -> super::IngressError {
-    let code = if rejected::is_rejection(error) {
-        rejected::REJECTED
-    } else {
-        "inbound_turn_interrupted"
-    };
-    super::IngressError::new(code, error.code())
-}
-
 /// Settles an executed item and hands a delivered final to restart handoff.
 async fn handled(
     item: &ClaimedInboundEvent,
@@ -293,7 +285,7 @@ async fn execute(
             let session_id = request.session_id.clone();
             let outcome = super::shutdown::run(btcc, request, shutdown)
                 .await
-                .map_err(|error| turn_error(&error))?;
+                .map_err(|error| errors::turn_error(&error))?;
             let binding = bindings
                 .get_by_session_id(&session_id)
                 .await
@@ -332,7 +324,7 @@ async fn execute(
                     turn_id: turn_id.into(),
                 })
                 .await
-                .map_err(|error| turn_error(&error))?;
+                .map_err(|error| errors::stop_persistence_error(&error))?;
             (binding, outcome)
         }
         Some("resume_turn") => {
@@ -340,7 +332,7 @@ async fn execute(
             let request = bind::control_request(&envelope, &binding)?;
             let outcome = super::shutdown::run(btcc, request, shutdown)
                 .await
-                .map_err(|error| turn_error(&error))?;
+                .map_err(|error| errors::turn_error(&error))?;
             (binding, outcome)
         }
         Some(_) => {
@@ -463,6 +455,7 @@ async fn complete_subsession_child(
         .map_err(|error| super::IngressError::new("subsession_result_commit_failed", error.code()))
 }
 
+mod errors;
 mod interrupted;
 mod rejected;
 #[cfg(test)]

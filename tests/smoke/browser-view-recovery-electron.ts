@@ -1,3 +1,4 @@
+// test-category: race
 /** Real renderer loss, background cover transitions and long-loading history. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
