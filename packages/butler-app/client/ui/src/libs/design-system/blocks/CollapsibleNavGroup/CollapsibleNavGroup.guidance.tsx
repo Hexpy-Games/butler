@@ -34,6 +34,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: [
     "Folder names as the user typed them.",
+    "Indented children keep the row rhythm after a group's last child: no extra gap, since the indent already shows depth.",
     "A sticky header's hover and pressed fills follow the surface like NavRow's (--nav-hover-bg / --nav-selected-bg over the sticky surface).",
   ],
   accessibility: ["The header exposes aria-expanded; children unmount after the exit."],
