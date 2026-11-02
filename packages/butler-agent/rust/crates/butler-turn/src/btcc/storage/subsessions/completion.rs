@@ -72,6 +72,9 @@ fn commit(
         tx.commit().map_err(StorageError::sqlite)?;
         return Ok(stopped);
     }
+    if !super::endings::accepts_completion(&tx, &completion.session, &completion.turn)? {
+        return Ok(Vec::new());
+    }
     let delegation = read(&tx, "r.child_session_id=?1", &completion.session)?.ok_or_else(|| {
         StorageError::new(
             StorageCode::SubsessionRelationMissing,
@@ -146,35 +149,7 @@ fn result_input(
             "Subsession model context is missing",
         ));
     }
-    let feedback =
-        delegation_feedback(tx, delegation, result, completion.failure_reason.as_deref())?;
-    let mut text = super::prompt_result::delivery_text(
-        tx, result, &completion.status, &completion.summary, &completion.evidence_refs, &feedback,
-    )?;
-    text.push_str(&super::assets::delivery_assets(tx, &completion.turn)?);
-    text.push_str(&delivery_artifacts(
-        tx,
-        &completion.turn,
-        &completion.status,
-    )?);
-    if let Some(code) = completion
-        .failure_code
-        .as_deref()
-        .or(result_code(completion))
-    {
-        text.push_str(&format!("\ncode: {code}"));
-    }
-    if let Some(handoff) = &completion.handoff {
-        let encoded = serde_json::to_string(handoff)
-            .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;
-        text.push_str(&format!("\ncapability_handoff: {encoded}\nContinue the requested action in this result Turn using your own granted tools and normal approval. Do not report this model/runtime-solvable issue to the user as an unfinished job. Reuse and revise the parent Plan to direct execution; the child is terminal."));
-    }
-    append_relay(
-        &mut text,
-        packet.child_role,
-        &completion.status,
-        completion.handoff.is_some(),
-    );
+    let text = result_text(tx, delegation, completion, result)?;
     Ok(match packet.child_role {
         ChildRole::Worker => ParentResultInput::StewardQueue(WorkerResultInput {
             text,
@@ -208,6 +183,49 @@ fn result_input(
             )?,
         })),
     })
+}
+
+fn result_text(
+    tx: &rusqlite::Transaction<'_>,
+    delegation: &StoredSubsessionDelegation,
+    completion: &ChildCompletion,
+    result: &str,
+) -> Result<String, StorageError> {
+    let feedback =
+        delegation_feedback(tx, delegation, result, completion.failure_reason.as_deref())?;
+    let mut text = super::prompt_result::delivery_text(
+        tx,
+        result,
+        &completion.status,
+        &completion.summary,
+        &completion.evidence_refs,
+        &feedback,
+    )?;
+    text.push_str(&super::assets::delivery_assets(tx, &completion.turn)?);
+    text.push_str(&delivery_artifacts(
+        tx,
+        &completion.turn,
+        &completion.status,
+    )?);
+    if let Some(code) = completion
+        .failure_code
+        .as_deref()
+        .or(result_code(completion))
+    {
+        text.push_str(&format!("\ncode: {code}"));
+    }
+    if let Some(handoff) = &completion.handoff {
+        let encoded = serde_json::to_string(handoff)
+            .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;
+        text.push_str(&format!("\ncapability_handoff: {encoded}\nContinue the requested action in this result Turn using your own granted tools and normal approval. Do not report this model/runtime-solvable issue to the user as an unfinished job. Reuse and revise the parent Plan to direct execution; the child is terminal."));
+    }
+    append_relay(
+        &mut text,
+        delegation.packet.child_role,
+        &completion.status,
+        completion.handoff.is_some(),
+    );
+    Ok(text)
 }
 
 impl SqliteSubsessionRepository {

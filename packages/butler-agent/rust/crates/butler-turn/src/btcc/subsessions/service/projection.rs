@@ -363,7 +363,10 @@ impl SubsessionService {
 fn continuing(result: Option<&Value>, latest: Option<&(String, String)>) -> bool {
     match (result, latest) {
         (Some(result), Some((turn, state))) => {
-            state == "admitted" && result["child_turn_id"].as_str() != Some(turn.as_str())
+            matches!(
+                state.as_str(),
+                "admitted" | "delivery_committed" | "delivered"
+            ) && result["child_turn_id"].as_str() != Some(turn.as_str())
         }
         _ => false,
     }

@@ -97,11 +97,6 @@ async fn pending_direction(worker: bool) -> Result<(), HarnessError> {
         "UPDATE btcc_subsession_directions SET status='applied' WHERE relation_id=?1",
         [&relation],
     )?;
-    assert!(
-        !butler_canon::store::runtime::epic_delete_running(&canon, id)
-            .map_err(|e| HarnessError(e.to_string()))?,
-        "terminal child without direction"
-    );
     canon.execute(
         "UPDATE btcc_session_relations SET activity_terminal=0 WHERE relation_id=?1",
         [&relation],
@@ -110,6 +105,47 @@ async fn pending_direction(worker: bool) -> Result<(), HarnessError> {
         butler_canon::store::runtime::epic_delete_running(&canon, id)
             .map_err(|e| HarnessError(e.to_string()))?,
         "open relation"
+    );
+    // A terminal flag alone no longer closes a task. Publish its actual end
+    // before expecting deletion to be safe once the pending direction retires.
+    let turn: String = canon.query_row(
+        "SELECT child_turn_id FROM btcc_subsession_delegations WHERE relation_id=?1",
+        [&relation],
+        |r| r.get(0),
+    )?;
+    graph
+        .children
+        .complete_child(
+            &child_session,
+            &turn,
+            "failed",
+            "Evidence check ended.".into(),
+        )
+        .await
+        .map_err(|e| HarnessError(e.to_string()))?;
+    let result: String = canon.query_row(
+        "SELECT result_id FROM btcc_steward_results WHERE relation_id=?1 ORDER BY rowid DESC LIMIT 1",
+        [&relation],
+        |r| r.get(0),
+    )?;
+    graph
+        .children
+        .mark_result_delivered(result)
+        .await
+        .map_err(|e| HarnessError(e.to_string()))?;
+    assert!(canon.query_row::<bool, _, _>(
+        "SELECT activity_terminal FROM btcc_session_relations WHERE relation_id=?1",
+        [&relation],
+        |r| r.get(0),
+    )?);
+    assert!(
+        butler_turn::btcc::storage::terminal_card_invariant(&canon, &child_session)
+            .map_err(|e| HarnessError(e.to_string()))?
+    );
+    assert!(
+        !butler_canon::store::runtime::epic_delete_running(&canon, id)
+            .map_err(|e| HarnessError(e.to_string()))?,
+        "terminal child without direction"
     );
     drop(canon);
     graph

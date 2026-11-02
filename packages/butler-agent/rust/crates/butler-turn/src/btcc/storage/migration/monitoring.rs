@@ -29,6 +29,10 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
         activity_terminal=EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id) \
         AND NOT EXISTS(SELECT 1 FROM btcc_subsession_end_members e WHERE e.session_id=btcc_session_relations.child_session_id) \
         AND NOT EXISTS(SELECT 1 FROM btcc_subsession_directions i WHERE i.relation_id=btcc_session_relations.relation_id AND i.status='pending') \
+        AND NOT EXISTS(SELECT 1 FROM btcc_turns t WHERE t.rowid=(SELECT rowid FROM btcc_turns \
+          WHERE session_id=btcc_session_relations.child_session_id ORDER BY rowid DESC LIMIT 1) \
+          AND t.semantic_state='delivered' AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x \
+            WHERE x.relation_id=btcc_session_relations.relation_id AND x.child_turn_id=t.turn_id)) \
         AND NOT EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=btcc_session_relations.child_session_id \
           AND t.semantic_state IN ('admitted','delivery_committed') \
           AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id AND x.child_turn_id=t.turn_id))";
@@ -40,12 +44,12 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
         ))?;
     }
     let upgraded: bool = db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='idx_btcc_activity_terminal_v2')",
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='idx_btcc_activity_terminal_v3')",
         [],
         |row| row.get(0),
     )?;
     if !upgraded {
-        db.execute_batch(&format!("{update}; CREATE INDEX idx_btcc_activity_terminal_v2 ON btcc_session_relations(child_session_id) WHERE activity_terminal=1;"))?;
+        db.execute_batch(&format!("{update}; DROP INDEX IF EXISTS idx_btcc_activity_terminal_v2; CREATE INDEX idx_btcc_activity_terminal_v3 ON btcc_session_relations(child_session_id) WHERE activity_terminal=1;"))?;
     }
     // Build after the first repair: an adopted DB leaves a sparse candidate set.
     db.execute_batch(&format!(

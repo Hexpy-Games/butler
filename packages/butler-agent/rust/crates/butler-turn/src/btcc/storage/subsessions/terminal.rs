@@ -38,7 +38,7 @@ pub(super) fn close_if_ended(
     }
     let mut stopped = Vec::new();
     for child in subtree(db, session)?.into_iter().rev() {
-        stopped.extend(close_session(db, &child, now)?);
+        stopped.extend(close_session(db, &child, child != session, now)?);
     }
     debug_assert!(
         invariant(db, session)?,
@@ -50,6 +50,7 @@ pub(super) fn close_if_ended(
 fn close_session(
     db: &Connection,
     session: &str,
+    publish_cancel: bool,
     now: &str,
 ) -> Result<Vec<(String, String)>, StorageError> {
     let relation: Option<(String, String, String)> = db
@@ -65,27 +66,15 @@ fn close_session(
         return Ok(Vec::new());
     };
     let turns = db.prepare_cached(
-        "SELECT t.turn_id FROM btcc_turns t WHERE t.session_id=?1 AND (t.semantic_state IN ('admitted','delivery_committed') OR NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.child_session_id=t.session_id AND x.child_turn_id=t.turn_id))",
+        "SELECT t.turn_id FROM btcc_turns t WHERE t.session_id=?1 AND (t.semantic_state IN ('admitted','delivery_committed') OR EXISTS(SELECT 1 FROM btcc_subsession_stop_outbox o WHERE o.turn_id=t.turn_id)) AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.child_session_id=t.session_id AND x.child_turn_id=t.turn_id)",
     ).map_err(StorageError::sqlite)?.query_map([session], |row| row.get::<_, String>(0))
         .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
-    for turn in turns.iter().chain(std::iter::once(&first_turn)) {
-        let exists: bool = db
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM btcc_turns WHERE turn_id=?1)",
-                [turn],
-                |r| r.get(0),
-            )
-            .map_err(StorageError::sqlite)?;
-        if turns.contains(turn) || !exists {
-            close_turn(db, session, turn, now)?;
-        }
-        db.execute(
-            "INSERT OR IGNORE INTO btcc_steward_results
-             (result_id,relation_id,task_id,child_session_id,child_turn_id,status,summary,acceptance_evidence_json,changed_artifacts_json,created_at)
-             VALUES (?1,?2,?3,?4,?5,'cancelled','Parent assignment ended.','[]','[]',?6)",
-            params![completion::turn_result_id(session, turn), relation, task, session, turn, now],
-        ).map_err(StorageError::sqlite)?;
+    for turn in &turns {
+        close_turn(db, session, turn, now)?;
+    }
+    if publish_cancel {
+        close_task_result(db, session, &relation, &task, &first_turn, now)?;
     }
     super::super::work::close_delegated_session(db, session, now)?;
     db.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=?2 WHERE relation_id=?1 AND status='pending'", params![relation,now]).map_err(StorageError::sqlite)?;
@@ -100,6 +89,43 @@ fn close_session(
         .collect())
 }
 
+/// A task has one closing result, even when several suspended Turns ran it.
+fn close_task_result(
+    db: &Connection,
+    session: &str,
+    relation: &str,
+    task: &str,
+    first_turn: &str,
+    now: &str,
+) -> Result<(), StorageError> {
+    let latest: Option<String> = db.query_row(
+        "SELECT t.turn_id FROM btcc_turns t WHERE t.rowid=(SELECT rowid FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1)
+         AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.child_session_id=t.session_id AND x.child_turn_id=t.turn_id)
+         AND (t.semantic_state IN ('admitted','delivery_committed','delivered') OR EXISTS(SELECT 1 FROM btcc_subsession_stop_outbox o WHERE o.turn_id=t.turn_id))",
+        [session], |r| r.get(0),
+    ).optional().map_err(StorageError::sqlite)?;
+    let answered: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM btcc_steward_results WHERE relation_id=?1)",
+            [relation],
+            |r| r.get(0),
+        )
+        .map_err(StorageError::sqlite)?;
+    if let Some(turn) = latest
+        .as_deref()
+        .or_else(|| (!answered).then_some(first_turn))
+    {
+        close_turn(db, session, turn, now)?;
+        db.execute(
+            "INSERT OR IGNORE INTO btcc_steward_results
+             (result_id,relation_id,task_id,child_session_id,child_turn_id,status,summary,acceptance_evidence_json,changed_artifacts_json,created_at)
+             VALUES (?1,?2,?3,?4,?5,'cancelled','Parent assignment ended.','[]','[]',?6)",
+            params![completion::turn_result_id(session, turn), relation, task, session, turn, now],
+        ).map_err(StorageError::sqlite)?;
+    }
+    Ok(())
+}
+
 /// Fence even an in-flight model/tool result before publishing terminal state.
 /// A stop tombstone also prevents a queued first turn from being admitted later.
 pub(super) fn close_turn(
@@ -109,7 +135,7 @@ pub(super) fn close_turn(
     now: &str,
 ) -> Result<(), StorageError> {
     db.execute(
-        "INSERT OR IGNORE INTO btcc_subsession_stop_outbox(turn_id,session_id) VALUES (?1,?2)",
+        "INSERT OR IGNORE INTO btcc_subsession_stop_outbox(turn_id,session_id) SELECT ?1,?2 WHERE EXISTS(SELECT 1 FROM btcc_turns WHERE turn_id=?1 AND semantic_state IN ('admitted','delivery_committed'))",
         params![turn, session],
     )
     .map_err(StorageError::sqlite)?;
@@ -147,9 +173,8 @@ pub(super) fn invariant(db: &Connection, session: &str) -> Result<bool, StorageE
     for child in subtree(db, session)? {
         let open: bool = db.query_row(
             "SELECT EXISTS (SELECT 1 FROM btcc_turns WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed'))
-             OR EXISTS (SELECT 1 FROM btcc_turns t WHERE t.session_id=?1 AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.child_session_id=t.session_id AND x.child_turn_id=t.turn_id))
              OR EXISTS (SELECT 1 FROM btcc_guided_works WHERE session_id=?1 AND status IN ('open','blocked'))
-             OR EXISTS (SELECT 1 FROM btcc_session_relations r WHERE r.parent_session_id=?1 AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=r.relation_id))
+             OR EXISTS (SELECT 1 FROM btcc_session_relations r WHERE r.child_session_id=?1 AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=r.relation_id))
 
              OR EXISTS (SELECT 1 FROM btcc_session_relations r JOIN btcc_subsession_directions i USING(relation_id) WHERE r.child_session_id=?1 AND i.status='pending')",
             [&child], |row| row.get(0),

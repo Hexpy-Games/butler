@@ -123,6 +123,14 @@ impl SubsessionService {
         {
             return Ok(true);
         }
+        if !self
+            .repository
+            .accepts_completion(session.into(), turn.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            return Ok(true);
+        }
         let Some(relation) = self
             .repository
             .by_child(session.to_owned())
@@ -142,6 +150,23 @@ impl SubsessionService {
         summary: String,
         failure_code: Option<String>,
     ) -> Result<(), BtccError> {
+        if self
+            .repository
+            .has_turn_result(session.into(), turn.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            self.finish_pending_ending(session).await?;
+            return self.deliver_child_result(session, status).await;
+        }
+        if !self
+            .repository
+            .accepts_completion(session.into(), turn.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            return Ok(());
+        }
         let disposition = self
             .result_disposition(session, turn, status, failure_code.as_deref())
             .await?;

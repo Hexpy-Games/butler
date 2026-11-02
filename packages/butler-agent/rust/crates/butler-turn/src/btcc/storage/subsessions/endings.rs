@@ -3,6 +3,17 @@ use super::terminal::{close_turn, subtree};
 use super::*;
 
 impl SqliteSubsessionRepository {
+    /// A late result cannot reopen a terminal or ancestor-fenced assignment.
+    pub(crate) async fn accepts_completion(
+        &self,
+        session: String,
+        turn: String,
+    ) -> Result<bool, StorageError> {
+        self.storage
+            .read(move |db| accepts_completion(db, &session, &turn))
+            .await
+    }
+
     /// Freeze execution first. The card remains unfinished until canonical Work
     /// closeout succeeds and commit_result publishes its result.
     pub(crate) async fn prepare_ending(
@@ -16,6 +27,7 @@ impl SqliteSubsessionRepository {
             let relation: String = tx.query_row("SELECT relation_id FROM btcc_session_relations WHERE child_session_id=?1", [&completion.session], |r| r.get(0)).map_err(StorageError::sqlite)?;
             let saved: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM btcc_steward_results WHERE result_id=?1)", [completion::turn_result_id(&completion.session, &completion.turn)], |r| r.get(0)).map_err(StorageError::sqlite)?;
             if saved && !repair { return Ok(None); }
+            if !repair && !accepts_completion(&tx, &completion.session, &completion.turn)? { return Ok(None); }
             let pending = tx.prepare_cached("SELECT instruction_id FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'")
                 .map_err(StorageError::sqlite)?.query_map([&relation], |r| r.get::<_, String>(0))
                 .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
@@ -181,4 +193,18 @@ fn fence_session(
         }
     }
     Ok(())
+}
+
+/// The original ending owns completion while its canonical Work is closing.
+pub(super) fn accepts_completion(
+    db: &rusqlite::Connection,
+    session: &str,
+    turn: &str,
+) -> Result<bool, StorageError> {
+    db.query_row(
+        "SELECT NOT EXISTS(SELECT 1 FROM btcc_session_relations WHERE child_session_id=?1 AND activity_terminal=1)
+         AND NOT EXISTS(SELECT 1 FROM btcc_subsession_end_members m JOIN btcc_subsession_endings e ON e.session_id=m.root_session_id
+         WHERE m.session_id=?1 AND (e.session_id<>?1 OR json_extract(e.completion_json,'$.turn')<>?2))",
+        params![session, turn], |r| r.get(0),
+    ).map_err(StorageError::sqlite)
 }
