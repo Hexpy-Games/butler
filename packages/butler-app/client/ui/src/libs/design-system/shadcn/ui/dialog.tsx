@@ -131,6 +131,7 @@ function DialogContent({
         data-glass="popover"
         data-radius={glassRadius}
         data-surface="tinted-glass"
+        data-close-button={showCloseButton ? "" : undefined}
         {...dialogContentAttributes({ size, layout, maxHeight, height })}
         className={cn(
           tintedGlassSurfaceClassName,
