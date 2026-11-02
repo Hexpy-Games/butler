@@ -11,7 +11,7 @@ import { openDetail } from "../library/libraryNav";
 import { openScrap } from "./ScrapViewer";
 import { openLibraryArtifact, openLibraryFile } from "../library/libraryFiles";
 /** A stored file, page or document from a chat: its source is that chat. */
-export const goesToChat = (item: LibraryItem) => Boolean(item.session && (item.file || item.output || documentKind(item)));
+export const goesToChat = (item: LibraryItem): item is LibraryItem & { session: string } => Boolean(item.session && (item.file || item.output || documentKind(item)));
 /** Opens an item: a scrap with an HTML copy shows exactly its clipped part; `source` (or no copy) opens the page. */
 export async function openLibraryItem(item: LibraryItem, source = false) {
   try {
