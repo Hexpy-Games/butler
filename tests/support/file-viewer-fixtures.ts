@@ -86,6 +86,8 @@ export async function viewerGeometry(viewer: Locator) {
     const card = root.getBoundingClientRect();
     return {
       pageWidth: page.width,
+      paneWidth: root.clientWidth,
+      contentWidth: content.width,
       insetStart: Math.round(content.left - card.left),
       insetEnd: Math.round(card.right - content.right),
       // What the user can scroll sideways: the pane's scroller and the window. The card clips its own edges.

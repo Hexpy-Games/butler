@@ -1,6 +1,7 @@
+import { LIBRARY_VIEWER, useSessionFiles } from "@/app/fileViewerState";
 import { LibraryFileViewer } from "../library/LibraryFileViewer";
 import { DocumentReadingPage } from "../documents/DocumentReadingPage";
-import { useState } from "react";
+import { Activity, useState } from "react";
 import { useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { Box, PageContainer, ScrollArea, Stack } from "@/butler-ds";
@@ -12,7 +13,12 @@ import { LibraryAttachDialog } from "./LibraryAttachDialog";
 import type { LibraryItem } from "./libraryStore";
 export function LibraryPage() {
   useAppLocale();
-  return <><LibraryContent /><LibraryFileViewer /></>;
+  const files = useSessionFiles(LIBRARY_VIEWER);
+  const shown = files.shown && files.entries.length > 0;
+  return <Stack fill gap="none" data-test-class="library-region">
+    <Activity mode={shown ? "hidden" : "visible"}><LibraryContent /></Activity>
+    {shown && <LibraryFileViewer />}
+  </Stack>;
 }
 
 function LibraryContent() {

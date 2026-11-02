@@ -202,7 +202,8 @@ async function closeAndFlush(page: Page) {
   assert.equal(new URL(page.url()).searchParams.get("doc"), null);
 }
 async function drawer(page: Page) {
-  if (await page.locator('[data-test-class="library-file-viewer"]').count()) await page.keyboard.press("Escape");
+  const viewer = page.locator('[data-test-class="library-region"] [data-test-class="file-viewer"]');
+  while (await viewer.count()) await viewer.locator('[data-test-class="file-viewer-close"]').click();
   await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
   await page.locator('[data-library-item="doc_report"]').waitFor(); await page.locator('[data-library-item="file-report"]').waitFor();
 }
@@ -454,7 +455,7 @@ async function matrix(page: Page) {
     await drawer(page); await shot(page, "drawer", width, theme);
     await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-reopened", width, theme);
     assert.equal(new URL(page.url()).searchParams.get("doc"), null);
-    assert.equal(await page.locator('[data-test-class="library-file-viewer"]').count(), 1);
+    assert.equal(await page.locator('[data-test-class="library-region"] [data-test-class="file-viewer"]').count(), 1);
     await page.reload(); await drawer(page);
     await drawer(page); await page.locator('[data-library-item="file-report"]').getByText("File report", { exact: true }).click();
     await page.getByRole("combobox", { name: "버전", exact: true }).waitFor(); await page.locator('[data-test-class="artifact-viewer"]').waitFor();

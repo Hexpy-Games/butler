@@ -146,6 +146,9 @@ try {
   await verifyGeometry(viewer, "markdown-1024");
   await verifyHeader(viewer, "markdown-1024", { compact: false, library: true });
   await capture("markdown");
+  await page.setViewportSize({ width: 1800, height: 960 });
+  await verifyGeometry(viewer, "markdown-1800");
+  await capture("markdown-wide");
   await page.setViewportSize({ width: 1440, height: 960 });
 
   // 서랍에서 열기 opens the 서랍's 문서 searched to this file; the conversation keeps its open files.
@@ -245,7 +248,9 @@ async function verifyGeometry(viewer: Locator, name: string) {
   const geometry = await viewerGeometry(viewer);
   console.log(JSON.stringify({ geometry: name, width: page.viewportSize()!.width, ...geometry }));
   assert(geometry.overflow <= 0 && geometry.contentPastCard === 0, `${name}: no sideways overflow (${geometry.overflow}px)`);
-  assert(geometry.pageWidth <= 760, `${name}: reading page ≤760px (${geometry.pageWidth}px)`);
+  const fill = name.startsWith("markdown");
+  const expected = fill ? Math.min(1400, geometry.paneWidth - 96) : Math.min(760, geometry.paneWidth) - 96;
+  assert(Math.abs(geometry.contentWidth - expected) <= 1, `${name}: reading width ${geometry.contentWidth}, expected ${expected}`);
   assert(geometry.insetStart >= 48 && geometry.insetEnd >= 48, `${name}: 48px insets (${geometry.insetStart}/${geometry.insetEnd})`);
   assert.equal(geometry.innerScrolls, 0, `${name}: no inner scroll`);
 }
