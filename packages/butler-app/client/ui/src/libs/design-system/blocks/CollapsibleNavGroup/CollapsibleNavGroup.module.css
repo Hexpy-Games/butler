@@ -19,9 +19,9 @@
   padding-top: var(--space-1);
 }
 
+/* The indent alone shows depth: no extra space after a group's last child. */
 .indented {
   padding-inline-start: var(--nav-tree-indent, var(--space-lg));
-  padding-bottom: var(--space-sm);
 }
 
 .stickyGroup > .header[data-slot="clickable"] {

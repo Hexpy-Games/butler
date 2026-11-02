@@ -3,7 +3,7 @@ import type { TimelineEvent } from "./types.ts";
 import type { SessionPendingAsks } from "../../../shared/pending-asks-contracts.ts";
 export type { PendingAsk, SessionPendingAsks } from "../../../shared/pending-asks-contracts.ts";
 
-type Reader = { page: SessionPendingAsks | null; listeners: Set<() => void>; controller?: AbortController; revision: number; queued: boolean; loading: boolean; dirty: boolean };
+type Reader = { page: SessionPendingAsks | null; listeners: Set<() => void>; controller?: AbortController; revision: number; queued: boolean; seen: Map<string, string> };
 const readers = new Map<string, Reader>();
 
 export function getSessionPendingAsks(sessionId: string, signal: AbortSignal) {
@@ -15,7 +15,7 @@ export const pendingAsksSnapshot = (sessionId: string) => readers.get(sessionId)
 export function observePendingAsks(sessionId: string, listener: () => void): () => void {
   let reader = readers.get(sessionId);
   if (!reader) {
-    reader = { page: null, listeners: new Set(), revision: 0, queued: false, loading: false, dirty: false };
+    reader = { page: null, listeners: new Set(), revision: 0, queued: false, seen: new Map() };
     readers.set(sessionId, reader);
     refresh(sessionId, reader);
   }
@@ -34,18 +34,20 @@ function refresh(sessionId: string, reader: Reader) {
     reader.controller?.abort();
     const controller = new AbortController();
     reader.controller = controller;
+    reader.seen.clear();
     const revision = ++reader.revision;
-    reader.loading = true;
-    reader.dirty = false;
     void getSessionPendingAsks(sessionId, controller.signal).then(page => {
       if (!controller.signal.aborted && reader.revision === revision && page.session_id === sessionId) {
         reader.page = page;
         for (const listener of reader.listeners) listener();
       }
     }).catch(() => { /* An unavailable projection never fabricates a section or a dot. */ }).finally(() => {
-      if (reader.revision !== revision) return;
-      reader.loading = false;
-      if (reader.dirty) refresh(sessionId, reader);
+      if (reader.controller !== controller) return;
+      reader.controller = undefined;
+      if (reader.page?.asks.some(ask => {
+        const id = reader.seen.get(`${ask.source_session_id}\u0000${ask.source_turn_id}`);
+        return id !== undefined && ask.source_message_id !== id;
+      })) refresh(sessionId, reader);
     });
   });
 }
@@ -53,18 +55,15 @@ export function publishPendingAsksEvent(event: TimelineEvent) {
   if (event.type === "stream.reconcile_required") {
     for (const [sessionId, reader] of readers) refresh(sessionId, reader);
   } else if (event.type === "message.created" || event.type === "message.updated") {
-    // The gateway resolves an ask's source to the turn's latest assistant message in the source
-    // session (a Steward or Worker child's, for a delegated ask), and falls back to the user message
-    // until one is saved. A reply first reaches the client as message.created or message.updated;
-    // once the ask names it no event matches, so streaming does not re-read. A read in flight may
-    // predate the reply: it is not aborted (fast streaming would starve it), it re-reads once after.
-    const message = event.payload?.message as { id?: string; chat_id?: string; role?: string; turn_id?: string } | undefined;
-    const { id, chat_id: chatId, role, turn_id: turnId } = message ?? {};
-    if (role !== "assistant" || !id || !chatId || !turnId) return;
+    const message = event.payload?.message;
+    if (message?.role !== "assistant" || typeof message.chat_id !== "string"
+      || typeof message.turn_id !== "string" || typeof message.id !== "string") return;
+    // Aborting reads on streaming updates would starve them. Record seen replies instead,
+    // including delegated sources, so a completed page is re-read only if its source is stale.
     for (const [sessionId, reader] of readers) {
-      if (reader.page?.asks.some(ask => ask.source_session_id === chatId && ask.source_turn_id === turnId && ask.source_message_id !== id)) {
-        if (reader.loading) reader.dirty = true; else refresh(sessionId, reader);
-      } else if (reader.loading && sessionId === chatId) reader.dirty = true;
+      if (reader.controller) reader.seen.set(`${message.chat_id}\u0000${message.turn_id}`, message.id);
+      else if (reader.page?.asks.some(ask => ask.source_session_id === message.chat_id
+        && ask.source_turn_id === message.turn_id && ask.source_message_id !== message.id)) refresh(sessionId, reader);
     }
   } else if (event.type === "pending_asks.changed" && typeof event.payload?.session_id === "string") {
     const reader = readers.get(event.payload.session_id);

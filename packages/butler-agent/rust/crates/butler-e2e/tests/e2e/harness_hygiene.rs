@@ -39,6 +39,8 @@ async fn unfinished_setup_keeps_only_the_last_five_failures() -> Result<(), Harn
     let output = std::process::Command::new(std::env::current_exe()?)
         .args(["harness_hygiene::retention_child", "--exact", "--nocapture"])
         .env("TMPDIR", isolated.root.join("tmp"))
+        .env("TMP", isolated.root.join("tmp"))
+        .env("TEMP", isolated.root.join("tmp"))
         .env("BUTLER_E2E_RETENTION_CHILD", "1")
         .output()?;
     assert!(

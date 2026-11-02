@@ -61,7 +61,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
     { id: "image-models", kind: "form", fields: ["image-model", "image-credential", "image-quality", "image-key-save", "hosted-credential-select", "hosted-credential-label", "hosted-api-key"] },
     { id: "advanced-models", kind: "form", fields: [] },
-    { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
+    { id: "worker-profiles", kind: "list", fields: ["worker-max-simultaneous", ...WORKER_PROFILE_FIELDS], optional: true },
   ],
   hooks: [
     { id: "hooks", kind: "list", fields: [] },
@@ -72,12 +72,19 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "mcp-servers", kind: "list", fields: [] },
     { id: "mcp-server-form", kind: "form", fields: [], optional: true },
   ],
-  skills: [{ id: "skills", kind: "list", fields: [] }],
+  skills: [
+    { id: "core-skills", kind: "list", fields: [] },
+    { id: "user-skills", kind: "list", fields: [] },
+    { id: "project-skills", kind: "list", fields: [] },
+  ],
   server: [
     { id: "connection", kind: "form", fields: ["server-url"] },
     { id: "projects", kind: "form", fields: ["default-project-folder"] },
   ],
-  updates: [{ id: "updates", kind: "list", fields: [] }],
+  updates: [
+    { id: "update-channel", kind: "form", fields: ["update-previews"] },
+    { id: "updates", kind: "list", fields: [] },
+  ],
   usage: [
     { id: "usage-overview", kind: "status", fields: [] },
     { id: "usage-history", kind: "status", fields: [] },

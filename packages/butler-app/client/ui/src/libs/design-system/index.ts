@@ -6,7 +6,7 @@ export type { WindowDrag } from "./lib/windowDrag";
 
 // Primitives
 export * from "./lib/floatingConstraints";
-export { useScrollEdges, type ScrollEdgeAxis } from "./lib/useScrollEdges";
+export { useScrollEdges, type ScrollEdgeAxis, type ScrollFadeAxis } from "./lib/useScrollEdges";
 export * from "./lib/motion";
 export * from "./lib/gridSettle";
 export * from "./lib/dropZones";
