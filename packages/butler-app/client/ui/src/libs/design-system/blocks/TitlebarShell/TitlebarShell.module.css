@@ -147,9 +147,8 @@
    `trailing` stays over the pane. The card's offsets inside the title row
    (--titlebar-card-start/-end) come from the shell (AdaptiveShell cards
    frame); without them the chat column starts and ends at the row's edges.
-   It follows splitChatWidth in the same render as the split, with no motion
-   of its own: the chat card resizes without motion and the pane brings its
-   own entrance. */
+   It follows splitChatWidth in the same render as the split; AdaptiveShellSplit
+   moves it with the chat card's edge when the pane opens or closes. */
 .titlebar[data-split] .chatGroup {
   flex: 0 1
     calc(

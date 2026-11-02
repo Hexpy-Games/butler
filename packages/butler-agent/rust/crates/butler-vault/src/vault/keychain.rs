@@ -61,6 +61,10 @@ impl KeychainSlot {
     }
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "saved keychain services hash this spelling; another form would orphan them"
+)]
 fn service(root: &Path) -> Result<String, VaultError> {
     let root = std::fs::canonicalize(root).map_err(VaultError::Io)?;
     let default =

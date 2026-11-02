@@ -47,7 +47,8 @@ The conversation titlebar reads `[title subtitle ⋯ ······ 세션 정보]
   `chatTrailing` then span the chat card, the end controls keeping the inset
   `trailing` has from the card at the window edge, and `trailing` (the browser
   toggle) stays over the pane. A drag moves the chat card and the group
-  together; the group has no motion of its own (the pane keeps its entrance).
+  together; when the pane opens or closes AdaptiveShellSplit moves the group with
+  the chat card's edge.
   Omit it while the pane is closed.
 
 The chat card's offsets inside the title row come from AdaptiveShell's cards

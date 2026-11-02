@@ -25,7 +25,14 @@ export function useBrowserPage(tab?: BrowserTab) {
     if (value) {
       const src = await browserCall("still", { id: tab.id });
       if (revision !== generation.current) return;
-      if (typeof src === "string") setStill({ id: tab.id, src });
+      // Decoded first, so the still paints in the frame it mounts in, before the page leaves.
+      if (typeof src === "string") {
+        const decoded = new Image();
+        decoded.src = src;
+        await decoded.decode().catch(() => undefined);
+        if (revision !== generation.current) return;
+        setStill({ id: tab.id, src });
+      }
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     }
     if (revision === generation.current) await browserCall("covered", { id: tab.id, value });

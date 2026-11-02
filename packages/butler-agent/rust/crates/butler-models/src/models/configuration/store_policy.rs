@@ -73,8 +73,10 @@ impl SecretStoreFacts {
 }
 
 fn same_folder(left: &Path, right: &Path) -> bool {
-    let resolve = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    resolve(left) == resolve(right)
+    let resolve = |path: &Path| {
+        butler_platform::secure_fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    };
+    butler_platform::secure_fs::same_path(&resolve(left), &resolve(right))
 }
 
 /// Why new keys go where they go.

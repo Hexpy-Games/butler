@@ -25,6 +25,10 @@ disallowed-methods = [
     { path = "reqwest::get", reason = "Use butler_log::http; all outbound HTTP must be logged" },
     { path = "rmcp::transport::worker::WorkerTransport::from_uri", reason = "Use butler_log::http; all outbound HTTP must be logged" },
     { path = "rmcp::transport::worker::WorkerTransport::from_config", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+    { path = "std::fs::canonicalize", reason = "Use butler_platform::secure_fs::canonicalize; std's Windows `\\\\?\\` form never matches other paths" },
+    { path = "std::path::Path::canonicalize", reason = "Use butler_platform::secure_fs::Canonical; std's Windows `\\\\?\\` form never matches other paths" },
+    { path = "tokio::fs::canonicalize", allow-invalid = true, reason = "Use butler_platform::secure_fs::canonicalize; std's Windows `\\\\?\\` form never matches other paths" },
+    { path = "dunce::canonicalize", allow-invalid = true, reason = "Use butler_platform::secure_fs::canonicalize, the one canonical form" },
 ]
 
 disallowed-types = [

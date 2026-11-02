@@ -14,7 +14,7 @@ pub(crate) fn working_directory(path: &Path) -> io::Result<PathBuf> {
     }
     // Native lookup needs the extended prefix even when the caller supplied
     // an ordinary long path. Canonicalization also pins the directory identity.
-    let canonical = std::fs::canonicalize(path)?;
+    let canonical = crate::secure_fs::canonicalize_extended(path)?;
     let mut original = PathBuf::new();
     let mut short = PathBuf::new();
     for component in canonical.components() {
