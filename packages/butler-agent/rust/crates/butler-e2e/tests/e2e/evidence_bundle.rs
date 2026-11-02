@@ -168,7 +168,19 @@ async fn evb_04_result_body_is_projected_once_per_parent_request() -> Result<(),
     run.scenario
         .turn("general", "Show the prior result.")
         .await?;
-    let input = text(run.script.requests.lock().unwrap().last().unwrap());
+    let input = {
+        let requests = run.script.requests.lock().unwrap();
+        let actor = requests
+            .iter()
+            .rev()
+            .find(|body| {
+                butler_e2e::e2e::chatgpt_wire::functions(body)
+                    .next()
+                    .is_some()
+            })
+            .expect("follow-up actor request");
+        text(actor)
+    };
     assert_eq!(
         input.matches(&format!("summary: {SUMMARY}")).count(),
         1,
