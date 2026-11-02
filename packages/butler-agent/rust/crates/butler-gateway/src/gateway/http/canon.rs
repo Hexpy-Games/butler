@@ -51,7 +51,9 @@ async fn resources(
         Some(query)
     } else if request.method() == Method::GET {
         None
-    } else if request.method() == Method::DELETE {
+    } else if request.method() == Method::DELETE
+        && resource != crate::gateway::AppCanonResource::DeleteEpic
+    {
         Some(serde_json::json!({}))
     } else {
         let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
@@ -137,8 +139,8 @@ fn resource<'a>(
 ) -> Result<(crate::gateway::AppCanonResource, &'a str), HttpError> {
     use crate::gateway::AppCanonResource::{
         Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
-        CreateTag, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants,
-        List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+        CreateTag, DeleteEpic, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic,
+        EpicProgress, Grants, List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
     };
     Ok(match (method, parts) {
         (&Method::GET, ["canon", "list"]) => (List, ""),
@@ -165,6 +167,7 @@ fn resource<'a>(
         (&Method::POST, ["projects", id, "canon", "backlog", "order"]) => (BacklogOrder, *id),
         (&Method::POST, ["projects", id, "canon", "epics"]) => (CreateEpic, *id),
         (&Method::PATCH, ["canon", "epics", id]) => (EditEpic, *id),
+        (&Method::DELETE, ["canon", "epics", id]) => (DeleteEpic, *id),
         _ => {
             return Err(HttpError::public(
                 405,
