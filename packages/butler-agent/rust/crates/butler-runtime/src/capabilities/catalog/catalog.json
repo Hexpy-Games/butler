@@ -140,14 +140,14 @@
       "definition": {
         "type": "function",
         "name": "web_read",
-        "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried. With query, the chunks that best match it come first; read the others with start_chunk.",
+        "description": "Read a page as evidence. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. url reads a static document (article, docs, PDF); tab reads an open tab as it shows now and returns unchanged when the page is the same. Script-built pages (stores, listings, dashboards) show their content only in a tab: open them with browser_open first. Navigation, ads and repeated blocks come after the main content. Request reads of different pages, and their continuations, together in one round. ok:false with next_action open_in_tab: read the tab before using anything from it; use another source only if the tab fails too, and report what failed.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "tab": {
               "type": "string",
-              "description": "Open tab id (from browser_open) to read as it shows now."
+              "description": "Open tab id."
             },
             "url": {
               "type": "string",
@@ -158,23 +158,24 @@
               "minimum": 1500,
               "maximum": 8000,
               "default": 2000,
-              "description": "Maximum markdown characters returned for the selected chunk window (1500-8000, default 2000). The minimum fits one built-in evidence chunk. Use start_chunk, not a larger max_chars, to continue reading later chunks."
+              "description": "Text character limit."
             },
             "max_chunks": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8,
               "default": 1,
-              "description": "Maximum evidence chunks returned from start_chunk (1-8, default 1)."
+              "description": "Passage or chunk limit."
             },
             "start_chunk": {
               "type": "integer",
               "minimum": 0,
               "default": 0,
-              "description": "Zero-based chunk offset for continuing through the page (default 0). Use next_start_chunk from the previous result."
+              "description": "Where to continue: next_start_chunk from the previous result (with query, the next ranked passages)."
             },
             "query": {
-              "type": "string"
+              "type": "string",
+              "description": "What you need from the page. Returns the matching passages first, with spans."
             }
           },
           "required": []
@@ -10958,14 +10959,14 @@
     "web_read": {
       "type": "function",
       "name": "web_read",
-      "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried. With query, the chunks that best match it come first; read the others with start_chunk.",
+      "description": "Read a page as evidence. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. url reads a static document (article, docs, PDF); tab reads an open tab as it shows now and returns unchanged when the page is the same. Script-built pages (stores, listings, dashboards) show their content only in a tab: open them with browser_open first. Navigation, ads and repeated blocks come after the main content. Request reads of different pages, and their continuations, together in one round. ok:false with next_action open_in_tab: read the tab before using anything from it; use another source only if the tab fails too, and report what failed.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "tab": {
             "type": "string",
-            "description": "Open tab id (from browser_open) to read as it shows now."
+            "description": "Open tab id."
           },
           "url": {
             "type": "string",
@@ -10976,20 +10977,20 @@
             "minimum": 1500,
             "maximum": 8000,
             "default": 2000,
-            "description": "Maximum markdown characters returned for the selected chunk window (1500-8000, default 2000). The minimum fits one built-in evidence chunk. Use start_chunk, not a larger max_chars, to continue reading later chunks."
+            "description": "Text character limit."
           },
           "max_chunks": {
             "type": "integer",
             "minimum": 1,
             "maximum": 8,
             "default": 1,
-            "description": "Maximum evidence chunks returned from start_chunk (1-8, default 1)."
+            "description": "Passage or chunk limit."
           },
           "start_chunk": {
             "type": "integer",
             "minimum": 0,
             "default": 0,
-            "description": "Zero-based chunk offset for continuing through the page (default 0). Use next_start_chunk from the previous result."
+            "description": "Where to continue: next_start_chunk from the previous result (with query, the next ranked passages)."
           },
           "backend": {
             "type": "string",
@@ -11004,7 +11005,8 @@
             "description": "Optional page reader backend override."
           },
           "query": {
-            "type": "string"
+            "type": "string",
+            "description": "What you need from the page. Returns the matching passages first, with spans."
           }
         },
         "required": []

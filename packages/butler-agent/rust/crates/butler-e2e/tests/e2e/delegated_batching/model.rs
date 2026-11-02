@@ -128,7 +128,7 @@ fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
         );
         let first = outputs
             .iter()
-            .find(|output| output["source_url"] == *url && output["start_chunk"] == 0)
+            .find(|output| output["final_url"] == *url && output["start_chunk"] == 0)
             .unwrap_or_else(|| panic!("first read of {url}: {outputs:?}"));
         call(
             &format!("rest-{index}"),
