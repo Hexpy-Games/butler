@@ -1,4 +1,6 @@
-//! Stub-only barriers at the Ledger/BTCC boundaries of a Work.
+//! Stub-only barriers at the Ledger/BTCC boundaries of a Work. The fixture
+//! answers a stage with 1 to continue or 0 to make that stage fail, the same
+//! way on every OS.
 use crate::btcc::BtccError;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -33,6 +35,8 @@ async fn barrier(variable: &str, stage: &[u8]) -> Result<(), BtccError> {
         .write_all(stage)
         .await
         .map_err(|e| fail(e.to_string()))?;
-    socket.read_u8().await.map_err(|e| fail(e.to_string()))?;
-    Ok(())
+    match socket.read_u8().await.map_err(|e| fail(e.to_string()))? {
+        0 => Err(fail("Stage refused by the fixture".into())),
+        _ => Ok(()),
+    }
 }

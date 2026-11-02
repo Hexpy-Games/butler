@@ -96,12 +96,12 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
         | "account_dirs" | "process_priority" | "download_mark" | "plugin_files"
-        | "shared_locks" | "powershell_text" => &[],
+        | "shared_locks" | "powershell_text" | "host_file_behavior" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
         "sqlite" | "fs_space" | "secrets" | "install_link" => &["secure_fs"],
-        "command_sandbox" => &["secure_fs", "account_dirs", "data_paths", "powershell_text"],
+        "command_sandbox" => &["secure_fs", "account_dirs", "data_paths"],
         "process_control" => &["process_table"],
         // The headless browser's DevTools pipe runs in a contained process tree.
         "browser_process" | "system_wake" => &["process_control"],

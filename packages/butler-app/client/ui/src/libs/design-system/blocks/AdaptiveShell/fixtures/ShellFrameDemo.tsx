@@ -27,12 +27,12 @@ export type ShellFrameView = "chat" | "browser" | "settings" | "hub" | "file";
 const COPY = {
   "en-US": {
     actions: "Conversation actions", showBrowser: "Show browser", hideBrowser: "Hide browser", showInspector: "Show inspector",
-    showSidebar: "Show sidebar", appearance: "Appearance", general: "General",
+    showSidebar: "Show sidebar", appearance: "Appearance", sidebar: "Sidebar", general: "General",
     appearanceDescription: "Theme and how the app looks.", translucent: "Translucent sidebar", smartGroups: "Smart groups",
   },
   "ko-KR": {
     actions: "대화 작업", showBrowser: "브라우저 열기", hideBrowser: "브라우저 닫기", showInspector: "인스펙터 보기",
-    showSidebar: "사이드바 보기", appearance: "모양", general: "일반",
+    showSidebar: "사이드바 보기", appearance: "모양", sidebar: "사이드바", general: "일반",
     appearanceDescription: "앱의 테마와 화면 표시 방식을 설정합니다.", translucent: "투명 사이드바", smartGroups: "스마트 그룹",
   },
 } as const;
@@ -78,7 +78,7 @@ function DemoSettings({ locale }: { locale: Locale }) {
       ]} />}
       detailHeader={<SettingsHeader title={copy.appearance} description={copy.appearanceDescription} />}
       detail={(
-        <FormSection title={copy.appearance}>
+        <FormSection title={copy.sidebar}>
           <SettingsField id={`${locale}-shell-translucent`} label={copy.translucent} control={<Switch id={`${locale}-shell-translucent`} defaultChecked />} />
           <SettingsField id={`${locale}-shell-groups`} label={copy.smartGroups} control={<Switch id={`${locale}-shell-groups`} />} />
         </FormSection>

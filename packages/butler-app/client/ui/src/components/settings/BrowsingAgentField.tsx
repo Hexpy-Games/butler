@@ -17,7 +17,7 @@ export function BrowsingAgentField() {
   const autoModel = models.find((model) => model.model_ref === auto?.model)
     ?? catalog.models.find((model) => model.model_ref === auto?.model);
   const autoName = auto?.available ? (autoModel?.display_name ?? copy.conversationModel) : copy.conversationModel;
-  return <SettingsSection id="browsing-agent" kind="form">
+  return <SettingsSection id="browsing-agent" kind="form" title={appCopy.settings.pageSections.browsing}>
     <SettingsSelect settingId="browsing-agent" label={copy.label}
       value={settings.browser?.browsing_agent ?? "off"} disabled={saving}
       onChange={(value) => void update({ browser: { browsing_agent: value } }, setSettings)}
