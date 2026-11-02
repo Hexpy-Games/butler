@@ -40,7 +40,7 @@ async fn blocked_project_followup_rejected_plan_reaches_new_terminal_card()
         .join(project_id);
     let old_path = ledger.join("work").join(&old_work).join("work.md");
     let old_bytes = std::fs::read(&old_path)?;
-    assert_eq!(record(&old_path)?["status"], "abandoned");
+    assert_canonical_closed(&ledger, &old_path)?;
     *script.relation.lock().unwrap() = first["relation"]["relation_id"].as_str().unwrap().into();
     script.blocked.store(false, Ordering::SeqCst);
     script.invalid_followup_plan.store(true, Ordering::SeqCst);
@@ -115,4 +115,35 @@ fn record(path: &std::path::Path) -> Result<Value, HarnessError> {
     let raw = std::fs::read_to_string(path)?;
     let (_, body) = raw.split_once("\n---\n").expect("Ledger frontmatter");
     Ok(serde_json::from_str(body.trim())?)
+}
+
+fn assert_canonical_closed(
+    ledger: &std::path::Path,
+    work: &std::path::Path,
+) -> Result<(), HarnessError> {
+    let manifest = record(work)?;
+    assert_eq!(manifest["status"], "abandoned");
+    assert!(
+        manifest["actionProgress"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|action| matches!(action["status"].as_str(), Some("done" | "skipped")))
+    );
+    let id = manifest["latestCheckpointRevisionId"].as_str().unwrap();
+    let checkpoint = record(
+        &ledger
+            .join("references")
+            .join(format!("{}.md", id.to_lowercase())),
+    )?;
+    assert_eq!(
+        checkpoint["checkpoint"]["actionProgress"],
+        manifest["actionProgress"]
+    );
+    assert_eq!(checkpoint["checkpoint"]["stage"], "reporting");
+    assert_eq!(
+        checkpoint["checkpoint"]["revision"],
+        manifest["checkpointRevision"]
+    );
+    Ok(())
 }
