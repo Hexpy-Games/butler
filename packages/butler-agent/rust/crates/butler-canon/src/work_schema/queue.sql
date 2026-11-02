@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS canon_session_queue (
   started_at INTEGER,
   btcc_work_id TEXT,
   result_reported_at INTEGER,
+  turn_ended_at INTEGER,
+  step_turn_id TEXT,
   PRIMARY KEY(session_id,epic_id)
 );
 CREATE TABLE IF NOT EXISTS canon_session_queue_chains (
@@ -29,6 +31,7 @@ CREATE TABLE IF NOT EXISTS canon_session_queue_chains (
   PRIMARY KEY(session_id,chain_id)
 );
 CREATE INDEX IF NOT EXISTS canon_queue_running ON canon_session_queue(state,step_op_id) WHERE state='running' AND hold_reason IS NULL AND step_op_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS canon_queue_receipts ON canon_session_queue(state,step_op_id) WHERE state='running' AND step_op_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS canon_queue_chain ON canon_session_queue(session_id,chain_id,step_index,stack_position);
 CREATE UNIQUE INDEX IF NOT EXISTS canon_queue_active_epic ON canon_session_queue(epic_id) WHERE state IN ('waiting','running','held');
 CREATE INDEX IF NOT EXISTS canon_queue_op ON canon_session_queue(step_op_id) WHERE step_op_id IS NOT NULL;
@@ -46,3 +49,8 @@ CREATE TABLE IF NOT EXISTS canon_step_cancellations (
 );
 CREATE INDEX IF NOT EXISTS canon_cancellations_epic ON canon_step_cancellations(epic_id);
 CREATE INDEX IF NOT EXISTS canon_cancellations_source ON canon_step_cancellations(source_session_id);
+
+CREATE INDEX IF NOT EXISTS canon_queue_epic ON canon_session_queue(epic_id);
+CREATE INDEX IF NOT EXISTS canon_intents_epic ON canon_intents(json_extract(payload_json,'$.epic_id'));
+CREATE INDEX IF NOT EXISTS canon_intents_work ON canon_intents(json_extract(payload_json,'$.work_id'));
+CREATE INDEX IF NOT EXISTS canon_queue_held_by ON canon_session_queue(held_by_epic_id);

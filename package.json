@@ -63,6 +63,7 @@
     "app:canon-sidebar:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-canon-sidebar-smoke.ts",
     "app:canon-inline-edit:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-canon-inline-edit-smoke.ts",
     "app:canon-tags:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-canon-tags-smoke.ts",
+    "app:canon-epic-delete:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-canon-epic-delete-smoke.ts",
     "app:canon-board:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-canon-board-smoke.ts",
     "app:scrollbar-gap:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/classic-scrollbar-gap-smoke.ts",
     "app:text-size:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-text-size-smoke.ts",

@@ -6,7 +6,7 @@ mod failures;
 mod gate;
 mod outbox;
 pub(in crate::gateway::application) use outbox::{
-    enqueue as enqueue_canon, update_payload as update_canon_payload,
+    enqueue as enqueue_canon, update_payload_with_text as update_canon_payload,
 };
 mod pause;
 pub(super) mod posting;

@@ -208,6 +208,7 @@ async fn run(
         work.enqueue(file);
     }
     loop {
+        context.retry_terminal_receipts().await;
         if let Err(error) = context.streaming.flush_due(&context).await {
             eprintln!("[gateway] streaming projection failed: {error}");
             tokio::time::sleep(SETTLE_DELAY).await;
@@ -446,9 +447,15 @@ async fn next_command(
     receiver: &mut mpsc::Receiver<Command>,
     context: &ProjectionContext,
 ) -> Option<Command> {
-    // Only buffered deltas arm a flush deadline. An unfinished turn is
-    // durable state, not evidence that its transcript has changed.
-    let deadline = context.streaming.until_flush();
+    // Buffered deltas and failed terminal notifications arm deadlines. An
+    // unfinished turn alone does not require background work.
+    let deadline = [
+        context.streaming.until_flush(),
+        context.terminal_receipt_delay(),
+    ]
+    .into_iter()
+    .flatten()
+    .min();
     let delay = deadline.unwrap_or_default();
     tokio::select! {
         command = receiver.recv() => command,
