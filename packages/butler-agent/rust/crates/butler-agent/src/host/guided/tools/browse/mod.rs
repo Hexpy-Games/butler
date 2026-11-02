@@ -39,7 +39,7 @@ pub(super) async fn execute(
     let Some(goal) = args["goal"].as_str().filter(|goal| !goal.trim().is_empty()) else {
         return encoded(&json!({"status":"stuck","summary":"goal is required"}));
     };
-    if !owner.binding.authorized_names.contains("browse") {
+    if !owner.authorized("browse") {
         return encoded(&json!({"status":"not_dispatched","reason":"tool_not_admitted"}));
     }
     let effort = serde_json::from_value(json!(owner.binding.reasoning_effort))

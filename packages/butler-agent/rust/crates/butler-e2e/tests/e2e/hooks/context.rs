@@ -252,14 +252,14 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
         hook["env"]["HOOK_EXIT"] = json!(code);
         hook
     };
-    let crash = exits("crash", "UserPromptSubmit", "CRASH-TEXT", "1");
-    let mut invalid = printing(&setup, "invalid", "UserPromptSubmit", "{INVALID-TEXT");
-    invalid["failClosed"] = json!(true);
+    let mut crash = exits("crash", "UserPromptSubmit", "CRASH-TEXT", "1");
+    crash["failClosed"] = json!(false);
+    let invalid = printing(&setup, "invalid", "UserPromptSubmit", "{INVALID-TEXT");
     let start = exits("start", "SessionStart", "START-TEXT", "2");
     let denied = exits("denied", "UserPromptSubmit", "DENIED-TEXT", "2");
-    let mut closed = exits("closed", "UserPromptSubmit", "CLOSED-TEXT", "1");
-    closed["failClosed"] = json!(true);
+    let closed = exits("closed", "UserPromptSubmit", "CLOSED-TEXT", "1");
     let mut slow = printing(&setup, "slow", "UserPromptSubmit", "SLOW-TEXT");
+    slow["failClosed"] = json!(false);
     slow["args"] = json!(fixture(&setup, "hold"));
     slow["env"] = json!({"HOOK_HELD":setup.sandbox.home.join("slow-held"),
         "HOOK_RELEASE":setup.sandbox.home.join("never")});
@@ -292,7 +292,8 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
     assert_eq!(stored, 0);
 
     // A deny rejects the send, so nothing it printed exists anywhere.
-    for hook in [denied, closed, invalid] {
+    for mut hook in [denied, closed, invalid] {
+        hook["failClosed"] = json!(true);
         replace(&s, vec![hook]).await?;
         let blocked =
             s.gw.post("/messages", json!({"chat_id":chat,"text":"Rejected."}))
@@ -307,32 +308,34 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
     s.finish().await
 }
 
-/// Text starting with a bracket is text unless the hook asked to be judged strictly.
+/// Unreadable JSON is a failure; only the switch decides whether it blocks.
 #[tokio::test]
-async fn hooks_context_bracketed_plain_text_reaches_the_model() -> Result<(), HarnessError> {
+async fn hooks_context_unreadable_json_follows_failure_switch() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = setup("HOOK-CONTEXT-BRACKET")?.env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
+    let open = |id: &str, text: &str| {
+        let mut hook = printing(&setup, id, "UserPromptSubmit", text);
+        hook["failClosed"] = json!(false);
+        hook
+    };
     configure(
         &setup,
         &[
-            printing(&setup, "array", "UserPromptSubmit", "[branch] main"),
-            printing(&setup, "object", "UserPromptSubmit", "{branch} is main"),
+            open("array", "[branch] main"),
+            open("object", "{branch} is main"),
         ],
     )?;
-    let strict = {
-        let mut hook = printing(&setup, "strict", "UserPromptSubmit", "[branch] main");
-        hook["failClosed"] = json!(true);
-        hook
-    };
+    let mut strict = printing(&setup, "strict", "UserPromptSubmit", "[branch] main");
+    strict["failClosed"] = json!(true);
     let s = setup.start().await?;
     assert_eq!(s.turn("general", "Which?").await?.1["state"], "delivered");
     let prompt = prompts(&s)?.pop().unwrap();
-    assert!(section(&prompt).contains("[branch] main"), "{prompt}");
-    assert!(section(&prompt).contains("{branch} is main"), "{prompt}");
+    assert!(!prompt.contains("[branch] main"), "{prompt}");
+    assert!(!prompt.contains("{branch} is main"), "{prompt}");
     let all = runs(&s).await?;
     for run in &all {
-        assert_eq!(run["outcome"], "continue", "{run}");
-        assert_eq!(run["reason"], "not valid JSON; treated as text", "{run}");
+        assert_eq!(run["outcome"], "error", "{run}");
+        assert!(run["context_bytes"].is_null(), "{run}");
     }
     replace(&s, vec![strict]).await?;
     let blocked =

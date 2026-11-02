@@ -16,7 +16,7 @@ function ContextUsage() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "A small donut button that shows how full the context window is and opens its details.",
+  purpose: "The context usage button: a small donut that shows how full the context window is and opens its details.",
   whenToUse: ["Context usage in the composer toolbar"],
   whenNotToUse: [
     { when: "A labelled progress bar in a panel", use: "ProgressMeter" },

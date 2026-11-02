@@ -12,5 +12,5 @@ export function FileViewerDocument({ id, onClose, onBack, documentPage }: {
   id: string; onClose: () => void; onBack?: () => void; documentPage: DocumentPageRenderer;
 }) {
   const controls = { leading: onBack ? <FileViewerBackButton onBack={onBack} /> : undefined, trailing: <FileViewerCloseButton onClose={onClose} /> };
-  return <FileViewerPage>{documentPage(id, controls)}</FileViewerPage>;
+  return <FileViewerPage fill>{documentPage(id, controls)}</FileViewerPage>;
 }

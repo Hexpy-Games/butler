@@ -1,5 +1,7 @@
 # StepSortableList
 
+Glossary: 진행 순서 섹션 / run order section (`StepSortableList`).
+
 `StepSortableList` is the design-system block for ordered chains of steps,
 such as the 작업 of a 과제. Each chain is a head followed by its follow-up
 steps (indented one level); each step is one item or a flat 묶음 of items,

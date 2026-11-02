@@ -20,7 +20,7 @@ pub(super) async fn execute(
         },
     );
     if matches!(decision, AccessDecision::Deny(_))
-        || (queue && owner.binding.access_mode == butler_turn::btcc::AccessMode::ReadOnly)
+        || (queue && owner.access_mode() == butler_turn::btcc::AccessMode::ReadOnly)
     {
         return super::dispatch::encoded(
             &json!({"ok":false,"error":{"code":"read_only","message":"This conversation is read-only, so canon cannot change. Tell the user in one sentence; they can change the permission level."}}),

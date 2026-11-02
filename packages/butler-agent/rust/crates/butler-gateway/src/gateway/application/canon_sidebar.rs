@@ -157,11 +157,20 @@ async fn apply(app: &AppApplication, intent: Value) -> Result<(), GatewayApplica
             .ok_or_else(GatewayApplicationError::internal)?,
     )
     .map_err(GatewayApplicationError::internal_from)?;
-    validate_intent(app, &payload).await?;
     // The projection receipt is visible before its admission hook completes.
     // Replay and HTTP callers must share that whole lifetime before returning.
     let _projection = app.canon_projection_locks.acquire(op.clone()).await;
-    if let Some(chat) = project(app, payload, op.clone()).await? {
+    let epic = payload["work_id"]
+        .as_str()
+        .ok_or_else(GatewayApplicationError::internal)?;
+    let projection = app
+        .canon_projection_locks
+        .acquire(format!("canon-epic-projection:{epic}"))
+        .await;
+    validate_intent(app, &payload).await?;
+    let created = project(app, payload, op.clone()).await?;
+    drop(projection);
+    if let Some(chat) = created {
         app.session_start_hook(chat, "created").await?;
     }
     if intent["state"] != "applied" {

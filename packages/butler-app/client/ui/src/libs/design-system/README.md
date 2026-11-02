@@ -1,5 +1,7 @@
 # Butler Design System
 
+UI names: [Glossary / 용어 사전](?visual=design-system&page=glossary).
+
 Butler Design System is the client UI foundation for reusable primitives, tokens, documentation, showcases, and agent-facing guidance.
 
 > Building or reviewing UI (human or agent)? Read

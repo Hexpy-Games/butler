@@ -12,15 +12,12 @@ pub(super) async fn search(
     category: Option<&str>,
     signal: &CancellationToken,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let can_discover = owner.binding.authorized_names.contains("call_mcp_tool")
-        || owner
-            .binding
-            .authorized_names
-            .contains("list_mcp_capabilities");
+    let can_discover =
+        owner.authorized("call_mcp_tool") || owner.authorized("list_mcp_capabilities");
     if !can_discover {
         return encoded(&json!({"ok":true,"results":[]}));
     }
-    let call_available = owner.binding.authorized_names.contains("call_mcp_tool");
+    let call_available = owner.authorized("call_mcp_tool");
     let mut filtered = args.clone();
     if let Some(category) = category {
         filtered.insert("category".into(), Value::String(category.into()));
@@ -51,7 +48,7 @@ pub(super) async fn describe(
     let Some(parsed) = butler_models::mcp_client::parse_mcp_catalog_id(id) else {
         return Ok(None);
     };
-    let call_available = owner.binding.authorized_names.contains("call_mcp_tool");
+    let call_available = owner.authorized("call_mcp_tool");
     Box::pin(butler_models::mcp_client::describe_mcp_tool(
         &owner.mcp_client,
         id,

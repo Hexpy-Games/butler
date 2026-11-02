@@ -7,6 +7,7 @@
 )]
 mod attachments;
 mod cleanup;
+mod epic_delete;
 mod migration;
 mod operations;
 mod planning;

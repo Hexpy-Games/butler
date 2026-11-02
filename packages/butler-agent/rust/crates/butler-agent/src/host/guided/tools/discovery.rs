@@ -7,7 +7,7 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use butler_core::json::{JsonDocument, visit_raw_array, visit_raw_object};
-use butler_runtime::capabilities::{BridgeCatalogTool, describe_native, search_native};
+use butler_runtime::capabilities::{BridgeCatalogTool, search_native};
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
@@ -205,9 +205,7 @@ async fn search(
     let result = search_native(
         catalog
             .builtin_tools()
-            .filter(|tool| {
-                !catalog.hidden_native_bridge_tool(tool.name, owner.binding.ledger_effects())
-            })
+            .filter(|tool| !catalog.hidden_native_bridge_tool(tool.name, owner.ledger_effects()))
             .map(|tool| projection(owner, tool)),
         &filtered,
     )
@@ -268,17 +266,15 @@ async fn describe(
             continue;
         };
         let catalog = owner.catalog.snapshot();
-        if catalog.hidden_native_bridge_tool(name, owner.binding.ledger_effects()) {
+        if catalog.hidden_native_bridge_tool(name, owner.ledger_effects()) {
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
             continue;
         }
         if let Some(tool) = catalog.builtin_tool(name) {
-            descriptions.push(describe_native(projection(owner, tool)).map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "guided_bridge_catalog_json",
-                    error.to_string(),
-                ))
-            })?);
+            descriptions.push(super::reader_surface::describe(
+                projection(owner, tool),
+                owner.browser_available(),
+            )?);
         } else {
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
         }
@@ -335,7 +331,7 @@ fn projection<'a>(
 ) -> BridgeCatalogTool<'a> {
     let configured_disabled = owner.web_session.configured_disabled_reason(tool.name);
     let enabled = configured_disabled.is_none()
-        && owner.binding.authorized_names.contains(tool.name)
+        && (owner.authorized(tool.name) || super::permission_mode::approved_capability(tool.name))
         && GuidedTools::supports(tool.name)
         && !matches!(
             ToolName::parse(tool.name),

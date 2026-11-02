@@ -1,4 +1,5 @@
 import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
+import { parts } from "../glossary/glossary";
 import { decisionGuide } from "./decisionGuide";
 import { chapterForToken, chapterPage, FOUNDATION_CHAPTERS } from "./foundations/chapters";
 import type { TokenEntry } from "./foundations/tokenCatalog";
@@ -21,7 +22,7 @@ const PAGES: Array<[string, string, string]> = [
   ["overview", "Overview", "Start"], ["guide", "Decision guide", "I need X → use Y"], ["recipes", "Build a screen", "Recipes"],
   ["foundations", "Foundations", "The guidebook"], ["motion", "Motion", "Durations, easings and live demos"],
   ["components", "Components", "Gallery"], ["blocks", "Blocks", "Gallery"], ["patterns", "Patterns", "Composition patterns"],
-  ["icons", "Icons", "Icon set"],
+  ["icons", "Icons", "Icon set"], ["glossary", "Glossary / 용어 사전", "UI names"],
 ];
 
 export function tokenAnchor(name: string): string {
@@ -30,6 +31,11 @@ export function tokenAnchor(name: string): string {
 
 export function buildSearchIndex(entries: ShowcaseEntry[], tokens: TokenEntry[]): SearchItem[] {
   const items: SearchItem[] = PAGES.map(([id, title, subtitle]) => ({ id: `page:${id}`, kind: "page", title, subtitle, target: id, text: `${title} ${subtitle}` }));
+  items.push(...parts.map((part): SearchItem => ({
+    id: `glossary:${part.id}`, kind: "page", title: part.ko, subtitle: part.en,
+    target: `glossary#${part.id}`,
+    text: [part.id, part.ko, part.en, part.desc, ...part.ds, ...part.avoid].join(" "),
+  })));
   for (const chapter of FOUNDATION_CHAPTERS) {
     if (chapter.id === "motion") continue;
     items.push({ id: `page:foundations/${chapter.id}`, kind: "page", title: chapter.title, subtitle: `Foundations ${chapter.number}`, target: chapterPage(chapter), text: `${chapter.title} ${chapter.summary}` });

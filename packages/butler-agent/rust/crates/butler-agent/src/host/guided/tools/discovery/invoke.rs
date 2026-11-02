@@ -3,7 +3,6 @@
 use super::{GuidedTools, bridge_error, encoded, projection, text};
 use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
-use butler_runtime::capabilities::describe_native;
 use butler_turn::btcc::normalize_then_validate;
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
@@ -60,7 +59,7 @@ pub(super) async fn run(
         ));
     };
     let catalog = owner.catalog.snapshot();
-    let Some(tool) = catalog.bridge_tool(name, owner.binding.ledger_effects()) else {
+    let Some(tool) = catalog.bridge_tool(name, owner.ledger_effects()) else {
         let mut error = bridge_error(
             "unknown_tool_catalog_id",
             &format!("Unknown tool catalog id: {id}"),
@@ -68,13 +67,9 @@ pub(super) async fn run(
         error["error"]["id"] = Value::String(id.into());
         return encoded(&error);
     };
-    let description = describe_native(projection(owner, tool)).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::relayed(
-            "guided_bridge_catalog_json",
-            error.to_string(),
-        ))
-    })?;
-    if let Some(error) = native_admission(owner, &description, id, name) {
+    let description =
+        super::super::reader_surface::describe(projection(owner, tool), owner.browser_available())?;
+    if let Some(error) = native_admission(owner, &description, id, name, args) {
         return encoded(&error);
     }
     let normalized = if tool.definition["handlerValidatesArguments"] == true {
@@ -154,7 +149,7 @@ async fn run_mcp(
         error["error"]["id"] = Value::String(id.into());
         return encoded(&error);
     };
-    let call_available = owner.binding.authorized_names.contains("call_mcp_tool");
+    let call_available = owner.authorized("call_mcp_tool");
     let description = match Box::pin(butler_models::mcp_client::describe_mcp_tool(
         &owner.mcp_client,
         id,
@@ -335,6 +330,7 @@ fn native_admission(
     description: &Value,
     id: &str,
     name: &str,
+    args: &serde_json::Map<String, Value>,
 ) -> Option<Value> {
     if description.get("enabled") != Some(&Value::Bool(true)) {
         let reason = description
@@ -343,7 +339,11 @@ fn native_admission(
             .unwrap_or("Tool is disabled.");
         let alternatives = if description.get("category").and_then(Value::as_str) == Some("search")
         {
-            vec!["tool_search", "web_read"]
+            if owner.browser_available() {
+                vec!["tool_search", "browser_open"]
+            } else {
+                vec!["tool_search", "web_read"]
+            }
         } else {
             vec!["tool_search"]
         };
@@ -358,8 +358,12 @@ fn native_admission(
         error["error"]["recovery"] = recovery;
         return Some(error);
     }
+    if let Some(error) = reader_admission(owner, name, args) {
+        return Some(error);
+    }
     // Source permits an already authorized current tool without a prior describe.
-    if !owner.binding.authorized_names.contains(name)
+    if !owner.authorized(name)
+        && !super::super::permission_mode::approved_capability(name)
         && !owner.state.lock().described_ids.contains(id)
     {
         let mut error = bridge_error(
@@ -403,9 +407,7 @@ fn mcp_admission(
         );
         return Some(error);
     }
-    if !owner.binding.visible_names.contains(tool_name)
-        && !owner.state.lock().described_ids.contains(id)
-    {
+    if !owner.visible(tool_name) && !owner.state.lock().described_ids.contains(id) {
         let mut error = bridge_error(
             "tool_not_described",
             &format!("Tool must be described before invocation: {id}"),
@@ -417,4 +419,16 @@ fn mcp_admission(
         return Some(error);
     }
     None
+}
+
+fn reader_admission(
+    owner: &GuidedTools,
+    name: &str,
+    args: &serde_json::Map<String, Value>,
+) -> Option<Value> {
+    if name == "web_read" && owner.browser_available() {
+        super::super::reader_surface::tab_required(args)
+    } else {
+        None
+    }
 }

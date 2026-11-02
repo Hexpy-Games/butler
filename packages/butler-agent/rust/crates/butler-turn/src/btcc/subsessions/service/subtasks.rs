@@ -44,6 +44,17 @@ pub struct OpenSubtask {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_total: Option<usize>,
     pub started_at: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub workers: Vec<SubtaskWorker>,
+}
+
+/// A direct Worker of an open subtask in the session-view projection.
+#[derive(Clone, Debug, Serialize)]
+pub struct SubtaskWorker {
+    pub session_id: String,
+    pub relation_id: String,
+    pub title: String,
+    pub status: &'static str,
 }
 
 impl SubsessionService {
@@ -80,8 +91,48 @@ impl SubsessionService {
                 plan_completed: plan.map(|(_, _, completed)| completed),
                 plan_total: plan.map(|(_, total, _)| total),
                 started_at: relation.created_at.clone(),
+                workers: Vec::new(),
             });
         }
         Ok(subtasks)
+    }
+}
+
+impl SubsessionService {
+    /// Only session-view requests enrich open subtasks; navigation keeps its narrow read.
+    pub(super) async fn fill_subtask_workers(
+        &self,
+        subtasks: &mut [OpenSubtask],
+    ) -> Result<(), BtccError> {
+        let rows = self
+            .repository
+            .subtask_workers(
+                subtasks
+                    .iter()
+                    .map(|task| task.session_id.clone())
+                    .collect(),
+            )
+            .await
+            .map_err(BtccError::from)?;
+        let mut by_parent: std::collections::HashMap<_, Vec<_>> = std::collections::HashMap::new();
+        for (relation, status) in rows {
+            let title = super::helpers::delegation_title(
+                Some(&relation.safe_title),
+                &relation.packet.objective,
+            );
+            by_parent
+                .entry(relation.parent_session_id)
+                .or_default()
+                .push(SubtaskWorker {
+                    session_id: relation.child_session_id,
+                    relation_id: relation.relation_id,
+                    title,
+                    status,
+                });
+        }
+        for task in subtasks {
+            task.workers = by_parent.remove(&task.session_id).unwrap_or_default();
+        }
+        Ok(())
     }
 }

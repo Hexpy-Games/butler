@@ -22,6 +22,7 @@ pub(super) use non_final::{
 mod observers;
 mod owner;
 mod staging;
+mod terminal_receipts;
 mod terminal_records;
 mod transcript_file;
 mod turn_event_sequence;
@@ -59,19 +60,12 @@ pub(super) struct ProjectionContext {
     butler_data: PathBuf,
     queue_wake: super::queue_dispatcher::QueueWake,
     retention_wake: super::retention::RetentionWake,
+    terminal_receipts: std::sync::Arc<terminal_receipts::Pending>,
     automation_wake: std::sync::Arc<tokio::sync::Notify>,
 }
 impl ProjectionContext {
     fn wake_queued_automations(&self) {
         self.automation_wake.notify_one();
-    }
-
-    async fn finish_terminal_turn(&self, turn: String) -> Result<(), GatewayApplicationError> {
-        super::canon_queue::turn_ended(&self.storage, &self.dependencies.canon, turn.clone())
-            .await?;
-        self.retention_wake.turn(turn).await?;
-        self.wake_queued_automations();
-        Ok(())
     }
 
     pub(super) fn new(
@@ -85,6 +79,7 @@ impl ProjectionContext {
     ) -> Self {
         Self {
             streaming: std::sync::Arc::default(),
+            terminal_receipts: std::sync::Arc::default(),
             storage,
             dependencies,
             subscribers,

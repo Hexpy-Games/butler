@@ -11,6 +11,7 @@ export type GallerySection = "components" | "blocks";
 export type ViewerPage =
   | { kind: "overview" }
   | { kind: "guide" }
+  | { kind: "glossary" }
   | { kind: "recipes" }
   | { kind: "foundations" }
   | { kind: "foundation"; chapter: FoundationChapter }
@@ -30,6 +31,7 @@ export interface ViewerNavGroup {
 const FIXED: Record<string, ViewerPage> = {
   overview: { kind: "overview" },
   guide: { kind: "guide" },
+  glossary: { kind: "glossary" },
   recipes: { kind: "recipes" },
   foundations: { kind: "foundations" },
   motion: { kind: "motion" },
