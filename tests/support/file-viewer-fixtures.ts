@@ -89,8 +89,8 @@ export async function viewerGeometry(viewer: Locator) {
       // Measure inside the card border, where the reading gutters start.
       paneWidth: root.clientWidth,
       contentWidth: content.width,
-      insetStart: Math.round(content.left - card.left),
-      insetEnd: Math.round(card.right - content.right),
+      insetStart: content.left - card.left,
+      insetEnd: card.right - content.right,
       // What the user can scroll sideways: the pane's scroller and the window. The card clips its own edges.
       overflow: Math.max(scroll.scrollWidth - scroll.clientWidth, document.documentElement.scrollWidth - innerWidth),
       contentPastCard: Math.max(0, Math.round(content.right - card.right)),
