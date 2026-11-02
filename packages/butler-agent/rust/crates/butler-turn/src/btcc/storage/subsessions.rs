@@ -11,6 +11,7 @@ mod handoff;
 mod handoff_context;
 mod instruction_context;
 mod parents;
+mod prompt_result;
 mod records;
 mod subtasks;
 mod worker_admission;

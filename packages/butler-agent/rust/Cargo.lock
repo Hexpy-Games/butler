@@ -1498,6 +1498,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "unicode-normalization",
+ "url",
  "uuid",
 ]
 
