@@ -43,7 +43,7 @@ export interface CanonTakeHerePanel {
   epic_id: string;
   epic_title: string;
   other_session_id: string;
-  state: "pending" | "taken";
+  state: "pending" | "taken" | "deleted";
 }
 export interface CanonStepOrigin {
   kind: "canon_step";
