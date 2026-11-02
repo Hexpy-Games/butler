@@ -10,7 +10,7 @@ function captureTab() {
   const contents = new EventEmitter();
   const image: any = { resize: () => image, toBitmap: () => Buffer.alloc(4), toJPEG: () => Buffer.from("abc"), isEmpty: () => false };
   Object.assign(contents, { debugger: new EventEmitter(), isDestroyed: () => false, isLoading: () => false,
-    capturePage: async () => image, executeJavaScriptInIsolatedWorld: async () => true });
+    capturePage: async () => image, executeJavaScriptInIsolatedWorld: async () => true, getBackgroundThrottling: () => true });
   return { epoch: 1, owner: "conversation:s", holder: "agent", view: { webContents: contents } };
 }
 const require = createRequire(import.meta.url);
