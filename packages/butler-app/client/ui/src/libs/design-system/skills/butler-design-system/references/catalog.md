@@ -1066,7 +1066,7 @@ A modal glass surface for a focused task that must finish or be dismissed before
 - Not for: A list of actions for an item → `DropdownMenu`
 - Not for: Global search and commands → `CommandPalettePanel`
 - Not for: A notification that needs no decision → `Toaster`
-- Tokens: `--dialog-overlay-bg`, `--tinted-glass-bg`, `--z-dialog`, `--motion-fast`, `--motion-scale-dialog`
+- Tokens: `--dialog-overlay-bg`, `--tinted-glass-bg`, `--z-dialog`, `--motion-fast`, `--motion-scale-dialog`, `--control-hit-target`, `--focus-ring-room`
 
 ### DropdownMenu
 
