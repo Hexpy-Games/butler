@@ -99,6 +99,12 @@ impl GuidedExecutionPolicy {
         }
     }
 
+    /// Only the main chat's Butler may read and change canon; delegated
+    /// sessions never get the canon tools.
+    pub fn canon_writer(&self) -> bool {
+        self.role == PolicyRole::Butler && self.subsession.is_none()
+    }
+
     /// Main chat usage or the writing session policy role verbatim.
     pub fn usage_role(&self) -> &str {
         if self.role.as_str() == "butler" {

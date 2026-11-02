@@ -38,7 +38,11 @@ pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &In
         }
     }
     if let Some(text) = cmd::raw_argument(invocation) {
-        command.args(["/d", "/s", "/c"]).raw_arg(text);
+        command.arg("/d");
+        if invocation.arguments.iter().any(|a| a == "/v:on") {
+            command.arg("/v:on");
+        }
+        command.args(["/s", "/c"]).raw_arg(text);
     } else {
         command.args(&invocation.arguments);
         let powershell = std::path::Path::new(&invocation.program)
@@ -72,6 +76,42 @@ pub(super) fn login_shell(command: &str, environment: &HashMap<String, String>) 
         .collect();
     legacy_shell(command, false, &environment)
 }
+
+/// A user hook's `command` text runs in `cmd.exe /d /s /c`, the shell the hook
+/// documentation names, not in the PowerShell that model commands use: cmd
+/// syntax such as `echo {"decision":"deny"}` is a parse error in PowerShell.
+///
+/// Built-ins cache the code page cmd started with, so `chcp 65001` must come
+/// before a fresh cmd that runs the text; otherwise `echo` of a Korean reason
+/// would write CP949, which is not UTF-8. The text travels in the environment
+/// and the outer cmd expands it late (`!var!`), after its own parsing, so its
+/// operators and quotes belong to the inner cmd only.
+pub(super) fn hook_shell(command: &str, environment: &HashMap<String, String>) -> Invocation {
+    let environment = environment
+        .iter()
+        .map(|(key, value)| (key.clone(), Some(value.clone())))
+        .collect();
+    let mut program = cmd::program(&environment);
+    if program.contains(['"', '\r', '\n', '\0']) {
+        program = "cmd.exe".into();
+    }
+    Invocation {
+        arguments: vec![
+            "/d".into(),
+            "/v:on".into(),
+            "/s".into(),
+            "/c".into(),
+            format!("chcp 65001>nul & \"{program}\" /d /s /c \"!{HOOK_TEXT}!\""),
+        ],
+        shell_program: Some(program.clone()),
+        shell_script: Some(command.to_owned()),
+        program,
+        ..Default::default()
+    }
+}
+
+/// The variable `add_arguments` fills from `Invocation::shell_script`.
+const HOOK_TEXT: &str = "BUTLER_COMMAND_SCRIPT";
 
 pub(super) fn legacy_shell(
     command: &str,
