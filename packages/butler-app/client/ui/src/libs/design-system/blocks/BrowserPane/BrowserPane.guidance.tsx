@@ -38,7 +38,7 @@ function ConversationPane() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The browser sheet: tab row and toolbar on a tinted pane, and the page card filling the pane edge to edge under them.",
+  purpose: "The browser column: tab row and toolbar on a tinted pane, and the page card filling the pane edge to edge under them.",
   whenToUse: [
     "The browser beside a conversation (the AdaptiveShellSplit pane)",
     "The standalone Browser view under its title bar",

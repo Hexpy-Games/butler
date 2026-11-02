@@ -11,6 +11,7 @@ export function pageTrail(page: ViewerPage): TrailStep[] {
   const home = { label: "Butler DS", page: "overview" };
   switch (page.kind) {
     case "overview": return [home, { label: "Overview" }];
+    case "glossary": return [home, { label: "Glossary / 용어 사전" }];
     case "guide": return [home, { label: "Decision guide" }];
     case "recipes": return [home, { label: "Build a screen" }];
     case "foundations": return [home, { label: "Foundations" }];

@@ -36,7 +36,7 @@ function NestedTitlebar() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The window titlebar: leading toggle, title, its actions and subtitle, chat-card controls that follow the browser split, trailing actions and window controls, draggable.",
+  purpose: "The window title bar: leading toggle, title, its actions and subtitle, chat-card controls that follow the browser split, trailing actions and window controls, draggable.",
   whenToUse: ["The top bar of the app window"],
   whenNotToUse: [
     { when: "A panel header", use: "PanelHeader" },
