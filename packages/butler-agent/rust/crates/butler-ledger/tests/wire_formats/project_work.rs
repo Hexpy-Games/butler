@@ -2,6 +2,9 @@
 //! their child records, publication claims and journals, the lock shard, and
 //! the dashboard projections over them.
 
+#[path = "project_work/subjects.rs"]
+pub(crate) mod subjects;
+
 use std::sync::Arc;
 
 use butler_ledger::project_ledger::{

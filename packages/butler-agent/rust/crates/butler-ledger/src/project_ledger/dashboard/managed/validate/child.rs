@@ -51,7 +51,7 @@ fn plan(item: &Value, record: &Record) -> Result<(), ProjectLedgerReadError> {
     if let Some(governing) = item.get("governingRefs") {
         strings(governing)?;
     }
-    if let Some(subjects) = item.get("subjects") {
+    if let Some(subjects) = item.get("subjects").filter(|value| !value.is_null()) {
         let mut keys = std::collections::HashSet::new();
         for subject in array(Some(subjects))? {
             exact(object(Some(subject))?, &["key", "label"], &[])?;
