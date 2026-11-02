@@ -18,7 +18,6 @@ import {
   type ProjectFolderSelection,
 } from "./api.ts";
 import { appCopy, setAppCopyLanguage } from "./copy.ts";
-import { askFolderTrust } from "./folderTrust.ts";
 import {
   ACTIVE_TURN_STATES,
   EMPTY_MODEL_CATALOG,
@@ -2225,8 +2224,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         }),
       });
       await get().refreshNavigation();
-      await askFolderTrust(result.project.id, get().settings.access_mode,
-        () => set({ projectCreateDialogOpen: false }));
       get().openNewProjectChat(result.project.id);
       set({ messages: [], status: { label: "ready", tone: "ok" } });
       return true;

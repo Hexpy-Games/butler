@@ -14,7 +14,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
-import { auditSessionInfoFocus, failPendingAsksRead, installSessionBrowser, installPendingAskEvents, pendingAsksChanged, populatedSession, replaySession, sessionQuestion } from "../support/session-info-fixtures.ts";
+import { auditSessionInfoFocus, failPendingAsksRead, installSessionBrowser, installPendingAskEvents, pendingAsksChanged, populatedSession, replaySession, runningSession, sessionQuestion } from "../support/session-info-fixtures.ts";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
@@ -85,7 +85,7 @@ try {
     const fills = [await verifyPaneToggleFill(page, "aside", true)];
     await aside.locator('[data-test-class="canon-epic-detail"]').waitFor();
     const titles = await aside.locator("[data-session-section]").evaluateAll(elements => elements.map(element => element.getAttribute("data-session-section")));
-    assert.deepEqual(titles, ["asks", "environment", "task", "context", "artifacts", "attachments", "schedules", "queue"]);
+    assert.deepEqual(titles, ["asks", "environment", "task", "context", "artifacts", "attachments", "schedules"]);
     assert.equal(await aside.getByText("작업자", { exact: true }).count(), 0);
     await aside.getByText("3/5 완료", { exact: true }).waitFor();
     assert.equal(await aside.getByRole("button", { name: "대화 열기", exact: true }).count(), 0);
@@ -96,7 +96,10 @@ try {
     await verifyInlineTriggerRings(aside);
     await verifySessionInlineEdit(page, server, epic.id, theme);
     await capture("pane-task-order");
-    await aside.getByText("작업 대기열", { exact: true }).scrollIntoViewIfNeeded();
+    await page.locator('[data-test-class="queued-message"]').getByText("검토 결과 정리", { exact: true }).waitFor();
+    assert.equal(await aside.locator('[data-session-section="queue"]').count(), 0, "Running with a queued message adds no queue section");
+    assert.equal(await aside.getByText("작업 대기열", { exact: true }).count(), 0);
+    await aside.locator('[data-session-section="schedules"]').scrollIntoViewIfNeeded();
     await capture("available-sections-bottom");
     await aside.getByText("환경", { exact: true }).scrollIntoViewIfNeeded();
     const context = aside.locator('[data-test-class="session-context"]');
@@ -122,7 +125,7 @@ try {
     await page.setViewportSize({ width: 1024, height: 900 });
     await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
     await verifyInlineTriggerRings(aside);
-    assert.equal(await aside.locator('[data-slot="separator"]').count(), 7);
+    assert.equal(await aside.locator('[data-slot="separator"]').count(), 6);
     await capture("floating");
     fills.push(await verifyPaneToggleFill(page, "aside", true));
     await page.setViewportSize({ width: 1440, height: 1050 });
@@ -146,16 +149,17 @@ try {
     // Empty canonical session: all data-dependent sections, including the linked task, disappear.
     const { session: empty } = await server.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "다음 릴리스 준비" }) });
     view = await server.api<SessionView>(`/session-view?session_id=${empty.id}`);
-    view = { ...view, context: null, branch: null };
+    view = runningSession({ ...view, context: null, branch: null });
     const emptyLoaded = page.waitForResponse(response => response.url().includes(`/session-view?session_id=${empty.id}`));
     await page.getByRole("button", { name: /다음 릴리스 준비/ }).first().click();
     await emptyLoaded;
+    await page.locator('[data-test-class="queued-message"]').getByText("검토 결과 정리", { exact: true }).waitFor();
     await toggle.waitFor({ state: "detached" });
     assert.equal(await toggle.count(), 0);
     assert.equal(await page.locator('[data-slot="conversation-aside"]').count(), 0);
     await capture("no-task-no-asks");
     assert.equal(await toggle.locator('[data-slot="icon-button-indicator"]').count(), 0);
-    console.log(JSON.stringify({ sectionTitles: titles, hiddenSections: 8, layouts: ["docked", "floating", "browser-floating"] }));
+    console.log(JSON.stringify({ sectionTitles: titles, hiddenSections: 7, layouts: ["docked", "floating", "browser-floating"] }));
     asksOpen = true;
     view = { ...view, pending_questions: [sessionQuestion(empty.id)] };
     const questionRead = page.waitForResponse(response => response.url().includes("/session-view?") && response.ok());

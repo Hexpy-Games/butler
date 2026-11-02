@@ -36,7 +36,7 @@ async fn favicon_endpoint_rejects_unsafe_hosts_and_serves_immutable_cache()
     fs::write(path(&root, "oversize.invalid"), oversized)?;
     let stale = path(&root, "stale.invalid");
     fs::write(&stale, &png)?;
-    fs::File::open(&stale)?.set_times(
+    fs::OpenOptions::new().write(true).open(&stale)?.set_times(
         fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_hours(744)),
     )?;
     let mut s = setup.start().await?;

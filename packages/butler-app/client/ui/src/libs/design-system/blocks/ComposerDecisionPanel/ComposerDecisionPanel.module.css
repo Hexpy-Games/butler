@@ -18,6 +18,59 @@
   -webkit-line-clamp: 4;
 }
 
+/* A { code } detail: the markdown code frame (hairline border, panel radius,
+   raised surface). The command keeps its own spaces and line breaks; the
+   shared two-axis fade (useScrollEdges("both")) fades every edge with hidden
+   content, so a long line or a tall script still reads as more. The block
+   inset sits on the frame. The whole frame, border and inset included, is
+   capped to the part of the details scroll area that its edge fades and
+   ring room leave clear (the scroller's inherited --scroll-fade-size): its
+   bottom edge never sits under the details fade, and a scrolling frame
+   focused from the keyboard always shows its whole ring. Only the text
+   shrinks under the cap and scrolls inside; a short command keeps its
+   natural height. A focused scroller draws that ring inset (the frame clips
+   outside it) and drops its fade mask, which would cut the ring. */
+.code {
+  display: flex;
+  min-width: 0;
+  max-height: calc(
+    var(--scroll-area-max-height-xs) - 2 *
+      (var(--scroll-fade-size) + var(--focus-ring-room))
+  );
+  flex-direction: column;
+  margin-block: var(--space-xs);
+  padding-block: var(--space-sm);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+
+.codeText {
+  min-height: 0;
+  padding-inline: var(--space-md);
+  overflow: auto;
+  white-space: pre;
+}
+
+/* The scroller keeps whole line boxes. Typo's cap/baseline trim leaves each
+   line overhanging the trimmed box, which a scroll container counts as
+   overflow: a one-line command would scroll and fade its bottom edge. The
+   frame's padding is the block inset instead. */
+@supports (text-box: trim-both cap alphabetic) {
+  .code > pre.codeText[data-trim] {
+    padding-block: 0;
+    text-box: normal;
+  }
+}
+
+.codeText:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .error {
   padding-block: var(--space-sm);
   padding-inline: var(--composer-panel-inset);

@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod authority;
 mod auto;
+mod credential_stores;
 mod link_targets;
 pub(super) use authority::{approve, assert_counts, delivered, paused};
 mod sandbox_data_reads;
