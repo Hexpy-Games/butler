@@ -276,7 +276,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 },
             )?);
             let journal = self.journal(&start.turn.turn_id, activity.clone());
-            let hooks = self.hook_binding(&start, &phase, &semantic, &tools).await?;
+            let hooks = self.hook_binding(start.turn, &phase).await?;
             let text = Arc::new(
                 prompt_state::state(
                     self,

@@ -1,33 +1,31 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Button, ButtonContainer, FieldError, Stack } from "@/butler-ds";
+import { Button } from "@/butler-ds";
 
+/** Section header actions of a skills list: import a zip, create one in a chat. */
 export function SkillActions({
   onImport,
   onCreate,
-  error,
+  errorId,
 }: {
-  error?: string;
+  /** Set while an import error for this list shows in its card; focuses Import and describes it. */
+  errorId?: string;
   onImport: () => void;
   onCreate: () => void;
 }) {
   useAppLocale();
   const copy = appCopy.settings.actions;
-  const errorId = useId();
   const importRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (error) importRef.current?.focus(); }, [error]);
+  useEffect(() => { if (errorId) importRef.current?.focus(); }, [errorId]);
   return (
-    <Stack gap="xs">
-    <ButtonContainer size="sm">
-      <Button ref={importRef} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} type="button" variant="outline" size="sm" onClick={onImport}>
+    <>
+      <Button ref={importRef} aria-invalid={Boolean(errorId)} aria-describedby={errorId} type="button" variant="outline" size="sm" onClick={onImport}>
         {copy.importSkill}
       </Button>
-      <Button type="button" size="sm" onClick={onCreate}>
+      <Button type="button" variant="outline" size="sm" onClick={onCreate}>
         {copy.createSkillWithChat}
       </Button>
-    </ButtonContainer>
-      {error ? <FieldError id={errorId}>{error}</FieldError> : null}
-    </Stack>
+    </>
   );
 }

@@ -116,6 +116,13 @@ async fn drain_query(
             QUERY_DRAIN_GRACE.as_millis()
         );
     }
+    // A stub scenario may hold here until it has queued its second request;
+    // the real grace then starts from the release.
+    let deadline = if super::drain_barrier::reached().await {
+        Instant::now() + QUERY_DRAIN_GRACE
+    } else {
+        deadline
+    };
     // Queued work waits for this bounded exchange to preserve the loaded
     // worker and frame synchronization. Its own deadline is pruned on dequeue.
     tokio::select! {

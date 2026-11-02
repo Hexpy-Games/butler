@@ -35,7 +35,6 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
   const modelRoute = useSettingsUIStore((state) => state.modelRoute);
   const backModelRoute = useSettingsUIStore((state) => state.backModelRoute);
   const resetModelRoute = useSettingsUIStore((state) => state.resetModelRoute);
-  const localMessage = useSettingsUIStore((state) => state.localMessage);
   const setLocalMessage = useSettingsUIStore((state) => state.setLocalMessage);
   const initialize = useSettingsUIStore((state) => state.initialize);
   const { target: traceTarget, close: closeTrace } = useLogTraceRoute();
@@ -146,7 +145,6 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
           title={title}
           description={activeDescriptor?.description}
           secondary={titleSecondary}
-          localMessage={localMessage}
         />
       }
       detail={
