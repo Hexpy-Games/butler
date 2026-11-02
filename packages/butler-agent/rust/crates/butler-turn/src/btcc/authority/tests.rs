@@ -96,6 +96,7 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
         .unwrap();
     let planned = work_service
         .replace_plan(ReplacePlanInput {
+            subjects: Vec::new(),
             scope: scope(),
             mutation_call_id: "plan-authority-work".into(),
             start_new: None,

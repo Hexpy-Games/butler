@@ -3,6 +3,8 @@
 //! macOS uses Seatbelt; Linux uses a single-threaded Landlock/seccomp
 //! trampoline. Unsupported hosts keep exact-action approval behavior.
 
+mod changes;
+pub use changes::{Changes, CommandChanges};
 mod denial;
 pub use denial::{
     EXECUTION_FAILURE_EXIT, EXECUTION_FAILURE_MARKER, EXECUTION_TIMEOUT_EXIT,

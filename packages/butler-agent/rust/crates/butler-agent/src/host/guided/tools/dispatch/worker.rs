@@ -72,6 +72,15 @@ fn request(
             })
     };
     Ok(WorkerDelegationRequest {
+        task: call
+            .arguments
+            .get("task")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|e| {
+                ToolExecutionError::Integrity(BtccError::relayed("task_invalid", e.to_string()))
+            })?,
         parent_session_id: owner.binding.source_session_id.clone(),
         parent_turn_id: owner.binding.turn_id.clone(),
         anchor_message_id: invocation.turn.original_message_id.clone(),

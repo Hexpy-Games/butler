@@ -113,6 +113,7 @@ impl GraphBuilder {
             queue,
             clock,
             sequence: 0,
+            access_mode: None,
         })
     }
 
@@ -138,12 +139,20 @@ impl GraphBuilder {
             },
             json!({}),
         );
+        if let Some(mode) = &self.access_mode
+            && let TurnCommand::Run(run) = &mut prepared.command
+        {
+            run.model_selection
+                .selection
+                .controls
+                .insert("accessMode".into(), json!(mode.as_str()));
+        }
         prepared.preparation_id = turn.into();
         self.turns.load_or_admit(&prepared).await?;
         Ok(())
     }
 
-    pub(super) async fn admit_child(
+    pub async fn admit_child(
         &mut self,
         session: &str,
         role: SessionRole,

@@ -33,9 +33,17 @@ impl SubsessionService {
             ExecutionMode::Workers,
             BtccCode::WorkerDelegationPlanModeRequired,
         )?;
+        let Some(task) = request.task.as_mut() else {
+            return Ok(
+                json!({"ok":false,"error":{"code":"task_fields_required","fields":["task.scope","task.output"]}}),
+            );
+        };
+        if let Some(error) = super::task_scope::validate(task, plan) {
+            return Ok(error);
+        }
         let action = executable_action(reviewed, plan, &request.action_key)?;
         let profile = self.profiles.read(request.profile_id.clone()).await?;
-        let identity = packets::worker_identity(&request, &profile);
+        let identity = packets::worker_identity(&request, &profile, reviewed, plan);
         let delegation_id = delegation::delegation_id(&delegation::WORKER, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {
             if let Some(output) = self.finished_worker_output(&existing).await? {
@@ -50,18 +58,19 @@ impl SubsessionService {
             );
         }
         let ids = delegation::DelegationIds::derive(&delegation::WORKER, delegation_id);
-        if let Some(error) = self
-            .replace_action_worker(&request, reviewed, &ids.relation_id)
-            .await?
-        {
-            return Ok(error);
-        }
         let now = (self.now)();
         let mut packet =
             packets::worker(&ids, &request, action, &profile, reviewed, (plan, review));
+        if let Some(error) =
+            Box::pin(self.prepare_task(&mut request, reviewed, &mut packet)).await?
+        {
+            return Ok(error);
+        }
+        if let Some(error) = self.replace_action_worker(&request, reviewed).await? {
+            return Ok(error);
+        }
         self.worker_handoff_context(&mut packet, reviewed).await?;
-        self.dispatch_worker(request, parent, ids, packet, now, profile.prompt)
-            .await
+        Box::pin(self.dispatch_worker(request, parent, ids, packet, now, profile.prompt)).await
     }
 
     async fn dispatch_worker(
@@ -92,19 +101,29 @@ impl SubsessionService {
                 source: "btcc-worker-delegation".into(),
             },
         };
-        let stored = self
-            .create_and_dispatch(ids.create(
-                delegation::Parent {
-                    session_id: request.parent_session_id,
-                    turn_id: request.parent_turn_id,
-                    anchor_message_id: request.anchor_message_id,
-                },
-                request.safe_title.unwrap_or_else(|| "Worker task".into()),
-                packet,
-                intent,
-                now,
-            ))
-            .await?;
+        let replaces = request.replaces_relation_id.clone();
+        let input = ids.create(
+            delegation::Parent {
+                session_id: request.parent_session_id,
+                turn_id: request.parent_turn_id,
+                anchor_message_id: request.anchor_message_id,
+            },
+            request.safe_title.unwrap_or_else(|| "Worker task".into()),
+            packet,
+            intent,
+            now,
+        );
+        if let Some(old) = replaces {
+            if let Some(error) = self
+                .repository
+                .create_replacing(input.clone(), old.clone())
+                .await?
+            {
+                return Ok(error);
+            }
+            self.stop_replaced_worker(&input, &old).await?;
+        }
+        let stored = self.create_and_dispatch(input).await?;
         self.worker_output(&stored).await
     }
 }
@@ -196,6 +215,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?;
         let published = async {
+            self.task_inputs_ready(stored).await?;
             self.ensure_child_binding(stored).await?;
             self.enqueue_worker(stored).await
         }
@@ -240,7 +260,8 @@ impl SubsessionService {
     pub(super) fn worker_publish_error_is_permanent(error: &BtccError) -> bool {
         matches!(
             error.code(),
-            "subsession_child_binding_mismatch"
+            "task_input_not_done"
+                | "subsession_child_binding_mismatch"
                 | "subsession_parent_binding_missing"
                 | "subsession_dispatch_intent_invalid"
                 | "subsession_direction_child_binding_missing"
@@ -372,11 +393,13 @@ impl SubsessionService {
         }
         let cap = self.cached_worker_cap();
         let waiting = stored.dispatch_state == SubsessionDispatchState::Pending;
-        if waiting
-            && !self
+        let dependencies = waiting
+            && self
                 .repository
                 .replacement_waiting(stored.relation_id.clone())
-                .await?
+                .await?;
+        if waiting
+            && !dependencies
             && self
                 .repository
                 .running_worker_count(stored.parent_session_id.clone())
@@ -388,9 +411,18 @@ impl SubsessionService {
         }
         let mut output = json!({"ok":true,"status":if waiting {"waiting"} else {"queued"},"delegation_id":stored.delegation_id,"relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id});
         if waiting && let Some(object) = output.as_object_mut() {
-            object.insert("message".into(), json!(
-                format!("Worker {} is waiting because this session already has {cap} Workers running. It starts automatically when one of them finishes, and its result arrives like any other. Continue your own work and do not dispatch it again.", stored.delegation_id)
-            ));
+            let message = if dependencies {
+                format!(
+                    "Worker {} is waiting for its Task dependencies. It starts automatically when they end; do not dispatch it again.",
+                    stored.delegation_id
+                )
+            } else {
+                format!(
+                    "Worker {} is waiting because this session already has {cap} Workers running. It starts automatically when one of them finishes, and its result arrives like any other. Continue your own work and do not dispatch it again.",
+                    stored.delegation_id
+                )
+            };
+            object.insert("message".into(), json!(message));
         }
         Ok(output)
     }

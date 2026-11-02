@@ -24,6 +24,7 @@ enum Mode {
     Replace,
     Facts,
     Publish,
+    Scope,
 }
 
 #[tokio::test]
@@ -104,13 +105,23 @@ async fn replacement_stops_old_worker_and_marks_its_late_cancellation_as_evidenc
         .collect();
     let refused = outputs
         .iter()
-        .find(|v| v["error"]["code"] == "action_worker_running")
+        .find(|v| v["error"]["code"] == "task_scope_overlap")
         .unwrap();
     assert_eq!(
-        refused["running_relation_id"],
-        *script.first_relation.lock().unwrap()
+        refused["error"]["detail"]["overlaps"][0]["status"],
+        "active"
     );
     let db = db(&s)?;
+    let first_task: String = db.query_row(
+        "SELECT task_id FROM btcc_work_tasks WHERE relation_id=?1",
+        [&*script.first_relation.lock().unwrap()],
+        |r| r.get(0),
+    )?;
+    assert_eq!(
+        refused["error"]["detail"]["overlaps"][0]["task"],
+        first_task
+    );
+
     let (old, new): (String, String) = db.query_row("SELECT relation_id,json_extract(packet_json,'$.superseded_by') FROM btcc_subsession_delegations WHERE json_extract(packet_json,'$.superseded_by') IS NOT NULL", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
     let prefix = format!(
         "Superseded Worker result: {old} was replaced by {new} for action A; it is not this action's result."
@@ -256,8 +267,17 @@ async fn run(
         }
         assert!(
             Instant::now() < deadline,
-            "stage={} last_outputs={:?}",
+            "stage={} first_errors={:?} last_outputs={:?}",
             script.stage.load(std::sync::atomic::Ordering::SeqCst),
+            script
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .flat_map(|(_, b)| stub::outputs(b))
+                .filter(|v| v["ok"] == false)
+                .take(4)
+                .collect::<Vec<_>>(),
             script
                 .requests
                 .lock()
@@ -272,4 +292,62 @@ async fn run(
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     Ok((s, script, server))
+}
+
+pub(super) async fn scope_writes() -> Result<(), HarnessError> {
+    let (s, script, server) = run(Mode::Scope).await?;
+    let requests = script.requests.lock().unwrap().clone();
+    let outputs: Vec<Value> = requests
+        .iter()
+        .filter(|(role, _)| role == "worker")
+        .flat_map(|(_, b)| stub::outputs(b))
+        .collect();
+    assert!(
+        outputs.iter().any(|o| o
+            .to_string()
+            .contains("outside the files this task may change")),
+        "{outputs:?}"
+    );
+    assert!(
+        outputs.iter().any(|o| o["task_scope_errors"]
+            .as_array()
+            .is_some_and(|e| !e.is_empty())),
+        "{outputs:?}"
+    );
+    assert!(
+        outputs
+            .iter()
+            .any(|o| o["ok"] == true && o["path"] == "tasks/A/inside.txt"),
+        "{outputs:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(s.sandbox.data.join("artifacts/generated/outside.txt"))?,
+        "scope-change",
+        "command changes must be reported without rollback"
+    );
+    assert!(
+        outputs.iter().any(|o| o["task_scope_errors"]
+            .to_string()
+            .contains("outside-command.txt")),
+        "{outputs:?}"
+    );
+    let db = db(&s)?;
+    let summary:String=db.query_row("SELECT summary FROM btcc_steward_results WHERE relation_id IN (SELECT relation_id FROM btcc_session_relations WHERE activity_role='worker') LIMIT 1",[],|r|r.get(0))?;
+    assert!(summary.contains("error: task_scope_write"), "{summary}");
+    assert!(
+        !summary.contains("/metrics/"),
+        "Runtime metrics are not command writes: {summary}"
+    );
+    assert!(
+        !summary.contains("/transcripts/"),
+        "Runtime transcripts are not command writes: {summary}"
+    );
+    assert!(
+        requests
+            .iter()
+            .any(|(r, b)| r == "steward" && b.to_string().contains("error: task_scope_write"))
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
 }

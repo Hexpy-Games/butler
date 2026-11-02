@@ -10,6 +10,7 @@ mod path_guard;
 mod registered_artifacts;
 mod scope;
 mod structured_stdout;
+mod task_scope;
 pub(in crate::host) mod timing;
 mod validation;
 
