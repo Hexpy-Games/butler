@@ -42,5 +42,5 @@ export const guidance: ShowcaseGuidance = {
     "Inside a DialogContent with a close button the title keeps the button's room free on its end, so a long title (one quoting a name) wraps before the close button; short titles render unchanged. Add no padding or line breaks for it.",
   ],
   accessibility: ["Renders a <form>; pair with a DialogTitle (sr-only) when DialogForm shows the visible title."],
-  tokens: ["--space-lg", "--settings-field-gap", "--typo-panel-title-size", "--dialog-title-close-room"],
+  tokens: ["--space-lg", "--settings-field-gap", "--typo-panel-title-size"],
 };

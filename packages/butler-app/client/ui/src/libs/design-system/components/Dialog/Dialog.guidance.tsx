@@ -56,7 +56,7 @@ export const guidance: ShowcaseGuidance = {
     "Focus is trapped and returns to the trigger; Escape closes; pass closeLabel from app copy.",
     "Every dialog has a DialogTitle (sr-only when DialogForm shows the visible title).",
   ],
-  tokens: ["--dialog-overlay-bg", "--tinted-glass-bg", "--z-dialog", "--motion-fast", "--motion-scale-dialog", "--dialog-close-room"],
+  tokens: ["--dialog-overlay-bg", "--tinted-glass-bg", "--z-dialog", "--motion-fast", "--motion-scale-dialog", "--control-hit-target", "--focus-ring-room"],
   internalExports: {
     DialogPortal: "Rendered by DialogContent; exported for shells that need the portal alone.",
     DialogOverlay: "Rendered by DialogContent (backdrop fade); exported for custom shells.",
