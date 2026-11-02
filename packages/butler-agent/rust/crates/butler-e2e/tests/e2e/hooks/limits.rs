@@ -64,10 +64,7 @@ async fn hooks_revision_invalid_reload_and_output_caps() -> Result<(), HarnessEr
         "powershell -NoProfile -Command \"[Console]::Write(('x' * 65537))\""
     };
     // Events without added context keep the decision bound; see context_size for the others.
-    // Overflow is a failure, so only an opted-out hook lets the answer finish.
-    let mut flood = hook("flood", "Stop", flood);
-    flood["failClosed"] = json!(false);
-    replace(&s, vec![flood]).await?;
+    replace(&s, vec![hook("flood", "Stop", flood)]).await?;
     assert_eq!(
         s.turn("general", "Output cap fails open.").await?.1["state"],
         "delivered"
