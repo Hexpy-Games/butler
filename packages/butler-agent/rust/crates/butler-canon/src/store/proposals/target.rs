@@ -25,6 +25,13 @@ pub(super) fn label(
                     format!("Move Epic to ‘{destination}’")
                 }
             }
+            "epic.delete" => {
+                if ko {
+                    format!("‘{title}’ 과제 삭제")
+                } else {
+                    format!("Delete Epic ‘{title}’")
+                }
+            }
             "epic.edit" => {
                 if ko {
                     "과제 변경".into()

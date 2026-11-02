@@ -122,7 +122,12 @@ fn attach(
     };
     save(tx, session, chain_id, &chain)
 }
-fn remove(tx: &Transaction<'_>, session: &str, epic: &str, pin_running: bool) -> Result<()> {
+pub(super) fn remove(
+    tx: &Transaction<'_>,
+    session: &str,
+    epic: &str,
+    pin_running: bool,
+) -> Result<()> {
     let items = items(tx, session)?;
     let item = items
         .iter()

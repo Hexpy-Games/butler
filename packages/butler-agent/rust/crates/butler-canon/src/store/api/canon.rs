@@ -229,7 +229,7 @@ fn container(db: &Connection, plan: Option<&str>, project: &str) -> Result<Vec<V
     };
     rows(db, q.sql(), [plan.unwrap_or(project)])
 }
-fn bump_order(
+pub(super) fn bump_order(
     tx: &Transaction<'_>,
     ctx: &Context,
     plan: Option<&str>,
