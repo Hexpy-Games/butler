@@ -27,7 +27,7 @@ pub(in crate::host::guided::tools) async fn page(
         return Err(failure("web_read needs a url or an open tab."));
     }
     // Only a turn that may use the browser reads its tabs.
-    let browsing = owner.binding.authorized_names.contains("browser_open");
+    let browsing = owner.authorized("browser_open");
     let client = if browsing {
         Client::new(owner).await
     } else {

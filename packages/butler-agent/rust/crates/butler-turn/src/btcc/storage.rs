@@ -1,7 +1,7 @@
 //! BTCC-owned SQLite connection lifecycle and serialized execution lane.
 
 mod admission;
-mod authority;
+pub(in crate::btcc) mod authority;
 mod bootstrap;
 mod budget;
 mod canonical;

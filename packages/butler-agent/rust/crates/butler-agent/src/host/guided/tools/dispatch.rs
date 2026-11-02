@@ -280,7 +280,7 @@ async fn file_capability(
 
 /// The Turn's access mode as delegation requests name it.
 fn access_mode(owner: &GuidedTools) -> String {
-    owner.binding.access_mode.as_str().into()
+    owner.access_mode().as_str().into()
 }
 
 async fn list_automations(
@@ -335,7 +335,7 @@ pub(super) async fn domain_tool(
             .connector_tool(
                 call.name.clone(),
                 Value::Object(call.arguments.clone()),
-                owner.binding.access_mode == butler_turn::btcc::AccessMode::ReadOnly,
+                owner.access_mode() == butler_turn::btcc::AccessMode::ReadOnly,
             )
             .await;
         return Some(encoded(

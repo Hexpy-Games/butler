@@ -11,12 +11,14 @@ import { FILE_VIEWER_PAGE_ID } from "./FileViewerFrame";
  * The file viewer in the conversation's right slot: one tab per open file (from two files on), then the file
  * with one title row that carries back and close. Closing the last file empties the viewer, which frees the slot.
  */
-export function FileViewerPane({ sessionId, notice, onBack, documentPage }: {
+export function FileViewerPane({ sessionId, notice, onBack, onClose, documentPage }: {
   sessionId: string;
   /** A connection notice above the viewer when it takes the whole workspace. */
   notice?: ReactNode;
   /** Back to the chat, when the viewer takes the whole workspace (a phone). */
   onBack?: () => void;
+  /** A host may close the whole pane while retaining its open files. */
+  onClose?: () => void;
   /** Renders an editable document (its title row with the viewer's controls, and body); the documents feature supplies it. */
   documentPage: DocumentPageRenderer;
 }) {
@@ -26,7 +28,7 @@ export function FileViewerPane({ sessionId, notice, onBack, documentPage }: {
   if (!active) return null;
   const c = appCopy.fileViewer;
   const viewer = useFileViewerState.getState();
-  const close = () => viewer.close(sessionId, active.id);
+  const close = onClose ?? (() => viewer.close(sessionId, active.id));
   return (
     <AdaptiveShellCard aria-label={c.files} data-test-class="file-viewer">
       <Presence present motion="fade"><Stack fill gap="none">

@@ -222,9 +222,8 @@ fn list_capabilities(owner: &GuidedTools, call: &ModelRoundToolCall) -> Value {
             if !include_disabled && !enabled {
                 return None;
             }
-            let selected = owner.binding.visible_names.contains(tool.name);
-            let callable =
-                selected && enabled && owner.binding.authorized_names.contains(tool.name);
+            let selected = owner.visible(tool.name);
+            let callable = selected && enabled && owner.authorized(tool.name);
             let reason = disabled
                 .map(|value| value.0)
                 .or_else(|| (!implemented).then_some("native_executor_unavailable"));

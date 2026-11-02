@@ -127,7 +127,7 @@ fn contained_run(
     decision: butler_turn::btcc::AccessDecision,
     kind: butler_turn::btcc::CapabilityKind,
 ) -> Contained {
-    let mode = &owner.binding.access_mode;
+    let mode = &owner.access_mode();
     if decision != butler_turn::btcc::AccessDecision::Allow
         || *mode == AccessMode::FullAccess
         || super::access::resumes(owner, occurrence)
@@ -416,7 +416,7 @@ fn command_scope(
         workspace_reference: owner.binding.workspace_reference.as_ref(),
         workspace_path: &owner.binding.workspace_path,
         butler_data: &owner.binding.butler_data,
-        execution: if owner.binding.access_mode == AccessMode::FullAccess {
+        execution: if owner.access_mode() == AccessMode::FullAccess {
             crate::host::guided::command::CommandExecution::Registered
         } else {
             crate::host::guided::command::CommandExecution::Sandboxed
@@ -425,7 +425,7 @@ fn command_scope(
         abort: signal,
         allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
         installation_root: owner.binding.installation_root.as_deref(),
-        deny_secret_reads: owner.binding.access_mode != AccessMode::FullAccess,
+        deny_secret_reads: owner.access_mode() != AccessMode::FullAccess,
     }
 }
 

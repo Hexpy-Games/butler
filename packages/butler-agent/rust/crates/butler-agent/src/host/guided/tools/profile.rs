@@ -26,8 +26,7 @@ pub(super) async fn execute(
     let result = match call.name.as_str() {
         "update_onboarding_profile" => {
             if !owner
-                .binding
-                .access_mode
+                .access_mode()
                 .allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
             {
                 return encoded(&json!({"ok":false,"error":{
