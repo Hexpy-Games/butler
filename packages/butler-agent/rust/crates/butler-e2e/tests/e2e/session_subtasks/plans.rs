@@ -23,7 +23,8 @@ async fn open_subtask_read_is_indexed_and_bounded_by_open_children() -> Result<(
 
 fn check(data: &std::path::Path) -> Result<(), HarnessError> {
     let db = butler_platform::sqlite::open(data.join("agent-runtime/btcc.sqlite"))?;
-    let plan = plan(&db)?;
+    let plan = plan(&db, SQL)?;
+    check_worker_plan(&db)?;
     for line in plan.lines() {
         let name = line.split_whitespace().nth(1).unwrap_or_default();
         if line.starts_with("SCAN ") {
@@ -110,8 +111,8 @@ fn seed(db: &Connection) -> Result<Seeded, HarnessError> {
     Ok((parents, history, open))
 }
 
-fn plan(db: &Connection) -> Result<String, HarnessError> {
-    let mut statement = db.prepare(&format!("EXPLAIN QUERY PLAN {SQL}"))?;
+fn plan(db: &Connection, sql: &str) -> Result<String, HarnessError> {
+    let mut statement = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
     let binds = vec![SqlValue::Null; statement.parameter_count()];
     let plan = statement
         .query_map(params_from_iter(binds), |r| r.get::<_, String>(3))?
@@ -119,4 +120,22 @@ fn plan(db: &Connection) -> Result<String, HarnessError> {
         .join("\n");
     eprintln!("SUBTASK-PLAN\n{plan}");
     Ok(plan)
+}
+
+fn check_worker_plan(db: &Connection) -> Result<(), HarnessError> {
+    let plan = plan(db, butler_turn::btcc::storage::SUBTASK_WORKERS_SQL)?;
+    assert!(
+        plan.lines()
+            .any(|line| line.starts_with("SEARCH r USING INDEX idx_btcc_activity_parent_page")),
+        "{plan}"
+    );
+    for line in plan.lines() {
+        assert!(
+            !line.starts_with("SCAN r")
+                && !line.contains("SCAN btcc_session_relations")
+                && !line.contains("AUTOMATIC"),
+            "{plan}"
+        );
+    }
+    Ok(())
 }
