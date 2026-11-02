@@ -280,6 +280,12 @@ async fn execute(
         .and_then(serde_json::Value::as_str);
     let (binding, outcome) = match kind {
         None => {
+            if !bind::child_turn_admissible(&envelope, subsessions).await? {
+                return Ok(Executed {
+                    delivered: 0,
+                    eligible_turn_id: None,
+                });
+            }
             let request =
                 bind::bind_and_request(&envelope, bindings, data_root, default_workspace).await?;
             let session_id = request.session_id.clone();
