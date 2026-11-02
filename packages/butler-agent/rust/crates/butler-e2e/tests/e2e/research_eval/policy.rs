@@ -305,10 +305,14 @@ fn absorb(actor: &mut Actor, body: &Value, spec: &Value) {
         }
     }
 }
-// Only extracted text can establish evidence. Tool metadata and Work objectives
-// can repeat the request, so scanning arbitrary JSON would credit unread facts.
+// Only native reader text and its extracted title can establish evidence.
+// Query metadata and Work objectives can repeat the unread answer key.
 fn page_text(page: &Value) -> String {
-    let mut text = page["markdown"].as_str().unwrap_or_default().to_owned();
+    let mut text = format!(
+        "{}\n{}",
+        page["title"].as_str().unwrap_or_default(),
+        page["markdown"].as_str().unwrap_or_default()
+    );
     for chunk in page["chunks"].as_array().into_iter().flatten() {
         text.push('\n');
         text.push_str(chunk["text"].as_str().unwrap_or_default());
@@ -342,4 +346,19 @@ pub(super) fn outputs(body: &Value) -> Vec<Value> {
         .filter_map(|i| serde_json::from_str::<Value>(&output_text(i)).ok())
         .map(|v| v.get("output").cloned().unwrap_or(v))
         .collect()
+}
+
+// test-category: pure-logic
+#[test]
+fn native_reader_title_counts_without_query_metadata() -> Result<(), butler_e2e::e2e::HarnessError>
+{
+    butler_e2e::gate!();
+    let text = page_text(
+        &json!({"title":"Electric kettle 1.25 L", "markdown":"Care instructions",
+        "query":"Unseen 900 watts", "next":"Unseen 900 watts"}),
+    );
+    assert!(text.contains("electric kettle 1.25 l"));
+    assert!(text.contains("care instructions"));
+    assert!(!text.contains("900 watts"));
+    Ok(())
 }

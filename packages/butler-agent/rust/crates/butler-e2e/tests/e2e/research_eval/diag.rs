@@ -7,7 +7,7 @@ use std::{collections::HashSet, path::PathBuf};
 use tokio_util::sync::CancellationToken;
 
 pub(super) fn directory(task: &Task, set: &str) -> Option<PathBuf> {
-    if set != "tasks" {
+    if super::blind(set) {
         return None;
     }
     let root = PathBuf::from(std::env::var_os("BUTLER_RESEARCH_EVAL_DIAG")?);
@@ -17,7 +17,7 @@ pub(super) fn directory(task: &Task, set: &str) -> Option<PathBuf> {
             .components()
             .all(|c| matches!(c, std::path::Component::Normal(_)))
     );
-    Some(root.join(id))
+    Some(root.join(set).join(id))
 }
 
 pub(super) async fn save(

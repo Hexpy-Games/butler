@@ -97,7 +97,7 @@ fn task_row(
                 .sum::<f64>()
         );
     }
-    if set == "tasks" {
+    if !super::blind(set) {
         row["largest_tool_outputs"] = json!(largest);
     }
     row["requests"] = json!(requests);
@@ -167,27 +167,45 @@ fn median(mut values: Vec<f64>) -> Option<f64> {
         values[mid]
     })
 }
+pub(super) fn redact(row: &mut Value, set: &str, index: usize) {
+    row["id"] = json!(format!("{set}/{index}"));
+    let fields = row.as_object_mut().unwrap();
+    for key in [
+        "shape",
+        "missed",
+        "runtime_models",
+        "requests",
+        "largest_tool_outputs",
+    ] {
+        fields.remove(key);
+    }
+}
 pub(super) fn summary(rows: &[Value]) -> Value {
+    let mut sets = BTreeMap::<&str, Vec<f64>>::new();
+    for row in rows {
+        sets.entry(row["set"].as_str().unwrap())
+            .or_default()
+            .push(row["usd"].as_f64().unwrap());
+    }
+    let per_set: BTreeMap<_, _> = sets
+        .into_iter()
+        .map(|(set, costs)| (set, median(costs)))
+        .collect();
     json!({"median_usd":median(rows.iter().map(|r|r["usd"].as_f64().unwrap()).collect()),
-        "median_holdout_usd":median(rows.iter().filter(|r|r["set"] == "holdout").map(|r|r["usd"].as_f64().unwrap()).collect()),
+        "median_blind_usd":median(rows.iter().filter(|r|super::blind(r["set"].as_str().unwrap())).map(|r|r["usd"].as_f64().unwrap()).collect()),
+        "median_usd_per_set":per_set,
         "all_facts_kept":rows.iter().all(|r|r["facts_found"] == r["facts_total"])})
 }
 pub(super) fn markdown(rows: &[Value]) -> String {
     use std::fmt::Write;
     let mut text = "| Task | Shape | Facts | Calls | Input | Cached | Uncached | Output | Avg tools | USD | Cold USD |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n".to_owned();
-    let mut holdout = 0;
     for row in rows {
-        let id = if row["set"] == "holdout" {
-            holdout += 1;
-            format!("holdout/{holdout}")
-        } else {
-            row["id"].as_str().unwrap().replace('|', "\\|")
-        };
+        let id = row["id"].as_str().unwrap().replace('|', "\\|");
         writeln!(
             text,
             "| {} | {} | {}/{} | {} | {:.0} | {:.0} | {:.0} | {:.0} | {:.0} | {:.6} | {:.6} |",
             id,
-            if row["set"] == "holdout" {
+            if super::blind(row["set"].as_str().unwrap()) {
                 "—"
             } else {
                 row["shape"].as_str().unwrap()
@@ -206,7 +224,35 @@ pub(super) fn markdown(rows: &[Value]) -> String {
         .unwrap();
     }
     let summary = summary(rows);
-    writeln!(text, "\nMedian USD: {}. Holdout median USD: {}. All facts kept: {}.\n\nToken estimates: o200k over serialized instructions, tools, input and reply items. Cached tokens are the common token prefix with the previous request in that lane. Prices are estimates from the static catalog, including per-request prompt tiers.",
-        summary["median_usd"], summary["median_holdout_usd"], if summary["all_facts_kept"] == true { "yes" } else { "no" }).unwrap();
+    writeln!(text, "\nMedian USD: {}. Blind median USD: {}. Per-set median USD: {}. All facts kept: {}.\n\nToken estimates: o200k over serialized instructions, tools, input and reply items. Cached tokens are the common token prefix with the previous request in that lane. Prices are estimates from the static catalog, including per-request prompt tiers.",
+        summary["median_usd"], summary["median_blind_usd"], summary["median_usd_per_set"], if summary["all_facts_kept"] == true { "yes" } else { "no" }).unwrap();
     text
+}
+
+// test-category: pure-logic
+#[test]
+fn arbitrary_sets_keep_blind_reports_numeric() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut row = json!({"id":"private-task", "set":"new-holdout-set", "shape":"private-shape",
+        "missed":["private-fact"], "largest_tool_outputs":["private-output"],
+        "runtime_models":["private-model"], "requests":["private-request"],
+        "facts_found":1, "facts_total":2, "calls":3, "input":4.0, "cached":1.0,
+        "uncached":3.0, "output":2.0, "average_tools_tokens":1.0, "usd":6.0, "usd_cold":7.0});
+    redact(&mut row, "new-holdout-set", 2);
+    assert_eq!(row["id"], "new-holdout-set/2");
+    assert!(!row.to_string().contains("private-"));
+    assert!(!markdown(&[row.clone()]).contains("private-"));
+    assert!(super::blind("new-holdout-set"));
+    assert!(!super::blind("new-visible-set"));
+    let totals = summary(&[
+        row,
+        json!({"set":"new-visible-set", "usd":2.0, "facts_found":1, "facts_total":1}),
+        json!({"set":"new-visible-set", "usd":4.0, "facts_found":1, "facts_total":1}),
+        json!({"set":"other-holdout", "usd":10.0, "facts_found":1, "facts_total":1}),
+    ]);
+    assert_eq!(totals["median_usd"], 5.0);
+    assert_eq!(totals["median_blind_usd"], 8.0);
+    assert_eq!(totals["median_usd_per_set"]["new-visible-set"], 3.0);
+    assert_eq!(totals["all_facts_kept"], false);
+    Ok(())
 }

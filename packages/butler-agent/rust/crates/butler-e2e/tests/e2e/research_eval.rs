@@ -35,21 +35,34 @@ async fn research_eval_report() -> Result<(), HarnessError> {
         std::env::var("BUTLER_RESEARCH_EVAL_OUT")
             .map_err(|_| HarnessError("BUTLER_RESEARCH_EVAL_OUT is required".into()))?,
     );
-    let sets = std::env::var("BUTLER_RESEARCH_EVAL_SETS").unwrap_or("tasks,holdout".into());
+    let sets = std::env::var("BUTLER_RESEARCH_EVAL_SETS")
+        .unwrap_or("tasks,holdout,deep,deep-holdout".into());
     let mut rows = Vec::new();
     for set in sets.split(',').map(str::trim) {
-        assert!(matches!(set, "tasks" | "holdout"), "unknown evaluation set");
+        assert!(
+            !set.is_empty()
+                && std::path::Path::new(set).components().count() == 1
+                && matches!(
+                    std::path::Path::new(set).components().next(),
+                    Some(std::path::Component::Normal(_))
+                ),
+            "evaluation set must name a directory under the fixture root"
+        );
         let directory = root.join(set);
         let mut paths = std::fs::read_dir(directory)?
             .map(|e| e.map(|e| e.path()))
             .collect::<Result<Vec<_>, _>>()?;
         paths.sort();
         assert!(!paths.is_empty(), "evaluation set is empty");
-        for path in paths.into_iter().filter(|p| p.is_dir()) {
+        for (index, path) in paths.into_iter().filter(|p| p.is_dir()).enumerate() {
             let task = tokio::task::spawn_blocking(move || fixture::Task::load(&path))
                 .await
                 .map_err(|e| HarnessError(e.to_string()))??;
-            rows.push(run(Arc::new(task), set).await?);
+            let mut row = run(Arc::new(task), set).await?;
+            if blind(set) {
+                report::redact(&mut row, set, index + 1);
+            }
+            rows.push(row);
         }
     }
     let markdown = report::markdown(&rows);
@@ -65,6 +78,10 @@ async fn research_eval_report() -> Result<(), HarnessError> {
     .await
     .map_err(|e| HarnessError(e.to_string()))??;
     Ok(())
+}
+
+fn blind(set: &str) -> bool {
+    set.contains("holdout")
 }
 
 async fn run(task: Arc<fixture::Task>, set: &str) -> Result<Value, HarnessError> {
