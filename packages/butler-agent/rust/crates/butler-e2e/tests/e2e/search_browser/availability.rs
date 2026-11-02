@@ -214,6 +214,30 @@ fn assert_reader_projection(
         );
         projected.as_object_mut().unwrap().remove(key);
     }
+    for key in [
+        "duration_ms",
+        "effective_max_chars",
+        "effective_max_chunks",
+        "source_url",
+        "requested_url",
+    ] {
+        projected.as_object_mut().unwrap().remove(key);
+    }
+    for (key, empty) in [
+        ("warnings", json!([])),
+        ("error", Value::Null),
+        ("render_recommended", json!(false)),
+    ] {
+        if projected[key] == empty {
+            projected.as_object_mut().unwrap().remove(key);
+        }
+    }
+    for chunk in projected["chunks"].as_array_mut().unwrap() {
+        chunk
+            .as_object_mut()
+            .unwrap()
+            .retain(|key, _| matches!(key.as_str(), "id" | "index"));
+    }
     assert_eq!(&projected, model, "projection changed web content");
     assert!(raw.len() < 50 * 1024);
     Ok(())

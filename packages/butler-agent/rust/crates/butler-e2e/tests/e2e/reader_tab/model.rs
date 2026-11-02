@@ -93,7 +93,7 @@ const ANSWER: &str = "The Beacon is the brightest of the three lamps.";
 
 /// The comparison of the read page's candidates, each value sourced to it.
 fn blocks(read: &Value) -> Value {
-    let source = read["source_url"].clone();
+    let source = read["final_url"].clone();
     let checked = chrono::Utc::now().to_rfc3339();
     let lamps = [("Aurora", 450), ("Beacon", 1200), ("Cinder", 800)];
     let cards = lamps.map(|(name, lumens)| {
