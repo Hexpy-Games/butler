@@ -22,6 +22,7 @@ pub(super) fn render(
     snapshot: &ContextBudgetSnapshot<'_>,
     model_ref: Option<&str>,
     history: (&str, &HistoryStarts),
+    results: &mut butler_turn::btcc::ResultProjection,
 ) -> ContextResult<(String, Vec<String>)> {
     let charge = |text: &str| {
         snapshot
@@ -70,6 +71,12 @@ pub(super) fn render(
     if !fits(&text, cap, &charge)? {
         return Ok((String::new(), Vec::new()));
     }
+    project_results(
+        turns.get(dropped..).unwrap_or_default(),
+        &mut rendered,
+        results,
+    );
+    text = join(&prefix, &rendered);
     if let Some(turn) = turns.get(dropped) {
         history.1.record(
             key,
@@ -447,4 +454,21 @@ fn render_cached(
         rendered.push(cached(&version, || render_condensed(turn, window))?);
     }
     Ok(rendered)
+}
+
+fn project_results(
+    turns: &[&std::sync::Arc<crate::context::ConversationSemanticTurnAtom>],
+    rendered: &mut [String],
+    results: &mut butler_turn::btcc::ResultProjection,
+) {
+    for (turn, text) in turns.iter().zip(rendered) {
+        for message in &turn.messages {
+            if butler_turn::btcc::ResultProjection::result_id(&message.text).is_some()
+                && text.contains(&message.text)
+            {
+                let projected = results.project(&message.text);
+                *text = text.replacen(&message.text, &projected, 1);
+            }
+        }
+    }
 }

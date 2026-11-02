@@ -70,6 +70,7 @@ pub trait ExactProjectWorkResultAuthority: Send + Sync {
 
 #[derive(Clone, Debug)]
 pub(crate) struct OperationResultDiscoveryInput {
+    pub evidence: Option<String>,
     pub turn_id: String,
     pub work_id: Option<String>,
     pub cursor: f64,
@@ -126,6 +127,7 @@ pub(crate) enum ExactResultSource {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ExactResultRangeInput {
+    pub evidence: Option<String>,
     pub turn_id: String,
     pub result_ref: String,
     pub result_sha256: String,

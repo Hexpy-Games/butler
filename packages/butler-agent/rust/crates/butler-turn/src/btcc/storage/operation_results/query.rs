@@ -32,6 +32,17 @@ pub(super) fn discover(
     db: &Connection,
     input: &OperationResultDiscoveryInput,
 ) -> StorageResult<OperationResultDiscovery> {
+    if let Some(bundle) = &input.evidence {
+        super::evidence::discover(db, input, bundle)
+    } else {
+        discover_work(db, input)
+    }
+}
+
+fn discover_work(
+    db: &Connection,
+    input: &OperationResultDiscoveryInput,
+) -> StorageResult<OperationResultDiscovery> {
     let work = input.work_id.as_deref().unwrap_or("");
     let through = input.through.map(Ok).unwrap_or_else(|| {
         db.query_row(THROUGH_SQL, params![input.turn_id, work], |row| {
@@ -321,9 +332,19 @@ pub(super) fn read_exact(
     authority: Option<&dyn ExactProjectWorkResultAuthority>,
     input: &ExactResultRangeInput,
 ) -> StorageResult<ExactResultRange> {
+    let authorized;
+    let input = if let Some(bundle) = &input.evidence {
+        authorized = super::evidence::authorize_read(db, input, bundle)?;
+        &authorized
+    } else {
+        input
+    };
     let payload = match work(db, "result.result_ref=?1", &input.result_ref)? {
         Some(work) => work_payload(db, authority, input, &work)?,
-        None => turn_payload(db, authority, input)?,
+        None => match input.evidence.as_ref() {
+            Some(_) => evidence_payload(db, authority, input)?,
+            None => turn_payload(db, authority, input)?,
+        },
     };
     let result = payload
         .result
@@ -430,4 +451,27 @@ fn turn_payload(
         return Err(error(StorageCode::OperationResultRevisionMismatch));
     }
     Ok(payload)
+}
+
+fn evidence_payload(
+    db: &Connection,
+    authority: Option<&dyn ExactProjectWorkResultAuthority>,
+    input: &ExactResultRangeInput,
+) -> StorageResult<Payload> {
+    let receipt = db.query_row(
+        "SELECT capability,receipt_json,result_json FROM btcc_guided_effects WHERE receipt_id=?1 AND status='applied'",
+        [&input.result_ref], |r| Ok(Payload {
+            tool: r.get(0)?, raw: r.get(1)?, result: r.get(2)?, hash: None,
+        }),
+    ).optional().map_err(StorageError::sqlite)?;
+    match receipt {
+        Some(_) if input.revision.is_some() || input.work_id.is_some() => {
+            Err(error(StorageCode::OperationResultRevisionMismatch))
+        }
+        Some(_) if input.source == ExactResultSource::Request => {
+            Err(error(StorageCode::OperationResultMissingOrScopeMismatch))
+        }
+        Some(payload) => Ok(payload),
+        None => turn_payload(db, authority, input),
+    }
 }
