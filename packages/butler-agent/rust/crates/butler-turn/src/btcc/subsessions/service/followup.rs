@@ -10,7 +10,7 @@ impl SubsessionService {
     ) -> Result<Value, BtccError> {
         let prior = self.prior_context(relation).await?;
         let worker = relation.packet.child_role == crate::btcc::ChildRole::Worker;
-        if prior["result"].is_null()
+        if prior.get("result").is_none_or(Value::is_null)
             || self
                 .repository
                 .has_pending_direction(relation.relation_id.clone())

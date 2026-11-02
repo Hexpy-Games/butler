@@ -50,7 +50,10 @@ impl SubsessionService {
         self.work
             .disposition(input, Some(pending.result_id.clone()))
             .await?;
-        if !matches!(result["status"].as_str(), Some("success" | "completed")) {
+        if !matches!(
+            result.get("status").and_then(Value::as_str),
+            Some("success" | "completed")
+        ) {
             self.work
                 .abandon_bound_work_for_turn(relation.parent_turn_id.clone())
                 .await?;
@@ -65,7 +68,10 @@ fn settlement_input(
     result: &Value,
     result_id: &str,
 ) -> Result<DispositionInput, BtccError> {
-    let status = result["status"].as_str().unwrap_or_default();
+    let status = result
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let disposition = match status {
         "success" | "completed" => DispositionStatus::Completed,
         "cancelled" | "abandoned" => DispositionStatus::Open,

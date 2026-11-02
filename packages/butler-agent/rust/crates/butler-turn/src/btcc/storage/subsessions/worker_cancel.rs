@@ -19,16 +19,6 @@ impl SqliteSubsessionRepository {
             .await
     }
 
-    pub(crate) async fn worker_cancellable(&self, relation: String) -> Result<bool, StorageError> {
-        self.storage.read(move |db| {
-            let pending: bool = db.query_row("SELECT EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')", [&relation], |r| r.get(0))
-                .map_err(StorageError::sqlite)?;
-            let live: bool = db.query_row(worker_admission::WORKER_TURN_UNSETTLED_SQL, [&relation], |r| r.get(0))
-                .map_err(StorageError::sqlite)?;
-            Ok(pending || live)
-        }).await
-    }
-
     /// Returns the current or unpublished turn to stop. Recheck eligibility in
     /// the same transaction that retires directions and their dispatch state.
     pub(crate) async fn cancel_worker_pending(

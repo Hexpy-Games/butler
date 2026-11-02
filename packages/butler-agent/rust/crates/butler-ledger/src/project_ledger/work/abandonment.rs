@@ -167,7 +167,10 @@ fn closing_checkpoint(
         next: "",
         checkpoint_identity: &identity.id,
     });
-    view.latest_checkpoint = Some(codec::typed(child["checkpoint"].clone())?);
+    view.latest_checkpoint =
+        Some(codec::typed(child.get("checkpoint").cloned().ok_or_else(
+            || invalid("project_work_managed_record_invalid"),
+        )?)?);
     Ok(vec![child])
 }
 
