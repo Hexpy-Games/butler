@@ -3,7 +3,7 @@
 // no clamp behind "Show more", nothing masked, Allow reachable. A command body sits in a code frame that keeps its
 // spaces, indentation and newlines (it scrolls both ways; each edge that hides content fades); invisible characters show as escapes.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { HARNESS_MESSAGES, HARNESS_MODEL_CATALOG, HARNESS_NAVIGATION, HARNESS_SS03_OBSERVER_VIEW } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 import { EMPTY_SETTINGS } from "../../packages/butler-app/client/ui/src/app/constants.ts";
@@ -11,11 +11,6 @@ import type { SessionView } from "../../packages/butler-app/client/ui/src/app/ty
 import { formatClips, probeFocusRing } from "../support/focus-ring-clipping.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 
-/** `--before` only captures screenshots, for comparison against a build without the change. */
-const before = Bun.argv.includes("--before");
-const output = process.env.BUTLER_APPROVAL_DETAILS_SHOTS;
-assert(output, "Set BUTLER_APPROVAL_DETAILS_SHOTS to a temporary screenshot directory");
-mkdirSync(output, { recursive: true });
 const dist = resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
 assert(existsSync(join(dist, "index.html")), "Build the UI first");
 const base = "http://approval-details.localhost/";
@@ -71,7 +66,6 @@ const browser = await launchSmokeBrowser();
 const page = await browser.newPage({ reducedMotion: "reduce", deviceScaleFactor: 2 });
 const errors: string[] = [];
 page.on("pageerror", error => errors.push(error.message));
-let screenshots = 0;
 const shortWindowsCovered: string[] = [];
 try {
   await page.route("**/*", async route => {
@@ -108,126 +102,98 @@ try {
       const label = `${item.name}: ${width}x${height} ${theme} ${locale}`;
       // The fixture's unrouted settings requests may raise an error toast over the card; it is not part of what is checked.
       await page.evaluate(() => document.querySelectorAll("[data-sonner-toast]").forEach(node => node.remove()));
-      const prefix = join(output,`${before ? "before" : "after"}-${item.name}-${width}x${height}-${theme}-${locale}`);
-      await panel.screenshot({ path: `${prefix}.png` });
-      screenshots++;
-      if (!before) {
-        const text = await panel.innerText();
-        for (const escape of item.escapes) assert(text.includes(escape), `${label}: shows ${escape}`);
-        if (item.code) assert(!text.includes("⏎") && !text.includes("‹U+0020"), `${label}: whitespace is drawn as itself, never as an escape`);
-        assert(text.includes(item.shown), `${label}: the exact text is shown, never cut`);
-        assert(!text.includes("••••") && !text.includes("[redacted]"), `${label}: nothing masked`);
-        if (item.once) assert.equal(text.split(item.once).length - 1, 1, `${label}: a capped copy is not shown again`);
-        assert.equal(await panel.locator('[data-slot="composer-decision-details"] [data-clamped]').count(), 0, `${label}: no clamp`);
-        assert.equal(await panel.getByRole("button", { name: /^(더\s?보기|Show more)$/u }).count(), 0, `${label}: no Show more`);
-        // The details scroll inside the panel: the tail is reachable and the decision buttons stay on screen.
-        const reach = await panel.evaluate((node, tail) => {
-          const scroll = node.querySelector('[data-slot="decision-details-scroll"]') as HTMLElement | null;
-          const line = [...node.querySelectorAll('[data-slot="composer-decision-details"] :is(p, pre)')].find(p => p.textContent?.includes(tail));
-          if (!scroll || !line) return { found: false, inside: false, buttons: false, info: [] as string[] };
-          scroll.scrollTop = scroll.scrollHeight;
-          const box = scroll.getBoundingClientRect(), at = line.getBoundingClientRect();
-          const info: string[] = [];
-          const buttons = [...node.querySelectorAll("button")].slice(-3).map(button => {
-            // In a short window the page itself may scroll; a button is reachable if scrolling it to the middle shows it uncovered.
-            button.scrollIntoView({ block: "center" });
-            const rect = button.getBoundingClientRect();
-            const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-            info.push(`${Math.round(rect.top)}..${Math.round(rect.bottom)} of ${window.innerHeight} hit=${hit?.tagName}.${hit?.closest("[data-test-class]")?.getAttribute("data-test-class")}`);
-            return rect.bottom <= window.innerHeight && rect.top >= 0 && rect.right <= window.innerWidth && Boolean(hit && button.contains(hit));
-          }).every(Boolean);
-          return { found: true, inside: at.bottom <= box.bottom + 1 && scroll.scrollWidth <= scroll.clientWidth + 1, buttons, info };
+      const text = await panel.innerText();
+      for (const escape of item.escapes) assert(text.includes(escape), `${label}: shows ${escape}`);
+      if (item.code) assert(!text.includes("⏎") && !text.includes("‹U+0020"), `${label}: whitespace is drawn as itself, never as an escape`);
+      assert(text.includes(item.shown), `${label}: the exact text is shown, never cut`);
+      assert(!text.includes("••••") && !text.includes("[redacted]"), `${label}: nothing masked`);
+      if (item.once) assert.equal(text.split(item.once).length - 1, 1, `${label}: a capped copy is not shown again`);
+      assert.equal(await panel.locator('[data-slot="composer-decision-details"] [data-clamped]').count(), 0, `${label}: no clamp`);
+      assert.equal(await panel.getByRole("button", { name: /^(더\s?보기|Show more)$/u }).count(), 0, `${label}: no Show more`);
+      // The details scroll inside the panel: the tail is reachable and the decision buttons stay on screen.
+      const reach = await panel.evaluate((node, tail) => {
+        const scroll = node.querySelector('[data-slot="decision-details-scroll"]') as HTMLElement | null;
+        const line = [...node.querySelectorAll('[data-slot="composer-decision-details"] :is(p, pre)')].find(p => p.textContent?.includes(tail));
+        if (!scroll || !line) return { found: false, inside: false, buttons: false, info: [] as string[] };
+        scroll.scrollTop = scroll.scrollHeight;
+        const box = scroll.getBoundingClientRect(), at = line.getBoundingClientRect();
+        const info: string[] = [];
+        const buttons = [...node.querySelectorAll("button")].slice(-3).map(button => {
+          // In a short window the page itself may scroll; a button is reachable if scrolling it to the middle shows it uncovered.
+          button.scrollIntoView({ block: "center" });
+          const rect = button.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          info.push(`${Math.round(rect.top)}..${Math.round(rect.bottom)} of ${window.innerHeight} hit=${hit?.tagName}.${hit?.closest("[data-test-class]")?.getAttribute("data-test-class")}`);
+          return rect.bottom <= window.innerHeight && rect.top >= 0 && rect.right <= window.innerWidth && Boolean(hit && button.contains(hit));
+        }).every(Boolean);
+        return { found: true, inside: at.bottom <= box.bottom + 1 && scroll.scrollWidth <= scroll.clientWidth + 1, buttons, info };
+      }, item.tail);
+      assert(reach.found && reach.inside, `${label}: tail reachable in the scroll area, with no sideways overflow`);
+      // A short window is reported, not asserted: the work-progress strip can sit over the buttons there, with or without a long card.
+      if (height >= 800) assert(reach.buttons, `${label}: Deny, Allow once and the allow menu on screen and not covered: ${JSON.stringify(reach.info)}`);
+      else if (!reach.buttons) shortWindowsCovered.push(`${label}: ${JSON.stringify(reach.info)}`);
+      if (item.code) {
+        // The command is in the code frame: whitespace kept, and scrolling the frame reaches the tail.
+        const frame = await panel.locator('[data-slot="composer-decision-code"] pre').first().evaluate(async (pre, tail) => {
+          const style = getComputedStyle(pre);
+          const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const code = pre.closest('[data-slot="composer-decision-code"]') as HTMLElement;
+          const details = pre.closest('[data-slot="decision-details-scroll"]') as HTMLElement;
+          const scroll = [details, ...details.querySelectorAll<HTMLElement>("[data-scroll-fade]")]
+            .find(node => node.hasAttribute("data-scroll-fade") && /auto|scroll|hidden|clip/u.test(getComputedStyle(node).overflowY))!;
+          scroll.scrollTop = 0; pre.scrollTop = 0; pre.scrollLeft = 0; await settle();
+          const box = code.getBoundingClientRect(), scrollBox = scroll.getBoundingClientRect();
+          const top = scrollBox.top + scroll.clientTop, bottom = top + scroll.clientHeight;
+          const fade = Number.parseFloat(getComputedStyle(scroll).getPropertyValue("--scroll-fade-size"));
+          const geometry = { top: box.top, bottom: box.bottom, scrollTop: top, scrollBottom: bottom, fade };
+          const wide = pre.scrollWidth > pre.clientWidth + 1, tall = pre.scrollHeight > pre.clientHeight + 1;
+          pre.scrollLeft = pre.scrollWidth; pre.scrollTop = pre.scrollHeight; await settle();
+          const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+          let node: Node | null = null;
+          while (walker.nextNode()) if (walker.currentNode.textContent?.includes(tail)) node = walker.currentNode;
+          let tailInside = false;
+          if (node) {
+            const range = document.createRange();
+            const at = node.textContent!.lastIndexOf(tail);
+            range.setStart(node, at); range.setEnd(node, at + tail.length);
+            const box = pre.getBoundingClientRect(), rect = range.getBoundingClientRect();
+            // The text-box trim lets a line box overhang the frame's text box, so the line's middle is checked vertically.
+            const line = (rect.top + rect.bottom) / 2;
+            tailInside = rect.left >= box.left - 1 && rect.right <= box.right + 1 && line >= box.top && line <= box.bottom;
+          }
+          pre.scrollLeft = 0; pre.scrollTop = 0; await settle();
+          return { whiteSpace: style.whiteSpace, wide, tall, tailInside, geometry };
         }, item.tail);
-        assert(reach.found && reach.inside, `${label}: tail reachable in the scroll area, with no sideways overflow`);
-        // A short window is reported, not asserted: the work-progress strip can sit over the buttons there, with or without a long card.
-        if (height >= 800) assert(reach.buttons, `${label}: Deny, Allow once and the allow menu on screen and not covered: ${JSON.stringify(reach.info)}`);
-        else if (!reach.buttons) shortWindowsCovered.push(`${label}: ${JSON.stringify(reach.info)}`);
-        if (item.code) {
-          // The command is in the code frame: monospace, whitespace kept, no ligatures (#1772), scrolling on both axes,
-          // and a fade on exactly the edges that hide content: at rest, part way, and at the far end.
-          const frame = await panel.locator('[data-slot="composer-decision-code"] pre').first().evaluate(async (pre, tail) => {
-            const style = getComputedStyle(pre);
-            const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-            const code = pre.closest('[data-slot="composer-decision-code"]') as HTMLElement;
-            const details = pre.closest('[data-slot="decision-details-scroll"]') as HTMLElement;
-            const scroll = [details, ...details.querySelectorAll<HTMLElement>("[data-scroll-fade]")]
-              .find(node => node.hasAttribute("data-scroll-fade") && /auto|scroll|hidden|clip/u.test(getComputedStyle(node).overflowY))!;
-            scroll.scrollTop = 0; pre.scrollTop = 0; pre.scrollLeft = 0; await settle();
-            const box = code.getBoundingClientRect(), scrollBox = scroll.getBoundingClientRect();
-            const top = scrollBox.top + scroll.clientTop, bottom = top + scroll.clientHeight;
-            const fade = Number.parseFloat(getComputedStyle(scroll).getPropertyValue("--scroll-fade-size"));
-            const codeStyle = getComputedStyle(code);
-            const inset = [codeStyle.paddingTop, codeStyle.paddingBottom, codeStyle.borderTopWidth, codeStyle.borderBottomWidth]
-              .reduce((sum, value) => sum + Number.parseFloat(value), 0);
-            const geometry = { top: box.top, bottom: box.bottom, scrollTop: top, scrollBottom: bottom, fade,
-              height: box.height, naturalHeight: (pre.textContent ?? "").split("\n").length * Number.parseFloat(style.lineHeight) + inset };
-            const fades = () => ["x-start", "x-end", "y-start", "y-end"].map(edge => Number.parseFloat(getComputedStyle(pre).getPropertyValue(`--scroll-fade-${edge}`)) > 0);
-            const wide = pre.scrollWidth > pre.clientWidth + 1, tall = pre.scrollHeight > pre.clientHeight + 1;
-            const expected = (start: boolean[], end: boolean[]) => [start[0] && wide, end[0] && wide, start[1] && tall, end[1] && tall];
-            const rest = fades();
-            pre.scrollLeft = (pre.scrollWidth - pre.clientWidth) / 2; pre.scrollTop = (pre.scrollHeight - pre.clientHeight) / 2; await settle();
-            const middle = fades();
-            pre.scrollLeft = pre.scrollWidth; pre.scrollTop = pre.scrollHeight; await settle();
-            const end = fades();
-            const fadesMatch = [[rest, expected([false, false], [true, true])], [middle, expected([true, true], [true, true])], [end, expected([true, true], [false, false])]]
-              .every(([seen, want]) => JSON.stringify(seen) === JSON.stringify(want));
-            const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
-            let node: Node | null = null;
-            while (walker.nextNode()) if (walker.currentNode.textContent?.includes(tail)) node = walker.currentNode;
-            let tailInside = false;
-            if (node) {
-              const range = document.createRange();
-              const at = node.textContent!.lastIndexOf(tail);
-              range.setStart(node, at); range.setEnd(node, at + tail.length);
-              const box = pre.getBoundingClientRect(), rect = range.getBoundingClientRect();
-              // The text-box trim lets a line box overhang the frame's text box, so the line's middle is checked vertically.
-              const line = (rect.top + rect.bottom) / 2;
-              tailInside = rect.left >= box.left - 1 && rect.right <= box.right + 1 && line >= box.top && line <= box.bottom;
-            }
-            pre.scrollLeft = 0; pre.scrollTop = 0; await settle();
-            return { whiteSpace: style.whiteSpace, mono: style.fontFamily.includes("Plex Mono"), ligatures: style.fontVariantLigatures, wide, tall,
-              fadesMatch, fades: { rest, middle, end }, tailInside, geometry };
-          }, item.tail);
-          assert(frame.geometry.top >= frame.geometry.scrollTop && frame.geometry.bottom <= frame.geometry.scrollBottom - frame.geometry.fade,
-            `${label}: the whole code frame stays above the details bottom fade: ${JSON.stringify(frame.geometry)}`);
-          if (item.name === "short-command") {
-            assert(!frame.tall, `${label}: the short command does not scroll vertically`);
-            assert(Math.abs(frame.geometry.height - frame.geometry.naturalHeight) <= 1, `${label}: the short frame keeps its natural height: ${JSON.stringify(frame.geometry)}`);
+        assert(frame.geometry.top >= frame.geometry.scrollTop && frame.geometry.bottom <= frame.geometry.scrollBottom - frame.geometry.fade,
+          `${label}: the whole code frame stays above the details bottom fade: ${JSON.stringify(frame.geometry)}`);
+        assert.equal(frame.whiteSpace, "pre", `${label}: the code frame keeps spaces and line breaks`);
+        assert(frame.tailInside, `${label}: scrolling the frame reaches the tail`);
+        if (item.name === "padded-command") assert(frame.wide, `${label}: the padding runs sideways out of the frame`);
+        if (item.name === "tall-command") assert(frame.tall, `${label}: the tall script scrolls inside its frame`);
+        if ((frame.wide || frame.tall) && height >= 800) {
+          // A frame that scrolls is a keyboard stop; its ring is drawn inset and never clipped.
+          await panel.focus();
+          let reached = false;
+          for (let step = 0; step < 8 && !reached; step++) {
+            await page.keyboard.press("Tab");
+            reached = await page.evaluate(() => document.activeElement?.matches('[data-slot="composer-decision-code"] pre') ?? false);
           }
-          assert.equal(frame.whiteSpace, "pre", `${label}: the code frame keeps spaces and line breaks`);
-          assert(frame.mono, `${label}: the code frame uses the code font`);
-          assert.equal(frame.ligatures, "none", `${label}: the code frame draws its own characters`);
-          assert(frame.fadesMatch, `${label}: only edges with hidden content fade (x-start, x-end, y-start, y-end): ${JSON.stringify(frame.fades)}`);
-          assert(frame.tailInside, `${label}: scrolling the frame reaches the tail`);
-          if (item.name === "padded-command") assert(frame.wide, `${label}: the padding runs sideways out of the frame`);
-          if (item.name === "tall-command") assert(frame.tall, `${label}: the tall script scrolls inside its frame`);
-          if ((frame.wide || frame.tall) && height >= 800) {
-            // A frame that scrolls is a keyboard stop; its ring is drawn inset and never clipped.
-            await panel.focus();
-            let reached = false;
-            for (let step = 0; step < 8 && !reached; step++) {
-              await page.keyboard.press("Tab");
-              reached = await page.evaluate(() => document.activeElement?.matches('[data-slot="composer-decision-code"] pre') ?? false);
-            }
-            assert(reached, `${label}: Tab reaches the code frame`);
-            const probe = await probeFocusRing(page);
-            assert(probe && !probe.noIndicator && probe.clips.length === 0,`${label}: the code frame's focus ring is not clipped: ${probe ? formatClips(probe.clips) : "no ring"}`);
-            await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-          }
-          if (item.name === "indented-command") {
-            const lines = (await panel.locator('[data-slot="composer-decision-code"] pre').first().innerText()).split("\n");
-            for (const line of INDENTED.split("\n").filter(line => line.startsWith(" ")))
-              assert(lines.includes(line), `${label}: indentation kept: ${JSON.stringify(line)}`);
-          }
+          assert(reached, `${label}: Tab reaches the code frame`);
+          const probe = await probeFocusRing(page);
+          assert(probe && !probe.noIndicator && probe.clips.length === 0,`${label}: the code frame's focus ring is not clipped: ${probe ? formatClips(probe.clips) : "no ring"}`);
+          await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         }
-        // The tail of the scrolled details, as the approver reaches it.
-        await panel.screenshot({ path: `${prefix}-end.png` });
-        await page.evaluate(() => document.querySelector('[data-slot="decision-details-scroll"]')?.scrollTo(0, 0));
+        if (item.name === "indented-command") {
+          const lines = (await panel.locator('[data-slot="composer-decision-code"] pre').first().innerText()).split("\n");
+          for (const line of INDENTED.split("\n").filter(line => line.startsWith(" ")))
+            assert(lines.includes(line), `${label}: indentation kept: ${JSON.stringify(line)}`);
+        }
       }
+      await page.evaluate(() => document.querySelector('[data-slot="decision-details-scroll"]')?.scrollTo(0, 0));
     }
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, before, screenshots, rendererErrors: errors.length, shortWindowsCovered: shortWindowsCovered.length }));
+  console.log(JSON.stringify({ ok: true, rendererErrors: errors.length, shortWindowsCovered: shortWindowsCovered.length }));
   for (const line of shortWindowsCovered.slice(0, 3)) console.log(line);
 } finally {
   await browser.close();
