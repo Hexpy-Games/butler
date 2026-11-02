@@ -1,3 +1,4 @@
+// test-category: race
 /** Actual browser picks → composer admission → persisted sent thumbnail fit. Stub only. */
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { strict as assert } from "node:assert";
@@ -35,6 +36,7 @@ try {
   }
   await app.call("selection-command", { id: tab, op: "attach" });
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "capture attachment persisted before reload");
+  await app.click("Hide browser");
   await sendBrowserCaptures(app, tab, evidence, async name => {
     // The sent-message renderer is the subject; no native pane is included in this capture.
     await app.page.expression("document.fonts.ready.then(()=>Promise.all([...document.querySelectorAll('article img')].map(img=>img.decode())))");

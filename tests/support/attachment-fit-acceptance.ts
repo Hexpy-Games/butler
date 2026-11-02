@@ -1,3 +1,4 @@
+// test-category: race
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
