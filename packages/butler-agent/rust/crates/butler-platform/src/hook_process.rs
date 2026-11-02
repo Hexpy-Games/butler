@@ -1,7 +1,7 @@
 //! Bounded lifecycle command processes: under the user's privileges for the user's
 //! own hooks, inside the session's sandbox for a project folder's.
 use crate::{
-    command_sandbox::{self, CommandOutputDecoder, ContainedHook, ShellAccess},
+    command_sandbox::{self, CommandOutputDecoder, ContainedHook},
     process_control::{self, GroupSignal},
 };
 pub use command_sandbox::{HookContainment, HookSandbox};
@@ -72,10 +72,7 @@ fn prepare_unsandboxed(input: &HookProcess) -> Result<std::process::Command, Hoo
     let invocation = input
         .command
         .as_ref()
-        .map(|text| {
-            command_sandbox::login_shell(text, ShellAccess::Full, &input.environment).map_err(error)
-        })
-        .transpose()?;
+        .map(|text| command_sandbox::hook_shell(text, &input.environment));
     let mut command = if let Some(invocation) = &invocation {
         std::process::Command::new(&invocation.program)
     } else {
