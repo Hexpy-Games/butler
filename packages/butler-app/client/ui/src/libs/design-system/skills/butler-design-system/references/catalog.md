@@ -2135,7 +2135,7 @@ The composer's decision state: what is being decided, optional detail lines, an 
 - Use for: The same decision in the transcript, where it was asked (placement="conversation")
 - Not for: A notice inside the conversation → `Notice`
 - Not for: A modal confirmation → `Dialog`
-- Tokens: `--adaptive-composer-radius`, `--radius-control`, `--radius-popover`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-sm`, `--text-secondary`, `--decision-media-narrow-height`
+- Tokens: `--adaptive-composer-radius`, `--radius-control`, `--radius-popover`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-sm`, `--text-secondary`, `--decision-media-narrow-height`, `--line`, `--radius-panel`, `--surface-raised`, `--typo-code-font`, `--scroll-fade-size`, `--focus-ring-width`, `--focus-ring-color`
 
 ### ComposerQuestionPanel
 

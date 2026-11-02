@@ -1,6 +1,6 @@
 // test-category: security
 import { expect, test } from "bun:test";
-import { visibleText } from "./visibleText";
+import { visibleCode, visibleText } from "./visibleText";
 
 const escaped = (code: number) => `‹U+${code.toString(16).toUpperCase().padStart(4, "0")}›`;
 
@@ -20,9 +20,18 @@ test("characters that hide or reflow an action show as escapes, and plain text i
   ]) expect(visibleText(`a${String.fromCodePoint(code)}b`), code.toString(16)).toBe(`a${escaped(code)}b`);
 });
 
+test("a code body keeps its spaces, tabs and newlines, and escapes everything else as text does", () => {
+  const script = "python3 -c '\ndef f():\n    if x:\n        return 1\n\tpass\n'";
+  expect(visibleCode(script)).toBe(script);
+  expect(visibleCode(`a${" ".repeat(5000)}b`)).toBe(`a${" ".repeat(5000)}b`);
+  for (const code of [0x0D, 0x1B, 0xA0, 0x2000, 0x2003, 0x200B, 0x2028, 0x202E, 0x2066, 0xFEFF, 0x2800, 0x0338])
+    expect(visibleCode(`a${String.fromCodePoint(code)}b`), code.toString(16)).toBe(`a${escaped(code)}b`);
+});
+
 test("the escape's own glyphs are escaped, so two different texts never read the same", () => {
   expect(visibleText("a⏎b")).toBe(`a${escaped(0x23CE)}b`);
   expect(visibleText("‹U+202E›")).toBe(`${escaped(0x2039)}U+202E${escaped(0x203A)}`);
   expect(visibleText("a\nb")).not.toBe(visibleText("a⏎b"));
+  expect(visibleCode("a⏎b")).toBe(`a${escaped(0x23CE)}b`);
   expect(visibleText("\u202E")).not.toBe(visibleText("‹U+202E›"));
 });

@@ -10,6 +10,12 @@
  * While a focus ring shows inside, each fade turns solid --focus-ring-room
  * sooner, so a control resting at an edge keeps its whole ring even when the
  * fade lags the scroll by a frame or is still fading out.
+ *
+ * useScrollEdges("both") sets data-scroll-fade="both" for content that
+ * overflows in two directions (a code frame): each axis keeps its own
+ * data-overflowing-x|y / data-at-start-x|y / data-at-end-x|y, and the two
+ * fades intersect, so every edge with hidden content fades on its own. The
+ * single-axis rules below are unchanged. "both" leaves no scrollbar gutter.
  */
 @property --scroll-fade-start {
   syntax: "<length>";
@@ -135,5 +141,107 @@
     transition:
       --scroll-fade-start var(--motion-base) var(--motion-ease-decelerate),
       --scroll-fade-end var(--motion-base) var(--motion-ease-decelerate);
+  }
+}
+
+/* Both axes: one fade per axis, intersected. */
+@property --scroll-fade-x-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --scroll-fade-x-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --scroll-fade-y-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --scroll-fade-y-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+:where([data-scroll-fade="both"]) {
+  --scroll-fade-x-start: 0px;
+  --scroll-fade-x-end: 0px;
+  --scroll-fade-y-start: 0px;
+  --scroll-fade-y-end: 0px;
+  --scroll-fade-x-start-guard: 0px;
+  --scroll-fade-x-end-guard: 0px;
+  --scroll-fade-y-start-guard: 0px;
+  --scroll-fade-y-end-guard: 0px;
+  --scroll-fade-x-mask: linear-gradient(
+    to right,
+    transparent 0 var(--scroll-fade-x-start-guard),
+    var(--text-primary)
+      max(0px, var(--scroll-fade-x-start) - var(--scroll-fade-ring-room)),
+    var(--text-primary)
+      calc(
+        100% - max(0px, var(--scroll-fade-x-end) - var(--scroll-fade-ring-room))
+      ),
+    transparent calc(100% - var(--scroll-fade-x-end-guard)) 100%
+  );
+  --scroll-fade-y-mask: linear-gradient(
+    to bottom,
+    transparent 0 var(--scroll-fade-y-start-guard),
+    var(--text-primary)
+      max(0px, var(--scroll-fade-y-start) - var(--scroll-fade-ring-room)),
+    var(--text-primary)
+      calc(
+        100% - max(0px, var(--scroll-fade-y-end) - var(--scroll-fade-ring-room))
+      ),
+    transparent calc(100% - var(--scroll-fade-y-end-guard)) 100%
+  );
+
+  -webkit-mask-image: var(--scroll-fade-x-mask), var(--scroll-fade-y-mask);
+  -webkit-mask-composite: source-in;
+  mask-image: var(--scroll-fade-x-mask), var(--scroll-fade-y-mask);
+  mask-composite: intersect;
+  scroll-padding: calc(var(--scroll-fade-size) + var(--focus-ring-room));
+}
+
+[data-scroll-fade="both"][data-overflowing-x="true"]:not(
+    [data-at-start-x="true"]
+  ) {
+  --scroll-fade-x-start: var(--scroll-fade-size);
+  --scroll-fade-x-start-guard: var(--scroll-fade-guard);
+}
+
+[data-scroll-fade="both"][data-overflowing-x="true"]:not(
+    [data-at-end-x="true"]
+  ) {
+  --scroll-fade-x-end: var(--scroll-fade-size);
+  --scroll-fade-x-end-guard: var(--scroll-fade-guard);
+}
+
+[data-scroll-fade="both"][data-overflowing-y="true"]:not(
+    [data-at-start-y="true"]
+  ) {
+  --scroll-fade-y-start: var(--scroll-fade-size);
+  --scroll-fade-y-start-guard: var(--scroll-fade-guard);
+}
+
+[data-scroll-fade="both"][data-overflowing-y="true"]:not(
+    [data-at-end-y="true"]
+  ) {
+  --scroll-fade-y-end: var(--scroll-fade-size);
+  --scroll-fade-y-end-guard: var(--scroll-fade-guard);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-scroll-fade="both"] {
+    transition:
+      --scroll-fade-x-start var(--motion-base) var(--motion-ease-decelerate),
+      --scroll-fade-x-end var(--motion-base) var(--motion-ease-decelerate),
+      --scroll-fade-y-start var(--motion-base) var(--motion-ease-decelerate),
+      --scroll-fade-y-end var(--motion-base) var(--motion-ease-decelerate);
   }
 }

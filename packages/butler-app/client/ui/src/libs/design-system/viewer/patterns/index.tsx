@@ -52,10 +52,12 @@ export const PATTERNS: PatternDefinition[] = [
       "Fades react to scroll position: none at the top boundary, none at the bottom boundary.",
       "Keep enough edge padding that text never sits inside the fade at rest.",
       "A focus ring inside: each fade turns solid --focus-ring-room sooner, so a control at an edge keeps its whole ring.",
+      "Content that overflows both ways (a code frame) uses useScrollEdges(\"both\"): each of the four edges fades on its own, only while it hides content.",
     ],
     tokens: ["--scroll-fade-size", "--focus-ring-room"],
     live: [
       { entry: "blocks/ScrollArea", story: "Vertical with edge fades" },
+      { entry: "blocks/ComposerDecisionPanel", story: "Command body in a code frame" },
       { entry: "blocks/SidebarShell", story: "Scrolling list with sticky filter" },
       { entry: "blocks/TabRail", story: "Shelf: needs you, busy, error, +2" },
     ],

@@ -7,12 +7,21 @@
  *   that strike through the text before them;
  * - the escape's own glyphs `⏎ ‹ ›`, so a literal one can never pass for an escape.
  */
-const HIDDEN = new RegExp(String.raw`[\p{Cc}\p{Cf}\p{Co}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\uFFFC⏎‹›]|[\u0334-\u0338\u20D2\u20D3\u20D8-\u20DA\u20DD-\u20E4]`, "gu");
+const HIDDEN = new RegExp(String.raw`[\p{Cc}\p{Cf}\p{Co}\p{Default_Ignorable_Code_Point}\p{White_Space}⠀￼⏎‹›]|[̴-̸⃒⃓⃘-⃚⃝-⃤]`, "gu");
+
+function escapeHidden(text: string, kept: (char: string) => string | undefined): string {
+  return text.replace(HIDDEN, (char) => kept(char) ?? `‹U+${char.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}›`);
+}
 
 export function visibleText(text: string): string {
-  return text.replace(HIDDEN, (char) => {
-    if (char === " ") return char;
-    if (char === "\n") return "⏎";
-    return `‹U+${char.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}›`;
-  });
+  return escapeHidden(text, (char) => char === " " ? char : char === "\n" ? "⏎" : undefined);
+}
+
+/**
+ * A command body in a code frame, where layout whitespace shows as itself: the space, the tab and
+ * the newline stay real, so indentation and line breaks keep their shape and a long run of spaces
+ * pushes the rest sideways under the frame's scroll fade. Everything else escapes as in `visibleText`.
+ */
+export function visibleCode(text: string): string {
+  return escapeHidden(text, (char) => char === " " || char === "\t" || char === "\n" ? char : undefined);
 }

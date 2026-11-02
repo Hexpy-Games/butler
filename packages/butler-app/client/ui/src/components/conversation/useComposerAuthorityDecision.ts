@@ -1,5 +1,5 @@
 import { imageApprovalMedia } from "../images/ImageApprovalMedia";
-import type { ComposerDecisionMedia } from "@/butler-ds";
+import type { ComposerDecisionDetail, ComposerDecisionMedia } from "@/butler-ds";
 import { useBrowserDecisionMedia } from "./useBrowserDecisionMedia";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useRef, useState } from "react";
@@ -12,7 +12,8 @@ export interface ComposerAuthorityDecision {
   /** The plain-language question, also shown on the pending attachment. */
   media?: ComposerDecisionMedia;
   pathDetails?: string[];
-  title: string; details: string[]; risk: ApprovalRequestView["risk"]; actionKind: ApprovalRequestView["actionKind"];
+  /** Command bodies come as `{ code }`, drawn in the panel's code frame. */
+  title: string; details: ComposerDecisionDetail[]; risk: ApprovalRequestView["risk"]; actionKind: ApprovalRequestView["actionKind"];
   /** What "Always allow in this conversation" covers; the grant needs the legacy `scope`. */
   conversationScope?: string; scope: AuthorityApprovalCard["scope"]; pending: boolean; error?: string;
   composingMessage: boolean; pendingCount: number;
@@ -54,7 +55,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn,
       onOpenTab: () => media?.onOpen ? media.onOpen() : void openHandoffTab(sessionId),
       onStop: () => void useButlerStore.getState().cancelActiveTurn() } } : {}),
-    title: handoff?.title ?? view.title, details: handoff?.details ?? view.details, risk: view.risk, actionKind: view.actionKind,
+    title: handoff?.title ?? view.title, details: handoff?.details ?? view.details.map(line => view.commands?.includes(line) ? { code: line } : line), risk: view.risk, actionKind: view.actionKind,
     pathDetails: view.pathDetails,
     conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
