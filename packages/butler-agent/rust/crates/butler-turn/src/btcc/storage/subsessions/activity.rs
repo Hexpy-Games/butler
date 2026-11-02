@@ -87,6 +87,19 @@ fn activity_child(
     db: &rusqlite::Connection,
     r: &super::StoredSubsessionDelegation,
 ) -> Result<serde_json::Value, StorageError> {
+    let (result, status) = child_activity(db, r)?;
+    Ok(
+        serde_json::json!({"waiting_for_slot":r.packet.child_role==crate::btcc::ChildRole::Worker && r.dispatch_state==super::SubsessionDispatchState::Pending,"role":r.packet.child_role.as_str(),"title":r.safe_title,"status":status,"updated_at":r.created_at,
+        "relation":{"relation_id":r.relation_id,"parent_session_id":r.parent_session_id,"parent_turn_id":r.parent_turn_id,"ordinal":r.ordinal,"safe_title":r.safe_title,"created_at":r.created_at},
+        "result":result.map(|_|serde_json::json!({"task_id":r.task_id}))}),
+    )
+}
+
+/// Shared indexed status reads for activity and nested session-view Workers.
+pub(super) fn child_activity(
+    db: &rusqlite::Connection,
+    r: &super::StoredSubsessionDelegation,
+) -> Result<(Option<String>, &'static str), StorageError> {
     use rusqlite::OptionalExtension;
     let result: Option<String>=db.query_row("SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",[&r.relation_id],|row|row.get(0)).optional().map_err(StorageError::sqlite)?;
     let latest: Option<String> = db
@@ -105,11 +118,7 @@ fn activity_child(
         _ if latest.as_deref() == Some("admitted") => "active",
         _ => "waiting",
     };
-    Ok(
-        serde_json::json!({"waiting_for_slot":r.packet.child_role==crate::btcc::ChildRole::Worker && r.dispatch_state==super::SubsessionDispatchState::Pending,"role":r.packet.child_role.as_str(),"title":r.safe_title,"status":status,"updated_at":r.created_at,
-        "relation":{"relation_id":r.relation_id,"parent_session_id":r.parent_session_id,"parent_turn_id":r.parent_turn_id,"ordinal":r.ordinal,"safe_title":r.safe_title,"created_at":r.created_at},
-        "result":result.map(|_|serde_json::json!({"task_id":r.task_id}))}),
-    )
+    Ok((result, status))
 }
 
 impl SqliteSubsessionRepository {

@@ -81,3 +81,55 @@ impl SqliteSubsessionRepository {
             .await
     }
 }
+
+/// Direct Workers, including finished ones, in delegation order for each subtask.
+pub const SUBTASK_WORKERS_SQL: &str = r"SELECT r.relation_id
+    FROM json_each(?1) p
+    JOIN btcc_session_relations r INDEXED BY idx_btcc_activity_parent_page
+        ON r.parent_session_id=p.value
+    WHERE r.activity_role='worker'
+    ORDER BY r.parent_session_id,r.ordinal";
+
+impl SqliteSubsessionRepository {
+    /// One snapshot for all requested subtasks and their indexed child status reads.
+    pub(crate) async fn subtask_workers(
+        &self,
+        parents: Vec<String>,
+    ) -> Result<Vec<(StoredSubsessionDelegation, &'static str)>, StorageError> {
+        if parents.is_empty() {
+            return Ok(Vec::new());
+        }
+        let parents = serde_json::to_string(&parents).map_err(|error| {
+            StorageError::new(
+                crate::btcc::StorageCode::SubsessionPacketInvalid,
+                error.to_string(),
+            )
+        })?;
+        self.storage
+            .read(move |db| {
+                let ids = db
+                    .prepare_cached(SUBTASK_WORKERS_SQL)
+                    .map_err(StorageError::sqlite)?
+                    .query_map([parents], |row| row.get::<_, String>(0))
+                    .map_err(StorageError::sqlite)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(StorageError::sqlite)?;
+                let mut workers = Vec::with_capacity(ids.len());
+                for id in ids {
+                    match super::decode::read(db, "r.relation_id=?1", &id) {
+                        Ok(Some(relation)) => {
+                            let (_, status) = super::activity::child_activity(db, &relation)?;
+                            workers.push((relation, status));
+                        }
+                        Ok(None) => {}
+                        Err(error)
+                            if error.code()
+                                == crate::btcc::StorageCode::SubsessionPacketInvalid.as_str() => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+                Ok(workers)
+            })
+            .await
+    }
+}
