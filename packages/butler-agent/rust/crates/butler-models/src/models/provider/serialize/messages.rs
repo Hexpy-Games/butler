@@ -92,6 +92,7 @@ fn chat_messages_with_instructions(
     history: crate::models::ChatReasoningHistory,
 ) -> Vec<Value> {
     let mut output = Vec::new();
+    let mut images = Vec::new();
     if let Some(value) = instructions
         .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
@@ -99,6 +100,9 @@ fn chat_messages_with_instructions(
         output.push(serde_json::json!({"role":"system","content":value}));
     }
     for message in request.messages {
+        if message.role != ModelRoundRole::Tool {
+            output.append(&mut images);
+        }
         let role = role(message.role);
         let mut row = Map::new();
         row.insert("role".into(), role.into());
@@ -139,13 +143,14 @@ fn chat_messages_with_instructions(
         {
             row.insert("content".into(), json!(text));
             output.push(row.into());
-            output.push(
+            images.push(
                 json!({"role":"user","content":[{"type":"image_url","image_url":{"url":url}}]}),
             );
             continue;
         }
         output.push(row.into());
     }
+    output.append(&mut images);
     output
 }
 

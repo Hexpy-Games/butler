@@ -140,3 +140,123 @@ fn assert_png_projection(url: &Value) {
     let png = STANDARD.decode(encoded).unwrap();
     assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
 }
+
+#[tokio::test]
+async fn chat_tool_images_follow_parallel_tool_results() -> Result<(), HarnessError> {
+    use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LocalCapabilities};
+    use butler_e2e::e2e::security::AdminClient;
+    use reqwest::Method;
+
+    butler_e2e::gate!();
+    let calls = json!([
+        {"id":"observe","type":"function","function":{"name":"browser_observe",
+            "arguments":json!({"tab":"t1","look":"always"}).to_string()}},
+        {"id":"read","type":"function","function":{"name":"read_file",
+            "arguments":json!({"requests":[{"path":"sample.txt"}]}).to_string()}}
+    ]);
+    let server = FakeServer::local_models(ChatBehavior {
+        script: vec![
+            json!({"role":"assistant","content":null,"tool_calls":calls}),
+            json!({"role":"assistant","content":"Finished."}),
+        ],
+        refuse_stream: true,
+        local_capabilities: LocalCapabilities {
+            ollama: Some(vec!["completion".into(), "tools".into(), "vision".into()]),
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .await?;
+    let s = super::setup_local_models::with_local_server("CHAT-TOOL-IMAGE-ORDER", &server).await?;
+    super::setup_local_models::use_local_model(&s, &server.base_url).await?;
+    s.patch_settings(
+        json!({"browser":{"browsing_agent":"off"}}),
+        "direct browser tools",
+    )
+    .await?;
+    std::fs::write(s.sandbox.data.join("sample.txt"), "File contents")?;
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let mut stream = reqwest::Client::new()
+        .get(format!("{}/internal/browser-host", s.gw.base))
+        .bearer_auth(&s.gw.token)
+        .header("x-butler-admin", &admin.admin)
+        .send()
+        .await?;
+    assert_eq!(stream.status(), 200);
+    let registered = admin
+        .send(
+            Method::POST,
+            "/internal/browser-host/events",
+            Some(json!({"tabs":[{
+                "id":"t1","owner":"conversation:general","profile":"signed_out","epoch":1,
+                "holder":"agent","inUse":false,"url":"https://example.com/"
+            }]})),
+            &[],
+        )
+        .await?;
+    assert_eq!(registered.status, 200, "{}", registered.text);
+    let pixels = STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"));
+    let image = pixels.clone();
+    let host = async move {
+        let mut buffer = String::new();
+        loop {
+            let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+            if frame["op"] != "tab.observe" {
+                continue;
+            }
+            assert_eq!(frame["args"]["include_image"], true);
+            let reply = admin
+                .send(
+                    Method::POST,
+                    &format!(
+                        "/internal/browser-host/results/{}",
+                        frame["id"].as_str().unwrap()
+                    ),
+                    Some(
+                        json!({"status":"ok","tab":"t1","obs":"o1","text":"Page text",
+                    "url":"https://example.com/","image":{"mime_type":"image/jpeg","data":image}}),
+                    ),
+                    &[],
+                )
+                .await?;
+            assert_eq!(reply.status, 200, "{}", reply.text);
+            return Ok::<_, HarnessError>(());
+        }
+    };
+    let (turn, served) = tokio::join!(s.turn("general", "Read the page and file."), host);
+    served?;
+    assert_eq!(turn_state(&turn?.1), "delivered");
+    let requests = server.chat_requests();
+    let messages = requests
+        .iter()
+        .rev()
+        .find(|r| r["stream"] != true && r["tools"].is_array())
+        .unwrap()["messages"]
+        .as_array()
+        .unwrap();
+    let index = messages
+        .iter()
+        .position(|m| m["tool_calls"] == calls)
+        .unwrap();
+    assert_eq!(messages[index]["role"], "assistant");
+    for (offset, id) in [(1, "observe"), (2, "read")] {
+        assert_eq!(messages[index + offset]["role"], "tool");
+        assert_eq!(messages[index + offset]["tool_call_id"], id);
+    }
+    let observed: Value = serde_json::from_str(messages[index + 1]["content"].as_str().unwrap())?;
+    assert_eq!(observed["output"]["untrusted_content"]["text"], "Page text");
+    assert!(observed["output"].get("image").is_none());
+    assert!(
+        messages[index + 2]["content"]
+            .as_str()
+            .unwrap()
+            .contains("File contents")
+    );
+    assert_eq!(
+        messages[index + 3],
+        json!({"role":"user","content":[{
+            "type":"image_url","image_url":{"url":format!("data:image/jpeg;base64,{pixels}")}
+        }]})
+    );
+    s.finish().await
+}
