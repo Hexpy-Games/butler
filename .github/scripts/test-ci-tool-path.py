@@ -28,6 +28,7 @@ EMBED = re.compile(r'include_(?:str|bytes)!\(\s*"([^"]*capabilities/catalog/[^"]
 # journaling and Work closeout. Each must still name the boundary types.
 CONSUMERS = {
     'butler-agent/src/host/guided/activity.rs': 'activity titles',
+    'butler-agent/src/host/guided/activity/actions.rs': 'activity action correlation',
     'butler-agent/src/host/guided/activity/content.rs': 'activity titles',
     'butler-agent/src/host/guided/journal.rs': 'call journaling',
     'butler-agent/src/host/guided/work.rs': 'Work closeout',

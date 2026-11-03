@@ -203,18 +203,14 @@ fn checkpoint_command(
     plan: (String, u64),
     progress: Vec<ActionProgress>,
 ) -> CheckpointCommand {
-    let summary = if progress.is_empty() {
-        ""
+    let (summary, next) = if progress.is_empty() {
+        ("", "")
     } else {
-        "Code written"
-    };
-    let next = if progress.is_empty() {
-        ""
-    } else {
-        "Run the tests"
+        ("Code written", "Run the tests")
     };
     CheckpointCommand {
         input: CheckpointInput {
+            current_action_key: None,
             scope: turn("turn-1"),
             mutation_call_id: call.into(),
             next_stage: (!progress.is_empty()).then_some(WorkStage::Execution),
@@ -382,6 +378,7 @@ async fn closeout(h: &mut Harness, repo: &dyn DurableWorkRepository, work_id: &s
     let continued = repo
         .continue_work(ContinueWorkCommand {
             input: ContinueWorkInput {
+                action_key: None,
                 scope: turn("turn-2"),
                 mutation_call_id: "call-continue".into(),
                 work_id: work_id.into(),
