@@ -39,16 +39,23 @@ fn offered(request: &Value) -> Vec<String> {
         .collect()
 }
 
-/// The parsed tool results the last model request carried, in order.
+/// The parsed tool results the latest model request with any carried, in order.
 fn tool_results(server: &FakeServer) -> Vec<Value> {
-    let requests = server.chat_requests();
-    requests.last().unwrap()["messages"]
-        .as_array()
-        .unwrap()
+    server
+        .chat_requests()
         .iter()
-        .filter(|message| message["role"] == "tool")
-        .map(|message| serde_json::from_str(message["content"].as_str().unwrap()).unwrap())
-        .collect()
+        .rev()
+        .map(|request| {
+            request["messages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|message| message["role"] == "tool")
+                .map(|message| serde_json::from_str(message["content"].as_str().unwrap()).unwrap())
+                .collect::<Vec<Value>>()
+        })
+        .find(|results| !results.is_empty())
+        .unwrap_or_default()
 }
 
 async fn execute(name: &str, args: Value) -> Result<Value, HarnessError> {
