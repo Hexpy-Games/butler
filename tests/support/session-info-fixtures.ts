@@ -5,16 +5,13 @@ import type { EpicProgressSnapshot } from "../../packages/butler-app/client/shar
 import type { QueuedMessageRecord, SessionView, SessionViewTurn, SubtaskView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { HARNESS_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 
-/** Running turn with public progress; replaySession supplies its queued follow-up. */
+/** Running turn with one live progress row; replaySession supplies its queued follow-up. */
 export function runningSession(view: SessionView): SessionView {
   const turn: SessionViewTurn = {
     id: "session-info-turn", state: "thinking", cancellable: true, retryable: false,
     created_at: view.updated_at, updated_at: view.updated_at,
     progress: { turn_id: "session-info-turn", state: "thinking", safe_progress_rows: [
-      { id: "accepted", kind: "message", state: "completed", safe_label: "요청을 확인했습니다. 릴리스 노트와 변경 사항을 검토합니다." },
-      { id: "round-1", kind: "thinking", bridge_phase: "model_round_waiting", thinking_title: "검토할 변경 사항 정리", state: "completed", safe_label: "모델 응답 1 · 검토할 변경 사항 정리" },
-      { id: "tool-1", kind: "ran_command", bridge_phase: "btcc_operation", tool_call_id: "diff-stat", safe_tool_name: "run_command", state: "completed", safe_label: "변경 파일 읽기", safe_input_label: "git diff --stat" },
-      { id: "round-2", kind: "thinking", bridge_phase: "model_round_waiting", thinking_title: "변경 사항 검토", state: "running", safe_label: "모델 응답 2 · 변경 사항 검토" },
+      { id: "round-1", kind: "thinking", bridge_phase: "model_round_waiting", thinking_title: "변경 사항 검토", state: "running", safe_label: "모델 응답 1 · 변경 사항 검토" },
     ] },
   };
   return { ...view, active_turn: turn, latest_turn: turn };

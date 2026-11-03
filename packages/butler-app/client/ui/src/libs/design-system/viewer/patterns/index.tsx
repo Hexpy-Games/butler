@@ -52,6 +52,7 @@ export const PATTERNS: PatternDefinition[] = [
       "Fades react to scroll position: none at the top boundary, none at the bottom boundary.",
       "Keep enough edge padding that text never sits inside the fade at rest.",
       "A focus ring inside: each fade turns solid --focus-ring-room sooner, so a control at an edge keeps its whole ring.",
+      "A focused control larger than the area its scroller shows: the scroller draws the ring inset on itself, the control's ring and the fades turn off until focus leaves.",
     ],
     tokens: ["--scroll-fade-size", "--focus-ring-room"],
     live: [

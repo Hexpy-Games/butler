@@ -72,6 +72,6 @@ pub trait HookPort: Send + Sync {
     ) -> HookFuture<'_, HookRun>;
     /// Snapshot of the last 200 runs, oldest first.
     fn runs(&self) -> Vec<HookRun>;
-    /// Sets the listener told when a failing hook blocks part of a running turn.
+    /// Sets the listener told when a hook fails during a session's event.
     fn observe_blocks(&self, _listener: HookBlockListener) {}
 }

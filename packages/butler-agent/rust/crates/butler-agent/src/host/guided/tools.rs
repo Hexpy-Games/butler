@@ -343,6 +343,20 @@ impl ToolPort for GuidedTools {
     ) -> &'a serde_json::Map<String, serde_json::Value> {
         hooks::input(call)
     }
+
+    fn runs_unoffered<'a>(
+        &'a self,
+        invocation: GuidedInvocation<'a>,
+        name: &'a str,
+    ) -> PortFuture<'a, bool> {
+        Box::pin(async move {
+            permission_mode::in_access(self, invocation, async {
+                discovery::runs_by_name(self, name)
+            })
+            .await
+        })
+    }
+
     fn surface<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

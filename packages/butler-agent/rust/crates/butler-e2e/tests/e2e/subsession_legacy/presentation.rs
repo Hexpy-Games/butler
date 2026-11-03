@@ -17,7 +17,7 @@ pub(super) fn seed(s: &Scenario) {
     db.execute_batch("INSERT INTO btcc_guided_works(work_id,session_id,scope_kind,scope_ref,origin_turn_id,origin_message_id,objective,status,current_plan_revision_id,created_at,updated_at) VALUES ('work-b','steward-legacy-b','session','steward-legacy-b','child-turn-b','message-legacy','Read and verify','open','plan-b','2026-01-01T00:00:00Z','2026-01-01T00:00:01Z');
         INSERT INTO btcc_guided_turn_work_bindings VALUES ('binding-b','child-turn-b','steward-legacy-b','work-b',1,1,'2026-01-01T00:00:00Z');").unwrap();
     let actions = json!([{"actionKey":"read","description":"Read","dependencyKeys":[]},{"actionKey":"verify","description":"Verify","dependencyKeys":["read"]}]);
-    db.execute("INSERT INTO btcc_guided_work_plan_revisions VALUES ('plan-b','work-b',1,'Read and verify','[]','direct',?1,'[\"Complete\"]','child-turn-b','2026-01-01T00:00:00Z')", [actions.to_string()]).unwrap();
+    db.execute("INSERT INTO btcc_guided_work_plan_revisions(plan_revision_id,work_id,revision,objective,governing_refs_json,execution_mode,actions_json,checks_json,origin_turn_id,created_at) VALUES ('plan-b','work-b',1,'Read and verify','[]','direct',?1,'[\"Complete\"]','child-turn-b','2026-01-01T00:00:00Z')", [actions.to_string()]).unwrap();
     db.execute_batch("INSERT INTO btcc_guided_work_review_revisions(review_revision_id,work_id,revision,subject,verdict,summary,corrections_json,bound_plan_revision_id,origin_turn_id,created_at) VALUES ('review-b','work-b',1,'plan','accept','Approved','[]','plan-b','child-turn-b','2026-01-01T00:00:00Z');").unwrap();
     let progress =
         json!([{"actionKey":"read","status":"done"},{"actionKey":"verify","status":"active"}]);

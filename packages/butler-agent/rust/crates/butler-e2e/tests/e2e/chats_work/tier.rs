@@ -182,7 +182,7 @@ async fn nested_worker_inherits_steward_and_parent_ceiling() -> Result<(), Harne
 }
 
 #[tokio::test]
-async fn pending_children_restart_with_current_parent_controls() -> Result<(), HarnessError> {
+async fn pending_children_restart_with_the_admitted_parent_tier() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, script, server) = crate::worker_cap::setup("SS6-QUEUED-RESTART", 4).await?;
     set_mode(&s, "ask_except_reads").await?;
@@ -193,6 +193,7 @@ async fn pending_children_restart_with_current_parent_controls() -> Result<(), H
     let (_, rows) = crate::worker_cap::workers(&s, "general", 4).await?;
     assert_eq!(rows[2]["status"], "waiting");
     assert_eq!(rows[3]["status"], "waiting");
+    // An unanswered composer change does not reach the admitted run's children.
     set_mode(&s, "ask_first").await?;
     s.agent.kill9()?;
     s.gw = s.agent.start_again().await?;
@@ -200,7 +201,7 @@ async fn pending_children_restart_with_current_parent_controls() -> Result<(), H
     for row in &rows[2..] {
         assert_eq!(
             child_mode(&s, row["session_id"].as_str().unwrap())?,
-            "ask_first"
+            "ask_except_reads"
         );
     }
     script.release("red-2");
