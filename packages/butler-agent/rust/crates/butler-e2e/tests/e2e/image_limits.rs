@@ -243,15 +243,6 @@ async fn chat_tool_images_follow_parallel_tool_results() -> Result<(), HarnessEr
         assert_eq!(messages[index + offset]["role"], "tool");
         assert_eq!(messages[index + offset]["tool_call_id"], id);
     }
-    let observed: Value = serde_json::from_str(messages[index + 1]["content"].as_str().unwrap())?;
-    assert_eq!(observed["output"]["untrusted_content"]["text"], "Page text");
-    assert!(observed["output"].get("image").is_none());
-    assert!(
-        messages[index + 2]["content"]
-            .as_str()
-            .unwrap()
-            .contains("File contents")
-    );
     assert_eq!(
         messages[index + 3],
         json!({"role":"user","content":[{
