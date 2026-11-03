@@ -76,10 +76,6 @@ pub(super) fn with_image_model_choices(
         for (key, choices) in [("size", "sizes"), ("quality", "qualities")] {
             let property = &mut tool["parameters"]["properties"][key];
             property["enum"] = capability[choices].clone();
-            property["description"] = serde_json::json!(format!(
-                "Allowed {key} values for the selected image model: {}. Omit for the default.",
-                capability[choices]
-            ));
         }
     }
 }
