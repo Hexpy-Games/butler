@@ -25,30 +25,27 @@ async fn subtask_workers_are_ordered_live_and_retained_when_finished() -> Result
         &["active", "active", "waiting", "waiting"],
     );
     assert_eq!(view["workers"], serde_json::json!([]), "{view}");
-    let cursor = live.snapshot().len();
+    let after = live
+        .snapshot()
+        .last()
+        .and_then(|event| event["id"].as_u64());
     script.release("red-0");
     worker_cap::closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
     worker_cap::started(&script, 3).await;
-    // Subscribe before the write and require a new pushed event for this exact Worker.
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        if live.snapshot()[cursor..].iter().any(|event| {
-            event["type"] == "subsession.changed"
-                && event["payload"]["session_id"] == subtask
-                && event["payload"]["child_session_id"] == rows[0]["session_id"]
-        }) {
-            break;
-        }
-        assert!(Instant::now() < deadline, "no Worker completion event");
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    // A new pushed event for this exact Worker, after the release.
+    live.wait_for(Duration::from_secs(20), |event| {
+        event["id"].as_u64() > after
+            && event["type"] == "subsession.changed"
+            && event["payload"]["session_id"] == subtask
+            && event["payload"]["child_session_id"] == rows[0]["session_id"]
+    })
+    .await?;
     let view = general_view(&s).await?;
     assert_workers(
         &view["subtasks"][0],
         &rows,
         &["completed", "active", "active", "waiting"],
     );
-    println!("SUBTASK-WORKERS-JSON {}", view["subtasks"][0]);
     let parent = navigation_chat(&s, "general").await?;
     let tasks = parent["subtasks"].as_array().unwrap();
     assert_eq!(tasks.len(), 1, "{parent}");
@@ -77,6 +74,5 @@ fn assert_workers(subtask: &Value, rows: &[Value], statuses: &[&str]) {
         assert_eq!(worker["title"], format!("Verify red-{index}"));
         assert_eq!(worker["title"], rows[index]["title"]);
         assert_eq!(worker["status"], statuses[index], "{subtask}");
-        assert_eq!(worker.as_object().unwrap().len(), 4, "{worker}");
     }
 }

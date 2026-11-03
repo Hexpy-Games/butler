@@ -46,6 +46,5 @@ export async function verifySessionInfoWorkers(browser: Browser, server: NativeA
     const plain = await section.locator('[data-test-class="subtask-row"]').evaluateAll(nodes => nodes.map(node => ({ y: node.getBoundingClientRect().y, bottom: node.getBoundingClientRect().bottom })));
     const plainGap = plain[1]!.y - plain[0]!.bottom;
     assert.equal(workerGap, plainGap);
-    console.log(JSON.stringify({ sessionWorkers: { workerGap, plainGap, focusStops: focus.stops, observer: "review-api" } }));
   } finally { await page.close(); }
 }
