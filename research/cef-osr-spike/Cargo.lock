@@ -746,10 +746,12 @@ dependencies = [
  "cef",
  "core-foundation",
  "core-video",
+ "foreign-types",
  "futures-lite",
  "gpui-ce",
  "gpui_ce_apple",
  "gpui_ce_platform",
+ "metal",
  "objc",
  "serde_json",
 ]
