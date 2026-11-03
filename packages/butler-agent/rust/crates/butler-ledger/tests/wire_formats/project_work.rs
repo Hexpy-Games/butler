@@ -203,15 +203,10 @@ fn checkpoint_command(
     plan: (String, u64),
     progress: Vec<ActionProgress>,
 ) -> CheckpointCommand {
-    let summary = if progress.is_empty() {
-        ""
+    let (summary, next) = if progress.is_empty() {
+        ("", "")
     } else {
-        "Code written"
-    };
-    let next = if progress.is_empty() {
-        ""
-    } else {
-        "Run the tests"
+        ("Code written", "Run the tests")
     };
     CheckpointCommand {
         input: CheckpointInput {
