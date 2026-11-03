@@ -160,13 +160,13 @@ fn research(mode: &str, out: &[Value]) -> Value {
             "web_search",
             &json!({"query":if mode=="P1" {"lumora corvel"}else{"maintenance"}}),
         ),
-        ("reader_url" | "reader_tab", 1) => call(n, "web_read", &json!({"url":url})),
-        ("reader_url" | "reader_tab", 2) => call(n, "browser_open", &json!({"url":url})),
-        ("reader_url" | "reader_tab", 3) | ("W2", 2 | 3) => {
+        ("reader_tab", 1) => call(n, "web_read", &json!({"url":url})),
+        ("reader_tab", 2) => call(n, "browser_open", &json!({"url":url})),
+        ("reader_tab", 3) | ("W2", 2 | 3) => {
             call(n, "browser_observe", &json!({"tab":tab,"look":"always"}))
         }
         ("gap", 2) => call(n, "browser_observe", &json!({"tab":tab,"look":"never"})),
-        ("reader_url" | "reader_tab", _) => message(
+        ("reader_tab", _) => message(
             "Next window: 2026-11-19 02:00-04:00 UTC, API and dashboard; 2026-09-03 is a past window.",
         ),
         (_, 1) => call(n, "browser_open", &json!({"url":url})),

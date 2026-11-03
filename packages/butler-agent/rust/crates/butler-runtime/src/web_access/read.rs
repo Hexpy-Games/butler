@@ -207,7 +207,7 @@ fn to_tab(page: &PageRead, observation: &mut Value) {
     );
     observation["ok"] = Value::Bool(false);
     observation["error"] = Value::String(format!(
-        "{reason} Open it with browser_open, then read the tab with web_read {{tab}}."
+        "{reason} Open it with browser_open, then read the tab with browser_read."
     ));
     observation["next_action"] = Value::String("open_in_tab".into());
 }

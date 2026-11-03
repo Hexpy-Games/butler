@@ -64,7 +64,7 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     let tools = fixture.tools.lock().unwrap().clone();
     for name in [
         "web_search",
-        "web_read",
+        "browser_read",
         "browser_open",
         "browser_observe",
         "browser_act",
@@ -74,12 +74,7 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
             "{name} offered: {tools:?}"
         );
     }
-    let reader = tools
-        .iter()
-        .find(|tool| tool["name"] == "web_read")
-        .unwrap();
-    assert!(reader["parameters"]["properties"].get("url").is_none());
-    assert_eq!(reader["parameters"]["required"], json!(["tab"]));
+    assert!(!tools.iter().any(|t| t["name"] == "web_read"), "{tools:?}");
     for index in [0, 2, 4] {
         for key in [
             "evidence_receipts",
@@ -133,11 +128,11 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     assert_eq!(log.iter().filter(|f| f["op"] == "tab.observe").count(), 1);
     assert!(!read.to_string().contains("End of the tide table."));
     assert_eq!(outputs[3]["ok"], false, "{}", outputs[3]);
-    assert_eq!(outputs[3]["error"]["code"], "browser_tab_required");
-    assert_eq!(outputs[3]["error"]["recoverable"], true);
-    let refusal = outputs[3].to_string();
-    assert!(refusal.contains("browser_open"), "{refusal}");
-    assert!(refusal.contains("recoverable"), "{refusal}");
+    assert_eq!(
+        outputs[3]["error"]["code"], "tool_unavailable",
+        "{}",
+        outputs[3]
+    );
     let full = &outputs[4];
     assert_eq!(full["ok"], true, "{full}");
     assert_eq!(full["content_has_more"], false, "{full}");
@@ -157,12 +152,10 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     }
     assert_eq!(log.iter().filter(|f| f["op"] == "tab.read").count(), 2);
     assert_eq!(
-        outputs[6]["error"]["code"], "browser_tab_required",
+        outputs[6]["error"]["code"], "disabled_tool",
         "{}",
         outputs[6]
     );
-    assert_eq!(outputs[6]["error"]["recoverable"], true);
-    assert!(outputs[6].to_string().contains("browser_open"));
     assert_eq!(outputs[7]["ok"], true, "{}", outputs[7]);
     assert!(
         outputs[7]["markdown"]

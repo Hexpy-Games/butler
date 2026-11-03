@@ -80,6 +80,7 @@ fn reads_external(name: &str, args: &Value) -> bool {
             "browse"
                 | "web_search"
                 | "web_read"
+                | "browser_read"
                 | "call_mcp_tool"
                 | "read_mcp_resource"
                 | "connector_fetch"
@@ -195,7 +196,7 @@ fn grant_kind(capability: &str) -> &'static str {
         "run_command_remote_observation" => "network",
         "run_command" => "command",
         "call_mcp_tool" => "connector",
-        "web_search" | "web_read" => "web_request",
+        "web_search" | "web_read" | "browser_read" => "web_request",
         "write_file" | "edit_file" => "file_edit",
         "read_file" | "list_files" | "grep_files" => "file_read",
         "create_automation" | "update_automation" | "delete_automation" | "run_due_automations" => {
