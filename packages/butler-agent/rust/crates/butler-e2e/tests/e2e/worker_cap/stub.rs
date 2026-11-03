@@ -49,6 +49,10 @@ pub(crate) struct Script {
     /// The Steward closes its Work instead of waiting for its Worker.
     pub(crate) close_before_worker: AtomicBool,
     pub(crate) hold_worker_report: AtomicBool,
+    /// Holds the Steward just before it closes its Work.
+    pub(crate) hold_steward_close: AtomicBool,
+    pub(crate) steward_closing: Gate,
+    pub(crate) steward_close_release: Gate,
     pub(crate) worker_reporting: Gate,
     pub(crate) worker_report_release: Gate,
 }
@@ -84,6 +88,9 @@ pub(crate) async fn start(
         waiting_wording: AtomicBool::new(false),
         close_before_worker: AtomicBool::new(false),
         hold_worker_report: AtomicBool::new(false),
+        hold_steward_close: AtomicBool::new(false),
+        steward_closing: Gate::new(),
+        steward_close_release: Gate::new(),
         worker_reporting: Gate::new(),
         worker_report_release: Gate::new(),
     });
@@ -262,6 +269,13 @@ async fn reply(
             _ => worker(step, &body),
         }
     };
+    if role == "steward"
+        && item["name"] == "record_work_disposition"
+        && script.hold_steward_close.swap(false, Ordering::SeqCst)
+    {
+        script.steward_closing.add_permits(1);
+        script.steward_close_release.wait().await;
+    }
     if role == "worker"
         && item["type"] == "message"
         && script.hold_worker_report.swap(false, Ordering::SeqCst)

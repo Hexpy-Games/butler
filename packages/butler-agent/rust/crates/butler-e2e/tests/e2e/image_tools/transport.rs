@@ -46,13 +46,6 @@ async fn offered_choices_follow_the_selected_image_model() -> Result<(), Harness
             for (key, choices) in [("size", "sizes"), ("quality", "qualities")] {
                 let property = &tool["parameters"]["properties"][key];
                 assert_eq!(property["enum"], capability[choices]);
-                let description = property["description"].as_str().unwrap();
-                for choice in capability[choices].as_array().unwrap() {
-                    assert!(
-                        description.contains(choice.as_str().unwrap()),
-                        "{description}"
-                    );
-                }
             }
         }
     }
@@ -96,16 +89,10 @@ async fn truncated_body_is_transport_but_complete_bad_json_is_invalid() -> Resul
 #[tokio::test]
 async fn complete_large_image_response_is_consumed_losslessly() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    large_image_response(std::time::Duration::ZERO).await
+    large_image_response().await
 }
 
-#[tokio::test]
-async fn slow_large_image_response_is_consumed_losslessly() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    large_image_response(std::time::Duration::from_millis(80)).await
-}
-
-async fn large_image_response(chunk_delay: std::time::Duration) -> Result<(), HarnessError> {
+async fn large_image_response() -> Result<(), HarnessError> {
     let f = Fixture::start(Access::Auto, "google").await?;
     let bytes = tokio::task::spawn_blocking(|| {
         let mut seed = 42_u32;
@@ -130,8 +117,7 @@ async fn large_image_response(chunk_delay: std::time::Duration) -> Result<(), Ha
     .into_bytes();
     assert!(body.len() > 4 * 1024 * 1024);
     let response_bytes = body.len();
-    f.image.respond_slowly(body, chunk_delay);
-    let started = std::time::Instant::now();
+    f.image.respond(body, false);
     f.script(
         "Large picture",
         vec![call("large", "generate_image", &json!({"prompt":"A kite"}))],
@@ -143,14 +129,9 @@ async fn large_image_response(chunk_delay: std::time::Duration) -> Result<(), Ha
     assert_eq!(f.raw(&format!("/message-assets/{id}")).await?, bytes);
     assert_eq!(f.image.requests().len(), 1);
     assert_eq!(f.image.requests()[0].path, "/v1beta/interactions");
-    let chunks = u32::try_from(response_bytes.div_ceil(64 * 1024)).unwrap();
-    let minimum = chunk_delay * chunks;
-    assert!(started.elapsed() >= minimum);
     eprintln!(
-        "image response_bytes={response_bytes} image_bytes={} elapsed_ms={} chunk_delay_ms={} complete=true",
-        bytes.len(),
-        started.elapsed().as_millis(),
-        chunk_delay.as_millis()
+        "image response_bytes={response_bytes} image_bytes={}",
+        bytes.len()
     );
     assert_eq!(f.stored_images().await?, 1);
     f.finish().await

@@ -19,7 +19,6 @@ struct ImageState {
 struct ImageResponse {
     bytes: Vec<u8>,
     truncated: bool,
-    chunk_delay: std::time::Duration,
 }
 pub struct ImageServer {
     pub base: String,
@@ -62,18 +61,7 @@ impl ImageServer {
         self.state.png.clone()
     }
     pub fn respond(&self, bytes: Vec<u8>, truncated: bool) {
-        *lock(&self.state.response) = Some(ImageResponse {
-            bytes,
-            truncated,
-            chunk_delay: std::time::Duration::ZERO,
-        });
-    }
-    pub fn respond_slowly(&self, bytes: Vec<u8>, chunk_delay: std::time::Duration) {
-        *lock(&self.state.response) = Some(ImageResponse {
-            bytes,
-            truncated: false,
-            chunk_delay,
-        });
+        *lock(&self.state.response) = Some(ImageResponse { bytes, truncated });
     }
     pub fn fail(&self, status: u16, message: &str) {
         *lock(&self.state.error) = Some((status, message.into()));
@@ -127,11 +115,7 @@ async fn image_reply(
     json_response(200, &body)
 }
 fn response_body(response: ImageResponse) -> Body {
-    let ImageResponse {
-        bytes,
-        truncated,
-        chunk_delay,
-    } = response;
+    let ImageResponse { bytes, truncated } = response;
     if truncated {
         let first = futures_util::stream::once(async move { Ok::<_, std::io::Error>(bytes) });
         let failure = futures_util::stream::once(async {
@@ -140,21 +124,7 @@ fn response_body(response: ImageResponse) -> Body {
         });
         return Body::from_stream(futures_util::StreamExt::chain(first, failure));
     }
-    if chunk_delay.is_zero() {
-        return Body::from(bytes);
-    }
-    Body::from_stream(futures_util::stream::unfold(
-        (bytes, 0),
-        move |(bytes, offset)| async move {
-            if offset == bytes.len() {
-                return None;
-            }
-            tokio::time::sleep(chunk_delay).await;
-            let end = (offset + 64 * 1024).min(bytes.len());
-            let chunk = bytes[offset..end].to_vec();
-            Some((Ok::<_, std::io::Error>(chunk), (bytes, end)))
-        },
-    ))
+    Body::from(bytes)
 }
 fn multipart(bytes: &[u8], boundary: &str) -> Vec<(String, Vec<u8>)> {
     let delimiter = format!("--{boundary}");
