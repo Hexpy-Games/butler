@@ -170,7 +170,7 @@ async fn delegated_relay_is_scored_and_only_success_has_relay_instruction()
             .filter_map(|part| part["text"].as_str())
             .find(|text| text.contains("Delegated result"))
             .unwrap();
-        let relay = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
+        let relay = "\nAnswer the user with this, outcome first, with its figures, names and source links for what was asked. Open or unconfirmed items are work, not caveats: settle those one quick lookup can; keep only what matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines on what was not re-checked or proven, or how the work was recorded.";
         assert_eq!(text.ends_with(relay), mode == "delegated_success", "{text}");
         assert_ne!(record["final_text"], "Direction delivered.");
         if mode == "delegated_success" {
