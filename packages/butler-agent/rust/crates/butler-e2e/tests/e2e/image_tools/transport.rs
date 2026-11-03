@@ -129,7 +129,10 @@ async fn large_image_response() -> Result<(), HarnessError> {
     assert_eq!(f.raw(&format!("/message-assets/{id}")).await?, bytes);
     assert_eq!(f.image.requests().len(), 1);
     assert_eq!(f.image.requests()[0].path, "/v1beta/interactions");
-    eprintln!("image response_bytes={response_bytes} image_bytes={}", bytes.len());
+    eprintln!(
+        "image response_bytes={response_bytes} image_bytes={}",
+        bytes.len()
+    );
     assert_eq!(f.stored_images().await?, 1);
     f.finish().await
 }
