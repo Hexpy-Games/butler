@@ -1,4 +1,4 @@
-// Text selection through the real native App with a stub model only: a drag across App chrome (sidebar header,
+// Text selection through the real native App with a stub model only: a drag across App chrome (sidebar,
 // titlebar, 세션 정보, composer toolbar) selects nothing; a drag inside a user message, an answer, a viewer document,
 // viewer code and the composer selects. Light and dark; crops at deviceScaleFactor 2 into BUTLER_SMOKE_SCREENSHOTS.
 import { strict as assert } from "node:assert";
@@ -43,7 +43,7 @@ try {
   await page.locator('[data-test-class~="conversation"]').waitFor();
 
   for (const [name, target, line] of [
-    ["sidebar-header", page.locator('[data-test-class="sidebar-fixed-header"]'), "diagonal"],
+    ["sidebar", page.locator('[data-test-class="sidebar-scroll"]'), "diagonal"],
     ["titlebar", page.locator('[data-slot="titlebar-title"]').first(), "middle"],
     ["composer-toolbar", page.locator('[data-test-class="composer-toolbar"]'), "diagonal"],
   ] as const) {
@@ -76,11 +76,13 @@ try {
 
   await infoToggle.click();
   await aside.waitFor({ state: "hidden" });
-  const textarea = page.locator('[data-test-class="composer-card"] textarea');
-  await textarea.fill("선택 확인 문장");
-  await drag(page, textarea, "composer-input", "middle");
-  const selected = await textarea.evaluate((node: HTMLTextAreaElement) => node.selectionEnd - node.selectionStart);
-  assert(selected > 0, "a drag inside the composer selects its text");
+  // The composer is a Lexical contenteditable, so its selection is the document selection.
+  const editor = page.locator('[data-test-class~="composer-card"] [contenteditable="true"]');
+  await editor.fill("선택 확인 문장");
+  await page.waitForFunction(() => document.querySelector('[data-test-class~="composer-card"]')?.getAnimations({ subtree: true })
+    .every((animation) => animation.playState !== "running") ?? true);
+  const composer = await drag(page, editor.getByText("선택 확인 문장", { exact: true }), "composer-input", "middle");
+  assert(composer.inside && composer.text.includes("선택 확인 문장"), "a drag inside the composer selects its text");
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ result: "BEHAVIOR_PASS", theme, screenshots: shots }));
 } finally {
