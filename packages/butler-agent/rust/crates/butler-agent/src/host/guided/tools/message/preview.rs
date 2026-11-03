@@ -45,11 +45,15 @@ pub(in crate::host) fn structured_raw(name: &str, raw: &str) -> Result<String, B
                 | ToolName::ReadConversationContext
                 | ToolName::WebSearch
                 | ToolName::WebRead
+                | ToolName::BrowserRead
         )
     ) && candidate.trim_start().starts_with('{')
     {
         let projected = retained::project(name, candidate)?;
-        if name == ToolName::WebRead {
+        if matches!(
+            ToolName::parse(name),
+            Some(ToolName::WebRead | ToolName::BrowserRead)
+        ) {
             web_read::project(&projected)
         } else {
             Ok(projected)
@@ -142,6 +146,7 @@ fn specialized(name: &str) -> bool {
                 ToolName::ReadOperationResults
                     | ToolName::WebSearch
                     | ToolName::WebRead
+                    | ToolName::BrowserRead
                     | ToolName::RunCommand
                     | ToolName::GrepFiles
                     | ToolName::ReadConversationContext

@@ -19,6 +19,7 @@ pub(super) fn authorize(
     for name in [
         "browser_open",
         "browser_observe",
+        "browser_read",
         "browser_act",
         "browser_tabs",
         "browser_selection",

@@ -38,7 +38,12 @@ impl Research {
         outputs: &[Value],
     ) -> Vec<Value> {
         let browsing = tools.iter().any(|t| t["name"] == "browser_open");
-        let contract = schema(tools, outputs, "web_read");
+        let reader = if tools.iter().any(|t| t["name"] == "browser_read") {
+            "browser_read"
+        } else {
+            "web_read"
+        };
+        let contract = schema(tools, outputs, reader);
         let mut calls = Vec::new();
         for step in group {
             let url = step["read"].as_str().unwrap();
@@ -52,7 +57,7 @@ impl Research {
             {
                 read.status = Status::Done;
                 let reason = if contract.is_null() {
-                    "web_read unavailable in offered tools and discovery."
+                    "No page reader in offered tools and discovery."
                 } else {
                     "No usable tab received for this page; the offered browser/reader tools cannot address it."
                 };
@@ -82,7 +87,7 @@ impl Research {
                 read.pass = Pass::Extra;
             }
             read.status = Status::Awaiting;
-            calls.push(self.invoke(tools, outputs, "web_read", &args));
+            calls.push(self.invoke(tools, outputs, reader, &args));
         }
         calls
     }

@@ -165,14 +165,9 @@ fn assert_surface(request: &Value) {
         })
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    for name in ["browse", "browser_act", "web_search", "web_read"] {
+    for name in ["browse", "browser_act", "web_search", "browser_read"] {
         assert!(names.contains(&name), "{names:?}");
     }
-    let reader = butler_e2e::e2e::chatgpt_wire::functions(request)
-        .find(|tool| tool["name"] == "web_read")
-        .unwrap();
-    assert!(reader["parameters"]["properties"].get("url").is_none());
-    assert_eq!(reader["parameters"]["required"], json!(["tab"]));
     for name in [
         "browser_open",
         "browser_observe",

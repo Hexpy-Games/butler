@@ -264,7 +264,7 @@ impl CapabilityKind {
             return Self::ProjectRecord;
         }
         match tool {
-            ToolName::WebRead => Self::WebRequest {
+            ToolName::WebRead | ToolName::BrowserRead => Self::WebRequest {
                 carries_data: super::web_read_carries_data(
                     arguments.get("url").and_then(Value::as_str).unwrap_or(""),
                     false,

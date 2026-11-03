@@ -18,7 +18,6 @@ use super::{
 
 pub(super) use super::providers::contracts::SearchResult;
 
-const OPEN_RESULTS: &str = "When the Butler browser host is available, open useful results with browser_open {results:[ids]} and read them with web_read {tab}; otherwise read result URLs with web_read.";
 use crate::web_access::WebAccessCode;
 pub(super) use parse::{is_duckduckgo_challenge, parse_results};
 
@@ -87,9 +86,6 @@ impl WebSession {
             .collect::<Vec<_>>();
         for (item, id) in items.iter_mut().zip(self.result_ids(&pairs)) {
             item["id"] = json!(id);
-        }
-        if !pairs.is_empty() {
-            result["next"] = json!(OPEN_RESULTS);
         }
     }
     async fn plan_search(

@@ -138,13 +138,6 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
 
     // Each provider received the same guidance.
     let first = fixture.first.lock().unwrap().clone().unwrap();
-    assert!(
-        first["system"]
-            .to_string()
-            .contains("open_in_tab results in a browser_open tab"),
-        "{}",
-        first["system"]
-    );
     let description = |name: &str| {
         butler_e2e::e2e::chatgpt_wire::tools(&first)
             .find(|tool| tool["name"] == name)
@@ -153,7 +146,7 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
             .unwrap()
             .to_owned()
     };
-    assert!(description("web_read").contains("Pass query with what you need"));
+    assert!(description("browser_read").contains("Pass query with what you need"));
     assert!(description("answer_blocks").contains("with or without a Plan"));
     s.finish().await
 }

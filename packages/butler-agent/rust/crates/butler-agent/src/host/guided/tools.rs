@@ -236,6 +236,8 @@ impl GuidedTools {
                     .is_none_or(|names| names.iter().any(|allowed| allowed == name))
         };
         butler_runtime::browser::host_attached()
+            && self.visible("browser_read")
+            && admitted("browser_read")
             && (admitted("browse") || (admitted("browser_open") && admitted("browser_observe")))
     }
 
@@ -377,16 +379,14 @@ impl ToolPort for GuidedTools {
             }
             self.resume_pool().await?;
             let mut tools = permission_surface::surface(self, invocation.turn).await?;
-            // Resolve the live host each round, just as browser calls do on
-            // dispatch. Keep admitted executors for in-flight/internal reads.
-            if self.browser_available() {
-                for tool in &mut tools {
-                    if tool.name == "web_read" {
-                        reader_surface::tab_only(&mut tool.parameters, &mut tool.description);
-                        tool.handler_validates_arguments = Some(true);
-                    }
-                }
-            }
+            // One page reader per round, chosen from the live host: open tabs while
+            // the Butler browser is attached, urls otherwise.
+            let withheld = if self.browser_available() {
+                "web_read"
+            } else {
+                "browser_read"
+            };
+            tools.retain(|tool| tool.name != withheld);
             let encoded = serde_json::to_string(&tools).map_err(|error| {
                 BtccError::relayed("guided_tool_surface_invalid", error.to_string())
                     .with_source(error)

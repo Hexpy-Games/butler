@@ -99,26 +99,26 @@ async fn image_notice_is_read_visually_and_resolved() -> Result<(), HarnessError
 #[tokio::test]
 async fn unavailable_reader_recovers_through_the_offered_browser() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    for mode in ["reader_url", "reader_tab"] {
-        let (record, requests) = run(mode, "W2").await?;
-        let outputs = requests
+    let (record, requests) = run("reader_tab", "W2").await?;
+    let outputs = requests
+        .iter()
+        .map(model::outputs)
+        .max_by_key(Vec::len)
+        .unwrap();
+    assert_eq!(
+        outputs[1]["error"]["code"], "tool_unavailable",
+        "{outputs:?}"
+    );
+    assert_eq!(
+        outputs[3]["schema"], "butler.browser-observation.v1",
+        "{outputs:?}"
+    );
+    assert!(
+        requests
             .iter()
-            .map(model::outputs)
-            .max_by_key(Vec::len)
-            .unwrap();
-        assert_eq!(outputs[1]["ok"], false, "{outputs:?}");
-        assert_eq!(
-            outputs[3]["schema"], "butler.browser-observation.v1",
-            "{outputs:?}"
-        );
-        assert_ne!(outputs[3]["duplicate_observation"], true, "{outputs:?}");
-        assert!(
-            requests
-                .iter()
-                .any(|request| request.to_string().contains("input_image"))
-        );
-        assert_eq!(record["items"]["window"]["status"], "resolved");
-    }
+            .any(|request| request.to_string().contains("input_image"))
+    );
+    assert_eq!(record["items"]["window"]["status"], "resolved");
     Ok(())
 }
 #[tokio::test]

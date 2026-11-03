@@ -75,7 +75,7 @@ fn next(outputs: &[Value]) -> Option<(&'static str, Value)> {
         if last["content_has_more"] == true {
             args["start_chunk"] = last["next_start_chunk"].clone();
         }
-        return Some(("web_read", args));
+        return Some(("browser_read", args));
     }
     if last["markdown"].is_string() {
         return Some((

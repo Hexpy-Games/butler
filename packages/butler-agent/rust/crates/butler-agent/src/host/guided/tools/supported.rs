@@ -84,6 +84,7 @@ fn builtin(name: &str) -> bool {
                 | ToolName::RunDueAutomations
                 | ToolName::WebSearch
                 | ToolName::WebRead
+                | ToolName::BrowserRead
                 | ToolName::Browse
                 | ToolName::ListWallpapers
                 | ToolName::SetWallpaper
