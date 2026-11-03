@@ -57,9 +57,9 @@ cef::wrap_render_handler! {
         }
         fn on_accelerated_paint(&self,_b:Option<&mut Browser>,kind:PaintElementType,_dirty:Option<&[Rect]>,info:Option<&AcceleratedPaintInfo>){
             let start=Instant::now();
-            let frame={let mut s=self.shared.borrow_mut();let pool=if kind==PaintElementType::POPUP{&mut s.popup_pool}else{&mut s.view_pool};info.and_then(|i|crate::unsafe_boundary::copy_accelerated(pool,i))};
+            let frame={let mut s=self.shared.borrow_mut();let s=&mut *s;let gpu=s.gpu.get_or_insert_with(crate::unsafe_boundary::GpuCopy::new);let pool=if kind==PaintElementType::POPUP{&mut s.popup_pool}else{&mut s.view_pool};info.and_then(|i|crate::unsafe_boundary::copy_accelerated(pool,gpu,i))};
             if let Some(frame)=frame{
-                accept(&self.shared,&self.tx,frame,kind,start,"accelerated-cpu-copy");
+                accept(&self.shared,&self.tx,frame,kind,start,"accelerated-gpu-copy");
             }
         }
         fn on_popup_show(&self,_b:Option<&mut Browser>,show:i32){self.shared.borrow_mut().popup_show=show!=0;log("popup_show",json!(show));let _=self.tx.try_send(());}

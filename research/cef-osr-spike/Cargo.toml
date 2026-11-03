@@ -6,7 +6,9 @@ edition = "2024"
 gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", package = "gpui-ce" }
 gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", package = "gpui_ce_platform" }
 cef = { version = "=156.2.0", default-features = false }
-core-video = "=0.5.2"
+core-video = { version = "=0.5.2", features = ["metal"] }
+metal = "0.33"
+foreign-types = "0.5"
 core-foundation = "=0.10.0"
 serde_json = "1"
 async-channel = "2"

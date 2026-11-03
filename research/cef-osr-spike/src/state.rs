@@ -10,6 +10,7 @@ pub struct Shared {
     pub popup: Option<CVPixelBuffer>,
     pub view_pool: crate::frame_pool::FramePool,
     pub popup_pool: crate::frame_pool::FramePool,
+    pub gpu: Option<crate::unsafe_boundary::GpuCopy>,
     pub popup_rect: cef::Rect,
     pub popup_show: bool,
     pub frames: u64,

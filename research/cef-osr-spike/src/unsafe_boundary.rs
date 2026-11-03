@@ -2,6 +2,11 @@
 // Foreign frame lifetimes and CoreVideo addresses cannot be expressed by these safe APIs.
 use core_foundation::base::TCFType;
 use core_video::pixel_buffer::{CVPixelBuffer, kCVPixelFormatType_32BGRA};
+use core_video::{
+    metal_texture::{CVMetalTexture, CVMetalTextureGetTexture},
+    metal_texture_cache::CVMetalTextureCache,
+};
+use foreign_types::ForeignTypeRef;
 
 pub fn copy_paint(
     pool: &mut crate::frame_pool::FramePool,
@@ -40,8 +45,65 @@ pub fn copy_paint(
     assert_eq!(frame.unlock_base_address(0), 0);
     Some(frame)
 }
+// One Metal queue and texture cache for all frame copies.
+pub struct GpuCopy {
+    queue: metal::CommandQueue,
+    cache: CVMetalTextureCache,
+}
+impl GpuCopy {
+    pub fn new() -> Self {
+        let device = metal::Device::system_default().expect("Metal device");
+        Self {
+            queue: device.new_command_queue(),
+            cache: CVMetalTextureCache::new(None, device, None).expect("Metal texture cache"),
+        }
+    }
+    fn texture(&self, buffer: &CVPixelBuffer) -> CVMetalTexture {
+        self.cache
+            .create_texture_from_image(
+                buffer.as_concrete_TypeRef(),
+                None,
+                metal::MTLPixelFormat::BGRA8Unorm,
+                buffer.get_width(),
+                buffer.get_height(),
+                0,
+            )
+            .expect("Frame texture")
+    }
+    pub fn copy(&self, source: &CVPixelBuffer, target: &CVPixelBuffer) {
+        objc::rc::autoreleasepool(|| {
+            let (from, to) = (self.texture(source), self.texture(target));
+            // SAFETY: each CVMetalTexture above owns its MTLTexture and outlives this blit.
+            let (from_texture, to_texture) = unsafe {
+                (
+                    metal::TextureRef::from_ptr(
+                        CVMetalTextureGetTexture(from.as_concrete_TypeRef()) as *mut _,
+                    ),
+                    metal::TextureRef::from_ptr(
+                        CVMetalTextureGetTexture(to.as_concrete_TypeRef()) as *mut _
+                    ),
+                )
+            };
+            let origin = metal::MTLOrigin { x: 0, y: 0, z: 0 };
+            let size = metal::MTLSize {
+                width: source.get_width() as u64,
+                height: source.get_height() as u64,
+                depth: 1,
+            };
+            let command = self.queue.new_command_buffer();
+            let blit = command.new_blit_command_encoder();
+            blit.copy_from_texture(from_texture, 0, 0, origin, size, to_texture, 0, 0, origin);
+            blit.end_encoding();
+            command.commit();
+            // CEF reclaims its surface when the paint callback returns, so the copy must finish first.
+            command.wait_until_completed();
+        });
+        self.cache.flush(0);
+    }
+}
 pub fn copy_accelerated(
     pool: &mut crate::frame_pool::FramePool,
+    gpu: &GpuCopy,
     info: &cef::AcceleratedPaintInfo,
 ) -> Option<CVPixelBuffer> {
     if info.shared_texture_io_surface.is_null() {
@@ -64,19 +126,9 @@ pub fn copy_accelerated(
     // SAFETY: success above transfers one non-null owned CoreVideo reference.
     let source: CVPixelBuffer = unsafe { TCFType::wrap_under_create_rule(raw) };
     assert_eq!(source.get_pixel_format(), kCVPixelFormatType_32BGRA);
-    if source.lock_base_address(1) != 0 {
-        return None;
-    }
-    let copy = copy_paint(
-        pool,
-        // SAFETY: the source is locked read-only until copy_paint completes.
-        unsafe { source.get_base_address().cast() },
-        source.get_width(),
-        source.get_height(),
-        source.get_bytes_per_row(),
-    );
-    assert_eq!(source.unlock_base_address(1), 0);
-    copy
+    let frame = pool.acquire(source.get_width(), source.get_height());
+    gpu.copy(&source, &frame);
+    Some(frame)
 }
 
 // NSNotificationCenter wakes the pump when visibility changes, with no idle poll.
