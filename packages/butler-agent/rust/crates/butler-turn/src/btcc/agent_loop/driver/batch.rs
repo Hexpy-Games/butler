@@ -22,11 +22,16 @@ pub(super) async fn run_tool_batch(
     let mut event = crate::btcc::RuntimeTurnEventInput::new("turn.tool_batch.recorded");
     event.visibility = Some(crate::btcc::EventVisibility::Internal);
     input.progress.emit(event).await.map_err(propagated)?;
-    let prepared_calls: Vec<_> = reply
-        .calls
-        .iter()
-        .map(|call| tool_batch::prepare(tools, call))
-        .collect();
+    let mut prepared_calls = Vec::with_capacity(reply.calls.len());
+    for call in &reply.calls {
+        let unoffered = !tools.iter().any(|tool| tool.name == call.name)
+            && input
+                .policy
+                .runs_unoffered(GuidedInvocation::from(input), &call.name)
+                .await
+                .map_err(propagated)?;
+        prepared_calls.push(tool_batch::prepare(tools, call, unoffered));
+    }
     let batch = ToolBatch {
         tools,
         calls: &reply.calls,

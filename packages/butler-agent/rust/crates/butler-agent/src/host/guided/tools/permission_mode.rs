@@ -29,20 +29,29 @@ pub(super) async fn execute(
             butler_turn::btcc::BtccError::relayed("turn_cancelled", "turn_cancelled"),
         ));
     }
+    in_access(
+        owner,
+        invocation,
+        Box::pin(super::execute::execute(owner, invocation, call)),
+    )
+    .await
+    .map_err(ToolExecutionError::Integrity)?
+}
+
+/// Runs `future` under the run's current access mode and its permission snapshot.
+pub(super) async fn in_access<F: std::future::Future>(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    future: F,
+) -> Result<F::Output, butler_turn::btcc::BtccError> {
     let mode = owner
         .authority
         .execution_access(owner.binding.turn_id.clone())
         .await
-        .map_err(|e| ToolExecutionError::Integrity(e.into()))?
+        .map_err(butler_turn::btcc::BtccError::from)?
         .unwrap_or_else(|| owner.binding.access_mode.clone());
-    let snapshot = super::permission_surface::snapshot(owner, invocation.turn, &mode)
-        .await
-        .map_err(ToolExecutionError::Integrity)?;
-    super::permission_surface::scope(
-        snapshot,
-        EXECUTION_ACCESS.scope(mode, super::execute::execute(owner, invocation, call)),
-    )
-    .await
+    let snapshot = super::permission_surface::snapshot(owner, invocation.turn, &mode).await?;
+    Ok(super::permission_surface::scope(snapshot, EXECUTION_ACCESS.scope(mode, future)).await)
 }
 
 pub(super) async fn approved(
