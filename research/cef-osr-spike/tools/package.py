@@ -40,6 +40,11 @@ for suffix in ('Helper', 'Helper (GPU)', 'Helper (Renderer)', 'Helper (Plugin)',
     helper = contents / 'Frameworks' / (name + '.app') / 'Contents'
     (helper / 'MacOS').mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, helper / 'MacOS' / name)
+    # Helpers live in Contents/Frameworks/<name>.app/Contents/MacOS; point the launch-time framework link there.
+    subprocess.run(['install_name_tool', '-change',
+        '@executable_path/../Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework',
+        '@executable_path/../../../Chromium Embedded Framework.framework/Chromium Embedded Framework',
+        str(helper / 'MacOS' / name)], check=True)
     info = dict(base, CFBundleName=name, CFBundleExecutable=name, LSUIElement=True)
     with (helper / 'Info.plist').open('wb') as file:
         plistlib.dump(info, file)
