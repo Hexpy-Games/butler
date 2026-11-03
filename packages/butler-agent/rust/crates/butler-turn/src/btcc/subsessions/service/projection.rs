@@ -308,7 +308,11 @@ impl SubsessionService {
     }
 
     async fn plan_counters(&self, turn_id: &str, projection: &mut Value) -> Result<(), BtccError> {
-        if let Some((revision, total, completed)) = self.plan_progress(turn_id).await? {
+        if let Some(work) = self.accepted_plan_work(turn_id).await? {
+            let (revision, total, completed) = counters(&work);
+            if let Some(plan) = self.work.plan_steps(work).await? {
+                projection["plan"] = plan;
+            }
             projection["approved_plan_revision"] = json!(revision);
             projection["approved_plan_total"] = json!(total);
             projection["approved_plan_completed"] = json!(completed);
@@ -321,6 +325,17 @@ impl SubsessionService {
         &self,
         turn_id: &str,
     ) -> Result<Option<(u64, usize, usize)>, BtccError> {
+        Ok(self
+            .accepted_plan_work(turn_id)
+            .await?
+            .as_ref()
+            .map(counters))
+    }
+
+    async fn accepted_plan_work(
+        &self,
+        turn_id: &str,
+    ) -> Result<Option<crate::btcc::WorkView>, BtccError> {
         let work = match self.work.bound_work_for_turn(turn_id.to_owned()).await {
             Ok(work) => work,
             // Legacy children without a durable Work binding have no plan.
@@ -346,18 +361,25 @@ impl SubsessionService {
         }) {
             return Ok(None);
         }
-        let completed = plan
-            .actions
-            .iter()
-            .filter(|action| {
-                work.action_progress.iter().any(|progress| {
-                    progress.action_key == action.action_key
-                        && progress.status == crate::btcc::ActionStatus::Done
-                })
-            })
-            .count();
-        Ok(Some((plan.revision, plan.actions.len(), completed)))
+        Ok(Some(work))
     }
+}
+
+fn counters(work: &crate::btcc::WorkView) -> (u64, usize, usize) {
+    let Some(plan) = &work.current_plan else {
+        return (0, 0, 0);
+    };
+    let completed = plan
+        .actions
+        .iter()
+        .filter(|action| {
+            work.action_progress.iter().any(|progress| {
+                progress.action_key == action.action_key
+                    && progress.status == crate::btcc::ActionStatus::Done
+            })
+        })
+        .count();
+    (plan.revision, plan.actions.len(), completed)
 }
 
 /// A later turn runs after the saved result, so that result is not the end.

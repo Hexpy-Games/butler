@@ -156,6 +156,7 @@ async fn retained_direction_cannot_reopen_scope_held_by_another_task() -> Result
             work_id: None,
             safe_title: None,
             instruction: "Revisit the same result".into(),
+            immediate: false,
             child_role: butler_turn::workspace::SessionRole::Worker,
             access_mode: "full_access".into(),
             schedule_run: None,

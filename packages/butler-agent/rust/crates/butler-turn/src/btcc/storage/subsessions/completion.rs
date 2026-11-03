@@ -3,7 +3,7 @@ use super::*;
 
 /// A successful Steward result is relayed as the answer: open items are work
 /// to settle, not caveats to forward.
-const RELAY: &str = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
+const RELAY: &str = "\nAnswer the user with this, outcome first, with its figures, names and source links for what was asked. Open or unconfirmed items are work, not caveats: settle those one quick lookup can; keep only what matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines on what was not re-checked or proven, or how the work was recorded.";
 
 /// The result identity of one child turn: each turn has at most one result.
 pub fn turn_result_id(session: &str, turn: &str) -> String {
@@ -64,6 +64,12 @@ fn commit(
         return Ok(Vec::new());
     }
     if !super::endings::accepts_completion(&tx, &completion.session, &completion.turn)? {
+        tx.execute(
+            "DELETE FROM btcc_subsession_endings WHERE session_id=?1 AND turn_id=?2",
+            params![completion.session, completion.turn],
+        )
+        .map_err(StorageError::sqlite)?;
+        tx.commit().map_err(StorageError::sqlite)?;
         return Ok(Vec::new());
     }
     let delegation = read(&tx, "r.child_session_id=?1", &completion.session)?.ok_or_else(|| {
@@ -345,7 +351,7 @@ pub(super) mod tests {
     use super::*;
 
     pub(in crate::btcc::storage::subsessions) fn assert_success_relay_format() {
-        let expected_relay = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
+        let expected_relay = "\nAnswer the user with this, outcome first, with its figures, names and source links for what was asked. Open or unconfirmed items are work, not caveats: settle those one quick lookup can; keep only what matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines on what was not re-checked or proven, or how the work was recorded.";
         for (role, status, handback, expected) in [
             (ChildRole::Steward, "success", false, true),
             (ChildRole::Steward, "blocked", false, false),

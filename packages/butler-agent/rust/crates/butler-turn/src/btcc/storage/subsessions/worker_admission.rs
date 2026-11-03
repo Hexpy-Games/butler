@@ -36,7 +36,7 @@ pub const WAITING_WORKERS_SQL: &str = concat!("SELECT d.relation_id FROM btcc_se
  AND NOT EXISTS (SELECT 1 FROM btcc_session_relations oldr
    JOIN btcc_subsession_delegations old ON old.relation_id=oldr.relation_id
    WHERE oldr.parent_session_id=r.parent_session_id
-     AND json_extract(old.packet_json,'$.superseded_by') IS NOT NULL
+     AND json_extract(old.packet_json,'$.superseded_by')=d.relation_id
      AND json_extract(old.packet_json,'$.parent_work_ref.work_id')=json_extract(d.packet_json,'$.parent_work_ref.work_id')
      AND json_extract(old.packet_json,'$.plan_action.action_key')=json_extract(d.packet_json,'$.plan_action.action_key')
      AND (NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=old.relation_id)
@@ -120,6 +120,7 @@ impl SqliteSubsessionRepository {
                 let Some(mut stored) = decode::admission_candidate(&tx, &id)? else { continue; };
                 tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id=?1", [&id])
                     .map_err(StorageError::sqlite)?;
+                super::work_tasks::refresh_packet(&tx, &mut stored)?;
                 stored.dispatch_state = SubsessionDispatchState::Enqueued;
                 tx.commit().map_err(StorageError::sqlite)?;
                 return Ok(Some(stored));

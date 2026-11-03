@@ -57,8 +57,6 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_directions (
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_btcc_subsession_direction_recovery ON btcc_subsession_directions(relation_id,created_at) WHERE status='pending';
-
 CREATE INDEX IF NOT EXISTS idx_btcc_subsession_directions_pending
 ON btcc_subsession_directions(relation_id, status, revision);
 

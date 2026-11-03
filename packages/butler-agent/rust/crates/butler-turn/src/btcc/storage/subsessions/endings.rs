@@ -134,12 +134,13 @@ fn fence_session(
     session: &str,
     now: &str,
 ) -> Result<Vec<(String, String)>, StorageError> {
-    let live = db.prepare_cached("SELECT turn_id FROM btcc_turns WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed')")
-        .map_err(StorageError::sqlite)?.query_map([session], |r| Ok((session.to_owned(), r.get::<_, String>(0)?)))
-        .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
     let mut turns = db.prepare_cached("SELECT turn_id FROM btcc_turns WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed')")
-            .map_err(StorageError::sqlite)?.query_map([session], |r| r.get::<_, String>(0))
-            .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
+        .map_err(StorageError::sqlite)?.query_map([session], |r| r.get::<_, String>(0))
+        .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
+    let live = turns
+        .iter()
+        .map(|turn| (session.to_owned(), turn.clone()))
+        .collect();
     let first: Option<String> = db.query_row("SELECT d.child_turn_id FROM btcc_session_relations r JOIN btcc_subsession_delegations d USING(relation_id) WHERE r.child_session_id=?1", [session], |r| r.get(0)).optional().map_err(StorageError::sqlite)?;
     turns.extend(first);
     let pending = db.prepare_cached("SELECT i.instruction_id FROM btcc_session_relations r JOIN btcc_subsession_directions i USING(relation_id) WHERE r.child_session_id=?1 AND i.status='pending'")

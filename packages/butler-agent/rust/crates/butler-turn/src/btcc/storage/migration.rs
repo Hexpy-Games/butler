@@ -59,19 +59,10 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
         "immediate",
         "INTEGER NOT NULL DEFAULT 1",
     )? {
+        transaction.execute_batch("UPDATE btcc_session_relations SET activity_terminal=0 WHERE activity_terminal=1 AND EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=btcc_session_relations.child_session_id AND t.semantic_state IN ('admitted','delivery_committed'))")?;
         transaction.execute_batch("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE status='pending' AND relation_id IN (SELECT relation_id FROM btcc_session_relations WHERE activity_terminal=1)")?;
     }
-    if ensure_column(
-        &transaction,
-        "btcc_subsession_endings",
-        "turn_id",
-        "TEXT NOT NULL DEFAULT ''",
-    )? {
-        transaction.execute_batch(
-            "UPDATE btcc_subsession_endings SET turn_id=json_extract(completion_json,'$.turn')",
-        )?;
-    }
-    transaction.execute_batch("DROP TABLE IF EXISTS btcc_subsession_end_members; DROP TABLE IF EXISTS btcc_subsession_stop_outbox;")?;
+    transaction.execute_batch("DROP INDEX IF EXISTS idx_btcc_subsession_direction_recovery; DROP TABLE IF EXISTS btcc_subsession_end_members; DROP TABLE IF EXISTS btcc_subsession_stop_outbox;")?;
     transaction.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_live_session_turn ON btcc_turns(session_id) WHERE semantic_state IN ('admitted','delivery_committed');
         CREATE INDEX IF NOT EXISTS idx_btcc_live_session_work ON btcc_guided_works(session_id) WHERE status IN ('open','blocked');")?;
     subsession::ensure_worker_admission(&transaction)?;
