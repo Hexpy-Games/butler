@@ -86,7 +86,7 @@ pub(super) fn sequence(
         if direct {
             calls.push(("read_file", json!({"path":*script.path.lock().unwrap()})));
         } else {
-            calls.push(("delegate_to_worker",json!({"action_key":"verify","objective":"Verify release evidence","implementation_brief":"Read the evidence and report it","acceptance_criteria":["Evidence verified"],"safe_title":"Evidence check"})));
+            calls.push(("delegate_to_worker",json!({"task":{"scope":{"paths":["tasks/verify"]},"output":{"format":"text","fields":["summary"]}},"action_key":"verify","objective":"Verify release evidence","implementation_brief":"Read the evidence and report it","acceptance_criteria":["Evidence verified"],"safe_title":"Evidence check"})));
             calls.push(("wait_for_worker", json!({})));
         }
     }
