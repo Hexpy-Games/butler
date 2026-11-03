@@ -56,7 +56,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionRelationMissing))?;
-        if self.steward_closed(&delegation).await? {
+        if self.child_stopped(&delegation).await? {
             return self.mark_result_delivered(pending.result_id).await;
         }
         let crate::btcc::ParentResultInput::StewardQueue(input) = &pending.input else {
