@@ -1743,14 +1743,20 @@ body {
   -webkit-user-select: none;
 }
 
-/* Content: preformatted text and editable fields select. */
-:where(pre, input, textarea, [contenteditable]:not([contenteditable="false"])) {
+/* Content selects: preformatted text, editable fields and DS content roots (data-selectable). */
+:where(
+  pre,
+  input,
+  textarea,
+  [contenteditable]:not([contenteditable="false"]),
+  [data-selectable]
+) {
   user-select: text;
   -webkit-user-select: text;
 }
 
-/* Controls stay chrome inside content. */
-:where(button, [role="button"], [role="tab"]) {
+/* Controls inside content stay chrome. */
+:where([data-selectable]) :where(button, [role="button"], [role="tab"]) {
   user-select: none;
   -webkit-user-select: none;
 }

@@ -64,8 +64,6 @@
 .body {
   padding-block: var(--space-lg);
   min-width: 0;
-  user-select: text;
-  -webkit-user-select: text;
 }
 
 .footer {

@@ -1,7 +1,5 @@
 .markdown {
   min-width: 0;
-  user-select: text;
-  -webkit-user-select: text;
   color: var(--text-primary);
   font-size: var(--font-size-3);
   line-height: var(--typo-body-line-height-document);

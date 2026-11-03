@@ -94,7 +94,7 @@ export const PATTERNS: PatternDefinition[] = [
     summary: "Dragging never selects App chrome; only content selects: conversation messages, documents, the viewer's files and web pages.",
     rules: [
       "The shell defaults to user-select: none (tokens.css); never add per-component user-select for chrome.",
-      "Content primitives opt back in: MessageRow body, QueuedMessage, MarkdownContent, DocumentReader, ChangedLineDiff lines and every pre (code frames, the approval command frame, ArtifactPreviewPre).",
+      "Content primitives mark their root data-selectable: MessageRow body, QueuedMessage, MarkdownContent, the DocumentEditor page, DocumentReader, ChangedLineDiff lines. Every pre selects (code frames, the approval command frame, ArtifactPreviewPre).",
       "Inputs, textareas and contenteditable keep native selection; buttons and tabs stay chrome inside content.",
       "Chrome text the user must copy (an ID, a URL, a log value) gets a CopyButton, not drag selection.",
     ],

@@ -19,8 +19,6 @@
 
 .bubble {
   width: fit-content;
-  user-select: text;
-  -webkit-user-select: text;
   max-width: min(440px, 68%);
   min-width: 0;
   border-radius: var(--radius-popover);

@@ -104,17 +104,18 @@ first child, or start-icon prop, is a `ChevronRight`/`ChevronDown`.
 
 Dragging never selects App chrome (sidebar, headers, buttons, menus, tabs,
 settings, session info, toolbars, dialogs). `tokens.css` sets
-`user-select: none` on `body`, and content primitives opt back in with
-`user-select: text`: the `MessageRow` body (user and assistant messages,
-answer blocks, activity), `QueuedMessage`, `MarkdownContent` (documents,
-the document editor page, artifacts), `DocumentReader`, `ChangedLineDiff`
-lines, and every `pre` (code frames, the approval command frame,
-`ArtifactPreviewPre`). Inputs, textareas and `contenteditable` keep native
-selection; `button`, `[role="button"]` and `[role="tab"]` stay chrome
-inside content, as does the code frame header. Web pages in browser tabs
+`user-select: none` on `body`, and content primitives mark their root
+`data-selectable` to opt back in: the `MessageRow` body (user and assistant
+messages, answer blocks, activity), `QueuedMessage`, `MarkdownContent`
+(documents, artifacts), the `DocumentEditor` page, `DocumentReader` and
+`ChangedLineDiff` lines. Every `pre` selects too (code frames, the approval
+command frame, `ArtifactPreviewPre`). Inputs, textareas and
+`contenteditable` keep native selection; `button`, `[role="button"]` and
+`[role="tab"]` stay chrome inside content, as does the code frame header. Web pages in browser tabs
 and artifact frames are their own documents. Chrome text the user must copy
 (an ID, a URL, a log value) gets a `CopyButton`. Never add `user-select` to
-a chrome component; a new content primitive opts in on its own root.
+a chrome component; a new content primitive marks its own root
+`data-selectable`.
 Pattern: [Text selection](?visual=design-system&page=patterns/text-selection).
 
 ## Responsive Contract

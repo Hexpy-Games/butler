@@ -39,10 +39,7 @@
 }
 
 /* Page change: a short rise on the page body (motion tokens only). */
-/* A viewer page is a document; its story canvases are App chrome again. */
 .page {
-  user-select: text;
-  -webkit-user-select: text;
   animation: page-enter var(--motion-base) var(--motion-ease-decelerate) both;
 }
 
@@ -316,6 +313,7 @@
   display: grid;
   width: 100%;
   min-width: 0;
+  /* A viewer page is a document (data-selectable); its story canvases are App chrome again. */
   user-select: none;
   -webkit-user-select: none;
 }

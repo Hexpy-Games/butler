@@ -89,7 +89,7 @@ export function QueuedMessage({
         {tone === "failed" ? <AlertCircle size="sm" /> : <Clock3 size="sm" />}
         <span>{status}</span>
       </Typo.Caption>
-      <div className={styles.bubble} data-test-class="queued-message-bubble" ref={bubbleRef}>
+      <div className={styles.bubble} data-selectable data-test-class="queued-message-bubble" ref={bubbleRef}>
         <ClampedText showMoreLabel={showMoreLabel} showLessLabel={showLessLabel}>{children}</ClampedText>
       </div>
       <div className={styles.controls}>
