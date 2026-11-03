@@ -5169,6 +5169,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "action_key": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional action_key from the current plan that this Turn works on first. Following activity is filed under that action until a checkpoint names another."
+            },
             "work_id": {
               "type": "string",
               "minLength": 1,
@@ -5364,6 +5369,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "current_action_key": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional action_key you work on next when several actions are active. Without it, the one action you mark active in action_updates becomes current. Following activity is filed under the current action."
+            },
             "action_updates": {
               "type": "array",
               "items": {
@@ -7869,7 +7879,7 @@
       "definition": {
         "type": "function",
         "name": "canon_queue",
-        "description": "Queue canon epics in this conversation only when the user explicitly asks to process them. plan_run processes the plan's unfinished epics in canon order. after places an epic in the step following target_epic_id; together joins its step. start_now starts a new head; remove removes a waiting epic. Each step starts its own Butler turn; linked Work is created by that turn, starting at Conception. No approval card is needed for this local act; read-only refuses it. Never call this merely because an epic is bound, a plan exists, or work completed. A held_elsewhere result offers the user a choice; do not take another conversation's epic without that choice.",
+        "description": "Runs canon epics one after another in this conversation, each step in its own Butler Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. Changes to a run pass expected_revision from the plan run note, which always shows the current queue; a stale revision is refused. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -7881,17 +7891,33 @@
                 "after",
                 "together",
                 "start_now",
-                "remove"
+                "remove",
+                "set_order"
               ]
             },
             "plan_id": {
-              "type": "string"
+              "type": "string",
+              "description": "A plan id (pl_…), never a title."
             },
             "epic_id": {
-              "type": "string"
+              "type": "string",
+              "description": "An epic id or canon:epic/ ref."
             },
             "target_epic_id": {
               "type": "string"
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "description": "Unfinished steps in order, each a list of epic ids or refs."
+            },
+            "expected_revision": {
+              "type": "integer"
             }
           },
           "required": [
@@ -12361,6 +12387,11 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "current_action_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional action_key you work on next when several actions are active. Without it, the one action you mark active in action_updates becomes current. Following activity is filed under the current action."
+          },
           "action_updates": {
             "type": "array",
             "items": {
@@ -12414,6 +12445,11 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "action_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional action_key from the current plan that this Turn works on first. Following activity is filed under that action until a checkpoint names another."
+          },
           "work_id": {
             "type": "string",
             "minLength": 1,
@@ -14426,7 +14462,7 @@
     "canon_queue": {
       "type": "function",
       "name": "canon_queue",
-      "description": "Queue canon epics in this conversation only when the user explicitly asks to process them. plan_run processes the plan's unfinished epics in canon order. after places an epic in the step following target_epic_id; together joins its step. start_now starts a new head; remove removes a waiting epic. Each step starts its own Butler turn; linked Work is created by that turn, starting at Conception. No approval card is needed for this local act; read-only refuses it. Never call this merely because an epic is bound, a plan exists, or work completed. A held_elsewhere result offers the user a choice; do not take another conversation's epic without that choice.",
+      "description": "Runs canon epics one after another in this conversation, each step in its own Butler Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. Changes to a run pass expected_revision from the plan run note, which always shows the current queue; a stale revision is refused. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -14438,17 +14474,33 @@
               "after",
               "together",
               "start_now",
-              "remove"
+              "remove",
+              "set_order"
             ]
           },
           "plan_id": {
-            "type": "string"
+            "type": "string",
+            "description": "A plan id (pl_…), never a title."
           },
           "epic_id": {
-            "type": "string"
+            "type": "string",
+            "description": "An epic id or canon:epic/ ref."
           },
           "target_epic_id": {
             "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Unfinished steps in order, each a list of epic ids or refs."
+          },
+          "expected_revision": {
+            "type": "integer"
           }
         },
         "required": [

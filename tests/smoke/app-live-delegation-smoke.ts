@@ -29,7 +29,7 @@ try {
   // 세션 정보 lists the unfinished subtask; it replaced the composer capsule.
   const pill = page.locator('[data-test-class="subtask-row"]');
   const dialog = page.locator('[data-test-class="steward-observer-dialog"]');
-  try { await card.getByText(/1\/3/).waitFor(); } catch (error) {
+  try { await card.getByText("Done 0/3", { exact: true }).waitFor(); } catch (error) {
     console.error(JSON.stringify({ body: await page.locator("body").innerText(), calls: server.stubModelCalls.length }));
     throw error;
   }
@@ -50,14 +50,15 @@ try {
   const url = page.url();
   let navigations = 0;
   page.on("framenavigated", frame => { if (frame === page.mainFrame()) navigations++; });
-  for (const [progress, checkpoint] of [["2/3", "Progress checkpoint 2"], ["3/3", "Progress checkpoint 3"]]) {
+  for (const [status, progress, checkpoint] of [["Done 1/3 · Now: second", "2/3", "Progress checkpoint 2"],
+    ["Done 2/3 · Now: third", "3/3", "Progress checkpoint 3"]]) {
     await stub.whenHeld();
     stub.advance();
-    try { await page.waitForFunction(({ progress, checkpoint }) => {
-      const selectors = ['[data-test-class~="steward-parent-progress-card"]', '[data-test-class="subtask-row"]'];
-      return selectors.every(selector => document.querySelector(selector)?.textContent?.includes(progress)) &&
+    try { await page.waitForFunction(({ status, progress, checkpoint }) => {
+      return document.querySelector('[data-test-class~="steward-parent-progress-card"]')?.textContent?.includes(status) &&
+        document.querySelector('[data-test-class="subtask-row"]')?.textContent?.includes(progress) &&
         document.querySelector('[data-test-class="steward-observer-dialog"]')?.textContent?.includes(checkpoint);
-    }, { progress, checkpoint }); } catch (error) {
+    }, { status, progress, checkpoint }); } catch (error) {
       console.error(JSON.stringify({ progress, card: await card.textContent(), pill: await pill.textContent(), modal: await dialog.textContent() }));
       throw error;
     }

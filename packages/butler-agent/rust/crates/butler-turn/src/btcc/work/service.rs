@@ -15,6 +15,10 @@ use crate::btcc::BtccCode;
 
 /// Durable Work storage; each command is idempotent by its mutation call id.
 pub trait DurableWorkRepository: Send + Sync {
+    /// Accepted plan steps and history for a hydrated Work.
+    fn plan_steps(&self, _work: WorkView) -> PortFuture<'_, Option<Value>> {
+        Box::pin(async { Ok(None) })
+    }
     /// Whether an active Steward owns this parent Work.
     fn steward_owns_work(&self, _session: String, _work: String) -> PortFuture<'_, bool> {
         Box::pin(async { Ok(false) })
@@ -75,6 +79,11 @@ impl DurableWorkService {
     /// A service over the Work repository.
     pub fn new(repository: Arc<dyn DurableWorkRepository>) -> Self {
         Self { repository }
+    }
+
+    /// Accepted plan steps and history for a hydrated Work.
+    pub async fn plan_steps(&self, work: WorkView) -> Result<Option<Value>, BtccError> {
+        self.repository.plan_steps(work).await
     }
 
     /// Whether parent closeout belongs to an active Steward.
