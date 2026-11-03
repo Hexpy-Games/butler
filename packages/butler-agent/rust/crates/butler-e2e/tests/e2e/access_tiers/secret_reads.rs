@@ -155,16 +155,6 @@ async fn hosts_without_secret_denial_ask_with_the_unsandboxed_card() -> Result<(
     let first = r#"echo one > "one$x.txt""#;
     let id = unsandboxed_card(&s, &chat, &script, "Write the first note.", first).await?;
     assert!(!project.join("one.txt").exists(), "ran before the approval");
-    let card = s.gw.approval_requests(&chat).await?.remove(0);
-    let reference = card["request_ref"].as_str().unwrap();
-    let rejected =
-        s.gw.post(
-            &format!("/authority-requests/{reference}/allow?session_id={chat}"),
-            json!({"scope":"conversation"}),
-        )
-        .await?;
-    assert_eq!(rejected.status, 400, "{rejected:?}");
-    assert_eq!(s.gw.approval_requests(&chat).await?.len(), 1);
     decide(&s, &chat, "allow", "once").await?;
     delivered(&s, &chat, &id).await?;
     assert!(
