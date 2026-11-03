@@ -208,15 +208,6 @@ pub struct AppFileWrite {
     pub bytes: Bytes,
 }
 
-/// Where a delivered or agent-written file was at delivery, for opening on
-/// this computer only; never sent to the App, LAN clients or the model.
-#[derive(Clone, Debug)]
-pub struct AppFileOrigin {
-    pub path: String,
-    /// No later delivery of the same source replaced it on its 서랍 card.
-    pub latest: bool,
-}
-
 pub struct AppFileDownload {
     pub file: MessageFileRef,
     pub bytes: Bytes,

@@ -3,27 +3,14 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{
-    AppApplication, AppFileDownload, AppFileOrigin, AppFileUpload, AppMessageFileSnapshot,
-    AppStorageError, GatewayApplicationError, app_error, public, read_model,
+    AppApplication, AppFileDownload, AppFileUpload, AppMessageFileSnapshot, AppStorageError,
+    GatewayApplicationError, app_error, public, read_model,
 };
 use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::{AppFileWrite, ApplicationFuture, MessageFileRef};
+use crate::gateway::{AppFileWrite, MessageFileRef};
 use butler_core::public_text::trim_js_whitespace;
 
 impl AppApplication {
-    pub(super) fn message_file_origin_owned(
-        &self,
-        id: String,
-    ) -> ApplicationFuture<Option<AppFileOrigin>> {
-        let this = self.clone_handle();
-        Box::pin(async move {
-            this.storage
-                .execute(move |db| file_origin(db, &id))
-                .await
-                .map_err(app_error)
-        })
-    }
-
     pub(super) async fn upload_message_file(
         &self,
         input: AppFileUpload,
@@ -170,37 +157,4 @@ fn not_found() -> AppStorageError {
         AppStorageCode::MessageFileNotFound,
         "Attachment file not found.",
     )
-}
-
-/// The recorded original, and whether a later delivery of the same source
-/// replaced this file on its 서랍 card. Version identity only, never content or time.
-fn file_origin(db: &Connection, id: &str) -> Result<Option<AppFileOrigin>, AppStorageError> {
-    let row = db
-        .query_row(
-            "SELECT origin_path,owner_session_id,source_label FROM message_files WHERE id=?1",
-            [id],
-            |r| {
-                Ok((
-                    r.get::<_, Option<String>>(0)?,
-                    r.get::<_, Option<String>>(1)?,
-                    r.get::<_, Option<String>>(2)?,
-                ))
-            },
-        )
-        .optional()
-        .map_err(AppStorageError::sqlite)?;
-    let Some((Some(path), chat, source)) = row else {
-        return Ok(None);
-    };
-    let superseded = match chat {
-        Some(chat) => {
-            let key = source.unwrap_or_else(|| format!("file:{id}"));
-            super::library::superseded(db, &chat, &key, id)?
-        }
-        None => false,
-    };
-    Ok(Some(AppFileOrigin {
-        path,
-        latest: !superseded,
-    }))
 }

@@ -101,7 +101,7 @@ export async function openInApp(fileId: string): Promise<void> {
   try {
     const result = await window.butlerApp?.openMessageFile?.({ fileId }) as { opened?: boolean; code?: unknown } | undefined;
     if (result?.opened) return;
-    notifyStatus(result?.code === "original_not_found" ? appCopy.fileViewer.originalNotFound : appCopy.artifacts.openInAppFailed, { tone: "error" });
+    notifyStatus(appCopy.artifacts.openInAppFailed, { tone: "error" });
   } catch (error) {
     notifyError(error, appCopy.artifacts.openInAppFailed);
   }

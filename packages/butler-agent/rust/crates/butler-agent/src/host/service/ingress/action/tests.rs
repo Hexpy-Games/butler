@@ -23,7 +23,6 @@ fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {
         kind: ArtifactKind::Report,
         title: "Report".into(),
         staged_path: None,
-        origin_path: None,
         safe_path_label: "report.md".into(),
         mime_type: Some("text/markdown".into()),
         size_bytes: Some(28),

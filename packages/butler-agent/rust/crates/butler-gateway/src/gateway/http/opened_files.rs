@@ -1,18 +1,15 @@
 //! `POST /internal/opened-files`: a stored file the user chose to open in
-//! another app. The App names the file by id only; this side picks the target
-//! and answers its path for the App to open or reveal. The latest version of a
-//! delivered or agent-written file is its original, recorded at delivery and
-//! never sent to clients, while that is still a regular file (not a link or a
-//! folder). Otherwise this side writes a copy under the data folder's temporary
-//! files and marks it as downloaded from the internet. Only content verified by
-//! a positive allowlist opens; anything else is only revealed, and only as the
-//! original, never as a temporary copy. The allowlist avoids OS executable
+//! another app. The App names the file by id only; this side checks the
+//! type, writes a copy under the data folder's temporary files and marks it
+//! as downloaded from the internet, then answers the copy's path for the App
+//! to open or reveal. A positive content-verified allowlist avoids OS executable
 //! denylists (PATHEXT, LaunchServices, xdg), which miss .jar, .terminal and WSH
-//! .js and need FFI. The copies are removed when the gateway starts and stops.
+//! .js and need FFI. Revealing is no wider than Save; copies carry the downloaded
+//! mark where supported. The copies are removed when the gateway starts and stops.
 mod kind;
 
 use std::{
-    io::{self, Read, Write},
+    io::{self, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -24,20 +21,10 @@ use super::{
     Body, Client, HttpError, HttpState, Method, Request, Response, StatusCode, json,
     read_body_with_limit,
 };
-use crate::gateway::application::AppFileOrigin;
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use butler_platform::{data_paths, download_mark, secure_fs};
 
 const OPENED_DIR: &str = "opened-files";
-/// The most of an original read for its content check; a larger one is only revealed.
-const ORIGINAL_LIMIT: u64 = 64 * 1024 * 1024;
-
-/// What the App acts on, whether it may open, and whether it is the original.
-struct Target {
-    path: PathBuf,
-    open: bool,
-    original: bool,
-}
 
 #[derive(Deserialize)]
 struct OpenRequest {
@@ -67,101 +54,27 @@ pub(super) async fn route(
     let input: OpenRequest = serde_json::from_slice(&bytes).map_err(|_| {
         HttpError::public(400, "open_request_invalid", "Request must be {file_id}.")
     })?;
-    let origin = state
+    let download = state
         .application
-        .message_file_origin(input.file_id.clone())
+        .download_message_file(input.file_id)
         .await?;
-    let original = match origin {
-        Some(origin) => blocking(move || Ok(original(origin))).await?,
-        None => None,
+    let handling = kind::verify(&download.file.safe_name, &download.bytes);
+    let open = matches!(handling, kind::Handling::Open(_));
+    let name = match handling {
+        kind::Handling::Open(extension) => copy_name(&download.file.safe_name, &extension),
+        kind::Handling::Reveal => download.file.safe_name.replace(['/', '\\'], "_"),
     };
-    let target = match original {
-        Some((path, Some(handling))) => Target {
-            open: matches!(handling, kind::Handling::Open(_)),
-            path,
-            original: true,
-        },
-        original => stored(&state, root, input.file_id, original.map(|(path, _)| path)).await?,
-    };
+    let path = tokio::task::spawn_blocking(move || write_marked(&root, &name, &download.bytes))
+        .await
+        .map_err(|_| failed())?
+        .map_err(|_| failed())?;
     json(
         StatusCode::CREATED,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: json!({ "path": target.path, "open": target.open, "original": target.original }),
+            data: json!({ "path": path, "open": open }),
         },
     )
-}
-
-/// The recorded original while it is a regular file, not a link or a folder.
-/// Only the latest version is checked for opening, by the original's own name
-/// and content; an older version opens as its stored copy.
-fn original(origin: AppFileOrigin) -> Option<(PathBuf, Option<kind::Handling>)> {
-    let path = PathBuf::from(origin.path);
-    let regular =
-        std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_file());
-    if !regular {
-        return None;
-    }
-    let handling = origin.latest.then(|| verify_original(&path));
-    Some((path, handling))
-}
-
-fn verify_original(path: &Path) -> kind::Handling {
-    let mut bytes = Vec::new();
-    let read = std::fs::File::open(path)
-        .and_then(|file| file.take(ORIGINAL_LIMIT + 1).read_to_end(&mut bytes));
-    if read.is_err() || bytes.len() as u64 > ORIGINAL_LIMIT {
-        return kind::Handling::Reveal;
-    }
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("");
-    kind::verify(name, &bytes)
-}
-
-/// The stored version: a marked copy when its content may open; otherwise its
-/// original is revealed, and without one there is nothing to show.
-async fn stored(
-    state: &HttpState,
-    root: PathBuf,
-    file_id: String,
-    original: Option<PathBuf>,
-) -> Result<Target, HttpError> {
-    let download = state.application.download_message_file(file_id).await?;
-    let kind::Handling::Open(extension) = kind::verify(&download.file.safe_name, &download.bytes)
-    else {
-        return original
-            .map(|path| Target {
-                path,
-                open: false,
-                original: true,
-            })
-            .ok_or_else(|| {
-                HttpError::public(
-                    404,
-                    "original_not_found",
-                    "The original file was not found.",
-                )
-            });
-    };
-    let name = copy_name(&download.file.safe_name, &extension);
-    let path = blocking(move || write_marked(&root, &name, &download.bytes)).await?;
-    Ok(Target {
-        path,
-        open: true,
-        original: false,
-    })
-}
-
-/// File checks and writes stay off the async workers.
-async fn blocking<T: Send + 'static>(
-    job: impl FnOnce() -> io::Result<T> + Send + 'static,
-) -> Result<T, HttpError> {
-    tokio::task::spawn_blocking(job)
-        .await
-        .map_err(|_| failed())?
-        .map_err(|_| failed())
 }
 
 /// Removes every copy made for another app (at gateway start and stop).

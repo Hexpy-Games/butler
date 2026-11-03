@@ -1,4 +1,4 @@
-// Real Electron, isolated gateway and stub model: the file viewer's open-external action reaches the shell once per click, or shows a toast when there is no original to reveal.
+// Real Electron, isolated gateway and stub model: the file viewer's open-external action reaches the shell once per click.
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -115,12 +115,6 @@ function assertCopy(line: ShellLine, fixture: Fixture) {
 async function assertShellAction(fixture: Fixture) {
   const count = shellLines().length;
   await click(action);
-  if (fixture.kind === "script") {
-    // An attachment has no recorded original, so there is nothing to show in a folder.
-    await waitBrowser(() => app.page.expression(`[...document.querySelectorAll('[data-sonner-toast]')].some((node) => node.textContent.includes(${JSON.stringify(copy.fileViewer.originalNotFound)}))`), "original-not-found toast");
-    assert.equal(shellLines().length, count, "no shell action without an original");
-    return;
-  }
   await waitBrowser(async () => shellLines().length > count, "desktop action logged");
   await settle();
   const lines = shellLines();

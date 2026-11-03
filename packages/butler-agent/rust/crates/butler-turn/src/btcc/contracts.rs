@@ -264,10 +264,6 @@ pub struct FinalArtifact {
     /// Private reader copy, consumed when the responder attachment is copied.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub staged_path: Option<String>,
-    /// Where the delivered original was (absolute); journal and App storage
-    /// only, never model context or clients.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub origin_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -9,7 +9,7 @@ const fileId = "file-12345678-1234-1234-1234-123456789abc";
 type Handler = Parameters<Parameters<typeof registerOpenMessageFile>[0]["ipcMain"]["handle"]>[1];
 let dir: string, root: string, file: string;
 let handler: Handler;
-let response: { data: { path: string; open: boolean; original?: boolean } };
+let response: { data: { path: string; open: boolean } };
 let trusted: boolean;
 let calls: Array<[string, string]>;
 let requests: Array<{ url: string; body: unknown }>;
@@ -48,15 +48,12 @@ test("only the id reaches the gateway; verified open uses the real path", async 
   expect(requests).toEqual([{ url: "/internal/opened-files", body: { file_id: fileId } }]);
   expect(calls).toEqual([["open", await realpath(file)]]);
 });
-test("outside path opens only as the gateway's original", async () => {
+test("outside path is refused without shell calls", async () => {
   const outside = join(dir, "outside.txt");
   await writeFile(outside, "outside");
   response.data.path = outside;
   expect(await handler({}, { fileId })).toEqual({ opened: false, code: "open_path_refused" });
   expect(calls).toEqual([]);
-  response.data.original = true;
-  expect(await handler({}, { fileId })).toEqual({ opened: true });
-  expect(calls).toEqual([["open", outside]]);
 });
 test("symlink pointing outside is refused without shell calls", async () => {
   const outside = join(dir, "outside.txt");
@@ -66,15 +63,9 @@ test("symlink pointing outside is refused without shell calls", async () => {
   response.data.path = link;
   expect(await handler({}, { fileId })).toEqual({ opened: false, code: "open_path_refused" });
   expect(calls).toEqual([]);
-  response.data.original = true;
-  expect(await handler({}, { fileId })).toEqual({ opened: false, code: "open_path_refused" });
-  expect(calls).toEqual([]);
 });
 test("the root itself is refused without shell calls", async () => {
   response.data.path = root;
-  expect(await handler({}, { fileId })).toEqual({ opened: false, code: "open_path_refused" });
-  expect(calls).toEqual([]);
-  response.data.original = true;
   expect(await handler({}, { fileId })).toEqual({ opened: false, code: "open_path_refused" });
   expect(calls).toEqual([]);
 });

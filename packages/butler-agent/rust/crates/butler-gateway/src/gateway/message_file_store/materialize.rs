@@ -19,7 +19,6 @@ const MAX_BYTES: usize = 10 * 1024 * 1024;
 const MAX_FILES: usize = 12;
 
 struct PendingFile {
-    origin_path: Option<String>,
     staged: Option<PathBuf>,
     title: Option<String>,
     source_label: Option<String>,
@@ -98,7 +97,6 @@ pub(super) fn run(
             .map(|bytes| stage(root, &mut staging, pending.len(), &bytes))
             .transpose()?;
         pending.push(PendingFile {
-            origin_path: candidate.origin_path.clone(),
             staged,
             title: candidate.title.clone(),
             source_label: candidate.source_label.clone(),
@@ -171,7 +169,6 @@ fn publish_files(
             .unwrap_or(Ok(()))
             .map_err(internal)?;
         files.push(MaterializedResponderFile {
-            origin_path: item.origin_path,
             id: id.clone(),
             title: item.title,
             source_label: item.source_label,

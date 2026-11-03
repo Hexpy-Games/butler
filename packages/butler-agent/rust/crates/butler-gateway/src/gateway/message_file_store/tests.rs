@@ -28,7 +28,6 @@ async fn source_artifact_is_stored_once_with_original_metadata() {
     std::fs::write(&source, b"native artifact\n").unwrap();
     let owner = AppMessageFiles::new(&root.clone(), Arc::new(Clock));
     let candidate = ArtifactFileCandidate {
-        origin_path: None,
         title: None,
         source_label: None,
         deliverable: false,
@@ -163,7 +162,6 @@ async fn interrupted_write(point: &str) {
                     allowed_roots: vec![root.clone()],
                     file_grants: Vec::new(),
                     candidates: vec![ArtifactFileCandidate {
-                        origin_path: None,
                         title: None,
                         source_label: None,
                         deliverable: false,

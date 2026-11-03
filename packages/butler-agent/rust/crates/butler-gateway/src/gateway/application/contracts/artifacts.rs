@@ -10,8 +10,6 @@ pub struct ArtifactMaterializationRequest {
 
 #[derive(Clone, Debug)]
 pub struct ArtifactFileCandidate {
-    /// The original's absolute path at delivery; stored, never projected.
-    pub origin_path: Option<String>,
     pub title: Option<String>,
     pub source_label: Option<String>,
     pub deliverable: bool,
@@ -22,7 +20,6 @@ pub struct ArtifactFileCandidate {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MaterializedResponderFile {
-    pub origin_path: Option<String>,
     pub title: Option<String>,
     pub source_label: Option<String>,
     pub deliverable: bool,

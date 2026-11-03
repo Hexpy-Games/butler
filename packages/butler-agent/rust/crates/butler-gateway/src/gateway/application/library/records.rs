@@ -196,7 +196,9 @@ pub(in crate::gateway::application) fn deliverable(
     file_id: &str,
     title: Option<&str>,
 ) -> Result<Value, AppStorageError> {
-    let id = document_id(chat, key);
+    use sha2::{Digest, Sha256};
+    let digest = format!("{:x}", Sha256::digest(format!("{chat}\0{key}").as_bytes()));
+    let id = format!("document-{}", &digest[..32]);
     let row = super::super::admission::file(db, file_id)?.ok_or_else(file_not_found)?;
     let file = read_model::message_file_ref(&row)?;
     let prior: Option<String> = db
@@ -262,29 +264,4 @@ pub(in crate::gateway::application) fn editable_document(
     db.execute("INSERT INTO browser_library(id,kind,title,url,payload,created_at) VALUES(?1,'doc',?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET title=excluded.title,payload=excluded.payload,created_at=excluded.created_at",
         params![id,item["title"].as_str(),item["url"].as_str(),item.to_string(),item["updatedAt"].as_str()]).map_err(sql)?;
     item::refresh(db, id)
-}
-
-/// The 서랍 document card of one chat/source (its primary key).
-fn document_id(chat: &str, key: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let digest = format!("{:x}", Sha256::digest(format!("{chat}\0{key}").as_bytes()));
-    format!("document-{}", &digest[..32])
-}
-
-/// Whether the file's 서랍 card lists it below a later version. Version
-/// identity only, never content or time.
-pub(in crate::gateway::application) fn superseded(
-    db: &Connection,
-    chat: &str,
-    key: &str,
-    file_id: &str,
-) -> Result<bool, AppStorageError> {
-    db.query_row(
-        "SELECT 1 FROM browser_library l, json_each(l.payload,'$.revisions') r WHERE l.id=?1 AND r.key>0 AND json_extract(r.value,'$.file.file_id')=?2 LIMIT 1",
-        params![document_id(chat, key), file_id],
-        |_| Ok(()),
-    )
-    .optional()
-    .map(|found| found.is_some())
-    .map_err(sql)
 }

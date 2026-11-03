@@ -12,7 +12,7 @@ pub use organize::AppLibraryChange;
 pub use query::AppLibraryQuery;
 pub(super) use records::{
     bookmark_in_folder, create_folder_groups, deliverable, document, editable_document, output,
-    save, superseded,
+    save,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
