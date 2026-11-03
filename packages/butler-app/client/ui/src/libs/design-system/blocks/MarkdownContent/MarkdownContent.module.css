@@ -176,14 +176,9 @@
   }
 }
 
-/* Fenced code block frame: header bar + faded pre. */
+/* Fenced code block (CodeFrame draws the frame): header bar + faded pre. */
 .codeFrame {
-  min-width: 0;
   margin-block: var(--space-4);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--surface-raised);
 }
 
 .codeHeader {

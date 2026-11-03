@@ -3,6 +3,7 @@ import { Button } from "../../components/Button";
 import { Typo } from "../../components/Typo";
 import { dsClass } from "../../lib/internal";
 import { useScrollEdges } from "../../lib/useScrollEdges";
+import { CodeFrame } from "../MarkdownContent/CodeFrame";
 import styles from "./ComposerDecisionPanel.module.css";
 
 /** A detail line, or `{ code }`: a command body drawn in a code frame with its own spaces and line breaks. */
@@ -10,14 +11,14 @@ export type ComposerDecisionDetail = string | { code: string };
 /** Display formatting for the title and detail lines; `code` for a `{ code }` detail. */
 export type ComposerDecisionRenderText = (text: string, as: "text" | "code") => ReactNode;
 
-/** The markdown code frame's look: monospace, whitespace kept; every edge with hidden content fades (long lines, a tall script). */
+/** The shared code frame, monospace, whitespace kept, at full height; a long line scrolls sideways with the edge fade of chat code blocks. */
 function DetailCode({ code, renderText, literal }: { code: string; renderText?: ComposerDecisionRenderText; literal?: boolean }) {
-  const fade = useScrollEdges("both");
-  return <div className={styles.code} data-slot="composer-decision-code">
+  const fade = useScrollEdges("x");
+  return <CodeFrame className={dsClass(styles.code)} data-slot="composer-decision-code">
     <Typo.Code as="pre" ref={fade} dir="ltr" tone="secondary" literal={literal} className={dsClass(styles.codeText)}>
       {renderText ? renderText(code, "code") : code}
     </Typo.Code>
-  </div>;
+  </CodeFrame>;
 }
 
 /**
