@@ -86,7 +86,7 @@ fn result_script(s: &Scenario, script: &Script, cards: &[Value]) -> Result<(), H
         |row| row.get(0),
     )?;
     script.rounds.lock().unwrap().insert(
-        "Delegated result status: success summary: Worker checks completed. evidence_refs:".into(),
+        "Delegated result result_id: result-{{DIGEST}} status: success summary: Worker checks completed.".into(),
         vec![
             call("result-wait", "wait_for_worker", &json!({})),
             call(
