@@ -23,6 +23,7 @@ cef::wrap_app! {
                 }
                 cmd.append_switch_with_value(Some(&"password-store".into()),Some(&"basic".into()));
                 cmd.append_switch_with_value(Some(&"autoplay-policy".into()),Some(&"no-user-gesture-required".into()));
+                cmd.append_switch_with_value(Some(&"disable-features".into()),Some(&"SpareRendererForSitePerProcess".into()));
             }
         }
     }
