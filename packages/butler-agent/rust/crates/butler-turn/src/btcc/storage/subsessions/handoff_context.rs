@@ -16,17 +16,6 @@ impl SqliteSubsessionRepository {
         }).await
     }
 
-    /// The parent relation index bounds this lookup to one session's Work.
-    pub(crate) async fn workers_for_work(
-        &self,
-        session: String,
-        work: String,
-    ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
-        self.storage.read(move |db| {
-            list(db, "WHERE json_extract(d.packet_json,'$.parent_work_ref.work_id')=?2 AND r.parent_session_id=?1 AND r.activity_role='worker' ORDER BY r.ordinal DESC", params![session,work])
-        }).await
-    }
-
     pub(crate) async fn relation_for_result(
         &self,
         result: String,

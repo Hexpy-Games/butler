@@ -227,6 +227,8 @@ impl AppApplication {
             "workers",
             "relation",
             "activity_rows",
+            "activity_history",
+            "plan",
             "approved_plan_revision",
             "approved_plan_total",
             "approved_plan_completed",

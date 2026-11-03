@@ -1,5 +1,6 @@
 //! One Turn's presentation correlation. It never authorizes or mutates Work.
 
+mod actions;
 mod content;
 mod publication;
 mod snapshot;
@@ -63,6 +64,8 @@ struct State {
     fallback: Option<String>,
     pending_stage: Option<WorkStage>,
     pending_title: Option<String>,
+    current_action: Option<String>,
+    action_selected: bool,
 }
 
 pub(crate) struct GuidedActivity {
@@ -79,6 +82,7 @@ impl GuidedActivity {
     ) -> Self {
         let mut state = State::default();
         if let Some(work) = initial_work {
+            state.current_action = actions::fallback(work);
             state.managed = true;
             state.pending_stage = work.current_stage;
             state.pending_title = Some(resumed(work).title);
@@ -173,6 +177,7 @@ impl GuidedActivity {
             };
             let kind = activity_kind(&call.name);
             if kind == "ordinary" {
+                actions::bind(&mut state, &group_id);
                 if let Some(stage) = state.pending_stage.take() {
                     let title = state.pending_title.take();
                     if let Some(group) = state.groups.get_mut(&group_id) {
@@ -229,6 +234,7 @@ impl GuidedActivity {
             let Some(binding) = state.bindings.get(journal_call_id).cloned() else {
                 return Ok(());
             };
+            actions::accepted(&mut state, &binding.id, work);
             let Some(group) = state.groups.get_mut(&binding.id) else {
                 return Ok(());
             };
@@ -311,7 +317,7 @@ fn new_group(
         resumes_work: first.name == ToolName::ContinueWork,
         next_execution_title: None,
         published: false,
-        extensions: Map::new(),
+        extensions: actions::group(state, first, stage),
     };
     if first.name == ToolName::RecordWorkReview
         && first.arguments.get("subject").and_then(Value::as_str) == Some("plan")
@@ -320,6 +326,19 @@ fn new_group(
         group.starts_execution = true;
         group.next_execution_title = next_execution_title;
     }
+    decorate_group(state, &mut group, first, text, turn_id);
+    state.groups.insert(id.clone(), group);
+    id
+}
+
+fn decorate_group(
+    state: &mut State,
+    group: &mut Group,
+    first: &ModelRoundToolCall,
+    text: &str,
+    turn_id: &str,
+) {
+    let deferred = group.deferred;
     if first.name == ToolName::ReplaceWorkPlan {
         let before = format!("guided-activity:{turn_id}:{}", uuid::Uuid::new_v4());
         let conception = content::conception(&group.summary);
@@ -351,6 +370,7 @@ fn new_group(
         && let Some(report) = content::reporting(text)
     {
         let after = format!("guided-activity:{turn_id}:{}", uuid::Uuid::new_v4());
+        let extensions = actions::group(state, first, Some(WorkStage::Reporting));
         state.groups.insert(
             after.clone(),
             Group {
@@ -368,11 +388,9 @@ fn new_group(
                 resumes_work: false,
                 next_execution_title: None,
                 published: false,
-                extensions: Map::new(),
+                extensions,
             },
         );
         group.following.push(after);
     }
-    state.groups.insert(id.clone(), group);
-    id
 }
