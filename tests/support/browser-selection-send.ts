@@ -44,7 +44,7 @@ export async function sendBrowserCaptures(app: App, tab: string) {
   await app.call("selection-command", { id: tab, op: "attach" });
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-test-class=composer-card] [data-blocked=true]').length===2"), "text-only model marks both images blocked");
   assert.ok(await app.page.expression<boolean>("[...document.querySelectorAll('[data-test-class=composer-card] [data-blocked=true]')].every(item=>item.querySelector('img')?.getAttribute('data-fit')==='contain')"));
-  assert.equal(await app.page.expression("document.querySelector('[data-test-class=composer-card] button[aria-label=Send]')?.getAttribute('aria-disabled')"), "true");
+  await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=composer-send-button]')?.getAttribute('aria-disabled')==='true'"), "send blocked for the text-only model");
   for (const theme of ["light", "dark"]) {
     await app.settings("en", theme, 1440);
     await app.shot(`selection-refused-${theme}`);
