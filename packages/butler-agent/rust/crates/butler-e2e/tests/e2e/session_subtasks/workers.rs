@@ -25,7 +25,10 @@ async fn subtask_workers_are_ordered_live_and_retained_when_finished() -> Result
         &["active", "active", "waiting", "waiting"],
     );
     assert_eq!(view["workers"], serde_json::json!([]), "{view}");
-    let after = live.snapshot().last().and_then(|event| event["id"].as_u64());
+    let after = live
+        .snapshot()
+        .last()
+        .and_then(|event| event["id"].as_u64());
     script.release("red-0");
     worker_cap::closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
     worker_cap::started(&script, 3).await;

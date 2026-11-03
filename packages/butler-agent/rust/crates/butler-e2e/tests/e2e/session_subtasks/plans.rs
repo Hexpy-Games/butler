@@ -36,7 +36,9 @@ fn check(data: &std::path::Path) -> Result<(), HarnessError> {
             let name = line.split_whitespace().nth(1).unwrap_or_default();
             if line.starts_with("SCAN ") {
                 assert!(
-                    CTES.contains(&name) || line.contains("VIRTUAL TABLE") || line.contains("USING"),
+                    CTES.contains(&name)
+                        || line.contains("VIRTUAL TABLE")
+                        || line.contains("USING"),
                     "unindexed source: {line}\n{plan}"
                 );
             }
