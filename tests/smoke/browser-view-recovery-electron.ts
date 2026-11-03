@@ -17,7 +17,7 @@ const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;
 const paint=()=>{canvas.getContext('2d').fillRect(0,0,64,64);requestAnimationFrame(paint)};paint();
 document.querySelector('video').srcObject=canvas.captureStream(10);
 </script>`;
-const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => {
+const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", idleTimeout: 0, fetch: request => {
   if (new URL(request.url).pathname === "/hold") return new Response(new ReadableStream({ start(controller) {
     controller.enqueue(new TextEncoder().encode("waiting"));
   } }));
@@ -58,6 +58,18 @@ try {
   assert.equal(listeners.after, listeners.baseline);
   await app.call("navigate", { id, value: fixture.url.href });
   await waitBrowser(() => app.main(`${tab}.status==='idle'`), "leave long-loading fixture");
+  // Back acts at once on a page that is still loading, and stop stays on that page.
+  const loading = JSON.stringify(new URL("loading", fixture.url).href);
+  await app.call("navigate", { id, value: new URL("loading", fixture.url).href });
+  await waitBrowser(() => app.main(`${tab}.view.webContents.getURL()===${loading} && ${tab}.view.webContents.isLoadingMainFrame()`), "long-loading page");
+  await app.call("back", { id });
+  await waitBrowser(() => app.main(`new URL(${tab}.view.webContents.getURL()).pathname==='/' && ${tab}.status==='idle'`), "back while loading");
+  await app.call("forward", { id });
+  await waitBrowser(() => app.main(`${tab}.view.webContents.getURL()===${loading} && ${tab}.view.webContents.isLoadingMainFrame()`), "forward to long-loading page");
+  await app.call("stop", { id });
+  await waitBrowser(() => app.main(`${tab}.view.webContents.getURL()===${loading} && !${tab}.view.webContents.isLoadingMainFrame() && ${tab}.status==='idle'`), "stop stays on the page");
+  await app.call("navigate", { id, value: fixture.url.href });
+  await waitBrowser(() => app.main(`${tab}.status==='idle'`), "leave long-loading page");
   // This is a real renderer crash, recovered using the existing public sad-tab action.
   await app.main(`${tab}.view.webContents.forcefullyCrashRenderer()`);
   await waitBrowser(() => app.main(`${tab}.status==='crashed'`), "gone renderer sad state");
