@@ -21,7 +21,7 @@ try {
       const events=['did-start-navigation','render-process-gone','destroyed'];
       const listeners=()=>[...events.map(name=>contents.listenerCount(name)),dbg.listenerCount('message'),tab.dialogWaiters?.size??0];
       let release, pending, value;const delivered=[];
-      const tab={id:'lifecycle-tab',epoch:1,url:'about:blank',owner:'conversation:s1',holder:'agent',view:{webContents:contents}};
+      const tab={id:'lifecycle-tab',epoch:1,url:'about:blank',owner:'conversation:s1',holder:'agent',attached:window,view:{webContents:contents}};
       const browser={publish(){},sync(){}};
       const originalPaint=contents.executeJavaScriptInIsolatedWorld.bind(contents);
       const originalCapture=contents.capturePage.bind(contents);
@@ -95,7 +95,7 @@ try {
       const listeners=()=>[...events.map(name=>contents.listenerCount(name)),dbg.listenerCount('message'),tab.dialogWaiters?.size??0];
       let requested=0,stale=false,timer;const delivered=[];
       const tab={id:'dialog-tab',epoch:1,url:'about:blank',owner:'conversation:s1',holder:'agent',agent:true,
-        view:{webContents:contents},afterCapture:()=>{stale=true}};
+        attached:window,view:{webContents:contents},afterCapture:()=>{stale=true}};
       const browser={publish(){},sync(){},detach(){},close(){}};
       try {
         await contents.loadURL('data:text/html,<title>Dialog</title><body>Dialog');
@@ -181,7 +181,7 @@ try {
     const {BrowserWindow}=require('electron');
     const {stepStill,comparisonThumbnail}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/stills.mjs"))});
     const window=new BrowserWindow({show:true,webPreferences:{backgroundThrottling:false}}),contents=window.webContents;
-    const tab={id:'comparison',epoch:1,holder:'agent',url:'about:blank',frameAttachPromises:new Map(),frameSessions:new Map(),view:{webContents:contents}};
+    const tab={id:'comparison',epoch:1,holder:'agent',url:'about:blank',frameAttachPromises:new Map(),frameSessions:new Map(),attached:window,view:{webContents:contents}};
     let captures=0;const delivered=[];
     const original=contents.capturePage.bind(contents);
     const originalWorld=contents.executeJavaScriptInIsolatedWorld.bind(contents);
