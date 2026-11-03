@@ -32,7 +32,7 @@ pub(super) async fn execute(
     in_access(
         owner,
         invocation,
-        super::execute::execute(owner, invocation, call),
+        Box::pin(super::execute::execute(owner, invocation, call)),
     )
     .await
     .map_err(ToolExecutionError::Integrity)?
