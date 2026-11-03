@@ -83,25 +83,6 @@ pub(super) fn routed_turn_id(envelope: &Envelope) -> &str {
         .unwrap_or(&envelope.event_id)
 }
 
-/// A child turn with nothing left to continue settles without a Turn.
-pub(super) async fn child_turn_admissible(
-    envelope: &Envelope,
-    subsessions: &butler_turn::btcc::SubsessionService,
-) -> Result<bool, IngressError> {
-    let Some(session) = envelope
-        .native_steward_context
-        .as_ref()
-        .and(envelope.routing_hints.as_ref())
-        .and_then(|hints| hints.session_id.as_deref())
-    else {
-        return Ok(true);
-    };
-    subsessions
-        .child_turn_admissible(session, routed_turn_id(envelope))
-        .await
-        .map_err(|error| IngressError::new("subsession_admission_unavailable", error.code()))
-}
-
 pub(super) async fn bind_and_request(
     envelope: &Envelope,
     bindings: &SessionBindingStore,
