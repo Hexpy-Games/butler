@@ -38,7 +38,7 @@ export async function snapshotApp(win, target) {
   const scale = contents.getZoomFactor();
   const tab = {
     // Keep the original glyph metrics, variation axes and layout features in a self-contained subset.
-    epoch: 1, url: contents.getURL(), bounds: { scale }, fetchAsset: appAsset(contents), subsetFont: subsetSnapshotFont,
+    epoch: 1, url: contents.getURL(), bounds: { scale }, attached: win, fetchAsset: appAsset(contents), subsetFont: subsetSnapshotFont,
     view: { webContents: contents, getBounds: () => { const { width, height } = win.getContentBounds(); return { x: 0, y: 0, width, height }; } },
   };
   const selector = `[data-butler-snapshot="${target}"]`;

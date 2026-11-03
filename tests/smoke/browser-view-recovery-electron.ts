@@ -77,6 +77,19 @@ try {
   await waitBrowser(() => app.main(`${tab}.status==='idle'`), "renderer reload");
   await nativeAligned(app);
   facts.crash = await app.main(`${tab}.view.webContents.mainFrame.executeJavaScript('document.title')`);
+  // A playing page out of the window starts no readback that could not finish: a load ending there leaves it live.
+  const other = await app.call<string>("create", { url: fixture.url.href });
+  await app.call("activate", { id: other });
+  await waitBrowser(() => app.main(`!${tab}.attached && ${tab}.view.webContents.getBackgroundThrottling()===false`), "playing page out of the window");
+  await app.main(`(()=>{const c=${tab}.view.webContents;globalThis.recoveryCapture=c.capturePage;c.capturePage=()=>new Promise(()=>{});})()`);
+  await app.main(`${tab}.view.webContents.mainFrame.executeJavaScript("{const f=document.createElement('iframe');f.src='/frame';document.body.appendChild(f)}true")`);
+  await Bun.sleep(6000);
+  assert.equal(await app.main(`${tab}.status`), "idle", "a playing page out of the window is not judged frozen");
+  await app.main(`(()=>{${tab}.view.webContents.capturePage=globalThis.recoveryCapture;})()`);
+  await app.call("activate", { id });
+  await waitBrowser(() => app.main(`${tab}.status==='idle' && ${tab}.attached===${app.win} && ${tab}.view.getVisible()`), "playing page live again");
+  await app.call("close", { id: other });
+  await nativeAligned(app);
   for (const sequence of ["background-cover", "minimize", "hide", "move", "detached", "pane"]) {
     if (sequence === "pane") {
       if (process.env.BUTLER_WINDOW_CAPTURE_EXECUTABLE) await app.shot("pane");
