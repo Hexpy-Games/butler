@@ -130,7 +130,6 @@ try {
   await waitBrowser(() => app.main(`${tab}.status==='idle' && ${tab}.attached===${app.win} && ${tab}.view.getVisible()`), "playing page live again");
   await app.call("close", { id: other });
   await nativeAligned(app);
-
   // A busy page that answers again returns to its live view without a reload.
   await app.main(`globalThis.recoveryUnresponsive=false;${tab}.view.webContents.once('unresponsive',()=>{globalThis.recoveryUnresponsive=true});${tab}.view.webContents.mainFrame.executeJavaScript('setTimeout(()=>{const end=Date.now()+25000;while(Date.now()<end){}},0);true')`);
   await app.main(`${tab}.view.webContents.sendInputEvent({type:'keyDown',keyCode:'A'})`);
