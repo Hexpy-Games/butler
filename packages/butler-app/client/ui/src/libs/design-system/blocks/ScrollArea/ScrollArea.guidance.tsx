@@ -31,6 +31,6 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: ["Content ends on the column edge whether it fits or overflows, with overlay or classic scrollbars: the scrollbar lane sits past that edge, so rows never reach into it.", "No gutter is reserved for a scrollbar that is not drawn: a classic scrollbar takes its width only while the content overflows, and the content gives back exactly the width this scroller's own scrollbar takes, never the document-wide --scrollbar-width (macOS can switch to overlay scrollbars after it is measured), so a selected row keeps the same inset on both sides.", "bleed=\"inline-end\" puts the scrollbar in the inspector gutter; windowDrag=\"no-drag\" keeps a scroller inside a drag region scrollable.", "No copy of its own."],
-  accessibility: ["Scrollable regions that hold focusable content need no tabIndex; otherwise give them a label and tabIndex=0."],
+  accessibility: ["Scrollable regions that hold focusable content need no tabIndex; otherwise give them a label and tabIndex=0.", "A focused control too large for the area (a long code frame) cannot show its whole ring, so the area draws the ring inset on itself and drops its fades until focus leaves; focus stays on the control."],
   tokens: ["--scroll-fade-size", "--scroll-area-max-height-xs", "--scroll-area-min-height-xs"],
 };

@@ -39,7 +39,6 @@ fn request(w: &GraphWork, id: &str, task: Value) -> WorkerDelegationRequest {
         objective: id.into(),
         acceptance_criteria: vec!["Complete results".into()],
         implementation_brief: "Use inputs and report findings".into(),
-        target_path: None,
         replaces_relation_id: None,
         safe_title: Some(id.into()),
         profile_id: None,

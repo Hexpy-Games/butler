@@ -96,7 +96,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
         style={offsetY === undefined ? style : { ...style, transform: `translateY(${offsetY}px)` }}
       >
         {avatar}
-        <div className={styles.body} data-test-class="message-body" ref={bodyRef}>
+        <div className={styles.body} data-selectable data-test-class="message-body" ref={bodyRef}>
           {children}
         </div>
         {footer && <div className={styles.rowFooter}>{footer}</div>}

@@ -2,7 +2,8 @@
 //
 // For the focused element (or its aria-activedescendant), find the element that
 // paints the focus indicator (itself or a near ancestor whose outline or
-// box-shadow uses the resolved --focus-ring-color), compute the indicator's
+// box-shadow uses the resolved --focus-ring-color, or the scroller that draws
+// the ring of a control too large for it), compute the indicator's
 // rectangle (outline width + offset, or the outer box-shadow's spread + blur +
 // offset; an inset ring stays on the box) and check it against every ancestor
 // that clips its painting: overflow (padding box, per axis, honoring
@@ -112,10 +113,14 @@ export const focusRingProbeInPage = (): FocusRingProbe | null => {
     return reach;
   };
 
-  // The indicator: the target, else the nearest of a few ancestors (a field box around its input).
+  // The indicator: a scroller that draws the ring of a control too large for it (data-focus-ring-host, which
+  // turns the control's own ring off), else the target, else the nearest of a few ancestors (a field box around its input).
   let painter: Element | null = null;
   let reach = 0;
-  for (let node: Element | null = target, depth = 0; node && depth < 4; node = node.parentElement, depth += 1) {
+  const host = target.parentElement?.closest("[data-focus-ring-host]") ?? null;
+  const hostReach = host ? outerReach(host) : null;
+  if (host && hostReach !== null) { painter = host; reach = hostReach; }
+  for (let node: Element | null = target, depth = 0; !painter && node && depth < 4; node = node.parentElement, depth += 1) {
     const found = outerReach(node);
     if (found !== null) { painter = node; reach = found; break; }
   }
@@ -142,6 +147,12 @@ export const focusRingProbeInPage = (): FocusRingProbe | null => {
     || style.filter !== "none" || style.perspective !== "none" || /paint|layout|strict|content/u.test(style.contain)
     || (style.backdropFilter ?? "none") !== "none" || style.willChange.includes("transform");
 
+  // A ring host paints its ring on its own box: its own mask (a scroll fade left on) would cut it.
+  if (painter === host) {
+    const own = getComputedStyle(painter);
+    const mask = own.maskImage || own.webkitMaskImage;
+    if (mask && mask !== "none") check({ left: ring.right, top: ring.bottom, right: ring.left, bottom: ring.top }, `${describe(painter)} (own mask on the ring host)`);
+  }
   let position = getComputedStyle(painter).position;
   for (let node = painter.parentElement; node; node = node.parentElement) {
     const style = getComputedStyle(node);

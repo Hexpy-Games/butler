@@ -32,7 +32,7 @@ struct Hooks {
     pool: Arc<tokio::sync::Semaphore>,
     /// Budgets output too large for one turn's context.
     output: butler_runtime::context::ToolOutput,
-    /// Told when a failing hook blocks part of a running turn.
+    /// Told when a hook fails during a session's event.
     block_listener: RwLock<Option<HookBlockListener>>,
     shutdown: CancellationToken,
 }

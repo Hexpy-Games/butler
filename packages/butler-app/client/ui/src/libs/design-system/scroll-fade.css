@@ -9,7 +9,8 @@
  *
  * While a focus ring shows inside, each fade turns solid --focus-ring-room
  * sooner, so a control resting at an edge keeps its whole ring even when the
- * fade lags the scroll by a frame or is still fading out.
+ * fade lags the scroll by a frame or is still fading out. A focused control
+ * too large for the scroller hands its ring to the scroller (below).
  */
 @property --scroll-fade-start {
   syntax: "<length>";
@@ -84,6 +85,24 @@
 
 :where([data-scroll-fade="x"]) {
   scroll-padding-inline: calc(var(--scroll-fade-size) + var(--focus-ring-room));
+}
+
+/* A keyboard-focused control larger than the band its scroller shows clear
+   of the fades (a code frame taller than its details area) can never show
+   its whole ring there. The scroller is what clips it, so the scroller draws
+   the ring, inset on its own box, and the control's own ring is off. The
+   fades stay off while the scroller holds the ring: they would cut it.
+   useScrollEdges measures this and sets data-focus-ring-host. */
+[data-scroll-fade][data-focus-ring-host] {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+[data-scroll-fade][data-focus-ring-host] :focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 [data-scroll-fade][data-overflowing="true"]:not([data-at-start="true"]) {

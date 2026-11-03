@@ -104,6 +104,10 @@ a.face:active {
   transition: opacity var(--motion-slow) var(--motion-ease-standard);
 }
 
+.picture[data-fit="contain"] {
+  object-fit: contain;
+}
+
 .picture[data-loaded="true"] {
   opacity: 1;
 }

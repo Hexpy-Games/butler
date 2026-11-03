@@ -37,48 +37,24 @@ impl SqliteSubsessionRepository {
         &self,
         parents: Vec<String>,
     ) -> Result<Vec<OpenSubtaskRow>, StorageError> {
-        if parents.is_empty() {
-            return Ok(Vec::new());
-        }
-        let parents = serde_json::to_string(&parents).map_err(|error| {
-            StorageError::new(
-                crate::btcc::StorageCode::SubsessionPacketInvalid,
-                error.to_string(),
-            )
-        })?;
-        self.storage
-            .read(move |db| {
-                let ids = db
-                    .prepare_cached(OPEN_SUBTASKS_SQL)
-                    .map_err(StorageError::sqlite)?
-                    .query_map([parents], |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, bool>(2)?,
-                        ))
-                    })
-                    .map_err(StorageError::sqlite)?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(StorageError::sqlite)?;
-                let mut rows = Vec::with_capacity(ids.len());
-                for (parent, id, awaiting_decision) in ids {
-                    match super::decode::read(db, "r.relation_id=?1", &id) {
-                        Ok(Some(relation)) => rows.push(OpenSubtaskRow {
-                            parent,
-                            relation,
-                            awaiting_decision,
-                        }),
-                        Ok(None) => {}
-                        Err(error)
-                            if error.code()
-                                == crate::btcc::StorageCode::SubsessionPacketInvalid.as_str() => {}
-                        Err(error) => return Err(error),
-                    }
-                }
-                Ok(rows)
-            })
-            .await
+        self.owner_relations(
+            OPEN_SUBTASKS_SQL,
+            parents,
+            |row| {
+                Ok((
+                    row.get::<_, String>(1)?,
+                    (row.get::<_, String>(0)?, row.get::<_, bool>(2)?),
+                ))
+            },
+            |_, relation, (parent, awaiting_decision): (String, bool)| {
+                Ok(OpenSubtaskRow {
+                    parent,
+                    relation,
+                    awaiting_decision,
+                })
+            },
+        )
+        .await
     }
 }
 
@@ -96,6 +72,36 @@ impl SqliteSubsessionRepository {
         &self,
         parents: Vec<String>,
     ) -> Result<Vec<(StoredSubsessionDelegation, &'static str)>, StorageError> {
+        self.owner_relations(
+            SUBTASK_WORKERS_SQL,
+            parents,
+            |row| Ok((row.get::<_, String>(0)?, ())),
+            |db, relation, ()| {
+                let (_, status) = super::activity::child_activity(db, &relation)?;
+                Ok((relation, status))
+            },
+        )
+        .await
+    }
+
+    /// Runs `sql` with the owners as one JSON array (`?1`) in a single read
+    /// snapshot. `key` returns each row's relation id plus the columns `build`
+    /// needs; relations that are gone or undecodable are skipped.
+    async fn owner_relations<K, T, F, B>(
+        &self,
+        sql: &'static str,
+        parents: Vec<String>,
+        key: F,
+        build: B,
+    ) -> Result<Vec<T>, StorageError>
+    where
+        K: Send + 'static,
+        T: Send + 'static,
+        F: Fn(&rusqlite::Row<'_>) -> rusqlite::Result<(String, K)> + Send + 'static,
+        B: Fn(&rusqlite::Connection, StoredSubsessionDelegation, K) -> Result<T, StorageError>
+            + Send
+            + 'static,
+    {
         if parents.is_empty() {
             return Ok(Vec::new());
         }
@@ -107,20 +113,17 @@ impl SqliteSubsessionRepository {
         })?;
         self.storage
             .read(move |db| {
-                let ids = db
-                    .prepare_cached(SUBTASK_WORKERS_SQL)
+                let keys = db
+                    .prepare_cached(sql)
                     .map_err(StorageError::sqlite)?
-                    .query_map([parents], |row| row.get::<_, String>(0))
+                    .query_map([parents], key)
                     .map_err(StorageError::sqlite)?
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(StorageError::sqlite)?;
-                let mut workers = Vec::with_capacity(ids.len());
-                for id in ids {
+                let mut rows = Vec::with_capacity(keys.len());
+                for (id, columns) in keys {
                     match super::decode::read(db, "r.relation_id=?1", &id) {
-                        Ok(Some(relation)) => {
-                            let (_, status) = super::activity::child_activity(db, &relation)?;
-                            workers.push((relation, status));
-                        }
+                        Ok(Some(relation)) => rows.push(build(db, relation, columns)?),
                         Ok(None) => {}
                         Err(error)
                             if error.code()
@@ -128,7 +131,7 @@ impl SqliteSubsessionRepository {
                         Err(error) => return Err(error),
                     }
                 }
-                Ok(workers)
+                Ok(rows)
             })
             .await
     }

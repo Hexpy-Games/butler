@@ -15,10 +15,11 @@ import { attachmentViewerKind, useOpenMessageImage } from "./messageImages";
  */
 export function MessageAttachments({
   attachments,
-  sessionId, tileAlign, refreshFileUrls,
+  sessionId, tileAlign, refreshFileUrls, attachmentMetadata,
 }: {
   attachments: MessageFileRef[];
   sessionId: string;
+  attachmentMetadata?: Record<string, unknown>;
   tileAlign?: "start" | "end";
   refreshFileUrls?: RefreshFileUrls;
 }) {
@@ -38,7 +39,7 @@ export function MessageAttachments({
         variant="tiles"
         tileLayout="wrap"
         tileAlign={tileAlign}
-        items={attachments.map((file) => ({ id: file.file_id, ...attachmentTile(file) }))}
+        items={attachments.map((file) => ({ id: file.file_id, ...attachmentTile(file, Boolean(attachmentMetadata?.[file.file_id])) }))}
         // A refused load (a revoked or expired signature) re-signs the file once; the new URL loads again.
         onMediaError={(item) => void retryMessageFileOnce(messageFilePath(files.get(item.id)?.url), refresh)}
         onOpen={(item) => {
