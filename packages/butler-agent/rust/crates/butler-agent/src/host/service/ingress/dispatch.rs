@@ -450,8 +450,8 @@ async fn complete_subsession_child(
 
 mod errors;
 mod interrupted;
-mod rejected;
 mod plain_turn;
+mod rejected;
 #[cfg(test)]
 mod tests;
 

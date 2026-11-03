@@ -37,7 +37,9 @@ pub(super) async fn run(
             IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })?
-        .ok_or_else(|| IngressError::new("session_binding_missing", "Session binding unavailable"))?;
+        .ok_or_else(|| {
+            IngressError::new("session_binding_missing", "Session binding unavailable")
+        })?;
     Ok(Some((binding, outcome)))
 }
 
