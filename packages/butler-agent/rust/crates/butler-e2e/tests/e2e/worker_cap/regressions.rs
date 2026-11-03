@@ -195,7 +195,10 @@ async fn cb_11_worker_result_queued_before_the_steward_closes_starts_no_turn()
     )?;
     assert_eq!(works, 1, "a late Worker result starts no Work");
     let view = s.gw.get("/session-view?session_id=general").await?;
-    assert_eq!(view.data()["steward_children"][0]["status"], "completed");
+    assert_eq!(
+        view.data()["steward_children"][0]["result"]["status"],
+        "success"
+    );
     assert!(view.data()["steward_children"][0]["active_turn"].is_null());
     s.finish().await?;
     server.abort();
