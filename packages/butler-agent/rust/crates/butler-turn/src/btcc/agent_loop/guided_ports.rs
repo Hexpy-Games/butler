@@ -146,15 +146,6 @@ pub trait ToolPort: Send + Sync {
         &call.arguments
     }
 
-    /// Whether a tool this round did not offer runs when the model calls it by its exact name.
-    fn runs_unoffered<'a>(
-        &'a self,
-        _invocation: GuidedInvocation<'a>,
-        _name: &'a str,
-    ) -> PortFuture<'a, bool> {
-        Box::pin(async { Ok(false) })
-    }
-
     /// The tools offered for the next round; the final-report phase offers none.
     fn surface<'a>(
         &'a self,

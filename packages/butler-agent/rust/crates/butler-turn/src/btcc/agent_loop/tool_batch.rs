@@ -50,7 +50,6 @@ pub(super) struct PreparedCall<'a> {
 pub(super) fn prepare<'a>(
     tools: &'a [ModelRoundTool],
     call: &ModelRoundToolCall,
-    runs_unoffered: bool,
 ) -> PreparedCall<'a> {
     let tool = tools.iter().find(|tool| tool.name == call.name);
     if call.origin == Some(ToolCallOrigin::Truncated) {
@@ -65,8 +64,6 @@ pub(super) fn prepare<'a>(
         };
     }
     let (arguments, validation) = match tool {
-        // The policy runs it as its catalog tool, with that tool's own schema check.
-        None if runs_unoffered => (call.arguments.clone(), None),
         None => (
             call.arguments.clone(),
             Some(tool_error(
@@ -277,13 +274,11 @@ fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
     {
         return;
     }
-    let Some(tool) = prepared.tool else {
-        return;
-    };
     if let Some(error) = &mut result.error {
+        let schema = prepared.tool.map(|tool| &tool.parameters);
         error.message.push_str(&format!(
             " Correct the input using this schema: {}. Resolve prerequisites from the returned state, choose another available tool, or wait for an active dependency; do not repeat the unchanged failure.",
-            serde_json::to_string(&tool.parameters).unwrap_or_default()
+            serde_json::to_string(&schema).unwrap_or_default()
         ));
     }
 }

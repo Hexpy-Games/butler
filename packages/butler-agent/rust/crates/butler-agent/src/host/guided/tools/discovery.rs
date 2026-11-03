@@ -130,38 +130,6 @@ pub(super) fn effective(call: &ModelRoundToolCall) -> (String, Value, Option<Str
     )
 }
 
-/// A catalog tool the round did not offer, called by its exact name, runs as
-/// a `tool_call` of that tool: the same admission, schema check, approval and journal.
-pub(super) fn runs_by_name(owner: &GuidedTools, name: &str) -> bool {
-    !owner.visible(name)
-        && owner.visible(ToolName::ToolCall.as_str())
-        && owner
-            .catalog
-            .snapshot()
-            .bridge_tool(name, owner.ledger_effects())
-            .is_some_and(|tool| projection(owner, tool).enabled)
-}
-
-/// The `tool_call` bridge call for a by-name call that [`runs_by_name`] admits.
-pub(super) fn by_name(
-    owner: &GuidedTools,
-    call: &ModelRoundToolCall,
-) -> Option<ModelRoundToolCall> {
-    if !runs_by_name(owner, &call.name) {
-        return None;
-    }
-    let mut arguments = Map::new();
-    arguments.insert("id".into(), Value::String(format!("native:{}", call.name)));
-    arguments.insert("arguments".into(), Value::Object(call.arguments.clone()));
-    let raw_arguments = butler_core::json::stringify(&Value::Object(arguments.clone())).ok()?;
-    Some(ModelRoundToolCall {
-        name: ToolName::ToolCall.as_str().into(),
-        arguments,
-        raw_arguments,
-        ..call.clone()
-    })
-}
-
 const CATEGORIES: [&str; 14] = [
     "search",
     "data",

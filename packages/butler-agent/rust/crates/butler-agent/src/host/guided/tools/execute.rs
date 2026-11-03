@@ -16,8 +16,6 @@ pub(super) async fn execute(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let direct = super::discovery::by_name(owner, call);
-    let call = direct.as_ref().unwrap_or(call);
     let timing = Some(super::super::command::timing::CommandTiming::new("handler"));
     let (effective_name, presentation_args, catalog_id) = super::discovery::effective(call);
     let (record, call_id) = restore_call(

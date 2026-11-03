@@ -51,15 +51,6 @@ impl GuidedPolicyPort for GuidedPolicy {
     ) -> &'a serde_json::Map<String, serde_json::Value> {
         self.dependencies.tools.hook_tool_input(call)
     }
-
-    fn runs_unoffered<'a>(
-        &'a self,
-        invocation: GuidedInvocation<'a>,
-        name: &'a str,
-    ) -> PortFuture<'a, bool> {
-        self.dependencies.tools.runs_unoffered(invocation, name)
-    }
-
     fn hooks(&self) -> Option<&super::guided_ports::GuidedHookBinding> {
         self.dependencies.hooks.as_ref()
     }
