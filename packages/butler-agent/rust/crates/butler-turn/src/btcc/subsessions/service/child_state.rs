@@ -56,8 +56,8 @@ impl SubsessionService {
                 .map_err(BtccError::from)?)
     }
 
-    /// Whether a child turn may start: its delegation's first turn, a bound
-    /// turn, or any turn of a child that still has something to continue.
+    /// Whether a child turn may start: its delegation's first turn, or any turn
+    /// of a child that still has something to continue.
     pub async fn child_turn_admissible(
         &self,
         session: &str,
@@ -71,12 +71,7 @@ impl SubsessionService {
         else {
             return Ok(true);
         };
-        if turn == relation.child_turn_id
-            || self.work.bound_work_for_turn(turn.into()).await?.is_some()
-        {
-            return Ok(true);
-        }
-        Ok(!self.steward_closed(&relation).await?)
+        Ok(turn == relation.child_turn_id || !self.steward_closed(&relation).await?)
     }
 
     /// Cancels the delegation under the role it was created with.
