@@ -37,6 +37,7 @@ pub(in crate::btcc::storage) fn prepare(
         relation::create_and_bind(db, &scope, call_id, &objective, &turn, &clock)?
     };
     let input = ReplacePlanInput {
+        subjects: Vec::new(),
         scope,
         mutation_call_id: format!("{call_id}:plan"),
         start_new: None,

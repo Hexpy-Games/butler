@@ -86,9 +86,9 @@ struct HookDefinitionInput {
     /// Observe-only background execution.
     #[serde(default, rename = "async")]
     asynchronous: bool,
-    /// Absent means false, see `HookDefinition::fail_closed`.
+    /// Errors block blocking events only when explicitly enabled.
     #[serde(default, rename = "failClosed")]
-    fail_closed: Option<bool>,
+    fail_closed: bool,
     /// Enabled by default for user-authored entries.
     #[serde(default = "yes")]
     enabled: bool,
@@ -204,7 +204,7 @@ impl<'de> Deserialize<'de> for HookDefinition {
                 30_000
             }),
             asynchronous: input.asynchronous,
-            fail_closed: input.fail_closed.unwrap_or(false),
+            fail_closed: input.fail_closed,
             enabled: input.enabled,
             schema_version: input.schema_version,
         })

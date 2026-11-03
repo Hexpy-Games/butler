@@ -23,12 +23,16 @@ pub const RUNNING_WORKERS_SQL: &str = "SELECT count(*) FROM btcc_subsession_dele
 
 // A continuation joins the same FIFO at its own creation, never at the original
 // dispatch's historical timestamp. Candidates use the parent and pending indexes.
-pub const WAITING_WORKERS_SQL: &str = "SELECT d.relation_id FROM btcc_session_relations r
+pub const WAITING_WORKERS_SQL: &str = concat!("SELECT d.relation_id FROM btcc_session_relations r
  JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
  LEFT JOIN btcc_subsession_directions i ON i.instruction_id=(
    SELECT instruction_id FROM btcc_subsession_directions WHERE relation_id=d.relation_id AND status='pending' ORDER BY revision LIMIT 1)
  WHERE r.parent_session_id=?1 AND r.activity_role='worker' AND d.dispatch_state='pending'
- AND NOT EXISTS(SELECT 1 FROM btcc_subsession_end_members e WHERE e.session_id=r.child_session_id)
+ AND NOT EXISTS(", endings::ENDING_SCOPE_SQL!("r.child_session_id"), ")
+ AND NOT EXISTS (SELECT 1 FROM btcc_work_tasks own WHERE own.relation_id=d.relation_id
+   AND (own.status NOT IN ('pending','active') OR EXISTS (
+     SELECT 1 FROM btcc_work_task_waits dep JOIN btcc_work_tasks prior ON prior.task_id=dep.after_task_id
+     WHERE dep.task_id=own.task_id AND prior.status IN ('pending','active'))))
  AND NOT EXISTS (SELECT 1 FROM btcc_session_relations oldr
    JOIN btcc_subsession_delegations old ON old.relation_id=oldr.relation_id
    WHERE oldr.parent_session_id=r.parent_session_id
@@ -41,7 +45,7 @@ pub const WAITING_WORKERS_SQL: &str = "SELECT d.relation_id FROM btcc_session_re
  AND NOT EXISTS (SELECT 1 FROM btcc_turns t WHERE t.session_id=r.child_session_id
    AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id AND x.child_turn_id=t.turn_id))
  ORDER BY CASE WHEN EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id) THEN i.created_at ELSE d.created_at END,
- CASE WHEN EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id) THEN i.rowid ELSE d.rowid END,d.rowid LIMIT 1";
+ CASE WHEN EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id) THEN i.rowid ELSE d.rowid END,d.rowid LIMIT 1");
 
 pub const RESET_DIRECTION_DISPATCH_SQL: &str =
     "UPDATE btcc_subsession_delegations SET dispatch_state='pending'

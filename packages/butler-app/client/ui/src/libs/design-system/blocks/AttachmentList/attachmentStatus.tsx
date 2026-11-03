@@ -1,5 +1,5 @@
 import type { Ref } from "react";
-import { CircleAlert } from "../../components/Icons";
+import { CircleAlert, FileText } from "../../components/Icons";
 import { Spinner } from "../../components/Spinner";
 import type { AttachmentListItem } from "./AttachmentList";
 import type { TriggerProps } from "./AttachmentTiles";
@@ -25,4 +25,24 @@ export function ItemName({ item, onOpen, ref, ...trigger }: { item: AttachmentLi
   if (onOpen) return <button {...shared} ref={ref as Ref<HTMLButtonElement>} type="button" onClick={() => onOpen(item)}>{item.name}</button>;
   if (item.href) return <a {...shared} ref={ref as Ref<HTMLAnchorElement>} href={item.href} target="_blank" rel="noreferrer">{item.name}</a>;
   return <span {...shared} ref={ref as Ref<HTMLSpanElement>}>{item.name}</span>;
+}
+
+/** A list or chip preview: upload status, an image, or the file glyph. */
+export function AttachmentPreview({ item }: { item: AttachmentListItem }) {
+  if (item.upload) return (
+    <span className={styles.icon} data-slot="attachment-icon" aria-hidden="true">
+      <AttachmentStatusIcon status={item.upload} size="sm" />
+    </span>
+  );
+  if (!item.thumbnail) return (
+    <span className={styles.icon} data-slot="attachment-icon" aria-hidden="true">
+      {item.icon ?? <FileText size="sm" />}
+    </span>
+  );
+  return (
+    <span className={styles.thumbnail} data-slot="attachment-thumbnail">
+      <img alt={item.thumbnail.alt ?? item.name} src={item.thumbnail.src}
+        data-fit={item.thumbnail.fit === "contain" ? "contain" : undefined} />
+    </span>
+  );
 }

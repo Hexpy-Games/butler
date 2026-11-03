@@ -30,10 +30,25 @@ function cssRules(source: string): CssRule[] {
   return rules;
 }
 
-function focusRingFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
+/** A scroller marked data-focus-ring-host (scroll-fade.css): it draws the ring of a focused control too large for it. */
+const RING_HOST = /\[data-focus-ring-host\]/u;
+
+/**
+ * The control's ring is off only because its scroller draws it: every
+ * selector is a :focus-visible descendant of a ring host, and the same file
+ * has a host rule that draws the shared ring.
+ */
+function ringDrawnByHost(rule: CssRule, rules: readonly CssRule[]): boolean {
+  const handed = rule.selector.split(",").every((part) => /\[data-focus-ring-host\][^\s]*\s+[^,]*:focus-visible/u.test(part.trim()));
+  return handed && rules.some((host) => RING_HOST.test(host.selector) && !host.selector.includes(":focus-visible")
+    && /(?:^|;|\s)outline\s*:[^;]*var\(--focus-ring-color\)/u.test(host.body));
+}
+
+function focusRingFindings(path: string, rule: CssRule, rules: readonly CssRule[]): DesignSystemRuleFinding[] {
   if (!rule.selector.includes(":focus-visible")) return [];
   if (!/(?:^|;|\s)outline\s*:\s*none\b/u.test(rule.body)) return [];
   if (rule.body.includes("var(--focus-ring")) return [];
+  if (ringDrawnByHost(rule, rules)) return [];
   return [{
     path,
     line: rule.line,
@@ -256,10 +271,11 @@ function unpairedFontSizeFindings(path: string, rule: CssRule): DesignSystemRule
 }
 
 export function lintDesignSystemRules(path: string, source: string): DesignSystemRuleFinding[] {
-  return cssRules(source).flatMap((rule) => [
+  const rules = cssRules(source);
+  return rules.flatMap((rule) => [
     ...ratioLineHeightFindings(path, rule),
     ...unpairedFontSizeFindings(path, rule),
-    ...focusRingFindings(path, rule),
+    ...focusRingFindings(path, rule, rules),
     ...zIndexFindings(path, rule),
     ...rawHeightFindings(path, rule),
     ...rawMotionFindings(path, rule),

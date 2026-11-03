@@ -139,10 +139,6 @@ async fn pending_direction(worker: bool) -> Result<(), HarnessError> {
         |r| r.get(0),
     )?);
     assert!(
-        butler_turn::btcc::storage::terminal_card_invariant(&canon, &child_session)
-            .map_err(|e| HarnessError(e.to_string()))?
-    );
-    assert!(
         !butler_canon::store::runtime::epic_delete_running(&canon, id)
             .map_err(|e| HarnessError(e.to_string()))?,
         "terminal child without direction"

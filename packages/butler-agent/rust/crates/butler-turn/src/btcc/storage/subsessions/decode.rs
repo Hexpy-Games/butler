@@ -5,7 +5,7 @@ use rusqlite::{OptionalExtension, Params, params};
 use serde_json::Value;
 
 use super::{
-    ChildCompletion, SELECT, StoredSubsessionDelegation, StoredSubsessionDirection,
+    SELECT, StoredSubsessionDelegation, StoredSubsessionDirection,
     SubsessionPacket,
 };
 use crate::btcc::{StorageCode, StorageError};
@@ -237,18 +237,6 @@ fn dispatchable(
 }
 
 fn close_undecodable(db: &rusqlite::Connection, raw: &RawDelegation) -> Result<(), StorageError> {
-    if !db.is_autocommit() {
-        return close_undecodable_in_transaction(db, raw);
-    }
-    let tx = db.unchecked_transaction().map_err(StorageError::sqlite)?;
-    close_undecodable_in_transaction(&tx, raw)?;
-    tx.commit().map_err(StorageError::sqlite)
-}
-
-fn close_undecodable_in_transaction(
-    db: &rusqlite::Connection,
-    raw: &RawDelegation,
-) -> Result<(), StorageError> {
     db.execute(
         "INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,'failed','delegation_context_incomplete','The delegation record is unreadable.','[]','[]',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
         params![super::completion::turn_result_id(&raw.child_session_id, &raw.child_turn_id), raw.relation_id, raw.task_id, raw.child_session_id, raw.child_turn_id],
@@ -265,22 +253,7 @@ fn close_undecodable_in_transaction(
             r.get(0)
         })
         .map_err(StorageError::sqlite)?;
-    if !super::terminal::invariant(db, &raw.child_session_id)? {
-        super::endings::stage(
-            db,
-            &ChildCompletion {
-                session: raw.child_session_id.clone(),
-                turn: raw.child_turn_id.clone(),
-                status: "failed".into(),
-                summary: "The delegation record is unreadable.".into(),
-                failure_reason: None,
-                failure_code: None,
-                evidence_refs: Vec::new(),
-                handoff: None,
-            },
-            &now,
-        )?;
-    }
+    super::terminal::close_if_ended(db, &raw.child_session_id, "failed", &now)?;
     Ok(())
 }
 

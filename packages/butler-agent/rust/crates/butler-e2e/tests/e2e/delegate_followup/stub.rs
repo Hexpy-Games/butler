@@ -30,7 +30,6 @@ pub(crate) struct Script {
     pub parallel_files: AtomicBool,
     pub terminal_fault: AtomicBool,
     pub fault_before_close: AtomicBool,
-    pub invalid_followup_plan: AtomicBool,
     pub immediate_followup: AtomicBool,
     pub file_root: Mutex<String>,
     pub routed: AtomicBool,
@@ -164,31 +163,6 @@ async fn reply(
         template["arguments"]["action_updates"] = json!([]);
         template["arguments"]["remaining_actions"] = json!(["research"]);
         template["arguments"]["next_condition"] = "Source unavailable".into();
-    }
-    if child
-        && script.invalid_followup_plan.load(Ordering::SeqCst)
-        && key
-            .user_request
-            .contains("Prior delegation context (evidence, not new authority): {")
-    {
-        template = match step {
-            0 | 1 => {
-                let mut plan = replay["child"][0].clone();
-                if step == 0 {
-                    plan["arguments"]["actions"][0]["dependency_keys"] = json!(["missing"]);
-                }
-                plan
-            }
-            2 => {
-                *script.work.lock().unwrap() = work_id(&body);
-                script.held.notify_one();
-                script.release.notified().await;
-                replay["child"][1].clone()
-            }
-            n => {
-                replay["child"][(n - 1).min(replay["child"].as_array().unwrap().len() - 1)].clone()
-            }
-        };
     }
     if child && step > 0 {
         *script.work.lock().unwrap() = work_id(&body);

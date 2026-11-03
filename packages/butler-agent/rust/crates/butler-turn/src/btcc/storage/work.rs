@@ -90,6 +90,10 @@ impl SessionWorkRepository {
 }
 
 impl DurableWorkRepository for SessionWorkRepository {
+    fn plan_steps(&self, work: WorkView) -> PortFuture<'_, Option<serde_json::Value>> {
+        Box::pin(self.read(move |db| read::plan_steps(db, &work)))
+    }
+
     fn work_for_turn(&self, turn: String, work: String) -> PortFuture<'_, Option<WorkView>> {
         Box::pin(async move {
             self.read(move |db| {

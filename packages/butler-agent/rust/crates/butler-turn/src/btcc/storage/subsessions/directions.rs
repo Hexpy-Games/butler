@@ -55,23 +55,6 @@ pub(super) fn retire_with_stop(
 }
 
 impl SqliteSubsessionRepository {
-    /// Old builds accepted directions after an assignment had already ended.
-    /// Current admissions carry provenance. Legacy queues retain authority if
-    /// a pending instruction predates the last result or a continuation runs.
-    pub(crate) async fn retire_late_directions(&self, now: String) -> Result<(), StorageError> {
-        self.storage.execute(move |db| {
-            db.execute("UPDATE btcc_subsession_directions AS i SET status='applied',applied_at=?1 WHERE i.status='pending' AND i.admission_version=0
-                AND i.created_at > (SELECT x.created_at FROM btcc_steward_results x WHERE x.relation_id=i.relation_id ORDER BY x.rowid DESC LIMIT 1)
-                AND NOT EXISTS(SELECT 1 FROM btcc_subsession_directions earlier
-                    WHERE earlier.relation_id=i.relation_id AND earlier.status='pending'
-                    AND earlier.created_at <= (SELECT x.created_at FROM btcc_steward_results x WHERE x.relation_id=i.relation_id ORDER BY x.rowid DESC LIMIT 1))
-                AND NOT EXISTS(SELECT 1 FROM btcc_session_relations r JOIN btcc_turns t ON t.session_id=r.child_session_id
-                    WHERE r.relation_id=i.relation_id AND t.semantic_state IN ('admitted','delivery_committed')
-                    AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id))", [now]).map_err(StorageError::sqlite)?;
-            Ok(())
-        }).await
-    }
-
     /// The relation following a Work, or the one that ran it earlier in its
     /// child session: a parent can still hold a Work its relation moved past.
     pub(crate) async fn relation_by_work(

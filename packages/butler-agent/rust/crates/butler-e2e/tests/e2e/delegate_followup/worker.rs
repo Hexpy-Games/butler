@@ -6,20 +6,15 @@ use std::sync::atomic::Ordering;
 #[tokio::test]
 async fn finished_worker_followup_is_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    followup(false, false).await
-}
-#[tokio::test]
-async fn historical_finished_worker_without_intent_refuses_followup() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    followup(true, false).await
+    followup(false).await
 }
 #[tokio::test]
 async fn cancelled_worker_followup_is_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    followup(false, true).await
+    followup(true).await
 }
 
-async fn followup(historical: bool, cancelled: bool) -> Result<(), HarnessError> {
+async fn followup(cancelled: bool) -> Result<(), HarnessError> {
     let (s, script, server) = setup("FOLLOWUP-WORKER", 4).await?;
     script.steer.store(true, Ordering::SeqCst);
     script.followup.store(true, Ordering::SeqCst);
@@ -38,15 +33,13 @@ async fn followup(historical: bool, cancelled: bool) -> Result<(), HarnessError>
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
         let delivered: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_subsession_outbox WHERE relation_id=?1 AND status='delivered')", [relation], |r| r.get(0))?;
         if delivered {
-            assert!(butler_turn::btcc::storage::terminal_card_invariant(&db, session).unwrap());
-            if historical {
-                db.execute("UPDATE btcc_subsession_delegations SET dispatch_intent_json=NULL WHERE relation_id=?1", [relation])?;
-            }
+            super::terminal::assert_closed(&db, session);
             break;
         }
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    let worker_requests = script.requests.lock().unwrap().iter().filter(|(role, _)| role == "worker").count();
     script.direction.add_permits(1);
     loop {
         let refused = script.requests.lock().unwrap().iter().any(|(_, request)| {
@@ -68,13 +61,8 @@ async fn followup(historical: bool, cancelled: bool) -> Result<(), HarnessError>
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let turns: i64 = db.query_row(
-        "SELECT count(*) FROM btcc_turns WHERE session_id=?1",
-        [session],
-        |r| r.get(0),
-    )?;
-    assert_eq!(turns, 1, "a finished Worker must not get another turn");
+    assert_eq!(script.requests.lock().unwrap().iter().filter(|(role, _)| role == "worker").count(), worker_requests,
+        "Worker stub must receive no request after its result");
     for n in 0..4 {
         script.release(&format!("red-{n}"));
     }

@@ -10,6 +10,7 @@ pub(super) fn solvable(code: &str) -> bool {
 }
 
 pub(super) const SOLVABLE: &[&str] = &[
+    "task_invalid",
     "steward_plan_review_required",
     "canon_epic_refs_multiple",
     "canon_epic_not_bound",

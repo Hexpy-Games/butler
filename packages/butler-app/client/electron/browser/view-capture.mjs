@@ -7,32 +7,30 @@
 const READBACK_STALL_MS = 5000;
 
 export function capturePage(tab, rect, options = { stayHidden: true }, contents = tab.view.webContents) {
-  let finish, release;
-  const ended = new Promise((_, reject) => { finish = reason => reject(new Error(reason)); });
+  // A page out of every window that is not throttled (media playing) draws no frame to read back
+  // until it is in a window again: such a capture could only stall, so it does not start.
+  if (!tab.attached && !contents.getBackgroundThrottling()) return Promise.reject(new Error("capture_out_of_window"));
+  let fail, release;
+  const ended = new Promise((_, reject) => { fail = reason => reject(new Error(reason)); });
   const barrier = new Promise(resolve => { release = resolve; });
   const captures = tab.captures ??= new Map();
+  // Each capture keeps how the page stood when it started: hidden out of a window (background
+  // throttling on) or visible there (off, as while media plays). The flag can flip while it runs.
   captures.set(barrier, contents.getBackgroundThrottling());
-  const navigate = (event, _url, inPlace, mainFrame) => {
-    if ((event.isMainFrame ?? mainFrame) && !(event.isSameDocument ?? inPlace)) finish("capture_document_changed");
-  };
-  const gone = () => { finish("capture_renderer_gone"); settled(); };
+  const gone = () => { fail("capture_renderer_gone"); settled(); };
   const settled = () => {
     captures.delete(barrier); clearTimeout(timer); release();
-    contents.removeListener("did-start-navigation", navigate);
     contents.removeListener("render-process-gone", gone);
     contents.removeListener("destroyed", gone);
+    // A readback that settles late was slow, not wedged: the tab may return to its live view.
+    tab.onCaptureSettled?.();
   };
-  contents.on("did-start-navigation", navigate);
   contents.once("render-process-gone", gone);
   contents.once("destroyed", gone);
-  const timer = setTimeout(() => {
-    finish("capture_surface_stalled");
-    tab.onCaptureStalled?.();
-  }, READBACK_STALL_MS);
+  const timer = setTimeout(() => { fail("capture_surface_stalled"); tab.onCaptureStalled?.(); }, READBACK_STALL_MS);
   let raw;
   try { raw = contents.capturePage(rect, options); } catch (error) { raw = Promise.reject(error); }
-  // Caller cancellation must never release the native layout barrier: only a
-  // completed readback or renderer destruction makes moving this view safe.
+  // Only a completed readback or renderer destruction releases the native layout barrier.
   raw.then(settled, settled);
   return Promise.race([raw, ended]);
 }

@@ -38,6 +38,14 @@ impl DurableWorkService {
     /// Validates and continues existing Work.
     pub async fn continue_work(&self, input: ContinueWorkInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_continue(&input)?;
+        if let Some(key) = input.action_key.as_deref()
+            && let Some(work) = self
+                .repository
+                .work_for_turn(input.scope.turn_id.clone(), input.work_id.clone())
+                .await?
+        {
+            super::super::policy::validate_action_key(&work, Some(key))?;
+        }
         let mut identity = serialized(&input)?;
         object_mut(&mut identity)?.remove("backfillToolCallIds");
         let request_sha256 = fingerprint("continue_work", &identity)?;

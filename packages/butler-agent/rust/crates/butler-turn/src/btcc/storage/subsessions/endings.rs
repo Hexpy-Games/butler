@@ -2,6 +2,17 @@
 use super::terminal::{close_turn, subtree};
 use super::*;
 
+macro_rules! ENDING_SCOPE_SQL {
+    ($session:literal) => {
+        concat!("WITH RECURSIVE ending_scope(session) AS (SELECT ", $session,
+            " UNION SELECT r.parent_session_id FROM ending_scope a JOIN btcc_session_relations r
+             ON r.child_session_id=a.session)
+             SELECT e.session_id,e.turn_id FROM ending_scope a JOIN btcc_subsession_endings e
+             ON e.session_id=a.session")
+    };
+}
+pub(super) use ENDING_SCOPE_SQL;
+
 impl SqliteSubsessionRepository {
     /// A late result cannot reopen a terminal or ancestor-fenced assignment.
     pub(crate) async fn accepts_completion(
@@ -14,42 +25,39 @@ impl SqliteSubsessionRepository {
             .await
     }
 
-    /// Freeze execution first. The card remains unfinished until canonical Work
-    /// closeout succeeds and commit_result publishes its result.
+    /// Freeze execution before canonical Work closeout and terminal publication.
     pub(crate) async fn prepare_ending(
         &self,
         completion: ChildCompletion,
         now: String,
-        repair: bool,
-    ) -> Result<Option<ChildCompletion>, StorageError> {
+    ) -> Result<Option<(ChildCompletion, Vec<(String, String)>)>, StorageError> {
         self.storage.execute(move |db| {
             let tx = db.transaction().map_err(StorageError::sqlite)?;
-            let relation: String = tx.query_row("SELECT relation_id FROM btcc_session_relations WHERE child_session_id=?1", [&completion.session], |r| r.get(0)).map_err(StorageError::sqlite)?;
             let saved: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM btcc_steward_results WHERE result_id=?1)", [completion::turn_result_id(&completion.session, &completion.turn)], |r| r.get(0)).map_err(StorageError::sqlite)?;
-            if saved && !repair { return Ok(None); }
-            if !repair && !accepts_completion(&tx, &completion.session, &completion.turn)? { return Ok(None); }
-            let pending = tx.prepare_cached("SELECT instruction_id FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'")
-                .map_err(StorageError::sqlite)?.query_map([&relation], |r| r.get::<_, String>(0))
-                .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
-            if completion.status == "success" && !repair
-                && pending.iter().any(|id| direction_turn_id(id) != completion.turn) { return Ok(None); }
-            let stored = stage(&tx, &completion, &now)?;
+            if saved || !accepts_completion(&tx, &completion.session, &completion.turn)?
+                || !ends_card(&tx, &completion.session, &completion.status, Some(&completion.turn))? {
+                return Ok(None);
+            }
+            let encoded = serde_json::to_string(&completion)
+                .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;
+            tx.execute("INSERT OR IGNORE INTO btcc_subsession_endings(session_id,turn_id,completion_json,created_at) VALUES (?1,?2,?3,?4)", params![completion.session,completion.turn,encoded,now]).map_err(StorageError::sqlite)?;
+            let mut stopped = Vec::new();
+            for session in subtree(&tx, &completion.session)? {
+                stopped.extend(fence_session(&tx, &session, &now)?);
+            }
+            let stored: String = tx.query_row("SELECT completion_json FROM btcc_subsession_endings WHERE session_id=?1", [&completion.session], |r| r.get(0)).map_err(StorageError::sqlite)?;
+            let stored = serde_json::from_str(&stored)
+                .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;
             tx.commit().map_err(StorageError::sqlite)?;
-            Ok(Some(stored))
+            Ok(Some((stored, stopped)))
         }).await
     }
 
     pub(crate) async fn ending_in_progress(&self, session: String) -> Result<bool, StorageError> {
-        self.storage
-            .read(move |db| {
-                db.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM btcc_subsession_end_members WHERE session_id=?1)",
-                    [session],
-                    |r| r.get(0),
-                )
+        self.storage.read(move |db| {
+            db.query_row(concat!("SELECT EXISTS(", ENDING_SCOPE_SQL!("?1"), ")"), [session], |r| r.get(0))
                 .map_err(StorageError::sqlite)
-            })
-            .await
+        }).await
     }
 
     pub(crate) async fn pending_ending(
@@ -111,70 +119,16 @@ impl SqliteSubsessionRepository {
         }).await
     }
 
-    pub(crate) async fn pending_terminal_controls(
-        &self,
-    ) -> Result<Vec<(String, String)>, StorageError> {
-        self.storage
-            .read(|db| {
-                db.prepare_cached(
-                    "SELECT session_id,turn_id FROM btcc_subsession_stop_outbox WHERE dispatched=0",
-                )
-                .map_err(StorageError::sqlite)?
-                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
-                .map_err(StorageError::sqlite)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(StorageError::sqlite)
-            })
-            .await
-    }
-
-    pub(crate) async fn terminal_control_dispatched(
-        &self,
-        turn: String,
-    ) -> Result<(), StorageError> {
-        self.storage
-            .execute(move |db| {
-                db.execute(
-                    "UPDATE btcc_subsession_stop_outbox SET dispatched=1 WHERE turn_id=?1",
-                    [turn],
-                )
-                .map_err(StorageError::sqlite)?;
-                Ok(())
-            })
-            .await
-    }
-}
-
-/// Caller owns the transaction, including a failure result saved without a packet.
-pub(super) fn stage(
-    db: &rusqlite::Connection,
-    completion: &ChildCompletion,
-    now: &str,
-) -> Result<ChildCompletion, StorageError> {
-    let encoded = serde_json::to_string(completion)
-        .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;
-    db.execute("INSERT OR IGNORE INTO btcc_subsession_endings(session_id,completion_json,created_at) VALUES (?1,?2,?3)", params![completion.session,encoded,now]).map_err(StorageError::sqlite)?;
-    for session in subtree(db, &completion.session)? {
-        fence_session(db, &session, &completion.session, now)?;
-    }
-    let stored: String = db
-        .query_row(
-            "SELECT completion_json FROM btcc_subsession_endings WHERE session_id=?1",
-            [&completion.session],
-            |r| r.get(0),
-        )
-        .map_err(StorageError::sqlite)?;
-    serde_json::from_str(&stored)
-        .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))
 }
 
 fn fence_session(
     db: &rusqlite::Connection,
     session: &str,
-    root: &str,
     now: &str,
-) -> Result<(), StorageError> {
-    db.execute("INSERT OR IGNORE INTO btcc_subsession_end_members(session_id,root_session_id) VALUES (?1,?2)", params![session,root]).map_err(StorageError::sqlite)?;
+) -> Result<Vec<(String, String)>, StorageError> {
+    let live = db.prepare_cached("SELECT turn_id FROM btcc_turns WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed')")
+        .map_err(StorageError::sqlite)?.query_map([session], |r| Ok((session.to_owned(), r.get::<_, String>(0)?)))
+        .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
     let mut turns = db.prepare_cached("SELECT turn_id FROM btcc_turns WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed')")
             .map_err(StorageError::sqlite)?.query_map([session], |r| r.get::<_, String>(0))
             .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
@@ -192,7 +146,7 @@ fn fence_session(
             close_turn(db, session, &turn, now)?;
         }
     }
-    Ok(())
+    Ok(live)
 }
 
 /// The original ending owns completion while its canonical Work is closing.
@@ -202,9 +156,22 @@ pub(super) fn accepts_completion(
     turn: &str,
 ) -> Result<bool, StorageError> {
     db.query_row(
-        "SELECT NOT EXISTS(SELECT 1 FROM btcc_session_relations WHERE child_session_id=?1 AND activity_terminal=1)
-         AND NOT EXISTS(SELECT 1 FROM btcc_subsession_end_members m JOIN btcc_subsession_endings e ON e.session_id=m.root_session_id
-         WHERE m.session_id=?1 AND (e.session_id<>?1 OR json_extract(e.completion_json,'$.turn')<>?2))",
+        concat!("SELECT NOT EXISTS(SELECT 1 FROM btcc_session_relations WHERE child_session_id=?1 AND activity_terminal=1)
+         AND NOT EXISTS(SELECT 1 FROM (", ENDING_SCOPE_SQL!("?1"), ") e
+         WHERE e.session_id<>?1 OR e.turn_id<>?2)"),
         params![session, turn], |r| r.get(0),
     ).map_err(StorageError::sqlite)
+}
+
+pub(super) fn ends_card(
+    db: &rusqlite::Connection,
+    session: &str,
+    status: &str,
+    own_turn: Option<&str>,
+) -> Result<bool, StorageError> {
+    if status != "success" { return Ok(true); }
+    let pending = db.prepare_cached("SELECT i.instruction_id FROM btcc_session_relations r JOIN btcc_subsession_directions i USING(relation_id) WHERE r.child_session_id=?1 AND i.status='pending'")
+        .map_err(StorageError::sqlite)?.query_map([session], |r| r.get::<_, String>(0))
+        .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
+    Ok(!pending.iter().any(|id| own_turn != Some(direction_turn_id(id).as_str())))
 }

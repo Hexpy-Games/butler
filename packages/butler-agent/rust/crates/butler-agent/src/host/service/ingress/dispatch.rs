@@ -279,31 +279,24 @@ async fn execute(
         .and_then(|control| control.get("kind"))
         .and_then(serde_json::Value::as_str);
     let (binding, outcome) = match kind {
-        None => {
-            let request =
-                bind::bind_and_request(&envelope, bindings, data_root, default_workspace).await?;
-            let session_id = request.session_id.clone();
-            let outcome = super::shutdown::run(btcc, request, shutdown)
-                .await
-                .map_err(|error| errors::turn_error(&error))?;
-            let binding = bindings
-                .get_by_session_id(&session_id)
-                .await
-                .map_err(|source| {
-                    super::IngressError::new(
-                        "session_binding_unavailable",
-                        "Session binding unavailable",
-                    )
-                    .with_source(source)
-                })?
-                .ok_or_else(|| {
-                    super::IngressError::new(
-                        "session_binding_missing",
-                        "Session binding unavailable",
-                    )
-                })?;
-            (binding, outcome)
-        }
+        None => match plain_turn::run(
+            &envelope,
+            turn,
+            bindings,
+            data_root,
+            default_workspace,
+            subsessions,
+        )
+        .await?
+        {
+            Some(ran) => ran,
+            None => {
+                return Ok(Executed {
+                    delivered: 0,
+                    eligible_turn_id: None,
+                });
+            }
+        },
         Some("cancel_turn") => {
             let binding = bind::existing_control_binding(&envelope, bindings).await?;
             let turn_id = bind::routed_turn_id(&envelope);
@@ -457,6 +450,7 @@ async fn complete_subsession_child(
 
 mod errors;
 mod interrupted;
+mod plain_turn;
 mod rejected;
 #[cfg(test)]
 mod tests;

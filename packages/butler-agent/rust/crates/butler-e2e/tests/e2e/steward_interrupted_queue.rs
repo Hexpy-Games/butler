@@ -216,7 +216,7 @@ async fn assert_drained(
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert!(butler_turn::btcc::storage::terminal_card_invariant(&db, &session).unwrap());
+            crate::delegate_followup::terminal::assert_closed(&db, &session);
             assert_eq!(script.hold_seen.load(Ordering::SeqCst), 1);
             let turn = s.gw.turn("general", held).await?.unwrap();
             assert_eq!(turn["state"], "failed", "{turn}");

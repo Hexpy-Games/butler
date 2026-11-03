@@ -16,6 +16,8 @@ mod prompt_result;
 mod records;
 mod subtasks;
 mod terminal;
+mod task_replacement;
+mod work_tasks;
 mod worker_admission;
 mod worker_cancel;
 mod worker_failure;
@@ -29,7 +31,6 @@ pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
 pub use subtasks::{OPEN_SUBTASKS_SQL, SUBTASK_WORKERS_SQL};
-pub use terminal::terminal_card_invariant;
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
@@ -258,13 +259,14 @@ impl SqliteSubsessionRepository {
                 [&relation], |r| r.get(0),
             ).map_err(StorageError::sqlite)?;
             let open: bool = tx.query_row("SELECT activity_terminal=0 FROM btcc_session_relations WHERE relation_id=?1", [&relation], |r| r.get(0)).map_err(StorageError::sqlite)?;
-            let ending: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM btcc_subsession_end_members e JOIN btcc_session_relations r ON r.child_session_id=e.session_id WHERE r.relation_id=?1)", [&relation], |r| r.get(0)).map_err(StorageError::sqlite)?;
+            let ending: bool = tx.query_row(concat!("SELECT EXISTS(", endings::ENDING_SCOPE_SQL!("(SELECT child_session_id FROM btcc_session_relations WHERE relation_id=?1)"), ")"), [&relation], |r| r.get(0)).map_err(StorageError::sqlite)?;
             if !open || ending || (immediate && !running) { return Ok(None); }
             let revision:i64=tx.query_row("SELECT COALESCE(MAX(revision),0)+1 FROM btcc_subsession_directions WHERE relation_id=?1",[&relation],|r|r.get(0)).map_err(StorageError::sqlite)?;
             let already_pending: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')", [&relation], |r| r.get(0)).map_err(StorageError::sqlite)?;
-            let inserted = tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at,immediate,admission_version) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7,?8,1)",params![instruction_id,relation,revision,source_turn,source_message,instruction,now,immediate]).map_err(StorageError::sqlite)?;
+            let inserted = tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at,immediate) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7,?8)",params![instruction_id,relation,revision,source_turn,source_message,instruction,now,immediate]).map_err(StorageError::sqlite)?;
             // Preserve an already published continuation between enqueue and turn admission.
             if inserted == 1 {
+            tx.execute("UPDATE btcc_work_tasks SET status='pending',updated_at=?2 WHERE relation_id=?1 AND status IN ('done','cancelled')",params![relation,now]).map_err(StorageError::sqlite)?;
             tx.execute(worker_admission::RESET_DIRECTION_DISPATCH_SQL, params![relation,already_pending]).map_err(StorageError::sqlite)?;
             }
             let stored=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND source_message_id=?2",params![relation,source_message],direction_row).map_err(StorageError::sqlite)?;

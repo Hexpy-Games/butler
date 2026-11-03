@@ -1,5 +1,7 @@
 //! S5 public gateway ownership and scrap storage, stub only.
 use butler_e2e::e2e::{HarnessError, scenario::Setup, security::AdminClient};
+mod attachments;
+
 use reqwest::Method;
 use serde_json::json;
 #[tokio::test]

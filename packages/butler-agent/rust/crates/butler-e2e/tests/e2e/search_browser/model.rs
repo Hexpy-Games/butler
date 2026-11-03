@@ -137,10 +137,10 @@ fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
         ),
         4 => call(
             4,
-            "web_read",
+            "browser_read",
             &json!({"tab":outputs[1]["tabs"][0]["tab"],"max_chars":8000,"max_chunks":8}),
         ),
-        5 => call(5, "tool_describe", &json!({"ids":["native:web_read"]})),
+        5 => call(5, "tool_describe", &json!({"ids":["native:browser_read"]})),
         6 => call(
             6,
             "tool_call",
@@ -149,7 +149,7 @@ fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
         7 => call(
             7,
             "tool_call",
-            &json!({"id":"native:web_read","arguments":{"tab":outputs[1]["tabs"][1]["tab"],"max_chars":8000,"max_chunks":8}}),
+            &json!({"id":"native:browser_read","arguments":{"tab":outputs[1]["tabs"][1]["tab"],"max_chars":8000,"max_chunks":8}}),
         ),
         _ => message("The three tables agree: the highest spring tide is 6.1 m."),
     }

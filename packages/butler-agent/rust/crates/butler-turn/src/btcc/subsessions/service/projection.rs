@@ -230,6 +230,7 @@ impl SubsessionService {
                 .waiting_for_children(&relation.child_session_id)
                 .await?;
         let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some() && !ending && !waiting && !continuing});
+        worker_identity(relation, &mut projection);
         if waiting && let Some(object) = projection.as_object_mut() {
             object.insert("waiting_for_slot".into(), json!(true));
         }

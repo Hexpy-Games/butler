@@ -1,7 +1,7 @@
 //! Whether a child has ended, and stopping one by its relation alone.
 use super::control::SubsessionCancelRequest;
 use super::{SubsessionService, error};
-use crate::btcc::{BtccCode, BtccError, StoredSubsessionDelegation};
+use crate::btcc::{BtccCode, BtccError, ChildRole, StoredSubsessionDelegation};
 use crate::workspace::SessionRole;
 use serde_json::Value;
 
@@ -34,6 +34,44 @@ impl SubsessionService {
                 .has_pending_direction(relation.relation_id.clone())
                 .await
                 .map_err(BtccError::from)?)
+    }
+
+    /// A Steward continues only the Work its relation follows or its pending
+    /// direction's new Work; with both gone it has nothing left to continue.
+    pub(super) async fn steward_closed(
+        &self,
+        relation: &StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        Ok(relation.packet.child_role == ChildRole::Steward
+            && self
+                .repository
+                .open_relation_by_work(relation.root_work_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                .is_none()
+            && !self
+                .repository
+                .has_pending_direction(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?)
+    }
+
+    /// Whether a child turn may start: its delegation's first turn, or any turn
+    /// of a child that still has something to continue.
+    pub async fn child_turn_admissible(
+        &self,
+        session: &str,
+        turn: &str,
+    ) -> Result<bool, BtccError> {
+        let Some(relation) = self
+            .repository
+            .by_child(session.into())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(true);
+        };
+        Ok(turn == relation.child_turn_id || !self.steward_closed(&relation).await?)
     }
 
     /// Cancels the delegation under the role it was created with.

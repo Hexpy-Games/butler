@@ -8,7 +8,7 @@ use butler_turn::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError
 use serde_json::{Value, json};
 
 const UNKNOWN_RESULT: &str = "No web_search result of this turn has that id. Use an id from this turn's web_search results, or pass its url.";
-const READ_NEXT: &str = "Read full page text with web_read {tab}; independent tabs and their continuations can be read together in one round. Use browser_observe for viewport inspection.";
+const READ_NEXT: &str = "Read full page text with browser_read {tab}; independent tabs and their continuations can be read together in one round. Use browser_observe for viewport inspection.";
 
 pub(super) async fn execute(
     owner: &GuidedTools,

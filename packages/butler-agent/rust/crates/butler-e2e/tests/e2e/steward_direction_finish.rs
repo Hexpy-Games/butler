@@ -407,7 +407,7 @@ async fn default_direction_queues_until_the_running_turn_finishes() -> Result<()
         continuation, first,
         "default queue must not change the active turn"
     );
-    assert!(butler_turn::btcc::storage::terminal_card_invariant(&db(&s), &session).unwrap());
+    crate::delegate_followup::terminal::assert_closed(&db(&s), &session);
     s.finish().await?;
     server.abort();
     Ok(())

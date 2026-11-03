@@ -52,12 +52,11 @@ export const PATTERNS: PatternDefinition[] = [
       "Fades react to scroll position: none at the top boundary, none at the bottom boundary.",
       "Keep enough edge padding that text never sits inside the fade at rest.",
       "A focus ring inside: each fade turns solid --focus-ring-room sooner, so a control at an edge keeps its whole ring.",
-      "Content that overflows both ways (a code frame) uses useScrollEdges(\"both\"): each of the four edges fades on its own, only while it hides content.",
+      "A focused control larger than the area its scroller shows: the scroller draws the ring inset on itself, the control's ring and the fades turn off until focus leaves.",
     ],
     tokens: ["--scroll-fade-size", "--focus-ring-room"],
     live: [
       { entry: "blocks/ScrollArea", story: "Vertical with edge fades" },
-      { entry: "blocks/ComposerDecisionPanel", story: "Command body in a code frame" },
       { entry: "blocks/SidebarShell", story: "Scrolling list with sticky filter" },
       { entry: "blocks/TabRail", story: "Shelf: needs you, busy, error, +2" },
     ],
@@ -87,6 +86,19 @@ export const PATTERNS: PatternDefinition[] = [
     tokens: ["--font-body", "--typo-body-size", "--line-height-body"],
     live: [{ entry: "blocks/QueuedMessage", story: "Long unbroken token" }],
     demo: () => <KoreanWrapping />,
+  },
+  {
+    id: "text-selection",
+    title: "Text selection",
+    summary: "Dragging never selects App chrome; only content selects: conversation messages, documents, the viewer's files and web pages.",
+    rules: [
+      "The shell defaults to user-select: none (tokens.css); never add per-component user-select for chrome.",
+      "Content primitives mark their root data-selectable: MessageRow body, QueuedMessage, MarkdownContent, the DocumentEditor page, DocumentReader, ChangedLineDiff lines. Every pre selects (code frames, the approval command frame, ArtifactPreviewPre).",
+      "Inputs, textareas and contenteditable keep native selection; buttons and tabs stay chrome inside content.",
+      "Chrome text the user must copy (an ID, a URL, a log value) gets a CopyButton, not drag selection.",
+    ],
+    tokens: [],
+    live: [{ entry: "blocks/MessageRow", story: "Completed turns" }, { entry: "blocks/MarkdownContent", story: "Code frame with copy" }, { entry: "blocks/SidebarShell", story: "Default" }],
   },
   {
     id: "settings-layout",

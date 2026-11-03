@@ -16,13 +16,6 @@ pub(in crate::host::guided::tools) async fn page(
 ) -> Result<Option<LivePage>, Value> {
     let named = args["tab"].as_str().filter(|tab| !tab.trim().is_empty());
     let url = args["url"].as_str().filter(|url| !url.trim().is_empty());
-    if owner.browser_available()
-        && let Some(error) = args
-            .as_object()
-            .and_then(super::super::reader_surface::tab_required)
-    {
-        return Err(error);
-    }
     if named.is_none() && url.is_none() {
         return Err(failure("web_read needs a url or an open tab."));
     }
@@ -35,7 +28,9 @@ pub(in crate::host::guided::tools) async fn page(
     };
     let Some(client) = client else {
         return match named {
-            Some(_) => Err(failure("The browser is unavailable; read the page by url.")),
+            Some(_) => Err(failure(
+                "The browser is unavailable; read the page by url with web_read.",
+            )),
             None => Ok(None),
         };
     };

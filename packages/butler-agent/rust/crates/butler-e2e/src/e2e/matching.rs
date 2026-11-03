@@ -59,13 +59,15 @@ pub fn user_request(text: &str, placeholders: &Placeholders) -> String {
     span.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn request_start(text: &str) -> Option<usize> {
-    [
+pub const REQUEST_HEADINGS: [&str; 4] = [
         "## Current request\n",
         "## Delegated result\nfrom: delegated task\n",
         "## Delegated result\nfrom: background worker\n",
         "User request:",
-    ]
+    ];
+
+fn request_start(text: &str) -> Option<usize> {
+    REQUEST_HEADINGS
     .iter()
     .filter_map(|heading| text.rfind(heading).map(|index| index + heading.len()))
     .max()

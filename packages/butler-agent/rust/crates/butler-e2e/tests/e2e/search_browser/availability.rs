@@ -21,16 +21,20 @@ fn offered(request: &Value, name: &str) -> bool {
 }
 
 #[tokio::test]
-async fn attached_host_offers_tab_reader_through_discovery() -> Result<(), HarnessError> {
+async fn attached_host_offers_browser_read_and_withholds_web_read() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let script = vec![
         call(0, "browser_open", &json!({"url":"https://example.com/"})),
         call(1, "browser_observe", &json!({"tab":"t1","look":"never"})),
-        call(2, "tool_describe", &json!({"ids":["native:web_read"]})),
+        call(
+            2,
+            "tool_describe",
+            &json!({"ids":["native:browser_read","native:web_read"]}),
+        ),
         call(
             3,
             "tool_search",
-            &json!({"query":"web_read","include_disabled":false}),
+            &json!({"query":"browser_read","include_disabled":false}),
         ),
         json!({"role":"assistant","content":"Finished."}),
     ];
@@ -45,12 +49,13 @@ async fn attached_host_offers_tab_reader_through_discovery() -> Result<(), Harne
         ] {
             assert!(offered(request, name), "{name}: {request}");
         }
-        assert!(offered(request, "web_read"), "{request}");
+        assert!(offered(request, "browser_read"), "{request}");
+        assert!(!offered(request, "web_read"), "{request}");
         let reader = request["tools"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|tool| tool["function"]["name"] == "web_read")
+            .find(|tool| tool["function"]["name"] == "browser_read")
             .unwrap();
         assert!(
             reader["function"]["parameters"]["properties"]
@@ -83,6 +88,14 @@ async fn attached_host_offers_tab_reader_through_discovery() -> Result<(), Harne
     assert_eq!(described["enabled"], true, "{described}");
     assert!(described["schema"]["properties"].get("url").is_none());
     assert_eq!(described["schema"]["required"], json!(["tab"]));
+    let withheld = outputs
+        .iter()
+        .find_map(|o| {
+            o.pointer("/descriptions/1")
+                .or_else(|| o.pointer("/output/descriptions/1"))
+        })
+        .unwrap();
+    assert_eq!(withheld["enabled"], false, "{withheld}");
     let results = outputs
         .iter()
         .find_map(|output| {
@@ -96,7 +109,7 @@ async fn attached_host_offers_tab_reader_through_discovery() -> Result<(), Harne
             .as_array()
             .unwrap()
             .iter()
-            .any(|tool| tool["name"] == "web_read")
+            .any(|tool| tool["name"] == "browser_read")
     );
     Ok(())
 }
@@ -185,6 +198,7 @@ async fn no_host_offers_web_read_and_web_search() -> Result<(), HarnessError> {
     );
     assert_reader_projection(&s, &turn, read)?;
     for request in requests {
+        assert!(!offered(&request, "browser_read"), "{request}");
         assert!(offered(&request, "web_read"), "{request}");
         assert!(offered(&request, "web_search"), "{request}");
     }

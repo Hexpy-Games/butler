@@ -1,9 +1,8 @@
-//! Interrupted assignments close their queued Workers on restart.
+//! Pending admission survives a process exit before slot release.
 use super::*;
 
 #[tokio::test]
-async fn cb_11_pending_workers_close_with_interrupted_parent_after_restart()
--> Result<(), HarnessError> {
+async fn cb_11_pending_worker_starts_after_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, script, server) = setup("CB-11-RESTART", 4).await?;
     s.gw.say("general", "Verify batch red").await?;
@@ -11,7 +10,11 @@ async fn cb_11_pending_workers_close_with_interrupted_parent_after_restart()
     started(&script, 2).await;
     script.fourth.add_permits(1);
     let (steward, rows) = workers(&s, "general", 4).await?;
-    // Exit before active turns can release slots during the shutdown drain.
+    assert_eq!(rows[2]["status"], "waiting");
+    assert_eq!(rows[3]["status"], "waiting");
+    // Crash Workers while their Steward is durably waiting, so its owner
+    // card stays open; an interrupted executing Steward closes every Task.
+    steward_parked(&s, &steward).await?;
     s.agent.kill9()?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let pending: String = db.query_row(
@@ -29,35 +32,15 @@ async fn cb_11_pending_workers_close_with_interrupted_parent_after_restart()
     assert_eq!(next, rows[2]["relation"]["relation_id"]);
     drop(db);
     s.gw = s.agent.start_again().await?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let view = s.gw.get("/session-view?session_id=general").await?;
-        let parent = &view.data()["steward_children"][0];
-        if parent["terminal"] == true {
-            assert_eq!(parent["result"]["status"], "failed", "{parent}");
-            break;
-        }
-        assert!(Instant::now() < deadline, "{view:?}\n{}", s.agent.logs());
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    for row in &rows[2..] {
-        let (results, cancelled, pending): (i64, i64, bool) = db.query_row(
-            "SELECT count(*),sum(x.status='cancelled'),d.dispatch_state IS NOT NULL
-             FROM btcc_steward_results x JOIN btcc_subsession_delegations d USING(relation_id)
-             WHERE x.relation_id=?1",
-            [row["relation"]["relation_id"].as_str().unwrap()],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-        )?;
-        assert_eq!((results, cancelled, pending), (1, 1, false));
-    }
-    for session in std::iter::once(steward.as_str())
-        .chain(rows.iter().map(|row| row["session_id"].as_str().unwrap()))
-    {
-        assert!(butler_turn::btcc::storage::terminal_card_invariant(&db, session).unwrap());
-    }
-    assert_eq!(*script.started.lock().unwrap(), ["red-0", "red-1"]);
-    drop(db);
+    started(&script, 4).await;
+    let mut started = script.started.lock().unwrap().clone();
+    started.sort();
+    assert_eq!(started, ["red-0", "red-1", "red-2", "red-3"]);
+    assert_fifo_publication(&s, &rows[2], &rows[3]).await?;
+    script.release("red-2");
+    script.release("red-3");
+    closed(&s, rows[2]["session_id"].as_str().unwrap()).await?;
+    closed(&s, rows[3]["session_id"].as_str().unwrap()).await?;
     s.finish().await?;
     server.abort();
     Ok(())
@@ -170,4 +153,70 @@ pub(crate) async fn cancel_worker(s: &Scenario, child: &Value) -> Result<(), Har
     .map_err(|e| harness_error(e.to_string()))?
     .map_err(|e| harness_error(e.to_string()))?;
     Ok(())
+}
+
+async fn assert_fifo_publication(
+    s: &Scenario,
+    first: &Value,
+    second: &Value,
+) -> Result<(), HarnessError> {
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let envelopes = [first, second].map(|row| {
+        let raw: String = db
+            .query_row(
+                "SELECT dispatch_intent_json FROM btcc_subsession_delegations WHERE relation_id=?1",
+                [row["relation"]["relation_id"].as_str().unwrap()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let intent: Value = serde_json::from_str(&raw).unwrap();
+        butler_core::json::JsonDocument::from_value(&intent["envelope"]).unwrap()
+    });
+    let data = s.sandbox.data.clone();
+    let timestamps = tokio::task::spawn_blocking(move || {
+        let queue = butler_gateway::gateway::InboundQueue::new(&data);
+        envelopes.map(|envelope| {
+            queue
+                .find_idempotent(&envelope)
+                .unwrap()
+                .unwrap()
+                .enqueued_at
+        })
+    })
+    .await
+    .unwrap();
+    assert!(
+        timestamps[0] <= timestamps[1],
+        "FIFO publication: {timestamps:?}"
+    );
+    Ok(())
+}
+
+/// Wait for both the durable suspension and settlement of its dispatch lease.
+pub(super) async fn steward_parked(s: &Scenario, session: &str) -> Result<(), HarnessError> {
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let raw: String = db.query_row("SELECT dispatch_intent_json FROM btcc_subsession_delegations d JOIN btcc_session_relations r USING(relation_id) WHERE r.child_session_id=?1", [session], |r|r.get(0))?;
+    let intent: Value = serde_json::from_str(&raw)?;
+    let envelope = butler_core::json::JsonDocument::from_value(&intent["envelope"])
+        .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;
+    let queue = butler_gateway::gateway::InboundQueue::new(&s.sandbox.data);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let waiting: Option<bool> = db.query_row("SELECT suspension_reason='waiting_for_worker' FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1", [session], |r|r.get(0))?;
+        if waiting == Some(true)
+            && queue
+                .find_async(envelope.clone())
+                .await
+                .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?
+                .is_some_and(|r| r.processing.is_none() && r.extra.contains_key("processedAt"))
+        {
+            return Ok(());
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Steward did not park: {}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }

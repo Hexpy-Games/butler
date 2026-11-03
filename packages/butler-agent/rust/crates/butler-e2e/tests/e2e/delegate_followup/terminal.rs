@@ -7,21 +7,23 @@ async fn failed_delegation_followup_has_new_card_and_closed_runtime() -> Result<
     followup(false, true).await
 }
 
-pub(super) fn assert_closed(s: &Scenario, child: &Value) {
-    let session = child["session_id"].as_str().unwrap();
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
-    assert_eq!(child["terminal"], true, "{child}");
-    assert!(butler_turn::btcc::storage::terminal_card_invariant(&db, session).unwrap());
-    let open: i64 = db.query_row(
-        "SELECT count(*) FROM btcc_turns WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed')",
-        [session], |row| row.get(0),
+pub(crate) fn assert_closed(db: &rusqlite::Connection, card_session: &str) {
+    let terminal: bool = db.query_row(
+        "SELECT activity_terminal FROM btcc_session_relations WHERE child_session_id=?1",
+        [card_session], |row| row.get(0),
     ).unwrap();
-    assert_eq!(open, 0, "terminal card must have no active turn");
-    let work: i64 = db.query_row(
-        "SELECT count(*) FROM btcc_guided_works WHERE session_id=?1 AND status IN ('open','blocked')",
-        [session], |row| row.get(0),
+    assert!(terminal, "card relation must be terminal");
+    let (turns, works): (i64, i64) = db.query_row(
+        "WITH RECURSIVE closing(session) AS (SELECT ?1 UNION
+         SELECT r.child_session_id FROM closing c JOIN btcc_session_relations r ON r.parent_session_id=c.session)
+         SELECT (SELECT count(*) FROM btcc_turns WHERE session_id IN (SELECT session FROM closing)
+                 AND semantic_state IN ('admitted','delivery_committed')),
+                (SELECT count(*) FROM btcc_guided_works WHERE session_id IN (SELECT session FROM closing)
+                 AND status IN ('open','blocked'))",
+        [card_session], |row| Ok((row.get(0)?, row.get(1)?)),
     ).unwrap();
-    assert_eq!(work, 0, "terminal card must have no open Work/Task");
+    assert_eq!(turns, 0, "terminal card and descendants have no active turn");
+    assert_eq!(works, 0, "terminal card and descendants have no open Work");
 }
 
 #[tokio::test]
@@ -78,13 +80,6 @@ async fn restart_in_the_middle_of_card_closeout_finishes_the_same_ending()
         .await
         .unwrap();
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let pending: i64 = db.query_row("SELECT count(*) FROM btcc_subsession_endings", [], |r| {
-        r.get(0)
-    })?;
-    assert_eq!(
-        pending, 1,
-        "closeout intent survives before terminal publication"
-    );
     let current = children(&s).await?.remove(0);
     assert_eq!(
         current["terminal"], false,
@@ -95,9 +90,13 @@ async fn restart_in_the_middle_of_card_closeout_finishes_the_same_ending()
     script.release.notify_one();
     s.gw = s.agent.start_again().await?;
     let ended = wait_result(&s, relation, "cancelled").await?;
-    assert_closed(&s, &ended);
-    let (pending, results): (i64, i64) = db.query_row("SELECT (SELECT count(*) FROM btcc_subsession_endings),(SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1)", [relation], |r| Ok((r.get(0)?,r.get(1)?)))?;
-    assert_eq!((pending, results), (0, 1), "recovery finishes exactly once");
+    assert_closed(&db, ended["session_id"].as_str().unwrap());
+    let (results, reports): (i64, i64) = db.query_row(
+        "SELECT (SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1),
+                (SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1 AND status='delivered')",
+        [relation], |r| Ok((r.get(0)?,r.get(1)?)),
+    )?;
+    assert_eq!((results, reports), (1, 1), "one terminal result and one parent report");
     s.finish().await?;
     server.abort();
     barrier.abort();

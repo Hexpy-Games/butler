@@ -143,6 +143,7 @@ tool_names! {
     WriteFile = "write_file",
     BrowserOpen = "browser_open",
     BrowserObserve = "browser_observe",
+    BrowserRead = "browser_read",
     BrowserAct = "browser_act",
     BrowserTabs = "browser_tabs",
     BrowserSelection = "browser_selection",

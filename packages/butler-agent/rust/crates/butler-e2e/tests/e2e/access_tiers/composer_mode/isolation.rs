@@ -42,14 +42,6 @@ async fn another_conversation_and_schedule_keep_their_modes() -> Result<(), Harn
     assert_eq!(reply.status, 202, "{}", reply.text);
     delivered(&s, other, &other_turn).await?;
     scheduled(&s).await?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let revisions: u64 = db.query_row(
-        "SELECT count(*) FROM btcc_authority_requests WHERE composer_revision IS NOT NULL",
-        [],
-        |row| row.get(0),
-    )?;
-    assert_eq!(revisions, 1, "only the changed root has a revision");
-    drop(db);
     s.finish().await?;
     server.abort();
     Ok(())

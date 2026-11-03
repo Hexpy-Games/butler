@@ -57,6 +57,8 @@ pub(super) fn publish(
     }
 }
 
+pub(super) use git::changed_paths;
+
 pub(super) fn append_git_delta(
     publication: &mut RegisteredArtifacts,
     before: &GitSnapshot,

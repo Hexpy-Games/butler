@@ -167,7 +167,7 @@ async fn blocked_continuation_closes_its_task_and_retires_queued_directions()
     let statuses: Vec<_> = saved.iter().map(|(_, status)| status.as_str()).collect();
     assert_eq!(statuses, ["success", "blocked"]);
     assert_eq!(works(&s, &session), ["completed", "abandoned"]);
-    assert!(butler_turn::btcc::storage::terminal_card_invariant(&db(&s), &session).unwrap());
+    crate::delegate_followup::terminal::assert_closed(&db(&s), &session);
     assert_eq!(
         count(
             &db(&s),

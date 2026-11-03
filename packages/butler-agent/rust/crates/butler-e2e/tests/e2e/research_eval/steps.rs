@@ -67,6 +67,8 @@ impl Research {
                 "web_search"
             } else if step["open"].is_array() {
                 "browser_open"
+            } else if tools.iter().any(|t| t["name"] == "browser_read") {
+                "browser_read"
             } else {
                 "web_read"
             };

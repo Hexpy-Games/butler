@@ -266,8 +266,8 @@ impl SubsessionService {
         Ok(())
     }
 
-    /// Nothing can read what a stopped child's own delegations report, so they stop
-    /// with it. Its result is committed first, so none of them can wake it again.
+    /// Nothing can read what a stopped or closed child's own delegations report, so they
+    /// stop with it. Its result is committed first, so none of them can wake it again.
     async fn cancel_open_children(&self, session: &str) {
         let children = self
             .repository
@@ -301,6 +301,11 @@ impl SubsessionService {
             .by_child(session.into())
             .await
             .map_err(BtccError::from)?;
+        // A closed Steward Work ends every task it delegated; nothing can use their results.
+        let closed = match &relation {
+            Some(relation) => self.steward_closed(relation).await?,
+            None => false,
+        };
         if relation
             .as_ref()
             .is_some_and(|r| r.packet.child_role == ChildRole::Steward)
@@ -312,7 +317,7 @@ impl SubsessionService {
                 error.code()
             );
         }
-        if status == "cancelled" {
+        if status == "cancelled" || closed {
             self.cancel_open_children(session).await;
         }
         let delivery = self.deliver_worker_results().await;
@@ -355,7 +360,6 @@ impl SubsessionService {
                 self.replay(&stored).await?;
             }
         }
-        self.recover_endings().await?;
         self.recover_directions().await?;
         if let Err(error) = self.deliver_worker_results().await {
             butler_core::diagnostic!(

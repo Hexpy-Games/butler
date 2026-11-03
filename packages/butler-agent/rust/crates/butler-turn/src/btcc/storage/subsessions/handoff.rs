@@ -29,7 +29,7 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
             ));
         }
         let closed: bool = db.query_row(
-            "SELECT EXISTS (SELECT 1 FROM btcc_session_relations WHERE child_session_id=?1 AND activity_terminal=1) OR EXISTS(SELECT 1 FROM btcc_subsession_end_members WHERE session_id=?1)",
+            concat!("SELECT EXISTS (SELECT 1 FROM btcc_session_relations WHERE child_session_id=?1 AND activity_terminal=1) OR EXISTS(", endings::ENDING_SCOPE_SQL!("?1"), ")"),
             [&input.parent_session_id], |row| row.get(0),
         ).map_err(StorageError::sqlite)?;
         if closed {
@@ -42,6 +42,7 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
             "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
             params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
         ).map_err(StorageError::sqlite)?;
+        super::work_tasks::insert(db, input)?;
         super::super::authority::access_revision::restrict_delegation(db, input)
             .map_err(|e| StorageError::new(StorageCode::SubsessionPacketInvalid, e.to_string()))?;
     }
@@ -50,7 +51,7 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
 
 fn followup_ready(db: &Connection, relation: &str, parent: &str) -> StorageResult<bool> {
     let child: Option<String> = db.query_row(
-        "SELECT r.child_session_id FROM btcc_session_relations r WHERE r.relation_id=?1 AND r.parent_session_id=?2 AND r.activity_terminal=1 AND NOT EXISTS(SELECT 1 FROM btcc_subsession_end_members e WHERE e.session_id=r.child_session_id)",
+        concat!("SELECT r.child_session_id FROM btcc_session_relations r WHERE r.relation_id=?1 AND r.parent_session_id=?2 AND r.activity_terminal=1 AND NOT EXISTS(", endings::ENDING_SCOPE_SQL!("r.child_session_id"), ")"),
         params![relation,parent], |r| r.get(0),
     ).optional().map_err(StorageError::sqlite)?;
     match child {

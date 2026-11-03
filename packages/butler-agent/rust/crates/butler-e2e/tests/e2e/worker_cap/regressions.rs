@@ -58,51 +58,148 @@ async fn cb_11_direction_during_a_workers_final_report_opens_its_own_turn()
     Ok(())
 }
 
-/// Only a direction starts a new Work: a Worker result that arrives after its
-/// Steward closed fails visibly instead of reopening the session.
+fn steward_results(
+    db: &rusqlite::Connection,
+    session: &str,
+) -> Result<Vec<(String, String)>, rusqlite::Error> {
+    db.prepare("SELECT child_turn_id,status FROM btcc_steward_results WHERE child_session_id=?1 ORDER BY rowid")?
+        .query_map([session], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect()
+}
+
+fn relation_status(
+    db: &rusqlite::Connection,
+    table: &str,
+    relation: &str,
+) -> Result<Option<String>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    db.query_row(
+        &format!("SELECT status FROM {table} WHERE relation_id=?1"),
+        [relation],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+/// Closing a Steward's Work ends its running Worker; the Worker's late result
+/// reopens nothing and cannot replace the Steward's result.
 #[tokio::test]
-async fn cb_11_steward_completion_closes_workers_without_a_late_turn() -> Result<(), HarnessError> {
+async fn cb_11_closing_steward_work_cancels_its_running_worker() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = setup("CB-11-LATE-WORKER", 1).await?;
     script.close_before_worker.store(true, Ordering::SeqCst);
     s.gw.say("general", "Verify batch red").await?;
-    let (steward, _) = workers(&s, "general", 1).await?;
+    let (steward, rows) = workers(&s, "general", 1).await?;
     started(&script, 1).await;
     let database = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let saved =
-        |database: &rusqlite::Connection| -> Result<Vec<(String, String)>, rusqlite::Error> {
-            database
-            .prepare("SELECT child_turn_id,status FROM btcc_steward_results WHERE child_session_id=?1 ORDER BY rowid")?
-            .query_map([&steward], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect()
-        };
     let deadline = Instant::now() + Duration::from_secs(30);
-    while saved(&database)?.is_empty() {
-        assert!(Instant::now() < deadline, "{}", s.agent.logs());
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    assert_eq!(saved(&database)?[0].1, "success", "{:?}", saved(&database)?);
-    script.release("red-0");
-    loop {
-        let open: i64 = database.query_row("SELECT count(*) FROM btcc_session_relations WHERE parent_session_id=?1 AND activity_terminal=0", [&steward], |r| r.get(0))?;
-        if open == 0 {
-            break;
-        }
+    while steward_results(&database, &steward)?.is_empty() {
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert_eq!(
-        saved(&database)?.len(),
-        1,
-        "an ended Steward receives no late result turn"
+        steward_results(&database, &steward)?[0].1,
+        "success",
+        "{:?}",
+        steward_results(&database, &steward)?
     );
-    assert!(butler_turn::btcc::storage::terminal_card_invariant(&database, &steward).unwrap());
+    let worker = rows[0]["relation"]["relation_id"].as_str().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while relation_status(&database, "btcc_steward_results", worker)?.as_deref()
+        != Some("cancelled")
+    {
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while relation_status(&database, "btcc_subsession_outbox", worker)?.as_deref()
+        != Some("delivered")
+    {
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    script.release("red-0");
+    assert_eq!(
+        steward_results(&database, &steward)?.len(),
+        1,
+        "a late Worker result cannot replace the Steward's result"
+    );
+    closed(&s, &steward).await?;
     let works: i64 = database.query_row(
         "SELECT count(*) FROM btcc_guided_works WHERE session_id=?1",
         [&steward],
         |row| row.get(0),
     )?;
     assert_eq!(works, 1, "a late Worker result starts no Work");
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+/// A Worker result already queued when its Steward closes the Work settles
+/// without a Steward turn; the card keeps the delivered result.
+#[tokio::test]
+async fn cb_11_worker_result_queued_before_the_steward_closes_starts_no_turn()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server) = setup("CB-11-QUEUED-LATE-WORKER", 1).await?;
+    script.close_before_worker.store(true, Ordering::SeqCst);
+    script.hold_steward_close.store(true, Ordering::SeqCst);
+    s.gw.say("general", "Verify batch red").await?;
+    let (steward, rows) = workers(&s, "general", 1).await?;
+    started(&script, 1).await;
+    tokio::time::timeout(Duration::from_secs(30), script.steward_closing.wait())
+        .await
+        .expect("the Steward reached its closeout");
+    script.release("red-0");
+    let database = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let worker = rows[0]["relation"]["relation_id"].as_str().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while relation_status(&database, "btcc_subsession_outbox", worker)?.as_deref()
+        != Some("delivered")
+    {
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    script.steward_close_release.add_permits(1);
+    closed(&s, &steward).await?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let processed = super::super::steward_interrupted_queue::records(
+            &s.sandbox.data.join("runtime/inbound-events"),
+            "processed",
+        )
+        .into_iter()
+        .any(|path| {
+            let record = super::super::steward_interrupted_queue::read_record(&path);
+            record
+                .pointer("/envelope/raw/source")
+                .and_then(Value::as_str)
+                == Some("btcc-worker-result")
+                && record.pointer("/envelope/peer/id").and_then(Value::as_str)
+                    == Some(steward.as_str())
+        });
+        if processed {
+            break;
+        }
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let results = steward_results(&database, &steward)?;
+    assert_eq!(results.len(), 1, "{results:?}");
+    assert_eq!(results[0].1, "success", "{results:?}");
+    let works: i64 = database.query_row(
+        "SELECT count(*) FROM btcc_guided_works WHERE session_id=?1",
+        [&steward],
+        |row| row.get(0),
+    )?;
+    assert_eq!(works, 1, "a late Worker result starts no Work");
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(
+        view.data()["steward_children"][0]["result"]["status"],
+        "success"
+    );
+    assert!(view.data()["steward_children"][0]["active_turn"].is_null());
     s.finish().await?;
     server.abort();
     Ok(())
@@ -125,23 +222,18 @@ async fn cancel_continuation(running: bool) -> Result<(), HarnessError> {
     script.steer.store(true, Ordering::SeqCst);
     script.followup.store(true, Ordering::SeqCst);
     script.hold_continuation.store(true, Ordering::SeqCst);
-    script.hold_worker_report.store(true, Ordering::SeqCst);
     s.gw.say("general", "Verify batch red").await?;
     let (parent, rows) = workers(&s, "general", 3).await?;
     started(&script, 2).await;
     script.release("red-0");
-    tokio::time::timeout(Duration::from_secs(30), script.worker_reporting.wait())
-        .await
-        .unwrap();
+    closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
+    started(&script, 3).await;
     script.direction.add_permits(1);
     let deadline = Instant::now() + Duration::from_secs(30);
     while !script.steered.load(Ordering::SeqCst) {
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    script.worker_report_release.add_permits(1);
-    closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
-    started(&script, 3).await;
     assert_pending_direction(&s, &rows[0])?;
     if running {
         script.release("red-1");

@@ -1,3 +1,5 @@
+mod validation;
+
 //! Durable direction revisions and cancellation over the shared native queue.
 
 use crate::btcc::storage::SubsessionDispatchState;
@@ -111,8 +113,16 @@ impl SubsessionService {
 
     /// Sends new direction to a subsession.
     pub async fn steer(&self, request: SubsessionDirectionRequest) -> Result<Value, BtccError> {
-        self.validate_direction(&request).await?;
-        let instruction = butler_core::public_text::trim_js_whitespace(&request.instruction);
+        let _admission = self.worker_delegation.lock().await;
+        self.steer_locked(request).await
+    }
+
+    pub(super) async fn steer_locked(
+        &self,
+        request: SubsessionDirectionRequest,
+    ) -> Result<Value, BtccError> {
+        let instruction = self.direction_instruction(&request).await?;
+        let instruction = instruction.as_str();
         let relation = self
             .select_relation(RelationQuery {
                 parent: &request.parent_session_id,
@@ -126,8 +136,8 @@ impl SubsessionService {
         if !self.relation_is_eligible(&relation).await? {
             return self.closed_feedback(&relation).await;
         }
-        if request.immediate && !self.child_turn_running(&relation.child_session_id).await? {
-            return self.closed_feedback(&relation).await;
+        if let Some(error) = self.task_direction_error(&relation).await? {
+            return Ok(error);
         }
         self.repository
             .restrict_instruction_context(
@@ -165,33 +175,6 @@ impl SubsessionService {
         Ok(
             json!({"ok":true,"instruction_id":direction.instruction_id,"relation_id":relation.relation_id,"revision":direction.revision,"status":if request.immediate {"pending"} else {"queued"}}),
         )
-    }
-
-    async fn validate_direction(
-        &self,
-        request: &SubsessionDirectionRequest,
-    ) -> Result<(), BtccError> {
-        let instruction = butler_core::public_text::trim_js_whitespace(&request.instruction);
-        if instruction.is_empty() {
-            return Err(error(BtccCode::StewardDirectionInstructionRequired));
-        }
-        if instruction.chars().count() > 1_200 {
-            return Err(error(BtccCode::StewardDirectionInstructionTooLong));
-        }
-        if request.access_mode == "read_only"
-            || !self
-                .repository
-                .admitted_turn_matches(
-                    request.parent_session_id.clone(),
-                    request.parent_turn_id.clone(),
-                    request.source_message_id.clone(),
-                )
-                .await
-                .map_err(BtccError::from)?
-        {
-            return Err(error(BtccCode::StewardFollowupAuthorityMismatch));
-        }
-        Ok(())
     }
 
     /// Cancels an unfinished subsession.

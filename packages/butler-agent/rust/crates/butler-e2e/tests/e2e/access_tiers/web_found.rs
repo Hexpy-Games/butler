@@ -91,15 +91,21 @@ async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Resu
     delivered(&s, "general", &turn).await?;
     assert_counts(&s, &turn, 2, 0)?;
     let requests = script.requests_for(PROMPT);
-    let attached = butler_e2e::e2e::chatgpt_wire::functions(requests.first().unwrap())
-        .find(|tool| tool["name"] == "web_read")
-        .unwrap();
-    assert!(attached["parameters"]["properties"].get("url").is_none());
-    assert_eq!(attached["parameters"]["required"], json!(["tab"]));
-    let detached = butler_e2e::e2e::chatgpt_wire::functions(requests.last().unwrap())
-        .find(|tool| tool["name"] == "web_read")
-        .unwrap();
-    assert!(detached["parameters"]["properties"].get("url").is_some());
+    let tool_names = |request: &Value| {
+        butler_e2e::e2e::chatgpt_wire::functions(request)
+            .map(|t| t["name"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let attached = tool_names(requests.first().unwrap());
+    assert!(
+        attached.contains(&"browser_read".to_owned()) && !attached.contains(&"web_read".to_owned()),
+        "{attached:?}"
+    );
+    let detached = tool_names(requests.last().unwrap());
+    assert!(
+        detached.contains(&"web_read".to_owned()) && !detached.contains(&"browser_read".to_owned()),
+        "{detached:?}"
+    );
     let inputs = requests.last().unwrap()["input"].clone();
     for (id, asked) in [
         ("popup", false),

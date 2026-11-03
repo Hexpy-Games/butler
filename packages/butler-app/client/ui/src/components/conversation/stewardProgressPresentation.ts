@@ -48,6 +48,22 @@ export function stewardProgressStatus(
   return appCopy.interfaceStatus.working;
 }
 
+/** Accepted plans add step detail without changing the legacy card's fallback. */
+export function stewardStepProgressStatus(child: StewardSessionSummaryView, narrow: boolean): string {
+  if (!child.plan) return stewardProgressStatus(child);
+  const status = effectiveStewardStatus(child);
+  const actions = [...child.plan.actions].sort((left, right) => left.order - right.order);
+  const copy = appCopy.conversation.work.planSteps;
+  const done = actions.filter(action => action.status === "done").length;
+  if (status === "delivered") return copy.delivered(done, actions.length);
+  if (status === "failed") return copy.failed((actions.find(action => action.status === "blocked") ??
+    actions.find(action => action.status === "active"))?.title ?? "");
+  if (status === "idle" || status === "cancelled") return stewardProgressStatus(child);
+  const active = actions.filter(action => action.status === "active");
+  if (narrow && active.length >= 2) return copy.compact(active[0]!.title, active.length - 1);
+  return copy.running(done, actions.length, active.map(action => action.title).join(", "));
+}
+
 export function stewardPlanProgress(
   child: Pick<
     StewardSessionSummaryView,

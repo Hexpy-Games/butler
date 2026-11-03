@@ -88,6 +88,16 @@ export const stories: ShowcaseStory[] = [
     render: (context) => <AttachmentList variant="tiles" tileLayout="wrap" items={tiles(context)} onOpen={() => undefined} />,
   },
   {
+    name: "Thumbnail fit (cover and contain)",
+    widths: ["320", "375", "app"],
+    render: (context) => <AttachmentList variant="tiles" tileLayout="wrap" items={[
+      { id: "default", name: text(context).preview, thumbnail: { src: fixturePicture("strip") } },
+      { id: "cover", name: text(context).preview, thumbnail: { src: fixturePicture("strip"), fit: "cover" } },
+      { id: "contain", name: text(context).preview, thumbnail: { src: fixturePicture("strip"), fit: "contain" } },
+      { id: "tall", name: text(context).preview, thumbnail: { src: fixturePicture("column"), fit: "contain" } },
+    ]} onOpen={() => undefined} />,
+  },
+  {
     // ComposerAttachments: 64px tiles in one row that scrolls sideways; ✕ on hover/focus, always on touch.
     name: "Composer tiles (row, removable)",
     widths: ["320", "375", "app"],

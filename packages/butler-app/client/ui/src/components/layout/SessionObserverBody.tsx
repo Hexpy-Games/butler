@@ -2,6 +2,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { SessionView, SessionViewStatus } from "@/app/types.ts";
 import { MessageRow, Stack, Typo } from "@/butler-ds";
 import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
+import { SessionObserverStepTimeline } from "./SessionObserverStepTimeline.tsx";
 import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
 
 /**
@@ -19,7 +20,7 @@ export function SessionObserverBody({ view, inline = false }: {
   useAppLocale();
   return (
     <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
-      <SessionObserverTimeline
+      {inline && view?.plan ? <SessionObserverStepTimeline view={view} plan={view.plan} /> : <SessionObserverTimeline
         delegatedGoal={view?.relation?.safe_title}
         expandActivities={inline}
         showReplies={!inline}
@@ -27,7 +28,7 @@ export function SessionObserverBody({ view, inline = false }: {
         activityHistory={view?.activity_history}
         activeTurn={view?.active_turn}
         latestTurn={view?.latest_turn}
-      />
+      />}
       {view?.waiting_for_children && !view.active_turn ? (
         <MessageRow
           role="assistant"

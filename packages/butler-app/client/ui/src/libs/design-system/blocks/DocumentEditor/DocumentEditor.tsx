@@ -51,7 +51,7 @@ export function DocumentEditor({ title, note, actions, menuActions, menuLabel, m
           {note ? <div className={styles.status}>{note}</div> : null}
         </div>
       ) : note ? <div className={styles.status}>{note}</div> : null}
-      <div className={cn(markdown.markdown, styles.page)} data-slot="document-editor-page">{children}</div>
+      <div className={cn(markdown.markdown, styles.page)} data-selectable data-slot="document-editor-page">{children}</div>
       {formatBar}
     </div>
   );

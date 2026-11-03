@@ -15,9 +15,10 @@ pub(super) enum OpenKind {
 }
 
 /// Only positively verified content may open; everything else is revealed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Handling {
-    Open(&'static str),
+    /// Opens; the copy is written with this lowercase extension.
+    Open(String),
     Reveal,
 }
 
@@ -60,28 +61,25 @@ impl OpenKind {
 pub(super) fn verify(name: &str, bytes: &[u8]) -> Handling {
     let extension = name.rsplit_once('.').map_or("", |(_, ext)| ext);
     let extension = extension.to_ascii_lowercase();
-    let text = || !bytes.contains(&0) && std::str::from_utf8(bytes).is_ok();
-    let jpeg = || bytes.starts_with(b"\xff\xd8\xff");
     let verified = match extension.as_str() {
-        "png" if bytes.starts_with(b"\x89PNG\r\n\x1a\n") => Some("png"),
-        "jpg" if jpeg() => Some("jpg"),
-        "jpeg" if jpeg() => Some("jpeg"),
-        "gif" if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") => Some("gif"),
-        "webp" if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") => Some("webp"),
-        "md" if text() => Some("md"),
-        "markdown" if text() => Some("markdown"),
-        "txt" if text() => Some("txt"),
-        "csv" if text() => Some("csv"),
-        "pdf" | "docx" | "xlsx" | "pptx" | "hwp" | "hwpx"
-            if butler_platform::download_mark::supported() =>
-        {
-            sniff(bytes)
-                .filter(|kind| kind.extension() == extension)
-                .map(OpenKind::extension)
+        "png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "jpg" | "jpeg" => bytes.starts_with(b"\xff\xd8\xff"),
+        "gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
+        "webp" => bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP"),
+        "md" | "markdown" | "txt" | "csv" => {
+            !bytes.contains(&0) && std::str::from_utf8(bytes).is_ok()
         }
-        _ => None,
+        "pdf" | "docx" | "xlsx" | "pptx" | "hwp" | "hwpx" => {
+            butler_platform::download_mark::supported()
+                && sniff(bytes).is_some_and(|kind| kind.extension() == extension)
+        }
+        _ => false,
     };
-    verified.map_or(Handling::Reveal, Handling::Open)
+    if verified {
+        Handling::Open(extension)
+    } else {
+        Handling::Reveal
+    }
 }
 
 fn sniff(bytes: &[u8]) -> Option<OpenKind> {

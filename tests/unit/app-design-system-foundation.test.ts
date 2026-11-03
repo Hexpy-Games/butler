@@ -149,6 +149,12 @@ describe("design-system rules lint", () => {
       ".a:focus-visible { outline: none; }\n.b:focus-visible { outline: none; box-shadow: var(--focus-ring); }\n.c:hover { outline: none; }",
     );
     expect(findings.map((finding) => finding.line)).toEqual([1]);
+    // A control's ring may turn off only under a ring host whose rule in the same file draws the shared ring.
+    const host = "[data-focus-ring-host] { outline: var(--focus-ring-width) solid var(--focus-ring-color); }\n";
+    const handed = "[data-scroll-fade][data-focus-ring-host] :focus-visible { outline: none; }\n";
+    expect(lintDesignSystemRules("sample.css", host + handed)).toEqual([]);
+    expect(lintDesignSystemRules("sample.css", handed).map((finding) => finding.line)).toEqual([1]);
+    expect(lintDesignSystemRules("sample.css", `${host}.a:focus-visible, ${handed}`).map((finding) => finding.line)).toEqual([2]);
   });
 
   // test-category: pure-logic

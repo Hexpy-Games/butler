@@ -88,7 +88,8 @@ export async function answerDialog(browser, tab, args, deliverStill) {
  */
 export function unloadPreflight(contents) {
   // An objecting page cannot reject: page-controls defines __butlerBeforeUnload non-configurable and it returns false explicitly.
-  return contents.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(answer => answer !== false, () => true);
+  // webContents.executeJavaScript waits for loading to finish; the preflight must answer now.
+  return contents.mainFrame.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(answer => answer !== false, () => true);
 }
 export async function requestClose(browser, tab) {
   if (tab) await drainStills(tab);

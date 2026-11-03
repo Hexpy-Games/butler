@@ -131,13 +131,7 @@ async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessEr
         status, "abandoned",
         "a terminal card must close its unfinished Work"
     );
-    assert!(
-        butler_turn::btcc::storage::terminal_card_invariant(
-            &db,
-            child["session_id"].as_str().unwrap()
-        )
-        .unwrap()
-    );
+    crate::delegate_followup::terminal::assert_closed(&db, child["session_id"].as_str().unwrap());
     drop(db);
     s.finish().await?;
     server.abort();
@@ -406,7 +400,7 @@ fn assert_direction(
                 && item["name"] == "read_file"
                 && item["call_id"] == "read-b")
             .count(),
-        3
+        4 // Retained through delivery, closeout, and the final report.
     );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let applied: i64 = db.query_row(

@@ -59,6 +59,9 @@ pub(super) fn resolve(
     let decision = match serde_json::from_str::<Decision>(raw) {
         Ok(decision) => decision,
         Err(_) if !raw.starts_with('{') && !raw.starts_with('[') => return proceed("continue"),
+        // Context text may start with a bracket; only a hook that blocks on error
+        // has such stdout judged as a decision.
+        Err(_) if super::context::can_add(hook) && !hook.fail_closed => return proceed("continue"),
         Err(_) => return failure(hook, "error", "printed invalid JSON"),
     };
     let specific = decision.specific;
@@ -91,6 +94,12 @@ pub(super) fn added_context(raw: &str) -> Option<String> {
     };
     let text = text.trim();
     (!text.is_empty()).then(|| text.to_owned())
+}
+/// Whether stdout looked like a decision but could only be read as text. A
+/// broken guard hook looks like this, so the run log says it.
+pub(super) fn fell_back_to_text(raw: &str) -> bool {
+    let raw = raw.trim();
+    (raw.starts_with('{') || raw.starts_with('[')) && serde_json::from_str::<Decision>(raw).is_err()
 }
 fn proceed(outcome: &str) -> Resolved {
     Resolved {

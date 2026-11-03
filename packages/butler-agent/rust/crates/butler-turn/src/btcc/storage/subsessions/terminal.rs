@@ -2,7 +2,7 @@
 use super::*;
 use rusqlite::Connection;
 
-/// Root first, then only unfinished descendants via the parent/open index.
+/// Root first, then every descendant relation's child session.
 pub(super) fn subtree(db: &Connection, session: &str) -> Result<Vec<String>, StorageError> {
     db.prepare_cached(
         "WITH RECURSIVE closing(session) AS (SELECT ?1 UNION
@@ -24,16 +24,7 @@ pub(super) fn close_if_ended(
     status: &str,
     now: &str,
 ) -> Result<Vec<(String, String)>, StorageError> {
-    let pending: bool = db
-        .query_row(
-            "SELECT EXISTS (SELECT 1 FROM btcc_session_relations r
-         JOIN btcc_subsession_directions i USING(relation_id)
-         WHERE r.child_session_id=?1 AND i.status='pending')",
-            [session],
-            |row| row.get(0),
-        )
-        .map_err(StorageError::sqlite)?;
-    if status == "success" && pending {
+    if !super::endings::ends_card(db, session, status, None)? {
         return Ok(Vec::new());
     }
     let mut stopped = Vec::new();
@@ -66,7 +57,7 @@ fn close_session(
         return Ok(Vec::new());
     };
     let turns = db.prepare_cached(
-        "SELECT t.turn_id FROM btcc_turns t WHERE t.session_id=?1 AND (t.semantic_state IN ('admitted','delivery_committed') OR EXISTS(SELECT 1 FROM btcc_subsession_stop_outbox o WHERE o.turn_id=t.turn_id)) AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.child_session_id=t.session_id AND x.child_turn_id=t.turn_id)",
+        "SELECT t.turn_id FROM btcc_turns t WHERE t.session_id=?1 AND t.semantic_state IN ('admitted','delivery_committed') AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.child_session_id=t.session_id AND x.child_turn_id=t.turn_id)",
     ).map_err(StorageError::sqlite)?.query_map([session], |row| row.get::<_, String>(0))
         .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
@@ -83,6 +74,7 @@ fn close_session(
         [&relation],
     )
     .map_err(StorageError::sqlite)?;
+    db.execute("UPDATE btcc_session_relations SET activity_terminal=1 WHERE relation_id=?1", [&relation]).map_err(StorageError::sqlite)?;
     Ok(turns
         .into_iter()
         .map(|turn| (session.into(), turn))
@@ -101,7 +93,7 @@ fn close_task_result(
     let latest: Option<String> = db.query_row(
         "SELECT t.turn_id FROM btcc_turns t WHERE t.rowid=(SELECT rowid FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1)
          AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.child_session_id=t.session_id AND x.child_turn_id=t.turn_id)
-         AND (t.semantic_state IN ('admitted','delivery_committed','delivered') OR EXISTS(SELECT 1 FROM btcc_subsession_stop_outbox o WHERE o.turn_id=t.turn_id))",
+         AND t.semantic_state IN ('admitted','delivery_committed','delivered')",
         [session], |r| r.get(0),
     ).optional().map_err(StorageError::sqlite)?;
     let answered: bool = db
@@ -135,11 +127,6 @@ pub(super) fn close_turn(
     now: &str,
 ) -> Result<(), StorageError> {
     db.execute(
-        "INSERT OR IGNORE INTO btcc_subsession_stop_outbox(turn_id,session_id) SELECT ?1,?2 WHERE EXISTS(SELECT 1 FROM btcc_turns WHERE turn_id=?1 AND semantic_state IN ('admitted','delivery_committed'))",
-        params![turn, session],
-    )
-    .map_err(StorageError::sqlite)?;
-    db.execute(
         "INSERT OR IGNORE INTO btcc_stop_requests (stop_request_id,turn_id,status,observed_turn_revision,created_at,updated_at)
          VALUES (?1,?2,'cancelled_before_admission',-1,?3,?3)",
         params![crate::btcc::digest_identity(&format!("btcc-stop-request.v1\0{turn}")),turn,now],
@@ -167,7 +154,7 @@ pub(super) fn close_turn(
     Ok(())
 }
 
-/// Shared by the debug assertion and public stub E2E checks. The Task is the
+/// The Task is the
 /// delegation's task_id; its saved result is its durable closing fact.
 pub(super) fn invariant(db: &Connection, session: &str) -> Result<bool, StorageError> {
     for child in subtree(db, session)? {
@@ -186,47 +173,3 @@ pub(super) fn invariant(db: &Connection, session: &str) -> Result<bool, StorageE
     Ok(true)
 }
 
-/// Check the same closeout invariant used by the writer's debug assertion.
-pub fn terminal_card_invariant(db: &Connection, session: &str) -> Result<bool, StorageError> {
-    let terminal: bool = db.query_row(
-        "SELECT COALESCE((SELECT activity_terminal FROM btcc_session_relations WHERE child_session_id=?1),0)",
-        [session], |row| row.get(0),
-    ).map_err(StorageError::sqlite)?;
-    Ok(!terminal || invariant(db, session)?)
-}
-
-impl SqliteSubsessionRepository {
-    /// Repair only terminal cards reached from live runtime, not card history.
-    pub(crate) async fn terminal_recovery_completions(
-        &self,
-    ) -> Result<Vec<ChildCompletion>, StorageError> {
-        self.storage.execute(move |db| {
-            let sessions = db.prepare_cached(
-                "WITH RECURSIVE live(session) AS (
-                    SELECT session_id FROM btcc_turns WHERE semantic_state IN ('admitted','delivery_committed')
-                    UNION SELECT session_id FROM btcc_guided_works WHERE status IN ('open','blocked')
-                    UNION SELECT r.child_session_id FROM btcc_subsession_delegations d JOIN btcc_session_relations r USING(relation_id) WHERE d.dispatch_state IN ('pending','enqueued')
-                 ), ancestors(session) AS (
-                    SELECT session FROM live UNION SELECT r.parent_session_id FROM ancestors a
-                    JOIN btcc_session_relations r ON r.child_session_id=a.session)
-                 SELECT r.child_session_id FROM ancestors a JOIN btcc_session_relations r
-                 ON r.child_session_id=a.session WHERE r.activity_terminal=1",
-            ).map_err(StorageError::sqlite)?.query_map([], |row| row.get::<_, String>(0))
-                .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>()
-                .map_err(StorageError::sqlite)?;
-            let mut completions = Vec::new();
-            for session in sessions {
-                let completion = db.query_row(
-                    "SELECT child_turn_id,status,summary,acceptance_evidence_json FROM btcc_steward_results WHERE child_session_id=?1 ORDER BY rowid DESC LIMIT 1",
-                    [&session], |r| Ok((r.get::<_, String>(0)?,r.get::<_, String>(1)?,r.get::<_, String>(2)?,r.get::<_, String>(3)?)),
-                ).optional().map_err(StorageError::sqlite)?;
-                if let Some((turn,status,summary,evidence)) = completion {
-                    completions.push(ChildCompletion { session, turn, status, summary,
-                        failure_reason: None, failure_code: None, handoff: None,
-                        evidence_refs: serde_json::from_str(&evidence).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()))? });
-                }
-            }
-            Ok(completions)
-        }).await
-    }
-}

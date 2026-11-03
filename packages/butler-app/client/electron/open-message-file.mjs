@@ -1,5 +1,4 @@
-// The renderer supplies only an id. The gateway prepares a copy and decides
-// whether its verified content may open, or must only be revealed.
+// The renderer supplies only an id. The gateway answers the target: a delivered original, or a marked copy under the copy root, and whether its verified content may open or must only be revealed.
 import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 
@@ -13,6 +12,15 @@ async function verifiedPath(path, root) {
     const inside = relative(base, target);
     if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) return null;
     return (await lstat(target)).isFile() ? target : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A gateway-recorded original: exactly the absolute path it answered, still a regular file and not a link. */
+async function originalPath(path) {
+  try {
+    return isAbsolute(path) && (await lstat(path)).isFile() ? path : null;
   } catch {
     return null;
   }
@@ -34,10 +42,10 @@ export function registerOpenMessageFile({ ipcMain, serverFetch, openPath, showIt
     if (!response.ok || typeof path !== "string") {
       return { opened: false, code: typeof body?.error?.code === "string" ? body.error.code : "open_copy_failed" };
     }
-    const target = await verifiedPath(path, openedFilesRoot);
+    const target = body.data.original === true ? await originalPath(path) : await verifiedPath(path, openedFilesRoot);
     if (!target) return { opened: false, code: "open_path_refused" };
     try {
-      if (body.data.open === true && input?.reveal !== true) {
+      if (body.data.open === true) {
         const failure = await openPath(target);
         return failure ? { opened: false, code: "open_failed" } : { opened: true };
       }

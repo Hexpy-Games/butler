@@ -44,7 +44,7 @@ function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSu
     const reveal = !canOpenInApp(artifact.safe_path_label || artifact.title);
     const label = reveal ? c.showInFolder : c.openInDefaultApp;
     actions.push({ id: "open-external", label, ariaLabel: `${label}: ${artifact.title}`, iconOnly: true,
-      icon: reveal ? <FolderOpen size="sm" /> : <Popup size="sm" />, run: () => { void openInApp(fileId, reveal); } });
+      icon: reveal ? <FolderOpen size="sm" /> : <Popup size="sm" />, run: () => { void openInApp(fileId); } });
   }
   return actions;
 }

@@ -61,16 +61,7 @@ fn commit(
         )
         .map_err(StorageError::sqlite)?;
     if saved {
-        let stopped = repair_saved(
-            &tx,
-            &completion.session,
-            &completion.turn,
-            &result,
-            &completion.status,
-            now,
-        )?;
-        tx.commit().map_err(StorageError::sqlite)?;
-        return Ok(stopped);
+        return Ok(Vec::new());
     }
     if !super::endings::accepts_completion(&tx, &completion.session, &completion.turn)? {
         return Ok(Vec::new());
@@ -81,6 +72,9 @@ fn commit(
             "Subsession relation is missing",
         )
     })?;
+    let mut completion = completion.clone();
+    completion.summary = super::work_tasks::with_scope_errors(&tx, &completion.turn, completion.summary)?;
+    let completion = &completion;
     let evidence = serde_json::to_string(&completion.evidence_refs)
         .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;
     let code = result_code(completion);
@@ -112,11 +106,7 @@ fn commit(
         super::directions::retire_with_stop(&tx, &delegation.relation_id, &completion.turn, now)?;
     }
     if delegation.packet.child_role == ChildRole::Worker {
-        tx.execute(
-            super::worker_admission::COMPLETE_WORKER_SQL,
-            [&delegation.relation_id],
-        )
-        .map_err(StorageError::sqlite)?;
+        super::work_tasks::settle_dispatch(&tx, &delegation.relation_id, now)?;
     }
     let stopped =
         super::terminal::close_if_ended(&tx, &completion.session, &completion.status, now)?;
@@ -250,50 +240,16 @@ impl SqliteSubsessionRepository {
                     params![result, now],
                 )
                 .map_err(StorageError::sqlite)?;
-                let owns_ending: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM btcc_subsession_endings e JOIN btcc_steward_results x ON x.child_session_id=e.session_id AND x.child_turn_id=json_extract(e.completion_json,'$.turn') WHERE x.result_id=?1)", [&result], |r| r.get(0)).map_err(StorageError::sqlite)?;
+                let owns_ending: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM btcc_subsession_endings e JOIN btcc_steward_results x ON x.child_session_id=e.session_id AND x.child_turn_id=e.turn_id WHERE x.result_id=?1)", [&result], |r| r.get(0)).map_err(StorageError::sqlite)?;
                 if let Some((_, child)) = &link && owns_ending {
-                    tx.execute("DELETE FROM btcc_subsession_end_members WHERE root_session_id=?1", [child]).map_err(StorageError::sqlite)?;
                     tx.execute("DELETE FROM btcc_subsession_endings WHERE session_id=?1", [child]).map_err(StorageError::sqlite)?;
-                    debug_assert!(terminal::terminal_card_invariant(&tx, child)?);
+                    debug_assert!(terminal::invariant(&tx, child)?);
                 }
                 tx.commit().map_err(StorageError::sqlite)?;
                 Ok(link)
             })
             .await
     }
-}
-
-fn repair_saved(
-    tx: &rusqlite::Transaction<'_>,
-    session: &str,
-    turn: &str,
-    result: &str,
-    status: &str,
-    now: &str,
-) -> Result<Vec<(String, String)>, StorageError> {
-    let repair: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM btcc_subsession_endings WHERE session_id=?1 AND json_extract(completion_json,'$.turn')=?2)", params![session,turn], |r| r.get(0)).map_err(StorageError::sqlite)?;
-    if !repair {
-        return Ok(Vec::new());
-    }
-    let stopped = super::terminal::close_if_ended(tx, session, status, now)?;
-    let pending: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1 AND status='pending')",
-        [result], |r| r.get(0),
-    ).map_err(StorageError::sqlite)?;
-    if pending {
-        return Ok(stopped);
-    }
-    tx.execute(
-        "DELETE FROM btcc_subsession_end_members WHERE root_session_id=?1",
-        [session],
-    )
-    .map_err(StorageError::sqlite)?;
-    tx.execute(
-        "DELETE FROM btcc_subsession_endings WHERE session_id=?1",
-        [session],
-    )
-    .map_err(StorageError::sqlite)?;
-    Ok(stopped)
 }
 
 /// The result Turn is titled after the delegated work it reports, the same
