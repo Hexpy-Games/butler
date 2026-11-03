@@ -17,7 +17,7 @@ const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;
 const paint=()=>{canvas.getContext('2d').fillRect(0,0,64,64);requestAnimationFrame(paint)};paint();
 document.querySelector('video').srcObject=canvas.captureStream(10);
 </script>`;
-const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => {
+const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", idleTimeout: 0, fetch: request => {
   if (new URL(request.url).pathname === "/hold") return new Response(new ReadableStream({ start(controller) {
     controller.enqueue(new TextEncoder().encode("waiting"));
   } }));
