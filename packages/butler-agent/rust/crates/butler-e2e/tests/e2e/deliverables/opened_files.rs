@@ -1,6 +1,4 @@
-//! OPEN-IN-APP: an Office file in the drawer is stored as a binary file (the
-//! App shows it as unsupported with save), and "open in app" gets a marked
-//! copy opened or revealed according to verified content; the copies go when the Agent stops.
+//! OPEN-IN-APP: an Office file in the drawer is stored as a binary file (the App shows it as unsupported with save); without an original, "open in app" opens a marked copy only for verified content and reveals nothing otherwise; the copies go when the Agent stops.
 use super::*;
 use crate::attachment_types::{PDF, upload};
 use butler_platform::secure_fs::{OWNER_ONLY, is_owner_only};
@@ -81,6 +79,8 @@ async fn office_file_opens_only_as_marked_allowlisted_copy() -> Result<(), Harne
     assert_eq!(file["kind"], "generic", "{file}");
     let saved = s.gw.get(file["url"].as_str().unwrap()).await?;
     assert_eq!(saved.status, 200);
+    // Without its original, the delivered file opens as its stored copy.
+    std::fs::remove_file(s.sandbox.data.join("plan.docx"))?;
 
     assert_copy(
         &s,
@@ -117,10 +117,13 @@ async fn office_file_opens_only_as_marked_allowlisted_copy() -> Result<(), Harne
     }
     let (status, _) = open(&s, "file-00000000-0000-0000-0000-000000000000").await?;
     assert_eq!(status, 404, "an unknown id opens nothing");
-    assert_eq!(
-        std::fs::read_dir(opened_dir(&s))?.count(),
+    let copies = std::fs::read_dir(opened_dir(&s)).map_or(0, Iterator::count);
+    let expected = if download_mark::supported() {
         1 + allowed.len()
-    );
+    } else {
+        0
+    };
+    assert_eq!(copies, expected);
     s.restart().await?;
     assert!(!opened_dir(&s).exists(), "copies are removed on restart");
     server.abort();
@@ -153,6 +156,15 @@ async fn assert_copy(
     may_open: bool,
 ) -> Result<(), HarnessError> {
     let (status, body) = open(s, file_id).await?;
+    if !may_open {
+        // With no original to show, content that may not open is never revealed.
+        assert_eq!(
+            (status, body["error"]["code"].as_str()),
+            (404, Some("original_not_found")),
+            "{copy}: {body}"
+        );
+        return Ok(());
+    }
     assert_eq!(status, 201, "{copy}: {body}");
     assert_eq!(body["data"]["open"], may_open, "{copy}: {body}");
     let path = std::path::PathBuf::from(body["data"]["path"].as_str().unwrap());
@@ -178,8 +190,8 @@ async fn assert_copy(
 }
 
 #[tokio::test]
-async fn images_and_text_open_but_active_or_mismatched_files_are_revealed()
--> Result<(), HarnessError> {
+async fn images_and_text_open_but_active_or_mismatched_files_never_do() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     let s = Setup::new("OPEN-OR-REVEAL")?.start().await?;
     let allowed: &[(&str, &[u8])] = &[

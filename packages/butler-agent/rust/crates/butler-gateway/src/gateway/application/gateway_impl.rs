@@ -256,6 +256,9 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.download_message_file(id).await })
     }
+    fn message_file_origin(&self, id: String) -> ApplicationFuture<Option<AppFileOrigin>> {
+        self.message_file_origin_owned(id)
+    }
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         self.dependencies.executor_readiness.readiness()
     }
