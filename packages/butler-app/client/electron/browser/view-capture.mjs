@@ -7,6 +7,9 @@
 const READBACK_STALL_MS = 5000;
 
 export function capturePage(tab, rect, options = { stayHidden: true }, contents = tab.view.webContents) {
+  // A page out of every window that is not throttled (media playing) draws no frame to read back
+  // until it is in a window again: such a capture could only stall, so it does not start.
+  if (!tab.attached && !contents.getBackgroundThrottling()) return Promise.reject(new Error("capture_out_of_window"));
   let fail, release;
   const ended = new Promise((_, reject) => { fail = reason => reject(new Error(reason)); });
   const barrier = new Promise(resolve => { release = resolve; });
