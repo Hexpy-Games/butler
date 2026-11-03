@@ -45,8 +45,9 @@ export function wireTab(tab, actions) {
     contents.mainFrame.executeJavaScript(DOCUMENT_ICONS).then(keep, () => keep([]));
   });
   contents.on("did-stop-loading", () => void actions.capture(tab));
-  contents.on("render-process-gone", () => actions.fail(tab, false));
-  contents.on("unresponsive", () => actions.fail(tab, true));
+  contents.on("render-process-gone", () => actions.fail(tab, "gone"));
+  contents.on("unresponsive", () => actions.fail(tab, "unresponsive"));
+  contents.on("responsive", () => { tab.unresponsive = false; actions.recover(tab); });
   for (const name of ["will-frame-navigate", "will-redirect"]) {
     contents.on(name, (event, url) => {
       const destination = typeof url === "string" ? url : event.url;
