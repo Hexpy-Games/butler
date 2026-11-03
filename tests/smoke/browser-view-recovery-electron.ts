@@ -58,6 +58,18 @@ try {
   assert.equal(listeners.after, listeners.baseline);
   await app.call("navigate", { id, value: fixture.url.href });
   await waitBrowser(() => app.main(`${tab}.status==='idle'`), "leave long-loading fixture");
+  // Back acts at once on a page that is still loading, and stop stays on that page.
+  const loading = JSON.stringify(new URL("loading", fixture.url).href);
+  await app.call("navigate", { id, value: new URL("loading", fixture.url).href });
+  await waitBrowser(() => app.main(`${tab}.view.webContents.getURL()===${loading} && ${tab}.view.webContents.isLoadingMainFrame()`), "long-loading page");
+  await app.call("back", { id });
+  await waitBrowser(() => app.main(`new URL(${tab}.view.webContents.getURL()).pathname==='/' && ${tab}.status==='idle'`), "back while loading");
+  await app.call("forward", { id });
+  await waitBrowser(() => app.main(`${tab}.view.webContents.getURL()===${loading} && ${tab}.view.webContents.isLoadingMainFrame()`), "forward to long-loading page");
+  await app.call("stop", { id });
+  await waitBrowser(() => app.main(`${tab}.view.webContents.getURL()===${loading} && !${tab}.view.webContents.isLoadingMainFrame() && ${tab}.status==='idle'`), "stop stays on the page");
+  await app.call("navigate", { id, value: fixture.url.href });
+  await waitBrowser(() => app.main(`${tab}.status==='idle'`), "leave long-loading page");
   // This is a real renderer crash, recovered using the existing public sad-tab action.
   await app.main(`${tab}.view.webContents.forcefullyCrashRenderer()`);
   await waitBrowser(() => app.main(`${tab}.status==='crashed'`), "gone renderer sad state");
