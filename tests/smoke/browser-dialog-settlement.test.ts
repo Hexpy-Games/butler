@@ -18,7 +18,7 @@ async function fixture(run: (tab: any, queue: any) => Promise<void>) {
   const dbg = Object.assign(new EventEmitter(), { sendCommand: async () => {} });
   const image: any = { resize: () => image, toBitmap: () => Buffer.alloc(4), toJPEG: () => Buffer.from("image"), isEmpty: () => false };
   const contents = Object.assign(new EventEmitter(), { debugger: dbg, isDestroyed: () => false, isLoading: () => false,
-    executeJavaScriptInIsolatedWorld: async () => true, capturePage: async () => image });
+    executeJavaScriptInIsolatedWorld: async () => true, capturePage: async () => image, getBackgroundThrottling: () => true });
   const tab: any = { id: "t", epoch: 1, owner: "conversation:s", holder: "agent", view: { webContents: contents }, delivered };
   try { await run(tab, queue); } finally { clearTimeout(tab.dialog?.timer); queue.stop(); await rm(directory, { recursive: true, force: true }); }
 }

@@ -17,16 +17,21 @@ export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
 /** Kinds whose example is the command line, shown as sent. */
 const COMMAND_KINDS: ReadonlySet<string> = new Set(["run_command", "network_command"]);
 
+/** A detail line: plain text, or `{ code }` for a command body shown as sent. */
+export type ApprovalDetail = string | { code: string };
+/** A detail line's characters, however it is drawn. */
+export function detailText(line: ApprovalDetail): string {
+  return typeof line === "string" ? line : line.code;
+}
+
 /** The approval card's content in the app language. */
 export interface ApprovalRequestView {
   /** One plain question: what, where and how many. */
   title: string;
-  /** Up to three examples, then a "+N more" line; else the targets, else the reason. Never cut. */
-  details: string[];
+  /** Up to three examples, then a "+N more" line; else the targets, else the reason. Never cut. Command bodies are `{ code }`. */
+  details: ApprovalDetail[];
   /** Path lines eligible for visual abbreviation; commands remain verbatim. */
   pathDetails?: string[];
-  /** The details that are command bodies (the operation's command, a command kind's examples as shown). */
-  commands?: string[];
   /** As the agent sent it; unknown or missing reads as high. */
   risk: ApprovalRisk;
   /** What "Always allow in this conversation" covers. */
@@ -155,8 +160,6 @@ export function approvalRequestView(
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
       ...actionDetails(approval, actionKind, card, copy)],
-    commands: [...(operation?.command ? [operation.command] : []),
-      ...(COMMAND_KINDS.has(actionKind) ? operation ? approval.examples : shownExamples(approval) : [])],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -173,7 +176,7 @@ export function approvalActionView(approval: ApprovalSummary, copy: ApprovalRequ
   return {
     label: (approval.operation && toolLabels[approval.operation.tool]) || toolLabels[approval.actionKind] || toolLabels.fallback,
     // The notice is not the decision card. No command appears in it, so it cannot mislead or leak.
-    target: COMMAND_KINDS.has(kind) || approval.operation?.command ? "" : maskActionSecrets(actionDetails(approval, kind, { reason: "" }, copy)[0] ?? ""),
+    target: COMMAND_KINDS.has(kind) || approval.operation?.command ? "" : maskActionSecrets(detailText(actionDetails(approval, kind, { reason: "" }, copy)[0] ?? "")),
   };
 }
 
@@ -183,7 +186,7 @@ function knownActionKind(approval: ApprovalSummary): ApprovalActionKind {
 
 /** The action's details, separate from permission notices and card explanations. */
 function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
-  card: Pick<AuthorityApprovalCard, "scope" | "reason">, copy: ApprovalRequestCopy): string[] {
+  card: Pick<AuthorityApprovalCard, "scope" | "reason">, copy: ApprovalRequestCopy): ApprovalDetail[] {
   const { schedule, operation } = approval;
   if (schedule) return [schedule.title,
     ...(schedule.scheduleType !== "update" ? [scheduleTiming(schedule)]
@@ -194,21 +197,24 @@ function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
   if (kind === "manage_schedule") return [copy.scheduleUnavailable];
   // An example is a capped copy of the command: when the operation carries the whole command, a prefix of it is a duplicate.
   const examples = approval.examples.filter(example => !operation?.command || example === operation.command || !operation.command.startsWith(example));
-  return operation ? [...new Set([...operationDetails(operation, copy), ...examples])] : details(approval, kind, card, copy);
+  if (!operation) return details(approval, kind, card, copy);
+  // Each text shows once, as its first line (the operation's command before an equal example), as the old Set did.
+  const lines = [...operationDetails(operation, copy), ...examples.map(example => COMMAND_KINDS.has(kind) ? { code: example } : example)];
+  return lines.filter((line, index) => lines.findIndex(other => detailText(other) === detailText(line)) === index);
 }
 
 /** Kinds whose own sentence names the action better than a tool label. */
 const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule"]);
 
 /** The exact operation, as the local decision shows it. */
-function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): string[] {
+function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): ApprovalDetail[] {
   if (operation.image) {
     const image = operation.image, c = appCopy.conversation.imageTools;
     const quality = c.quality[image.quality as keyof typeof c.quality] ?? image.quality;
     return [`${c.model}: ${image.model}`, `${c.size}: ${image.size === "auto" ? c.default : image.size}`,
       `${c.qualityLabel}: ${image.quality === "auto" ? c.default : quality}`, `${c.prompt}: ${image.prompt}`];
   }
-  return [...(operation.command ? [operation.command] : []),
+  return [...(operation.command ? [{ code: operation.command }] : []),
     ...operation.targets.map((target, index) => index === 0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
     ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
     ...(operation.tool === "browser_pay_wait" ? [copy.payStep(operation.wait_reason ?? "unknown_form")] : []),
@@ -262,14 +268,15 @@ function details(
   kind: ApprovalActionKind,
   card: Pick<AuthorityApprovalCard, "scope" | "reason">,
   copy: ApprovalRequestCopy,
-): string[] {
+): ApprovalDetail[] {
   const notice = approval.commandAccess === "read_only_unisolated" ? [copy.readOnlyUnisolated] : [];
   const shown = shownExamples(approval);
   const outside = approval.targets.filter(target => target.kind === "outside").map(target => target.path);
   if (shown.length) {
     const additionalOutside = outside.filter(path => !shown.includes(path));
     const rest = approval.count - shown.length - (kind === "edit_files" ? additionalOutside.length : 0);
-    return [...notice, ...additionalOutside, ...shown, ...(rest > 0 ? [copy.more(rest)] : [])];
+    return [...notice, ...additionalOutside, ...shown.map(example => COMMAND_KINDS.has(kind) ? { code: example } : example),
+      ...(rest > 0 ? [copy.more(rest)] : [])];
   }
   // Without examples, say what the request acts on: its targets, else the reason.
   const targets = approval.targets.filter((target) => DETAIL_TARGET_KINDS.has(target.kind)).map((target) => target.path);

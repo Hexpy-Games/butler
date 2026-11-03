@@ -25,7 +25,7 @@ import { protectPartition, wireTab } from "./tab-events.mjs";
 import { clearOffer } from "./signin-offer.mjs";
 import { drainStills } from "./still-delivery.mjs";
 import { attachView, capturePage, detachView } from "./view-capture.mjs";
-import { createViewRecovery, failTab } from "./view-recovery.mjs";
+import { createViewRecovery, failTab, recoverTab } from "./view-recovery.mjs";
 
 /** One registry per App; no web view before Browser activation. */
 class UserBrowser {
@@ -64,7 +64,7 @@ class UserBrowser {
   snapshot() {
     const popups = new Map();
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
-    return { restored: this.opened, enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest, layoutRevision: this.layoutRevision ?? 0,
+    return { restored: this.opened, enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
       tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab) || Boolean(tab.stillJobs?.size), paused: Boolean(tab.pausedTurns), agentAt: tab.lastAgentCall ?? undefined, privacyFrozen: this.live.sensitive(tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
         signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
   }
@@ -110,7 +110,7 @@ class UserBrowser {
   sync(tab) {
     if (tab?.popupWindow) { syncPopup(this, tab); return; }
     const win = this.getWindow();
-    const visible = win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && this.areaVisible && tab.id === this.activeId &&
+    const visible = win && !win.isDestroyed() && win.isVisible() && this.areaVisible && tab.id === this.activeId &&
       tab.slot?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
     if (!visible || !tab.view) { this.detach(tab); backgroundTab(this, tab); return; }
     viewedTab(this, tab, true);
@@ -184,9 +184,10 @@ class UserBrowser {
     attachNativeWorlds(tab);
     this.live.watch(tab);
     tab.afterCapture = image => this.live.changed(tab, image);
-    tab.onCaptureStalled = () => failTab(this, tab, true);
+    tab.onCaptureStalled = () => failTab(this, tab, "stalled");
+    tab.onCaptureSettled = () => recoverTab(this, tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
-      fail: (item, stalled) => failTab(this, item, stalled),
+      fail: (item, reason) => failTab(this, item, reason), recover: (item) => recoverTab(this, item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       linkMenu: (url) => linkMenuItems(this, url, tab), language: this.getLanguage,
       window: this.getWindow, shortcut: (input) => {
@@ -339,15 +340,16 @@ class UserBrowser {
         void tab.identityReady.then(() => contents.loadURL(url)).catch(() => {});
       }
     } else if (op === "reload") {
-      if (tab.surfaceStalled && !contents.isCrashed()) {
-        tab.surfaceStalled = false;
+      // A hung renderer or wedged surface survives an in-place reload: replace the renderer first.
+      const replace = (tab.failure === "unresponsive" || tab.failure === "stalled") && !contents.isCrashed();
+      tab.failure = null; tab.unresponsive = false;
+      if (replace) {
         contents.once("render-process-gone", () => {
           if (tab.closing || contents.isDestroyed()) return;
-          tab.status = "loading"; contents.reload(); this.sync(tab); this.publish();
+          tab.failure = null; tab.status = "loading"; contents.reload(); this.sync(tab); this.publish();
         });
         contents.forcefullyCrashRenderer(); return;
       }
-      tab.surfaceStalled = false;
       tab.status = "loading"; contents.reload();
     }
     else if (op === "stop") contents.stop();
