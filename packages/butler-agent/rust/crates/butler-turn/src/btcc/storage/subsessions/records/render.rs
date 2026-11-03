@@ -6,20 +6,9 @@ impl SubsessionPacket {
     pub(crate) fn render_worker_input(&self, profile_prompt: Option<&str>) -> String {
         let packet = self;
         let user = packet.user_request.as_ref().map(|text| format!(
-        "\nuser_request (the user's own words, verbatim; context for your action, keep within its scope and output form): {text}"
+        "\nuser_request (the user's own words, verbatim; context only, your assignment below is your scope): {text}"
     )).unwrap_or_default();
-        let mut context = packet.task_context.clone();
-        if let Some(path) = &packet.target_path {
-            context.push_str(&format!(
-            "\ntarget_path: {path}. Revise and check this path; it is the one that gets published."
-        ));
-        }
-        if !packet.earlier_steps.is_empty() {
-            context.push_str("\nearlier_steps: Results of the actions this one depends on. Use their facts as confirmed; research only the gaps they name and what this action newly needs, and re-check a confirmed fact only when this action is to verify it.");
-            for step in &packet.earlier_steps {
-                context.push_str(&format!("\n- {step}"));
-            }
-        }
+        let context = packet.task_context.clone();
         let base = format!(
             "role: worker{user}\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}{context}\nReport the bounded result to the Steward. {WORKER_GAPS}",
             packet.objective,

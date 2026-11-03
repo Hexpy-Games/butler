@@ -141,7 +141,6 @@ impl GraphBuilder {
                         .into_iter().filter(|t| t.action_key == key && t.status == "done")
                         .map(|t| json!({"task":t.task_id,"use":"artifact"})).collect::<Vec<_>>()
                 }))?),
-                target_path: None,
                 replaces_relation_id: None,
                 parent_session_id: work.scope.session_id.clone(),
                 parent_turn_id: work.scope.turn_id.clone(),

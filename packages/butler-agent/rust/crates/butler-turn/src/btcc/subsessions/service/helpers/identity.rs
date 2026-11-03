@@ -31,8 +31,6 @@ pub(in crate::btcc::subsessions::service) struct WorkerIdentity<'a> {
     pub(in crate::btcc::subsessions::service) implementation_brief: &'a str,
     pub(in crate::btcc::subsessions::service) profile_id: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(in crate::btcc::subsessions::service) target_path: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(in crate::btcc::subsessions::service) replaces_relation_id: Option<&'a str>,
 }
 

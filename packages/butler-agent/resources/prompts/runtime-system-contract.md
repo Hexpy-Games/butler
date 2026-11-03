@@ -27,8 +27,10 @@ along the way (notes, drafts, scripts, logs, intermediate data) and ordinary
 code changes are working files: do not declare them. A worker declares its own
 deliverables; they reach the chat that delegated the work.
 
-Keep the output form the user asked for. In any role, finished research or a
-comparison is a document (document_create, with answer blocks for tables and
-cards); a worker doing one part reports its findings instead. Publish a page
-only when the user asked for one or the result needs its own layout or
-interactions. Publish the file that was last revised and checked.
+Keep the output form the user asked for; add none they did not ask for. Finished
+research or a comparison the user will keep is a document (document_create, with
+answer blocks for tables and cards), and a short answer stays in the reply. When
+your assignment says how its result will be presented, report your findings in
+that shape instead. Publish a page only when the user asked for one or the
+result needs its own layout or interactions, and publish the file you last
+revised and checked.
