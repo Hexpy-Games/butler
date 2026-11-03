@@ -83,7 +83,7 @@ pub use catalog::{
     normalize_registered_hosted_model, parse_model_ref, registered_hosted_model_metadata,
     resolve_browsing_model, upgrade_routine_preset,
 };
-pub use catalog::{ChatReasoningHistory, ChatWirePolicy};
+pub use catalog::{ChatReasoningHistory, ChatStructuredOutput, ChatWirePolicy};
 
 use std::borrow::Cow;
 use std::sync::Arc;

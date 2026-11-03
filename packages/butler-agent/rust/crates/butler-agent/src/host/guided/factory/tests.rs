@@ -1,6 +1,7 @@
 //! One physical provider -> native file -> durable journal -> provider Turn.
 
 mod journaled_factory;
+mod run_note_race;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

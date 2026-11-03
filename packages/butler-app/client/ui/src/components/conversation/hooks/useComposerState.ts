@@ -33,8 +33,8 @@ export function useComposerState(
   isSending: boolean,
   uploadingCount: number,
 ) {
-  const elementCount = useElementDraft(s => s.items.length);
-  const hasSendableDraft = text.trim().length > 0 || attachments.length > 0 || elementCount > 0;
+  const elements = useElementDraft(s => s.items);
+  const hasSendableDraft = text.trim().length > 0 || attachments.length > 0 || elements.length > 0;
 
   const workers = useMemo(() => (summary?.worker_activity ?? []).filter(
     (worker): worker is WorkerActivitySummary =>
@@ -61,7 +61,7 @@ export function useComposerState(
 
   const activeModel =
     models.find((item) => item.model_ref === model);
-  const blockedAttachments = blockedImageAttachmentIds(attachments, composerImagePolicy(activeModel));
+  const blockedAttachments = blockedImageAttachmentIds([...attachments, ...elements.map(item => ({ id: item.id, kind: item.file.kind, file: item.file }))], composerImagePolicy(activeModel));
 
   const canSend =
     modelState === "ready" &&

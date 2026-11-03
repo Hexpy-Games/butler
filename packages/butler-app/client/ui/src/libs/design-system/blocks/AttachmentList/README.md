@@ -46,6 +46,11 @@ loads again.
 
 `blockedReason` greys a tile and names the reason in its tooltip.
 
+Set per-image `thumbnail.fit` to `"contain"` to show the whole image inside
+the neutral thumbnail background. Omit it (or use `"cover"`) for the existing
+filled crop. This applies to list/chip thumbnails and both tile layouts.
+Choose it from attachment kind or origin in the container, never a file name.
+
 ## Upload status
 `upload` marks an item that is still uploading (`"uploading"`) or failed to
 (`"failed"`); the container

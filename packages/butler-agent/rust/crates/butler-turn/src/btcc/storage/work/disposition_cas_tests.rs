@@ -71,6 +71,7 @@ async fn material_changed_after_the_callers_read_is_rejected() {
     // Another mutation changes the Work between the read and the closeout.
     service
         .record_checkpoint(CheckpointInput {
+            current_action_key: None,
             scope: scope(),
             mutation_call_id: "checkpoint".into(),
             next_stage: None,

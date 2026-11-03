@@ -100,7 +100,7 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
                     .unwrap();
                 script.replacement_settled.store(ended, Ordering::SeqCst);
             }
-            worker(script.mode, step, &body, user)
+            worker(script.mode, step, &body)
         }
         "steward" => {
             if user.starts_with("Superseded Worker result:") {
@@ -129,12 +129,8 @@ fn describe() -> Value {
         json!({"ids":["native:document_create","native:output_publish"]}),
     )
 }
-fn assign(objective: &str, mode: Mode, replacement: Option<&str>) -> Value {
-    let mut args = json!({"action_key":if objective == "next step" {"B"} else {"A"},"objective":objective,"acceptance_criteria":["Findings recorded"],"implementation_brief":"Use confirmed evidence and report gaps"});
-    if mode == Mode::Publish {
-        args["target_path"] = "site/index.html".into();
-        args["task"] = json!({"scope":{"owns":[{"subject":"report","aspects":["publication"]}],"paths":["site/index.html"]},"output":{"format":"html","files":["site/index.html"]}});
-    }
+fn assign(objective: &str, replacement: Option<&str>) -> Value {
+    let mut args = json!({"action_key":"A","objective":objective,"acceptance_criteria":["Findings recorded"],"implementation_brief":"Use confirmed evidence and report gaps"});
     if let Some(relation) = replacement {
         args["replaces_relation_id"] = relation.into();
     }
@@ -155,12 +151,11 @@ fn steward(script: &Script, stage: usize, body: &Value) -> Value {
             .find_map(|v| v["relation_id"].as_str().map(str::to_owned))
             .unwrap();
         *script.first_relation.lock().unwrap() = relation;
-        return assign("replacement attempt", mode, None);
+        return assign("replacement attempt", None);
     }
     if mode == Mode::Replace && stage == 5 {
         return assign(
             "replacement attempt",
-            mode,
             Some(&script.first_relation.lock().unwrap()),
         );
     }
@@ -182,33 +177,39 @@ fn steward(script: &Script, stage: usize, body: &Value) -> Value {
             )
         }
         2 => review(),
-        3 => assign("first attempt", mode, None),
+        3 => assign("first attempt", None),
         4 => call("wait_for_worker", json!({})),
         5 => call(
             "record_work_checkpoint",
             json!({"action_updates":[{"action_key":"A","status":"done"}],"public_summary":"Findings recorded"}),
         ),
-        6 if mode == Mode::Facts => assign("next step", mode, None),
+        6 if mode == Mode::Facts => {
+            let db = rusqlite::Connection::open(
+                script
+                    .data
+                    .lock()
+                    .unwrap()
+                    .join("agent-runtime/btcc.sqlite"),
+            )
+            .unwrap();
+            let a: String = db
+                .query_row(
+                    "SELECT task_id FROM btcc_work_tasks WHERE action_key='A'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            call(
+                "delegate_to_worker",
+                json!({"action_key":"B","objective":"next step","acceptance_criteria":["Findings recorded"],"implementation_brief":"Use confirmed evidence and report gaps","task":{"scope":{"paths":["tasks/B"]},"output":{"format":"text","fields":["summary"]},"inputs":[{"task":a,"use":"facts"}]}}),
+            )
+        }
         7 if mode == Mode::Facts => call("wait_for_worker", json!({})),
-        6 if mode == Mode::Publish => call(
-            "output_publish",
-            json!({"path":"site/page.html","title":"Research"}),
-        ),
-        7 if mode == Mode::Publish => call(
-            "output_publish",
-            json!({"path":"site/index.html","title":"Research"}),
-        ),
         6 => call(
             "document_create",
             json!({"title":"Research report","body":FACTS}),
         ),
-        n if n
-            == if mode == Mode::Facts || mode == Mode::Publish {
-                8
-            } else {
-                7
-            } =>
-        {
+        n if n == if mode == Mode::Facts { 8 } else { 7 } => {
             let mut updates = vec![json!({"action_key":"A","status":"done"})];
             if mode == Mode::Facts {
                 updates.push(json!({"action_key":"B","status":"done"}));
@@ -220,7 +221,7 @@ fn steward(script: &Script, stage: usize, body: &Value) -> Value {
         _ => message("Findings recorded."),
     }
 }
-fn worker(mode: Mode, step: usize, body: &Value, user: &str) -> Value {
+fn worker(mode: Mode, step: usize, body: &Value) -> Value {
     match step {
         0 if mode == Mode::Scope => call("tool_describe", json!({"ids":["native:run_command"]})),
         0 => describe(),
@@ -229,19 +230,6 @@ fn worker(mode: Mode, step: usize, body: &Value, user: &str) -> Value {
             json!({"objective":"Bounded research","execution_mode":"direct","actions":[{"action_key":"research","description":"Record evidence"}],"checks":["Findings recorded"]}),
         ),
         2 => review(),
-        3 if mode == Mode::Facts && user.contains("assigned_objective: next step") => {
-            let reference = user
-                .split("- A (session ")
-                .nth(1)
-                .unwrap()
-                .split("): ")
-                .next()
-                .unwrap();
-            call(
-                "read_conversation_session",
-                json!({"conversation_session_id":reference,"scope":"all_user_sessions","include_internal":true,"limit":80}),
-            )
-        }
         3 if mode == Mode::Scope => call(
             "write_file",
             json!({"path":"tasks/A/inside.txt","content":"complete in-scope content","overwrite":false,"create_parents":true}),
@@ -257,24 +245,11 @@ fn worker(mode: Mode, step: usize, body: &Value, user: &str) -> Value {
         6 if mode == Mode::Scope => {
             disposition(body, &[json!({"action_key":"research","status":"done"})])
         }
-        3 if mode == Mode::Publish => call(
-            "write_file",
-            json!({"path":"site/index.html","content":"<!doctype html><title>Research</title><p>Checked findings</p>","overwrite":false,"create_parents":true}),
-        ),
-        4 if mode == Mode::Publish => call(
-            "read_file",
-            json!({"requests":[{"path":"site/index.html"}]}),
-        ),
-        5 if mode == Mode::Publish => {
-            disposition(body, &[json!({"action_key":"research","status":"done"})])
-        }
         3 => call(
             "document_create",
             json!({"title":"Research evidence","body":FACTS}),
         ),
-        4 if mode != Mode::Publish => {
-            disposition(body, &[json!({"action_key":"research","status":"done"})])
-        }
+        4 => disposition(body, &[json!({"action_key":"research","status":"done"})]),
         _ => message(FACTS),
     }
 }

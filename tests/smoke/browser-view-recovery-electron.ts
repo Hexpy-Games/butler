@@ -117,43 +117,30 @@ try {
     }
   }
   facts.nativeInput = Boolean(process.env.BUTLER_BROWSER_NATIVE_INPUT_EXECUTABLE);
-  // Navigation cancels the caller, while the still-running native readback keeps
-  // the view in its source hierarchy until it actually completes.
-  facts.navigation = await app.main(`(async()=>{
+  // A busy page that answers again returns to its live view without a reload.
+  await app.main(`globalThis.recoveryUnresponsive=false;${tab}.view.webContents.once('unresponsive',()=>{globalThis.recoveryUnresponsive=true});${tab}.view.webContents.mainFrame.executeJavaScript('setTimeout(()=>{const end=Date.now()+25000;while(Date.now()<end){}},0);true')`);
+  await app.main(`${tab}.view.webContents.sendInputEvent({type:'keyDown',keyCode:'A'})`);
+  await waitBrowser(() => app.main(`globalThis.recoveryUnresponsive && ${tab}.status==='crashed'`), "unresponsive renderer sad state");
+  await waitBrowser(() => app.main(`${tab}.status==='idle' && !${tab}.failure && ${tab}.attached===${app.win} && ${tab}.view.getVisible()`), "responsive renderer live again");
+  await nativeAligned(app);
+  // A readback that settles late was slow, not wedged: the tab returns to its live view by itself.
+  facts.slow = await app.main(`(async()=>{
     const b=globalThis.browserAgentSubject,t=${tab},c=t.view.webContents;
     await b.capture(t);const original=c.capturePage.bind(c),image=await original();let release;
-    const held=new Promise(done=>{release=()=>done(image)});c.capturePage=()=>held;
-    const pending=b.capture(t);void c.loadURL(${JSON.stringify(fixture.url.href)}).catch(()=>{});
-    await pending;b.commandTab('covered',t.id,true);
-    if(!t.captures.size || t.attached!==${app.win}) throw new Error('navigation released native capture barrier');
-    c.capturePage=original;release();
-    await Promise.all([...t.captures.keys()]);b.commandTab('covered',t.id,false);
-    return {barrierHeld:true};
+    c.capturePage=()=>new Promise(done=>{release=()=>done(image)});
+    const pending=b.capture(t);b.commandTab('covered',t.id,true);b.commandTab('covered',t.id,false);
+    await pending;c.capturePage=original;const failed={status:t.status,failure:t.failure};
+    release();return failed;
   })()`);
-  await waitBrowser(() => app.main(`${tab}.status==='idle'`), "navigation settled");
+  assert.deepEqual(facts.slow, { status: "crashed", failure: "stalled" }, "a stalled readback shows the sad tab");
+  await waitBrowser(() => app.main(`${tab}.status==='idle' && !${tab}.failure && ${tab}.attached===${app.win} && ${tab}.view.getVisible()`), "slow readback live again");
   await nativeAligned(app);
-  const unresponsiveAt = Date.now();
-  await app.main(`globalThis.recoveryUnresponsive=false;${tab}.view.webContents.once('unresponsive',()=>{globalThis.recoveryUnresponsive=true});${tab}.view.webContents.mainFrame.executeJavaScript('setTimeout(()=>{while(true){}},0);true')`);
-  await app.main(`${tab}.view.webContents.sendInputEvent({type:'keyDown',keyCode:'A'})`);
-  await waitBrowser(() => app.main(`globalThis.recoveryUnresponsive && ${tab}.status==='crashed' && ${tab}.surfaceStalled===true`), "unresponsive renderer sad state");
-  facts.unresponsive = { elapsedMs: Date.now() - unresponsiveAt };
+  // A wedged surface never settles a readback: the window's return probe finds it with no user action.
+  await app.main(`(async()=>{const t=${tab},c=t.view.webContents,w=${app.win};w.hide();await new Promise(r=>setTimeout(r,500));globalThis.recoveryCapture=c.capturePage;c.capturePage=()=>new Promise(()=>{});w.show();w.focus();})()`);
+  await waitBrowser(() => app.main(`${tab}.status==='crashed' && ${tab}.failure==='stalled'`), "wedged view found on return");
+  await app.main(`(()=>{${tab}.view.webContents.capturePage=globalThis.recoveryCapture;})()`);
   await app.call("reload", { id });
-  await waitBrowser(() => app.main(`${tab}.status==='idle'`), "unresponsive renderer reload");
-  await nativeAligned(app);
-  // A compositor readback can remain pending without a renderer-gone event.
-  // Inject that native boundary failure, then exercise the real cover/attach state machine.
-  facts.stalled = await app.main(`(async()=>{
-    const b=globalThis.browserAgentSubject,t=${tab},c=t.view.webContents;
-    await b.capture(t);
-    const original=c.capturePage.bind(c);c.capturePage=()=>new Promise(()=>{});
-    const started=Date.now(),pending=b.capture(t);
-    b.commandTab('covered',t.id,true);b.commandTab('covered',t.id,false);
-    await pending;c.capturePage=original;
-    return {elapsedMs:Date.now()-started,status:t.status,stalled:t.surfaceStalled,captures:t.captures.size};
-  })()`);
-  assert.equal((facts.stalled as { status: string }).status, "crashed", "stalled surface exposes the existing reload action");
-  await app.call("reload", { id });
-  await waitBrowser(() => app.main(`${tab}.status==='idle' && !${tab}.detachWait && !${tab}.attachWait && !${tab}.placeHold`), "stalled compositor reload");
+  await waitBrowser(() => app.main(`${tab}.status==='idle' && !${tab}.detachWait && !${tab}.attachWait && !${tab}.placeHold`), "wedged view reload");
   await nativeAligned(app);
   writeFileSync(join(evidence, "recovery.json"), JSON.stringify(facts, null, 2));
 } catch (error) {

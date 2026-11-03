@@ -1,6 +1,8 @@
 import type { ReactNode, TableHTMLAttributes } from "react";
 import { Typo } from "../../components/Typo";
+import { dsClass } from "../../lib/internal";
 import { useScrollEdges } from "../../lib/useScrollEdges";
+import { CodeFrame } from "./CodeFrame";
 import styles from "./MarkdownContent.module.css";
 
 export interface MarkdownCodeFrameProps {
@@ -12,17 +14,17 @@ export interface MarkdownCodeFrameProps {
   children: ReactNode;
 }
 
-/** Fenced code block: header bar (language + actions) over a horizontally faded `pre`. */
+/** Fenced code block: CodeFrame with a header bar (language + actions) over a horizontally faded `pre`. */
 export function MarkdownCodeFrame({ language, actions, children }: MarkdownCodeFrameProps) {
   const preFadeRef = useScrollEdges("x");
   return (
-    <div className={styles.codeFrame} data-test-class="code-block">
+    <CodeFrame className={dsClass(styles.codeFrame)} data-test-class="code-block">
       <div className={styles.codeHeader} data-test-class="code-block-header">
         <Typo.Code as="span" truncate>{language ?? ""}</Typo.Code>
         {actions}
       </div>
       <pre ref={preFadeRef} className={styles.codePre}>{children}</pre>
-    </div>
+    </CodeFrame>
   );
 }
 

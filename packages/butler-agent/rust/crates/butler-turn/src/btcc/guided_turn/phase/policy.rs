@@ -94,6 +94,11 @@ impl SubsessionPolicy {
 }
 
 impl GuidedExecutionPolicy {
+    /// Whether this policy belongs to a delegated subsession.
+    pub fn has_subsession(&self) -> bool {
+        self.subsession.is_some()
+    }
+
     /// The file scope a delegated Worker alone owns; other roles have no Task scope.
     pub fn worker_mutation_scope(&self) -> Option<&[String]> {
         if self.role != PolicyRole::Worker {
