@@ -1,5 +1,7 @@
 .markdown {
   min-width: 0;
+  user-select: text;
+  -webkit-user-select: text;
   color: var(--text-primary);
   font-size: var(--font-size-3);
   line-height: var(--typo-body-line-height-document);
@@ -195,6 +197,9 @@
   padding-inline: var(--space-4) var(--space-1);
   border-bottom: 1px solid var(--line);
   color: var(--text-tertiary);
+  /* The language label and copy action are the frame's chrome. */
+  user-select: none;
+  -webkit-user-select: none;
   font-size: var(--font-size-2);
   line-height: var(--typo-label-line-height);
 }

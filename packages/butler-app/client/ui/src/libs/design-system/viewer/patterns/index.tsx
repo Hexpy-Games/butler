@@ -89,6 +89,19 @@ export const PATTERNS: PatternDefinition[] = [
     demo: () => <KoreanWrapping />,
   },
   {
+    id: "text-selection",
+    title: "Text selection",
+    summary: "Dragging never selects App chrome; only content selects: conversation messages, documents, the viewer's files and web pages.",
+    rules: [
+      "The shell defaults to user-select: none (tokens.css); never add per-component user-select for chrome.",
+      "Content primitives opt back in: MessageRow body, QueuedMessage, MarkdownContent, DocumentReader, ChangedLineDiff lines and every pre (code frames, the approval command frame, ArtifactPreviewPre).",
+      "Inputs, textareas and contenteditable keep native selection; buttons and tabs stay chrome inside content.",
+      "Chrome text the user must copy (an ID, a URL, a log value) gets a CopyButton, not drag selection.",
+    ],
+    tokens: [],
+    live: [{ entry: "blocks/MessageRow", story: "Completed turns" }, { entry: "blocks/MarkdownContent", story: "Code frame with copy" }, { entry: "blocks/SidebarShell", story: "Default" }],
+  },
+  {
     id: "settings-layout",
     title: "Settings layout",
     summary: "A settings page is a column of sections: the section header sits above its card (outside the surface), fields inside the card follow one spacing ramp.",

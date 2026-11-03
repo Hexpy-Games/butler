@@ -56,4 +56,6 @@
   color: var(--text-primary);
   font: inherit;
   white-space: pre;
+  user-select: text;
+  -webkit-user-select: text;
 }
