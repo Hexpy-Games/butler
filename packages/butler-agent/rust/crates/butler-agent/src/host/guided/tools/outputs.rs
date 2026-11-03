@@ -16,24 +16,6 @@ pub(super) async fn publish(
         return super::dispatch::encoded(&json!({"ok":false,"error":"tool_not_admitted"}));
     }
     let args = &call.arguments;
-    let work = owner
-        .work
-        .bound_work()
-        .await
-        .map_err(ToolExecutionError::Integrity)?;
-    if let Some(error) = owner
-        .subsessions
-        .publish_target_error(
-            &owner.binding.source_session_id,
-            work.as_ref().map(|work| work.work_id.as_str()),
-            &owner.active_workspace_path(),
-            args.get("path").and_then(Value::as_str).unwrap_or(""),
-        )
-        .await
-        .map_err(ToolExecutionError::Integrity)?
-    {
-        return super::dispatch::encoded(&error);
-    }
     let request = publish_request(owner, invocation, args);
     if owner
         .binding

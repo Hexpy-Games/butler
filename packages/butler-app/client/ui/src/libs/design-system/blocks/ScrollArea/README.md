@@ -25,10 +25,7 @@ takes the free space in a flex column. There is no `UNSAFE_style`.
 The scroller opts into the shared scroll-fade primitive (`useScrollEdges` plus
 `scroll-fade.css`). An edge fades only while content is clipped there: no fade
 at a resting edge and none when content fits. Pass `orientation="x"` for a
-horizontal scroller; the fade follows the scrolling axis. Content that
-overflows both ways inside a block (a code frame) calls `useScrollEdges("both")`
-instead: each of its four edges fades on its own, only while it hides content.
-Single-axis scrollers are unchanged by it.
+horizontal scroller; the fade follows the scrolling axis.
 
 ## Scrollbar Lane
 
@@ -84,6 +81,17 @@ past it, so both inline edges keep the same room with either scrollbar. Keyboard
 and while a ring shows inside, each fade turns solid `--focus-ring-room` sooner:
 a control resting at an edge keeps its whole ring even on the frame where the
 fade still lags the scroll. Nothing changes while nothing inside has focus.
+
+A focused control taller (or wider) than the band the scroller shows clear of
+its fades, such as an approval card's code frame longer than the details
+area, can never show its whole ring at any scroll position. The scroller is
+what clips it, so the scroller draws the ring instead: inset on its own box,
+with the control's own ring off and the fades off while it holds the ring.
+This is decided by measurement when keyboard focus arrives and again when the
+scroller resizes (`useScrollEdges` sets `data-focus-ring-host`; the rule is in
+`scroll-fade.css`), for every DS scroller, and only the innermost scroller that
+clips the control takes the ring. Focus stays on the control, so it keeps its
+own keyboard behaviour (a code frame still scrolls sideways with the arrows).
 
 ## Boundaries
 

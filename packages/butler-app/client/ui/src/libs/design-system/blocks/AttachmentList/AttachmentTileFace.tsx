@@ -15,15 +15,15 @@ function videoLength(seconds: number): string | undefined {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-/** A cover picture that fades in once decoded; a cached one shows at once. Lazy and async decoded. */
-function Picture({ src, onFailed }: { src: string; onFailed: () => void }) {
+/** A thumbnail picture that fades in once decoded; a cached one shows at once. Lazy and async decoded. */
+function Picture({ src, fit, onFailed }: { src: string; fit?: "cover" | "contain"; onFailed: () => void }) {
   const [loaded, setLoaded] = useState(false);
   const known = useCallback((image: HTMLImageElement | null) => {
     if (image?.complete && image.naturalWidth) setLoaded(true);
   }, []);
   return (
     <img ref={known} className={styles.picture} data-loaded={loaded ? "true" : undefined} src={src} alt=""
-      loading="lazy" decoding="async" draggable={false} onLoad={() => setLoaded(true)} onError={onFailed} />
+      data-fit={fit === "contain" ? "contain" : undefined} loading="lazy" decoding="async" draggable={false} onLoad={() => setLoaded(true)} onError={onFailed} />
   );
 }
 
@@ -100,7 +100,7 @@ export function AttachmentTileFace({ item, withMeta, onMediaError }: {
     const fail = () => { setFailed(source); onMediaError?.(item); };
     const status = item.upload ? <TintedGlass className={dsClass(styles.status)} radius="control" padding="none">
       <AttachmentStatusIcon status={item.upload} size="sm" /></TintedGlass> : null;
-    return <>{video ? <VideoFrame key={video} src={video} onFailed={fail} /> : <Picture key={picture} src={picture!} onFailed={fail} />}{status}</>;
+    return <>{video ? <VideoFrame key={video} src={video} onFailed={fail} /> : <Picture key={picture} src={picture!} fit={item.thumbnail?.fit} onFailed={fail} />}{status}</>;
   }
   return <FileFace item={item} withMeta={withMeta} />;
 }

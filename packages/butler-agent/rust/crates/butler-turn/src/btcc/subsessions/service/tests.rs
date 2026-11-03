@@ -218,7 +218,6 @@ pub(crate) fn delegation_identities_are_byte_stable() {
         acceptance_criteria: &["c".to_owned()],
         implementation_brief: "b",
         profile_id: "id",
-        target_path: None,
         replaces_relation_id: None,
     };
     assert_eq!(

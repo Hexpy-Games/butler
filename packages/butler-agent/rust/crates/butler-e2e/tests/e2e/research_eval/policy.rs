@@ -205,7 +205,7 @@ fn research_actor(
                 call(
                     &format!("worker-{i}"),
                     "delegate_to_worker",
-                    &json!({"action_key":format!("research-{i}"),
+                    &json!({"task":{"scope":{"paths":[format!("tasks/research-{i}")]},"output":{"format":"text","fields":["summary"]}},"action_key":format!("research-{i}"),
                 "objective":w["goal"],"implementation_brief":w["goal"],
                 "acceptance_criteria":["Report evidence with source URLs"]}),
                 )

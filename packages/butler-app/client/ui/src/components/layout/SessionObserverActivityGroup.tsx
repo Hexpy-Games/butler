@@ -22,13 +22,26 @@ export function SessionObserverActivityGroup({ activities, active, state, delega
     <Stack gap="md">
       {activities.length > 0 ? <TurnActivityTimeline delegatedGoal={delegatedGoal} activities={activities} live={Boolean(active)} pulseLatest={Boolean(active)} expandAll={expandAll}
         currentState={current?.semanticState ?? state} turnId={activities[0]?.turnId} /> : null}
-      {active && activities.length === 0 && current?.phaseActivities.length === 0 ? <TurnActivityPanel
+      <SessionObserverCurrentStatus active={active} hasActivities={activities.length > 0} />
+    </Stack>
+  );
+}
+
+/** Shared live footer for flat observer and inline step timelines. */
+export function SessionObserverCurrentStatus({ active, hasActivities }: {
+  active?: SessionView["active_turn"];
+  hasActivities: boolean;
+}) {
+  const current = active
+    ? projectTurnActivity(active.progress?.safe_progress_rows ?? [], active.id)
+    : undefined;
+  return (
+    active && !hasActivities && current?.phaseActivities.length === 0 ? <TurnActivityPanel
         rows={active.progress?.safe_progress_rows ?? []} state={active.state}
         turnId={active.id} startedAt={active.created_at} /> : active && current ? <CurrentTurnStatus state={active.state}
         modelRoundWait={current.modelRoundWait} operation={current.operation}
         publicActivity={current.publicActivity}
         phaseLabel={current.phaseActivities.at(-1)?.summary}
-        startedAt={active.created_at} /> : null}
-    </Stack>
+        startedAt={active.created_at} /> : null
   );
 }

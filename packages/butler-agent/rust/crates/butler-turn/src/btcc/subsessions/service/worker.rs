@@ -66,10 +66,7 @@ impl SubsessionService {
         {
             return Ok(error);
         }
-        if let Some(error) = self.replace_action_worker(&request, reviewed).await? {
-            return Ok(error);
-        }
-        self.worker_handoff_context(&mut packet, reviewed).await?;
+        self.worker_user_request(&mut packet).await?;
         Box::pin(self.dispatch_worker(request, parent, ids, packet, now, profile.prompt)).await
     }
 
