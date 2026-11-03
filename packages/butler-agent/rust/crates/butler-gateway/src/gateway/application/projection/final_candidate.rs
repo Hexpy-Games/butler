@@ -285,6 +285,8 @@ fn artifacts(value: Option<&Value>, roots: &[PathBuf]) -> Vec<ArtifactFileCandid
             let title = text(object.get("title"));
             let name = label.unwrap_or_default();
             Some(ArtifactFileCandidate {
+                origin_path: text(object.get("originPath"))
+                    .filter(|path| std::path::Path::new(path).is_absolute()),
                 title,
                 candidate_paths: paths,
                 source_label: text(object.get("source")),
