@@ -265,6 +265,9 @@ fn standalone_decision(p: &Map<String, Value>, row: &mut Map<String, Value>) {
 }
 
 fn contract(p: &Map<String, Value>, row: &mut Map<String, Value>) {
+    if let Some(key) = p.get("actionKey").and_then(Value::as_str) {
+        row.insert("action_key".into(), Value::String(key.to_owned()));
+    }
     for (from, to) in [
         ("contractId", "work_contract_id"),
         ("workstreamId", "work_stream_id"),
