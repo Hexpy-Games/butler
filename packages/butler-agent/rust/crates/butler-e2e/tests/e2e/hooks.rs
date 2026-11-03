@@ -293,7 +293,9 @@ async fn hooks_crash_failclosed_prompt_deny_and_next_send() -> Result<(), Harnes
         .await?;
     assert_eq!(blocked.status, 422, "{blocked:?}");
     assert_eq!(blocked.error_code(), Some("hook_blocked"));
-    let message = blocked.body["error"]["message"].as_str().unwrap_or_default();
+    let message = blocked.body["error"]["message"]
+        .as_str()
+        .unwrap_or_default();
     assert!(message.starts_with("crash: hook failed ("), "{blocked:?}");
     assert_eq!(count(), before);
     let deny = if command_sandbox::POSIX_SHELL {
