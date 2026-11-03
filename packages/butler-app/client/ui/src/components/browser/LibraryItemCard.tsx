@@ -10,6 +10,8 @@ import { hasWebSource } from "../library/libraryActions";
 import { openDetail } from "../library/libraryNav";
 import { openScrap } from "./ScrapViewer";
 import { openLibraryArtifact, openLibraryFile } from "../library/libraryFiles";
+/** A stored file, page or document from a chat: its source is that chat. */
+export const goesToChat = (item: LibraryItem): item is LibraryItem & { session: string } => Boolean(item.session && (item.file || item.output || documentKind(item)));
 /** Opens an item: a scrap with an HTML copy shows exactly its clipped part; `source` (or no copy) opens the page. */
 export async function openLibraryItem(item: LibraryItem, source = false) {
   try {
@@ -19,7 +21,7 @@ export async function openLibraryItem(item: LibraryItem, source = false) {
       else openDetail(item, { kind: "library", section: "scrap" });
       return;
     }
-    if (source && item.session && (item.file || item.output || documentKind(item))) {
+    if (source && goesToChat(item)) {
       useButlerStore.getState().openSession(item.session); return;
     }
     const document = documentKind(item);

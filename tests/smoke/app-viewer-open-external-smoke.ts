@@ -1,17 +1,13 @@
-// Real Electron, isolated gateway and stub model. Capture the same KO headers with an old renderer via
-// BUTLER_SMOKE_BASELINE=1 + BUTLER_SMOKE_UI_ROOT; only the after phase asserts desktop actions.
+// Real Electron, isolated gateway and stub model: the file viewer's open-external action reaches the shell once per click.
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { crc32, deflateSync } from "node:zlib";
 import { appLocaleFromLanguage, getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { sendWithFiles, uploadFixture, type StoredFile } from "../support/attachment-fixtures.ts";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app.ts";
 
-const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
-const phase = baseline ? "before" : "after";
 const shots = process.env.BUTLER_SMOKE_SCREENSHOTS;
 const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? join(process.env.TMPDIR ?? "/tmp", "viewer-open-external-evidence");
 mkdirSync(evidence, { recursive: true });
@@ -26,54 +22,18 @@ const pane = '[data-test-class="file-viewer"]';
 const header = `${pane} [data-test-class="file-viewer-header"]`;
 const action = `${header} [data-test-class="file-viewer-open-external"]`;
 
-function pngChunk(type: string, data: Buffer) {
-  const name = Buffer.from(type, "ascii");
-  const length = Buffer.alloc(4), checksum = Buffer.alloc(4);
-  length.writeUInt32BE(data.length); checksum.writeUInt32BE(crc32(Buffer.concat([name, data])));
-  return Buffer.concat([length, name, data, checksum]);
-}
-
-function picturePng() {
-  const width = 480, height = 300, stride = width * 3 + 1;
-  const pixels = Buffer.alloc(height * stride);
-  const start = [116, 184, 204], end = [242, 203, 169];
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const blend = x / (width - 1) * 0.55 + y / (height - 1) * 0.45;
-    const index = y * stride + 1 + x * 3;
-    for (let channel = 0; channel < 3; channel++) pixels[index + channel] = Math.round(start[channel]! * (1 - blend) + end[channel]! * blend);
-  }
-  const circles = [
-    { x: 350, y: 82, radius: 48, color: [255, 239, 189] },
-    { x: 159, y: 160, radius: 72, color: [99, 119, 158] },
-    { x: 247, y: 188, radius: 37, color: [223, 120, 126] },
-    { x: 306, y: 119, radius: 19, color: [248, 232, 204] },
-  ];
-  for (const circle of circles) for (let y = Math.max(0, circle.y - circle.radius); y <= Math.min(height - 1, circle.y + circle.radius); y++) {
-    for (let x = Math.max(0, circle.x - circle.radius); x <= Math.min(width - 1, circle.x + circle.radius); x++) {
-      if ((x - circle.x) ** 2 + (y - circle.y) ** 2 > circle.radius ** 2) continue;
-      const index = y * stride + 1 + x * 3;
-      for (let channel = 0; channel < 3; channel++) pixels[index + channel] = circle.color[channel]!;
-    }
-  }
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 2;
-  return Buffer.concat([
-    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    pngChunk("IHDR", header),
-    pngChunk("IDAT", deflateSync(pixels)),
-    pngChunk("IEND", Buffer.alloc(0)),
-  ]);
-}
+/** A 1×1 PNG; the viewer only needs a decodable picture. */
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mMo2XEGAAOcAfk4If7EAAAAAElFTkSuQmCC", "base64");
 
 const fixtures = [
   { name: "검토.md", mimeType: "text/markdown", buffer: Buffer.from("# 검토\n\n기본 앱에서 읽을 문서입니다.\n"), kind: "markdown" },
-  { name: "그림.png", mimeType: "image/png", buffer: picturePng(), kind: "image" },
+  { name: "그림.png", mimeType: "image/png", buffer: PNG, kind: "image" },
   { name: "검토.py", mimeType: "text/plain", buffer: Buffer.from("print('review')\n"), kind: "script" },
 ];
 type Fixture = typeof fixtures[number];
 type ShellLine = { action: string; target: string };
 const stored: StoredFile[] = [];
-const app = await browserAgentApp(evidence, () => null, process.env.BUTLER_SMOKE_UI_ROOT);
+const app = await browserAgentApp(evidence, () => null);
 
 function shellLines(): ShellLine[] {
   return readFileSync(shellLog, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as ShellLine);
@@ -172,7 +132,7 @@ async function capture(name: string, tooltip = false) {
     return { x: Math.floor(box.x), y: Math.floor(box.y), width: Math.floor(box.width), height: Math.floor(box.height) };
   })()`);
   const png = await app.main<string>(`(async () => (await ${app.win}.webContents.capturePage(${JSON.stringify(rect)})).toPNG().toString('base64'))()`);
-  writeFileSync(join(shots, `${phase}-${name}.png`), Buffer.from(png, "base64"));
+  writeFileSync(join(shots, `${name}.png`), Buffer.from(png, "base64"));
 }
 
 async function assertRefusals() {
@@ -216,17 +176,17 @@ try {
     await click(`[data-test-class="app-sidebar"] [aria-label="${sessionTitle}"]`);
     for (const fixture of fixtures) {
       await openFixture(fixture);
-      if (!baseline) { await assertHeader(fixture); await assertShellAction(fixture); }
+      await assertHeader(fixture); await assertShellAction(fixture);
       if (fixture.kind !== "script") await capture(`header-${fixture.kind}-${theme}`);
-      if (!baseline && fixture.kind === "markdown" && shots) {
+      if (fixture.kind === "markdown" && shots) {
         await hoverAction(copy.fileViewer.openInDefaultApp);
         await capture(`tooltip-${theme}`, true);
         await app.page.movePointer(5, 890);
       }
     }
   }
-  if (!baseline) await assertRefusals();
-  console.log(JSON.stringify({ result: baseline ? "BASELINE_CAPTURED" : "BEHAVIOR_PASS", shellActions: shellLines().length, screenshots: shots }));
+  await assertRefusals();
+  console.log(JSON.stringify({ result: "BEHAVIOR_PASS", shellActions: shellLines().length, screenshots: shots }));
 } catch (error) {
   writeFileSync(join(evidence, "failure.png"), await app.page.screenshot());
   throw error;

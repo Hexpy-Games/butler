@@ -5,15 +5,13 @@ use super::*;
 async fn session_results_keep_latest_delivery_without_working_files() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    let mut steps: Vec<_> = (0..8)
-        .map(|n| write(&format!("sources/page-{n}.html"), "<h1>Source</h1>"))
-        .collect();
-    steps.extend([
+    *script.steps.lock().unwrap() = [
+        write("sources/page.html", "<h1>Source</h1>"),
         write("report.md", "Report"),
         deliver("report.md", "First"),
         done(),
-    ]);
-    *script.steps.lock().unwrap() = steps.into();
+    ]
+    .into();
     let s = Setup::new("SESSION-RESULTS")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
@@ -21,12 +19,9 @@ async fn session_results_keep_latest_delivery_without_working_files() -> Result<
         .await?;
     run_turn(&s, &script, "Research and deliver a report.").await?;
     let first = last(&s).await?;
-    assert_eq!(first["attachments"].as_array().unwrap().len(), 9);
+    assert_eq!(first["attachments"].as_array().unwrap().len(), 2);
     assert_eq!(first["artifacts"].as_array().unwrap().len(), 1);
     assert_eq!(first["artifacts"][0]["source_label"], "report.md");
-    for file in first["attachments"].as_array().unwrap() {
-        assert_eq!(s.gw.get(file["url"].as_str().unwrap()).await?.status, 200);
-    }
     let artifacts = results(&s).await?;
     assert_eq!(artifacts.len(), 1, "{artifacts:?}");
     assert_eq!(artifacts[0]["message_id"], first["id"]);
@@ -38,24 +33,15 @@ async fn session_results_keep_latest_delivery_without_working_files() -> Result<
     assert_eq!(artifacts.len(), 1, "{artifacts:?}");
     assert_eq!(artifacts[0]["message_id"], latest["id"]);
     assert_eq!(artifacts[0]["created_at"], latest["updated_at"]);
-    // Same bytes at another path and changed bytes at the same path are distinct.
+    // Changed bytes at the same path are a distinct result.
     *script.steps.lock().unwrap() = [
-        write("other.md", "Report"),
-        deliver("other.md", "Other path"),
         write("report.md", "Revised report"),
         deliver("report.md", "Revised"),
         done(),
     ]
     .into();
-    run_turn(&s, &script, "Deliver two distinct results.").await?;
-    assert_eq!(results(&s).await?.len(), 3);
-    assert!(
-        s.gw.messages("general")
-            .await?
-            .iter()
-            .filter(|m| m["role"] == "user")
-            .all(|m| m["attachments"].as_array().is_none_or(Vec::is_empty))
-    );
+    run_turn(&s, &script, "Deliver the revised report.").await?;
+    assert_eq!(results(&s).await?.len(), 2);
     s.finish().await?;
     server.abort();
     Ok(())

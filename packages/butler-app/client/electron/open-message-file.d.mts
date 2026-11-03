@@ -1,6 +1,5 @@
 interface OpenFileInput {
   fileId?: unknown;
-  reveal?: unknown;
   [key: string]: unknown;
 }
 interface OpenFileResult { opened: boolean; revealed?: boolean; code?: string }
