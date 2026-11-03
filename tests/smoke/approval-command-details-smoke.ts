@@ -1,7 +1,7 @@
 // test-category: security
 // A pending command, and a web read with a query, show exactly what will run or be sent on the real conversation surface:
 // no clamp behind "Show more", nothing masked, Allow reachable. A command body sits in a code frame that keeps its
-// spaces, indentation and newlines (it scrolls both ways; each edge that hides content fades); invisible characters show as escapes.
+// spaces, indentation and newlines at full height (a long line scrolls sideways; the details area scrolls a tall one); invisible characters show as escapes.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve, sep } from "node:path";
@@ -34,7 +34,7 @@ const cases: Case[] = [
   command("newline-command", "./run --password\n./evil.sh ‮x​z", "./evil.sh", ["‹U+202E›", "‹U+200B›"], { shown: "./run --password\n./evil.sh ‹U+202E›x‹U+200B›z" }),
   // Indentation keeps its width: 4, 8 and 12 spaces at the start of the lines of a python3 -c script.
   command("indented-command", INDENTED, "print(item)", [], { shown: INDENTED }),
-  // A script taller than the details area scrolls inside its frame, which still fits where focus can reveal its whole ring.
+  // A script taller than the details area keeps its full height in the frame; the details area scrolls to its end.
   command("tall-command", TALL, "print(\"done\")", [], { shown: TALL }),
   // Padding must not hide the payload: the spaces stay real, so the line runs sideways out of the frame, which shows
   // its end fade and scrolls to the tail (checked below for every code case).
@@ -133,21 +133,17 @@ try {
       if (height >= 800) assert(reach.buttons, `${label}: Deny, Allow once and the allow menu on screen and not covered: ${JSON.stringify(reach.info)}`);
       else if (!reach.buttons) shortWindowsCovered.push(`${label}: ${JSON.stringify(reach.info)}`);
       if (item.code) {
-        // The command is in the code frame: whitespace kept, and scrolling the frame reaches the tail.
+        // The command is in the code frame: whitespace kept, and scrolling the frame sideways reaches the tail.
         const frame = await panel.locator('[data-slot="composer-decision-code"] pre').first().evaluate(async (pre, tail) => {
           const style = getComputedStyle(pre);
           const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          const code = pre.closest('[data-slot="composer-decision-code"]') as HTMLElement;
           const details = pre.closest('[data-slot="decision-details-scroll"]') as HTMLElement;
-          const scroll = [details, ...details.querySelectorAll<HTMLElement>("[data-scroll-fade]")]
-            .find(node => node.hasAttribute("data-scroll-fade") && /auto|scroll|hidden|clip/u.test(getComputedStyle(node).overflowY))!;
-          scroll.scrollTop = 0; pre.scrollTop = 0; pre.scrollLeft = 0; await settle();
-          const box = code.getBoundingClientRect(), scrollBox = scroll.getBoundingClientRect();
-          const top = scrollBox.top + scroll.clientTop, bottom = top + scroll.clientHeight;
-          const fade = Number.parseFloat(getComputedStyle(scroll).getPropertyValue("--scroll-fade-size"));
-          const geometry = { top: box.top, bottom: box.bottom, scrollTop: top, scrollBottom: bottom, fade };
-          const wide = pre.scrollWidth > pre.clientWidth + 1, tall = pre.scrollHeight > pre.clientHeight + 1;
-          pre.scrollLeft = pre.scrollWidth; pre.scrollTop = pre.scrollHeight; await settle();
+          pre.scrollLeft = 0; await settle();
+          const wide = pre.scrollWidth > pre.clientWidth + 1, taller = pre.clientHeight > details.clientHeight;
+          // The band of the details area that its edge fades and ring room leave clear.
+          const edge = (name: string) => Number.parseFloat(getComputedStyle(details).getPropertyValue(name));
+          const fits = pre.getBoundingClientRect().height <= details.clientHeight - 2 * (edge("--scroll-fade-size") + edge("--focus-ring-room"));
+          pre.scrollLeft = pre.scrollWidth; await settle();
           const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
           let node: Node | null = null;
           while (walker.nextNode()) if (walker.currentNode.textContent?.includes(tail)) node = walker.currentNode;
@@ -161,17 +157,16 @@ try {
             const line = (rect.top + rect.bottom) / 2;
             tailInside = rect.left >= box.left - 1 && rect.right <= box.right + 1 && line >= box.top && line <= box.bottom;
           }
-          pre.scrollLeft = 0; pre.scrollTop = 0; await settle();
-          return { whiteSpace: style.whiteSpace, wide, tall, tailInside, geometry };
+          pre.scrollLeft = 0; await settle();
+          return { whiteSpace: style.whiteSpace, wide, taller, fits, tailInside };
         }, item.tail);
-        assert(frame.geometry.top >= frame.geometry.scrollTop && frame.geometry.bottom <= frame.geometry.scrollBottom - frame.geometry.fade,
-          `${label}: the whole code frame stays above the details bottom fade: ${JSON.stringify(frame.geometry)}`);
         assert.equal(frame.whiteSpace, "pre", `${label}: the code frame keeps spaces and line breaks`);
-        assert(frame.tailInside, `${label}: scrolling the frame reaches the tail`);
+        assert(frame.tailInside, `${label}: the tail is inside the frame, reached by sideways scrolling only`);
         if (item.name === "padded-command") assert(frame.wide, `${label}: the padding runs sideways out of the frame`);
-        if (item.name === "tall-command") assert(frame.tall, `${label}: the tall script scrolls inside its frame`);
-        if ((frame.wide || frame.tall) && height >= 800) {
-          // A frame that scrolls is a keyboard stop; its ring is drawn inset and never clipped.
+        if (item.name === "tall-command") assert(frame.taller, `${label}: the tall script keeps its full height; the details area scrolls it`);
+        if (frame.wide && height >= 800) {
+          // A frame that scrolls is a keyboard stop; its ring is drawn inset. A frame taller than the details area's clear
+          // band cannot show its whole ring at once (the details area scrolls it), so only a frame that fits is probed.
           await panel.focus();
           let reached = false;
           for (let step = 0; step < 8 && !reached; step++) {
@@ -180,7 +175,8 @@ try {
           }
           assert(reached, `${label}: Tab reaches the code frame`);
           const probe = await probeFocusRing(page);
-          assert(probe && !probe.noIndicator && probe.clips.length === 0,`${label}: the code frame's focus ring is not clipped: ${probe ? formatClips(probe.clips) : "no ring"}`);
+          assert(probe && !probe.noIndicator, `${label}: the code frame shows a focus ring`);
+          if (frame.fits) assert(probe.clips.length === 0, `${label}: the code frame's focus ring is not clipped: ${formatClips(probe.clips)}`);
           await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         }
         if (item.name === "indented-command") {
