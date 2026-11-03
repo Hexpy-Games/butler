@@ -226,6 +226,7 @@ impl SubsessionService {
                 .waiting_for_children(&relation.child_session_id)
                 .await?;
         let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some() && !waiting && !continuing});
+        worker_identity(relation, &mut projection);
         if waiting && let Some(object) = projection.as_object_mut() {
             object.insert("waiting_for_slot".into(), json!(true));
         }
@@ -303,7 +304,11 @@ impl SubsessionService {
     }
 
     async fn plan_counters(&self, turn_id: &str, projection: &mut Value) -> Result<(), BtccError> {
-        if let Some((revision, total, completed)) = self.plan_progress(turn_id).await? {
+        if let Some(work) = self.accepted_plan_work(turn_id).await? {
+            let (revision, total, completed) = counters(&work);
+            if let Some(plan) = self.work.plan_steps(work).await? {
+                projection["plan"] = plan;
+            }
             projection["approved_plan_revision"] = json!(revision);
             projection["approved_plan_total"] = json!(total);
             projection["approved_plan_completed"] = json!(completed);
@@ -316,6 +321,17 @@ impl SubsessionService {
         &self,
         turn_id: &str,
     ) -> Result<Option<(u64, usize, usize)>, BtccError> {
+        Ok(self
+            .accepted_plan_work(turn_id)
+            .await?
+            .as_ref()
+            .map(counters))
+    }
+
+    async fn accepted_plan_work(
+        &self,
+        turn_id: &str,
+    ) -> Result<Option<crate::btcc::WorkView>, BtccError> {
         let work = match self.work.bound_work_for_turn(turn_id.to_owned()).await {
             Ok(work) => work,
             // Legacy children without a durable Work binding have no plan.
@@ -341,18 +357,25 @@ impl SubsessionService {
         }) {
             return Ok(None);
         }
-        let completed = plan
-            .actions
-            .iter()
-            .filter(|action| {
-                work.action_progress.iter().any(|progress| {
-                    progress.action_key == action.action_key
-                        && progress.status == crate::btcc::ActionStatus::Done
-                })
-            })
-            .count();
-        Ok(Some((plan.revision, plan.actions.len(), completed)))
+        Ok(Some(work))
     }
+}
+
+fn counters(work: &crate::btcc::WorkView) -> (u64, usize, usize) {
+    let Some(plan) = &work.current_plan else {
+        return (0, 0, 0);
+    };
+    let completed = plan
+        .actions
+        .iter()
+        .filter(|action| {
+            work.action_progress.iter().any(|progress| {
+                progress.action_key == action.action_key
+                    && progress.status == crate::btcc::ActionStatus::Done
+            })
+        })
+        .count();
+    (plan.revision, plan.actions.len(), completed)
 }
 
 /// A later turn runs after the saved result, so that result is not the end.
@@ -385,4 +408,16 @@ fn model_only_line(check: &str) -> bool {
         || crate::btcc::PLAN_INTENT_LINES
             .iter()
             .any(|line| check.starts_with(line))
+}
+
+fn worker_identity(relation: &StoredSubsessionDelegation, projection: &mut Value) {
+    if relation.packet.child_role == crate::btcc::ChildRole::Worker {
+        projection["parent_turn_id"] = json!(relation.parent_turn_id);
+        if let Some(action) = &relation.packet.plan_action {
+            projection["action_key"] = json!(action.action_key);
+        }
+        if let Some(id) = &relation.packet.source_tool_call_id {
+            projection["source_tool_call_id"] = json!(id);
+        }
+    }
 }

@@ -43,6 +43,12 @@ title or domain, full URL in the tooltip, opened in the system browser).
 mailto, fragment and relative links stay plain anchors as before. Without
 `faviconSrc` every external link shows the globe.
 
+Fenced code renders in `MarkdownCodeFrame`: a header bar (language and a
+copy action) over a `pre` that scrolls sideways with edge fades. Its frame
+(hairline border, panel radius, raised surface) is the DS-internal `CodeFrame`
+part, which a `ComposerDecisionPanel` `{ code }` detail also draws, without
+the header bar.
+
 Tables scroll inside their own frame with edge fades. A comparison table
 built for `MarkdownTable` with row header cells (`<th scope="row">` in
 `tbody`; GFM tables never have them) keeps the row labels quiet (secondary

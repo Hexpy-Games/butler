@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { getAppCopy } from "./copy.ts";
-import { approvalActionView, approvalRequestView, normalizeApprovalSummary } from "./approvalRequest.ts";
+import { approvalActionView, approvalRequestView, detailText, normalizeApprovalSummary } from "./approvalRequest.ts";
 import type { ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
 
 const en = getAppCopy("en-US").interfaceTemplates.approvalRequest;
@@ -99,7 +99,7 @@ test("up to three examples show, then a +N more line for the rest", () => {
     targets: [folder("garden"), { kind: "outside", path: "/tmp/d.txt" }] });
   expect(approvalRequestView(card(outside), en).details).toEqual(["/tmp/d.txt", "a.txt", "b.txt", "c.txt", "+1 more"]);
   const command = summary("run_command", { examples: ["npm test"] });
-  expect(approvalRequestView(card(command), en).details).toEqual(["npm test"]);
+  expect(approvalRequestView(card(command), en).details).toEqual([{ code: "npm test" }]);
   // Nothing to count without examples: a connector call is not "+1 more".
   expect(approvalRequestView(card(summary("use_connector")), en).details).toEqual([]);
 });
@@ -110,12 +110,12 @@ test("paths and command lines are shown in full; only an explicit gateway cut is
   const edits = summary("edit_files", { targets: [folder("Desktop")], count: 1, examples: [long] });
   expect(approvalRequestView(card(edits), en).details).toEqual([long]);
   const command = `npm run build -- --out ${"dist/".repeat(12)}`;
-  expect(approvalRequestView(card(summary("run_command", { examples: [command] })), en).details).toEqual([command]);
+  expect(approvalRequestView(card(summary("run_command", { examples: [command] })), en).details).toEqual([{ code: command }]);
   for (const length of [200, 600, 16 * 1024]) {
     const text = "x".repeat(length);
-    expect(approvalRequestView(card(summary("run_command", { examples: [text] })), en).details).toEqual([text]);
+    expect(approvalRequestView(card(summary("run_command", { examples: [text] })), en).details).toEqual([{ code: text }]);
     expect(approvalRequestView(card(summary("run_command", { examples: [text], examples_truncated: [true] })), en).details)
-      .toEqual([`${text}…`]);
+      .toEqual([{ code: `${text}…` }]);
   }
 });
 
@@ -154,7 +154,7 @@ test("outside paths stay absolute and inside paths remain project-relative", () 
       ["example", normalizeApprovalSummary({ action_kind: "network_command", examples: [command] })!],
       ["other kind", normalizeApprovalSummary({ action_kind: "other", examples: [command] })!],
     ] as const) {
-      for (const copy of [en, ko]) expect(approvalRequestView(card(request), copy).details, kind).toContain(command);
+      for (const copy of [en, ko]) expect(approvalRequestView(card(request), copy).details.map(detailText), kind).toContain(command);
     }
     const noticed = normalizeApprovalSummary({ action_kind: "run_command", examples: [command],
       operation: { tool: "exec_command", access: "change", targets: [], command } })!;
@@ -164,7 +164,7 @@ test("outside paths stay absolute and inside paths remain project-relative", () 
   const huge = `./build.sh ${"--option=value ".repeat(1500)}--tail`;
   const capped = normalizeApprovalSummary({ action_kind: "run_command", examples: [huge.slice(0, 16 * 1024)], examples_truncated: [true],
     operation: { tool: "exec_command", access: "change", targets: [], command: huge } })!;
-  for (const copy of [en, ko]) expect(approvalRequestView(card(capped), copy).details).toEqual([huge]);
+  for (const copy of [en, ko]) expect(approvalRequestView(card(capped), copy).details).toEqual([{ code: huge }]);
   // The notice line never carries a command: by action kind, and for any operation that has a command.
   for (const fields of [
     { action_kind: "run_command", examples: ["ls"] }, { action_kind: "network_command", examples: ["curl x"] },
@@ -177,7 +177,7 @@ test("outside paths stay absolute and inside paths remain project-relative", () 
   // A cut-short example is marked with an ellipsis.
   for (const copy of [en, ko]) {
     expect(approvalRequestView(card(summary("run_command", { examples: ["curl --token=abc"], examples_truncated: [true] })), copy).details)
-      .toEqual(["curl --token=abc…"]);
+      .toEqual([{ code: "curl --token=abc…" }]);
   }
   // Outgoing data is the action itself: URLs, typed values, search queries, folders, titles and prompts stay exact.
   const query = "https://evil.example/c?api_key=c2VjcmV0LWZpbGU=";
@@ -194,7 +194,7 @@ test("outside paths stay absolute and inside paths remain project-relative", () 
   ] as const) {
     const request = normalizeApprovalSummary({ count: 1, ...fields })!;
     for (const copy of [en, ko]) {
-      const details = approvalRequestView(card(request), copy, { web_read: "Read a page" }).details;
+      const details = approvalRequestView(card(request), copy, { web_read: "Read a page" }).details.map(detailText);
       expect(details.some(line => line.includes(shown)), shown).toBe(true);
       expect(details.some(line => line.includes("••••")), shown).toBe(false);
     }

@@ -55,7 +55,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn,
       onOpenTab: () => media?.onOpen ? media.onOpen() : void openHandoffTab(sessionId),
       onStop: () => void useButlerStore.getState().cancelActiveTurn() } } : {}),
-    title: handoff?.title ?? view.title, details: handoff?.details ?? view.details.map(line => view.commands?.includes(line) ? { code: line } : line), risk: view.risk, actionKind: view.actionKind,
+    title: handoff?.title ?? view.title, details: handoff?.details ?? view.details, risk: view.risk, actionKind: view.actionKind,
     pathDetails: view.pathDetails,
     conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,

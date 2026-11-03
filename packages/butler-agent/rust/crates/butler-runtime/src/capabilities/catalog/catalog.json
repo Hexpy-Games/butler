@@ -5163,6 +5163,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "action_key": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional action_key from the current plan that this Turn works on first. Following activity is filed under that action until a checkpoint names another."
+            },
             "work_id": {
               "type": "string",
               "minLength": 1,
@@ -5358,6 +5363,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "current_action_key": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional action_key you work on next when several actions are active. Without it, the one action you mark active in action_updates becomes current. Following activity is filed under the current action."
+            },
             "action_updates": {
               "type": "array",
               "items": {
@@ -12365,6 +12375,11 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "current_action_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional action_key you work on next when several actions are active. Without it, the one action you mark active in action_updates becomes current. Following activity is filed under the current action."
+          },
           "action_updates": {
             "type": "array",
             "items": {
@@ -12418,6 +12433,11 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "action_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional action_key from the current plan that this Turn works on first. Following activity is filed under that action until a checkpoint names another."
+          },
           "work_id": {
             "type": "string",
             "minLength": 1,
