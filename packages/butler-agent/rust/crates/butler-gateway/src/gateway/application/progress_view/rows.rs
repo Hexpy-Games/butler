@@ -173,6 +173,7 @@ const OPTIONAL_FIELDS: &[&str] = &[
     "work_stream_id",
     "semantic_block_id",
     "activity_stage",
+    "action_key",
     "work_block_id",
     "work_block_label",
     "work_block_phase",

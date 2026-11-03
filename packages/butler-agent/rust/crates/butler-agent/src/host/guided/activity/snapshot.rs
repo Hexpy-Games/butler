@@ -90,48 +90,21 @@ pub(super) fn capture(state: &State) -> GuidedActivitySnapshot {
         pending_execution_title: state.pending_title.clone(),
         pending_execution: None,
         pending_stage: state.pending_stage.map(|value| stage(value).to_owned()),
-        extensions: Default::default(),
+        extensions: serde_json::Map::from_iter([
+            (
+                "currentActionKey".into(),
+                serde_json::json!(state.current_action),
+            ),
+            (
+                "actionSelected".into(),
+                serde_json::json!(state.action_selected),
+            ),
+        ]),
     }
 }
 
 pub(super) fn restore(snapshot: &GuidedActivitySnapshot) -> Result<State, BtccError> {
-    let mut groups = IndexMap::with_capacity(snapshot.groups.len());
-    for group in &snapshot.groups {
-        groups.insert(
-            group.activity_id.clone(),
-            Group {
-                id: group.activity_id.clone(),
-                stage: group
-                    .display_stage
-                    .as_deref()
-                    .map(parse_stage)
-                    .transpose()?,
-                deferred: group.deferred_until_accepted,
-                title: group.title.clone(),
-                summary: group.summary.clone(),
-                rationale: group.rationale.clone(),
-                next_step: group.next_step.clone(),
-                interface_content: group.interface_content.clone(),
-                preceding: group.preceding_ids.clone(),
-                following: group.following_ids.clone(),
-                starts_execution: group.starts_execution.unwrap_or(false),
-                resumes_work: group.resumes_work.unwrap_or(false),
-                next_execution_title: group.next_execution_title.clone(),
-                published: group.published,
-                extensions: group.extensions.clone(),
-            },
-        );
-    }
-    for group in groups.values() {
-        if group
-            .preceding
-            .iter()
-            .chain(&group.following)
-            .any(|id| !groups.contains_key(id))
-        {
-            return Err(invalid());
-        }
-    }
+    let groups = restore_groups(snapshot)?;
     let pending = snapshot
         .pending_tools
         .iter()
@@ -189,5 +162,56 @@ pub(super) fn restore(snapshot: &GuidedActivitySnapshot) -> Result<State, BtccEr
         fallback,
         pending_stage,
         pending_title: snapshot.pending_execution_title.clone(),
+        current_action: snapshot
+            .extensions
+            .get("currentActionKey")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        action_selected: snapshot
+            .extensions
+            .get("actionSelected")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
     })
+}
+
+fn restore_groups(snapshot: &GuidedActivitySnapshot) -> Result<IndexMap<String, Group>, BtccError> {
+    let mut groups = IndexMap::with_capacity(snapshot.groups.len());
+    for group in &snapshot.groups {
+        groups.insert(
+            group.activity_id.clone(),
+            Group {
+                id: group.activity_id.clone(),
+                stage: group
+                    .display_stage
+                    .as_deref()
+                    .map(parse_stage)
+                    .transpose()?,
+                deferred: group.deferred_until_accepted,
+                title: group.title.clone(),
+                summary: group.summary.clone(),
+                rationale: group.rationale.clone(),
+                next_step: group.next_step.clone(),
+                interface_content: group.interface_content.clone(),
+                preceding: group.preceding_ids.clone(),
+                following: group.following_ids.clone(),
+                starts_execution: group.starts_execution.unwrap_or(false),
+                resumes_work: group.resumes_work.unwrap_or(false),
+                next_execution_title: group.next_execution_title.clone(),
+                published: group.published,
+                extensions: group.extensions.clone(),
+            },
+        );
+    }
+    for group in groups.values() {
+        if group
+            .preceding
+            .iter()
+            .chain(&group.following)
+            .any(|id| !groups.contains_key(id))
+        {
+            return Err(invalid());
+        }
+    }
+    Ok(groups)
 }

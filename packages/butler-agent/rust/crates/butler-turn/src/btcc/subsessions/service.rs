@@ -129,7 +129,6 @@ pub struct WorkerDelegationRequest {
     pub objective: String,
     pub acceptance_criteria: Vec<String>,
     pub implementation_brief: String,
-    pub target_path: Option<String>,
     pub replaces_relation_id: Option<String>,
     pub safe_title: Option<String>,
     pub profile_id: Option<String>,

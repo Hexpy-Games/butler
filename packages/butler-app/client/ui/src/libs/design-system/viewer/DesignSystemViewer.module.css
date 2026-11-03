@@ -313,6 +313,9 @@
   display: grid;
   width: 100%;
   min-width: 0;
+  /* A viewer page is a document (data-selectable); its story canvases are App chrome again. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .canvas > * {

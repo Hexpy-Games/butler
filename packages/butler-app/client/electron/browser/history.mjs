@@ -24,7 +24,7 @@ export function createVisitQueue(send) {
 }
 export function wireHistory(browser, tab) {
   const contents = tab.view.webContents;
-  let intent, pending = [], metadata;
+  let intent, pending = [];
   const background = () => { const win = browser.getWindow(); return !win || !win.isVisible(); };
   const privateMode = () => browser.privateMode === true || tab.privateMode === true;
   const begin = (_event, _url, _inPlace, mainFrame) => {
@@ -56,11 +56,9 @@ export function wireHistory(browser, tab) {
     let favicon = tab.documentIcon === false ? "" : tab.favicon || "";
     if (!quitting) {
       try {
-        // WebContents.executeJavaScript queues a did-stop-loading listener for each
-        // call during a load. Read the committed frame directly and share its lookup.
-        metadata ??= contents.mainFrame.executeJavaScript("document.querySelector('link[rel~=icon]')?.href||''")
-          .finally(() => { metadata = null; });
-        const found = await metadata;
+        // WebContents.executeJavaScript waits for did-stop-loading, adding a listener per call
+        // during a load; the committed frame answers at once.
+        const found = await contents.mainFrame.executeJavaScript("document.querySelector('link[rel~=icon]')?.href||''");
         if (typeof found === "string" && /^https?:/u.test(found)) favicon = found;
       } catch { /* A closed or superseded page still has its committed visit. */ }
     }

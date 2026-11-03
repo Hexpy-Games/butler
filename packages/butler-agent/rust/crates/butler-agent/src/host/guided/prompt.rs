@@ -13,6 +13,7 @@ pub(in crate::host::guided) mod open_asks;
 mod phase_memory;
 mod prior_tool;
 pub(in crate::host) mod work_context;
+pub(in crate::host::guided) use canon::run_note;
 
 use std::sync::Arc;
 
@@ -27,6 +28,8 @@ use butler_turn::btcc::{
 
 pub(crate) struct GuidedTextState {
     pub skill_catalog: String,
+    /// Outer None means this Turn has not rendered canon context.
+    pub(super) last_run_note: tokio::sync::Mutex<Option<Option<String>>>,
     pub(super) open_asks: Arc<parking_lot::Mutex<open_asks::Reminders>>,
     pub phase: GuidedPhaseSelection,
     pub work: GuidedWork,

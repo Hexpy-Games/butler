@@ -113,6 +113,7 @@ async fn fresh_turn_binds_and_continues_only_current_session_head() {
     assert_eq!(
         service
             .continue_work(ContinueWorkInput {
+                action_key: None,
                 scope: next_scope.clone(),
                 mutation_call_id: "continue".into(),
                 work_id: started.work_id.clone(),
