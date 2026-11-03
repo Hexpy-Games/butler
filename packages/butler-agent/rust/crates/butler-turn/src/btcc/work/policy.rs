@@ -33,6 +33,20 @@ pub(crate) fn progress_for_replacement_plan(
         .collect()
 }
 
+pub(crate) fn validate_action_key(work: &WorkView, key: Option<&str>) -> Result<(), BtccError> {
+    let Some(key) = key else { return Ok(()) };
+    let plan = work
+        .current_plan
+        .as_ref()
+        .ok_or_else(|| error("Durable Work progress requires a current Plan"))?;
+    if !plan.actions.iter().any(|a| a.action_key == key) {
+        return Err(error(format!(
+            "Durable Work action is not in the current Plan: {key}"
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) fn apply_work_action_updates(
     work: &WorkView,
     updates: &[ActionProgress],

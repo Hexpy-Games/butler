@@ -215,6 +215,16 @@ export interface ApprovalRequestCopy {
 export type AppLocale = "en-US" | "ko-KR";
 
 interface ConversationWorkCopy {
+  planSteps: {
+    running: (done: number, total: number, titles: string) => string;
+    compact: (first: string, more: number) => string;
+    delivered: (done: number, total: number) => string;
+    failed: (step: string) => string;
+    title: (order: number, title: string) => string;
+    statuses: Record<"pending" | "active" | "done" | "blocked" | "skipped", string>;
+    since: (time: string) => string;
+    revised: (added: number, removed: number) => string;
+  };
   historyRegionLabel: string;
   pendingLabel: string;
   pendingStateLabels: Record<string, string>;
