@@ -72,6 +72,21 @@ async fn replacement_stops_old_worker_and_marks_its_late_cancellation_as_evidenc
         refused["error"]["detail"]["overlaps"][0]["status"],
         "active"
     );
+    assert!(
+        refused["error"]["next_action"]
+            .as_str()
+            .unwrap()
+            .contains("task.overlap")
+    );
+    let raw_refusal = requests
+        .iter()
+        .flat_map(|(_, body)| body["input"].as_array().unwrap())
+        .filter_map(|message| message["output"].as_str())
+        .find(|text| {
+            serde_json::from_str::<Value>(text).is_ok_and(|value| value["output"] == *refused)
+        })
+        .unwrap();
+    assert!(!raw_refusal.contains("Correct the input using this schema"));
     let db = db(&s)?;
     let first_task: String = db.query_row(
         "SELECT task_id FROM btcc_work_tasks WHERE relation_id=?1",

@@ -277,6 +277,16 @@ fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
     {
         return;
     }
+    // A refusal that explains itself with a detail needs no schema dump.
+    if result
+        .output
+        .as_ref()
+        .and_then(|output| output.field("error").ok().flatten())
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+        .is_some_and(|error| error.get("detail").is_some())
+    {
+        return;
+    }
     let Some(tool) = prepared.tool else {
         return;
     };
