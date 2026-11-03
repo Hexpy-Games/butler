@@ -73,7 +73,8 @@ fn commit(
         )
     })?;
     let mut completion = completion.clone();
-    completion.summary = super::work_tasks::with_scope_errors(&tx, &completion.turn, completion.summary)?;
+    completion.summary =
+        super::work_tasks::with_scope_errors(&tx, &completion.turn, completion.summary)?;
     let completion = &completion;
     let evidence = serde_json::to_string(&completion.evidence_refs)
         .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;

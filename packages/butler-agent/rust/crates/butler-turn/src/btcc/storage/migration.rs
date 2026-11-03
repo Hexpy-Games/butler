@@ -61,8 +61,15 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     )? {
         transaction.execute_batch("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE status='pending' AND relation_id IN (SELECT relation_id FROM btcc_session_relations WHERE activity_terminal=1)")?;
     }
-    if ensure_column(&transaction, "btcc_subsession_endings", "turn_id", "TEXT NOT NULL DEFAULT ''")? {
-        transaction.execute_batch("UPDATE btcc_subsession_endings SET turn_id=json_extract(completion_json,'$.turn')")?;
+    if ensure_column(
+        &transaction,
+        "btcc_subsession_endings",
+        "turn_id",
+        "TEXT NOT NULL DEFAULT ''",
+    )? {
+        transaction.execute_batch(
+            "UPDATE btcc_subsession_endings SET turn_id=json_extract(completion_json,'$.turn')",
+        )?;
     }
     transaction.execute_batch("DROP TABLE IF EXISTS btcc_subsession_end_members; DROP TABLE IF EXISTS btcc_subsession_stop_outbox;")?;
     transaction.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_live_session_turn ON btcc_turns(session_id) WHERE semantic_state IN ('admitted','delivery_committed');

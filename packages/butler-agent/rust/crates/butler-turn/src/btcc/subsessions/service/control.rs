@@ -1,6 +1,6 @@
-mod validation;
-
 //! Durable direction revisions and cancellation over the shared native queue.
+
+mod validation;
 
 use crate::btcc::storage::SubsessionDispatchState;
 

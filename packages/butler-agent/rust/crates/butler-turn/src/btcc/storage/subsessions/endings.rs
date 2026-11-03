@@ -4,11 +4,14 @@ use super::*;
 
 macro_rules! ENDING_SCOPE_SQL {
     ($session:literal) => {
-        concat!("WITH RECURSIVE ending_scope(session) AS (SELECT ", $session,
+        concat!(
+            "WITH RECURSIVE ending_scope(session) AS (SELECT ",
+            $session,
             " UNION SELECT r.parent_session_id FROM ending_scope a JOIN btcc_session_relations r
              ON r.child_session_id=a.session)
              SELECT e.session_id,e.turn_id FROM ending_scope a JOIN btcc_subsession_endings e
-             ON e.session_id=a.session")
+             ON e.session_id=a.session"
+        )
     };
 }
 pub(super) use ENDING_SCOPE_SQL;
@@ -54,10 +57,16 @@ impl SqliteSubsessionRepository {
     }
 
     pub(crate) async fn ending_in_progress(&self, session: String) -> Result<bool, StorageError> {
-        self.storage.read(move |db| {
-            db.query_row(concat!("SELECT EXISTS(", ENDING_SCOPE_SQL!("?1"), ")"), [session], |r| r.get(0))
+        self.storage
+            .read(move |db| {
+                db.query_row(
+                    concat!("SELECT EXISTS(", ENDING_SCOPE_SQL!("?1"), ")"),
+                    [session],
+                    |r| r.get(0),
+                )
                 .map_err(StorageError::sqlite)
-        }).await
+            })
+            .await
     }
 
     pub(crate) async fn pending_ending(
@@ -118,7 +127,6 @@ impl SqliteSubsessionRepository {
             Ok(turns)
         }).await
     }
-
 }
 
 fn fence_session(
@@ -169,9 +177,13 @@ pub(super) fn ends_card(
     status: &str,
     own_turn: Option<&str>,
 ) -> Result<bool, StorageError> {
-    if status != "success" { return Ok(true); }
+    if status != "success" {
+        return Ok(true);
+    }
     let pending = db.prepare_cached("SELECT i.instruction_id FROM btcc_session_relations r JOIN btcc_subsession_directions i USING(relation_id) WHERE r.child_session_id=?1 AND i.status='pending'")
         .map_err(StorageError::sqlite)?.query_map([session], |r| r.get::<_, String>(0))
         .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
-    Ok(!pending.iter().any(|id| own_turn != Some(direction_turn_id(id).as_str())))
+    Ok(!pending
+        .iter()
+        .any(|id| own_turn != Some(direction_turn_id(id).as_str())))
 }

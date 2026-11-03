@@ -25,18 +25,16 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
     let update = "UPDATE btcc_session_relations SET activity_role=(SELECT \
         CASE WHEN json_valid(d.packet_json) THEN COALESCE(json_extract(d.packet_json,'$.child_role'), \
         CASE WHEN child_session_id GLOB 'worker-*' THEN 'worker' ELSE 'steward' END) END \
-        FROM btcc_subsession_delegations d WHERE d.relation_id=btcc_session_relations.relation_id), \
-        activity_terminal=EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id)";
+        FROM btcc_subsession_delegations d WHERE d.relation_id=btcc_session_relations.relation_id)";
     let identity =
         "UPDATE btcc_session_relations SET activity_worker_id=activity_role||'-'||relation_id";
     if needs_backfill(db)? {
         db.execute_batch(&format!(
-            "{update} WHERE activity_worker_id IS NULL; {identity} WHERE {BACKFILL};"
+            "{update}, activity_terminal=EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id) WHERE activity_worker_id IS NULL; {identity} WHERE {BACKFILL};"
         ))?;
     }
-    let update = update.split(", \
-        activity_terminal=").next().expect("activity role update");
-    db.execute_batch("DROP INDEX IF EXISTS idx_btcc_activity_terminal_v2;
+    db.execute_batch(
+        "DROP INDEX IF EXISTS idx_btcc_activity_terminal_v2;
         DROP INDEX IF EXISTS idx_btcc_activity_terminal_v3;
         DROP TRIGGER IF EXISTS activity_turn_INSERT;
         DROP TRIGGER IF EXISTS activity_turn_UPDATE;
@@ -44,7 +42,8 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
         DROP TRIGGER IF EXISTS activity_ending_DELETE;
         DROP TRIGGER IF EXISTS activity_btcc_subsession_directions_INSERT;
         DROP TRIGGER IF EXISTS activity_btcc_subsession_directions_UPDATE;
-        DROP TRIGGER IF EXISTS activity_btcc_subsession_directions_DELETE;")?;
+        DROP TRIGGER IF EXISTS activity_btcc_subsession_directions_DELETE;",
+    )?;
     // Build after the first repair: an adopted DB leaves a sparse candidate set.
     db.execute_batch(&format!(
         "CREATE INDEX IF NOT EXISTS idx_btcc_activity_backfill

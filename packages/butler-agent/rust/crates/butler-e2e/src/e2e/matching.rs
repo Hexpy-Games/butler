@@ -60,17 +60,17 @@ pub fn user_request(text: &str, placeholders: &Placeholders) -> String {
 }
 
 pub const REQUEST_HEADINGS: [&str; 4] = [
-        "## Current request\n",
-        "## Delegated result\nfrom: delegated task\n",
-        "## Delegated result\nfrom: background worker\n",
-        "User request:",
-    ];
+    "## Current request\n",
+    "## Delegated result\nfrom: delegated task\n",
+    "## Delegated result\nfrom: background worker\n",
+    "User request:",
+];
 
 fn request_start(text: &str) -> Option<usize> {
     REQUEST_HEADINGS
-    .iter()
-    .filter_map(|heading| text.rfind(heading).map(|index| index + heading.len()))
-    .max()
+        .iter()
+        .filter_map(|heading| text.rfind(heading).map(|index| index + heading.len()))
+        .max()
 }
 
 /// Values the product writes into background prompts that differ on every

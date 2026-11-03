@@ -8,10 +8,13 @@ async fn failed_delegation_followup_has_new_card_and_closed_runtime() -> Result<
 }
 
 pub(crate) fn assert_closed(db: &rusqlite::Connection, card_session: &str) {
-    let terminal: bool = db.query_row(
-        "SELECT activity_terminal FROM btcc_session_relations WHERE child_session_id=?1",
-        [card_session], |row| row.get(0),
-    ).unwrap();
+    let terminal: bool = db
+        .query_row(
+            "SELECT activity_terminal FROM btcc_session_relations WHERE child_session_id=?1",
+            [card_session],
+            |row| row.get(0),
+        )
+        .unwrap();
     assert!(terminal, "card relation must be terminal");
     let (turns, works): (i64, i64) = db.query_row(
         "WITH RECURSIVE closing(session) AS (SELECT ?1 UNION
@@ -22,7 +25,10 @@ pub(crate) fn assert_closed(db: &rusqlite::Connection, card_session: &str) {
                  AND status IN ('open','blocked'))",
         [card_session], |row| Ok((row.get(0)?, row.get(1)?)),
     ).unwrap();
-    assert_eq!(turns, 0, "terminal card and descendants have no active turn");
+    assert_eq!(
+        turns, 0,
+        "terminal card and descendants have no active turn"
+    );
     assert_eq!(works, 0, "terminal card and descendants have no open Work");
 }
 
@@ -96,7 +102,11 @@ async fn restart_in_the_middle_of_card_closeout_finishes_the_same_ending()
                 (SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1 AND status='delivered')",
         [relation], |r| Ok((r.get(0)?,r.get(1)?)),
     )?;
-    assert_eq!((results, reports), (1, 1), "one terminal result and one parent report");
+    assert_eq!(
+        (results, reports),
+        (1, 1),
+        "one terminal result and one parent report"
+    );
     s.finish().await?;
     server.abort();
     barrier.abort();

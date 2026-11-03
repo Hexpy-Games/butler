@@ -74,7 +74,11 @@ fn close_session(
         [&relation],
     )
     .map_err(StorageError::sqlite)?;
-    db.execute("UPDATE btcc_session_relations SET activity_terminal=1 WHERE relation_id=?1", [&relation]).map_err(StorageError::sqlite)?;
+    db.execute(
+        "UPDATE btcc_session_relations SET activity_terminal=1 WHERE relation_id=?1",
+        [&relation],
+    )
+    .map_err(StorageError::sqlite)?;
     Ok(turns
         .into_iter()
         .map(|turn| (session.into(), turn))
@@ -172,4 +176,3 @@ pub(super) fn invariant(db: &Connection, session: &str) -> Result<bool, StorageE
     }
     Ok(true)
 }
-

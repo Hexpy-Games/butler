@@ -51,7 +51,12 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
          {risks}, {recommendations}, {refs}, {direction}, {failure_key}, created_at FROM btcc_steward_results_ss02_success; \
          DROP TABLE btcc_steward_results_ss02_success"
     ))?;
-        ensure_column(db, "btcc_session_relations", "activity_terminal", "INTEGER NOT NULL DEFAULT 0")?;
+        ensure_column(
+            db,
+            "btcc_session_relations",
+            "activity_terminal",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
         db.execute_batch("UPDATE btcc_session_relations SET activity_terminal=1 WHERE relation_id IN (SELECT relation_id FROM btcc_steward_results)")?;
         add_result_columns(db)?;
         migrate_followup_results(db)

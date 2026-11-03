@@ -394,3 +394,15 @@ fn model_only_line(check: &str) -> bool {
             .iter()
             .any(|line| check.starts_with(line))
 }
+
+fn worker_identity(relation: &StoredSubsessionDelegation, projection: &mut Value) {
+    if relation.packet.child_role == crate::btcc::ChildRole::Worker {
+        projection["parent_turn_id"] = json!(relation.parent_turn_id);
+        if let Some(action) = &relation.packet.plan_action {
+            projection["action_key"] = json!(action.action_key);
+        }
+        if let Some(id) = &relation.packet.source_tool_call_id {
+            projection["source_tool_call_id"] = json!(id);
+        }
+    }
+}

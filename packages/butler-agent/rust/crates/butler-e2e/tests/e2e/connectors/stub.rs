@@ -121,7 +121,8 @@ pub(crate) fn find_spec(value: &Value) -> Option<Value> {
             let start = butler_e2e::e2e::matching::REQUEST_HEADINGS[..3]
                 .iter()
                 .filter_map(|heading| text.rfind(heading).map(|index| index + heading.len()))
-                .max().unwrap_or(0);
+                .max()
+                .unwrap_or(0);
             let text = &text[start..];
             if let Some((_, data)) = text.split_once("<connector-data>\n") {
                 let payload = serde_json::Deserializer::from_str(data)

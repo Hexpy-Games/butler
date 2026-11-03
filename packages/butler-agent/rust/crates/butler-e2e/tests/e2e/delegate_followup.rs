@@ -82,7 +82,10 @@ async fn followup(stopped: bool, failed: bool) -> Result<(), HarnessError> {
     } else {
         wait_first(&s).await?
     };
-    terminal::assert_closed(&rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?, first["session_id"].as_str().unwrap());
+    terminal::assert_closed(
+        &rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?,
+        first["session_id"].as_str().unwrap(),
+    );
     script
         .fault_before_close
         .store(false, std::sync::atomic::Ordering::SeqCst);
@@ -99,7 +102,10 @@ async fn followup(stopped: bool, failed: bool) -> Result<(), HarnessError> {
     assert_ne!(second["session_id"], first["session_id"]);
     assert_eq!(second["result"]["status"], "success");
     assert_followup(&s, &script, before, &relation, stopped, failed, &turn);
-    terminal::assert_closed(&rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?, second["session_id"].as_str().unwrap());
+    terminal::assert_closed(
+        &rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?,
+        second["session_id"].as_str().unwrap(),
+    );
     assert_ne!(
         second["relation"]["anchor_message_id"],
         first["relation"]["anchor_message_id"]

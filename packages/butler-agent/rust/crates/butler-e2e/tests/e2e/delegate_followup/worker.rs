@@ -39,7 +39,13 @@ async fn followup(cancelled: bool) -> Result<(), HarnessError> {
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let worker_requests = script.requests.lock().unwrap().iter().filter(|(role, _)| role == "worker").count();
+    let worker_requests = script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(role, _)| role == "worker")
+        .count();
     script.direction.add_permits(1);
     loop {
         let refused = script.requests.lock().unwrap().iter().any(|(_, request)| {
@@ -61,8 +67,17 @@ async fn followup(cancelled: bool) -> Result<(), HarnessError> {
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    assert_eq!(script.requests.lock().unwrap().iter().filter(|(role, _)| role == "worker").count(), worker_requests,
-        "Worker stub must receive no request after its result");
+    assert_eq!(
+        script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(role, _)| role == "worker")
+            .count(),
+        worker_requests,
+        "Worker stub must receive no request after its result"
+    );
     for n in 0..4 {
         script.release(&format!("red-{n}"));
     }

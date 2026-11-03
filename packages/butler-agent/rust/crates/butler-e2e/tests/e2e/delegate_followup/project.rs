@@ -3,8 +3,7 @@ use super::*;
 use std::sync::atomic::Ordering;
 
 #[tokio::test]
-async fn blocked_project_followup_reaches_new_terminal_card()
--> Result<(), HarnessError> {
+async fn blocked_project_followup_reaches_new_terminal_card() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start(false).await?;
     script.blocked.store(true, Ordering::SeqCst);
@@ -31,7 +30,10 @@ async fn blocked_project_followup_reaches_new_terminal_card()
     s.turn(parent, stub::OWNER).await?;
     let first = wait_project_result(&s, parent, None).await?;
     assert_eq!(first["result"]["status"], "blocked");
-    terminal::assert_closed(&rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?, first["session_id"].as_str().unwrap());
+    terminal::assert_closed(
+        &rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?,
+        first["session_id"].as_str().unwrap(),
+    );
     let old_work = script.work.lock().unwrap().clone();
     let ledger = s
         .sandbox
@@ -47,7 +49,10 @@ async fn blocked_project_followup_reaches_new_terminal_card()
     let second = wait_project_result(&s, parent, Some(&first)).await?;
     assert_ne!(second["session_id"], first["session_id"]);
     assert_eq!(second["result"]["status"], "success");
-    terminal::assert_closed(&rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?, second["session_id"].as_str().unwrap());
+    terminal::assert_closed(
+        &rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?,
+        second["session_id"].as_str().unwrap(),
+    );
     assert_eq!(std::fs::read(&old_path)?, old_bytes);
     s.finish().await?;
     server.abort();
