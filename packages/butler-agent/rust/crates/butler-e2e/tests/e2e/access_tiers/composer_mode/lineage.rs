@@ -15,7 +15,8 @@ fn delegate(id: &str) -> Value {
     call(
         id,
         "delegate_to_worker",
-        &json!({"action_key":id,"objective":format!("Check {id} source"),
+        &json!({"task":{"scope":{"paths":[format!("tasks/{id}")]},"output":{"format":"text","fields":["summary"]}},
+        "action_key":id,"objective":format!("Check {id} source"),
         "acceptance_criteria":["Checked"],"implementation_brief":"Run both status checks","safe_title":id}),
     )
 }
