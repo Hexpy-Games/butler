@@ -49,4 +49,12 @@ impl Runtime {
             h.close_browser(1);
         }
     }
+    /// A hidden view keeps no frame buffers; they are recreated by the next paint after it is shown.
+    pub fn release_frames(&self) {
+        let mut s = self.shared.borrow_mut();
+        s.frame = None;
+        s.popup = None;
+        s.view_pool = Default::default();
+        s.popup_pool = Default::default();
+    }
 }

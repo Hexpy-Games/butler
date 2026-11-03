@@ -42,6 +42,12 @@ pub fn run(rx: async_channel::Receiver<Message>, rt: Runtime, cx: &mut App) {
                     visible = value;
                     if let Some(host) = rt.host() {
                         host.was_hidden(i32::from(!value));
+                        if value {
+                            host.invalidate(cef::PaintElementType::VIEW);
+                        }
+                    }
+                    if !value {
+                        rt.release_frames();
                     }
                     // Cancel only the periodic fallback. Explicit CEF requests still run.
                     fallback = Instant::now();
