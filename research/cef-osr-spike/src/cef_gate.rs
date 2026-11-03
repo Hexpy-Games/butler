@@ -23,7 +23,10 @@ cef::wrap_app! {
                 }
                 cmd.append_switch_with_value(Some(&"password-store".into()),Some(&"basic".into()));
                 cmd.append_switch_with_value(Some(&"autoplay-policy".into()),Some(&"no-user-gesture-required".into()));
-                cmd.append_switch_with_value(Some(&"disable-features".into()),Some(&"SpareRendererForSitePerProcess".into()));
+                // Add to CEF's own disabled features; replacing the value would re-enable them.
+                let disabled=CefString::from(&cmd.switch_value(Some(&"disable-features".into()))).to_string();
+                let disabled=if disabled.is_empty(){"SpareRendererForSitePerProcess".to_string()}else{format!("{disabled},SpareRendererForSitePerProcess")};
+                cmd.append_switch_with_value(Some(&"disable-features".into()),Some(&disabled.as_str().into()));
             }
         }
     }
