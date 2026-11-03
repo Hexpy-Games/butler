@@ -1,0 +1,11 @@
+/target
+/gpui-fork
+/cef
+/dist
+/profile*
+/memory-evidence
+/home-*
+/data-*
+/tmp-*
+*.log
+*.jsonl

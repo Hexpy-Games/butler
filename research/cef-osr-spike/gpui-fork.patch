@@ -1,0 +1,301 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 93119d862b..218a93240c 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -48,7 +48,7 @@ anyhow = "1.0.86"
+ async-task = "4.7"
+ backtrace = "0.3"
+ bitflags = "2.6.0"
+-collections = { path = "crates/gpui_collections", version = "0.2.2", package = "gpui_ce_collections" }
++collections = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", version = "0.2.2", package = "gpui_ce_collections" }
+ dunce = "1.0"
+ etagere = "0.2"
+ fontique = { version = "0.11.1", default-features = false }
+@@ -239,7 +239,7 @@ windows-core = "0.62.2"
+ tokio = { version = "1" }
+ gpui_util = { path = "crates/gpui_ce_util", version = "0.2.6", package = "gpui_ce_util" }
+ 
+-gpui = { path = "./crates/gpui/", version = "0.2.2", package = "gpui-ce", default-features = false }
++gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", version = "0.2.2", package = "gpui-ce", default-features = false }
+ gpui_render = { path = "./crates/gpui_render/", version = "0.1.0", package = "gpui_ce_render" }
+ gpui_platform = { path = "./crates/gpui_platform/", version = "0.1.0", package = "gpui_ce_platform" }
+ gpui_linux = { path = "./crates/gpui_linux/", version = "0.1.0", package = "gpui_ce_linux" }
+diff --git a/crates/gpui_apple/src/gpui_apple.rs b/crates/gpui_apple/src/gpui_apple.rs
+index 208d297ea1..b56bbb9c2f 100644
+--- a/crates/gpui_apple/src/gpui_apple.rs
++++ b/crates/gpui_apple/src/gpui_apple.rs
+@@ -6,3 +6,5 @@
+ 
+ mod metal_atlas;
+ pub mod metal_renderer;
++mod surface_lifetime;
++pub mod surface_observer;
+diff --git a/crates/gpui_apple/src/metal_renderer.rs b/crates/gpui_apple/src/metal_renderer.rs
+index e7dbdf0761..b3288ab602 100644
+--- a/crates/gpui_apple/src/metal_renderer.rs
++++ b/crates/gpui_apple/src/metal_renderer.rs
+@@ -25,8 +25,9 @@ use image::RgbaImage;
+ 
+ use core_foundation::base::TCFType;
+ use core_video::{
+-    metal_texture::CVMetalTextureGetTexture, metal_texture_cache::CVMetalTextureCache,
+-    pixel_buffer::kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
++    metal_texture::CVMetalTextureGetTexture,
++    metal_texture_cache::CVMetalTextureCache,
++    pixel_buffer::{kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange},
+ };
+ use foreign_types::{ForeignType, ForeignTypeRef};
+ use metal::{
+@@ -694,6 +695,29 @@ impl MetalRenderer {
+             };
+         self.release_instance_buffer_when_complete(&command_buffer, instance_buffer);
+ 
++        if let Some(observer) = crate::surface_observer::observer() {
++            let surfaces: Vec<_> = scene
++                .surfaces
++                .iter()
++                .filter_map(|s| match &s.source {
++                    SurfaceSource::Surface(f) => Some(f.clone()),
++                    _ => None,
++                })
++                .collect();
++            let surfaces = Cell::new(Some(surfaces));
++            let handler = block::ConcreteBlock::new(move |drawable: &metal::DrawableRef| {
++                let Some(surfaces) = surfaces.take() else {
++                    return;
++                };
++                let ids: Vec<_> = surfaces
++                    .iter()
++                    .map(|f| f.as_concrete_TypeRef() as usize)
++                    .collect();
++                observer(&ids, drawable.presented_time());
++            })
++            .copy();
++            drawable.add_presented_handler(&handler);
++        }
+         if self.presents_with_transaction {
+             command_buffer.commit();
+             command_buffer.wait_until_scheduled();
+@@ -1035,6 +1059,7 @@ impl MetalRenderer {
+                     &scene.surfaces[range.clone()],
+                     &scene_uniforms,
+                     command_encoder,
++                    command_buffer,
+                 ),
+                 RenderCommand::Batch(PrimitiveBatch::BackdropFilters(range)) => {
+                     command_encoder.end_encoding();
+@@ -1865,6 +1890,7 @@ impl MetalRenderer {
+         surfaces: &[PaintSurface],
+         scene_uniforms: &SceneUniforms,
+         command_encoder: &metal::RenderCommandEncoderRef,
++        command_buffer: &metal::CommandBufferRef,
+     ) -> bool {
+         command_encoder.set_render_pipeline_state(&self.surfaces_pipeline_state);
+         bind_scene_uniforms(command_encoder, scene_uniforms);
+@@ -1886,38 +1912,60 @@ impl MetalRenderer {
+                 }
+             };
+ 
+-            assert_eq!(
+-                image_buffer.get_pixel_format(),
+-                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+-            );
++            let (y_texture, cb_cr_texture, color_format) =
++                if image_buffer.get_pixel_format() == kCVPixelFormatType_32BGRA {
++                    let texture = self
++                        .core_video_texture_cache
++                        .create_texture_from_image(
++                            image_buffer.as_concrete_TypeRef(),
++                            None,
++                            MTLPixelFormat::BGRA8Unorm,
++                            image_buffer.get_width(),
++                            image_buffer.get_height(),
++                            0,
++                        )
++                        .unwrap();
++                    // Bind both shader slots, even though the RGBA branch only samples one.
++                    (
++                        texture.clone(),
++                        texture,
++                        SurfaceColorFormat::PremultipliedRgba,
++                    )
++                } else {
++                    assert_eq!(
++                        image_buffer.get_pixel_format(),
++                        kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
++                    );
++                    let y_texture = self
++                        .core_video_texture_cache
++                        .create_texture_from_image(
++                            image_buffer.as_concrete_TypeRef(),
++                            None,
++                            MTLPixelFormat::R8Unorm,
++                            image_buffer.get_width_of_plane(0),
++                            image_buffer.get_height_of_plane(0),
++                            0,
++                        )
++                        .unwrap();
++                    let cb_cr_texture = self
++                        .core_video_texture_cache
++                        .create_texture_from_image(
++                            image_buffer.as_concrete_TypeRef(),
++                            None,
++                            MTLPixelFormat::RG8Unorm,
++                            image_buffer.get_width_of_plane(1),
++                            image_buffer.get_height_of_plane(1),
++                            1,
++                        )
++                        .unwrap();
+ 
+-            let y_texture = self
+-                .core_video_texture_cache
+-                .create_texture_from_image(
+-                    image_buffer.as_concrete_TypeRef(),
+-                    None,
+-                    MTLPixelFormat::R8Unorm,
+-                    image_buffer.get_width_of_plane(0),
+-                    image_buffer.get_height_of_plane(0),
+-                    0,
+-                )
+-                .unwrap();
+-            let cb_cr_texture = self
+-                .core_video_texture_cache
+-                .create_texture_from_image(
+-                    image_buffer.as_concrete_TypeRef(),
+-                    None,
+-                    MTLPixelFormat::RG8Unorm,
+-                    image_buffer.get_width_of_plane(1),
+-                    image_buffer.get_height_of_plane(1),
+-                    1,
+-                )
+-                .unwrap();
++                    (y_texture, cb_cr_texture, SurfaceColorFormat::Yuv)
++                };
+ 
+             let surface_uniforms = SurfaceUniforms {
+                 bounds: surface.bounds.into(),
+                 content_mask: surface.content_mask.into(),
+-                color_format: SurfaceColorFormat::Yuv,
++                color_format,
+                 opacity: 1.0,
+                 padding0: 0,
+                 padding1: 0,
+@@ -1946,7 +1994,15 @@ impl MetalRenderer {
+             });
+ 
+             command_encoder.draw_primitives(metal::MTLPrimitiveType::TriangleStrip, 0, 4);
++            crate::surface_lifetime::hold_until_completed(
++                command_buffer,
++                image_buffer.clone(),
++                y_texture,
++                cb_cr_texture,
++            );
+         }
++        // Drop only cache-owned references; in-flight jobs retain their textures.
++        self.core_video_texture_cache.flush(0);
+         true
+     }
+ }
+diff --git a/crates/gpui_apple/src/surface_lifetime.rs b/crates/gpui_apple/src/surface_lifetime.rs
+new file mode 100644
+index 0000000000..acc1d79f84
+--- /dev/null
++++ b/crates/gpui_apple/src/surface_lifetime.rs
+@@ -0,0 +1,16 @@
++//! Keep both CoreVideo textures and their source alive until Metal finishes.
++use core_video::{metal_texture::CVMetalTexture, pixel_buffer::CVPixelBuffer};
++use std::cell::Cell;
++pub(crate) fn hold_until_completed(
++    command: &metal::CommandBufferRef,
++    frame: CVPixelBuffer,
++    primary: CVMetalTexture,
++    secondary: CVMetalTexture,
++) {
++    let resources = Cell::new(Some((frame, primary, secondary)));
++    let completed = block::ConcreteBlock::new(move |_: &metal::CommandBufferRef| {
++        drop(resources.take());
++    })
++    .copy();
++    command.add_completed_handler(&completed);
++}
+diff --git a/crates/gpui_apple/src/surface_observer.rs b/crates/gpui_apple/src/surface_observer.rs
+new file mode 100644
+index 0000000000..5f893d88d8
+--- /dev/null
++++ b/crates/gpui_apple/src/surface_observer.rs
+@@ -0,0 +1,11 @@
++//! Optional surface presentation telemetry for embedding diagnostics.
++use std::sync::{Arc, OnceLock};
++pub type Observer = Arc<dyn Fn(&[usize], f64) + Send + Sync>;
++static OBSERVER: OnceLock<Observer> = OnceLock::new();
++/// Install before creating windows. Called on Metal's presentation callback thread.
++pub fn install(observer: Observer) -> bool {
++    OBSERVER.set(observer).is_ok()
++}
++pub(crate) fn observer() -> Option<Observer> {
++    OBSERVER.get().cloned()
++}
+diff --git a/crates/gpui_render/Cargo.toml b/crates/gpui_render/Cargo.toml
+index 85f4f283d2..9c7c2f6a68 100644
+--- a/crates/gpui_render/Cargo.toml
++++ b/crates/gpui_render/Cargo.toml
+@@ -13,7 +13,7 @@ workspace = true
+ path = "src/gpui_render.rs"
+ 
+ [dependencies]
+-gpui = { path = "../gpui", version = "0.2.2", package = "gpui-ce", default-features = false }
++gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", version = "0.2.2", package = "gpui-ce", default-features = false }
+ smallvec.workspace = true
+ wgsl-rs.workspace = true
+ 
+@@ -31,7 +31,7 @@ naga-old = { package = "naga", version = "24.0.0", features = [
+   "hlsl-out",
+   "wgsl-in",
+ ] }
+-gpui = { path = "../gpui", version = "0.2.2", package = "gpui-ce", default-features = false }
++gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", version = "0.2.2", package = "gpui-ce", default-features = false }
+ wgsl-rs.workspace = true
+ 
+ [dev-dependencies]
+diff --git a/crates/gpui_render/src/shaders/common.rs b/crates/gpui_render/src/shaders/common.rs
+index d28513cb0d..0976256a50 100644
+--- a/crates/gpui_render/src/shaders/common.rs
++++ b/crates/gpui_render/src/shaders/common.rs
+@@ -94,6 +94,7 @@ mod source {
+     pub enum SurfaceColorFormat {
+         Rgba = 0,
+         Yuv = 1,
++        PremultipliedRgba = 2,
+     }
+ 
+     #[repr(u32)]
+diff --git a/crates/gpui_render/src/shaders/filters.rs b/crates/gpui_render/src/shaders/filters.rs
+index def0e4a2de..e3870c42c8 100644
+--- a/crates/gpui_render/src/shaders/filters.rs
++++ b/crates/gpui_render/src/shaders/filters.rs
+@@ -75,6 +75,25 @@ pub mod surface {
+         if locals.color_format == SurfaceColorFormat::Yuv {
+             return sample_yuv_surface(input.texture_position) * locals.opacity * fade;
+         }
++        // The Metal surface pipeline blends straight alpha. Convert only this format;
++        // preserve the legacy RGBA and NV12 behavior, including their mask handling.
++        if locals.color_format == SurfaceColorFormat::PremultipliedRgba {
++            let color = texture_sample_level(
++                SURFACE_TEXTURE,
++                SURFACE_SAMPLER,
++                input.texture_position,
++                0.0,
++            );
++            if color.w <= 0.0 {
++                return transparent();
++            }
++            return vec4f(
++                color.x / color.w,
++                color.y / color.w,
++                color.z / color.w,
++                color.w * locals.opacity * fade,
++            );
++        }
+         texture_sample_level(
+             SURFACE_TEXTURE,
+             SURFACE_SAMPLER,

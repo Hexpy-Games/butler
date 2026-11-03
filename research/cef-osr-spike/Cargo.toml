@@ -1,0 +1,31 @@
+[package]
+name = "butler-cef-spike"
+version = "0.1.0"
+edition = "2024"
+[dependencies]
+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", package = "gpui-ce" }
+gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", package = "gpui_ce_platform" }
+cef = { version = "=156.2.0", default-features = false }
+core-video = "=0.5.2"
+core-foundation = "=0.10.0"
+serde_json = "1"
+async-channel = "2"
+objc = "0.2"
+block = "0.1"
+gpui_apple = { package = "gpui_ce_apple", path = "gpui-fork/crates/gpui_apple" }
+futures-lite = "2"
+base64 = "0.22"
+[lints.rust]
+unsafe_code = "deny"
+[profile.dev]
+debug = 0
+incremental = false
+
+[patch."https://github.com/Hexpy-Games/gpui-ce"]
+gpui_ce_apple = { path = "gpui-fork/crates/gpui_apple" }
+gpui_ce_render = { path = "gpui-fork/crates/gpui_render" }
+
+[profile.release]
+debug = 0
+lto = "thin"
+codegen-units = 8
