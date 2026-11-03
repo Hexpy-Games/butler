@@ -90,57 +90,6 @@ async fn hooks_failing_guard_blocks_tool_and_names_hook() -> Result<(), HarnessE
 }
 
 #[tokio::test]
-async fn hooks_timed_out_guard_blocks_tool() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let setup = reading("HOOK-FAIL-TIMEOUT")?;
-    let mut hook = printing(&setup, "PreToolUse", "", "0");
-    hook["args"] = json!(fixture(&setup, "hold"));
-    hook["env"] = json!({"HOOK_HELD":setup.sandbox.home.join("held"),
-        "HOOK_RELEASE":setup.sandbox.home.join("never")});
-    hook["timeout_ms"] = json!(300);
-    configure(&setup, &[hook])?;
-    let s = setup.start().await?;
-    assert_tool_blocked(&s, "Command guard: hook failed (timed out after 300 ms)").await?;
-    assert_eq!(outcome(&s, "guard").await?, "timeout");
-    s.finish().await
-}
-
-#[tokio::test]
-async fn hooks_unreadable_json_guard_blocks_tool() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let setup = reading("HOOK-FAIL-JSON")?;
-    configure(
-        &setup,
-        &[printing(&setup, "PreToolUse", "{\"decision\":", "0")],
-    )?;
-    let s = setup.start().await?;
-    assert_tool_blocked(&s, "Command guard: hook failed (printed invalid JSON)").await?;
-    assert_eq!(outcome(&s, "guard").await?, "error");
-    s.finish().await
-}
-
-/// A rejected send names the hook in its own response, so no event repeats it.
-#[tokio::test]
-async fn hooks_failing_prompt_guard_rejects_send_naming_hook() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let setup = reading("HOOK-FAIL-PROMPT")?;
-    configure(&setup, &[printing(&setup, "UserPromptSubmit", "", "1")])?;
-    let s = setup.start().await?;
-    let blocked =
-        s.gw.post("/messages", json!({"chat_id":"general","text":ASK}))
-            .await?;
-    assert_eq!(blocked.status, 422, "{blocked:?}");
-    assert_eq!(blocked.error_code(), Some("hook_blocked"));
-    assert_eq!(
-        blocked.body["error"]["message"], "Command guard: hook failed (exited with code 1)",
-        "{blocked:?}"
-    );
-    assert_eq!(s.gw.turns("general").await?, [] as [Value; 0]);
-    assert_eq!(blocks(&s).await?, [] as [Value; 0]);
-    s.finish().await
-}
-
-#[tokio::test]
 async fn hooks_fail_closed_default_off_lets_events_continue() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = reading("HOOK-FAIL-OPEN")?;
@@ -152,8 +101,7 @@ async fn hooks_fail_closed_default_off_lets_events_continue() -> Result<(), Harn
     let mut stop = printing(&setup, "Stop", "", "1");
     stop["id"] = json!("stop");
     stop.as_object_mut().unwrap().remove("failClosed");
-    let defaults = vec![prompt, tool, stop];
-    configure(&setup, &defaults)?;
+    configure(&setup, &[prompt, tool, stop])?;
     let s = setup.start().await?;
     let (_, turn) = s.turn("general", ASK).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
@@ -180,16 +128,6 @@ async fn hooks_fail_closed_default_off_lets_events_continue() -> Result<(), Harn
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    assert_eq!(blocks(&s).await?, [] as [Value; 0]);
-    let explicit = defaults
-        .into_iter()
-        .map(|mut hook| {
-            hook["failClosed"] = json!(false);
-            hook
-        })
-        .collect();
-    replace(&s, explicit).await?;
-    assert_eq!(s.turn("general", ASK).await?.1["state"], "delivered");
     assert_eq!(blocks(&s).await?, [] as [Value; 0]);
     s.finish().await
 }

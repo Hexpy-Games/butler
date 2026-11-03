@@ -147,7 +147,7 @@ try {
       await chat.locator("[data-sonner-toast]").first().waitFor({ state: "detached" }).catch(() => {});
       releaseBlock();
       await chat.locator('[data-sonner-toast][data-type="error"]')
-        .filter({ hasText: copy.settings.hooks.failedBlock("Test guard", "run_command") }).waitFor();
+        .filter({ hasText: copy.settings.hooks.failedBlock("Test guard", copy.guided.tools.run_command) }).waitFor();
       await capture("hook-blocked", chat);
       releaseFailure();
       await chat.getByText(copy.settings.hooks.failedOpen("Test guard"), { exact: true }).waitFor();

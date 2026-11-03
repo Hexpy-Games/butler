@@ -120,8 +120,7 @@ change nothing else. Each is off unless set to `1`.
 
 Settings → Hooks manages `$BUTLER_DATA/hooks.json`. No hooks are installed by
 default. Hooks run with your privileges and receive full prompt and tool content.
-They cannot grant permission or change tool inputs. Project-folder hooks are not
-supported yet.
+They cannot grant permission or change tool inputs. Project folders cannot add hooks.
 
 ```json
 {
@@ -167,8 +166,8 @@ and its event can block (`UserPromptSubmit`, `PreToolUse`, `Stop`, `SubagentStop
 `SessionStart` and `PostToolUse` always continue after failures. Explicit deny
 responses still block blocking events regardless of this switch. A rejected send
 names the hook in its response; turn-time blocks show what the hook blocked.
-Stdout starting with `[` or `{` is judged as JSON; unreadable JSON follows the
-same failure switch and adds no context. `allow` and `ask` are logged as
+Unreadable JSON is a failure, except from `UserPromptSubmit` and `SessionStart`
+hooks without `failClosed`, where it is added as text. `allow` and `ask` are logged as
 `approval_ignored`; normal permission checks still run. Input rewriting is
 ignored. Reasons are limited to 16 KiB.
 
