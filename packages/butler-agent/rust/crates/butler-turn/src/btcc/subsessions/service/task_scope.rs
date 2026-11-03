@@ -127,6 +127,7 @@ impl SubsessionService {
                 child_role: SessionRole::Worker,
                 access_mode: request.access_mode.as_str().into(),
                 schedule_run: request.schedule_run.clone(),
+                immediate: false,
             })
             .await?;
         if result.get("ok").and_then(Value::as_bool) == Some(true) {
