@@ -37,6 +37,10 @@ async fn browser_speed_offers_tools_runs_tabs_concurrently_and_keeps_prefix()
         .stub_cassette(cassette()?)
         .start()
         .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"off"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let stream = reqwest::Client::new()
         .get(format!("{}/internal/browser-host", s.gw.base))

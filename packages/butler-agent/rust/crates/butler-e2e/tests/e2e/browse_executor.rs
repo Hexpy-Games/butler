@@ -26,10 +26,6 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
         .access(Access::AskExceptReads)
         .start()
         .await?;
-    let reply =
-        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
-            .await?;
-    assert_eq!(reply.status, 200, "{}", reply.text);
     let (host, actions) = host::start(&s).await?;
     let id = s.gw.say_turn("general", stub::TASK).await?;
     let turn =
@@ -101,6 +97,48 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
     let sources: i64 = db.query_row("SELECT COUNT(DISTINCT read_source) FROM btcc_guided_tool_calls WHERE tool_name='browser_open' AND read_source IS NOT NULL", [], |row| row.get(0))?;
     assert_eq!(sources, 4, "every opened page retains normal provenance");
     drop(db);
+    host.abort();
+    let _ = host.await;
+    s.finish().await
+}
+
+#[tokio::test]
+async fn browse_runs_with_an_explicit_registered_model() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut cassette = stub::payment_cassette()?;
+    cassette.exchanges[1].request.key.effort = Some("medium".into());
+    cassette.exchanges[1].response = stub::message(
+        &json!({"notes":"","next":{"done":{"fields":{},"evidence":[],"summary":"Done"}}})
+            .to_string(),
+    );
+    let s = Setup::new("BROWSE-EXPLICIT")?
+        .stub_cassette(cassette)
+        .start()
+        .await?;
+    let settings = s.gw.settings().await?;
+    let model = settings["model"].as_str().unwrap();
+    let (provider, model_id) = model.split_once('/').unwrap();
+    let reply =
+        s.gw.post(
+            "/model-catalog/registered-models",
+            json!({"provider_id":provider,"model_id":model_id,"auth_type":"chatgpt_oauth"}),
+        )
+        .await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":model}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let (host, _) = host::start(&s).await?;
+    let (_, turn) = s.turn("general", "Inspect checkout").await?;
+    assert_eq!(turn["state"], "delivered");
+    let requests = s.provider()?.requests();
+    let results = outputs(requests.last().unwrap());
+    assert_eq!(
+        results.last().unwrap().0["output"]["status"],
+        "done",
+        "{results:?}"
+    );
     host.abort();
     let _ = host.await;
     s.finish().await
