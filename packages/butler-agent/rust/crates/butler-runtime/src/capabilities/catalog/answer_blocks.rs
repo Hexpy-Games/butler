@@ -19,7 +19,7 @@ mod sets;
 mod walk;
 pub use draft::{AnswerBlocksDraftOp, AnswerBlocksDraftUnit, AnswerBlocksParser};
 pub use sets::{accept, normalize, pictured_sources, shown, sources};
-pub use walk::{image_ids, walk};
+pub use walk::{epic_ids, image_ids, walk};
 
 pub const ANSWER_BLOCKS_SCHEMA: &str = include_str!("answer-blocks.schema.json");
 pub const MAX_SPEC_BYTES: usize = 32 * 1024;
@@ -30,6 +30,7 @@ static CONTRACT: LazyLock<Result<Value, serde_json::Error>> =
 /// Evidence is supplied by the asset store and the current conversation, not the model.
 pub struct AnswerBlocksContext<'a> {
     pub now: DateTime<Utc>,
+    pub epic_project: &'a dyn Fn(&str) -> Option<String>,
     pub image_exists: &'a dyn Fn(&str) -> bool,
     pub read_sources: &'a [String],
 }
@@ -131,6 +132,7 @@ fn semantic(
                     "unknown image id; use an id returned by image_collect",
                 );
             }
+            epics(value, path, context, problems);
             dimensions(value, path, problems);
             for (key, field) in fields {
                 semantic(field, &pointer(path, key), context, read, problems);
@@ -149,6 +151,46 @@ fn semantic(
             }
         }
         _ => {}
+    }
+}
+
+fn epics(
+    value: &Value,
+    path: &str,
+    context: &AnswerBlocksContext<'_>,
+    problems: &mut Vec<AnswerBlocksProblem>,
+) {
+    if value["type"] != "epics" {
+        return;
+    }
+    let mut seen = HashSet::new();
+    for (i, id) in value["ids"].as_array().into_iter().flatten().enumerate() {
+        let Some(id) = id.as_str() else {
+            continue;
+        };
+        let path = format!("{path}/ids/{i}");
+        if !seen.insert(id) {
+            push(
+                problems,
+                &path,
+                "duplicate id; give each entry a distinct id",
+            );
+        }
+        match (context.epic_project)(id) {
+            None => push(
+                problems,
+                &path,
+                "unknown or deleted epic id; use an id from canon_read or canon_propose",
+            ),
+            Some(project) if value["project_id"] != project => push(
+                problems,
+                &path,
+                format!(
+                    "this epic is in project {project}; put it in an epics block with that project_id"
+                ),
+            ),
+            Some(_) => {}
+        }
     }
 }
 

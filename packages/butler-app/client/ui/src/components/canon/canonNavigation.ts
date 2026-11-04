@@ -1,3 +1,4 @@
+import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { appCopy } from "@/app/copy.ts";
 import { linkCanonConversation, type EpicCard } from "@/app/canonApi.ts";
 import { sessionFromNavigation } from "@/app/utils.ts";
@@ -17,4 +18,12 @@ export async function openEpicConversation(_projectId: string, epic: EpicCard): 
     if (!sessionFromNavigation(app.navigation, id)) await app.refreshNavigation();
     app.openSession(id);
   } catch (error) { notifyError(error, appCopy.canon.conversationFailed); }
+}
+
+/** Open an epic in the board's existing detail panel. */
+export function openCanonEpic(projectId: string, epicId?: string) {
+  const app = useButlerStore.getState();
+  useProjectDashboardState.getState().update(projectId, { tab: "board" });
+  app.openProjectDashboard(projectId);
+  app.setView({ kind: "project-dashboard", projectId, epicId });
 }

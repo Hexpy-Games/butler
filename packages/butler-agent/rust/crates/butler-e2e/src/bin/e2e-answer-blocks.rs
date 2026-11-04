@@ -15,6 +15,8 @@ struct Request {
     images: HashSet<String>,
     sources: Vec<String>,
     #[serde(default)]
+    epics: std::collections::HashMap<String, String>,
+    #[serde(default)]
     stream: bool,
     #[serde(default)]
     perf: bool,
@@ -34,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let exists = |id: &str| request.images.contains(id);
             let context = AnswerBlocksContext {
                 now: DateTime::parse_from_rfc3339(&request.now)?.with_timezone(&Utc),
+                epic_project: &|id| request.epics.get(id).cloned(),
                 image_exists: &exists,
                 read_sources: &request.sources,
             };
