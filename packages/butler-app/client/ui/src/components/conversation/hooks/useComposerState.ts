@@ -49,9 +49,6 @@ export function useComposerState(
     activeProgress ||
     (summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)),
   );
-  const activeSteward = summary?.steward_children?.find((child) =>
-    !child.terminal && (child.status === "active" || child.waiting_for_children),
-  );
   const activeWorker = firstCancellableWorker(workers);
   const activeTurn = Boolean(parentActive || activeWorker);
   const synthesisLocked = parentActive &&
@@ -84,7 +81,6 @@ export function useComposerState(
     canSend,
     blockedAttachments,
     workers,
-    activeSteward,
     activeTurn,
     canStop,
     taskRows,
