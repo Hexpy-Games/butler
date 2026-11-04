@@ -31,8 +31,20 @@ fn assert_no_secret(path: &Path, secret: &[u8]) -> Result<(), HarnessError> {
         if path.is_dir() {
             assert_no_secret(&path, secret)?;
         } else {
+            let bytes = match fs::read(&path) {
+                Ok(bytes) => bytes,
+                // Only a file a live database has byte-range locked (its WAL
+                // index, a table of page numbers) is skipped, and only where
+                // the host refuses the read; every other file is scanned.
+                Err(error)
+                    if butler_platform::host_file_behavior::is_byte_range_lock_conflict(&error) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
             assert!(
-                !fs::read(path)?.windows(secret.len()).any(|w| w == secret),
+                !bytes.windows(secret.len()).any(|w| w == secret),
                 "secret was written to BUTLER_DATA"
             );
         }

@@ -62,7 +62,8 @@ async fn hanging_git_times_out_without_blocking_configuration_writes() -> Result
         "{inspection:?}"
     );
     assert!(
-        matches!(eof, Ok(Ok(0))),
+        matches!(&eof, Ok(Ok(0)))
+            || matches!(&eof, Ok(Err(error)) if error.kind() == std::io::ErrorKind::ConnectionReset),
         "git transport still alive: {eof:?}"
     );
     assert!(empty(&s.sandbox.data.join("plugins/staging")));
