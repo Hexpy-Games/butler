@@ -61,7 +61,9 @@ impl SubsessionService {
         let now = (self.now)();
         let mut packet =
             packets::worker(&ids, &request, action, &profile, reviewed, (plan, review));
-        if let Some(error) = Box::pin(self.prepare_task(&request, reviewed, &mut packet)).await? {
+        if let Some(error) =
+            Box::pin(self.prepare_task(&mut request, reviewed, &mut packet)).await?
+        {
             return Ok(error);
         }
         self.worker_user_request(&mut packet).await?;

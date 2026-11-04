@@ -52,6 +52,18 @@ pub(in crate::btcc::subsessions::service) fn validate(
             json!({"fields":["task.inputs.reason"]}),
         ));
     }
+    if task.overlap.as_ref().is_some_and(|o| {
+        butler_core::public_text::trim_js_whitespace(&o.reason).is_empty()
+            || !matches!(
+                o.resolution.as_str(),
+                "merge" | "narrow" | "wait" | "verify"
+            )
+    }) {
+        return Some(refusal(
+            "task_overlap_invalid",
+            json!({"fields":["task.overlap.resolution","task.overlap.reason"]}),
+        ));
+    }
     None
 }
 
@@ -60,7 +72,15 @@ pub(super) fn check_inputs(task: &TaskContract, tasks: &[WorkTask]) -> Option<Va
         if !tasks.iter().any(|t| {
             t.task_id == input.task
                 && (t.status == "done" && t.result_ref.is_some()
-                    || matches!(t.status.as_str(), "pending" | "active"))
+                    || matches!(t.status.as_str(), "pending" | "active")
+                        && (task.merge_after.contains(&input.task)
+                            || task
+                                .overlap
+                                .as_ref()
+                                .is_some_and(|r| r.resolution == "wait")
+                                && task.scope.as_ref().is_some_and(|scope| {
+                                    !task_overlap(scope, &t.scope).is_empty()
+                                })))
         }) {
             return Some(refusal("task_input_not_done", json!({"task":input.task})));
         }

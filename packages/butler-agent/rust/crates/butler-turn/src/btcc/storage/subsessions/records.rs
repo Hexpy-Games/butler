@@ -58,6 +58,8 @@ impl PacketExecutionMode {
 pub struct SubsessionPacket {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<crate::btcc::TaskContract>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub task_overlaps: Vec<crate::btcc::TaskOverlap>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub task_context: String,
     pub child_role: ChildRole,
@@ -291,6 +293,7 @@ impl SubsessionPacket {
     pub fn fixture(role: ChildRole, objective: &str) -> Self {
         Self {
             task: None,
+            task_overlaps: Vec::new(),
             task_context: String::new(),
             child_role: role,
             delegation_id: "delegation".into(),

@@ -1,6 +1,6 @@
 //! A retained Worker continuation reserves its same Task before admission.
 use super::*;
-use crate::btcc::StoredSubsessionDelegation;
+use crate::btcc::{StoredSubsessionDelegation, task_overlap};
 
 impl SubsessionService {
     pub(super) async fn task_direction_error(
@@ -33,7 +33,12 @@ impl SubsessionService {
                 json!({"task":own.task_id}),
             )));
         }
-        Ok(None)
+        if matches!(own.status.as_str(), "active" | "pending") {
+            return Ok(None);
+        }
+        let conflicts:Vec<_>=tasks.iter().filter(|t| t.task_id!=own.task_id && matches!(t.status.as_str(),"pending"|"active"|"done") && !(t.status=="done" && own.inputs.iter().any(|i| i.task==t.task_id)))
+            .filter_map(|t| {let cells=task_overlap(&own.scope,&t.scope);(!cells.is_empty()).then(|| json!({"task":t.task_id,"status":t.status,"cells":cells,"result_ref":t.result_ref.as_ref().map(|r|format!("evidence:{r}"))}))}).collect();
+        Ok((!conflicts.is_empty()).then(|| task_scope::refusal("task_scope_overlap",json!({"overlaps":conflicts,"message":"Assign a Task with explicit inputs or a wait resolution instead."}))))
     }
     pub(super) async fn task_inputs_ready(
         &self,

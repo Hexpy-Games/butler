@@ -1,4 +1,4 @@
-//! Task records and settlement share the existing writer transaction.
+//! Exclusive Task ownership and settlement share the existing writer transaction.
 pub(in crate::btcc::storage) const SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS btcc_work_tasks (
  task_id TEXT PRIMARY KEY,

@@ -1,6 +1,6 @@
-//! Record the replacement Task and transfer its pending dependents in one commit.
+//! Reserve replacement ownership and transfer its pending dependents in one commit.
 use super::*;
-use crate::btcc::TaskInput;
+use crate::btcc::{TaskInput, TaskOverlap};
 
 impl SqliteSubsessionRepository {
     pub(crate) async fn create_replacing(
@@ -58,21 +58,23 @@ fn rejected(code: &str, task: &str, status: &str) -> Value {
 }
 
 fn transfer_waiters(db: &rusqlite::Connection, old: &str, new: &str) -> Result<(), StorageError> {
-    let mut statement=db.prepare_cached("SELECT t.task_id,t.merge_after,t.inputs_json FROM btcc_work_task_waits d JOIN btcc_work_tasks t ON t.task_id=d.task_id WHERE d.after_task_id=?1 AND t.status='pending' AND t.task_id!=?2").map_err(StorageError::sqlite)?;
+    let mut statement=db.prepare_cached("SELECT t.task_id,t.merge_after,t.inputs_json,t.overlaps_json FROM btcc_work_task_waits d JOIN btcc_work_tasks t ON t.task_id=d.task_id WHERE d.after_task_id=?1 AND t.status='pending' AND t.task_id!=?2").map_err(StorageError::sqlite)?;
     let rows = statement
         .query_map(params![old, new], |r| {
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, String>(1)?,
                 r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
             ))
         })
         .map_err(StorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
-    for (id, merge, inputs) in rows {
+    for (id, merge, inputs, overlaps) in rows {
         let mut merge: Vec<String> = decode(&merge)?;
         let mut inputs: Vec<TaskInput> = decode(&inputs)?;
+        let mut overlaps: Vec<TaskOverlap> = decode(&overlaps)?;
         for dep in &mut merge {
             if dep == old {
                 *dep = new.into();
@@ -83,11 +85,17 @@ fn transfer_waiters(db: &rusqlite::Connection, old: &str, new: &str) -> Result<(
                 input.task = new.into();
             }
         }
-        db.execute(
-            "UPDATE btcc_work_tasks SET merge_after=?2,inputs_json=?3 WHERE task_id=?1",
-            params![id, encode(&merge)?, encode(&inputs)?],
-        )
-        .map_err(StorageError::sqlite)?;
+        let redirected: Vec<_> = overlaps
+            .iter()
+            .filter(|o| o.task == old)
+            .map(|o| {
+                let mut o = o.clone();
+                o.task = new.into();
+                o
+            })
+            .collect();
+        overlaps.extend(redirected);
+        db.execute("UPDATE btcc_work_tasks SET merge_after=?2,inputs_json=?3,overlaps_json=?4 WHERE task_id=?1",params![id,encode(&merge)?,encode(&inputs)?,encode(&overlaps)?]).map_err(StorageError::sqlite)?;
         db.execute(
             "DELETE FROM btcc_work_task_waits WHERE task_id=?1 AND after_task_id=?2",
             params![id, old],

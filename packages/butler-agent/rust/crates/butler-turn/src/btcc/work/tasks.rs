@@ -1,4 +1,4 @@
-//! Durable Task contracts. Scope decisions belong to the model.
+//! Durable exclusive Task contracts. Scope decisions belong to the model.
 use serde::{Deserialize, Serialize};
 mod render;
 
@@ -50,14 +50,29 @@ pub struct TaskOutput {
     pub files: Vec<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskResolution {
+    pub resolution: String,
+    pub reason: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskContract {
     pub scope: Option<TaskScope>,
     pub output: Option<TaskOutput>,
     #[serde(default)]
     pub inputs: Vec<TaskInput>,
+    pub overlap: Option<TaskResolution>,
     #[serde(default)]
     pub merge_after: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskOverlap {
+    pub task: String,
+    pub cells: Vec<String>,
+    pub resolution: String,
+    pub reason: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -71,6 +86,7 @@ pub struct WorkTask {
     pub scope: TaskScope,
     pub inputs: Vec<TaskInput>,
     pub output: TaskOutput,
+    pub overlaps: Vec<TaskOverlap>,
     pub merge_after: Vec<String>,
     pub result_ref: Option<String>,
     pub summary: Option<String>,
@@ -113,6 +129,46 @@ pub fn task_path_contains(parent: &str, child: &str) -> bool {
         || child
             .strip_prefix(parent)
             .is_some_and(|s| s.starts_with('/'))
+}
+
+/// Empty aspects reserve the entire subject; paths reserve complete subtrees.
+pub fn task_overlap(left: &TaskScope, right: &TaskScope) -> Vec<String> {
+    let mut cells = Vec::new();
+    for a in &left.owns {
+        for b in right.owns.iter().filter(|b| b.subject == a.subject) {
+            if a.aspects.is_empty() && b.aspects.is_empty() {
+                cells.push(format!("{}:*", a.subject));
+            } else {
+                let aspects = if a.aspects.is_empty() {
+                    &b.aspects
+                } else {
+                    &a.aspects
+                };
+                cells.extend(
+                    aspects
+                        .iter()
+                        .filter(|aspect| {
+                            b.aspects.is_empty()
+                                || a.aspects.is_empty()
+                                || b.aspects.contains(aspect)
+                        })
+                        .map(|aspect| format!("{}:{aspect}", a.subject)),
+                );
+            }
+        }
+    }
+    for a in &left.paths {
+        for b in &right.paths {
+            if task_path_contains(a, b) {
+                cells.push(format!("path:{b}"));
+            } else if task_path_contains(b, a) {
+                cells.push(format!("path:{a}"));
+            }
+        }
+    }
+    cells.sort();
+    cells.dedup();
+    cells
 }
 
 impl TaskContract {

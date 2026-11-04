@@ -1,4 +1,4 @@
-//! The Task scope and confirmed-input lines in a Worker packet.
+//! The Task ownership and confirmed-input lines in a Worker packet.
 use crate::btcc::{TaskInputUse, WorkTask};
 pub(super) fn render_context(packet: &crate::btcc::SubsessionPacket, tasks: &[WorkTask]) -> String {
     let Some(task) = &packet.task else {
@@ -10,11 +10,7 @@ pub(super) fn render_context(packet: &crate::btcc::SubsessionPacket, tasks: &[Wo
     let owned = render_owned(scope);
     let others = tasks
         .iter()
-        .filter(|t| {
-            t.task_id != packet.task_id
-                && matches!(t.status.as_str(), "active" | "done")
-                && !task.inputs.iter().any(|i| i.task == t.task_id)
-        })
+        .filter(|t| t.task_id != packet.task_id && matches!(t.status.as_str(), "active" | "done"))
         .map(|t| {
             format!(
                 "Task {} ({}): {}",

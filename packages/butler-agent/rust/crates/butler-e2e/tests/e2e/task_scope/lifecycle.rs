@@ -7,9 +7,9 @@ async fn tsk_06_terminal_work_and_card_close_active_and_pending_after_restart() 
     for terminal in ["completed", "abandoned", "card", "delivered"] {
         let dir = butler_e2e::e2e::sandbox::Sandbox::new("TASK-SCOPE")?;
         let (b, w) = setup(&dir.data).await?;
-        let first = assign(&b, &w, "active", task("price")).await?;
+        assign(&b, &w, "active", task("price")).await?;
         let mut wait = task("price");
-        wait["inputs"] = json!([{"task": first["task_id"], "use": "facts"}]);
+        wait["overlap"] = json!({"resolution":"wait","reason":"Serialize ownership"});
         assign(&b, &w, "pending", wait).await?;
         let work = w.view.work_id.clone();
         b.close().await?;
@@ -87,9 +87,9 @@ async fn tsk_06_real_card_result_closes_tasks_before_restart() -> Result {
     for status in ["success", "failed", "cancelled"] {
         let dir = butler_e2e::e2e::sandbox::Sandbox::new("TASK-CARD")?;
         let (b, w) = setup(&dir.data).await?;
-        let first = assign(&b, &w, "active", task("price")).await?;
+        assign(&b, &w, "active", task("price")).await?;
         let mut wait = task("price");
-        wait["inputs"] = json!([{"task": first["task_id"], "use": "facts"}]);
+        wait["overlap"] = json!({"resolution":"wait","reason":"Keep one owner"});
         assign(&b, &w, "pending", wait).await?;
         b.children
             .complete_child(
@@ -125,7 +125,7 @@ async fn tsk_06_real_card_result_closes_tasks_before_restart() -> Result {
 }
 
 #[tokio::test]
-async fn finished_worker_cannot_be_replaced() -> Result {
+async fn retained_direction_cannot_reopen_scope_held_by_another_task() -> Result {
     butler_e2e::gate!();
     let dir = butler_e2e::e2e::sandbox::Sandbox::new("TASK-DIRECTION")?;
     let (mut b, w) = setup(&dir.data).await?;
@@ -143,6 +143,29 @@ async fn finished_worker_cannot_be_replaced() -> Result {
         b.children.delegate_worker(replacement, &w.view).await?["error"]["code"],
         "task_replacement_not_running"
     );
+    let mut reuse = task("price");
+    reuse["inputs"] = json!([{"task":first["task_id"],"use":"artifact"}]);
+    let next = assign(&b, &w, "revise", reuse).await?;
+    let refused = b
+        .children
+        .steer(SubsessionDirectionRequest {
+            parent_session_id: w.scope.session_id,
+            parent_turn_id: w.scope.turn_id.clone(),
+            source_message_id: w.scope.turn_id,
+            relation_id: first["relation_id"].as_str().map(str::to_owned),
+            work_id: None,
+            safe_title: None,
+            instruction: "Revisit the same result".into(),
+            child_role: butler_turn::workspace::SessionRole::Worker,
+            access_mode: "full_access".into(),
+            schedule_run: None,
+        })
+        .await?;
+    assert_eq!(refused["error"]["code"], "task_scope_overlap");
+    assert_eq!(
+        refused["error"]["detail"]["overlaps"][0]["task"],
+        next["task_id"]
+    );
     finish(b, dir).await
 }
 
@@ -159,7 +182,7 @@ async fn replacement_transfers_pending_waiters_before_old_worker_settles() -> Re
         )
         .await?;
     let mut wait = task("price");
-    wait["inputs"] = json!([{"task": first["task_id"], "use": "facts"}]);
+    wait["overlap"] = json!({"resolution":"wait","reason":"Use the completed result"});
     let waiter = assign(&b, &w, "later", wait).await?;
     let mut replace = request(&w, "replacement", task("price"));
     replace.replaces_relation_id = first["relation_id"].as_str().map(str::to_owned);
@@ -176,6 +199,10 @@ async fn replacement_transfers_pending_waiters_before_old_worker_settles() -> Re
         .find(|t| t.task_id == waiter["task_id"])
         .unwrap();
     assert_eq!(pending.status, "pending");
+    assert_eq!(
+        pending.merge_after,
+        vec![replacement["task_id"].as_str().unwrap()]
+    );
     let next = b
         .admit_child(
             replacement["child_session_id"].as_str().unwrap(),

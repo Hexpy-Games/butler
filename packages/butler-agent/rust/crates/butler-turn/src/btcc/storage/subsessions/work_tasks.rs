@@ -1,6 +1,6 @@
 //! Work-indexed Task reads and atomic delegation attachment.
 use super::*;
-use crate::btcc::WorkTask;
+use crate::btcc::{TaskOverlap, WorkTask};
 use rusqlite::Connection;
 
 fn encode<T: serde::Serialize>(value: &T) -> Result<String, StorageError> {
@@ -15,12 +15,11 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> Result<(), St
     let Some(parent) = &input.packet.parent_work_ref else {
         return Ok(());
     };
-    // overlaps_json is no longer used; existing databases declare it NOT NULL, so new rows store '[]'.
-    db.execute("INSERT INTO btcc_work_tasks (task_id,work_id,plan_revision_id,action_key,relation_id,status,scope_json,inputs_json,output_json,overlaps_json,merge_after,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,'pending',?6,?7,?8,'[]',?9,?10,?10)",
+    db.execute("INSERT INTO btcc_work_tasks (task_id,work_id,plan_revision_id,action_key,relation_id,status,scope_json,inputs_json,output_json,overlaps_json,merge_after,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,'pending',?6,?7,?8,?9,?10,?11,?11)",
         params![input.task_id, parent.work_id, parent.plan_revision_id,
             input.packet.plan_action.as_ref().map(|a| &a.action_key), input.relation_id,
             encode(&task.scope)?,encode(&task.inputs)?,encode(&task.output)?,
-            encode(&task.merge_after)?,input.created_at])
+            encode(&input.packet.task_overlaps)?,encode(&task.merge_after)?,input.created_at])
         .map_err(StorageError::sqlite)?;
     for dependency in task
         .merge_after
@@ -41,9 +40,26 @@ impl SqliteSubsessionRepository {
         self.storage.read(move |db| db.query_row("SELECT EXISTS (SELECT 1 FROM btcc_guided_works WHERE work_id=?1 AND status IN ('open','blocked'))",[work],|r| r.get(0)).map_err(StorageError::sqlite)).await
     }
 
-    /// All Task records for a single Work, including immutable result refs.
+    /// All ownership records for a single Work, including immutable result refs.
     pub async fn work_tasks(&self, work: String) -> Result<Vec<WorkTask>, StorageError> {
         self.storage.read(move |db| read_tasks(db, &work)).await
+    }
+
+    pub(crate) async fn record_task_overlaps(
+        &self,
+        task: String,
+        overlaps: Vec<TaskOverlap>,
+    ) -> Result<(), StorageError> {
+        self.storage.execute(move |db| {
+            let tx = db.transaction().map_err(StorageError::sqlite)?;
+            let old: String = tx.query_row("SELECT overlaps_json FROM btcc_work_tasks WHERE task_id=?1", [&task], |r| r.get(0)).map_err(StorageError::sqlite)?;
+            let mut all: Vec<TaskOverlap> = serde_json::from_str(&old).map_err(|e| StorageError::new(StorageCode::SubsessionPacketInvalid,e.to_string()))?;
+            let previous = all.len();
+            for overlap in overlaps { if !all.contains(&overlap) { all.push(overlap); } }
+            if all.len()==previous { return Ok(()); }
+            tx.execute("UPDATE btcc_work_tasks SET overlaps_json=?2,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE task_id=?1", params![task,encode(&all)?]).map_err(StorageError::sqlite)?;
+            tx.commit().map_err(StorageError::sqlite)
+        }).await
     }
 }
 
@@ -82,7 +98,7 @@ pub(super) fn settle_dispatch(
 }
 
 fn read_tasks(db: &Connection, work: &str) -> Result<Vec<WorkTask>, StorageError> {
-    let mut stmt = db.prepare_cached("SELECT t.task_id,t.work_id,t.plan_revision_id,t.action_key,t.relation_id,t.status,t.scope_json,t.inputs_json,t.output_json,t.merge_after,x.result_id,x.summary FROM btcc_work_tasks t LEFT JOIN btcc_steward_results x ON x.result_id=(SELECT result_id FROM btcc_steward_results WHERE relation_id=t.relation_id ORDER BY rowid DESC LIMIT 1) WHERE t.work_id=?1 ORDER BY t.created_at,t.rowid").map_err(StorageError::sqlite)?;
+    let mut stmt = db.prepare_cached("SELECT t.task_id,t.work_id,t.plan_revision_id,t.action_key,t.relation_id,t.status,t.scope_json,t.inputs_json,t.output_json,t.overlaps_json,t.merge_after,x.result_id,x.summary FROM btcc_work_tasks t LEFT JOIN btcc_steward_results x ON x.result_id=(SELECT result_id FROM btcc_steward_results WHERE relation_id=t.relation_id ORDER BY rowid DESC LIMIT 1) WHERE t.work_id=?1 ORDER BY t.created_at,t.rowid").map_err(StorageError::sqlite)?;
     stmt.query_map([work], |r| {
         Ok(WorkTask {
             task_id: r.get(0)?,
@@ -94,9 +110,10 @@ fn read_tasks(db: &Connection, work: &str) -> Result<Vec<WorkTask>, StorageError
             scope: json(r, 6)?,
             inputs: json(r, 7)?,
             output: json(r, 8)?,
-            merge_after: json(r, 9)?,
-            result_ref: r.get(10)?,
-            summary: r.get(11)?,
+            overlaps: json(r, 9)?,
+            merge_after: json(r, 10)?,
+            result_ref: r.get(11)?,
+            summary: r.get(12)?,
         })
     })
     .map_err(StorageError::sqlite)?
