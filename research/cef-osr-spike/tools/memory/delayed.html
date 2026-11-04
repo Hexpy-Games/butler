@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset=utf-8><title>delayed</title></head>
+<body style="font:24px Arial"><p id=t>before</p>
+<script>
+// Static page that changes on its own after 15 s, then reports how long until the next animation frame.
+setTimeout(()=>{document.getElementById('t').textContent='after';const t0=performance.now();
+requestAnimationFrame(()=>console.log('delayed-raf-ms '+(performance.now()-t0).toFixed(1)));},15000);
+</script></body></html>

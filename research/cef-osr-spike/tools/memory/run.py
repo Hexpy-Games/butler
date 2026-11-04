@@ -2,10 +2,13 @@
 usage: python3 -I run.py <variant> <scenario> [--perf] [--label <name>] [--extra "<app args>"]
 scenario: blank | orig | chat | tab1 | artifact | hidden   (hidden = orig page, then the app is hidden before measuring)
 --extra passes app flags (e.g. "--zero-copy", "--tabs 4"); with --tabs N the run waits for the N-1 background tabs first.
+--perf runs the app's own --measure harness (--modes overrides "idle,animate"). --cpu (with --perf --modes idle) also samples
+CPU time and idle wakeups per process for 15 s inside the harness's idle window (60-80 s after first paint) into raw/cpu.jsonl.
+scenario delayed: a static page that changes its text after 15 s and logs the time to its next animation frame.
 Footprint per process via measure.py (footprint, never RSS): 30 s settle, 3 readings 10 s apart, median."""
 import os, shutil, signal, subprocess, sys, tempfile, time
 B = "/tmp/cef-osr-memory"; ROOT = f"{B}/src"; STUDY = os.path.expanduser("~/tmp/mem-study-20261103")
-variant, scenario = sys.argv[1], sys.argv[2]; perf = "--perf" in sys.argv
+variant, scenario = sys.argv[1], sys.argv[2]; perf = "--perf" in sys.argv; cpu = "--cpu" in sys.argv
 opt = lambda name: sys.argv[sys.argv.index(name) + 1] if name in sys.argv else None
 extra = (opt("--extra") or "").split(); name = opt("--label") or variant
 tabs = int(extra[extra.index("--tabs") + 1]) if "--tabs" in extra else 1
@@ -14,6 +17,7 @@ content = {
     "orig": open(f"{B}/content/orig.html").read(), "hidden": open(f"{B}/content/orig.html").read(),
     "blank": "<!doctype html><html><head><meta charset=utf-8><title>blank</title></head><body></body></html>",
     "chat": open(f"{STUDY}/content/chat.html").read(), "artifact": open(f"{STUDY}/content/artifact.html").read(),
+    "delayed": open(f"{B}/content/delayed.html").read(),
     "tab1": '<!doctype html><meta http-equiv="refresh" content="0;url=https://en.wikipedia.org/wiki/Web_browser">',
 }[scenario]
 open(f"{ROOT}/src/fixture.html", "w").write(content)
@@ -26,7 +30,7 @@ label = f"{name}/{scenario}" + ("/perf" if perf else "")
 log = f"{ROOT}/memory-evidence/{name}-{scenario}{'-perf' if perf else ''}.jsonl"
 if os.path.exists(log): os.remove(log)
 args = ["--log", log, *extra]
-if perf: args += ["--measure", "--modes", "idle,animate"]
+if perf: args += ["--measure", "--modes", opt("--modes") or "idle,animate"]
 scale = lambda: subprocess.run([f"{STUDY}/src/scale"], capture_output=True, text=True).stdout.strip()
 s0 = scale()
 app = subprocess.Popen([f"{APP}/Contents/MacOS/ButlerCefSpike-bin", *args, "--pump-max-ms", "33", "--use-mock-keychain",
@@ -35,6 +39,24 @@ app = subprocess.Popen([f"{APP}/Contents/MacOS/ButlerCefSpike-bin", *args, "--pu
                        stdin=subprocess.DEVNULL, start_new_session=True)
 try:
     if perf:
+        if cpu:
+            time.sleep(66)
+            pids = subprocess.run(["pgrep", "-g", str(app.pid)], capture_output=True, text=True).stdout.split()
+            cputime = lambda: {p: subprocess.run(["ps", "-o", "time=", "-p", p], capture_output=True, text=True).stdout.strip() for p in pids}
+            secs = lambda t: sum(float(x) * 60 ** i for i, x in enumerate(reversed(t.replace("-", ":").split(":")))) if t else 0.0
+            before = cputime()
+            top = subprocess.run(["top", "-l", "2", "-s", "15", "-c", "d", "-stats", "pid,idlew", *sum((["-pid", p] for p in pids), [])],
+                                 capture_output=True, text=True).stdout
+            after = cputime()
+            last = top.split("PID")[-1].splitlines()[1:]
+            wake = {l.split()[0]: int(l.split()[1]) for l in last if len(l.split()) == 2 and l.split()[1].isdigit()}
+            rows = []
+            for p in pids:
+                cmd = subprocess.run(["ps", "-o", "command=", "-p", p], capture_output=True, text=True).stdout.strip()
+                role = cmd.split("--type=")[1].split()[0] if "--type=" in cmd else "main"
+                rows.append({"pid": p, "role": role, "cpu_pct": round((secs(after.get(p)) - secs(before.get(p))) / 15 * 100, 2), "wakeups_per_s": round(wake.get(p, 0) / 15, 1)})
+            import json
+            open(f"{B}/raw/cpu.jsonl", "a").write(json.dumps({"label": label, "processes": rows, "cpu_pct": round(sum(r["cpu_pct"] for r in rows), 2), "wakeups_per_s": round(sum(r["wakeups_per_s"] for r in rows), 1)}) + "\n")
         app.wait(timeout=240)  # --measure runs its modes, logs metric events, then quits
     else:
         time.sleep(3)
@@ -52,7 +74,7 @@ try:
             vm = subprocess.run(["vmmap", "-w", p], capture_output=True, text=True).stdout
             sel = [l for l in vm.splitlines() if l.startswith(("IOSurface", "IOAccelerator", "CoreAnimation")) or (l.startswith(("__DATA_CONST", "__DATA ")) and "Embedded" in l)]
             open(f"{out}/{p}.txt", "w").write(cmd + "\n\n" + fp + "\n\n" + "\n".join(sel) + "\n")
-        if scenario in ("blank", "orig", "chat"):
+        if scenario != "hidden":
             wid = subprocess.run([f"{B}/window-id", str(app.pid)], capture_output=True, text=True).stdout.strip()
             if wid: subprocess.run(["screencapture", "-x", "-o", "-l", wid, f"{B}/raw/shot-{name}-{scenario}.png"])
 finally:
