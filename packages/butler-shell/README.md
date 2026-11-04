@@ -5,7 +5,7 @@ Electron app and is not shipped.
 
 - Its own Cargo workspace (not part of `packages/butler-agent/rust`), with the same
   toolchain and lints.
-- gpui comes from the Butler fork of gpui-ce, pinned to tag `butler-lens-3`
+- gpui comes from the Butler fork of gpui-ce, pinned to tag `butler-lens-4`
   (`https://github.com/Hexpy-Games/gpui-ce`). The fork adds the Liquid Glass lens and
   the Acrylic window material (Windows Acrylic, the macOS sidebar vibrancy).
 - The UI reads data through `source::Source`, backed by `butler-shell-client`.
@@ -33,7 +33,7 @@ cargo run --release -p butler-shell --features shots --bin butler-shell-shots --
 
 For a real isolated agent, pass `<dir> --data <data-dir>` (and optionally `--dark`).
 The live harness accepts commands on stdin: `connected`, `open <chat>`, `new`,
-`send <text>`, `answer <text>`, `approval`, `exact <text>`, `modify`, `allow`, `deny`,
+`compose`, `type <text>`, `key <keystroke>`, `send <text>`, `answer <text>`, `approval`, `exact <text>`, `modify`, `allow`, `deny`,
 `cancel`, `disconnected`, `shot <name>` and `quit`. Each completed command prints
 `LIVE OK`. The main Rust workspace's `butler-e2e` example `gpui_shell` drives these
 with a local stub provider, stops/restarts its own agent, and saves both themes.

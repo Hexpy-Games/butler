@@ -56,6 +56,8 @@ pub(crate) struct Strings {
     /// composer.placeholder, composer.placeholderFollowUp
     pub(crate) placeholder: &'static str,
     pub(crate) placeholder_follow_up: &'static str,
+    /// composer.messageComposer
+    pub(crate) message_composer: &'static str,
     /// composer.approval.categoryCommand, composer.approval.categoryEffect
     pub(crate) category_command: &'static str,
     pub(crate) category_effect: &'static str,
@@ -107,6 +109,7 @@ static KO: Strings = Strings {
     show_more: "더보기",
     placeholder: "버틀러에게 무엇이든 물어보세요",
     placeholder_follow_up: "후속 변경사항 요청",
+    message_composer: "메시지 입력",
     category_command: "명령",
     category_effect: "작업 승인",
     allow_once: "이번만 허용",
@@ -146,6 +149,7 @@ static EN: Strings = Strings {
     show_more: "Show more",
     placeholder: "Ask Butler anything",
     placeholder_follow_up: "Ask for follow-up changes",
+    message_composer: "Message composer",
     category_command: "Command",
     category_effect: "Operation approval",
     allow_once: "Allow once",
