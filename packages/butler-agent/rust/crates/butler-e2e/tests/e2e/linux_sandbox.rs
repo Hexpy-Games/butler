@@ -232,10 +232,16 @@ async fn admission(abi_cap: Option<u32>) -> Result<(), HarnessError> {
         "fixture must yield plain DAC EACCES"
     );
     assert!(String::from_utf8_lossy(&baseline.stderr).contains("Permission denied"));
-    let network = format!(
-        "python3 -c \"import socket; socket.create_connection(('127.0.0.1', {}))\"",
-        tcp.local_addr()?.port()
-    );
+    // A project script keeps the command's lexical file scope inside the
+    // project; quoted inline code is unresolved scope and always asks.
+    std::fs::write(
+        project.join("connect.py"),
+        format!(
+            "import socket\nsocket.create_connection(('127.0.0.1', {}))\n",
+            tcp.local_addr()?.port()
+        ),
+    )?;
+    let network = "python3 connect.py".to_owned();
     for (prompt, command) in [
         ("List the project.", "ls -1"),
         ("Read a file with restrictive permissions.", dac_read),
