@@ -124,6 +124,7 @@ fn ensure_message_file_columns(connection: &Connection) -> Result<(), AppStorage
     )?;
     migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
     migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
+    migration::ensure_column(connection, "message_files", "origin_path", "TEXT")?;
     Ok(())
 }
 

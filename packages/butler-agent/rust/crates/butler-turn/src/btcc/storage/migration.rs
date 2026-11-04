@@ -70,7 +70,14 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
          WHERE canonical_assistant_message_id IS NOT NULL;",
     )?;
     startup_indexes::cutover(&transaction)?;
+    ensure_column(
+        &transaction,
+        "btcc_guided_work_plan_revisions",
+        "subjects_json",
+        "TEXT NOT NULL DEFAULT '[]'",
+    )?;
     transaction.execute_batch(super::schema::task_graphs::SCHEMA)?;
+    transaction.execute_batch(super::schema::work_tasks::SCHEMA)?;
     transaction.execute_batch(super::schema::pending_asks::SCHEMA)?;
     // Keep the Work rebuild last: it validates all FKs before restoring deferral,
     // so no later migration can accidentally rely on deferred constraints.

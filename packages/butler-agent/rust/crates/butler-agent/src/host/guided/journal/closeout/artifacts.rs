@@ -146,6 +146,10 @@ fn final_artifact(value: &Value) -> Option<FinalArtifact> {
             .get("staged_path")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        origin_path: item
+            .get("origin_path")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         safe_path_label: path,
         mime_type: Some(mime),
         size_bytes,
@@ -272,16 +276,18 @@ pub(super) fn with_changed_files(
         {
             continue;
         }
+        let path = std::path::Path::new(workspace)
+            .join(label)
+            .to_string_lossy()
+            .into_owned();
         artifacts.push(FinalArtifact {
             id: format!("artifact-{}", butler_turn::btcc::digest_identity(label)),
             kind: ArtifactKind::File,
             title: label.rsplit('/').next().unwrap_or(label).to_owned(),
             mime_type: Some(mime_for(label).into()),
             staged_path: None,
-            safe_path_label: std::path::Path::new(workspace)
-                .join(label)
-                .to_string_lossy()
-                .into_owned(),
+            origin_path: Some(path.clone()),
+            safe_path_label: path,
             source,
             deliverable: false,
             size_bytes: None,

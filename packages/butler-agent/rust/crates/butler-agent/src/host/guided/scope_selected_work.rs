@@ -140,6 +140,15 @@ impl ScopeSelectedWorkRepository {
 }
 
 impl DurableWorkRepository for ScopeSelectedWorkRepository {
+    fn plan_steps(&self, work: WorkView) -> PortFuture<'_, Option<serde_json::Value>> {
+        Box::pin(async move {
+            self.store_for_turn(&work.origin.turn_id)
+                .await?
+                .plan_steps(work)
+                .await
+        })
+    }
+
     fn work_for_turn(&self, turn: String, work: String) -> PortFuture<'_, Option<WorkView>> {
         Box::pin(async move {
             self.store_for_turn(&turn)

@@ -3,6 +3,7 @@
 use super::{GuidedTools, bridge_error, encoded, projection, text};
 use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
+use butler_runtime::capabilities::describe_native;
 use butler_turn::btcc::normalize_then_validate;
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
@@ -67,9 +68,13 @@ pub(super) async fn run(
         error["error"]["id"] = Value::String(id.into());
         return encoded(&error);
     };
-    let description =
-        super::super::reader_surface::describe(projection(owner, tool), owner.browser_available())?;
-    if let Some(error) = native_admission(owner, &description, id, name, args) {
+    let description = describe_native(projection(owner, tool)).map_err(|error| {
+        ToolExecutionError::Integrity(BtccError::relayed(
+            "guided_bridge_catalog_json",
+            error.to_string(),
+        ))
+    })?;
+    if let Some(error) = native_admission(owner, &description, id, name) {
         return encoded(&error);
     }
     let normalized = if tool.definition["handlerValidatesArguments"] == true {
@@ -82,6 +87,7 @@ pub(super) async fn run(
                 error["error"]["id"] = Value::String(id.into());
                 error["error"]["field"] = Value::String(path.clone());
                 error["error"]["path"] = Value::String(path);
+                error["error"]["schema"] = description["schema"].clone();
                 return encoded(&error);
             }
         }
@@ -210,6 +216,7 @@ async fn invoke_mcp(
                 error["error"]["id"] = Value::String(id.into());
                 error["error"]["field"] = Value::String(path.clone());
                 error["error"]["path"] = Value::String(path);
+                error["error"]["schema"] = schema.clone();
                 return encoded(&error);
             }
         };
@@ -330,7 +337,6 @@ fn native_admission(
     description: &Value,
     id: &str,
     name: &str,
-    args: &serde_json::Map<String, Value>,
 ) -> Option<Value> {
     if description.get("enabled") != Some(&Value::Bool(true)) {
         let reason = description
@@ -356,9 +362,6 @@ fn native_admission(
         error["error"]["alternatives"] = json!(alternatives);
         error["error"]["next_action"] = Value::String(next_action.into());
         error["error"]["recovery"] = recovery;
-        return Some(error);
-    }
-    if let Some(error) = reader_admission(owner, name, args) {
         return Some(error);
     }
     // Source permits an already authorized current tool without a prior describe.
@@ -419,16 +422,4 @@ fn mcp_admission(
         return Some(error);
     }
     None
-}
-
-fn reader_admission(
-    owner: &GuidedTools,
-    name: &str,
-    args: &serde_json::Map<String, Value>,
-) -> Option<Value> {
-    if name == "web_read" && owner.browser_available() {
-        super::super::reader_surface::tab_required(args)
-    } else {
-        None
-    }
 }

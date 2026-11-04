@@ -32,7 +32,7 @@ export function ChangedLineDiff({
             <span aria-hidden="true" className={styles.marker}>
               {line.type === "added" ? "+" : "−"}
             </span>
-            <code className={styles.content}>{line.content || " "}</code>
+            <code className={styles.content} data-selectable>{line.content || " "}</code>
           </div>
         ))}
       </div>

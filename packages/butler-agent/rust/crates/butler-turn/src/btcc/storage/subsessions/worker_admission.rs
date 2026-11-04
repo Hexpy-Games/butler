@@ -28,10 +28,14 @@ pub const WAITING_WORKERS_SQL: &str = "SELECT d.relation_id FROM btcc_session_re
  LEFT JOIN btcc_subsession_directions i ON i.instruction_id=(
    SELECT instruction_id FROM btcc_subsession_directions WHERE relation_id=d.relation_id AND status='pending' ORDER BY revision LIMIT 1)
  WHERE r.parent_session_id=?1 AND r.activity_role='worker' AND d.dispatch_state='pending'
+ AND NOT EXISTS (SELECT 1 FROM btcc_work_tasks own WHERE own.relation_id=d.relation_id
+   AND (own.status NOT IN ('pending','active') OR EXISTS (
+     SELECT 1 FROM btcc_work_task_waits dep JOIN btcc_work_tasks prior ON prior.task_id=dep.after_task_id
+     WHERE dep.task_id=own.task_id AND prior.status IN ('pending','active'))))
  AND NOT EXISTS (SELECT 1 FROM btcc_session_relations oldr
    JOIN btcc_subsession_delegations old ON old.relation_id=oldr.relation_id
    WHERE oldr.parent_session_id=r.parent_session_id
-     AND json_extract(old.packet_json,'$.superseded_by') IS NOT NULL
+     AND json_extract(old.packet_json,'$.superseded_by')=d.relation_id
      AND json_extract(old.packet_json,'$.parent_work_ref.work_id')=json_extract(d.packet_json,'$.parent_work_ref.work_id')
      AND json_extract(old.packet_json,'$.plan_action.action_key')=json_extract(d.packet_json,'$.plan_action.action_key')
      AND (NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=old.relation_id)
@@ -115,6 +119,7 @@ impl SqliteSubsessionRepository {
                 let Some(mut stored) = decode::admission_candidate(&tx, &id)? else { continue; };
                 tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id=?1", [&id])
                     .map_err(StorageError::sqlite)?;
+                super::work_tasks::refresh_packet(&tx, &mut stored)?;
                 stored.dispatch_state = SubsessionDispatchState::Enqueued;
                 tx.commit().map_err(StorageError::sqlite)?;
                 return Ok(Some(stored));

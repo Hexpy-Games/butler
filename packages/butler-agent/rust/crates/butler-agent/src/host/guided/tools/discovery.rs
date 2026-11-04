@@ -7,7 +7,7 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use butler_core::json::{JsonDocument, visit_raw_array, visit_raw_object};
-use butler_runtime::capabilities::{BridgeCatalogTool, search_native};
+use butler_runtime::capabilities::{BridgeCatalogTool, describe_native, search_native};
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
@@ -128,6 +128,38 @@ pub(super) fn effective(call: &ModelRoundToolCall) -> (String, Value, Option<Str
         Value::Object(call.arguments.clone()),
         None,
     )
+}
+
+/// A catalog tool the round did not offer, called by its exact name, runs as
+/// a `tool_call` of that tool: the same admission, schema check, approval and journal.
+pub(super) fn runs_by_name(owner: &GuidedTools, name: &str) -> bool {
+    !owner.visible(name)
+        && owner.visible(ToolName::ToolCall.as_str())
+        && owner
+            .catalog
+            .snapshot()
+            .bridge_tool(name, owner.ledger_effects())
+            .is_some_and(|tool| projection(owner, tool).enabled)
+}
+
+/// The `tool_call` bridge call for a by-name call that [`runs_by_name`] admits.
+pub(super) fn by_name(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+) -> Option<ModelRoundToolCall> {
+    if !runs_by_name(owner, &call.name) {
+        return None;
+    }
+    let mut arguments = Map::new();
+    arguments.insert("id".into(), Value::String(format!("native:{}", call.name)));
+    arguments.insert("arguments".into(), Value::Object(call.arguments.clone()));
+    let raw_arguments = butler_core::json::stringify(&Value::Object(arguments.clone())).ok()?;
+    Some(ModelRoundToolCall {
+        name: ToolName::ToolCall.as_str().into(),
+        arguments,
+        raw_arguments,
+        ..call.clone()
+    })
 }
 
 const CATEGORIES: [&str; 14] = [
@@ -271,10 +303,12 @@ async fn describe(
             continue;
         }
         if let Some(tool) = catalog.builtin_tool(name) {
-            descriptions.push(super::reader_surface::describe(
-                projection(owner, tool),
-                owner.browser_available(),
-            )?);
+            descriptions.push(describe_native(projection(owner, tool)).map_err(|error| {
+                ToolExecutionError::Integrity(BtccError::relayed(
+                    "guided_bridge_catalog_json",
+                    error.to_string(),
+                ))
+            })?);
         } else {
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
         }
@@ -329,7 +363,10 @@ fn projection<'a>(
     owner: &GuidedTools,
     tool: butler_turn::btcc::GuidedCatalogRead<'a>,
 ) -> BridgeCatalogTool<'a> {
-    let configured_disabled = owner.web_session.configured_disabled_reason(tool.name);
+    let configured_disabled = owner
+        .web_session
+        .configured_disabled_reason(tool.name)
+        .or_else(|| super::reader_surface::withheld(owner, tool.name));
     let enabled = configured_disabled.is_none()
         && (owner.authorized(tool.name) || super::permission_mode::approved_capability(tool.name))
         && GuidedTools::supports(tool.name)

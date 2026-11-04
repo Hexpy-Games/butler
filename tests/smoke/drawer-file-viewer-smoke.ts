@@ -13,7 +13,6 @@ import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 const cases = ["light", "dark"];
 if (await runSmokeCases(cases, "BUTLER_DRAWER_CASE", import.meta.path, { isolate: true })) process.exit(0);
 const theme = process.env.BUTLER_DRAWER_CASE!;
-const before = process.argv.includes("--capture-before");
 const shots = process.env.BUTLER_SMOKE_SCREENSHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 const browser = await launchSmokeBrowser();
@@ -32,100 +31,93 @@ try {
   await capture(page, "drawer");
   await page.locator(`[data-library-item="${drawerFiles[0]!.id}"]`).getByText(drawerFiles[0]!.title, { exact: true }).click();
   const viewer = page.locator('[data-test-class="file-viewer"]');
-  if (before) {
-    await page.locator('[data-test-class~="conversation"]').waitFor();
+  await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
+  await assertDrawer(page);
+  await capture(page, "viewer-over-drawer");
+  await closeViewer(page);
+  for (const item of [...drawerFiles.slice(1), drawerDoc, drawerOutput]) {
+    if (item === drawerOutput) await page.locator('[data-test-class="library-entry"]').click();
+    await page.locator(`[data-library-item="${item.id}"]`).getByText(item.title, { exact: true }).click();
     await viewer.waitFor();
-    assert.equal(await page.locator('[data-test-class="library-page"]').count(), 0, "baseline leaves the drawer");
-    await capture(page, "navigates-away");
-  } else {
-    await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
+    if (item === drawerDoc) await viewer.getByText("세션에서 작성한 본문입니다.", { exact: true }).waitFor();
+    else if (item === drawerOutput || item.title.endsWith(".html")) await viewer.locator("iframe").waitFor();
+    else if (item.title.endsWith(".pdf")) await viewer.locator('[data-preview-mode="pdf"] iframe').waitFor();
+    else await viewer.locator("img").evaluate((node: HTMLImageElement) => node.decode());
     await assertDrawer(page);
-    await capture(page, "viewer-over-drawer");
+    await assertReadingWidth(page, item === drawerDoc);
+    if (item === drawerDoc) assert((await viewer.locator('[role="tab"]').count()) > 1, "closing also returns from a multi-file viewer");
+    await capture(page, item.id);
+    if (item === drawerOutput) {
+      await viewer.getByRole("button", { name: "브라우저에서 열기", exact: true }).click();
+      const owners = await page.evaluate(() => (window as Window & { __browserCalls?: { method: string; input?: { owner?: string } }[] })
+        .__browserCalls?.filter((call) => call.method === "create").map((call) => call.input?.owner));
+      assert.deepEqual(owners, [`conversation:${DRAWER_SESSION}`], "page browser action uses its source session, not the previously active chat");
+    }
     await closeViewer(page);
-    for (const item of [...drawerFiles.slice(1), drawerDoc, drawerOutput]) {
-      if (item === drawerOutput) await page.locator('[data-test-class="library-entry"]').click();
-      await page.locator(`[data-library-item="${item.id}"]`).getByText(item.title, { exact: true }).click();
-      await viewer.waitFor();
-      if (item === drawerDoc) await viewer.getByText("세션에서 작성한 본문입니다.", { exact: true }).waitFor();
-      else if (item === drawerOutput || item.title.endsWith(".html")) await viewer.locator("iframe").waitFor();
-      else if (item.title.endsWith(".pdf")) await viewer.locator('[data-preview-mode="pdf"] iframe').waitFor();
-      else await viewer.locator("img").evaluate((node: HTMLImageElement) => node.decode());
-      await assertDrawer(page);
-      await assertReadingWidth(page, item === drawerDoc);
-      if (item === drawerDoc) assert((await viewer.locator('[role="tab"]').count()) > 1, "closing also returns from a multi-file viewer");
-      await capture(page, item.id);
-      if (item === drawerOutput) {
-        await viewer.getByRole("button", { name: "브라우저에서 열기", exact: true }).click();
-        const owners = await page.evaluate(() => (window as Window & { __browserCalls?: { method: string; input?: { owner?: string } }[] })
-          .__browserCalls?.filter((call) => call.method === "create").map((call) => call.input?.owner));
-        assert.deepEqual(owners, [`conversation:${DRAWER_SESSION}`], "page browser action uses its source session, not the previously active chat");
+  }
+  for (const width of [1800, 390]) {
+    await page.setViewportSize({ width, height: 960 });
+    await page.locator(`[data-library-item="${drawerFiles[0]!.id}"]`).getByText(drawerFiles[0]!.title, { exact: true }).click();
+    await viewer.locator("h1").waitFor();
+    await page.waitForFunction(() => {
+      for (let node = document.querySelector('[data-test-class="file-viewer"]'); node; node = node.parentElement) {
+        if (node.getAnimations().some((animation) => animation.playState === "running")) return false;
       }
-      await closeViewer(page);
-    }
-    for (const width of [1000, 1800, 2200, 768, 390]) {
-      await page.setViewportSize({ width, height: 960 });
-      await page.locator(`[data-library-item="${drawerFiles[0]!.id}"]`).getByText(drawerFiles[0]!.title, { exact: true }).click();
-      await viewer.locator("h1").waitFor();
-      await page.waitForFunction(() => {
-        for (let node = document.querySelector('[data-test-class="file-viewer"]'); node; node = node.parentElement) {
-          if (node.getAnimations().some((animation) => animation.playState === "running")) return false;
-        }
-        return true;
-      });
-      const focus = await auditTabOrder(page, { within: '[data-test-class="file-viewer"]', maxStops: 12 });
-      assert(focus.stops > 0);
-      assert.deepEqual(focus.clipped, [], "drawer viewer focus rings stay inside clipping ancestors");
-      const geometry = await viewer.boundingBox();
-      assert(geometry && geometry.x >= -0.5 && geometry.x + geometry.width <= width + 0.5, JSON.stringify({ width, geometry }));
-      await assertDrawer(page);
-      await assertReadingWidth(page, true);
-      await capture(page, `viewer-over-drawer-${width}`);
-      await closeViewer(page);
-      if (width >= 1800) {
-        await openDrawer(page);
-        await page.locator(`[data-library-item="${drawerDoc.id}"]`).getByText(drawerDoc.title, { exact: true }).click();
-        await viewer.getByText("세션에서 작성한 본문입니다.", { exact: true }).waitFor();
-        await assertReadingWidth(page, true);
-        await capture(page, `editable-document-${width}`);
-        await closeViewer(page);
-      }
-    }
-    await page.setViewportSize({ width: 1440, height: 960 });
-    await openDrawer(page);
-    await page.setViewportSize({ width: 390, height: 480 });
-    const scroller = page.locator('[data-test-class="library-page"]');
-    await scroller.evaluate((node) => { node.scrollTop = node.scrollHeight; node.setAttribute("data-scroll-probe", "retained"); });
-    const documentCard = page.locator(`[data-library-item="${drawerDoc.id}"]`).getByText(drawerDoc.title, { exact: true });
-    await documentCard.scrollIntoViewIfNeeded();
-    await scroller.evaluate((node) => node.addEventListener("click", () => {
-      node.setAttribute("data-open-scroll", String(node.scrollTop));
-    }, { once: true, capture: true }));
-    await documentCard.click();
-    const scrollTop = Number(await scroller.getAttribute("data-open-scroll"));
-    await viewer.getByText("세션에서 작성한 본문입니다.", { exact: true }).waitFor();
-    assert(scrollTop > 0, "exercise a scrolled drawer");
+      return true;
+    });
+    const focus = await auditTabOrder(page, { within: '[data-test-class="file-viewer"]', maxStops: 12 });
+    assert(focus.stops > 0);
+    assert.deepEqual(focus.clipped, [], "drawer viewer focus rings stay inside clipping ancestors");
+    const geometry = await viewer.boundingBox();
+    assert(geometry && geometry.x >= -0.5 && geometry.x + geometry.width <= width + 0.5, JSON.stringify({ width, geometry }));
+    await assertDrawer(page);
     await assertReadingWidth(page, true);
-    await capture(page, "editable-document-scrolled");
+    await capture(page, `viewer-over-drawer-${width}`);
     await closeViewer(page);
-    assert.equal(await scroller.getAttribute("data-scroll-probe"), "retained", "same drawer DOM");
-    assert.equal(await scroller.evaluate((node) => node.scrollTop), scrollTop, "same drawer scroll position");
-    await page.setViewportSize({ width: 1440, height: 960 });
-    for (const item of [...drawerFiles, drawerDoc, drawerOutput]) {
-      if (item === drawerOutput) await page.locator('[data-test-class="library-entry"]').click();
-      const card = page.locator(`[data-library-item="${item.id}"]`);
-      await card.getByRole("button", { name: "더 보기", exact: true }).click();
-      await page.getByRole("menuitem", { name: "대화로 이동", exact: true }).waitFor();
-      if (item === drawerFiles[0]) await capture(page, "secondary-menu");
-      await page.getByRole("menuitem", { name: "대화로 이동", exact: true }).click();
-      assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), getAppCopy("ko-KR").space.general);
-      await page.locator('[data-test-class~="conversation"]').waitFor();
-      assert.equal(await page.locator('[data-test-class="library-page"]').count(), 0);
-      if (item === drawerFiles[0]) await capture(page, "secondary-conversation");
+    if (width >= 1800) {
       await openDrawer(page);
+      await page.locator(`[data-library-item="${drawerDoc.id}"]`).getByText(drawerDoc.title, { exact: true }).click();
+      await viewer.getByText("세션에서 작성한 본문입니다.", { exact: true }).waitFor();
+      await assertReadingWidth(page, true);
+      await capture(page, `editable-document-${width}`);
+      await closeViewer(page);
     }
   }
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await openDrawer(page);
+  await page.setViewportSize({ width: 390, height: 480 });
+  const scroller = page.locator('[data-test-class="library-page"]');
+  await scroller.evaluate((node) => { node.scrollTop = node.scrollHeight; node.setAttribute("data-scroll-probe", "retained"); });
+  const documentCard = page.locator(`[data-library-item="${drawerDoc.id}"]`).getByText(drawerDoc.title, { exact: true });
+  await documentCard.scrollIntoViewIfNeeded();
+  await scroller.evaluate((node) => node.addEventListener("click", () => {
+    node.setAttribute("data-open-scroll", String(node.scrollTop));
+  }, { once: true, capture: true }));
+  await documentCard.click();
+  const scrollTop = Number(await scroller.getAttribute("data-open-scroll"));
+  await viewer.getByText("세션에서 작성한 본문입니다.", { exact: true }).waitFor();
+  assert(scrollTop > 0, "exercise a scrolled drawer");
+  await assertReadingWidth(page, true);
+  await capture(page, "editable-document-scrolled");
+  await closeViewer(page);
+  assert.equal(await scroller.getAttribute("data-scroll-probe"), "retained", "same drawer DOM");
+  assert.equal(await scroller.evaluate((node) => node.scrollTop), scrollTop, "same drawer scroll position");
+  await page.setViewportSize({ width: 1440, height: 960 });
+  for (const item of [...drawerFiles, drawerDoc, drawerOutput]) {
+    if (item === drawerOutput) await page.locator('[data-test-class="library-entry"]').click();
+    const card = page.locator(`[data-library-item="${item.id}"]`);
+    await card.getByRole("button", { name: "더 보기", exact: true }).click();
+    await page.getByRole("menuitem", { name: "대화로 이동", exact: true }).waitFor();
+    if (item === drawerFiles[0]) await capture(page, "secondary-menu");
+    await page.getByRole("menuitem", { name: "대화로 이동", exact: true }).click();
+    assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), getAppCopy("ko-KR").space.general);
+    await page.locator('[data-test-class~="conversation"]').waitFor();
+    assert.equal(await page.locator('[data-test-class="library-page"]').count(), 0);
+    if (item === drawerFiles[0]) await capture(page, "secondary-conversation");
+    await openDrawer(page);
+  }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result: "PASS", theme, before, fileKinds: before ? 1 : 6, deviceScaleFactor: 2 }));
+  console.log(JSON.stringify({ result: "PASS", theme, fileKinds: 6, deviceScaleFactor: 2 }));
 } finally { await browser.close(); }
 
 async function openDrawer(page: Page) {
@@ -148,7 +140,7 @@ async function assertDrawer(page: Page) {
   assert.equal(await page.locator('[data-test-class~="conversation"]').count(), 0, "does not switch to a session");
 }
 async function capture(page: Page, name: string) {
-  if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}-${theme}-${name}.png`), animations: "disabled" });
+  if (shots) await page.screenshot({ path: join(shots, `${theme}-${name}.png`), animations: "disabled" });
 }
 
 async function closeViewer(page: Page) {

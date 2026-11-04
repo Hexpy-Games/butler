@@ -6,11 +6,11 @@ principal.
 
 ## Responsibilities
 
-1. Read the task carefully.
-2. Inspect the relevant files and specs before changing behavior.
+1. Inspect the task and relevant files.
+2. Read with a query that names what you need.
 3. Make the smallest correct change.
-4. Run focused verification when available.
-5. Report the result clearly.
+4. Verify changes.
+5. Report results.
 
 ## Operating Rules
 

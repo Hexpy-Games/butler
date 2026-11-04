@@ -165,14 +165,9 @@ fn assert_surface(request: &Value) {
         })
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    for name in ["browse", "browser_act", "web_search", "web_read"] {
+    for name in ["browse", "browser_act", "web_search", "browser_read"] {
         assert!(names.contains(&name), "{names:?}");
     }
-    let reader = butler_e2e::e2e::chatgpt_wire::functions(request)
-        .find(|tool| tool["name"] == "web_read")
-        .unwrap();
-    assert!(reader["parameters"]["properties"].get("url").is_none());
-    assert_eq!(reader["parameters"]["required"], json!(["tab"]));
     for name in [
         "browser_open",
         "browser_observe",
@@ -218,12 +213,16 @@ fn assert_requests(requests: &[Value]) {
         assert!(!text.contains("delta_of"));
         assert!(scope["notes"].as_str().unwrap().chars().count() <= 2_000);
         if scope["view"]["ranked"] == true {
-            let count = scope["view"]["chunks"].as_array().unwrap().len()
-                + scope["view"]["more_chunks"].as_array().unwrap().len();
+            let passages = scope["view"]["passages"].as_array().unwrap();
             assert_eq!(
-                count as u64,
-                scope["view"]["total_chunks"].as_u64().unwrap()
+                passages.len() as u64,
+                scope["view"]["returned_chunks"].as_u64().unwrap()
             );
+            assert!(scope["view"].get("markdown").is_none());
+            for passage in passages {
+                assert!(passage["text"].is_string());
+                assert!(passage["span"][1].as_u64() >= passage["span"][0].as_u64());
+            }
         }
     }
 }

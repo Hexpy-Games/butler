@@ -113,8 +113,7 @@ async fn execute_client(
     if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
         return pay::execute(owner, invocation, call, occurrence, client, args).await;
     }
-    if call.name == "browser_open" && owner.taint() == butler_turn::btcc::TurnTaint::ConnectorEvent
-    {
+    if call.name == "browser_open" && navigation::reviewed(owner, &args) {
         return navigation::execute(owner, invocation, call, occurrence, client, args).await;
     }
     if call.name == "browser_open" && args.get("results").is_some() {

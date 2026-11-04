@@ -103,7 +103,7 @@ impl GraphBuilder {
                     safe_title: Some(objective.into()),
                     model_ref: "openai/gpt-6-luna".into(),
                     reasoning_effort: "low".into(),
-                    access_mode: butler_turn::btcc::AccessMode::ReadOnly,
+                    access_mode: self.access_mode.clone().unwrap_or(AccessMode::ReadOnly),
                     schedule_run: None,
                 },
                 &parent.view,
@@ -135,7 +135,12 @@ impl GraphBuilder {
         self.tick();
         let output = Box::pin(self.children.delegate_worker(
             WorkerDelegationRequest {
-                target_path: None,
+                task: Some(serde_json::from_value(json!({
+                    "scope":{"paths":[format!("tasks/{key}")]},"output":{"format":"text","fields":["summary"]},
+                    "inputs": self.children.repository().work_tasks(work.view.work_id.clone()).await?
+                        .into_iter().filter(|t| t.action_key == key && t.status == "done")
+                        .map(|t| json!({"task":t.task_id,"use":"artifact"})).collect::<Vec<_>>()
+                }))?),
                 replaces_relation_id: None,
                 parent_session_id: work.scope.session_id.clone(),
                 parent_turn_id: work.scope.turn_id.clone(),
@@ -147,7 +152,7 @@ impl GraphBuilder {
                 implementation_brief: brief.into(),
                 safe_title: Some(format!("Task {key}")),
                 profile_id: None,
-                access_mode: butler_turn::btcc::AccessMode::ReadOnly,
+                access_mode: self.access_mode.clone().unwrap_or(AccessMode::ReadOnly),
                 schedule_run: None,
             },
             &work.view,

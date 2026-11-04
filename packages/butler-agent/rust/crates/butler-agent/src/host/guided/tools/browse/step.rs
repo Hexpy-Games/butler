@@ -52,7 +52,15 @@ async fn browser_call(
 ) -> Result<Value, ToolExecutionError> {
     let call = call(name, &args);
     let occurrence = format!("{occurrence}:{name}");
-    super::journal::execute(owner, invocation, &call, &occurrence).await
+    // Nested dispatch includes both browser actions and page readers. Keep its
+    // future on the heap so the actor's poll stack does not embed that state.
+    Box::pin(super::journal::execute(
+        owner,
+        invocation,
+        &call,
+        &occurrence,
+    ))
+    .await
 }
 
 pub(super) async fn observe(
@@ -118,7 +126,10 @@ pub(super) async fn execute(
     if let Some(read) = next.get("read") {
         let args = json!({"tab":run.tab,"query":read["query"],"start_chunk":read["start_chunk"]});
         let call = call("web_read", &args);
-        return super::journal::execute(owner, invocation, &call, occurrence).await;
+        return Box::pin(super::journal::execute(
+            owner, invocation, &call, occurrence,
+        ))
+        .await;
     }
     let steps = &next["act"]["steps"];
     if !valid_steps(steps, &run.view) {

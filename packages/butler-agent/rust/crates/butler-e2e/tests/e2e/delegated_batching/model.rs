@@ -119,7 +119,11 @@ fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
     };
     let read = |index: usize| {
         let tab = tabs()[index]["tab"].clone();
-        call(&format!("read-{index}"), "web_read", &json!({"tab":tab}))
+        call(
+            &format!("read-{index}"),
+            "browser_read",
+            &json!({"tab":tab}),
+        )
     };
     let rest = |index: usize| {
         let (tab, url) = (
@@ -128,11 +132,11 @@ fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
         );
         let first = outputs
             .iter()
-            .find(|output| output["source_url"] == *url && output["start_chunk"] == 0)
+            .find(|output| output["final_url"] == *url && output["start_chunk"] == 0)
             .unwrap_or_else(|| panic!("first read of {url}: {outputs:?}"));
         call(
             &format!("rest-{index}"),
-            "web_read",
+            "browser_read",
             &json!({"tab":tab,"start_chunk":first["next_start_chunk"],"max_chunks":8,"max_chars":8000}),
         )
     };

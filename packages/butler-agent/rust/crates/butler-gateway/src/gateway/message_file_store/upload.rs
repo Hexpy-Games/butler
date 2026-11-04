@@ -48,6 +48,7 @@ pub(super) fn write(
         return Err(GatewayApplicationError::internal());
     }
     let file = MaterializedResponderFile {
+        origin_path: None,
         title: None,
         source_label: None,
         deliverable: false,
@@ -164,6 +165,7 @@ pub(super) fn replace_still(
     let path = file_path(root, &file)?;
     replace_private(path, bytes, "browser_still").map_err(internal)?;
     Ok(MaterializedResponderFile {
+        origin_path: None,
         title: None,
         source_label: None,
         deliverable: false,

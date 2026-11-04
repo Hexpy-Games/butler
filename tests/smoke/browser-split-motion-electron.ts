@@ -162,14 +162,15 @@ try {
 
   // A tab Butler drives keeps working parked in the hidden window: the pane opens on its latest page.
   await togglePane(app, false);
-  await app.main(`(() => { const t = globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}); t.driven = true; globalThis.browserAgentSubject.sync(t); })()`);
+  // As a real takeover does (agent.mjs wireAgentTab), the driven tab keeps painting with throttling off.
+  await app.main(`(() => { const t = globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}); t.view.webContents.setBackgroundThrottling(false); t.driven = true; globalThis.browserAgentSubject.sync(t); })()`);
   await waitBrowser(() => app.main<boolean>(`(() => { const t = globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}); return Boolean(t.attached) && t.attached !== ${app.win} && !t.attachWait && !t.detachWait; })()`), "the driven tab parks in the hidden window");
   await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).view.webContents.executeJavaScript("document.documentElement.style.background=document.body.style.background='#22c55e';new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))")`);
   const driven = await toggleWatched();
   assertNoBlank(driven, "driven open", "green");
   await nativeAligned(app);
   facts.driven = { moved: driven.dom.moved, end: driven.dom.end, longest: driven.dom.longest, painted: driven.frames.length };
-  await app.main(`(() => { const t = globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}); t.driven = false; globalThis.browserAgentSubject.sync(t); })()`);
+  await app.main(`(() => { const t = globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}); t.driven = false; t.view.webContents.setBackgroundThrottling(true); globalThis.browserAgentSubject.sync(t); })()`);
   await nativeAligned(app);
 
   // Rapid toggling while captures run: the last state wins, the view ends on its slot and later captures settle.

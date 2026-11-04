@@ -110,6 +110,7 @@ export function toolchainGroupLabel(row: ProgressRow): string {
     if (row.safe_tool_name === "web_search") return appCopy.interfaceStatus.search;
     if (
       row.safe_tool_name === "web_read" ||
+      row.safe_tool_name === "browser_read" ||
       row.safe_tool_name === "read_file" ||
       row.safe_tool_name === "list_files" ||
       row.safe_tool_name === "grep_files"

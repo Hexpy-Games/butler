@@ -26,37 +26,17 @@ impl DurableWorkService {
                 "Durable Work progress requires a current Plan and stage",
             )
         })?;
+        super::super::policy::validate_action_key(
+            &context.work,
+            input.current_action_key.as_deref(),
+        )?;
         let stage = context.work.current_stage.ok_or_else(|| {
             BtccError::detected(
                 BtccCode::DurableWorkStageMissing,
                 "Durable Work progress requires a current Plan and stage",
             )
         })?;
-        let mut identity = serde_json::Map::new();
-        with_null_project(&input.scope, &mut identity);
-        identity.insert(
-            "mutationCallId".into(),
-            Value::String(input.mutation_call_id.clone()),
-        );
-        identity.insert(
-            "actionUpdates".into(),
-            serialized(&input.action_updates.as_deref().unwrap_or(&[]))?,
-        );
-        identity.insert(
-            "publicSummary".into(),
-            input
-                .public_summary
-                .as_ref()
-                .map_or(Value::Null, |value| Value::String(value.clone())),
-        );
-        identity.insert(
-            "nextStep".into(),
-            input
-                .next_step
-                .as_ref()
-                .map_or(Value::Null, |value| Value::String(value.clone())),
-        );
-        let request_sha256 = fingerprint("record_checkpoint", &Value::Object(identity))?;
+        let request_sha256 = checkpoint_fingerprint(&input)?;
         let action_progress = super::super::policy::apply_work_action_updates(
             &context.work,
             input.action_updates.as_deref().unwrap_or(&[]),
@@ -179,4 +159,35 @@ fn review_fingerprint(input: &ReviewInput) -> Result<String, BtccError> {
             .unwrap_or(Value::Null),
     );
     fingerprint("record_review", &Value::Object(identity))
+}
+
+fn checkpoint_fingerprint(input: &CheckpointInput) -> Result<String, BtccError> {
+    let mut identity = serde_json::Map::new();
+    with_null_project(&input.scope, &mut identity);
+    identity.insert(
+        "mutationCallId".into(),
+        Value::String(input.mutation_call_id.clone()),
+    );
+    identity.insert(
+        "actionUpdates".into(),
+        serialized(&input.action_updates.as_deref().unwrap_or(&[]))?,
+    );
+    identity.insert(
+        "publicSummary".into(),
+        input
+            .public_summary
+            .as_ref()
+            .map_or(Value::Null, |value| Value::String(value.clone())),
+    );
+    identity.insert(
+        "nextStep".into(),
+        input
+            .next_step
+            .as_ref()
+            .map_or(Value::Null, |value| Value::String(value.clone())),
+    );
+    if let Some(key) = &input.current_action_key {
+        identity.insert("currentActionKey".into(), Value::String(key.clone()));
+    }
+    fingerprint("record_checkpoint", &Value::Object(identity))
 }

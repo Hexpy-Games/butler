@@ -34,6 +34,8 @@ pub struct ContinueWorkInput {
     #[serde(flatten)]
     pub scope: WorkTurnScope,
     pub mutation_call_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_key: Option<String>,
     pub work_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub backfill_tool_call_ids: Option<Vec<String>>,
@@ -48,6 +50,8 @@ pub const PLAN_INTENT_LINES: [&str; 4] = ["Goal:", "Deliver:", "Next:", "Assumed
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReplacePlanInput {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subjects: Vec<super::super::PlanSubject>,
     #[serde(flatten)]
     pub scope: WorkTurnScope,
     pub mutation_call_id: String,
@@ -71,6 +75,8 @@ pub struct CheckpointInput {
     #[serde(flatten)]
     pub scope: WorkTurnScope,
     pub mutation_call_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_action_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_stage: Option<WorkStage>,
     #[serde(skip_serializing_if = "Option::is_none")]

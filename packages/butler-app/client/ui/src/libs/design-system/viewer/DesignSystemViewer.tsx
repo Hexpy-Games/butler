@@ -128,7 +128,7 @@ export function DesignSystemViewer() {
           onChange={update} onOpen={open} onSearch={() => setPaletteOpen(true)} />
         <div className={styles.scroll} data-ds-scroll ref={scrollRef}>
           <div className={styles.content}>
-            <div className={styles.page} key={pageId}>
+            <div className={styles.page} data-selectable key={pageId}>
               <ViewerContent anchor={anchor} entries={showcaseEntries} onChange={update} onOpen={open} page={page} state={state} themes={theme.frames} />
             </div>
           </div>

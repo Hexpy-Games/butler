@@ -3,7 +3,7 @@ use super::*;
 
 /// A successful Steward result is relayed as the answer: open items are work
 /// to settle, not caveats to forward.
-const RELAY: &str = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
+const RELAY: &str = "\nAnswer the user with this, outcome first, with its figures, names and source links for what was asked. Open or unconfirmed items are work, not caveats: settle those one quick lookup can; keep only what matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines on what was not re-checked or proven, or how the work was recorded.";
 
 /// The result identity of one child turn: each turn has at most one result.
 pub fn turn_result_id(session: &str, turn: &str) -> String {
@@ -54,12 +54,11 @@ impl SqliteSubsessionRepository {
             let delegation = read(db,"r.child_session_id=?1",&child_session)?.ok_or_else(|| StorageError::new(StorageCode::SubsessionRelationMissing,"Subsession relation is missing"))?;
             let result_id = turn_result_id(&child_session, &child_turn);
             let packet = &delegation.packet;
-            let model = packet.model_ref.as_str();
-            let reasoning = packet.reasoning_effort.as_str();
+            let (model, reasoning) = model_context(packet)?;
             let access = packet.access_mode.as_str();
             let parent_chat = packet.parent_chat_id.as_deref();
-            if model.is_empty() || reasoning.is_empty() { return Err(StorageError::new(StorageCode::SubsessionParentModelContextMissing,"Subsession model context is missing")); }
             let tx = db.transaction().map_err(StorageError::sqlite)?;
+            let summary = super::work_tasks::with_scope_errors(&tx, &child_turn, summary)?;
             let evidence_json=serde_json::to_string(&evidence_refs).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
             let code = failure_code.as_ref().map(|_| "steward_execution_failed")
                 .or(handoff.as_ref().map(|_| "capability_unavailable_in_child"));
@@ -74,7 +73,7 @@ impl SqliteSubsessionRepository {
                 super::super::work::settle_steward_parent(&tx, &delegation, (&result_id, &child_turn), &status, &summary, &evidence_refs, &now)?;
             }
             let feedback = delegation_feedback(&tx, &delegation, &result_id, failure_reason.as_deref())?;
-            let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}{feedback}");
+            let mut text = super::prompt_result::delivery_text(&tx, &result_id, &status, &summary, &evidence_refs, &feedback)?;
             text.push_str(&super::assets::delivery_assets(&tx, &child_turn)?);
             text.push_str(&delivery_artifacts(&tx, &child_turn, &status)?);
             if let Some(code) = failure_code.as_deref().or(code) { text.push_str(&format!("\ncode: {code}")); }
@@ -109,7 +108,7 @@ impl SqliteSubsessionRepository {
                 super::directions::retire_with_stop(&tx, &delegation.relation_id, &child_turn, &now)?;
             }
             if packet.child_role == ChildRole::Worker {
-                tx.execute(super::worker_admission::COMPLETE_WORKER_SQL, params![delegation.relation_id]).map_err(StorageError::sqlite)?;
+                super::work_tasks::settle_dispatch(&tx, &delegation.relation_id, &now)?;
             }
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(())
@@ -204,12 +203,22 @@ fn append_relay(text: &mut String, role: ChildRole, status: &str, has_handoff: b
     }
 }
 
+fn model_context(packet: &SubsessionPacket) -> Result<(&str, &str), StorageError> {
+    if packet.model_ref.is_empty() || packet.reasoning_effort.is_empty() {
+        return Err(StorageError::new(
+            StorageCode::SubsessionParentModelContextMissing,
+            "Subsession model context is missing",
+        ));
+    }
+    Ok((&packet.model_ref, &packet.reasoning_effort))
+}
+
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
 
     pub(in crate::btcc::storage::subsessions) fn assert_success_relay_format() {
-        let expected_relay = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
+        let expected_relay = "\nAnswer the user with this, outcome first, with its figures, names and source links for what was asked. Open or unconfirmed items are work, not caveats: settle those one quick lookup can; keep only what matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines on what was not re-checked or proven, or how the work was recorded.";
         for (role, status, handback, expected) in [
             (ChildRole::Steward, "success", false, true),
             (ChildRole::Steward, "blocked", false, false),

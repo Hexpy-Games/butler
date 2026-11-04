@@ -43,7 +43,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "Raw file contents", use: "ArtifactPreviewPre" },
   ],
   recipes: [
-    { name: "Document with code and a table", description: "Wrap markdown output; MarkdownCodeFrame and MarkdownTable replace pre and table.", render: () => <SpecExcerpt /> },
+    { name: "Document with code and a table", description: "Wrap markdown output; MarkdownCodeFrame and MarkdownTable replace pre and table. MarkdownCodeFrame draws its border, radius and surface with the shared CodeFrame part, which an approval card's command body uses without the header bar.", render: () => <SpecExcerpt /> },
     { name: "Links in markdown", description: "MarkdownLink replaces a: http(s) links become external InlineReferences with favicons from faviconSrc; mailto and relative links stay plain.", render: () => <LinkedReply faviconSrc={sampleFaviconSrc} /> },
   ],
   doDont: [

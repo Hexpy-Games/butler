@@ -30,6 +30,9 @@ pub(crate) fn validate_start(input: &StartWorkInput) -> Result<(), BtccError> {
 
 pub(crate) fn validate_continue(input: &ContinueWorkInput) -> Result<(), BtccError> {
     validate_mutation(&input.scope, &input.mutation_call_id)?;
+    if let Some(key) = &input.action_key {
+        required_text(key, "actionKey")?;
+    }
     required_text(&input.work_id, "workId")
 }
 
@@ -45,6 +48,14 @@ pub(crate) fn validate_replace(input: &ReplacePlanInput) -> Result<(), BtccError
     if let Some(refs) = input.governing_refs.as_deref() {
         for (index, reference) in refs.iter().enumerate() {
             required_text(reference, &format!("governingRefs[{index}]"))?;
+        }
+    }
+    let mut subjects = HashSet::new();
+    for subject in &input.subjects {
+        required_text(&subject.key, "subjects.key")?;
+        required_text(&subject.label, "subjects.label")?;
+        if !subjects.insert(&subject.key) {
+            return Err(error("Plan subjects must have unique keys"));
         }
     }
     let mut keys = HashSet::with_capacity(input.actions.len());
@@ -83,8 +94,12 @@ pub(crate) fn validate_replace(input: &ReplacePlanInput) -> Result<(), BtccError
 
 pub(crate) fn validate_checkpoint(input: &CheckpointInput) -> Result<(), BtccError> {
     validate_mutation(&input.scope, &input.mutation_call_id)?;
+    if let Some(key) = &input.current_action_key {
+        required_text(key, "currentActionKey")?;
+    }
     let updates = input.action_updates.as_deref().unwrap_or(&[]);
     if input.next_stage.is_none()
+        && input.current_action_key.is_none()
         && updates.is_empty()
         && input
             .public_summary
@@ -96,7 +111,7 @@ pub(crate) fn validate_checkpoint(input: &CheckpointInput) -> Result<(), BtccErr
             .is_none_or(|value| trim_js_whitespace(value).is_empty())
     {
         return Err(error(
-            "Durable Work progress requires a stage, action update, or summary",
+            "Durable Work progress requires a stage, action update, current action, or summary",
         ));
     }
     validate_action_updates(updates)

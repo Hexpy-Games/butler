@@ -16,6 +16,8 @@ pub(super) async fn execute(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    let direct = super::discovery::by_name(owner, call);
+    let call = direct.as_ref().unwrap_or(call);
     let timing = Some(super::super::command::timing::CommandTiming::new("handler"));
     let (effective_name, presentation_args, catalog_id) = super::discovery::effective(call);
     let (record, call_id) = restore_call(
@@ -61,7 +63,7 @@ pub(super) async fn execute(
     let result = super::permission_mode::with_approval(
         approval_mode,
         effective_name.clone(),
-        dispatch_result(owner, invocation, call, &call_id),
+        super::task_writes::dispatch(owner, invocation, call, &call_id, &effective_name),
     )
     .await?;
     if let Some(timing) = &timing {
@@ -233,7 +235,7 @@ async fn complete(
     Ok(result)
 }
 
-async fn dispatch_result(
+pub(super) async fn dispatch_result(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,

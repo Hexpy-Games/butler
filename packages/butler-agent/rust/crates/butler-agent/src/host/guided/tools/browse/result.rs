@@ -11,14 +11,25 @@ impl Run {
     pub(super) fn remember(&mut self, view: Value) {
         let url = view["untrusted_content"]["url"]
             .as_str()
+            .or(view["final_url"].as_str())
             .or(view["source_url"].as_str())
             .unwrap_or("")
             .to_owned();
-        let text = view["untrusted_content"]["text"]
+        let texts = if let Some(text) = view["untrusted_content"]["text"]
             .as_str()
             .or(view["markdown"].as_str())
-            .unwrap_or("");
-        self.seen.push((url.clone(), text.to_owned()));
+        {
+            vec![text]
+        } else {
+            view["passages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|passage| passage["text"].as_str())
+                .collect()
+        };
+        self.seen
+            .extend(texts.into_iter().map(|text| (url.clone(), text.to_owned())));
         self.url = json!(url);
         if let Some(obs) = view.get("obs") {
             self.observation = obs.clone();

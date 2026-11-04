@@ -69,7 +69,6 @@ impl GuidedWorkAdapter {
         if call.name != result.name {
             return Ok(false);
         }
-        // Fields borrow encoded JSON tokens, including quotes around strings.
         let field = |name| {
             result
                 .output
@@ -77,7 +76,7 @@ impl GuidedWorkAdapter {
                 .and_then(|output| output.field(name).ok().flatten())
         };
         let requested = match ToolName::parse(call.name.as_str()) {
-            Some(ToolName::WaitForWorker) => result.ok && field("status") == Some("\"waiting\""),
+            Some(ToolName::WaitForWorker) => result.ok,
             Some(ToolName::DelegateToSteward) => {
                 result.ok || field("wait_for_child") == Some("true")
             }

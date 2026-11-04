@@ -49,7 +49,7 @@ async fn deleg_batch_01_batched_reads_take_fewer_rounds_with_the_same_content()
         batched.instructions
     );
     for next in &batched.guidance {
-        assert!(next.contains("web_read {tab}"), "{next}");
+        assert!(next.contains("browser_read {tab}"), "{next}");
     }
     // The same facts: every page window, and the report Butler got.
     assert_eq!(serial.reads.len(), 6, "{:?}", serial.reads);
@@ -186,7 +186,7 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
         .filter(|output| output["reader"] == "butler-browser-tab")
         .map(|output| {
             (
-                output["source_url"].as_str().unwrap().to_owned(),
+                output["final_url"].as_str().unwrap().to_owned(),
                 output["start_chunk"].as_u64().unwrap(),
                 output["markdown"].as_str().unwrap().to_owned(),
             )

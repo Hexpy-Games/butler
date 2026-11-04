@@ -30,7 +30,10 @@ impl GraphBuilder {
             .graph("butler/history", 1, "Historical request")
             .await?;
         for i in 0..attempts {
-            self.worker(&work, "a", &format!("Historical approach {i}"))
+            let attempt = self
+                .worker(&work, "a", &format!("Historical approach {i}"))
+                .await?;
+            self.result(&attempt, "failed", "Historical approach ended")
                 .await?;
         }
         Ok(())

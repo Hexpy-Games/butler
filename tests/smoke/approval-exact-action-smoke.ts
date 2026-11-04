@@ -9,7 +9,6 @@ import type { SessionView } from "../../packages/butler-app/client/ui/src/app/ty
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 
 const before = Bun.argv.includes("--before");
-const menuBefore = Bun.argv.includes("--permission-menu-before");
 const output = process.env.BUTLER_APPROVAL_EXACT_SHOTS;
 assert(output, "Set BUTLER_APPROVAL_EXACT_SHOTS to a temporary screenshot directory");
 mkdirSync(output, { recursive: true });
@@ -100,9 +99,7 @@ try {
             return Boolean(field && field.getBoundingClientRect().bottom <= field.parentElement!.getBoundingClientRect().bottom + 1);
           }, item.text);
         }
-        if (!before) {
-          assert.equal(await panel.locator('[aria-haspopup="menu"]').count(), menuBefore ? 1 : 0, "backend flag hides conversation allow");
-        }
+        assert.equal(await panel.locator('[aria-haspopup="menu"]').count(), 1, "allow keeps its scope menu; conversation option shows disabled");
         const text = await panel.innerText();
         assert.equal(text.includes(item.text), !before, `${item.tool}: exact input visibility`);
         await page.evaluate(() => document.fonts.ready);

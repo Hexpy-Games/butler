@@ -332,7 +332,7 @@ function notifyHookBlocked(event: TimelineEvent): void {
   const { hook, tool } = (event.payload ?? {}) as Record<string, unknown>;
   if (typeof hook !== "string" || !hook) return;
   const copy = appCopy.settings.hooks;
-  notifyStatus(event.type === "hook.failed" ? copy.failedOpen(hook) : copy.failedBlock(hook, typeof tool === "string" && tool ? tool : copy.finishTarget), { id: "hook-blocked", tone: "error" });
+  notifyStatus(event.type === "hook.failed" ? copy.failedOpen(hook) : copy.failedBlock(hook, typeof tool === "string" && tool ? appCopy.guided.tools[tool] ?? tool : copy.finishTarget), { id: "hook-blocked", tone: "error" });
 }
 
 function isRecentEvent(event: TimelineEvent): boolean {

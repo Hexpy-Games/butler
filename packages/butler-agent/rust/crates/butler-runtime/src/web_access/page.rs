@@ -4,8 +4,8 @@ use sha2::{Digest, Sha256};
 use super::html::title_from_html;
 use super::service::WebAccessError;
 
-const CHUNK_SIZE: usize = 1_500;
-const CHUNK_OVERLAP: usize = 180;
+mod chunks;
+mod table_context;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct PageRead {
@@ -33,6 +33,8 @@ pub(super) struct EvidenceChunk {
     pub(super) url: String,
     pub(super) text: String,
     pub(super) char_count: usize,
+    pub(super) units: Vec<super::read::passages::Unit>,
+    pub(super) header_prefix: bool,
 }
 
 impl PageRead {
@@ -157,7 +159,7 @@ pub(super) fn extract_page(
             || (text_len < 50 && method != "github-raw"));
     warnings.sort();
     warnings.dedup();
-    let chunks = chunk_evidence(&markdown, title.as_deref(), final_url);
+    let chunks = chunks::chunk_evidence(&markdown, title.as_deref(), final_url);
     let ok = response_ok && !text.trim().is_empty() && error.is_none();
     Ok(PageRead {
         reader: "butler-lightweight".into(),
@@ -274,50 +276,6 @@ fn page_warnings(body: &str, text: &str, content_type: Option<&str>) -> Vec<Stri
         warnings.push(format!("unexpected-content-type:{content_type}"));
     }
     warnings
-}
-
-fn chunk_evidence(markdown: &str, title: Option<&str>, url: &str) -> Vec<EvidenceChunk> {
-    let text = markdown.trim();
-    let mut chunks = Vec::new();
-    let mut offset = 0;
-    while offset < text.encode_utf16().count() {
-        // Utf16Slice takes an end offset, not a length.
-        let candidate = butler_core::json::Utf16Slice::new(text, offset, offset + CHUNK_SIZE)
-            .utf8_lossy()
-            .into_owned();
-        let candidate_units = candidate.encode_utf16().count();
-        let end = offset.saturating_add(candidate_units);
-        let mut end = end.min(text.encode_utf16().count());
-        if end < text.encode_utf16().count()
-            && let Some(boundary) = candidate.rfind("\n\n")
-        {
-            let before = candidate[..boundary].encode_utf16().count();
-            if before > CHUNK_SIZE * 45 / 100 {
-                end = offset + before;
-            }
-        }
-        let slice = butler_core::json::Utf16Slice::new(text, offset, end)
-            .utf8_lossy()
-            .into_owned();
-        let chunk_text = slice.trim().to_owned();
-        if !chunk_text.is_empty() {
-            let index = chunks.len();
-            let identity = format!("{url}:{index}:{}", utf16_prefix(&chunk_text, 160));
-            chunks.push(EvidenceChunk {
-                id: format!("ev_{}", simple_hash(&identity)),
-                index,
-                title: title.map(str::to_owned),
-                url: url.into(),
-                char_count: chunk_text.encode_utf16().count(),
-                text: chunk_text,
-            });
-        }
-        if end >= text.encode_utf16().count() {
-            break;
-        }
-        offset = end.saturating_sub(CHUNK_OVERLAP).max(offset + 1);
-    }
-    chunks
 }
 
 fn utf16_prefix(value: &str, max: usize) -> String {
