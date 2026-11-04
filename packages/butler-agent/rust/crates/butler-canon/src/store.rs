@@ -66,6 +66,9 @@ pub enum Error {
     QueueRevisionRequired,
     #[error("invalid operation: {0}")]
     Invalid(&'static str),
+    /// A request body that did not decode; serde's message names the field.
+    #[error("invalid operation: {0}")]
+    Fields(String),
     #[error(transparent)]
     Chain(#[from] crate::work_chain::ChainError),
     #[error(transparent)]

@@ -3,6 +3,7 @@
 use butler_e2e::e2e::{
     HarnessError,
     fake_servers::{ChatBehavior, FakeServer, LocalCapabilities},
+    gateway::tool_rows,
     scenario::Scenario,
 };
 use serde_json::{Value, json};
@@ -236,6 +237,62 @@ async fn deferred_tool_called_by_name_still_asks_for_approval() -> Result<(), Ha
         !first.iter().any(|name| name == "set_wallpaper"),
         "{first:?}"
     );
+    s.finish().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn bridged_tool_rows_name_the_catalog_tool() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (_server, s) = local(
+        "BRIDGE-LABEL",
+        vec![
+            call(
+                "bridged",
+                "tool_call",
+                &json!({"id":"native:list_automations","arguments":{}}),
+            ),
+            json!({"role":"assistant","content":"Finished."}),
+        ],
+    )
+    .await?;
+    let (turn_id, _) = s.turn("general", "List my schedules.").await?;
+    let rows = tool_rows(&s.gw.messages("general").await?, &turn_id);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0]["safe_tool_name"], "list_automations", "{rows:?}");
+    assert_eq!(rows[0]["safe_label"], "list_automations", "{rows:?}");
+    s.finish().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn searched_tools_run_the_same_through_tool_call() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let args = json!({"op":"remove","epic_id":"ep_missing"});
+    let (server, s) = local(
+        "BRIDGE-ROUTE",
+        vec![
+            call(
+                "search",
+                "tool_search",
+                &json!({"query":"queue canon epics"}),
+            ),
+            call(
+                "bridged",
+                "tool_call",
+                &json!({"id":"native:canon_queue","arguments":args}),
+            ),
+            call("direct", "canon_queue", &args),
+            json!({"role":"assistant","content":"Done."}),
+        ],
+    )
+    .await?;
+    s.turn("general", "Take that epic out of the run.").await?;
+    let results = tool_results(&server);
+    assert_eq!(results.len(), 3, "{results:?}");
+    let direct = &results[2]["error"]["code"];
+    assert!(direct.is_string(), "{results:?}");
+    assert_eq!(&results[1]["error"]["code"], direct, "{results:?}");
     s.finish().await?;
     Ok(())
 }

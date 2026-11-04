@@ -60,6 +60,38 @@ async fn cp_05_auto_applies_with_record_without_an_open_ask() -> Result<(), Harn
     }
     Ok(())
 }
+/// A change with a field its op does not take is refused with the field named, so the model can fix it.
+#[tokio::test]
+async fn cp_05b_wrong_change_fields_are_named() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, project, chat) = setup("CP-05B", Access::Auto).await?;
+    run(
+        &s,
+        &script,
+        &chat,
+        "이 문제를 과제로 등록해",
+        vec![
+            ("canon_propose", json!({"project_id":project,"summary":"표시 오류","changes":[{"op":"epic.create","name":"표시 오류"}]})),
+            ("canon_propose", json!({"project_id":project,"summary":"표시 오류","changes":[{"op":"epic.create","title":"표시 오류","status":"planned"}]})),
+        ],
+    )
+    .await?;
+    let messages: Vec<String> = stub::results(&script)
+        .iter()
+        .filter_map(|r| r["error"]["message"].as_str().map(str::to_owned))
+        .collect();
+    assert!(
+        messages.iter().any(|m| m.contains("unknown field `name`")),
+        "{messages:?}"
+    );
+    assert!(
+        messages.iter().any(|m| m.contains("takes no status")),
+        "{messages:?}"
+    );
+    server.abort();
+    s.finish().await?;
+    Ok(())
+}
 #[tokio::test]
 async fn cp_06_read_only_tool_stays_visible_and_refuses() -> Result<(), HarnessError> {
     butler_e2e::gate!();

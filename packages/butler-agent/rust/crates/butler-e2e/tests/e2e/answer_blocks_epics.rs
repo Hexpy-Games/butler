@@ -195,6 +195,18 @@ fn assert_tool(script: &stub::Script) {
         tool["description"],
         catalog["rawDefinitions"]["answer_blocks"]["description"]
     );
+    assert!(
+        tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("names epics (과제)")
+    );
+    assert!(
+        tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("one epics block for the epics it is about")
+    );
     assert_eq!(
         tool["parameters"]["$defs"]["epics"],
         schema["$defs"]["epics"]
@@ -273,7 +285,7 @@ fn epic_tool_tokens_stay_within_existing_budget() -> Result<(), HarnessError> {
         "ANSWER_BLOCKS_TOKENS main=234+2776=3010 after={description_tokens}+{schema_tokens}={}",
         description_tokens + schema_tokens
     );
-    // Ratchet: main measured 3010 before the epics block; counts may only go down.
-    assert!(description_tokens + schema_tokens <= 3009);
+    // Ratchet: previous ratchet was 3009; counts may only go down.
+    assert!(description_tokens + schema_tokens <= 3004);
     Ok(())
 }
