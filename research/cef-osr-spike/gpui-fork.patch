@@ -198,11 +198,12 @@ index e7dbdf0761..b3288ab602 100644
  }
 diff --git a/crates/gpui_apple/src/surface_lifetime.rs b/crates/gpui_apple/src/surface_lifetime.rs
 new file mode 100644
-index 0000000000..acc1d79f84
+index 0000000000..905069c015
 --- /dev/null
 +++ b/crates/gpui_apple/src/surface_lifetime.rs
-@@ -0,0 +1,16 @@
-+//! Keep both CoreVideo textures and their source alive until Metal finishes.
+@@ -0,0 +1,21 @@
++//! Keep both CoreVideo textures and their source alive until Metal finishes, and report when it does.
++use core_foundation::base::TCFType;
 +use core_video::{metal_texture::CVMetalTexture, pixel_buffer::CVPixelBuffer};
 +use std::cell::Cell;
 +pub(crate) fn hold_until_completed(
@@ -211,19 +212,23 @@ index 0000000000..acc1d79f84
 +    primary: CVMetalTexture,
 +    secondary: CVMetalTexture,
 +) {
++    let surface = frame.as_concrete_TypeRef() as usize;
++    crate::surface_observer::begin_read(surface);
 +    let resources = Cell::new(Some((frame, primary, secondary)));
 +    let completed = block::ConcreteBlock::new(move |_: &metal::CommandBufferRef| {
-+        drop(resources.take());
++        if resources.take().is_some() {
++            crate::surface_observer::end_read(surface);
++        }
 +    })
 +    .copy();
 +    command.add_completed_handler(&completed);
 +}
 diff --git a/crates/gpui_apple/src/surface_observer.rs b/crates/gpui_apple/src/surface_observer.rs
 new file mode 100644
-index 0000000000..5f893d88d8
+index 0000000000..488b574764
 --- /dev/null
 +++ b/crates/gpui_apple/src/surface_observer.rs
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,42 @@
 +//! Optional surface presentation telemetry for embedding diagnostics.
 +use std::sync::{Arc, OnceLock};
 +pub type Observer = Arc<dyn Fn(&[usize], f64) + Send + Sync>;
@@ -234,6 +239,37 @@ index 0000000000..5f893d88d8
 +}
 +pub(crate) fn observer() -> Option<Observer> {
 +    OBSERVER.get().cloned()
++}
++/// Called on Metal's completion thread whenever submitted GPU work stops reading a surface.
++pub type Released = Arc<dyn Fn() + Send + Sync>;
++static RELEASED: OnceLock<Released> = OnceLock::new();
++// Submitted command buffers still reading each surface, keyed by `CVPixelBuffer` pointer.
++static IN_FLIGHT: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<usize, u32>>> =
++    std::sync::LazyLock::new(Default::default);
++/// Install before creating windows, so an embedder knows when it may let a surface be rewritten.
++pub fn install_released(released: Released) -> bool {
++    RELEASED.set(released).is_ok()
++}
++/// Whether submitted GPU work still reads this surface (`CVPixelBuffer` pointer).
++pub fn in_flight(surface: usize) -> bool {
++    IN_FLIGHT.lock().unwrap().contains_key(&surface)
++}
++pub(crate) fn begin_read(surface: usize) {
++    *IN_FLIGHT.lock().unwrap().entry(surface).or_insert(0) += 1;
++}
++pub(crate) fn end_read(surface: usize) {
++    {
++        let mut reads = IN_FLIGHT.lock().unwrap();
++        if let Some(count) = reads.get_mut(&surface) {
++            *count -= 1;
++            if *count == 0 {
++                reads.remove(&surface);
++            }
++        }
++    }
++    if let Some(released) = RELEASED.get() {
++        released();
++    }
 +}
 diff --git a/crates/gpui_render/Cargo.toml b/crates/gpui_render/Cargo.toml
 index 85f4f283d2..9c7c2f6a68 100644
