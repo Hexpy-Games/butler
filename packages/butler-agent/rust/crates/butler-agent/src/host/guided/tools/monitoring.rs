@@ -216,13 +216,17 @@ fn list_capabilities(owner: &GuidedTools, call: &ModelRoundToolCall) -> Value {
             if category.is_some_and(|selected| selected != item_category) {
                 return None;
             }
-            let disabled = owner.web_session.configured_disabled_reason(tool.name);
+            let withheld = super::reader_surface::withheld(owner, tool.name);
+            let disabled = owner
+                .web_session
+                .configured_disabled_reason(tool.name)
+                .or(withheld);
             let implemented = GuidedTools::supports(tool.name);
             let enabled = implemented && disabled.is_none();
             if !include_disabled && !enabled {
                 return None;
             }
-            let selected = owner.visible(tool.name);
+            let selected = owner.visible(tool.name) && withheld.is_none();
             let callable = selected && enabled && owner.authorized(tool.name);
             let reason = disabled
                 .map(|value| value.0)
