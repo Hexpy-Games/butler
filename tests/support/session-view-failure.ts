@@ -6,7 +6,7 @@ import type { SessionView } from "../../packages/butler-app/client/ui/src/app/ty
 
 /**
  * A session whose session-view load fails never gets a summary. The sections
- * that need none (pending asks, the canon task, the queue) and the toggle with its asks
+ * that need none (pending asks, the canon task) and the toggle with its asks
  * dot must still show once the load has settled.
  */
 export async function verifySessionViewFailure(browser: Browser, server: NativeAppServerHandle, view: SessionView) {
@@ -26,9 +26,9 @@ export async function verifySessionViewFailure(browser: Browser, server: NativeA
     assert.equal(await toggle.locator('[data-slot="icon-button-indicator"]').count(), 1, "the asks dot stays without a summary");
     await toggle.click();
     const aside = page.getByRole("complementary", { name: "세션 정보", exact: true });
-    for (const id of ["asks", "task", "queue"]) await aside.locator(`[data-session-section="${id}"]`).waitFor();
+    for (const id of ["asks", "task"]) await aside.locator(`[data-session-section="${id}"]`).waitFor();
     const sections = await aside.locator("[data-session-section]").evaluateAll(elements => elements.map(element => element.getAttribute("data-session-section")));
-    assert.deepEqual(sections, ["asks", "task", "queue"], "only the sections that need no summary show");
+    assert.deepEqual(sections, ["asks", "task"], "only the sections that need no summary show");
     console.log(JSON.stringify({ sessionViewFailure: "PASS", sections }));
   } finally {
     await page.close();

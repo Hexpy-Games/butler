@@ -96,10 +96,11 @@ fn checked(
     if !metadata.is_file() || metadata.len() > MAX_BYTES {
         return None;
     }
-    let target = secure_fs::stage_file(data, turn, &root.join(relative), file, MAX_BYTES).ok()?;
+    let original = root.join(relative);
+    let target = secure_fs::stage_file(data, turn, &original, file, MAX_BYTES).ok()?;
     let source = relative.to_str()?.replace('\\', "/");
     Some(
-        json!({"path":source,"staged_path":target.to_str()?.to_owned(),
+        json!({"path":source,"staged_path":target.to_str()?.to_owned(),"origin_path":original.to_str()?.to_owned(),
         "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(&label)}),
     )
 }

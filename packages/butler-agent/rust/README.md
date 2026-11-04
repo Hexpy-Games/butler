@@ -120,8 +120,7 @@ change nothing else. Each is off unless set to `1`.
 
 Settings → Hooks manages `$BUTLER_DATA/hooks.json`. No hooks are installed by
 default. Hooks run with your privileges and receive full prompt and tool content.
-They cannot grant permission or change tool inputs. Plugin hooks are not supported
-yet.
+They cannot grant permission or change tool inputs. Project folders cannot add hooks.
 
 ```json
 {
@@ -134,7 +133,6 @@ yet.
     "type": "command",
     "args": ["sh", "/absolute/path/guard.sh"],
     "timeout_ms": 30000,
-    "failClosed": false,
     "enabled": true
   }]
 }
@@ -158,11 +156,18 @@ include full `tool_input`, call id and `resumed`; post events include `ok`, full
 
 Exit 2 or `{"decision":"deny","reason":"..."}` denies a pre-event. `block` and
 Claude Code's `hookSpecificOutput.permissionDecision: "deny"` are also accepted.
-Exit 0 with empty/non-JSON stdout continues. Other exits, crashes, invalid JSON,
-spawn failures, timeout and output overflow are logged and continue by default;
-`failClosed: true` blocks on these failures. A `UserPromptSubmit` or `SessionStart`
-hook's non-JSON stdout counts as text even when it starts with `[` or `{`, unless
-that hook sets `failClosed: true`. `allow` and `ask` are logged as
+Exit 0 with empty/non-JSON stdout continues. Anything else is a failure: another
+exit code, a crash, invalid JSON, a spawn failure, a timeout or output overflow.
+Failures are logged and reported in a brief toast naming the hook. Each hook's
+`failClosed` switch defaults to **false** for every event, including `Stop`;
+stored hooks without this field also load as false, and new hooks start with
+"Block on error" off. Failures proceed unless that hook has `failClosed: true`
+and its event can block (`UserPromptSubmit`, `PreToolUse`, `Stop`, `SubagentStop`).
+`SessionStart` and `PostToolUse` always continue after failures. Explicit deny
+responses still block blocking events regardless of this switch. A rejected send
+names the hook in its response; turn-time blocks show what the hook blocked.
+Unreadable JSON is a failure, except from `UserPromptSubmit` and `SessionStart`
+hooks without `failClosed`, where it is added as text. `allow` and `ask` are logged as
 `approval_ignored`; normal permission checks still run. Input rewriting is
 ignored. Reasons are limited to 16 KiB.
 
@@ -203,50 +208,6 @@ Timeout and cancellation terminate the process tree, allow two seconds of grace,
 then force termination and reap. Each output stream is capped at 64 KiB, except
 stdout of hooks that can add context (above); overflow is an error, never truncated
 success. Stdin is streamed in full.
-
-### Project-folder hooks
-
-A project folder can define command hooks in `.butler/hooks.json`, in the same
-format. Butler asks once per folder whether to run its hooks, on one card however
-many hooks there are, listing the folder's full path and each hook's event, tools and
-command with its environment additions. Adding a project asks in a dialog; closing it
-is no answer. A folder that still has no answer asks on a card, before the first model
-round of the first turn that reaches it. A folder with no hooks is never asked about.
-
-After you say to run them, the folder's hooks run, including ones added or changed later, with no
-further question. If the file changed while the question waited, the answer saves
-nothing and a new card lists what is there now. If you don't, nothing from that file
-runs, whatever it says later.
-The answer covers that folder: a replaced or renamed one asks again. Answers are kept
-in `$BUTLER_DATA/auth/project-hook-trust.json`, which no file tool can write. A
-scheduled run has nobody to answer, so without an answer its hooks do not run and the
-run continues.
-
-Trust is not the boundary, and neither are hooks: the sandbox and the permission mode
-are. A guard hook can be removed or changed with no question, and a script an allowed
-hook runs can change, for example through `git pull`.
-
-Project hooks run inside the sandbox of the session, or of the message or schedule
-that raised them if it has its own mode: in `auto`, `ask_first` and `ask_except_reads`
-they may write only inside the project and scratch folders, and in `read_only` nowhere.
-Neither has network access or can read credential stores. A hook's `env` is set inside
-the sandbox too, so a variable that acts on a program's startup (`LD_PRELOAD`, say)
-never reaches what starts the sandbox. Only `full_access` is exempt, and its card says
-so. A host that cannot apply the sandbox does not run the hook.
-
-A project hook adds text to the model's context only through
-`hookSpecificOutput.additionalContext`; its plain stdout is not added, and the run log
-says so. The text is labelled `scope=project`. A guard's `reason` and the stderr of an
-exit 2 still reach the model, because that is how a guard says why it refused. Either
-kind of text marks the turn as having read outside content: in `auto`, what would send
-something out then asks first.
-
-SessionStart held back by the card runs after you say to run the hooks, and any text it
-adds is dropped and noted in the run log; UserPromptSubmit starts with your next
-message. A symlink at `.butler/hooks.json` or `.butler` and an invalid file are
-refused: nothing runs, and the reason is in the run log. Project hooks receive
-`hook: {id: "project:<id>", scope: "project"}`, with `cwd` and `project_dir` set to the
-folder they were read from.
 
 Windows `command` uses `cmd.exe /d /s /c`. For PowerShell use
 `args: ["pwsh", "-NoProfile", "-File", "C:\\path\\hook.ps1"]`. PowerShell 5

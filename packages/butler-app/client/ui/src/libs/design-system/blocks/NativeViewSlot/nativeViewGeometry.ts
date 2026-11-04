@@ -50,6 +50,9 @@ export function rectsOverlap(a: RectLike, b: RectLike): boolean {
     && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 }
 
+/** Set on an ancestor about to move: the native view is covered first, and the motion starts once the still stands in. */
+export const NATIVE_VIEW_HOLD = "data-native-view-hold";
+
 /** CSS transition properties that move or resize a box. */
 export const GEOMETRY_TRANSITIONS = new Set([
   "all", "transform", "translate", "scale", "rotate", "width", "height", "inset", "left", "right", "top", "bottom",

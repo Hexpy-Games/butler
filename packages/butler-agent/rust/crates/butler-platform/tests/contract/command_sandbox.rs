@@ -143,7 +143,7 @@ fn protected_roots_refuse_writes_by_path_and_real_path() {
     std::fs::create_dir_all(&outside).unwrap();
     // The scratch directory may itself sit behind a link (macOS /var is
     // /private/var), so the real path is protected too.
-    let real_root = root.canonicalize().unwrap();
+    let real_root = butler_platform::secure_fs::canonicalize(&root).unwrap();
     let blocked = [root.join("by-path"), real_root.join("by-real-path")];
     let allowed = outside.join("allowed");
     let command = write_command(&[&blocked[0], &blocked[1], &allowed]);

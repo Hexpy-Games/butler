@@ -16,27 +16,7 @@ pub(super) async fn publish(
         return super::dispatch::encoded(&json!({"ok":false,"error":"tool_not_admitted"}));
     }
     let args = &call.arguments;
-    let request = PublishRequest {
-        workspace: owner.active_workspace_path(),
-        path: args
-            .get("path")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_owned(),
-        entry: args.get("entry").and_then(Value::as_str).map(str::to_owned),
-        title: args
-            .get("title")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_owned(),
-        session_id: owner
-            .binding
-            .app_session_id
-            .clone()
-            .unwrap_or_else(|| owner.binding.source_session_id.clone()),
-        message_id: invocation.turn.original_message_id.clone(),
-        turn_id: owner.binding.turn_id.clone(),
-    };
+    let request = publish_request(owner, invocation, args);
     if owner
         .binding
         .allowed_tools_and_effects
@@ -75,6 +55,34 @@ pub(super) async fn publish(
         Err(_) => json!({"ok":false,"error":"output_publish_failed"}),
     };
     super::dispatch::encoded(&value)
+}
+
+fn publish_request(
+    owner: &GuidedTools,
+    invocation: &GuidedInvocation<'_>,
+    args: &serde_json::Map<String, Value>,
+) -> PublishRequest {
+    PublishRequest {
+        workspace: owner.active_workspace_path(),
+        path: args
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned(),
+        entry: args.get("entry").and_then(Value::as_str).map(str::to_owned),
+        title: args
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned(),
+        session_id: owner
+            .binding
+            .app_session_id
+            .clone()
+            .unwrap_or_else(|| owner.binding.source_session_id.clone()),
+        message_id: invocation.turn.original_message_id.clone(),
+        turn_id: owner.binding.turn_id.clone(),
+    }
 }
 
 pub(super) async fn inspect(

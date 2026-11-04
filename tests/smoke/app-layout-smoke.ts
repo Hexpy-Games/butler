@@ -2772,7 +2772,7 @@ try {
       );
       const cardsFrame = workspace?.closest('[data-frame="cards"]');
       const contentCard = cardsFrame
-        ? element.closest<HTMLElement>('[data-slot="adaptive-shell-card"]')
+        ? element.closest<HTMLElement>('[data-slot="adaptive-shell-card"], [data-slot="adaptive-shell-split-chat"]')
         : null;
       const contentRect = contentCard?.getBoundingClientRect();
       // Wallpaper canvases may exceed the card; its overflow clips the visible paint.

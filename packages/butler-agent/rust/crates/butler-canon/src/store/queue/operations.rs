@@ -2,8 +2,17 @@ use super::*;
 
 pub fn request(tx: &Transaction<'_>, ctx: &Context, session: &str, input: &Value) -> Result<Value> {
     let op = text(input, "op")?;
+    edits::check_revision(tx, session, &input["expected_revision"], op == "set_order")?;
     if op == "remove" {
         return remove_request(tx, ctx, session, input);
+    }
+    if op == "set_order" {
+        return edit(
+            tx,
+            ctx,
+            session,
+            &json!({"op":"set_order","steps":input["steps"],"expected_graph_revision":input["expected_revision"]}),
+        );
     }
     let epics = if op == "plan_run" {
         let plan = text(input, "plan_id")?;
@@ -122,7 +131,12 @@ fn attach(
     };
     save(tx, session, chain_id, &chain)
 }
-fn remove(tx: &Transaction<'_>, session: &str, epic: &str, pin_running: bool) -> Result<()> {
+pub(super) fn remove(
+    tx: &Transaction<'_>,
+    session: &str,
+    epic: &str,
+    pin_running: bool,
+) -> Result<()> {
     let items = items(tx, session)?;
     let item = items
         .iter()
@@ -267,7 +281,7 @@ pub fn session_deleted(
             // A deleted source has no turn left to stop. Keep the committed move
             // and use the normal terminal receipt to unblock its current owner.
             for cancellation in rows(tx, sql::SOURCE_CANCELLATIONS, [session])? {
-                engine::turn_ended(tx, ctx, text(&cancellation, "op_id")?, "cancelled")?;
+                engine::turn_ended(tx, ctx, text(&cancellation, "op_id")?, "cancelled", None)?;
             }
             tx.execute(sql::DELETE_HEAD, [session])?;
             Ok(())

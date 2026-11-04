@@ -18,9 +18,11 @@ export const useElementDraft = create<{ session: string; items: ElementAttachmen
 export async function restoreElementDraft(session: string) {
   useElementDraft.setState({ session, items: [] });
   const draft = await readCachedComposerDraft(session);
-  if (useElementDraft.getState().session === session) useElementDraft.setState({ items: draft?.element_attachments ?? [] });
+  const items = (draft?.element_attachments ?? []).map(restoreCapture);
+  if (useElementDraft.getState().session === session) useElementDraft.setState({ items });
 }
 async function persist(session: string, items: ElementAttachment[]) {
+  items = items.map(restoreCapture);
   const composer = useComposerStore.getState();
   const draft = await readCachedComposerDraft(session);
   const snapshot = { schema: "butler.composer-draft.v1" as const, session_id: session,
@@ -47,9 +49,9 @@ export function attachElements(session: string, elements: PickedElement[]) {
     for (const element of elements) {
       const image = await (await fetch(element.crop)).blob();
       const crop = await uploadMessageFile(new File([image], "element.jpg", { type: "image/jpeg" }), session);
-      const data = { kind: "untrusted_web_page_data", ...element, crop: { file_id: crop.file_id }, ref: undefined, observation: undefined };
-      const file = await uploadMessageFile(new File([JSON.stringify({ untrusted_content: data })], "element.json", { type: "application/json" }), session);
-      items.push({ id: element.id, title: element.title, site: element.site, file, crop });
+      const { crop: _crop, ref: _ref, observation: _observation, ...source } = element;
+      const metadata = { untrusted_content: { kind: "untrusted_web_page_data", ...source } };
+      items.push({ id: element.id, title: element.title, site: element.site, file: crop, metadata });
     }
     const draft = await readCachedComposerDraft(session);
     const prior = draft?.element_attachments ?? [];
@@ -93,4 +95,9 @@ export function attachLibraryReference(session: string, item: ElementAttachment)
     const draft=await readCachedComposerDraft(session);
     await persist(session,[...(draft?.element_attachments ?? []).filter(old=>old.id!==item.id),item]);
   });
+}
+
+/** Older drafts stored the metadata file as the visible file and kept its image separately. */
+function restoreCapture(item: ElementAttachment): ElementAttachment {
+  return item.crop && item.kind !== "library" && item.file.kind !== "image" ? { ...item, file: item.crop } : item;
 }

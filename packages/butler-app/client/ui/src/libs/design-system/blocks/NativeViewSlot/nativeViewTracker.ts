@@ -1,5 +1,5 @@
 import {
-  GEOMETRY_TRANSITIONS, hasGeometryAnimation, rectsOverlap, sameNativeViewBounds, toNativeViewBounds,
+  GEOMETRY_TRANSITIONS, NATIVE_VIEW_HOLD, hasGeometryAnimation, rectsOverlap, sameNativeViewBounds, toNativeViewBounds,
   type NativeViewBounds, type NativeViewViewport,
 } from "./nativeViewGeometry";
 import { NATIVE_VIEW_OCCLUDERS } from "./nativeViewOccluders";
@@ -26,7 +26,7 @@ export interface NativeViewTrackerOptions extends NativeViewTrackerSettings {
 
 /** Running geometry motion on an ancestor (the slot moves) or on an element crossing the slot. */
 function panelAnimating(root: HTMLElement, rect: DOMRect, movers: Set<Element>): boolean {
-  for (let node = root.parentElement; node; node = node.parentElement) if (hasGeometryAnimation(node)) return true;
+  for (let node = root.parentElement; node; node = node.parentElement) if (node.hasAttribute(NATIVE_VIEW_HOLD) || hasGeometryAnimation(node)) return true;
   for (const mover of movers) {
     if (!mover.isConnected) movers.delete(mover);
     else if (hasGeometryAnimation(mover) && rectsOverlap(mover.getBoundingClientRect(), rect)) return true;
@@ -48,7 +48,7 @@ function observeNativeChanges(root: HTMLElement, target: HTMLElement, selector: 
     const css = selector();
     const touches = (node: Node) => node instanceof Element && (node.matches(css) || node.querySelector(css) !== null);
     const relevant = records.some((record) => record.type === "attributes"
-      ? record.attributeName === "data-left-peek" || (record.target as Element).closest?.(css) !== null
+      ? record.attributeName === "data-left-peek" || record.attributeName === NATIVE_VIEW_HOLD || (record.target as Element).closest?.(css) !== null
       : [...record.addedNodes, ...record.removedNodes].some(touches));
     if (relevant) schedule();
   };
@@ -60,7 +60,7 @@ function observeNativeChanges(root: HTMLElement, target: HTMLElement, selector: 
   resize?.observe(target);
   const move = observeMove(target, schedule);
   const mutations = typeof MutationObserver === "undefined" ? null : new MutationObserver(onMutation);
-  mutations?.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "hidden", "open", "data-left-peek"] });
+  mutations?.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "hidden", "open", "data-left-peek", NATIVE_VIEW_HOLD] });
   const listeners: Array<[EventTarget, string, EventListener, AddEventListenerOptions]> = [
     [doc.defaultView ?? window, "resize", schedule, { passive: true }],
     [doc, "scroll", schedule, { capture: true, passive: true }],

@@ -7,7 +7,6 @@ import { api } from "@/app/api.ts";
 import { confirmAction } from "@/app/confirmation.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ArchiveListView } from "@/app/types.ts";
-import { Button } from "@/butler-ds";
 import { ArchiveItemRow } from "./ArchiveItemRow";
 import { archiveItems, type ArchiveItem } from "./archiveSettingsUtils";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
@@ -103,9 +102,11 @@ export function ArchivesSettings() {
       <SettingsSection
         id="archives"
         kind="list"
+        title={appCopy.settings.pageSections.archived}
         state={archives === null ? (loadFailed ? "error" : "loading") : items.length === 0 ? "empty" : "ready"}
         emptyMessage={appCopy.interfaceDetails.archivesEmpty}
         onRetry={() => void refresh()}
+        more={archives?.pagination.has_more ? { label: appCopy.common.more, busy: Boolean(busyId), onClick: () => void loadMore() } : undefined}
       >
         {items.map((item) => (
           <ArchiveItemRow
@@ -117,11 +118,6 @@ export function ArchivesSettings() {
             onRemove={() => void remove(item)}
           />
         ))}
-        {archives?.pagination.has_more && (
-          <Button type="button" size="sm" variant="outline" disabled={Boolean(busyId)} onClick={() => void loadMore()}>
-            {appCopy.common.more}
-          </Button>
-        )}
       </SettingsSection>
     </SettingsPage>
   );

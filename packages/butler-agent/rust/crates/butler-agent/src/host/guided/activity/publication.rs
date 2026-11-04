@@ -2,7 +2,9 @@
 
 use serde_json::{Map, json};
 
-use butler_turn::btcc::{AgentLoopProgress, GuidedSourceRevision, RuntimeTurnEventInput};
+use butler_turn::btcc::{
+    AgentLoopProgress, GuidedSourceRevision, RuntimeTurnEventInput, WorkStage,
+};
 
 use super::State;
 
@@ -37,6 +39,14 @@ pub(super) fn publish(
     payload.insert("semanticBlockId".into(), json!(group.id));
     payload.insert("originTurnId".into(), json!(turn_id));
     payload.insert("sourceRevision".into(), json!(revisions.next()));
+    if let Some(key) = group.extensions.get("actionKey")
+        && !matches!(
+            group.stage,
+            Some(WorkStage::Conception | WorkStage::Planning)
+        )
+    {
+        payload.insert("actionKey".into(), key.clone());
+    }
     if let Some(stage) = group.stage {
         payload.insert("activityStage".into(), json!(stage));
     }

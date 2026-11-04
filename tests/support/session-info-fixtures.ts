@@ -2,22 +2,32 @@ import type { SessionPendingAsks } from "../../packages/butler-app/client/shared
 import { probeFocusRingFrames, type FocusRingClip } from "./focus-ring-clipping.ts";
 import type { Locator, Page, Route } from "playwright";
 import type { EpicProgressSnapshot } from "../../packages/butler-app/client/shared/canon-contracts.ts";
-import type { QueuedMessageRecord, SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
+import type { QueuedMessageRecord, SessionView, SessionViewTurn, SubtaskView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { HARNESS_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
+
+/** Running turn with one live progress row; replaySession supplies its queued follow-up. */
+export function runningSession(view: SessionView): SessionView {
+  const turn: SessionViewTurn = {
+    id: "session-info-turn", state: "thinking", cancellable: true, retryable: false,
+    created_at: view.updated_at, updated_at: view.updated_at,
+    progress: { turn_id: "session-info-turn", state: "thinking", safe_progress_rows: [
+      { id: "round-1", kind: "thinking", bridge_phase: "model_round_waiting", thinking_title: "변경 사항 검토", state: "running", safe_label: "모델 응답 1 · 변경 사항 검토" },
+    ] },
+  };
+  return { ...view, active_turn: turn, latest_turn: turn };
+}
 
 /** Canonical session-view replay: renderer-only coverage, never production fixtures. */
 export function populatedSession(view: SessionView): SessionView {
   return {
-    ...view,
+    ...runningSession(view),
     pending_questions: [sessionQuestion(view.session_id)],
-    latest_turn: { id: "session-info-turn", state: "running", cancellable: true, retryable: false,
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      progress: { safe_progress_rows: [{ id: "session-info-running", kind: "todo", state: "running", safe_label: "변경 사항 검토" }] } },
     branch: { workspace_label: "butler", branch_name: "feat/session-info-pane", workspace_binding: "project", workspace_status: "available" },
     context: sessionContext(view.session_id),
-    artifacts: HARNESS_SUMMARY.artifacts!.map(item => ({ ...item, session_id: view.session_id, title: "검토 결과.md" })),
+    artifacts: HARNESS_SUMMARY.artifacts!.map(item => ({ ...item, session_id: view.session_id, title: "검토 결과.md", deliverable: true })),
     automations: [{ automation_id: "session-schedule", title: "진행 상황 확인", schedule_type: "interval", interval_seconds: 3600 }],
-    messages: [{ id: "session-info-message", chat_id: view.session_id, role: "assistant", text: "검토를 시작했습니다.", created_at: new Date().toISOString(),
+    messages: [{ id: "session-info-message", chat_id: view.session_id, role: "assistant", text: "검토를 시작했습니다.", created_at: new Date().toISOString() },
+      { id: "session-info-upload", chat_id: view.session_id, role: "user", text: "이 자료를 검토해 주세요.", created_at: new Date().toISOString(),
       attachments: [{ file_id: "session-info-file", kind: "text", mime_type: "text/plain", safe_name: "검토 자료.txt", size_bytes: 42,
         sha256: "", url: "/message-files/session-info-file", created_at: new Date().toISOString() }] }],
   };
@@ -150,4 +160,17 @@ function sessionContext(sessionId: string) {
       budget_tokens: 258_000, ratio: tokens / 258_000, safe_description: id,
       source_kind: id.endsWith("-reserve") ? id.replaceAll("-", "_") : undefined })),
   };
+}
+
+/** Two delegated reviews, one with a live, finished and failed worker. */
+export function sessionWorkerSubtasks(): SubtaskView[] {
+  return [
+    { session_id: "review-changes", relation_id: "changes-relation", title: "변경 사항 검토", state: "working", started_at: "2026-11-01T09:00:00Z",
+      workers: [
+        { session_id: "review-api", relation_id: "api-relation", title: "API 변경 확인", status: "active" },
+        { session_id: "review-copy", relation_id: "copy-relation", title: "문구 검토", status: "completed" },
+        { session_id: "review-build", relation_id: "build-relation", title: "빌드 결과 확인", status: "failed" },
+      ] },
+    { session_id: "review-notes", relation_id: "notes-relation", title: "릴리스 노트 정리", state: "working", started_at: "2026-11-01T09:01:00Z" },
+  ];
 }

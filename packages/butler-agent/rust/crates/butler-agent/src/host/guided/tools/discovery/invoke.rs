@@ -60,7 +60,7 @@ pub(super) async fn run(
         ));
     };
     let catalog = owner.catalog.snapshot();
-    let Some(tool) = catalog.bridge_tool(name, owner.binding.ledger_effects()) else {
+    let Some(tool) = catalog.bridge_tool(name, owner.ledger_effects()) else {
         let mut error = bridge_error(
             "unknown_tool_catalog_id",
             &format!("Unknown tool catalog id: {id}"),
@@ -87,6 +87,7 @@ pub(super) async fn run(
                 error["error"]["id"] = Value::String(id.into());
                 error["error"]["field"] = Value::String(path.clone());
                 error["error"]["path"] = Value::String(path);
+                error["error"]["schema"] = description["schema"].clone();
                 return encoded(&error);
             }
         }
@@ -154,7 +155,7 @@ async fn run_mcp(
         error["error"]["id"] = Value::String(id.into());
         return encoded(&error);
     };
-    let call_available = owner.binding.authorized_names.contains("call_mcp_tool");
+    let call_available = owner.authorized("call_mcp_tool");
     let description = match Box::pin(butler_models::mcp_client::describe_mcp_tool(
         &owner.mcp_client,
         id,
@@ -215,6 +216,7 @@ async fn invoke_mcp(
                 error["error"]["id"] = Value::String(id.into());
                 error["error"]["field"] = Value::String(path.clone());
                 error["error"]["path"] = Value::String(path);
+                error["error"]["schema"] = schema.clone();
                 return encoded(&error);
             }
         };
@@ -343,7 +345,11 @@ fn native_admission(
             .unwrap_or("Tool is disabled.");
         let alternatives = if description.get("category").and_then(Value::as_str) == Some("search")
         {
-            vec!["tool_search", "web_read"]
+            if owner.browser_available() {
+                vec!["tool_search", "browser_open"]
+            } else {
+                vec!["tool_search", "web_read"]
+            }
         } else {
             vec!["tool_search"]
         };
@@ -359,7 +365,8 @@ fn native_admission(
         return Some(error);
     }
     // Source permits an already authorized current tool without a prior describe.
-    if !owner.binding.authorized_names.contains(name)
+    if !owner.authorized(name)
+        && !super::super::permission_mode::approved_capability(name)
         && !owner.state.lock().described_ids.contains(id)
     {
         let mut error = bridge_error(
@@ -403,9 +410,7 @@ fn mcp_admission(
         );
         return Some(error);
     }
-    if !owner.binding.visible_names.contains(tool_name)
-        && !owner.state.lock().described_ids.contains(id)
-    {
+    if !owner.visible(tool_name) && !owner.state.lock().described_ids.contains(id) {
         let mut error = bridge_error(
             "tool_not_described",
             &format!("Tool must be described before invocation: {id}"),

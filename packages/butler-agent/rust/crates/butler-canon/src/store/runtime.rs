@@ -4,15 +4,22 @@ mod progress;
 pub mod queries;
 use super::*;
 pub use feed::{catch_up, prepare};
-pub(crate) use progress::queue_outcome;
+pub(crate) use progress::{closing_summary, queue_outcome, step_unfinished};
 pub use progress::{enrich, progress, project_works};
 pub fn epic_running(db: &Connection, epic: &str) -> Result<bool> {
-    for work in rows(db, Query::Works.sql(), [epic])? {
-        if progress::running(db, &work)? {
+    let works = rows(db, Query::Works.sql(), [epic])?;
+    for (index, work) in works.iter().enumerate() {
+        if progress::current(&works, index) && progress::running(db, work)? {
             return Ok(true);
         }
     }
     Ok(false)
+}
+/// Protect admission before its Work link, unless the queue says later chat
+/// Turns no longer belong to this step. Linked Works use the progress check.
+pub fn epic_delete_running(db: &Connection, epic: &str) -> Result<bool> {
+    let active: bool = db.query_row(Query::DeleteRunning.sql(), [epic], |r| r.get(0))?;
+    Ok(active || epic_running(db, epic)?)
 }
 pub type ProjectViews = std::collections::HashMap<String, Value>;
 use queries::Query;
@@ -39,7 +46,7 @@ pub fn precheck(
             .collect::<Vec<_>>()
             .join(", ");
         return Ok(Some(
-            json!({"code":"canon_epic_refs_multiple","message":format!("governing_refs names {} epics ({list}); one Work serves one epic. Call replace_work_plan again with only the epic this Work processes, and process each other epic in its own Work in a later Turn.",epics.len())}),
+            json!({"code":"canon_epic_refs_multiple","message":format!("governing_refs names {} epics ({list}); one Work serves one epic. Call replace_work_plan again with only the epic this Work processes. To process the others too, queue them with canon_queue so each gets its own Turn and Work. If canon_queue is not among your tools, name them in your result instead.",epics.len())}),
         ));
     }
     let Some(epic) = epics.first() else {
@@ -93,11 +100,53 @@ pub fn context(db: &Connection, session: &str) -> Result<Vec<Value>> {
         crate::work_queries::Query::ConversationWork.sql(),
         [session],
     )?;
+    epic_context(db, epics)
+}
+
+/// The 과제 a delegated Steward serves, reached through its parent Work: the link, or the
+/// parent's plan when the feed has not linked it yet. No tool, no bind, no project id.
+pub fn steward_context(db: &Connection, session: &str) -> Result<Vec<Value>> {
+    let Some(parent) = rows(db, Query::StewardParentWork.sql(), [session])?
+        .into_iter()
+        .next()
+        .and_then(|row| row["work_id"].as_str().map(str::to_owned))
+    else {
+        return Ok(Vec::new());
+    };
+    let mut epics: Vec<String> = rows(db, Query::Link.sql(), [&parent])?
+        .iter()
+        .filter_map(|row| row["epic_id"].as_str().map(str::to_owned))
+        .collect();
+    if epics.is_empty() {
+        for turn in rows(db, Query::HistoryTurns.sql(), [&parent])? {
+            for call in rows(db, Query::HistoryCalls.sql(), [text(&turn, "turn_id")?])? {
+                if call["tool_name"] == "replace_work_plan" {
+                    let args: Value = serde_json::from_str(text(&call, "arguments_json")?)?;
+                    let refs: Vec<String> = serde_json::from_value(
+                        args.get("governing_refs").cloned().unwrap_or(json!([])),
+                    )?;
+                    epics = epic_refs(&refs).into_iter().map(str::to_owned).collect();
+                }
+            }
+        }
+    }
+    let works = epics
+        .iter()
+        .map(|id| read_work(db, id))
+        .collect::<Result<Vec<_>>>()?;
+    epic_context(db, works)
+}
+
+fn epic_context(db: &Connection, epics: Vec<Value>) -> Result<Vec<Value>> {
     epics.into_iter().map(|epic| {
         let id = text(&epic,"id")?;
         let nodes = rows(db, crate::work_queries::Query::WorkSpecNodes.sql(), [id])?;
         let mut data = json!({"epic_ref":format!("canon:epic/{id}"),"canon_status":epic["canon_status"],"untrusted_content":{"kind":"canon_epic","title":epic["title"]}});
         if epic["description"].as_str().is_some_and(|s| !s.is_empty()) { data["untrusted_content"]["description"] = epic["description"].clone(); }
+        if let Some(plan) = epic["plan_id"].as_str() {
+            data["plan_id"] = json!(plan);
+            data["untrusted_content"]["plan_title"] = read_plan(db, plan)?["title"].clone();
+        }
         let tags = rows(db, super::api::sql::EPIC_TAGS, [id])?;
         if !tags.is_empty() { data["untrusted_content"]["tags"] = json!(tags.iter().map(|tag| &tag["name"]).collect::<Vec<_>>()); }
         let mut specs = Vec::new();
@@ -144,7 +193,7 @@ fn advance_label(tx: &Transaction<'_>, ctx: &Context, id: &str, target: &str) ->
     )
 }
 
-fn progress_event(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
+pub(super) fn progress_event(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
     let epic = read_work(tx, id)?;
     tx.execute(
         super::sql::OUTBOX,

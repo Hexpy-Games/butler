@@ -95,6 +95,9 @@ fn apply_mandatory_rules(
     mark_latest(units, messages, |message| {
         message.request_segment_kind.as_deref() == Some("project_ledger_and_work_authority")
     });
+    mark_latest(units, messages, |message| {
+        message.request_segment_kind.as_deref() == Some("canon_run_status")
+    });
     let anchors = butler_turn::btcc::latest_work_anchor_indices(messages);
     for unit in units {
         if anchors.iter().any(|index| unit.range.contains(index)) {

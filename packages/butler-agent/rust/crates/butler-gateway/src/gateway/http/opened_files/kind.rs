@@ -1,6 +1,6 @@
-//! Which stored files may open in another app: the document types on the
-//! allowlist, decided by the bytes and matching the file's own extension.
-//! Anything else, macro-enabled documents included, is refused.
+//! Which stored files may open in another app: documents, raster images and
+//! plain text, verified from the bytes and matching the file's own extension.
+//! Anything else, macro-enabled documents included, is revealed.
 use std::io::{Cursor, Read};
 
 /// An allowlisted document type, verified from the file's content.
@@ -14,23 +14,14 @@ pub(super) enum OpenKind {
     Hwpx,
 }
 
-/// Why a file may not open in another app.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Refusal {
-    /// The name or the content is not an allowlisted type (or carries macros).
-    NotAllowed,
-    /// The content is an allowlisted type other than the name says.
-    Mismatch,
+/// Only positively verified content may open; everything else is revealed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Handling {
+    /// Opens; the copy is written with this lowercase extension.
+    Open(String),
+    Reveal,
 }
 
-const ALLOWED: [OpenKind; 6] = [
-    OpenKind::Pdf,
-    OpenKind::Docx,
-    OpenKind::Xlsx,
-    OpenKind::Pptx,
-    OpenKind::Hwp,
-    OpenKind::Hwpx,
-];
 const OOXML_MAIN: [(&str, OpenKind); 3] = [
     (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
@@ -65,21 +56,29 @@ impl OpenKind {
     }
 }
 
-/// The verified type of the file `name` holding `bytes`.
-pub(super) fn verify(name: &str, bytes: &[u8]) -> Result<OpenKind, Refusal> {
-    let extension = name
-        .rsplit_once('.')
-        .map(|(_, extension)| extension.to_ascii_lowercase())
-        .ok_or(Refusal::NotAllowed)?;
-    let named = ALLOWED
-        .into_iter()
-        .find(|kind| kind.extension() == extension)
-        .ok_or(Refusal::NotAllowed)?;
-    let content = sniff(bytes).ok_or(Refusal::NotAllowed)?;
-    if content == named {
-        Ok(content)
+/// Verify both the named extension and the content. Documents require the
+/// downloaded mark; raster images and UTF-8 text can open without it.
+pub(super) fn verify(name: &str, bytes: &[u8]) -> Handling {
+    let extension = name.rsplit_once('.').map_or("", |(_, ext)| ext);
+    let extension = extension.to_ascii_lowercase();
+    let verified = match extension.as_str() {
+        "png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "jpg" | "jpeg" => bytes.starts_with(b"\xff\xd8\xff"),
+        "gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
+        "webp" => bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP"),
+        "md" | "markdown" | "txt" | "csv" => {
+            !bytes.contains(&0) && std::str::from_utf8(bytes).is_ok()
+        }
+        "pdf" | "docx" | "xlsx" | "pptx" | "hwp" | "hwpx" => {
+            butler_platform::download_mark::supported()
+                && sniff(bytes).is_some_and(|kind| kind.extension() == extension)
+        }
+        _ => false,
+    };
+    if verified {
+        Handling::Open(extension)
     } else {
-        Err(Refusal::Mismatch)
+        Handling::Reveal
     }
 }
 

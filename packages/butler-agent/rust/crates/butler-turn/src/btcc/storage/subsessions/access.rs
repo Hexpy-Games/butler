@@ -3,6 +3,34 @@ use super::SqliteSubsessionRepository;
 use crate::btcc::{BtccError, TurnRecord};
 
 impl SqliteSubsessionRepository {
+    pub(crate) async fn access_limit(
+        &self,
+        relation: crate::btcc::StoredSubsessionDelegation,
+    ) -> Result<Option<crate::btcc::AccessMode>, BtccError> {
+        self.storage
+            .read(move |db| {
+                let packet = serde_json::to_string(&relation.packet).map_err(|e| {
+                    super::super::StorageError::new(
+                        crate::btcc::StorageCode::SubsessionPacketInvalid,
+                        e.to_string(),
+                    )
+                })?;
+                super::super::authority::access_revision::delegation_limit(
+                    db,
+                    &relation.relation_id,
+                    &relation.parent_turn_id,
+                    &packet,
+                )
+                .map_err(|e| {
+                    super::super::StorageError::new(
+                        crate::btcc::StorageCode::SubsessionPacketInvalid,
+                        e.to_string(),
+                    )
+                })
+            })
+            .await
+            .map_err(BtccError::from)
+    }
     pub(crate) async fn parent_turn(&self, id: String) -> Result<Option<TurnRecord>, BtccError> {
         self.storage
             .read(move |db| super::super::hydration::find_turn(db, &id))

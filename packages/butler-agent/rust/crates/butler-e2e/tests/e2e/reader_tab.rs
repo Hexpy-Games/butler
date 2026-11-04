@@ -1,7 +1,4 @@
-//! A product page the reader gets only part of goes to a browser tab before
-//! the answer, and the comparison of its candidates arrives as answer
-//! blocks. The same flow and expectations on each provider's wire: a
-//! scripted model, this test as the App browser host, no network.
+//! Attached browser reads and sourced answer blocks on both provider wires.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -26,14 +23,15 @@ const PROMPT: &str =
     "Which desk lamp on https://93.184.216.34/desk-lamps is the brightest? Compare them.";
 
 #[tokio::test]
-async fn partial_page_goes_to_a_tab_and_comparison_has_blocks_openai() -> Result<(), HarnessError> {
+async fn attached_browser_reads_page_and_comparison_has_blocks_openai() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     flow(Wire::Codex).await
 }
 
 #[tokio::test]
-async fn partial_page_goes_to_a_tab_and_comparison_has_blocks_anthropic() -> Result<(), HarnessError>
-{
+async fn attached_browser_reads_page_and_comparison_has_blocks_anthropic()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     flow(Wire::Anthropic).await
 }
@@ -41,6 +39,11 @@ async fn partial_page_goes_to_a_tab_and_comparison_has_blocks_anthropic() -> Res
 async fn flow(wire: Wire) -> Result<(), HarnessError> {
     let fixture = model::Fixture::start(wire).await?;
     let s = start(wire, &fixture.base).await?;
+    s.patch_settings(
+        json!({"browser":{"browsing_agent":"off"}}),
+        "direct browser tools",
+    )
+    .await?;
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"mock","readerBackend":"browser",
@@ -54,23 +57,50 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
     assert_eq!(turn["state"], "delivered", "{turn}\n{}", s.agent.logs());
     let outputs = fixture.outputs.lock().unwrap().clone();
 
-    // (a) The partial read is a failure that names the tab; the tab is read
-    // before the answer.
-    let partial = &outputs[0];
-    assert_eq!(partial["ok"], false, "{partial}");
-    assert_eq!(partial["next_action"], "open_in_tab", "{partial}");
+    // Page text and viewport inspection remain separate offered operations.
+    assert_eq!(outputs[0]["status"], "ok", "{}", outputs[0]);
+    let reads: Vec<_> = outputs
+        .iter()
+        .skip(1)
+        .take_while(|output| output["markdown"].is_string())
+        .collect();
+    assert!(reads.len() > 1, "the long page requires continuation reads");
+    let text = reads
+        .iter()
+        .map(|read| read["markdown"].as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let total = reads[0]["total_chunks"].as_u64().unwrap();
+    let returned: u64 = reads
+        .iter()
+        .map(|read| {
+            assert_eq!(read["ok"], true, "{read}");
+            assert_eq!(read["markdown_truncated"], false, "{read}");
+            read["returned_chunks"].as_u64().unwrap()
+        })
+        .sum();
+    assert_eq!(returned, total, "all complete chunks arrive exactly once");
+    assert_eq!(reads.last().unwrap()["content_has_more"], false);
+    let mut end = 0;
+    for paragraph in host::detail_paragraphs() {
+        let offset = text
+            .find(&paragraph)
+            .expect("every long-page paragraph arrives");
+        assert!(offset >= end, "paragraph order is preserved");
+        end = offset + paragraph.len();
+    }
     assert!(
-        partial["error"].as_str().unwrap().contains("browser_open"),
-        "{partial}"
+        text.len() > 20_000,
+        "full text extends beyond the short viewport observation"
     );
-    assert_eq!(outputs[1]["status"], "ok", "{}", outputs[1]);
-    let read = &outputs[2];
-    assert_eq!(read["ok"], true, "{read}");
-    assert_eq!(read["reader"], "butler-browser-tab", "{read}");
-    assert!(read.get("next_action").is_none(), "{read}");
-    let markdown = read["markdown"].as_str().unwrap();
+    eprintln!(
+        "tab full_page_bytes={} paragraphs=200 reads={} chunks={total} complete=true",
+        text.len(),
+        reads.len()
+    );
+    let read = reads[0];
     for lamp in ["Aurora", "Beacon", "Cinder"] {
-        assert!(markdown.contains(lamp), "{read}");
+        assert!(text.contains(lamp), "{read}");
     }
     let ops = log
         .lock()
@@ -79,10 +109,22 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
         .filter_map(|frame| frame["op"].as_str().map(str::to_owned))
         .filter(|op| op != "tabs.list")
         .collect::<Vec<_>>();
-    assert_eq!(ops, ["reader.render", "tab.open", "tab.read"], "{ops:?}");
-
+    let expected: Vec<_> = std::iter::once("tab.open")
+        .chain(std::iter::repeat_n("tab.read", reads.len()))
+        .chain(std::iter::once("tab.observe"))
+        .collect();
+    assert_eq!(ops, expected, "{ops:?}");
+    assert_eq!(
+        outputs[reads.len() + 1]["schema"],
+        "butler.browser-observation.v1"
+    );
     // (b) The comparison is on the delivered reply as blocks.
-    assert_eq!(outputs[3]["ok"], true, "{}", outputs[3]);
+    assert_eq!(
+        outputs[reads.len() + 2]["ok"],
+        true,
+        "{}",
+        outputs[reads.len() + 2]
+    );
     let messages = s.gw.messages("general").await?;
     let reply = messages
         .iter()
@@ -96,13 +138,6 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
 
     // Each provider received the same guidance.
     let first = fixture.first.lock().unwrap().clone().unwrap();
-    assert!(
-        first["system"]
-            .to_string()
-            .contains("open_in_tab results in a browser_open tab"),
-        "{}",
-        first["system"]
-    );
     let description = |name: &str| {
         butler_e2e::e2e::chatgpt_wire::tools(&first)
             .find(|tool| tool["name"] == name)
@@ -111,7 +146,7 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
             .unwrap()
             .to_owned()
     };
-    assert!(description("web_read").contains("ok:false with next_action open_in_tab"));
+    assert!(description("browser_read").contains("Pass query with what you need"));
     assert!(description("answer_blocks").contains("with or without a Plan"));
     s.finish().await
 }

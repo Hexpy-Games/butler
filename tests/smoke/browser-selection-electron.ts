@@ -3,6 +3,7 @@ import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { sendBrowserCaptures } from "../support/browser-selection-send";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
@@ -121,6 +122,7 @@ try {
   await waitBrowser(async () => (await app.gateway.api<{ items: unknown[] }>("/library?kind=scrap")).items.length === 2, "Library drop saves scraps");
   await drag('[data-test-class="composer-card"]');
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "composer accepts elements");
+  await sendBrowserCaptures(app, tab);
   await app.call("pick", { id: tab, value: false });
   await app.call("control", { id: tab, holder: "agent" });
   await pointerAction(app, tab, "fill");

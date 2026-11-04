@@ -96,6 +96,30 @@ pub(super) async fn reconcile(
     reader: ProjectReader,
     after: Arc<std::sync::atomic::AtomicI64>,
 ) -> Result<(), GatewayApplicationError> {
+    reconcile_batch(&storage, &reader, &after).await?;
+    Ok(())
+}
+
+/// Keyset batches until the feed is empty, bounded so a busy feed cannot hold a caller.
+pub(super) async fn catch_up(
+    storage: &BtccStorage,
+    reader: &ProjectReader,
+    after: &Arc<std::sync::atomic::AtomicI64>,
+) -> Result<(), GatewayApplicationError> {
+    for _ in 0..16 {
+        if !reconcile_batch(storage, reader, after).await? {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Whether the batch had anything to read.
+async fn reconcile_batch(
+    storage: &BtccStorage,
+    reader: &ProjectReader,
+    after: &Arc<std::sync::atomic::AtomicI64>,
+) -> Result<bool, GatewayApplicationError> {
     use std::sync::atomic::Ordering;
     let cursor = after.load(Ordering::Relaxed);
     let mut batch = storage
@@ -103,9 +127,9 @@ pub(super) async fn reconcile(
         .await
         .map_err(error)?;
     if batch.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
-    let views = views(&reader, std::mem::take(&mut batch.works)).await?;
+    let views = views(reader, std::mem::take(&mut batch.works)).await?;
     let next = storage
         .canon_write(move |tx| {
             store::runtime::catch_up(
@@ -122,5 +146,5 @@ pub(super) async fn reconcile(
         tracing::warn!(%error, %row, "Canon reconcile row quarantined");
     }
     after.store(next.after, Ordering::Relaxed);
-    Ok(())
+    Ok(true)
 }

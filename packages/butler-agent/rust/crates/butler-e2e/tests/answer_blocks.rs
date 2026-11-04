@@ -188,3 +188,30 @@ fn answer_blocks_container_children_close_before_tab() -> Result<(), Box<dyn std
     );
     Ok(())
 }
+
+#[test]
+fn answer_blocks_epics_stream_closed_ids_and_project_in_any_order()
+-> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let mut requests = Vec::new();
+    for raw in [
+        r#"{"v":2,"blocks":[{"type":"epics","project_id":"project","ids":["one","two"]}]}"#,
+        r#"{"v":2,"blocks":[{"ids":["one","two"],"project_id":"project","type":"epics"}]}"#,
+        r#"{"v":2,"blocks":[{"type":"epics","ids":["one","two"],"project_id":"project"}]}"#,
+    ] {
+        requests.push(serde_json::json!({"spec":serde_json::from_str::<Value>(raw)?,"raw":raw,"images":[],"sources":[],"epics":{"one":"project","two":"project"},"now":"2026-11-02T12:00:00Z","stream":true}));
+    }
+    let results = run_stream_requests(&requests)?;
+    assert_eq!(results.len(), 3);
+    for result in results {
+        assert!(
+            result["ops"]
+                .as_array()
+                .ok_or("missing ops")?
+                .iter()
+                .any(|op| op["field"] == "ids" && op["value"] == serde_json::json!(["one", "two"])),
+            "{result}"
+        );
+    }
+    Ok(())
+}

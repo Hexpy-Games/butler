@@ -4,6 +4,61 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// A hold card answers a run the owner started: waiting for morning is a silent stall.
+#[tokio::test]
+async fn quiet_hours_do_not_delay_a_hold_card() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, _) = crate::canon_link::setup_at(
+        "CB-QUIET-HOLD",
+        false,
+        false,
+        Some("2026-10-27T06:00:00.000Z"),
+    )
+    .await?;
+    data(
+        s.gw.patch("/settings", json!({"timezone":"UTC"})).await?,
+        200,
+    );
+    data(
+        s.gw.post(
+            "/sessions/general/canon/queue",
+            json!({"op":"start_now","epic_id":first}),
+        )
+        .await?,
+        200,
+    );
+    script.wait_held().await;
+    let turn = first_turn(&s, "general").await?;
+    data(
+        s.gw.post(&format!("/turns/{turn}/cancel"), json!({}))
+            .await?,
+        202,
+    );
+    script.release();
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let view = data(s.gw.get("/sessions/general/canon/queue").await?, 200);
+        let posted: i64 = db.query_row(
+            "SELECT count(*) FROM app_initiated_messages WHERE kind='canon_hold' AND state='posted'",
+            [],
+            |r| r.get(0),
+        )?;
+        if posted == 1 {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "hold card delayed during quiet hours: {view}"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    drop(db);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 #[tokio::test]
 async fn quiet_hours_do_not_delay_step_turns() -> Result<(), HarnessError> {
     butler_e2e::gate!();

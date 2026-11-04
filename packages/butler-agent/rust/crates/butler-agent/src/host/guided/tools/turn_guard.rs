@@ -34,8 +34,7 @@ impl TurnGuard {
 }
 
 /// The taint a turn starts with: restored from its authority continuation,
-/// or external when the user message carries attachments or a project folder's
-/// hook added text: that text can ask the model to send something out.
+/// or external when the user message carries attachments.
 fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) -> TurnTaint {
     let resumed = restored
         .and_then(|continuation| continuation.extensions.get(TAINT_KEY))
@@ -50,7 +49,7 @@ fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) 
         .get("attachments")
         .and_then(Value::as_array)
         .is_some_and(|items| !items.is_empty());
-    if resumed == Some("external") || attached || context["hookContextProject"] == true {
+    if resumed == Some("external") || attached {
         TurnTaint::External
     } else {
         TurnTaint::Clean
@@ -81,6 +80,7 @@ fn reads_external(name: &str, args: &Value) -> bool {
             "browse"
                 | "web_search"
                 | "web_read"
+                | "browser_read"
                 | "call_mcp_tool"
                 | "read_mcp_resource"
                 | "connector_fetch"
@@ -196,7 +196,7 @@ fn grant_kind(capability: &str) -> &'static str {
         "run_command_remote_observation" => "network",
         "run_command" => "command",
         "call_mcp_tool" => "connector",
-        "web_search" | "web_read" => "web_request",
+        "web_search" | "web_read" | "browser_read" => "web_request",
         "write_file" | "edit_file" => "file_edit",
         "read_file" | "list_files" | "grep_files" => "file_read",
         "create_automation" | "update_automation" | "delete_automation" | "run_due_automations" => {

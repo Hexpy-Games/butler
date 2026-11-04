@@ -27,6 +27,38 @@ function remeasureOnZoom(doc: Document) {
   }, { once: true });
 }
 
+/** Per scroller, on its frame (the parent): the width its own scrollbar takes from its content box now (`0px` when none is drawn or it overlays). */
+export const DRAWN_SCROLLBAR_PROPERTY = "--scroll-area-drawn-scrollbar";
+
+/** Runs from the observer, after layout: it forces no layout of its own. */
+function writeDrawnScrollbar(scroller: HTMLElement, frame: HTMLElement) {
+  const style = getComputedStyle(scroller);
+  const borders = (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.borderRightWidth) || 0);
+  const next = `${Math.max(0, scroller.offsetWidth - borders - scroller.clientWidth)}px`;
+  if (frame.style.getPropertyValue(DRAWN_SCROLLBAR_PROPERTY) !== next) frame.style.setProperty(DRAWN_SCROLLBAR_PROPERTY, next);
+}
+
+/**
+ * Ref callback: publishes the width this scroller's scrollbar actually takes
+ * as `--scroll-area-drawn-scrollbar` on its frame, so the lane is never
+ * narrower than that scrollbar and the content gives back exactly that width.
+ * The document-wide `--scrollbar-width` says how wide a classic scrollbar
+ * would be; it is measured once and can disagree with the scrollbar a scroller
+ * draws (macOS switches between overlay and classic scrollbars with the
+ * pointing device), and giving that width back while an overlay scrollbar
+ * takes none pushed the content past the column. A ResizeObserver on the
+ * scroller's content box reports once on mount and again when its scrollbar
+ * appears, goes or changes width, each time before that frame paints;
+ * nothing runs while idle or on scroll.
+ */
+export function trackDrawnScrollbar(element: HTMLElement | null): (() => void) | void {
+  const frame = element?.parentElement;
+  if (!element || !frame || typeof ResizeObserver === "undefined") return;
+  const observer = new ResizeObserver(() => writeDrawnScrollbar(element, frame));
+  observer.observe(element);
+  return () => observer.disconnect();
+}
+
 /**
  * Measures how much layout width a drawn thin native scrollbar takes and
  * publishes it on the root, so a scroller reserves a lane for an overlay

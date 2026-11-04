@@ -98,7 +98,7 @@ async fn execute_client(
     if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
         return preview::execute(owner, invocation, call, occurrence, client).await;
     }
-    if call.name == "browser_close" && owner.binding.access_mode == AccessMode::ReadOnly {
+    if call.name == "browser_close" && owner.access_mode() == AccessMode::ReadOnly {
         return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
     }
     if call.name == "browser_act" {
@@ -113,8 +113,7 @@ async fn execute_client(
     if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
         return pay::execute(owner, invocation, call, occurrence, client, args).await;
     }
-    if call.name == "browser_open" && owner.taint() == butler_turn::btcc::TurnTaint::ConnectorEvent
-    {
+    if call.name == "browser_open" && navigation::reviewed(owner, &args) {
         return navigation::execute(owner, invocation, call, occurrence, client, args).await;
     }
     if call.name == "browser_open" && args.get("results").is_some() {
@@ -232,7 +231,7 @@ async fn act_refusal(
     client: &client::Client,
     args: &mut Value,
 ) -> Option<Value> {
-    if owner.binding.access_mode == AccessMode::ReadOnly {
+    if owner.access_mode() == AccessMode::ReadOnly {
         return Some(json!({"status":"not_dispatched","reason":"read_only"}));
     }
     if has_point_steps(args)
@@ -379,7 +378,7 @@ async fn dispatch_effect(
         dispatch_args["payment_skip"] = json!({"amount":inspected["amount"]});
     }
     dispatch_args["commit_cleared"] = json!(authority::commit_cleared(
-        &owner.binding.access_mode,
+        &owner.access_mode(),
         &input,
         owner.taint()
     ));

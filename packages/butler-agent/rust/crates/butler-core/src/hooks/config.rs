@@ -47,8 +47,9 @@ pub struct HookDefinition {
     /// Observe-only background execution.
     #[serde(default, rename = "async")]
     pub asynchronous: bool,
-    /// Errors block pre-events only when explicitly enabled.
-    #[serde(default, rename = "failClosed")]
+    /// Whether a failure (bad exit, timeout, unreadable output) blocks the event.
+    /// Defaults to false for every event.
+    #[serde(rename = "failClosed")]
     pub fail_closed: bool,
     /// Enabled by default for user-authored entries.
     #[serde(default = "yes")]
@@ -85,7 +86,7 @@ struct HookDefinitionInput {
     /// Observe-only background execution.
     #[serde(default, rename = "async")]
     asynchronous: bool,
-    /// Errors block pre-events only when explicitly enabled.
+    /// Errors block blocking events only when explicitly enabled.
     #[serde(default, rename = "failClosed")]
     fail_closed: bool,
     /// Enabled by default for user-authored entries.

@@ -1,3 +1,4 @@
+import { ChatEpicCards } from "../canon/ChatEpicCards";
 import { memo, useMemo } from "react";
 import type { AnswerBlockSet } from "../../../../shared/app-contracts";
 import type { AnswerBlockView } from "../../../../shared/answer-blocks-view";
@@ -20,6 +21,8 @@ const Block = memo(function Block({ block, path, streaming, incoming }: { block:
   const sendMessage = useButlerStore(state => state.sendMessage);
   const sessionId = useAnswerSession();
   switch (block.type) {
+    case "epics": return <ChatEpicCards projectId={block.project_id} ids={block.ids} render={cards =>
+      <AnswerBlockFrame block={block} path={path}>{cards}{streaming ? <Skeleton height="row" width="full" /> : null}</AnswerBlockFrame>} />;
     case "columns": case "tabs": case "group": return <AnswerContainers block={block} render={(leaf, suffix) => <AnswerBlockFrame block={leaf} path={`${path}${suffix}`} child><Block block={leaf} path={`${path}${suffix}`} /></AnswerBlockFrame>} />;
     case "timeline": case "checklist": case "progress": case "text": case "image": case "quote": return <AnswerLeafBlocks block={block} />;
     case "cards": return <AnswerCards block={block} streaming={streaming} incoming={incoming} />;
@@ -63,7 +66,9 @@ export const AnswerBlocks = memo(function AnswerBlocks({ sets, sessionId, turnId
       const ready = final || Boolean(entry?.view);
       const streaming = entry?.open === true;
       const incoming = entry?.incoming;
-      return <AnswerBlockFrame key={block.id ?? `${index}:${block.type}`} block={block} path={`/blocks/${index}`}>
+      const key = ("id" in block ? block.id : undefined) ?? `${index}:${block.type}`;
+      if (ready && block.type === "epics") return <Block key={key} block={block} path={`/blocks/${index}`} streaming={streaming} />;
+      return <AnswerBlockFrame key={key} block={block} path={`/blocks/${index}`}>
         {ready ? <Block block={block} path={`/blocks/${index}`} streaming={streaming} incoming={incoming} /> : block.type === "cards" ? <ItemCardSkeleton media={block.media} /> : <Skeleton height="row" width="full" />}
         {streaming && ready && block.type !== "cards" && block.type !== "table" ? <Skeleton height="row" width="full" /> : null}
       </AnswerBlockFrame>;

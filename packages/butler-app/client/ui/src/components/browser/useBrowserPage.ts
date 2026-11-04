@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { browserCall, connectBrowser, type BrowserTab } from "./browserBridge";
 
+/** Two frames paint the still; a hidden document paints nothing and would not run them. */
+function presentStill() {
+  if (document.hidden) return Promise.resolve();
+  return new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
+
 /** Keep the still painted before detaching the native page for an App overlay. */
 export function useBrowserPage(tab?: BrowserTab) {
   const generation = useRef(0);
@@ -25,8 +31,15 @@ export function useBrowserPage(tab?: BrowserTab) {
     if (value) {
       const src = await browserCall("still", { id: tab.id });
       if (revision !== generation.current) return;
-      if (typeof src === "string") setStill({ id: tab.id, src });
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      // Decoded first, so the still paints in the frame it mounts in, before the page leaves.
+      if (typeof src === "string") {
+        const decoded = new Image();
+        decoded.src = src;
+        await decoded.decode().catch(() => undefined);
+        if (revision !== generation.current) return;
+        setStill({ id: tab.id, src });
+      }
+      await presentStill();
     }
     if (revision === generation.current) await browserCall("covered", { id: tab.id, value });
   };

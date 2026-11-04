@@ -39,17 +39,19 @@ function writeScrollEdges(element: HTMLElement, edges: ScrollEdges) {
 /**
  * Tracks scroll edges for one scroller and mirrors them to
  * data-overflowing / data-at-start / data-at-end. Scroll and resize work is
- * batched into one animation frame.
+ * batched into one animation frame; `onUpdate` runs after each such update.
  */
 export function observeScrollEdges(
   element: HTMLElement,
   axis: ScrollEdgeAxis,
+  onUpdate?: () => void,
 ): () => void {
   let frame = 0;
   const observedChildren = new Set<Element>();
   const update = () => {
     frame = 0;
     writeScrollEdges(element, readScrollEdges(element, axis));
+    onUpdate?.();
   };
   const schedule = () => {
     if (frame === 0) frame = requestAnimationFrame(update);
@@ -103,16 +105,8 @@ function cssLength(style: CSSStyleDeclaration, name: string): number {
   return Number.parseFloat(style.getPropertyValue(name)) || 0;
 }
 
-/**
- * Scrolls `target` (keyboard focus) so its focus ring sits clear of the
- * scroller's edge fades. Native focus scrolling stops at the scrollport edge
- * and leaves a partly visible control where it is, under the fade.
- */
-export function revealFocusInFades(
-  element: HTMLElement,
-  axis: ScrollEdgeAxis,
-  target: Element,
-) {
+/** The target's ring span on `axis` and the band of the scroller its fades and ring room leave clear. */
+function ringBand(element: HTMLElement, axis: ScrollEdgeAxis, target: Element) {
   const scrollerStyle = getComputedStyle(element);
   const targetStyle = getComputedStyle(target);
   const outline = targetStyle.outlineStyle === "none" ? 0
@@ -124,8 +118,52 @@ export function revealFocusInFades(
   const [start, size, low, high] = axis === "x"
     ? [box.left + element.clientLeft, element.clientWidth, rect.left - ring, rect.right + ring]
     : [box.top + element.clientTop, element.clientHeight, rect.top - ring, rect.bottom + ring];
-  const first = start + fade;
-  const last = start + size - fade;
+  return { low, high, first: start + fade, last: start + size - fade };
+}
+
+/**
+ * True when `target`'s ring does not fit the band the scroller shows clear of
+ * its fades and ring room, so no scroll position shows all of it.
+ */
+export function focusOutgrowsScroller(element: HTMLElement, axis: ScrollEdgeAxis, target: Element): boolean {
+  const { low, high, first, last } = ringBand(element, axis, target);
+  return high - low > last - first + 0.5;
+}
+
+const RING_HOST = "data-focus-ring-host";
+
+/**
+ * Hands the ring of a keyboard-focused control the scroller can never show
+ * whole to the scroller itself (data-focus-ring-host, drawn by
+ * scroll-fade.css). Only the innermost such scroller takes it. Measured when
+ * focus arrives, before it paints, and again whenever the scroller's edges
+ * update (a resize) while that focus stays inside.
+ */
+function trackRingHost(element: HTMLElement, axis: ScrollEdgeAxis) {
+  let focused: Element | null = null;
+  const measure = () => {
+    const nearer = focused?.parentElement?.closest(`[${RING_HOST}]`);
+    const innermost = !nearer || nearer === element || !element.contains(nearer);
+    element.toggleAttribute(RING_HOST, focused !== null && innermost && focusOutgrowsScroller(element, axis, focused));
+  };
+  return {
+    focus(target: Element | null) { focused = target; measure(); },
+    refresh() { if (focused) measure(); },
+    stop() { focused = null; element.removeAttribute(RING_HOST); },
+  };
+}
+
+/**
+ * Scrolls `target` (keyboard focus) so its focus ring sits clear of the
+ * scroller's edge fades. Native focus scrolling stops at the scrollport edge
+ * and leaves a partly visible control where it is, under the fade.
+ */
+export function revealFocusInFades(
+  element: HTMLElement,
+  axis: ScrollEdgeAxis,
+  target: Element,
+) {
+  const { low, high, first, last } = ringBand(element, axis, target);
   const delta = low < first || high - low > last - first ? low - first : high > last ? high - last : 0;
   if (Math.abs(delta) < 0.5) return;
   if (axis === "x") element.scrollLeft += delta;
@@ -136,28 +174,39 @@ export function revealFocusInFades(
 
 /**
  * Callback ref that opts an element into the shared scroll-fade mask
- * (see scroll-fade.css) and keeps keyboard focus clear of its fades. Pass
- * `enabled: false` to keep the scroller unmasked.
+ * (see scroll-fade.css) and keeps keyboard focus clear of its fades; a
+ * focused control too large for the scroller gets its ring drawn by the
+ * scroller (see trackRingHost). Pass `enabled: false` to keep the scroller
+ * unmasked.
  */
 export function useScrollEdges(axis: ScrollEdgeAxis, enabled = true) {
   return useCallback(
     (element: HTMLElement | null) => {
       if (!element || !enabled) return undefined;
       element.dataset.scrollFade = axis;
-      const stop = observeScrollEdges(element, axis);
+      const host = trackRingHost(element, axis);
+      const stop = observeScrollEdges(element, axis, host.refresh);
       let frame = 0;
       // Only keyboard focus: a pointer press must not move its row (#792).
       const reveal = (event: FocusEvent) => {
         const target = event.target;
-        if (!(target instanceof Element) || target === element || !target.matches(":focus-visible")) return;
+        const keyboard = target instanceof Element && target !== element && target.matches(":focus-visible");
+        host.focus(keyboard ? target : null);
+        if (!keyboard) return;
         cancelAnimationFrame(frame);
         // After the browser's own focus scroll.
         frame = requestAnimationFrame(() => revealFocusInFades(element, axis, target));
       };
+      const release = (event: FocusEvent) => {
+        if (!(event.relatedTarget instanceof Node && element.contains(event.relatedTarget))) host.focus(null);
+      };
       element.addEventListener("focusin", reveal);
+      element.addEventListener("focusout", release);
       return () => {
         cancelAnimationFrame(frame);
         element.removeEventListener("focusin", reveal);
+        element.removeEventListener("focusout", release);
+        host.stop();
         stop();
         delete element.dataset.scrollFade;
       };

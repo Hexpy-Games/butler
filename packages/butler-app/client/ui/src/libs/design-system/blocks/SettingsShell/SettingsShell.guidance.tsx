@@ -25,8 +25,8 @@ function NotificationsPage() {
 function SectionWithPageCopy() {
   return (
     <SettingsPageProvider title="General" description="Language and search defaults.">
-      {/* Repeats the page title, so FormSection drops this header. */}
-      <FormSection title="General">
+      {/* The description repeats the page description, so FormSection drops it; a title never repeats the page. */}
+      <FormSection title="Sidebar" description="Language and search defaults.">
         <SettingsField id="groups" label="Smart groups" control={<Switch id="groups" />} />
       </FormSection>
     </SettingsPageProvider>
@@ -40,19 +40,19 @@ function Framed() {
 }
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The settings layout: navigation master, detail header and detail pane, single-pane on compact widths.",
+  purpose: "The settings screen layout: navigation master, detail header and detail pane, single-pane on compact widths.",
   whenToUse: ["The settings screen and settings-like editors"],
   whenNotToUse: [
     { when: "A management page (automations, dashboards)", use: "ManagementPage" },
     { when: "A setup flow", use: "SetupWizardShell" },
   ],
   recipes: [
-    { name: "Settings page in the shell", description: "pageTitle and pageDescription let sections drop headers that repeat them.", render: () => <Framed /> },
+    { name: "Settings page in the shell", description: "pageTitle and pageDescription let sections drop a description that repeats the page; a section title that repeats the page title throws in dev builds.", render: () => <Framed /> },
     { name: "Page copy for sections outside the shell", description: "SettingsPageProvider supplies the page copy when sections render on their own.", render: () => <SectionWithPageCopy /> },
   ],
   doDont: [
     {
-      do: { caption: "Section headers sit above cards; a header that repeats the page is dropped.", render: () => <SectionWithPageCopy /> },
+      do: { caption: "Section headers sit above cards and name what the card holds; a description that repeats the page is dropped.", render: () => <SectionWithPageCopy /> },
       dont: { caption: "A card titled like the page it is on repeats itself.", render: () => <FormSection title="General" description="General"><SettingsField id="x" label="Smart groups" control={<Switch id="x" />} /></FormSection> },
     },
   ],

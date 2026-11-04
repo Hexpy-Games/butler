@@ -1,5 +1,7 @@
 # PageBand
 
+Glossary: 브라우저 제어 상태줄 / browser control band (`PageBand`).
+
 ## What is this block
 `PageBand` is one 40px line on a `PageCard`'s top edge for page-scoped state:
 who holds the tab (agent, user), an approval (waiting), a request for your

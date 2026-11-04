@@ -99,7 +99,9 @@ pub(super) async fn validate_spec(
         .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
     let image_ids = answer_blocks::image_ids(spec);
     let images = super::browser::lookup_assets(owner, image_ids).await;
+    let epics = lookup_epics(owner, answer_blocks::epic_ids(spec)).await;
     let context = AnswerBlocksContext {
+        epic_project: &|id| epics.get(id).cloned(),
         now: chrono::Utc::now(),
         // Asset acceptance is owned by image_collect's store (T4).
         image_exists: &|id| images.contains(id),
@@ -108,4 +110,23 @@ pub(super) async fn validate_spec(
     Ok(answer_blocks::validate_answer_blocks(spec, &context)
         .err()
         .unwrap_or_default())
+}
+
+/// App canon owns existence and active-project visibility for every referenced id.
+pub(super) async fn lookup_epics(
+    owner: &GuidedTools,
+    ids: Vec<String>,
+) -> std::collections::HashMap<String, String> {
+    let mut projects = std::collections::HashMap::new();
+    for id in ids {
+        let result =
+            super::canon::request(owner, "read", json!({"arguments":{"view":"epic","id":id}}))
+                .await;
+        if result["ok"] == true
+            && let Some(project) = result["untrusted_content"]["project_id"].as_str()
+        {
+            projects.insert(id, project.to_owned());
+        }
+    }
+    projects
 }

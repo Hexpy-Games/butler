@@ -217,7 +217,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
-    let read = ("web_read", json!({"tab":"t1"}));
+    let read = ("browser_read", json!({"tab":"t1"}));
     let calls = vec![
         (
             "tool_describe",

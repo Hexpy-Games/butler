@@ -236,10 +236,18 @@ async fn standing_grants_never_cover_an_unresolved_scope() -> Result<(), Harness
         assert_eq!(cards[0]["reason"], REASON, "{cards:?}");
         assert_eq!(cards[0]["approval"]["operation"]["command"], command);
         let reference = cards[0]["request_ref"].as_str().unwrap();
+        let rejected =
+            s.gw.post(
+                &format!("/authority-requests/{reference}/allow?session_id={chat}"),
+                json!({"scope":"conversation"}),
+            )
+            .await?;
+        assert_eq!(rejected.status, 400, "{rejected:?}");
+        assert_eq!(s.gw.approval_requests(&chat).await?.len(), 1);
         let reply =
             s.gw.post(
                 &format!("/authority-requests/{reference}/{action}?session_id={chat}"),
-                json!({"scope":"conversation"}),
+                json!({"scope":"once"}),
             )
             .await?;
         assert_eq!(reply.status, 202, "{reply:?}");
@@ -307,13 +315,26 @@ async fn resolved_project_commands_keep_plain_behavior() -> Result<(), HarnessEr
         assert_eq!(body["exit_code"], 0, "{body}");
         assert!(!output.contains("protected_path"), "{output}");
     }
-    assert_eq!(
-        std::fs::read_to_string(project.join("out.txt"))?.trim(),
-        "hi"
-    );
+    assert_eq!(shell_written_text(&project.join("out.txt"))?.trim(), "hi");
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+/// Text a command's `>` redirection wrote. Windows PowerShell 5.1, the Windows
+/// command shell, redirects as UTF-16LE with a byte-order mark.
+fn shell_written_text(path: &Path) -> Result<String, HarnessError> {
+    let bytes = std::fs::read(path)?;
+    let Some(utf16) = bytes.strip_prefix(&[0xFF, 0xFE]) else {
+        return Ok(String::from_utf8(bytes).map_err(std::io::Error::other)?);
+    };
+    let units: Vec<u16> = utf16
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
+        .collect();
+    Ok(String::from_utf16(&units).map_err(std::io::Error::other)?)
 }
 
 #[tokio::test]

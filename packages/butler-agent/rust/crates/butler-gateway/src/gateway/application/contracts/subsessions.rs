@@ -36,6 +36,16 @@ pub trait AppSubsessionPort: Send + Sync {
         Box::pin(async { Ok(Vec::new()) })
     }
 
+    /// Runtime Turns of a conversation suspended on delegated work.
+    fn turns_waiting_on_delegation(&self, _parent: String) -> ApplicationFuture<Vec<String>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    /// Stops every open delegation below a removed conversation.
+    fn cancel_subtree(&self, _parent: String) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn user_work_present(&self) -> ApplicationFuture<bool> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

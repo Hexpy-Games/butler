@@ -56,7 +56,9 @@ export function wireHistory(browser, tab) {
     let favicon = tab.documentIcon === false ? "" : tab.favicon || "";
     if (!quitting) {
       try {
-        const found = await contents.executeJavaScript("document.querySelector('link[rel~=icon]')?.href||''");
+        // WebContents.executeJavaScript waits for did-stop-loading, adding a listener per call
+        // during a load; the committed frame answers at once.
+        const found = await contents.mainFrame.executeJavaScript("document.querySelector('link[rel~=icon]')?.href||''");
         if (typeof found === "string" && /^https?:/u.test(found)) favicon = found;
       } catch { /* A closed or superseded page still has its committed visit. */ }
     }

@@ -1,6 +1,5 @@
-//! A scripted model that follows the tool contracts the same way on each
-//! provider's wire: read the page, open it in a tab when the read says so,
-//! read the tab, show the comparison in answer blocks, then answer.
+//! A model that follows the offered browser contracts on both provider wires:
+//! open the page, read its text, inspect the viewport, show blocks, then answer.
 use axum::{Json, Router, extract::State, response::Response, routing::post};
 use butler_e2e::e2e::HarnessError;
 use futures_util::StreamExt;
@@ -67,22 +66,34 @@ impl Drop for Fixture {
 /// The next step, from the tool outputs so far: `(tool, arguments)` or the
 /// final answer when `None`.
 fn next(outputs: &[Value]) -> Option<(&'static str, Value)> {
-    match outputs.len() {
-        0 => Some(("web_read", json!({"url":super::PAGE}))),
-        1 if outputs[0]["next_action"] == "open_in_tab" => {
-            Some(("browser_open", json!({"url":super::PAGE})))
-        }
-        2 => Some(("web_read", json!({"tab":outputs[1]["tab"]}))),
-        3 => Some(("answer_blocks", blocks(&outputs[2]))),
-        _ => None,
+    if outputs.is_empty() {
+        return Some(("browser_open", json!({"url":super::PAGE})));
     }
+    let last = outputs.last().unwrap();
+    if outputs.len() == 1 || last["content_has_more"] == true {
+        let mut args = json!({"tab":outputs[0]["tab"],"max_chars":8000,"max_chunks":8});
+        if last["content_has_more"] == true {
+            args["start_chunk"] = last["next_start_chunk"].clone();
+        }
+        return Some(("browser_read", args));
+    }
+    if last["markdown"].is_string() {
+        return Some((
+            "browser_observe",
+            json!({"tab":outputs[0]["tab"],"scope":"text","look":"never"}),
+        ));
+    }
+    if last["schema"] == "butler.browser-observation.v1" {
+        return Some(("answer_blocks", blocks(&outputs[1])));
+    }
+    None
 }
 
 const ANSWER: &str = "The Beacon is the brightest of the three lamps.";
 
 /// The comparison of the read page's candidates, each value sourced to it.
 fn blocks(read: &Value) -> Value {
-    let source = read["source_url"].clone();
+    let source = read["final_url"].clone();
     let checked = chrono::Utc::now().to_rfc3339();
     let lamps = [("Aurora", 450), ("Beacon", 1200), ("Cinder", 800)];
     let cards = lamps.map(|(name, lumens)| {

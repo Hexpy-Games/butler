@@ -203,13 +203,6 @@ export interface ApprovalRequestCopy {
   restartService: string;
   createWorktree: string;
   switchFolder: string;
-  projectHooks: {
-    title: string;
-    receives: string;
-    unsandboxed: string;
-    deny: string;
-    allow: string;
-  };
   /** Any kind this App does not know yet. */
   generic: string;
   /** The line after the examples. */
@@ -222,6 +215,16 @@ export interface ApprovalRequestCopy {
 export type AppLocale = "en-US" | "ko-KR";
 
 interface ConversationWorkCopy {
+  planSteps: {
+    running: (done: number, total: number, titles: string) => string;
+    compact: (first: string, more: number) => string;
+    delivered: (done: number, total: number) => string;
+    failed: (step: string) => string;
+    title: (order: number, title: string) => string;
+    statuses: Record<"pending" | "active" | "done" | "blocked" | "skipped", string>;
+    since: (time: string) => string;
+    revised: (added: number, removed: number) => string;
+  };
   historyRegionLabel: string;
   pendingLabel: string;
   pendingStateLabels: Record<string, string>;
@@ -1320,7 +1323,8 @@ export interface AppCopy {
     hooks: { add: string; edit: string; test: string; remove: string; recent: string; empty: string;
       name: string; event: string; tools: string; command: string; args: string; timeout: string;
       failClosed: string; async: string; enabled: string; refresh: string; blocked: string; editTitle: string; disabled: string; emptyRuns: string; testSuccess: string; testFailure: string;
-      exitCode: string; commandDisabled: string; commandRequired: string; deleteConfirm: (name: string) => string; };
+      exitCode: string; commandDisabled: string; commandRequired: string; deleteConfirm: (name: string) => string;
+      failedBlock: (hook: string, target: string) => string; failedOpen: (hook: string) => string; finishTarget: string; };
 
     deleteSchedule: (name: string) => string;
     deleteMcpServer: (name: string) => string;
@@ -1418,7 +1422,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"noticedPatterns" | "instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSections: Record<"noticedPatterns" | "instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites" | "hooks" | "mcpServers" | "updateVersions" | "updateChannel" | "browsing" | "systemEvents" | "archived" | "modelProvider" | "coreSkills" | "userSkills" | "projectSkills", string>;
     pageSectionDescriptions: Record<"noticedPatterns" | "instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {

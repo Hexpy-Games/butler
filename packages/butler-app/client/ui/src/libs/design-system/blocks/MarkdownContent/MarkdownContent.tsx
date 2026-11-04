@@ -20,7 +20,7 @@ export function MarkdownContent({
   ...props
 }: MarkdownContentProps) {
   return (
-    <div className={cn(styles.markdown, className)} data-density={density === "compact" ? "compact" : undefined} {...props}>
+    <div className={cn(styles.markdown, className)} data-selectable data-density={density === "compact" ? "compact" : undefined} {...props}>
       <MarkdownFaviconContext.Provider value={faviconSrc}>{children}</MarkdownFaviconContext.Provider>
     </div>
   );

@@ -37,6 +37,7 @@ pub(super) fn provider_candidates(
             "generate_image" | "edit_image" | "canon_read" | "canon_propose" | "canon_queue"
         ) || tool.name == ToolName::UpdateTodoList
             || BROWSER_CORE.contains(&tool.name.as_str())
+            || tool.name == ToolName::BrowserRead
             || tool.effect_boundary.as_deref() == Some("turn_local")
                 && tool.category.as_deref() == Some("message")
         {

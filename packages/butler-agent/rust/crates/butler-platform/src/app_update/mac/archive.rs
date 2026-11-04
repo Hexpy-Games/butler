@@ -64,12 +64,12 @@ pub(crate) fn extract(artifact: &Path, staging: &Path) -> Result<(), String> {
 // Ditto receives no links. After every data write, resolve on the actual
 // filesystem too: macOS case/Unicode aliases must not bypass the link graph.
 fn materialize_links(staging: &Path, entries: &[Entry]) -> Result<(), String> {
-    let root = fs::canonicalize(staging).map_err(error)?;
+    let root = crate::secure_fs::canonicalize(staging).map_err(error)?;
     for entry in entries {
         if let Some(target) = &entry.link {
             let path = root.join(&entry.path);
-            let parent =
-                fs::canonicalize(path.parent().ok_or("Invalid ZIP link")?).map_err(error)?;
+            let parent = crate::secure_fs::canonicalize(path.parent().ok_or("Invalid ZIP link")?)
+                .map_err(error)?;
             if !parent.starts_with(&root) {
                 return Err("ZIP link parent escapes staging".into());
             }
@@ -77,7 +77,7 @@ fn materialize_links(staging: &Path, entries: &[Entry]) -> Result<(), String> {
         }
     }
     for entry in entries.iter().filter(|entry| entry.link.is_some()) {
-        let path = fs::canonicalize(root.join(&entry.path))
+        let path = crate::secure_fs::canonicalize(root.join(&entry.path))
             .map_err(|_| "ZIP link destination is unavailable".to_owned())?;
         let bundle = entry.path.components().next().ok_or("Invalid ZIP link")?;
         if !path.starts_with(root.join(bundle.as_os_str())) {

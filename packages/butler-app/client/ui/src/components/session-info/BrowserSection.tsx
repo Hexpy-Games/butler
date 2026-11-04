@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { LiveTabCard, Stack, type AsideLayout } from "@/butler-ds";
+import { LiveTabList, type AsideLayout } from "@/butler-ds";
 import { agentTabCardProps } from "../browser/agentTabCardProps.ts";
 import type { BrowserTab } from "../browser/browserBridge.ts";
 import { useDocumentVisible, useLiveFrames } from "../browser/useLiveFrames.ts";
 import { SessionSection } from "./SessionSection.tsx";
 
+/** Full previews before the overflow row; only these subscribe to live frames. */
+const SHOWN_TABS = 3;
+
 /** Mounted by SessionSections only when browser tabs can be opened. */
 export function BrowserSection({ layout, session, tabs }: { layout: AsideLayout; session: string; tabs: readonly BrowserTab[] }) {
   useAppLocale();
+  const [expanded, setExpanded] = useState(false);
   const documentVisible = useDocumentVisible();
   const content = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(false);
@@ -19,9 +23,11 @@ export function BrowserSection({ layout, session, tabs }: { layout: AsideLayout;
     observer.observe(element);
     return () => observer.disconnect();
   }, [layout]);
-  const frames = useLiveFrames(tabs.map(tab => tab.id), 416, !documentVisible || !inView);
+  const frames = useLiveFrames((expanded ? tabs : tabs.slice(0, SHOWN_TABS)).map(tab => tab.id), 416, !documentVisible || !inView);
   return <SessionSection id="browser" layout={layout} title={appCopy.sessionInfo.browser} count={tabs.length}>
-    <div ref={content}><Stack gap="sm">{tabs.map(tab => <LiveTabCard key={tab.id} variant="full"
-      {...agentTabCardProps(session, tab, frames[tab.id])} closeLabel={appCopy.browser.closeTab} />)}</Stack></div>
+    <div ref={content}><LiveTabList limit={SHOWN_TABS} expanded={expanded} onExpandedChange={setExpanded}
+      labels={{ more: appCopy.sessionInfo.browserMore, less: appCopy.sessionInfo.browserLess,
+        overflow: count => appCopy.browser.moreTabs.replace("{count}", String(count)) }}
+      tabs={tabs.map(tab => ({ ...agentTabCardProps(session, tab, frames[tab.id]), closeLabel: appCopy.browser.closeTab }))} /></div>
   </SessionSection>;
 }

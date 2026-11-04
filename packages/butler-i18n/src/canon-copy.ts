@@ -3,7 +3,7 @@ export interface CanonAfterCaption { word: string; name: string }
 export interface CanonOrderCopy {
   chain: Record<"user_message" | "schedule" | "detach", string>;
   /** Status words; a waiting step, or one held under a blocked step, shows none (its caption says what it waits for). */
-  status: Record<"running" | "failed" | "done", string>;
+  status: Record<"running" | "failed" | "unfinished" | "done", string>;
   /** What a step waits for, word first. */
   after: (title: string) => CanonAfterCaption;
   afterStack: (title: string, count: number) => CanonAfterCaption;
@@ -22,13 +22,14 @@ export interface CanonOrderCopy {
   deck: { expand: (count: number, front: string) => string; fold: (item: string) => string };
 }
 export interface CanonCopy {
+  deletedTask: string;
+  deletion: { changeDelete: string; changed: string; addDelete: string; action: string; title: (title: string) => string; detail: string; running: string; deleted: string; missing: string };
   order: CanonOrderCopy;
   queue: {
     step: (plan: string, epic: string) => string;
     stepEpic: (epic: string) => string;
-    removed: string; continued: string; taken: string;
+    removed: string; continued: string; resolved: string; taken: string;
     hold: (epic: string) => string;
-    takeHere: (epic: string, conversation: string) => string;
     remove: string; proceed: string; openOther: string; take: string;
   };
   criteriaCount: (confirmed: number, total: number) => string;

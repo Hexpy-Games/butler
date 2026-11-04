@@ -18,7 +18,6 @@ use super::{
 
 pub(super) use super::providers::contracts::SearchResult;
 
-const OPEN_RESULTS: &str = "Open the results worth reading with browser_open {results:[ids]} (background tabs, in parallel), then read their text together: one web_read {tab} per tab in one round.";
 use crate::web_access::WebAccessCode;
 pub(super) use parse::{is_duckduckgo_challenge, parse_results};
 
@@ -87,9 +86,6 @@ impl WebSession {
             .collect::<Vec<_>>();
         for (item, id) in items.iter_mut().zip(self.result_ids(&pairs)) {
             item["id"] = json!(id);
-        }
-        if !pairs.is_empty() {
-            result["next"] = json!(OPEN_RESULTS);
         }
     }
     async fn plan_search(

@@ -241,6 +241,7 @@ fn operation_tool_name(call: &super::contracts::ModelRoundToolCall) -> &str {
             name,
             "browser_open"
                 | "browser_observe"
+                | "browser_read"
                 | "browser_act"
                 | "browser_tabs"
                 | "browser_selection"

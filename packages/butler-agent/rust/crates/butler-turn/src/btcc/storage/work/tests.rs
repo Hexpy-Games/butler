@@ -82,6 +82,7 @@ pub(super) async fn journal_result(
 
 pub(super) fn plan(call: &str) -> ReplacePlanInput {
     ReplacePlanInput {
+        subjects: Vec::new(),
         scope: scope(),
         mutation_call_id: call.into(),
         start_new: None,
@@ -155,6 +156,7 @@ async fn real_admission_plan_journal_review_disposition_and_reopen_share_one_own
     journal_result(&journal, "tool-one", 1, 16).await;
     let first_backfill = service
         .continue_work(ContinueWorkInput {
+            action_key: None,
             scope: scope(),
             mutation_call_id: "continue-one".into(),
             work_id: started.work_id.clone(),
@@ -166,6 +168,7 @@ async fn real_admission_plan_journal_review_disposition_and_reopen_share_one_own
     journal_result(&journal, "tool-two", 2, 16).await;
     let second_backfill = service
         .continue_work(ContinueWorkInput {
+            action_key: None,
             scope: scope(),
             mutation_call_id: "continue-two".into(),
             work_id: started.work_id.clone(),
@@ -176,6 +179,7 @@ async fn real_admission_plan_journal_review_disposition_and_reopen_share_one_own
     assert_eq!(second_backfill.result_refs.len(), 2);
     let checked = service
         .record_checkpoint(CheckpointInput {
+            current_action_key: None,
             scope: scope(),
             mutation_call_id: "checkpoint".into(),
             next_stage: None,

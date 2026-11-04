@@ -4,15 +4,35 @@
  * while one of its capturePage calls is in flight: that capture can still return, but no later capture
  * of the view ever settles.
  */
+const READBACK_STALL_MS = 5000;
+
 export function capturePage(tab, rect, options = { stayHidden: true }, contents = tab.view.webContents) {
-  const pending = contents.capturePage(rect, options);
+  // A page out of every window that is not throttled (media playing) draws no frame to read back
+  // until it is in a window again: such a capture could only stall, so it does not start.
+  if (!tab.attached && !contents.getBackgroundThrottling()) return Promise.reject(new Error("capture_out_of_window"));
+  let fail, release;
+  const ended = new Promise((_, reject) => { fail = reason => reject(new Error(reason)); });
+  const barrier = new Promise(resolve => { release = resolve; });
+  const captures = tab.captures ??= new Map();
   // Each capture keeps how the page stood when it started: hidden out of a window (background
   // throttling on) or visible there (off, as while media plays). The flag can flip while it runs.
-  const captures = tab.captures ??= new Map();
-  captures.set(pending, contents.getBackgroundThrottling());
-  const settled = () => { captures.delete(pending); };
-  pending.then(settled, settled);
-  return pending;
+  captures.set(barrier, contents.getBackgroundThrottling());
+  const gone = () => { fail("capture_renderer_gone"); settled(); };
+  const settled = () => {
+    captures.delete(barrier); clearTimeout(timer); release();
+    contents.removeListener("render-process-gone", gone);
+    contents.removeListener("destroyed", gone);
+    // A readback that settles late was slow, not wedged: the tab may return to its live view.
+    tab.onCaptureSettled?.();
+  };
+  contents.once("render-process-gone", gone);
+  contents.once("destroyed", gone);
+  const timer = setTimeout(() => { fail("capture_surface_stalled"); tab.onCaptureStalled?.(); }, READBACK_STALL_MS);
+  let raw;
+  try { raw = contents.capturePage(rect, options); } catch (error) { raw = Promise.reject(error); }
+  // Only a completed readback or renderer destruction releases the native layout barrier.
+  raw.then(settled, settled);
+  return Promise.race([raw, ended]);
 }
 
 /** Null when no matching capture of the tab is in flight; otherwise settles once each current one has. */
@@ -60,7 +80,7 @@ export function detachView(tab, resync) {
  * Returns false while the attach waits.
  */
 export function attachView(tab, win, below, place, resync) {
-  if (tab.attached === win) {
+  if (tab.attached === win && win.contentView.children.includes(tab.view)) {
     tab.detachWait = null;
     tab.view.setVisible(true);
     if (!tab.placeHold) place();
@@ -83,7 +103,7 @@ export function attachView(tab, win, below, place, resync) {
   const hold = settled?.then(() => {
     if (tab.placeHold !== hold) return;
     tab.placeHold = null;
-    if (tab.attached === win && tab.view) place();
+    if (tab.attached === win && tab.view) resync();
   }) ?? null;
   tab.placeHold = hold;
   if (!hold) place();

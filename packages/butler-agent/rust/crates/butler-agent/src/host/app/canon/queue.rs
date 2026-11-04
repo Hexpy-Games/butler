@@ -72,6 +72,7 @@ fn write(
             input,
         } => match action.as_str() {
             "request" => store::queue::request(tx, ctx, &session_id, &input),
+            "stop_running" => store::queue::engine::stop_running(tx, ctx, &session_id),
             "hold" => store::queue::decide_hold(
                 tx,
                 ctx,
@@ -89,9 +90,11 @@ fn write(
             ),
             _ => Err(store::Error::Invalid("queue operation")),
         },
-        AppCanonOperation::StepTurnEnded { op_id, outcome } => {
-            store::queue::engine::turn_ended(tx, ctx, &op_id, &outcome)
-        }
+        AppCanonOperation::StepTurnEnded {
+            op_id,
+            outcome,
+            turn_id,
+        } => store::queue::engine::turn_ended(tx, ctx, &op_id, &outcome, turn_id.as_deref()),
         AppCanonOperation::SessionDeleted {
             session_hint,
             op_id,

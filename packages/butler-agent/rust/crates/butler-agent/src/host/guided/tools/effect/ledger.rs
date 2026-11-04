@@ -27,7 +27,7 @@ pub(super) async fn prepare(
     name: &str,
     args: &serde_json::Map<String, Value>,
 ) -> Result<(String, Value, std::sync::Arc<dyn EffectAdapter>), butler_turn::btcc::BtccError> {
-    if !owner.binding.enable_project_ledger_effects {
+    if owner.ledger_effects() == butler_turn::btcc::LedgerEffects::Disabled {
         return Err(butler_turn::btcc::BtccError::relayed(
             "project_ledger_active_context_required",
             "Project Ledger effects require a bounded project Turn.",

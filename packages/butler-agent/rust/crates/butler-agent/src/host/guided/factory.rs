@@ -3,7 +3,7 @@
 mod authority;
 mod hooks;
 mod prompt_state;
-mod surface;
+pub(super) mod surface;
 mod workspace;
 
 #[cfg(test)]
@@ -89,6 +89,15 @@ impl GuidedTurnFactoryAdapter {
             .await
     }
 
+    async fn permission_config(&self) -> super::tools::permission_surface::Config {
+        super::tools::permission_surface::Config {
+            phase_surface_flag: self.preparation.phase_surface_flag.clone(),
+            operation_replay_flag: self.preparation.operation_replay_flag.clone(),
+            default_workspace: self.preparation.default_workspace.clone(),
+            browsing_agent: self.monitoring.browsing_agent_setting().await != "off",
+        }
+    }
+
     async fn skill_catalog(&self, project_id: Option<String>) -> Result<String, BtccError> {
         self.capabilities
             .compact_skill_catalog(project_id)
@@ -125,28 +134,13 @@ impl GuidedTurnFactoryAdapter {
         &self,
         phase: &mut butler_turn::btcc::GuidedPhaseSelection,
     ) -> Result<Vec<butler_turn::btcc::ModelRoundTool>, BtccError> {
-        if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
-            && phase.provider_tools.iter().any(|tool| {
-                tool.get("name").and_then(serde_json::Value::as_str) == Some("delegate_to_worker")
-            })
-        {
-            let profiles = self.subsessions.enabled_worker_profiles().await?;
-            surface::with_worker_profile_choices(phase, &profiles)?;
-        }
-        if self
-            .monitoring
-            .configuration
-            .image_model_settings()
-            .await
-            .ok()
-            .is_none_or(|v| v["selected"].is_null())
-        {
-            for name in ["generate_image", "edit_image"] {
-                phase.authorized_names.retain(|n| n != name);
-                phase.provider_tools.retain(|t| t["name"] != name);
-            }
-        }
-        surface::available(phase, self.preparation.catalog.snapshot())
+        surface::for_owner(
+            phase,
+            &self.subsessions,
+            &self.monitoring,
+            self.preparation.catalog.snapshot(),
+        )
+        .await
     }
 }
 
@@ -212,7 +206,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 )),
                 self.effects.clone(),
                 self.preparation.authority.clone(),
-                self.file_effects(&workspace, &workspace_path),
+                self.file_effects(&workspace, &phase),
                 self.memory_query.clone(),
                 self.memory_recall.clone(),
                 self.memory_writes.clone(),
@@ -235,13 +229,12 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.app_endpoint.clone(),
                 semantic.authority.as_ref(),
                 GuidedToolBinding {
+                    permission_config: self.permission_config().await,
                     turn_id: start.turn.turn_id.clone(),
                     open_asks: open_asks.clone(),
                     app_session_id: app_session_id(&start.turn.context),
                     access_mode: policy.access_mode.clone(),
-                    enable_project_ledger_effects: policy.access_mode
-                        != butler_turn::btcc::AccessMode::ReadOnly
-                        && policy.tracking_mode == "ledger"
+                    ledger_tracking: policy.tracking_mode == "ledger"
                         && policy.project_id.is_some(),
                     owner_session_id: authority_owner,
                     source_session_id: start.turn.session_id.clone(),
@@ -271,12 +264,12 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     butler_data: self.butler_data.clone(),
                     protected_ledger_roots: self.protected_ledger_roots.clone(),
                     allowed_tools_and_effects: None,
-                    mutation_scope: None,
+                    mutation_scope: policy.worker_mutation_scope().map(<[String]>::to_vec),
                     installation_root: Some(self.installation_root.clone()),
                 },
             )?);
             let journal = self.journal(&start.turn.turn_id, activity.clone());
-            let hooks = self.hook_binding(&start, &phase, &semantic, &tools).await?;
+            let hooks = self.hook_binding(start.turn, &phase).await?;
             let text = Arc::new(
                 prompt_state::state(
                     self,
@@ -369,7 +362,7 @@ impl GuidedTurnFactoryAdapter {
             self.preparation.work.clone(),
             scope.clone(),
             policy.tracking_mode.clone(),
-            policy.role.as_str(),
+            self.preparation.subsessions.repository(),
             language,
             turn.original_message.clone(),
         )?

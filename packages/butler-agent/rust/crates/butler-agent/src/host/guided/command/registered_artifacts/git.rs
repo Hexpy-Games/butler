@@ -29,7 +29,10 @@ pub(super) fn parse_git_status(stdout: &str) -> GitSnapshot {
     snapshot
 }
 
-pub(super) fn changed_paths(before: &GitSnapshot, after: &GitSnapshot) -> Vec<String> {
+pub(in crate::host::guided::command) fn changed_paths(
+    before: &GitSnapshot,
+    after: &GitSnapshot,
+) -> Vec<String> {
     after
         .iter()
         .filter(|(path, status)| before.get(*path) != Some(status))
@@ -49,6 +52,7 @@ pub(in crate::host::guided::command) async fn snapshot(
             steps: vec![CommandStep {
                 executable: "git".into(),
                 arguments: vec![
+                    "--no-optional-locks".into(),
                     "status".into(),
                     "--porcelain=v1".into(),
                     "-z".into(),

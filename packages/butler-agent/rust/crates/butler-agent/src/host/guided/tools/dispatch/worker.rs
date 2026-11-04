@@ -72,6 +72,15 @@ fn request(
             })
     };
     Ok(WorkerDelegationRequest {
+        task: call
+            .arguments
+            .get("task")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|e| {
+                ToolExecutionError::Integrity(BtccError::relayed("task_invalid", e.to_string()))
+            })?,
         parent_session_id: owner.binding.source_session_id.clone(),
         parent_turn_id: owner.binding.turn_id.clone(),
         anchor_message_id: invocation.turn.original_message_id.clone(),
@@ -80,6 +89,11 @@ fn request(
         objective: required("objective")?,
         acceptance_criteria: acceptance,
         implementation_brief: required("implementation_brief")?,
+        replaces_relation_id: call
+            .arguments
+            .get("replaces_relation_id")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         safe_title: call
             .arguments
             .get("safe_title")
@@ -90,7 +104,7 @@ fn request(
             .get("profile_id")
             .and_then(Value::as_str)
             .map(str::to_owned),
-        access_mode: owner.binding.access_mode.clone(),
+        access_mode: owner.access_mode(),
         schedule_run: owner.inherited_run(),
     })
 }

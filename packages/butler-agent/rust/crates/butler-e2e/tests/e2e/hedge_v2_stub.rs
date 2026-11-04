@@ -97,21 +97,28 @@ async fn image_notice_is_read_visually_and_resolved() -> Result<(), HarnessError
     Ok(())
 }
 #[tokio::test]
-async fn failed_reader_then_same_url_tab_read_is_not_a_duplicate() -> Result<(), HarnessError> {
+async fn unavailable_reader_recovers_through_the_offered_browser() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    for mode in ["reader_url", "reader_tab"] {
-        let (record, requests) = run(mode, "W2").await?;
-        let outputs = requests
+    let (record, requests) = run("reader_tab", "W2").await?;
+    let outputs = requests
+        .iter()
+        .map(model::outputs)
+        .max_by_key(Vec::len)
+        .unwrap();
+    assert_eq!(
+        outputs[1]["error"]["code"], "tool_unavailable",
+        "{outputs:?}"
+    );
+    assert_eq!(
+        outputs[3]["schema"], "butler.browser-observation.v1",
+        "{outputs:?}"
+    );
+    assert!(
+        requests
             .iter()
-            .map(model::outputs)
-            .max_by_key(Vec::len)
-            .unwrap();
-        assert_eq!(outputs[1]["ok"], false, "{outputs:?}");
-        assert_eq!(outputs[3]["reader"], "butler-browser-tab", "{outputs:?}");
-        assert_ne!(outputs[3]["duplicate_observation"], true, "{outputs:?}");
-        assert!(outputs[3]["markdown"].as_str().unwrap().contains("[image]"));
-        assert_eq!(record["items"]["window"]["status"], "resolved");
-    }
+            .any(|request| request.to_string().contains("input_image"))
+    );
+    assert_eq!(record["items"]["window"]["status"], "resolved");
     Ok(())
 }
 #[tokio::test]
@@ -163,7 +170,7 @@ async fn delegated_relay_is_scored_and_only_success_has_relay_instruction()
             .filter_map(|part| part["text"].as_str())
             .find(|text| text.contains("Delegated result"))
             .unwrap();
-        let relay = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
+        let relay = "\nAnswer the user with this, outcome first, with its figures, names and source links for what was asked. Open or unconfirmed items are work, not caveats: settle those one quick lookup can; keep only what matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines on what was not re-checked or proven, or how the work was recorded.";
         assert_eq!(text.ends_with(relay), mode == "delegated_success", "{text}");
         assert_ne!(record["final_text"], "Direction delivered.");
         if mode == "delegated_success" {

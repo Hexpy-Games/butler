@@ -165,11 +165,11 @@ fn cassette(mode: Mode) -> Result<Cassette, HarnessError> {
         ("browser_act", act)
     };
     let read = (
-        "web_read",
+        "browser_read",
         json!({"tab":if matches!(mode, Mode::Different) {"B"} else {"A"}}),
     );
     let batch = match mode {
-        Mode::Shared => vec![read, ("web_read", json!({"tab":"A","max_chars":2500}))],
+        Mode::Shared => vec![read, ("browser_read", json!({"tab":"A","max_chars":2500}))],
         Mode::Reverse => vec![read, action],
         _ => vec![action, read],
     };

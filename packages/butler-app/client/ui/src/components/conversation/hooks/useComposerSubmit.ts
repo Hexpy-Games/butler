@@ -7,6 +7,7 @@ import type {
   ReasoningEffort,
 } from "@/app/types.ts";
 import type { KeyboardEventLike } from "./composerEventTypes";
+import { captureContent } from "../../browser/captureContent";
 import { composerControlsForSubmit } from "./composerSubmitControls";
 import type { ComposerAttachment } from "./useFileAttachments";
 import { useComposerStore } from "../composerStore";
@@ -70,7 +71,7 @@ export function useComposerSubmit({
       const submitted = useComposerStore.getState();
       const revision = submitted.draftRevision;
       const sessionId = submitted.draftSessionId;
-      const contentParts = submitted.contentParts;
+      const contentParts = captureContent(submitted.contentParts, draftText, elements);
       setModelMenuOpen(false);
       setAccessMenuOpen(false);
       // The sent bubble flies from where the text sat (DS send flight).

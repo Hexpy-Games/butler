@@ -7,8 +7,9 @@ const donePrefix = (chain: CanonQueueView["chains"][number]) => {
   const first = chain.steps.findIndex(step => step.items.some(item => item.state !== "done"));
   return first < 0 ? chain.steps.length : first;
 };
+const faceRank = (item: CanonQueueItem) => item.state === "running" ? (item.hold_reason ? 0 : 1) : item.state === "done" ? 3 : 2;
 export function orderChains(view: CanonQueueView): StepSortableChain<OrderItem>[] {
-  return view.chains.map(chain => ({ id: chain.chain_id, label: chain.origin, steps: chain.steps.slice(donePrefix(chain)).map(step => step.items.map(epic => ({
+  return view.chains.map(chain => ({ id: chain.chain_id, label: chain.origin, steps: chain.steps.slice(donePrefix(chain)).map(step => [...step.items].sort((a, b) => faceRank(a) - faceRank(b)).map(epic => ({
     id: epic.epic_id, label: epic.title, epic, running: epic.state === "running" && !epic.hold_reason,
     done: epic.state === "done", pinned: epic.state === "running" || epic.state === "done",
   }))) }));

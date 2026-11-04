@@ -26,7 +26,7 @@ export function DocumentReader({ header, facts, children, details, hint, action 
             <dd><Typo.Body as="div">{fact.value}</Typo.Body></dd>
           </div>)}
         </dl>}
-        <Stack gap="lg" className={dsClass(styles.body)}>{children}{details}</Stack>
+        <Stack gap="lg" className={dsClass(styles.body)} data-selectable>{children}{details}</Stack>
       </ScrollArea>
       {(hint || action) && <div className={styles.footer}>
         {hint && <Typo.Caption className={dsClass(styles.hint)}>{hint}</Typo.Caption>}

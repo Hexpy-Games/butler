@@ -253,12 +253,10 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
         hook
     };
     let crash = exits("crash", "UserPromptSubmit", "CRASH-TEXT", "1");
-    let mut invalid = printing(&setup, "invalid", "UserPromptSubmit", "{INVALID-TEXT");
-    invalid["failClosed"] = json!(true);
+    let invalid = printing(&setup, "invalid", "UserPromptSubmit", "{INVALID-TEXT");
     let start = exits("start", "SessionStart", "START-TEXT", "2");
     let denied = exits("denied", "UserPromptSubmit", "DENIED-TEXT", "2");
-    let mut closed = exits("closed", "UserPromptSubmit", "CLOSED-TEXT", "1");
-    closed["failClosed"] = json!(true);
+    let closed = exits("closed", "UserPromptSubmit", "CLOSED-TEXT", "1");
     let mut slow = printing(&setup, "slow", "UserPromptSubmit", "SLOW-TEXT");
     slow["args"] = json!(fixture(&setup, "hold"));
     slow["env"] = json!({"HOOK_HELD":setup.sandbox.home.join("slow-held"),
@@ -292,7 +290,8 @@ async fn hooks_context_failing_hook_inserts_nothing() -> Result<(), HarnessError
     assert_eq!(stored, 0);
 
     // A deny rejects the send, so nothing it printed exists anywhere.
-    for hook in [denied, closed, invalid] {
+    for mut hook in [denied, closed, invalid] {
+        hook["failClosed"] = json!(true);
         replace(&s, vec![hook]).await?;
         let blocked =
             s.gw.post("/messages", json!({"chat_id":chat,"text":"Rejected."}))

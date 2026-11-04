@@ -1,5 +1,5 @@
 import { imageApprovalMedia } from "../images/ImageApprovalMedia";
-import type { ComposerDecisionMedia } from "@/butler-ds";
+import type { ComposerDecisionDetail, ComposerDecisionMedia } from "@/butler-ds";
 import { useBrowserDecisionMedia } from "./useBrowserDecisionMedia";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useRef, useState } from "react";
@@ -12,7 +12,8 @@ export interface ComposerAuthorityDecision {
   /** The plain-language question, also shown on the pending attachment. */
   media?: ComposerDecisionMedia;
   pathDetails?: string[];
-  title: string; details: string[]; risk: ApprovalRequestView["risk"]; actionKind: ApprovalRequestView["actionKind"];
+  /** Command bodies come as `{ code }`, drawn in the panel's code frame. */
+  title: string; details: ComposerDecisionDetail[]; risk: ApprovalRequestView["risk"]; actionKind: ApprovalRequestView["actionKind"];
   /** What "Always allow in this conversation" covers; the grant needs the legacy `scope`. */
   conversationScope?: string; scope: AuthorityApprovalCard["scope"]; pending: boolean; error?: string;
   composingMessage: boolean; pendingCount: number;

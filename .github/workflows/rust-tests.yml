@@ -89,6 +89,8 @@ jobs:
           python3 .github/scripts/isolated.py bun tests/smoke/browser-efficiency-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/icons"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-icons-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/split-motion"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-split-motion-electron.ts
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -159,6 +161,7 @@ jobs:
               smoke hooks-settings-smoke
               smoke sidebar-group-drop
               smoke app-canon-board-smoke
+              smoke app-canon-epic-delete-smoke
               smoke composer-model-fallback-smoke
               smoke sidebar-new-chat-smoke
               smoke settings-trace-smoke

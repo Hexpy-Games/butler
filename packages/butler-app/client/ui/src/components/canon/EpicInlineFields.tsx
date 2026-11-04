@@ -11,8 +11,8 @@ import { InlineUnsavedDialog } from "./InlineUnsavedDialog.tsx";
 import { useInlineExitGuard } from "./useInlineExitGuard.ts";
 import { useEpicInlineEdit, type EpicTextField } from "./useEpicInlineEdit.ts";
 
-export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = false, summary }: {
-  compact?: boolean; summary?: ReactNode;
+export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = false, summary, titleAction }: {
+  compact?: boolean; summary?: ReactNode; titleAction?: ReactNode;
   epic: EpicDetail; busy: boolean; titleRef?: Ref<HTMLElement>;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
@@ -49,10 +49,13 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
       guard.blur();
     }}>
       {(["title", "description"] as const).map(field => <Stack gap="sm" key={field}>
-        {edit.draft?.field === field
+        <Stack align="row" cross="start" gap="lg">
+          <Box grow minWidth="0">{edit.draft?.field === field
           ? <EpicFieldInput epic={epic} field={field} value={edit.draft.value} busy={busy} valid={edit.valid}
             current={edit.draft.current} base={edit.draft.base} onChange={edit.change} onSave={guard.save} onCancel={guard.cancel} />
-          : <EpicFieldRest field={field} epic={epic} compact={compact} titleRef={titleRef} triggerRef={triggers[field]} busy={busy} onEdit={() => void begin(field)} />}
+          : <EpicFieldRest field={field} epic={epic} compact={compact} titleRef={titleRef} triggerRef={triggers[field]} busy={busy} onEdit={() => void begin(field)} />}</Box>
+          {field === "title" && titleAction && <Box shrink={false}>{titleAction}</Box>}
+        </Stack>
         {field === "title" && summary}
         {field === "description" && edit.draft?.field !== field && unreferenced.length > 0 && <AttachmentList
           items={unreferenced.map(file => ({ id: file.file_id, name: file.safe_name,

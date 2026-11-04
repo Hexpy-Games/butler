@@ -94,6 +94,7 @@ impl GraphBuilder {
             .children
             .delegate_steward(
                 StewardDelegationRequest {
+                    user_request: None,
                     parent_session_id: parent.scope.session_id.clone(),
                     parent_turn_id: parent.scope.turn_id.clone(),
                     anchor_message_id: "anchor".into(),
@@ -102,7 +103,7 @@ impl GraphBuilder {
                     safe_title: Some(objective.into()),
                     model_ref: "openai/gpt-6-luna".into(),
                     reasoning_effort: "low".into(),
-                    access_mode: butler_turn::btcc::AccessMode::ReadOnly,
+                    access_mode: self.access_mode.clone().unwrap_or(AccessMode::ReadOnly),
                     schedule_run: None,
                 },
                 &parent.view,
@@ -132,26 +133,31 @@ impl GraphBuilder {
         brief: &str,
     ) -> Result<Attempt, Error> {
         self.tick();
-        let output = self
-            .children
-            .delegate_worker(
-                WorkerDelegationRequest {
-                    parent_session_id: work.scope.session_id.clone(),
-                    parent_turn_id: work.scope.turn_id.clone(),
-                    anchor_message_id: "anchor".into(),
-                    source_tool_call_id: format!("worker-{}", self.sequence),
-                    action_key: key.into(),
-                    objective: format!("Complete {key}"),
-                    acceptance_criteria: vec!["All checks pass".into()],
-                    implementation_brief: brief.into(),
-                    safe_title: Some(format!("Task {key}")),
-                    profile_id: None,
-                    access_mode: butler_turn::btcc::AccessMode::ReadOnly,
-                    schedule_run: None,
-                },
-                &work.view,
-            )
-            .await?;
+        let output = Box::pin(self.children.delegate_worker(
+            WorkerDelegationRequest {
+                task: Some(serde_json::from_value(json!({
+                    "scope":{"paths":[format!("tasks/{key}")]},"output":{"format":"text","fields":["summary"]},
+                    "inputs": self.children.repository().work_tasks(work.view.work_id.clone()).await?
+                        .into_iter().filter(|t| t.action_key == key && t.status == "done")
+                        .map(|t| json!({"task":t.task_id,"use":"artifact"})).collect::<Vec<_>>()
+                }))?),
+                replaces_relation_id: None,
+                parent_session_id: work.scope.session_id.clone(),
+                parent_turn_id: work.scope.turn_id.clone(),
+                anchor_message_id: "anchor".into(),
+                source_tool_call_id: format!("worker-{}", self.sequence),
+                action_key: key.into(),
+                objective: format!("Complete {key}"),
+                acceptance_criteria: vec!["All checks pass".into()],
+                implementation_brief: brief.into(),
+                safe_title: Some(format!("Task {key}")),
+                profile_id: None,
+                access_mode: self.access_mode.clone().unwrap_or(AccessMode::ReadOnly),
+                schedule_run: None,
+            },
+            &work.view,
+        ))
+        .await?;
         let session = output["child_session_id"]
             .as_str()
             .ok_or_else(|| format!("missing worker: {output}"))?;

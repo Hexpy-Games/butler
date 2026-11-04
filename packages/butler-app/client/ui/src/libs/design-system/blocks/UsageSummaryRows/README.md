@@ -1,5 +1,7 @@
 # UsageSummaryRows
 
+Glossary: 컨텍스트 사용량 팝오버 / context usage popover (`UsageSummaryRows`).
+
 ## What is this component
 A presenter for provider usage: quota windows as meters, token counts and a
 USD cost as label/value rows, and loading, unavailable and stale states.

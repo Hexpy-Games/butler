@@ -103,6 +103,22 @@ impl SqliteSubsessionRepository {
 
     /// Retires a relation's waiting directions and returns the turn the first
     /// would have run in, for a stop that arrives before that turn starts.
+    pub(crate) async fn has_pending_direction(
+        &self,
+        relation: String,
+    ) -> Result<bool, StorageError> {
+        self.storage
+            .read(move |db| {
+                db.query_row(
+                    "SELECT EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')",
+                    [relation],
+                    |row| row.get(0),
+                )
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
     pub(crate) async fn retire_pending_directions(
         &self,
         relation: String,

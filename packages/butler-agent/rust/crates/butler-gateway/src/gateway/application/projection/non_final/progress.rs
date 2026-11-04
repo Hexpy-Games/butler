@@ -106,6 +106,9 @@ fn progress_row(
 }
 
 fn basic_fields(row: &mut Map<String, Value>, source: &Map<String, Value>) {
+    if let Some(key) = source.get("actionKey").and_then(Value::as_str) {
+        row.insert("action_key".into(), Value::String(key.to_owned()));
+    }
     copy_string(source, row, "failureCode", "failure_code", 96);
     copy_string(source, row, "authType", "auth_type", 64);
     copy_string(source, row, "toolName", "safe_tool_name", 180);

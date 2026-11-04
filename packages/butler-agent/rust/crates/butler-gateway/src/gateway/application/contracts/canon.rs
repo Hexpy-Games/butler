@@ -22,6 +22,7 @@ pub enum AppCanonResource {
     EditPlan,
     CreateEpic,
     EditEpic,
+    DeleteEpic,
     PlanOrder,
     BacklogOrder,
     Tags,
@@ -72,6 +73,8 @@ pub enum AppCanonOperation {
     StepTurnEnded {
         op_id: String,
         outcome: String,
+        /// The Turn that ended, when one did: its delegations can still finish the step.
+        turn_id: Option<String>,
     },
     SessionDeleted {
         session_hint: String,

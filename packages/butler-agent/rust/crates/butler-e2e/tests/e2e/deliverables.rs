@@ -9,9 +9,11 @@ pub(super) mod delegation;
 mod handoff;
 mod handoff_lifetime;
 mod migration;
+mod open_original;
 mod opened_files;
 mod paths;
 mod security;
+mod session_results;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -93,7 +95,7 @@ async fn research_to_deck_preserves_working_files_and_pairs_changes() -> Result<
     let artifacts = s.gw.get("/artifacts?session_id=general").await?;
     assert_eq!(
         artifacts.data()["artifacts"].as_array().unwrap().len(),
-        4,
+        1,
         "{artifacts:?}"
     );
     let projected = artifacts.data();

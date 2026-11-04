@@ -20,7 +20,7 @@ pub(in crate::host::guided::tools) async fn page(
         return Err(failure("web_read needs a url or an open tab."));
     }
     // Only a turn that may use the browser reads its tabs.
-    let browsing = owner.binding.authorized_names.contains("browser_open");
+    let browsing = owner.authorized("browser_open");
     let client = if browsing {
         Client::new(owner).await
     } else {
@@ -28,7 +28,9 @@ pub(in crate::host::guided::tools) async fn page(
     };
     let Some(client) = client else {
         return match named {
-            Some(_) => Err(failure("The browser is unavailable; read the page by url.")),
+            Some(_) => Err(failure(
+                "The browser is unavailable; read the page by url with web_read.",
+            )),
             None => Ok(None),
         };
     };
@@ -110,7 +112,7 @@ async fn find(
 fn unreadable(reason: &Value) -> Value {
     json!({"ok":false,"error":{"code":"tab_unreadable","message":"That tab could not be read.",
         "reason":reason,
-        "recovery":"Use an open tab id from browser_open or browser_tabs, or read the page by url."}})
+        "recovery":"Use an open tab id from browser_open or browser_tabs."}})
 }
 
 fn failure(message: &str) -> Value {

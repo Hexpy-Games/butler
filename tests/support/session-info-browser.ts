@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import { installPendingAskEvents, installSessionBrowser, replaySession } from "./session-info-fixtures.ts";
+import { auditSessionInfoFocus, installPendingAskEvents, installSessionBrowser, replaySession } from "./session-info-fixtures.ts";
 
 const ASIDE = '[data-slot="conversation-aside"]';
 const SECTION = '[data-session-section="browser"]';
@@ -18,10 +18,10 @@ type BrowserProof = Window & {
   __browserCalls: { method: string; input?: { id?: string } }[];
 };
 
-function browserTabs(session: string) {
-  return ["자료 검토", "확인 요청"].map((title, index) => ({
-    id: `session-browser-${index}`, owner: `conversation:${session}`, title, url: `https://example.com/${index}`,
-    favicon: "", agent: true, holder: "agent", agentAt: 1_760_000_000_000 - index, status: "idle",
+function browserTabs(session: string, count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `session-browser-${index}`, owner: `conversation:${session}`, title: ["자료 검토", "확인 요청"][index] ?? `검토 자료 ${index + 1}`, url: `https://example.com/${index}`,
+    favicon: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="7" fill="hsl(${index * 31} 55% 40%)"/><text x="16" y="22" font-size="17" font-weight="700" text-anchor="middle" fill="white">${String.fromCharCode(65 + index)}</text></svg>`)}`, agent: true, holder: "agent", agentAt: 1_760_000_000_000 - index, status: "idle",
     canBack: false, canForward: false, ...(index ? { waiting: true } : { busy: true }),
   }));
 }
@@ -117,12 +117,14 @@ async function verifyTwoTabs(page: Page, ids: string[], shots: string, theme: st
 
 /** Real live-frame decoding, section order, shared right slot, stream lifetime and review captures. */
 export async function verifySessionInfoBrowser(browser: Browser, server: NativeAppServerHandle, view: SessionView, shots: string, theme: string) {
-  for (const count of [0, 1, 2]) {
+  for (const count of [0, 1, 2, 3, 5, 12]) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     try {
-      const tabs = browserTabs(view.session_id).slice(0, count);
+      const tabs = browserTabs(view.session_id, count);
+      // Waiting tabs precede the busy tab in the panel.
+      const orderedIds = [...tabs.slice(1), ...tabs.slice(0, 1)].map(tab => tab.id);
       await installSessionBrowser(page, tabs);
       await installPendingAskEvents(page);
       await replaySession(page, () => view);
@@ -136,16 +138,47 @@ export async function verifySessionInfoBrowser(browser: Browser, server: NativeA
       await page.locator(`${ASIDE} [data-session-section="environment"]`).waitFor();
       if (count) {
         await page.locator(SECTION).scrollIntoViewIfNeeded();
-        await waitSubscriptions(page, tabs.map(tab => tab.id));
-        await page.waitForFunction(({ section, count }) => document.querySelectorAll(`${section} [data-slot="live-tab-canvas"]`).length === count, { section: SECTION, count });
+        await waitSubscriptions(page, orderedIds.slice(0, 3));
+        await page.waitForFunction(({ section, count }) => document.querySelectorAll(`${section} [data-slot="live-tab-canvas"]`).length === count, { section: SECTION, count: Math.min(count, 3) });
       } else {
         assert.equal(await page.locator(SECTION).count(), 0);
       }
-      await capture(page, shots, ["none", "one", "two"][count]!, theme);
+      if (count <= 3) {
+        assert.equal(await page.locator(`${SECTION} [data-test-class="live-tab-list-toggle"]`).count(), 0);
+        assert.equal(await page.locator(`${SECTION} ${CARD}`).count(), count);
+      }
+      await capture(page, shots, String(count), theme);
+      if (count > 3) await verifyOverflow(page, count, orderedIds, shots, theme);
       if (count === 2) await verifyTwoTabs(page, tabs.map(tab => tab.id), shots, theme);
       assert.deepEqual(errors, []);
     } finally {
       await page.close();
     }
   }
+}
+
+async function verifyOverflow(page: Page, count: number, ids: string[], shots: string, theme: string) {
+  const section = page.locator(SECTION);
+  const toggle = section.locator('[data-test-class="live-tab-list-toggle"]');
+  await toggle.scrollIntoViewIfNeeded();
+  // A narrow panel puts the +N count in the 12-tab review capture.
+  if (count === 12) await section.evaluate(node => { (node as HTMLElement).style.width = "140px"; });
+  assert.equal(await toggle.count(), 1);
+  assert.equal(await section.locator(CARD).count(), 3);
+  const focus = await auditSessionInfoFocus(page, section);
+  assert.deepEqual(focus.clips, []);
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(({ section, card }) => document.querySelectorAll(`${section} ${card}`).length > 3, { section: SECTION, card: CARD });
+  assert.equal(await section.locator(CARD).count(), count);
+  assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
+  await section.scrollIntoViewIfNeeded();
+  await waitSubscriptions(page, ids);
+  await page.keyboard.press("Enter");
+  assert.equal(await section.locator(CARD).count(), 3);
+  assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
+  await section.scrollIntoViewIfNeeded();
+  await waitSubscriptions(page, ids.slice(0, 3));
+  await toggle.scrollIntoViewIfNeeded();
+  await capture(page, shots, `overflow-${count}`, theme);
 }
