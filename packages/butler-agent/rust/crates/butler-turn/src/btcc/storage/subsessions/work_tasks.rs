@@ -41,7 +41,7 @@ impl SqliteSubsessionRepository {
         self.storage.read(move |db| db.query_row("SELECT EXISTS (SELECT 1 FROM btcc_guided_works WHERE work_id=?1 AND status IN ('open','blocked'))",[work],|r| r.get(0)).map_err(StorageError::sqlite)).await
     }
 
-    /// All ownership records for a single Work, including immutable result refs.
+    /// All Task records for a single Work, including immutable result refs.
     pub async fn work_tasks(&self, work: String) -> Result<Vec<WorkTask>, StorageError> {
         self.storage.read(move |db| read_tasks(db, &work)).await
     }

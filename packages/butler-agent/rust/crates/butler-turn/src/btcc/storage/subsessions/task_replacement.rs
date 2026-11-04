@@ -1,4 +1,4 @@
-//! Reserve replacement ownership and transfer its pending dependents in one commit.
+//! Record the replacement Task and transfer its pending dependents in one commit.
 use super::*;
 use crate::btcc::TaskInput;
 

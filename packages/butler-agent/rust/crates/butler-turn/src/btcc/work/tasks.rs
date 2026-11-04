@@ -1,4 +1,4 @@
-//! Durable exclusive Task contracts. Scope decisions belong to the model.
+//! Durable Task contracts. Scope decisions belong to the model.
 use serde::{Deserialize, Serialize};
 mod render;
 

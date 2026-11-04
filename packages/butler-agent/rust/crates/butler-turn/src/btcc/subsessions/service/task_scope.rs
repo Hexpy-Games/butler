@@ -31,12 +31,12 @@ pub(super) fn refusal(code: &str, detail: Value) -> Value {
 impl SubsessionService {
     pub(super) async fn prepare_task(
         &self,
-        request: &mut WorkerDelegationRequest,
+        request: &WorkerDelegationRequest,
         work: &WorkView,
         packet: &mut crate::btcc::SubsessionPacket,
     ) -> Result<Option<Value>, BtccError> {
         let tasks = self.repository.work_tasks(work.work_id.clone()).await?;
-        let task = request.task.as_mut().ok_or_else(|| {
+        let task = request.task.as_ref().ok_or_else(|| {
             BtccError::relayed(
                 "task_fields_required",
                 "task.scope and task.output are required",
