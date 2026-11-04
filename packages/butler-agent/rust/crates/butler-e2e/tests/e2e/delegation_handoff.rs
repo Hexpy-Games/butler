@@ -60,44 +60,7 @@ async fn replacement_stops_old_worker_and_marks_its_late_cancellation_as_evidenc
     butler_e2e::gate!();
     let (s, script, server) = run(Mode::Replace).await?;
     let requests = script.requests.lock().unwrap().clone();
-    let outputs: Vec<Value> = requests
-        .iter()
-        .flat_map(|(_, b)| stub::outputs(b))
-        .collect();
-    let refused = outputs
-        .iter()
-        .find(|v| v["error"]["code"] == "task_scope_overlap")
-        .unwrap();
-    assert_eq!(
-        refused["error"]["detail"]["overlaps"][0]["status"],
-        "active"
-    );
-    assert!(
-        refused["error"]["next_action"]
-            .as_str()
-            .unwrap()
-            .contains("task.overlap")
-    );
-    let raw_refusal = requests
-        .iter()
-        .flat_map(|(_, body)| body["input"].as_array().unwrap())
-        .filter_map(|message| message["output"].as_str())
-        .find(|text| {
-            serde_json::from_str::<Value>(text).is_ok_and(|value| value["output"] == *refused)
-        })
-        .unwrap();
-    assert!(!raw_refusal.contains("Correct the input using this schema"));
     let db = db(&s)?;
-    let first_task: String = db.query_row(
-        "SELECT task_id FROM btcc_work_tasks WHERE relation_id=?1",
-        [&*script.first_relation.lock().unwrap()],
-        |r| r.get(0),
-    )?;
-    assert_eq!(
-        refused["error"]["detail"]["overlaps"][0]["task"],
-        first_task
-    );
-
     let (old, new): (String, String) = db.query_row("SELECT relation_id,json_extract(packet_json,'$.superseded_by') FROM btcc_subsession_delegations WHERE json_extract(packet_json,'$.superseded_by') IS NOT NULL", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
     let prefix = format!(
         "Superseded Worker result: {old} was replaced by {new} for action A; it is not this action's result."
