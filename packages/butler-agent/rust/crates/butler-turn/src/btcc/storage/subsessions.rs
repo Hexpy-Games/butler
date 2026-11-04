@@ -411,8 +411,15 @@ impl SqliteSubsessionRepository {
                     .query_row(
                         "SELECT EXISTS (SELECT 1 FROM btcc_session_relations r
                          JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
-                         WHERE r.parent_session_id=?1 AND r.activity_terminal=0
-                           AND json_extract(d.packet_json,'$.superseded_by') IS NULL)",
+                         WHERE r.parent_session_id=?1
+                           AND json_extract(d.packet_json,'$.superseded_by') IS NULL AND (
+                           EXISTS (SELECT 1 FROM btcc_subsession_directions i
+                             WHERE i.relation_id=r.relation_id AND i.status='pending')
+                           OR NOT EXISTS (SELECT 1 FROM btcc_steward_results x
+                             WHERE x.relation_id=r.relation_id AND x.child_turn_id=COALESCE(
+                               (SELECT t.turn_id FROM btcc_turns t
+                                WHERE t.session_id=r.child_session_id ORDER BY t.rowid DESC LIMIT 1),
+                               d.child_turn_id))))",
                         [parent],
                         |row| row.get(0),
                     )

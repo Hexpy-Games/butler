@@ -293,7 +293,7 @@ impl SubsessionService {
             now,
         );
         create.previous_relation_id = previous;
-        let stored = self.create_and_dispatch(create).await?;
+        let stored = Box::pin(self.create_and_dispatch(create)).await?;
         Ok(delegation_output(&stored))
     }
 

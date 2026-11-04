@@ -117,7 +117,17 @@ pub(super) fn child_activity(
             |row| row.get(0),
         )
         .map_err(StorageError::sqlite)?;
-    let status = match result.as_deref().filter(|_| terminal) {
+    let pending: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')",
+            [&r.relation_id],
+            |row| row.get(0),
+        )
+        .map_err(StorageError::sqlite)?;
+    let status = match result
+        .as_deref()
+        .filter(|_| terminal || (latest.as_deref() != Some("admitted") && !pending))
+    {
         Some("success") => "completed",
         Some("cancelled") => "cancelled",
         Some("blocked") => "blocked",

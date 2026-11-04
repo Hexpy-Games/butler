@@ -17,6 +17,25 @@ macro_rules! ENDING_SCOPE_SQL {
 pub(super) use ENDING_SCOPE_SQL;
 
 impl SqliteSubsessionRepository {
+    pub(crate) async fn card_open(&self, relation: String) -> Result<bool, StorageError> {
+        self.storage
+            .read(move |db| {
+                db.query_row(
+                    concat!(
+                        "SELECT r.activity_terminal=0 AND NOT EXISTS(",
+                        ENDING_SCOPE_SQL!("r.child_session_id"),
+                        ") FROM btcc_session_relations r WHERE r.relation_id=?1"
+                    ),
+                    [relation],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map(|open| open.unwrap_or(false))
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
     /// A late result cannot reopen a terminal or ancestor-fenced assignment.
     pub(crate) async fn accepts_completion(
         &self,
@@ -178,6 +197,9 @@ pub(super) fn ends_card(
     status: &str,
     own_turn: Option<&str>,
 ) -> Result<bool, StorageError> {
+    if status == "blocked" {
+        return Ok(false);
+    }
     if status != "success" {
         return Ok(true);
     }

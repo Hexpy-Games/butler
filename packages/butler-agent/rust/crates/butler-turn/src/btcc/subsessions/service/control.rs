@@ -51,7 +51,7 @@ impl SubsessionService {
     /// Whether the child's latest turn still runs: admitted and without a saved
     /// result. An interrupted turn closed with a failed result stays `admitted`
     /// in the turn store but no longer holds back a direction.
-    pub(super) async fn child_turn_running(&self, child_session: &str) -> Result<bool, BtccError> {
+    async fn child_turn_running(&self, child_session: &str) -> Result<bool, BtccError> {
         let Some((turn, state)) = self
             .repository
             .latest_turn(child_session.to_owned())
@@ -68,20 +68,6 @@ impl SubsessionService {
             .has_turn_result(child_session.to_owned(), turn)
             .await
             .map_err(BtccError::from)?)
-    }
-
-    /// Whether a direction is still waiting for or running on this child.
-    pub(super) async fn steward_continuing(
-        &self,
-        relation: &StoredSubsessionDelegation,
-    ) -> Result<bool, BtccError> {
-        Ok(self
-            .repository
-            .pending_direction(relation.relation_id.clone())
-            .await
-            .map_err(BtccError::from)?
-            .is_some()
-            || self.child_turn_running(&relation.child_session_id).await?)
     }
 
     /// Enqueues the child's pending direction once its latest turn has ended.

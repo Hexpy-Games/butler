@@ -138,8 +138,8 @@ fn steer_answers(script: &stub::Script) -> Vec<Value> {
 }
 
 #[tokio::test]
-async fn blocked_continuation_closes_its_task_and_retires_queued_directions()
--> Result<(), HarnessError> {
+async fn next_direction_stays_on_the_work_a_continuation_left_blocked() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     let (s, script, server, relation, session) =
         hold_continuation("STEWARD-DIRECTION-BLOCKED", "message", true).await?;
@@ -163,18 +163,28 @@ async fn blocked_continuation_closes_its_task_and_retires_queued_directions()
     }
     assert_eq!(answers[0]["instruction_id"], answers[1]["instruction_id"]);
     script.item_release.notify_one();
-    let saved = wait_reports(&s, &relation, 2).await?;
+    let saved = wait_reports(&s, &relation, 3).await?;
     let statuses: Vec<_> = saved.iter().map(|(_, status)| status.as_str()).collect();
-    assert_eq!(statuses, ["success", "blocked"]);
-    assert_eq!(works(&s, &session), ["completed", "abandoned"]);
-    crate::delegate_followup::terminal::assert_closed(&db(&s), &session);
-    assert_eq!(
-        count(
-            &db(&s),
-            "SELECT count(*) FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'",
-            &relation
-        ),
-        0
+    assert_eq!(statuses, ["success", "blocked", "success"]);
+    assert_eq!(works(&s, &session), ["completed", "completed"]);
+    let second = script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|r| {
+            let text = request_text(r);
+            text.starts_with(stub::DIRECTION_2) && text != stub::DIRECTION_2
+        })
+        .expect("the second direction opened no turn")
+        .to_string();
+    // The Work's own original request may still say how that Work began.
+    let (_, current) = second
+        .rsplit_once("## Current request")
+        .expect("the turn states its request");
+    assert!(
+        !current.contains("runs on a new Work") && current.contains("Continue the existing Work"),
+        "the blocked Work is re-bound, not replaced: {current}"
     );
     s.finish().await?;
     server.abort();

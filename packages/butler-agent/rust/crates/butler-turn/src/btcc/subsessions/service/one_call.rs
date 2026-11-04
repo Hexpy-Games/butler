@@ -191,7 +191,7 @@ pub(super) fn build(
 
 fn runtime_settled(work: &WorkView, result: &str, status: &str) -> bool {
     if work.status == crate::btcc::DurableWorkStatus::Abandoned {
-        return matches!(status, "cancelled" | "abandoned" | "failed" | "blocked");
+        return matches!(status, "cancelled" | "abandoned" | "failed");
     }
     let id = match work.scope {
         crate::btcc::WorkScope::Session { .. } => format!("steward-result-disposition:{result}"),

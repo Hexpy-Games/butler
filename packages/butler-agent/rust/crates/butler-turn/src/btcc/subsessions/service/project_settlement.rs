@@ -52,7 +52,7 @@ impl SubsessionService {
             .await?;
         if !matches!(
             result.get("status").and_then(Value::as_str),
-            Some("success" | "completed")
+            Some("success" | "completed" | "blocked")
         ) {
             self.work
                 .abandon_bound_work_for_turn(relation.parent_turn_id.clone())

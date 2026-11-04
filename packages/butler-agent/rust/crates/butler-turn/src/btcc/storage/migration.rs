@@ -60,6 +60,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
         "INTEGER NOT NULL DEFAULT 1",
     )? {
         transaction.execute_batch("UPDATE btcc_session_relations SET activity_terminal=0 WHERE activity_terminal=1 AND EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=btcc_session_relations.child_session_id AND t.semantic_state IN ('admitted','delivery_committed'))")?;
+        transaction.execute_batch("UPDATE btcc_session_relations SET activity_terminal=0 WHERE activity_terminal=1 AND (SELECT status FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id ORDER BY x.rowid DESC LIMIT 1)='blocked'")?;
         transaction.execute_batch("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE status='pending' AND relation_id IN (SELECT relation_id FROM btcc_session_relations WHERE activity_terminal=1)")?;
     }
     transaction.execute_batch("DROP INDEX IF EXISTS idx_btcc_subsession_direction_recovery; DROP TABLE IF EXISTS btcc_subsession_end_members; DROP TABLE IF EXISTS btcc_subsession_stop_outbox;")?;

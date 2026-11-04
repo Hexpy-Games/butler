@@ -139,26 +139,10 @@ impl SubsessionService {
         &self,
         candidate: &StoredSubsessionDelegation,
     ) -> Result<bool, BtccError> {
-        let terminal = self
-            .repository
-            .result_for_relation(candidate.relation_id.clone())
+        self.repository
+            .card_open(candidate.relation_id.clone())
             .await
-            .map_err(BtccError::from)?
-            .is_some();
-        if !terminal {
-            return Ok(true);
-        }
-        if self
-            .repository
-            .has_pending_direction(candidate.relation_id.clone())
-            .await
-            .map_err(BtccError::from)?
-        {
-            return Ok(true);
-        }
-        // Results end assignments. A queued continuation remains eligible only
-        // while its own latest turn is actually running.
-        self.child_turn_running(&candidate.child_session_id).await
+            .map_err(BtccError::from)
     }
 }
 

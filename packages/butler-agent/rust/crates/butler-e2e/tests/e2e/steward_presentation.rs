@@ -128,10 +128,9 @@ async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessEr
         )
         .unwrap();
     assert_eq!(
-        status, "abandoned",
-        "a terminal card must close its unfinished Work"
+        status, "blocked",
+        "Work must retain its unfinished disposition"
     );
-    crate::delegate_followup::terminal::assert_closed(&db, child["session_id"].as_str().unwrap());
     drop(db);
     s.finish().await?;
     server.abort();

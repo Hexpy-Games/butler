@@ -10,13 +10,7 @@ impl SubsessionService {
     ) -> Result<Value, BtccError> {
         let prior = self.prior_context(relation).await?;
         let worker = relation.packet.child_role == crate::btcc::ChildRole::Worker;
-        if prior.get("result").is_none_or(Value::is_null)
-            || self
-                .repository
-                .has_pending_direction(relation.relation_id.clone())
-                .await
-                .map_err(BtccError::from)?
-        {
+        if self.relation_is_eligible(relation).await? {
             return Ok(
                 json!({"ok":false,"error":{"code":"delegated_session_not_running","recoverable":true,
                 "message":"Immediate steering requires a running child turn. Queue this instruction instead."},
@@ -157,7 +151,7 @@ impl SubsessionService {
             .prompt_result_for_relation(relation.relation_id.clone())
             .await
             .map_err(BtccError::from)?;
-        let state = if result.is_none() || self.steward_continuing(&relation).await? {
+        let state = if result.is_none() || self.relation_is_eligible(&relation).await? {
             "active: queue related follow-ups; mode=steer only for an immediate correction to a running turn"
         } else {
             "closed: new requests use delegate_to_steward(previous_relation_id) in this turn"
