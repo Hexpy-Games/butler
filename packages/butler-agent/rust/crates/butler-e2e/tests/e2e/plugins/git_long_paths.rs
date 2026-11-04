@@ -4,15 +4,16 @@ use super::{git_support::*, *};
 
 /// A short folder under the system temp folder, removed on drop, so the data
 /// folder has the intended length whatever the sandbox root's length is.
+/// Tests in one process run in parallel, so each gets its own unique folder.
 struct ShortRoot(PathBuf);
 
 impl ShortRoot {
     fn create() -> Result<Self, HarnessError> {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.subsec_nanos());
-        let path = std::env::temp_dir().join(format!("bpg-{}-{nanos}", std::process::id()));
-        fs::create_dir_all(&path)?;
+        let path = std::env::temp_dir().join(format!(
+            "bpg-{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..12]
+        ));
+        fs::create_dir(&path)?;
         Ok(Self(butler_platform::secure_fs::canonicalize(&path)?))
     }
 }

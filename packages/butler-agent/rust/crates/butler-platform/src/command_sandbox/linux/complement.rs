@@ -334,26 +334,21 @@ fn grant_child(
     // The listing names each entry's type: only directories may be chain
     // directories under another name (and directory-only rights need a
     // type). Cached attributes suffice for type and identity.
-    let stat = if identify || directory_only(rights) {
-        use rustix::fs::{AtFlags, StatxFlags};
-        Some(rustix::fs::statx(
-            &fd,
-            "",
-            AtFlags::EMPTY_PATH | AtFlags::STATX_DONT_SYNC,
-            StatxFlags::TYPE | StatxFlags::INO,
-        )?)
-    } else {
-        None
+    use rustix::fs::{AtFlags, StatxFlags};
+    // An entry whose device is gone (e.g. a removed drive left mounted) is unreachable too.
+    let stat = match rustix::fs::statx(
+        &fd,
+        "",
+        AtFlags::EMPTY_PATH | AtFlags::STATX_DONT_SYNC,
+        StatxFlags::TYPE | StatxFlags::INO,
+    ) {
+        Err(rustix::io::Errno::NODEV) => return Ok(()),
+        result => result?,
     };
-    let directory =
-        stat.is_some_and(|stat| u32::from(stat.stx_mode) & nix::libc::S_IFMT == nix::libc::S_IFDIR);
+    let directory = u32::from(stat.stx_mode) & nix::libc::S_IFMT == nix::libc::S_IFDIR;
     // Another view of a chain directory: its split name grants its contents.
-    if directory
-        && stat.is_some_and(|stat| {
-            let device = rustix::fs::makedev(stat.stx_dev_major, stat.stx_dev_minor);
-            denied.chained(device, stat.stx_ino)
-        })
-    {
+    let device = rustix::fs::makedev(stat.stx_dev_major, stat.stx_dev_minor);
+    if directory && (identify || directory_only(rights)) && denied.chained(device, stat.stx_ino) {
         return Ok(());
     }
     let rights = file_rights(rights, !directory_only(rights) || directory);

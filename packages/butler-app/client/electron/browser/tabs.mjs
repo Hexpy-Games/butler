@@ -101,7 +101,8 @@ class UserBrowser {
     if (tab?.attached && tab.view) {
       // Preserve the visible frame once; repeated hidden layout passes must not
       // keep starting readbacks while waiting to move this view.
-      if (tab.view.getVisible()) void this.capture(tab);
+      // A background-window view has no user-visible frame to preserve.
+      if (tab.attached === this.getWindow() && tab.view.getVisible()) void this.capture(tab);
       detachView(tab, () => {
         if (this.tabs.get(tab.id) === tab && !tab.closing && !tab.closeRequested && tab.view && !tab.view.webContents.isDestroyed()) this.sync(tab);
       });
