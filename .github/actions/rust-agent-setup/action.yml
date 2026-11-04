@@ -200,6 +200,18 @@ runs:
         echo "TARGET_SNAPSHOT_FEATURES=$SNAPSHOT_FEATURES" >> "$GITHUB_ENV"
         if [ -n "$SNAPSHOT_TARGET" ]; then echo "CARGO_BUILD_TARGET=$SNAPSHOT_TARGET" >> "$GITHUB_ENV"; fi
 
+    - name: Free disk for the Cargo snapshot
+      if: inputs.restore-cargo-target == 'true' && runner.os == 'Linux' && runner.environment == 'github-hosted'
+      shell: bash
+      run: |
+        # The restored debug target needs ~18 GiB plus its ~3 GiB archive; some hosted images start with less free space.
+        free_gib=$(df --output=avail -BG / | tail -1 | tr -dc 0-9)
+        echo "Free on /: ${free_gib} GiB"
+        if [ "$free_gib" -lt 40 ]; then
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/local/.ghcup /usr/share/swift
+          df -h /
+        fi
+
     - name: Restore persistent main Cargo snapshot and validated source freshness
       if: inputs.restore-cargo-target == 'true'
       shell: bash
