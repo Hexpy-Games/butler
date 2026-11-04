@@ -1,6 +1,9 @@
 """Run the D4 research harness and acknowledge requested full-screen captures."""
 import json
 import math
+import os
+import signal
+import tempfile
 import pathlib
 import subprocess
 import sys
@@ -52,7 +55,7 @@ def summary(out, exit_code, timed_out, capture_errors):
                 lines.append('| ' + ' | '.join(json.dumps(c, ensure_ascii=False)
                              .replace('|', '\\|').replace('\n', ' ') for c in cells) + ' |')
     lines += ['', f"Steps: {counts['steps']}; pass: {counts['pass']}; fail: {counts['fail']}.",
-              f'App exit: {exit_code}; timeout: {timed_out}.']
+              f'App exit: {exit_code}; timeout: {timed_out}.', 'launch_mode: open']
     lines += ['', *capture_errors]
     (out / 'summary.md').write_text('\n'.join(lines) + '\n')
     print(json.dumps(counts))
@@ -62,14 +65,18 @@ def main():
     app = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2]).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    launcher = app / 'Contents/MacOS/ButlerCefSpike' if app.is_dir() else app
     handled = set()
     errors = []
     timed_out = False
-    with (out / 'app.log').open('wb') as log:
-        process = subprocess.Popen([str(launcher), '--d4', str(out)],
-                                   stdout=log, stderr=subprocess.STDOUT)
-        (out / 'pid').write_text(str(process.pid) + '\n')
+    with tempfile.TemporaryDirectory(prefix='d4-home-') as home, \
+            tempfile.TemporaryDirectory(prefix='d4-data-') as data, \
+            tempfile.TemporaryDirectory(prefix='d4-tmp-') as tmp:
+        process = subprocess.Popen([
+            'open', '-n', '-W', '--stdout', str(out / 'app.log'),
+            '--stderr', str(out / 'app.log'), '--env', f'HOME={home}',
+            '--env', f'BUTLER_DATA={data}', '--env', f'TMPDIR={tmp}',
+            '--env', 'MallocNanoZone=0', '--env', 'OS_ACTIVITY_MODE=disable',
+            str(app), '--args', '--d4', str(out)])
         try:
             deadline = time.monotonic() + 240
             while process.poll() is None:
@@ -86,13 +93,19 @@ def main():
                     break
                 time.sleep(0.05)
         finally:
-            if process.poll() is None:
-                process.terminate()
+            if timed_out and (out / 'pid').exists():
+                pid = int((out / 'pid').read_text())
                 try:
+                    os.kill(pid, signal.SIGTERM)
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
             summary(out, process.returncode, timed_out, errors)
     return 0
 

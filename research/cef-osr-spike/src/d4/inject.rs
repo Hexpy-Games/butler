@@ -52,6 +52,7 @@ unsafe extern "C" {
     fn TISCopyCurrentKeyboardInputSource() -> CFTypeRef;
     fn TISCreateInputSourceList(properties: CFTypeRef, include_all: bool) -> CFTypeRef;
     fn TISSelectInputSource(source: CFTypeRef) -> i32;
+    fn TISGetInputSourceProperty(source: CFTypeRef, property: CFStringRef) -> CFTypeRef;
 }
 pub struct InputSource(CFTypeRef);
 impl InputSource {
@@ -72,7 +73,7 @@ impl Drop for InputSource {
         }
     }
 }
-pub fn select_input_source(id: &str) -> Result<(), String> {
+pub fn select_input_source(id: &str) -> Result<String, String> {
     unsafe {
         let id = CFString::new(id);
         let key = kTISPropertyInputSourceID as *mut Object;
@@ -90,10 +91,22 @@ pub fn select_input_source(id: &str) -> Result<(), String> {
         };
         CFRelease(sources);
         if status == 0 {
-            Ok(())
+            Ok(input_source())
         } else {
             Err(format!("cannot select input source: {status}"))
         }
+    }
+}
+pub fn input_source() -> String {
+    unsafe {
+        let source = TISCopyCurrentKeyboardInputSource();
+        if source.is_null() {
+            return String::new();
+        }
+        let id = TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
+        let result = string(id as *mut Object);
+        CFRelease(source);
+        result
     }
 }
 pub fn app() -> *mut Object {
@@ -213,10 +226,25 @@ pub fn status() -> serde_json::Value {
         serde_json::json!({"isActive":active,"key_window":string(title)})
     }
 }
-pub fn shot_info() -> serde_json::Value {
+pub fn shot_info(baseline: &serde_json::Value) -> serde_json::Value {
+    let foreign = super::ax::foreign_windows();
+    let foreign: Vec<_> = foreign
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|w| {
+            w["bounds"]["width"].as_f64().unwrap_or(0.) < 1000.
+                && w["bounds"]["height"].as_f64().unwrap_or(0.) < 1000.
+                && !baseline
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|b| b["pid"] == w["pid"] && b["number"] == w["number"])
+        })
+        .collect();
     unsafe {
         let scale: f64 = msg_send![window("main"), backingScaleFactor];
-        serde_json::json!({"window_frame":top_left(frame(window("main"))),"backing_scale":scale,"foreign_windows":super::ax::foreign_windows()})
+        serde_json::json!({"window_frame":top_left(frame(window("main"))),"backing_scale":scale,"foreign_windows":foreign})
     }
 }
 pub fn caret_rect() -> serde_json::Value {

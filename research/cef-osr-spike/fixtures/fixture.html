@@ -2,10 +2,10 @@
 <style>
 html,body{margin:0;font:20px Arial,sans-serif;background:transparent;color:#152a3b}main{padding:24px;background:rgba(240,245,250,.96)}h1{margin:0 0 12px;font-size:28px}p{margin:10px 0}.card{border:2px solid teal;padding:18px;margin:14px 0;background:#d5efe9}button,input,select{font:18px Arial}input{width:180px}.tall{height:1900px;background:linear-gradient(#e9eaf0,#9ac8db)}canvas,video{width:100%;height:130px;display:none}.bar{height:24px;width:100%;background:repeating-linear-gradient(90deg,teal 0 20px,#dd44a2 20px 40px);display:none}.animate .bar{display:block;animation:slide 1s linear infinite}.animate canvas{display:block}.video video{display:block}@keyframes slide{to{background-position:40px 0}}
 </style><main>
-<h1>웹 제목</h1><p>Aa 한글 123 • Chromium 20px</p>
+<h1>CEF OSR fixture</h1><p>Aa 한글 123 • Chromium 20px</p>
 <img alt="Teal image" width="64" height="42" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='42'%3E%3Crect fill='teal' width='64' height='42'/%3E%3C/svg%3E">
-<a href="#nested">Local link</a> <button id="button" onclick="window.clicks++">웹 버튼</button>
-<p><input id="web_in" aria-label="웹 입력"><input id="text" aria-label="Korean input" placeholder="Page input"> <select id="select"><option>First</option><option>Second</option><option>Third</option></select></p>
+<a href="#nested">Local link</a> <button id="button" onclick="window.clicks++">Button</button>
+<p><input id="text" aria-label="Korean input" placeholder="Page input"> <select id="select"><option>First</option><option>Second</option><option>Third</option></select></p>
 <div class="card" id="nested">Nested card<strong> Child content</strong><p>Drag selection across this sentence.</p></div>
 <div class="bar"></div><canvas width="1600" height="260"></canvas><video src="fixture.webm" loop muted playsinline></video>
 <p><button onclick="alert('Spike dialog')">Dialog</button> <button onclick="window.open('about:blank')">New window</button> <input type="file" id="file"></p><div class="tall">Scroll area<div style="padding-top:600px">Middle of page</div></div></main>

@@ -5,17 +5,7 @@ use gpui_ce_elements::editable_text::{EditableTextState, StringStorage, text_are
 use serde_json::{Value, json};
 use std::{cell::RefCell, rc::Rc};
 
-pub const ORDER: [&str; 8] = [
-    "field_a",
-    "field_b",
-    "composer",
-    "보내기",
-    "첨부",
-    "더보기",
-    "열기",
-    "page",
-];
-actions!(d4, [Accept, Next, Previous, Dismiss, Down, Up]);
+actions!(d4, [Accept, Tab, BackTab, Dismiss, Down, Up]);
 pub struct Scene {
     pub fields: Vec<Entity<EditableTextState>>,
     pub page: Entity<Page>,
@@ -29,11 +19,15 @@ pub struct Scene {
 }
 impl Scene {
     pub fn new(rt: Runtime, w: &mut Window, cx: &mut Context<Self>) -> Self {
+        let page = cx.new(|cx| Page::new(rt, w, cx));
+        page.update(cx, |p, _| {
+            p.focus = p.focus.clone().tab_index(7).tab_stop(true)
+        });
         Self {
             fields: (0..3)
                 .map(|_| cx.new(|cx| EditableTextState::new(StringStorage::default(), cx)))
                 .collect(),
-            page: cx.new(|cx| Page::new(rt, w, cx)),
+            page,
             field_b_bounds: Rc::default(),
             buttons: [
                 "보내기",
@@ -121,7 +115,7 @@ impl Scene {
         } else if self.menu {
             &["복사", "편집", "삭제"]
         } else {
-            &ORDER
+            return;
         };
         let current = self.focused(w, cx);
         let i = order.iter().position(|id| *id == current).unwrap_or(0);
@@ -142,7 +136,13 @@ impl Scene {
         cx.notify();
     }
     fn button(&self, id: &'static str, role: Role, cx: &Context<Self>) -> impl IntoElement {
-        let handle = self.buttons.iter().find(|b| b.0 == id).unwrap().1.clone();
+        let mut handle = self.buttons.iter().find(|b| b.0 == id).unwrap().1.clone();
+        if let Some(index) = ["보내기", "첨부", "더보기", "열기"]
+            .iter()
+            .position(|name| *name == id)
+        {
+            handle = handle.tab_index(index as isize + 3).tab_stop(true);
+        }
         div()
             .id(id)
             .role(role)
@@ -155,7 +155,13 @@ impl Scene {
             .child(id)
             .on_click(cx.listener(move |s, _, w, cx| s.activate(id, w, cx)))
     }
-    fn field(&self, index: usize, id: &'static str, label: &'static str) -> impl IntoElement {
+    fn field(
+        &self,
+        index: usize,
+        id: &'static str,
+        label: &'static str,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         let input = if index == 2 {
             text_area(id)
         } else {
@@ -163,6 +169,14 @@ impl Scene {
         };
         input
             .state(self.fields[index].downgrade())
+            .tab_index(index as isize)
+            .track_focus(
+                &self.fields[index]
+                    .read(cx)
+                    .focus_handle(cx)
+                    .tab_index(index as isize)
+                    .tab_stop(true),
+            )
             .aria_label(label)
             .role(if index == 2 {
                 Role::MultilineTextInput
@@ -182,18 +196,18 @@ impl Scene {
             .flex()
             .flex_col()
             .gap_2()
-            .child(self.field(0, "field_a", "제목"))
+            .child(self.field(0, "field_a", "제목", cx))
             .child(
                 div()
                     .relative()
-                    .child(self.field(1, "field_b", "검색"))
+                    .child(self.field(1, "field_b", "검색", cx))
                     .child(
                         canvas(move |b, _, _| *bounds.borrow_mut() = b, |_, (), _, _| {})
                             .absolute()
                             .inset_0(),
                     ),
             )
-            .child(self.field(2, "composer", "메시지 입력"))
+            .child(self.field(2, "composer", "메시지 입력", cx))
             .child(
                 div()
                     .flex()
@@ -239,6 +253,8 @@ impl Scene {
     fn overlays(&self, cx: &Context<Self>) -> impl IntoElement {
         div()
             .id("overlays")
+            .absolute()
+            .inset_0()
             .role(Role::Group)
             .when(self.menu, |d| {
                 d.child(
@@ -287,8 +303,20 @@ impl Render for Scene {
             .bg(rgb(0x202c38))
             .text_color(rgb(0xffffff))
             .on_action(cx.listener(|s, _: &Accept, w, cx| s.activate(&s.focused(w, cx), w, cx)))
-            .on_action(cx.listener(|s, _: &Next, w, cx| s.cycle(1, w, cx)))
-            .on_action(cx.listener(|s, _: &Previous, w, cx| s.cycle(-1, w, cx)))
+            .on_action(cx.listener(|s, _: &Tab, w, cx| {
+                if s.dialog {
+                    s.cycle(1, w, cx);
+                } else {
+                    w.focus_next(cx);
+                }
+            }))
+            .on_action(cx.listener(|s, _: &BackTab, w, cx| {
+                if s.dialog {
+                    s.cycle(-1, w, cx);
+                } else {
+                    w.focus_prev(cx);
+                }
+            }))
             .on_action(cx.listener(|s, _: &Down, w, cx| {
                 if s.menu {
                     s.cycle(1, w, cx);
@@ -311,6 +339,8 @@ impl Render for Scene {
                         div()
                             .id("page")
                             .role(Role::WebView)
+                            .track_focus(&self.page.read(cx).focus)
+                            .tab_index(7)
                             .flex_1()
                             .h_full()
                             .child(self.page.clone()),

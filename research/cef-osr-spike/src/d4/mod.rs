@@ -9,7 +9,8 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Duration};
 
 pub fn start(args: cef::args::Args, cx: &mut App, out: PathBuf) {
     std::fs::create_dir_all(&out).expect("D4 output directory");
-    std::fs::write(out.join("fixture.html"), include_str!("../fixture.html")).expect("D4 fixture");
+    std::fs::write(out.join("pid"), std::process::id().to_string()).expect("D4 PID");
+    let baseline = ax::foreign_windows();
     let (pump_tx, pump_rx) = async_channel::unbounded();
     let (tx, rx) = async_channel::bounded(1);
     let (start, _) = async_channel::bounded(1);
@@ -53,7 +54,8 @@ pub fn start(args: cef::args::Args, cx: &mut App, out: PathBuf) {
         })
         .detach();
         cx.background_executor().timer(Duration::from_secs(2)).await;
-        if let Err(error) = script::run(window, rt.clone(), out.clone(), cx).await {
+        rt.cdp.eval(&host, r#"(async () => { await new Promise(resolve => document.readyState === 'complete' ? resolve() : addEventListener('load', resolve, {once:true})); document.querySelector('h1').textContent = '웹 제목'; document.querySelector('#text').insertAdjacentHTML('beforebegin', '<button>웹 버튼</button><input id="web_in" aria-label="웹 입력">'); return true; })()"#, false).await;
+        if let Err(error) = script::run(window, rt.clone(), out.clone(), baseline, cx).await {
             let _ = std::fs::write(out.join("setup-error.txt"), error);
             rt.close();
             std::process::exit(1);
@@ -89,8 +91,8 @@ fn bindings(cx: &mut App) {
     for context in ["D4", DEFAULT_INPUT_CONTEXT] {
         cx.bind_keys([
             KeyBinding::new("enter", scene::Accept, Some(context)),
-            KeyBinding::new("tab", scene::Next, Some(context)),
-            KeyBinding::new("shift-tab", scene::Previous, Some(context)),
+            KeyBinding::new("tab", scene::Tab, Some(context)),
+            KeyBinding::new("shift-tab", scene::BackTab, Some(context)),
             KeyBinding::new("escape", scene::Dismiss, Some(context)),
         ]);
     }

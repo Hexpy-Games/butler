@@ -96,13 +96,24 @@ fn walk(node: *mut Object, depth: usize, remaining: &mut usize) -> Value {
 pub fn focused() -> Value {
     unsafe {
         describe(attribute(
-            inject::app(),
+            {
+                let view: *mut Object = msg_send![inject::key_window(), contentView];
+                view
+            },
             sel!(accessibilityFocusedUIElement),
         ))
     }
 }
 pub fn dump_ax(window: *mut Object) -> Value {
-    json!({"window":walk(window,0,&mut 2000),"focused":focused()})
+    let tree = walk(window, 0, &mut 2000);
+    let mut all = Vec::new();
+    nodes(&tree, &mut all);
+    let node = all
+        .into_iter()
+        .find(|n| n["focused"] == true)
+        .map(|n| json!({"role":n["role"], "title":n["title"]}))
+        .unwrap_or(Value::Null);
+    json!({"window":tree,"focused":focused(),"ax_focused_node":node})
 }
 unsafe fn item(dict: *mut Object, key: &str) -> *mut Object {
     unsafe { msg_send![dict, objectForKey:inject::ns(key)] }
@@ -123,12 +134,6 @@ pub fn foreign_windows() -> Value {
         if list.is_null() {
             return json!([]);
         }
-        let window = inject::window("main");
-        let frame = inject::top_left(inject::frame(window));
-        let x = frame["x"].as_f64().unwrap_or(0.) - 400.;
-        let y = frame["y"].as_f64().unwrap_or(0.) - 400.;
-        let right = x + frame["width"].as_f64().unwrap_or(0.) + 800.;
-        let bottom = y + frame["height"].as_f64().unwrap_or(0.) + 800.;
         let count: usize = msg_send![list as *mut Object, count];
         let mut result = Vec::new();
         for i in 0..count {
@@ -143,9 +148,7 @@ pub fn foreign_windows() -> Value {
                 number(b, "Width"),
                 number(b, "Height"),
             );
-            if bx < right && by < bottom && bx + bw > x && by + bh > y {
-                result.push(json!({"owner":inject::string(item(d,"kCGWindowOwnerName")),"layer":number(d,"kCGWindowLayer"),"bounds":{"x":bx,"y":by,"width":bw,"height":bh}}));
-            }
+            result.push(json!({"pid":number(d,"kCGWindowOwnerPID"),"number":number(d,"kCGWindowNumber"),"owner":inject::string(item(d,"kCGWindowOwnerName")),"layer":number(d,"kCGWindowLayer"),"bounds":{"x":bx,"y":by,"width":bw,"height":bh}}));
         }
         CFRelease(list);
         json!(result)

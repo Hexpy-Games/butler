@@ -248,9 +248,7 @@ fn initialize(
         dialogs::Dialog::new(),
         dialogs::Js::new(),
     );
-    let fixture = option("--d4")
-        .map(|out| format!("file://{out}/fixture.html"))
-        .unwrap_or_else(|| format!("file://{ROOT}/src/fixture.html"));
+    let fixture = format!("file://{ROOT}/fixtures/fixture.html");
     let url = option("--url").unwrap_or_else(|| fixture.clone());
     assert!(url == fixture || url == "https://github.com/Hexpy-Games/butler");
     *rt.browser.borrow_mut() = cef::browser_host_create_browser_sync(

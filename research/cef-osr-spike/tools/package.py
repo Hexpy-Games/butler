@@ -14,9 +14,11 @@ launcher = contents / 'MacOS/ButlerCefSpike'
 launcher.write_text(f'''#!/bin/bash
 set -eu
 ROOT='{root}'
+if [ "${{1:-}}" != "--d4" ]; then
 export HOME=$(/usr/bin/mktemp -d "$ROOT/home-run.XXXXXX")
 export BUTLER_DATA=$(/usr/bin/mktemp -d "$ROOT/data-run.XXXXXX")
 export TMPDIR=$(/usr/bin/mktemp -d "$ROOT/tmp-run.XXXXXX")
+fi
 export MallocNanoZone=0
 export OS_ACTIVITY_MODE=disable
 /bin/rm -rf "$ROOT/profile"
