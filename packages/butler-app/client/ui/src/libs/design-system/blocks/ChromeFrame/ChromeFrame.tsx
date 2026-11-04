@@ -64,7 +64,7 @@ export function ChromeFloatingToggleLayer({
       className={styles.floatingLayer}
       data-test-class="chrome-floating-toggle-layer"
     >
-      <div className={styles.floatingToggle}>{children}</div>
+      <div className={styles.floatingToggle} data-peek-companion="">{children}</div>
     </div>
   );
 }
