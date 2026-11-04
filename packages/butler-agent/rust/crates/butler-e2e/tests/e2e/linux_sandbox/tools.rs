@@ -129,12 +129,15 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
             // M+ runs every tool. Tier L creates no top-level names and denies
             // chmod/utimensat, so a tool needs a declared directory, and one
             // whose output needs no chmod: Cargo's target, and npm's symlink
-            // for a `file:` dependency. An undeclared project, and a Python
-            // venv (ensurepip copies modes), must ask.
-            let expected = policy["mountns_plus"] == true
+            // for a `file:` dependency. Tier L refuses an undeclared project.
+            // Elsewhere a refusal depends only on whether the tool itself
+            // calls chmod (npm versions differ; ensurepip copies modes), so
+            // only the containment checks below apply.
+            let runs = policy["mountns_plus"] == true
                 || (declared && matches!(tool, "cargo" | "npm"))
                 || (policy["mountns"] == true && tool == "cargo");
-            if output.status.success() != expected {
+            let refused = policy["mountns"] != true && !declared;
+            if (runs && !output.status.success()) || (refused && output.status.success()) {
                 failures.push(format!("{tool} declared={declared}: {}", output.status));
             }
             // Any contained failure carries the approval retry hint
