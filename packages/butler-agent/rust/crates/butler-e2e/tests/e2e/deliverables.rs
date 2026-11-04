@@ -270,7 +270,12 @@ async fn command_declaration_and_missing_file_use_explicit_intent_only() -> Resu
     assert_eq!(result["ok"], false);
     assert_eq!(result["error"], "deliver_file_unavailable");
     drop(db);
-    *script.steps.lock().unwrap() = [call("run_command", json!({"command":"printf 'a,b' > \"$BUTLER_ARTIFACTS_DIR/table.csv\"; printf x > \"$BUTLER_ARTIFACTS_DIR/helper\"; printf y > \"$BUTLER_ARTIFACTS_DIR/log\"", "summary":"Create requested files", "output_paths":["artifacts/generated/table.csv"]})), done()].into();
+    let command = if butler_platform::command_sandbox::POSIX_SHELL {
+        "printf 'a,b' > \"$BUTLER_ARTIFACTS_DIR/table.csv\"; printf x > \"$BUTLER_ARTIFACTS_DIR/helper\"; printf y > \"$BUTLER_ARTIFACTS_DIR/log\""
+    } else {
+        "$ErrorActionPreference='Stop'; Set-Content -NoNewline -LiteralPath \"$env:BUTLER_ARTIFACTS_DIR/table.csv\" -Value 'a,b'; Set-Content -NoNewline -LiteralPath \"$env:BUTLER_ARTIFACTS_DIR/helper\" -Value x; Set-Content -NoNewline -LiteralPath \"$env:BUTLER_ARTIFACTS_DIR/log\" -Value y"
+    };
+    *script.steps.lock().unwrap() = [call("run_command", json!({"command":command, "summary":"Create requested files", "output_paths":["artifacts/generated/table.csv"]})), done()].into();
     run_turn(&s, &script, "Create table.").await?;
     let docs = documents(&s).await?;
     assert_eq!(docs.len(), 1, "{docs:?}");
