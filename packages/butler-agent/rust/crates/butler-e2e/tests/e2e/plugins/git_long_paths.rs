@@ -2,8 +2,9 @@
 //! check out, and a checkout git cannot open is named as such.
 use super::{git_support::*, *};
 
-/// A short, uniquely named folder under system temp, removed on drop. Tests in
-/// one process run in parallel, so each needs its own.
+/// A short folder under the system temp folder, removed on drop, so the data
+/// folder has the intended length whatever the sandbox root's length is.
+/// Tests in one process run in parallel, so each gets its own unique folder.
 struct ShortRoot(PathBuf);
 
 impl ShortRoot {
