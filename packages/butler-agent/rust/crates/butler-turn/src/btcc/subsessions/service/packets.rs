@@ -64,7 +64,6 @@ pub(super) fn steward(
 ) -> SubsessionPacket {
     SubsessionPacket {
         task: None,
-        task_overlaps: Vec::new(),
         task_context: String::new(),
         child_role: ChildRole::Steward,
         delegation_id: ids.delegation_id.clone(),
@@ -111,7 +110,6 @@ pub(super) fn worker(
 ) -> SubsessionPacket {
     SubsessionPacket {
         task: request.task.clone(),
-        task_overlaps: Vec::new(),
         task_context: String::new(),
         child_role: ChildRole::Worker,
         delegation_id: ids.delegation_id.clone(),

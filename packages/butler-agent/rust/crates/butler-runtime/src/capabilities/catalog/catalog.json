@@ -4749,7 +4749,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_worker",
-        "description": "Assign an exclusive Task of your accepted Plan to a Worker. Include its scope, inputs, return contract and a compact implementation brief. Use parallel Workers for disjoint Tasks and long actions; integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
+        "description": "Assign one Task of your accepted Plan to a Worker, with its own scope, inputs, return contract and a compact implementation brief. Split the work in the Plan so each Worker gets a distinct part. Integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4804,7 +4804,7 @@
                   "properties": {
                     "owns": {
                       "type": "array",
-                      "description": "Subjects from the Plan and the aspects this Worker alone covers (for example a product's price). Nothing else may own them while it runs.",
+                      "description": "Plan subjects and the aspects of each that this Worker covers.",
                       "items": {
                         "type": "object",
                         "properties": {
@@ -4825,7 +4825,7 @@
                     },
                     "paths": {
                       "type": "array",
-                      "description": "Files and folders only this Worker may change.",
+                      "description": "Files and folders this Worker may change.",
                       "items": {
                         "type": "string"
                       }
@@ -4841,7 +4841,7 @@
                 },
                 "inputs": {
                   "type": "array",
-                  "description": "Earlier Tasks whose results it uses. use=facts: take them as confirmed; artifact: revise that output; verify: re-check, with a reason.",
+                  "description": "Earlier Tasks whose results it uses; it starts after they finish. use=facts: take them as confirmed; artifact: revise that output; verify: re-check, with a reason.",
                   "items": {
                     "type": "object",
                     "properties": {
@@ -4888,28 +4888,6 @@
                   },
                   "required": [
                     "format"
-                  ]
-                },
-                "overlap": {
-                  "type": "object",
-                  "description": "When told of an overlap: merge, narrow, wait or verify, with a short reason.",
-                  "properties": {
-                    "resolution": {
-                      "type": "string",
-                      "enum": [
-                        "merge",
-                        "narrow",
-                        "wait",
-                        "verify"
-                      ]
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "resolution",
-                    "reason"
                   ]
                 },
                 "merge_after": {
@@ -9179,7 +9157,7 @@
     "delegate_to_worker": {
       "type": "function",
       "name": "delegate_to_worker",
-      "description": "Assign an exclusive Task of your accepted Plan to a Worker. Include its scope, inputs, return contract and a compact implementation brief. Use parallel Workers for disjoint Tasks and long actions; integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
+      "description": "Assign one Task of your accepted Plan to a Worker, with its own scope, inputs, return contract and a compact implementation brief. Split the work in the Plan so each Worker gets a distinct part. Integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -9234,7 +9212,7 @@
                 "properties": {
                   "owns": {
                     "type": "array",
-                    "description": "Subjects from the Plan and the aspects this Worker alone covers (for example a product's price). Nothing else may own them while it runs.",
+                    "description": "Plan subjects and the aspects of each that this Worker covers.",
                     "items": {
                       "type": "object",
                       "properties": {
@@ -9255,7 +9233,7 @@
                   },
                   "paths": {
                     "type": "array",
-                    "description": "Files and folders only this Worker may change.",
+                    "description": "Files and folders this Worker may change.",
                     "items": {
                       "type": "string"
                     }
@@ -9271,7 +9249,7 @@
               },
               "inputs": {
                 "type": "array",
-                "description": "Earlier Tasks whose results it uses. use=facts: take them as confirmed; artifact: revise that output; verify: re-check, with a reason.",
+                "description": "Earlier Tasks whose results it uses; it starts after they finish. use=facts: take them as confirmed; artifact: revise that output; verify: re-check, with a reason.",
                 "items": {
                   "type": "object",
                   "properties": {
@@ -9318,28 +9296,6 @@
                 },
                 "required": [
                   "format"
-                ]
-              },
-              "overlap": {
-                "type": "object",
-                "description": "When told of an overlap: merge, narrow, wait or verify, with a short reason.",
-                "properties": {
-                  "resolution": {
-                    "type": "string",
-                    "enum": [
-                      "merge",
-                      "narrow",
-                      "wait",
-                      "verify"
-                    ]
-                  },
-                  "reason": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "resolution",
-                  "reason"
                 ]
               },
               "merge_after": {
