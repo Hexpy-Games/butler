@@ -38,7 +38,7 @@ async fn browsing_settings_roundtrip_and_account_scoped_auto() -> Result<(), Har
     butler_e2e::gate!();
     let mut s = Setup::new("BROWSING-SETTINGS")?.start().await?;
     let initial = s.gw.settings().await?;
-    assert_eq!(initial["browser"]["browsing_agent"], "off");
+    assert_eq!(initial["browser"]["browsing_agent"], "auto");
     assert_eq!(initial["browser"]["auto"]["model"], initial["model"]);
     assert_eq!(initial["browser"]["auto"]["rule"], "conversation");
     let a = credential(&s, "account-a").await?;
@@ -92,5 +92,32 @@ async fn browsing_settings_roundtrip_and_account_scoped_auto() -> Result<(), Har
     s.restart().await?;
     let restored = s.gw.settings().await?;
     assert_eq!(restored["browser"], settings["browser"]);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn upgrade_turns_a_stored_off_browsing_agent_on_once() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("BROWSING-AGENT-UPGRADE")?.start().await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"off"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    s.agent.terminate().await?;
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    db.execute(
+        "DELETE FROM app_settings WHERE key='browsing_agent_auto_v1'",
+        [],
+    )?;
+    drop(db);
+    s.gw = s.agent.start_again().await?;
+    assert_eq!(s.gw.settings().await?["browser"]["browsing_agent"], "auto");
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"off"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    s.agent.terminate().await?;
+    s.gw = s.agent.start_again().await?;
+    assert_eq!(s.gw.settings().await?["browser"]["browsing_agent"], "off");
     s.finish().await
 }
