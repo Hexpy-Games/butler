@@ -5,7 +5,7 @@ fn environment(s: &Setup) -> HashMap<String, String> {
     HashMap::from([
         ("HOME".into(), s.sandbox.home.display().to_string()),
         ("BUTLER_DATA".into(), s.sandbox.data.display().to_string()),
-        ("BUTLER_CHATGPT_AUTH_DIR".into(), "profiles/login".into()),
+        ("BUTLER_OPENAI_AUTH_PROFILE".into(), "profiles/login".into()),
     ])
 }
 
