@@ -16,7 +16,8 @@ function smartGroupInput(body: any): Record<string, unknown> | undefined {
   if (body.tools?.length) return undefined;
   const user = Array.isArray(body.input) ? body.input.find((item: any) => item.role === "user") : undefined;
   const content = user?.content;
-  const source = typeof content === "string" ? content
+  const source = typeof body.input === "string" ? body.input
+    : typeof content === "string" ? content
     : Array.isArray(content) ? content[0]?.text : undefined;
   if (typeof source !== "string") return undefined;
   try {
