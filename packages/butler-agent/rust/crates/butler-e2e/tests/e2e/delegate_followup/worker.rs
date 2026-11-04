@@ -39,13 +39,7 @@ async fn followup(cancelled: bool) -> Result<(), HarnessError> {
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let worker_requests = script
-        .requests
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|(role, _)| role == "worker")
-        .count();
+    let worker_requests = red_0_requests(&script);
     script.direction.add_permits(1);
     loop {
         let refused = script.requests.lock().unwrap().iter().any(|(_, request)| {
@@ -68,13 +62,7 @@ async fn followup(cancelled: bool) -> Result<(), HarnessError> {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert_eq!(
-        script
-            .requests
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|(role, _)| role == "worker")
-            .count(),
+        red_0_requests(&script),
         worker_requests,
         "Worker stub must receive no request after its result"
     );
@@ -85,4 +73,19 @@ async fn followup(cancelled: bool) -> Result<(), HarnessError> {
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+/// The Worker requests the stub routes to red-0; released cap slots start other Workers.
+fn red_0_requests(script: &crate::worker_cap::stub::Script) -> usize {
+    let others = ["red-1", "red-2", "red-3"];
+    script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(role, body)| {
+            let key = butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default());
+            role == "worker" && !others.iter().any(|o| key.user_request.contains(o))
+        })
+        .count()
 }

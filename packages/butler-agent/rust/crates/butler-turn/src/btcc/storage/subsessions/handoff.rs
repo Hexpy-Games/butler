@@ -49,7 +49,7 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
     Ok(inserted)
 }
 
-/// A follow-up may replace a terminal card, or a blocked one that is idle.
+/// A follow-up may replace a terminal card, or an open one whose latest report is blocked.
 fn followup_ready(db: &Connection, relation: &str, parent: &str) -> StorageResult<bool> {
     let row: Option<(String, bool)> = db.query_row(
         concat!("SELECT r.child_session_id,r.activity_terminal FROM btcc_session_relations r WHERE r.relation_id=?1 AND r.parent_session_id=?2 AND NOT EXISTS(", endings::ENDING_SCOPE_SQL!("r.child_session_id"), ")"),
@@ -57,11 +57,9 @@ fn followup_ready(db: &Connection, relation: &str, parent: &str) -> StorageResul
     ).optional().map_err(StorageError::sqlite)?;
     match row {
         Some((child, true)) => super::terminal::invariant(db, &child),
-        Some((child, false)) => db.query_row(
-            "SELECT (SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY rowid DESC LIMIT 1)='blocked'
-             AND NOT EXISTS(SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')
-             AND NOT EXISTS(SELECT 1 FROM btcc_turns WHERE session_id=?2 AND semantic_state IN ('admitted','delivery_committed'))",
-            params![relation, child], |r| r.get::<_, Option<bool>>(0),
+        Some((_, false)) => db.query_row(
+            "SELECT (SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY rowid DESC LIMIT 1)='blocked'",
+            [relation], |r| r.get::<_, Option<bool>>(0),
         ).map(|ready| ready.unwrap_or(false)).map_err(StorageError::sqlite),
         None => Ok(false),
     }
