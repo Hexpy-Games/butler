@@ -27,11 +27,21 @@ pub struct Shared {
     pub frame_waiter: Option<(usize, usize, async_channel::Sender<()>)>,
     pub context: Option<ContextMenu>,
 }
+impl Shared {
+    /// A hidden view keeps no frame buffers; they are recreated by the next paint after it is shown.
+    pub fn release_frames(&mut self) {
+        self.frame = None;
+        self.popup = None;
+        self.view_pool = Default::default();
+        self.popup_pool = Default::default();
+    }
+}
 pub type SharedRef = Rc<RefCell<Shared>>;
 #[derive(Clone)]
 pub struct Runtime {
     pub shared: SharedRef,
     pub browser: Rc<RefCell<Option<cef::Browser>>>,
+    pub background: Rc<RefCell<Vec<cef::Browser>>>,
     pub cdp: crate::cdp::Cdp,
     pub start: async_channel::Sender<()>,
 }
@@ -48,13 +58,13 @@ impl Runtime {
         if let Some(h) = self.host() {
             h.close_browser(1);
         }
+        for browser in self.background.borrow().iter() {
+            if let Some(h) = cef::ImplBrowser::host(browser) {
+                h.close_browser(1);
+            }
+        }
     }
-    /// A hidden view keeps no frame buffers; they are recreated by the next paint after it is shown.
     pub fn release_frames(&self) {
-        let mut s = self.shared.borrow_mut();
-        s.frame = None;
-        s.popup = None;
-        s.view_pool = Default::default();
-        s.popup_pool = Default::default();
+        self.shared.borrow_mut().release_frames();
     }
 }

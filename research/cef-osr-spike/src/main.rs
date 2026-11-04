@@ -99,6 +99,7 @@ fn start(args: cef::args::Args, cx: &mut App) {
     let rt = state::Runtime {
         shared: shared.clone(),
         browser: Rc::default(),
+        background: Rc::default(),
         cdp: cdp::Cdp::new(cx),
         start: start_tx.clone(),
     };
@@ -175,6 +176,22 @@ fn start(args: cef::args::Args, cx: &mut App) {
     }
     unsafe_boundary::observe_visibility(pump_tx.clone());
     pump::run(pump_rx, rt.clone(), cx);
+    let tabs: usize = option("--tabs").map(|v| v.parse().unwrap()).unwrap_or(1);
+    if tabs > 1 {
+        let r = rt.clone();
+        cx.spawn(async move |cx| {
+            // Background tabs take the visible tab's laid-out size, known once it has painted.
+            while r.shared.borrow().frames == 0 {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(100))
+                    .await;
+            }
+            for index in 1..tabs {
+                open_background_tab(&r, index).await;
+            }
+        })
+        .detach();
+    }
     harness::launch(window, rt, cx);
 }
 fn initialize(
@@ -229,26 +246,33 @@ fn initialize(
         json!({"elapsed_ms":start.elapsed().as_secs_f64()*1000.,"main_thread":true,"sandbox":false,"periodic_tick":true,"pump_max_ms":pump::max_delay().as_millis()}),
     );
     let s = rt.shared.clone();
-    let mut client = cef_gate::ClientBuilder::new(
-        cef_gate::Paint::new(s.clone(), tx.clone(), flag("--zero-copy")),
-        cef_gate::Life::new(s.clone(), tx.clone()),
-        cef_gate::Display::new(s.clone(), tx.clone()),
-        dialogs::Menu::new(s, tx),
+    let mut client = client(&s, &tx);
+    *rt.browser.borrow_mut() = create_browser(&mut client);
+    assert!(rt.browser.borrow().is_some());
+}
+fn client(shared: &state::SharedRef, tx: &async_channel::Sender<()>) -> cef::Client {
+    cef_gate::ClientBuilder::new(
+        cef_gate::Paint::new(shared.clone(), tx.clone(), flag("--zero-copy")),
+        cef_gate::Life::new(shared.clone(), tx.clone()),
+        cef_gate::Display::new(shared.clone(), tx.clone()),
+        dialogs::Menu::new(shared.clone(), tx.clone()),
         dialogs::Dialog::new(),
         dialogs::Js::new(),
-    );
+    )
+}
+fn create_browser(client: &mut cef::Client) -> Option<cef::Browser> {
     let url = option("--url").unwrap_or_else(|| format!("file://{ROOT}/src/fixture.html"));
     assert!(
         url == format!("file://{ROOT}/src/fixture.html")
             || url == "https://github.com/Hexpy-Games/butler"
     );
-    *rt.browser.borrow_mut() = cef::browser_host_create_browser_sync(
+    cef::browser_host_create_browser_sync(
         Some(&cef::WindowInfo {
             windowless_rendering_enabled: 1,
             shared_texture_enabled: i32::from(!flag("--software")),
             ..Default::default()
         }),
-        Some(&mut client),
+        Some(client),
         Some(&url.as_str().into()),
         Some(&cef::BrowserSettings {
             windowless_frame_rate: 60,
@@ -257,6 +281,34 @@ fn initialize(
         }),
         None,
         None,
+    )
+}
+/// Opens one background tab at the visible tab's size: it paints once, then is hidden
+/// like a tab the user switched away from.
+async fn open_background_tab(rt: &state::Runtime, index: usize) {
+    let (bounds, scale) = {
+        let s = rt.shared.borrow();
+        (s.bounds, s.scale)
+    };
+    let shared = Rc::new(RefCell::new(state::Shared {
+        bounds,
+        scale,
+        ..Default::default()
+    }));
+    let (tx, rx) = async_channel::bounded(1);
+    let browser = create_browser(&mut client(&shared, &tx)).expect("Background tab");
+    while shared.borrow().frames == 0 {
+        assert!(rx.recv().await.is_ok());
+    }
+    use cef::ImplBrowser;
+    browser.host().unwrap().was_hidden(1);
+    let keep = flag("--keep-hidden-frames");
+    if !keep {
+        shared.borrow_mut().release_frames();
+    }
+    log(
+        "background_tab",
+        json!({"index":index,"frames":shared.borrow().frames,"released":!keep}),
     );
-    assert!(rt.browser.borrow().is_some());
+    rt.background.borrow_mut().push(browser);
 }
