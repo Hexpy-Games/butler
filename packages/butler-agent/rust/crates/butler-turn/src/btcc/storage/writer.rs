@@ -27,7 +27,7 @@ pub(super) fn run_connection_lane(
             })?;
         }
         let mut connection = sqlite::open(path).map_err(StorageError::sqlite)?;
-        configure(&connection, profile)?;
+        configure(&mut connection, profile)?;
         timing::install_writer(&connection);
         validate_activation(&connection, activation)?;
         bootstrap::migrate_current(&mut connection)?;
@@ -113,7 +113,10 @@ pub(super) fn close(
         .and(closed)
 }
 
-pub(super) fn configure(connection: &Connection, profile: StorageProfile) -> StorageResult<()> {
+pub(super) fn configure(connection: &mut Connection, profile: StorageProfile) -> StorageResult<()> {
+    // Every writer transaction may write. Taking the lock at BEGIN lets busy_timeout
+    // wait, instead of a read-then-write upgrade failing at once with BUSY.
+    connection.set_transaction_behavior(rusqlite::TransactionBehavior::Immediate);
     // The writer no longer serves request reads. Bound its page cache so adding
     // independent readers does not retain SQLite's default 2 MiB writer cache.
     connection
