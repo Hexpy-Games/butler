@@ -45,11 +45,9 @@ try {
             $ErrorActionPreference = 'Continue'
             $listed = & "$out/e2e.exe" "$test`::" --list
             $ErrorActionPreference = 'Stop'
-            # libtest filters are substrings, so select the top-level module prefix explicitly.
-            $selected = @($listed | Where-Object { $_ -match ': test$' } | ForEach-Object { $_ -replace ': test$', '' } | Where-Object { $_.StartsWith("$test`::") })
-            if ($LASTEXITCODE -ne 0 -or $selected.Count -eq 0) { throw "Empty update E2E selection: $test" }
+            if ($LASTEXITCODE -ne 0 -or !($listed -match ': test$')) { throw "Empty update E2E selection: $test" }
             $ErrorActionPreference = 'Continue'
-            & "$out/e2e.exe" --exact @selected --nocapture --test-threads=8
+            & "$out/e2e.exe" "$test`::" --nocapture --test-threads=8
             $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE) { throw "Update E2E failed: $test" }
         }

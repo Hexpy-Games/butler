@@ -3,7 +3,7 @@
 // be missing on a clean machine.
 const WINDOWS_SYSTEM_DLLS = new Set([
   "advapi32.dll", "bcrypt.dll", "bcryptprimitives.dll", "cfgmgr32.dll",
-  "combase.dll", "comctl32.dll", "credui.dll", "crypt32.dll", "dbghelp.dll", "dnsapi.dll", "gdi32.dll", "iphlpapi.dll",
+  "combase.dll", "credui.dll", "crypt32.dll", "dbghelp.dll", "dnsapi.dll", "gdi32.dll", "iphlpapi.dll",
   "kernel32.dll", "mswsock.dll", "ncrypt.dll", "netapi32.dll", "ntdll.dll",
   "ole32.dll", "oleaut32.dll", "pdh.dll", "powrprof.dll", "propsys.dll", "psapi.dll",
   "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shell32.dll", "shlwapi.dll",
