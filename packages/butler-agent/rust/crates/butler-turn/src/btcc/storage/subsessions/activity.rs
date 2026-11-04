@@ -117,16 +117,10 @@ pub(super) fn child_activity(
             |row| row.get(0),
         )
         .map_err(StorageError::sqlite)?;
-    let pending: bool = db
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')",
-            [&r.relation_id],
-            |row| row.get(0),
-        )
-        .map_err(StorageError::sqlite)?;
+    // An open card shows its result only while blocked and idle (waiting for direction).
     let status = match result
         .as_deref()
-        .filter(|_| terminal || (latest.as_deref() != Some("admitted") && !pending))
+        .filter(|s| terminal || (*s == "blocked" && latest.as_deref() != Some("admitted")))
     {
         Some("success") => "completed",
         Some("cancelled") => "cancelled",
