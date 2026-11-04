@@ -2,6 +2,7 @@
 
 mod asset_versions;
 mod assets;
+mod browsing_agent_auto;
 pub(in crate::gateway::application) mod canon;
 pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
@@ -213,6 +214,7 @@ fn migrate_app_features(
     monitoring::migrate(connection)?;
     pending_asks::create(connection)?;
     connectors::create(connection)?;
+    browsing_agent_auto::migrate(connection)?;
     library::recover(connection, butler_data)?;
     Ok(())
 }

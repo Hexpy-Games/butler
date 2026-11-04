@@ -55,17 +55,6 @@ jobs:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
-      - name: Free disk for the Cargo snapshot
-        if: runner.os == 'Linux' && runner.environment == 'github-hosted'
-        shell: bash
-        run: |
-          # The restored debug target needs ~18 GiB plus its ~3 GiB archive; some hosted images start with less free space.
-          free_gib=$(df --output=avail -BG / | tail -1 | tr -dc 0-9)
-          echo "Free on /: ${free_gib} GiB"
-          if [ "$free_gib" -lt 40 ]; then
-            sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/local/.ghcup /usr/share/swift
-            df -h /
-          fi
       - uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
