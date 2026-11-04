@@ -55,6 +55,16 @@ jobs:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
+      - name: Disk report (start)
+        continue-on-error: true
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          df -h / /mnt "$RUNNER_TEMP" 2>/dev/null || true
+          lsblk 2>/dev/null || true
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo du -xsh /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache /opt/ghc /usr/local/.ghcup /usr/local/share/powershell /usr/share/swift /opt/microsoft /opt/google /usr/local/share/chromium /usr/lib/jvm /opt/az /usr/local/julia* 2>/dev/null | sort -h || true
+          fi
       - uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
@@ -63,6 +73,13 @@ jobs:
           cache-workspace-crates: "true"
           artifact-cache-platform: ${{ inputs.platform }}
           artifact-cache-kind: dev
+      - name: Disk report (after restore)
+        continue-on-error: true
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          df -h / /mnt "$RUNNER_TEMP" 2>/dev/null || true
+          du -sh packages/butler-agent/rust/target packages/butler-agent/rust/target/* "$RUNNER_TEMP" "$RUNNER_TEMP"/* ~/.cargo ~/.rustup 2>/dev/null | sort -h | tail -25 || true
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -92,6 +109,13 @@ jobs:
           if [ "$SMOKE_IN_PLACE" != true ]; then
             python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
           fi
+      - name: Disk report (after build)
+        continue-on-error: true
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          df -h / /mnt "$RUNNER_TEMP" 2>/dev/null || true
+          du -sh packages/butler-agent/rust/target packages/butler-agent/rust/target/* "$RUNNER_TEMP" "$RUNNER_TEMP"/* ~/.cargo ~/.rustup 2>/dev/null | sort -h | tail -25 || true
       - name: Run PR workspace smoke in the build VM
         if: inputs.smoke-in-place && github.event_name == 'pull_request'
         env:
@@ -224,3 +248,11 @@ jobs:
           mode: ${{ inputs.ort-mode }}
           kind: dev
           producer: Build archives (${{ inputs.platform }})
+      - name: Disk report (end)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          df -h / /mnt "$RUNNER_TEMP" 2>/dev/null || true
+          du -sh packages/butler-agent/rust/target packages/butler-agent/rust/target/* "$RUNNER_TEMP" "$RUNNER_TEMP"/* ~/.cargo ~/.rustup 2>/dev/null | sort -h | tail -25 || true
