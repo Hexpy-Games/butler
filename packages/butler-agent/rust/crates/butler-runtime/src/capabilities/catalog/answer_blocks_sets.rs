@@ -67,7 +67,9 @@ pub fn shown(spec: &Value) -> Map<String, Value> {
         if matches!(kind, "columns" | "tabs" | "group") {
             return;
         }
-        let count = if matches!(kind, "cards" | "gallery") {
+        let count = if kind == "epics" {
+            block["ids"].as_array().map_or(0, Vec::len) as u64
+        } else if matches!(kind, "cards" | "gallery") {
             block["items"].as_array().map_or(0, Vec::len) as u64
         } else {
             1

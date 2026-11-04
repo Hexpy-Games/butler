@@ -3,7 +3,8 @@ import { CanonProposalChanges } from "./CanonProposalChanges.tsx";
 import { useState } from "react";
 import { Button, ButtonContainer, Card, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
 import { useAppLocale } from "@/app/copy.ts";
-import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
+import { openCanonEpic } from "./canonNavigation.ts";
+import { ChatEpicCards } from "./ChatEpicCards.tsx";
 import { useButlerStore } from "@/app/store.ts";
 import { resolveCanonProposal, type CanonProposal } from "@/app/canonProposals.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
@@ -49,17 +50,18 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
     const project = "id" in p.project ? p.project.id : null;
     if (!project) return;
     const epic = p.changes.find(change => change.op.startsWith("epic.") && change.op !== "epic.delete" && change.id)?.id;
-    const app = useButlerStore.getState();
-    useProjectDashboardState.getState().update(project, { tab: "board" });
-    app.openProjectDashboard(project); app.setView({ kind: "project-dashboard", projectId: project, epicId: epic });
+    openCanonEpic(project, epic);
   };
-  if (p.state !== "open") return <Card padding="sm" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
+  const created = p.changes.flatMap(change => change.op === "epic.create" && change.id ? [change.id] : []);
+  if (p.state !== "open") return <Stack gap="sm"><Card padding="sm" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
     <Stack align="row" cross="center" justify="between" gap="sm">
       <Typo.Caption>{p.state === "applied" ? deletes ? mixedDelete ? copy.changed : copy.deleted : p.resolved_by === null ? copy.record : p.resolved_by === "chat" ? copy.chat : copy.added
         : p.state === "cancelled" ? copy.cancelled : p.state === "superseded" ? copy.superseded : copy.stale}</Typo.Caption>
       {p.state === "applied" && <ButtonContainer size="sm" justify="end"><Button size="sm" variant="link" onClick={open}>{copy.open}</Button></ButtonContainer>}
     </Stack>
-  </Card>;
+  </Card>
+    {p.state === "applied" && "id" in p.project && p.project.id && created.length > 0 && <ChatEpicCards projectId={p.project.id} ids={created} />}
+  </Stack>;
   const empty = chooseProject && target === "@new" && !name.trim();
   return <Card radius="lg" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
     <Stack gap="lg">

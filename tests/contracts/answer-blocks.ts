@@ -1,8 +1,10 @@
+// test-category: format-pin
 // Invoked by the single Rust fixture table, without a second test suite.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Project } from "ts-morph";
 import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts.ts";
+import { parseAnswerBlocks } from "../../packages/butler-app/client/shared/answer-blocks-parse.ts";
 import { toMarkdown } from "../../packages/butler-app/client/shared/answer-blocks-markdown.ts";
 
 interface Rule {
@@ -64,3 +66,12 @@ for (const entry of fixtures.cases) {
   assert.equal(toMarkdown(spec), fixtures.markdown[entry.spec], `${entry.name}: complete Markdown`);
 }
 console.log(`${Object.keys(expectedTypes).length} mirrored types; accepted fixture Markdown matches`);
+
+const epics: AnswerBlocks = { v: 2, blocks: [{ type: "epics", project_id: "project", ids: ["first", "second"] }] };
+assert.deepEqual(parseAnswerBlocks(epics), epics, "top-level epics preserve project and id order");
+assert.equal(toMarkdown(epics), "", "epics carry no portable text");
+assert.equal(toMarkdown({ v: 2, blocks: [...epics.blocks, { type: "text", text: "Only prose" }, ...epics.blocks] }), "Only prose");
+for (const container of [
+  { type: "columns", blocks: epics.blocks }, { type: "group", blocks: epics.blocks },
+  { type: "tabs", tabs: [{ label: "Tasks", blocks: epics.blocks }] },
+]) assert.equal(parseAnswerBlocks({ v: 2, blocks: [container] }), null, "epics never enter leaf containers");

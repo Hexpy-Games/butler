@@ -151,16 +151,13 @@ fn steward(script: &Script, stage: usize, body: &Value) -> Value {
             .find_map(|v| v["relation_id"].as_str().map(str::to_owned))
             .unwrap();
         *script.first_relation.lock().unwrap() = relation;
-        return assign("replacement attempt", None);
-    }
-    if mode == Mode::Replace && stage == 5 {
         return assign(
             "replacement attempt",
             Some(&script.first_relation.lock().unwrap()),
         );
     }
-    let stage = if mode == Mode::Replace && stage >= 6 {
-        stage - 2
+    let stage = if mode == Mode::Replace && stage >= 5 {
+        stage - 1
     } else {
         stage
     };

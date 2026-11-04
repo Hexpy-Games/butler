@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use crate::btcc::agent_loop::ModelRoundResult;
 use crate::btcc::{
-    AttemptHistory, BtccError, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
+    AttemptHistory, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
     ModelRouteEventWrite, ModelRouteWrite, RouteEventStatus, RouteState, StateExecutionClaim,
     TurnRecord, TurnStore,
 };
@@ -50,13 +48,13 @@ impl RouteHooks {
         if route.is_some() {
             binding.route = route;
         }
-        self.retry("attempt_event_write", || {
-            self.store.record_model_route_event(ModelRouteEventWrite {
+        self.store
+            .record_model_route_event(ModelRouteEventWrite {
                 binding: binding.clone(),
                 event: event.clone(),
             })
-        })
-        .await
+            .await
+            .map_err(|error| failure::durability("attempt_event_write", &error))
     }
 
     pub(super) async fn history(
@@ -66,10 +64,10 @@ impl RouteHooks {
         model: &str,
     ) -> Result<AttemptHistory, crate::btcc::agent_loop::ModelRoundError> {
         let key = self.key(round, candidate, model, KeyScope::Route);
-        self.retry("attempt_history_read", || {
-            self.store.load_model_route_attempt_history(key.clone())
-        })
-        .await
+        self.store
+            .load_model_route_attempt_history(key)
+            .await
+            .map_err(|error| failure::durability("attempt_history_read", &error))
     }
 
     pub(super) async fn accepted(
@@ -79,10 +77,10 @@ impl RouteHooks {
         model: &str,
     ) -> Result<Option<ModelRoundResult>, crate::btcc::agent_loop::ModelRoundError> {
         let key = self.key(round, candidate, model, KeyScope::Checkpoint);
-        self.retry("response_acceptance_read", || {
-            self.store.load_model_round_acceptance(key.clone())
-        })
-        .await
+        self.store
+            .load_model_round_acceptance(key)
+            .await
+            .map_err(|error| failure::durability("response_acceptance_read", &error))
     }
 
     pub(super) async fn accept(
@@ -102,10 +100,10 @@ impl RouteHooks {
             transport_attempt: attempt,
             result: Box::new(result),
         };
-        self.retry("response_acceptance_write", || {
-            self.store.record_model_round_acceptance(write.clone())
-        })
-        .await
+        self.store
+            .record_model_round_acceptance(write)
+            .await
+            .map_err(|error| failure::durability("response_acceptance_write", &error))
     }
 
     fn key(&self, round: &str, candidate: u32, model: &str, scope: KeyScope) -> ModelRoundKey {
@@ -120,28 +118,6 @@ impl RouteHooks {
             checkpoint_revision: checkpoint.then_some(self.checkpoint_revision),
         }
     }
-
-    async fn retry<T, F, Fut>(
-        &self,
-        phase: &str,
-        mut operation: F,
-    ) -> Result<T, crate::btcc::agent_loop::ModelRoundError>
-    where
-        F: FnMut() -> Fut,
-        Fut: Future<Output = Result<T, BtccError>>,
-    {
-        let mut attempt = 1;
-        loop {
-            match operation().await {
-                Ok(value) => return Ok(value),
-                Err(error) if contention(&error) && attempt < 3 => {
-                    attempt += 1;
-                    tokio::task::yield_now().await;
-                }
-                Err(error) => return Err(failure::durability(phase, &error)),
-            }
-        }
-    }
 }
 
 /// Whether a round key is bound to the claim's checkpoint (accepted
@@ -150,10 +126,4 @@ impl RouteHooks {
 enum KeyScope {
     Route,
     Checkpoint,
-}
-
-fn contention(error: &BtccError) -> bool {
-    error.code() == "sqlite_contention"
-        || error.message().contains("database is locked")
-        || error.message().contains("database is busy")
 }

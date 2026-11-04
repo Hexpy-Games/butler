@@ -161,6 +161,11 @@ fn apply(
 }
 
 fn needs_evidence(block: &Block, unit: &AnswerBlocksDraftUnit) -> bool {
+    if block.fields.get("type").and_then(Value::as_str) == Some("epics")
+        && unit.field.as_deref() == Some("ids")
+    {
+        return !block.fields.contains_key("project_id");
+    }
     if unit.field.as_deref() == Some("rows") {
         return !block.fields.contains_key("columns");
     }
@@ -203,7 +208,7 @@ fn stage_evidence(
 fn flush_pending(block: &mut Block, context: &AnswerBlocksContext<'_>) -> Vec<Value> {
     // Dependencies can precede type in JSON. Prime them before checking deferred
     // units, so every released unit still closes before its block_end operation.
-    for field in ["source", "columns", "x", "checked"] {
+    for field in ["project_id", "source", "columns", "x", "checked"] {
         for unit in &block.pending {
             if unit.field.as_deref() == Some(field)
                 && unit.index.is_none()

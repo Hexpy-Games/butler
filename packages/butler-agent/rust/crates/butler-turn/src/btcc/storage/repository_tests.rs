@@ -1,3 +1,4 @@
+use butler_platform::sqlite;
 use serde_json::json;
 
 use super::repository::BtccRepositories;
@@ -174,6 +175,17 @@ async fn model_journal_abandons_restarted_attempt_and_output_accounting_commits(
             failure: None,
         },
     };
+    // race: another writer holds the lock; the write must wait for it, not fail at once.
+    let lock_connection = sqlite::open(&fixture.path).expect("open lock connection");
+    lock_connection
+        .execute_batch("BEGIN IMMEDIATE")
+        .expect("hold writer lock");
+    let lock_release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        lock_connection
+            .execute_batch("COMMIT")
+            .expect("release writer lock");
+    });
     assert_eq!(
         repositories
             .record_model_route_event(event.clone())
@@ -181,6 +193,7 @@ async fn model_journal_abandons_restarted_attempt_and_output_accounting_commits(
             .expect("record start"),
         crate::btcc::RouteEventStatus::Recorded
     );
+    lock_release.join().expect("join lock release");
     assert_eq!(
         repositories
             .record_model_route_event(event)
