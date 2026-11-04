@@ -207,8 +207,8 @@ pub use work::{
     ReplacePlanCommand, ResolvedProjectWorkScope, ReviewCommand, StartWorkCommand,
 };
 pub use work::{
-    PlanSubject, TaskContract, TaskInput, TaskInputUse, TaskOutput, TaskOverlap, TaskOwnership,
-    TaskResolution, TaskScope, WorkTask, task_overlap, task_path, task_path_contains,
+    PlanSubject, TaskContract, TaskInput, TaskInputUse, TaskOutput, TaskOwnership, TaskScope,
+    WorkTask, task_path, task_path_contains,
 };
 
 /// The SHA-256 hex digest used for BTCC identities.
