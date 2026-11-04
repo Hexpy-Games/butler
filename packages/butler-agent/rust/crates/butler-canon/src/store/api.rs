@@ -123,7 +123,7 @@ pub fn write(
     }
 }
 fn input<T: serde::de::DeserializeOwned>(value: Value) -> Result<T> {
-    serde_json::from_value(value).map_err(|error| Error::Fields(error.to_string()))
+    serde_json::from_value(value).map_err(|_| Error::Invalid("invalid request fields"))
 }
 fn revision(row: &Value) -> Result<i64> {
     row["revision"].as_i64().ok_or(Error::Invalid("revision"))

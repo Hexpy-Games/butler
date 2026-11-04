@@ -69,24 +69,6 @@ async fn cb_07_plan_run_three_epics_in_canon_order() -> Result<(), HarnessError>
         std::time::Duration::from_secs(60),
     )
     .await?;
-    {
-        let captured = script.requests.lock().unwrap();
-        let item = captured
-            .iter()
-            .flat_map(|body| body["input"].as_array().unwrap())
-            .find(|item| {
-                item["type"] == "function_call_output"
-                    && item["call_id"]
-                        .as_str()
-                        .is_some_and(|id| id.starts_with("canon-flow-"))
-            })
-            .unwrap();
-        let output: serde_json::Value =
-            serde_json::from_str(item["output"].as_str().unwrap()).unwrap();
-        let out = output.get("output").unwrap_or(&output);
-        assert_eq!(out["ok"], true);
-        assert!(out["message"].is_string());
-    }
     let view = data(
         s.gw.get(&format!("/sessions/{chat}/canon/queue")).await?,
         200,

@@ -8014,8 +8014,7 @@
                     "type": "string"
                   },
                   "name": {
-                    "type": "string",
-                    "description": "project.create only; epics and plans use title."
+                    "type": "string"
                   },
                   "title": {
                     "type": "string"
@@ -8036,8 +8035,7 @@
                     "type": "string"
                   },
                   "status": {
-                    "type": "string",
-                    "description": "Not for epic.create."
+                    "type": "string"
                   },
                   "body": {
                     "type": "string"
@@ -14379,8 +14377,7 @@
                   "type": "string"
                 },
                 "name": {
-                  "type": "string",
-                  "description": "project.create only; epics and plans use title."
+                  "type": "string"
                 },
                 "title": {
                   "type": "string"
@@ -14401,8 +14398,7 @@
                   "type": "string"
                 },
                 "status": {
-                  "type": "string",
-                  "description": "Not for epic.create."
+                  "type": "string"
                 },
                 "body": {
                   "type": "string"
