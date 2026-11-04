@@ -75,7 +75,7 @@ impl GraphBuilder {
         for (i, state) in states.iter().enumerate() {
             let title = format!("Release {}", i + 1);
             let mut work = if state == "waiting" {
-                self.unplanned(parent, count, &title).await?.0
+                Box::pin(self.unplanned(parent, count, &title)).await?.0
             } else {
                 self.graph(parent, count, &title).await?
             };
