@@ -28,12 +28,13 @@ pub struct Shared {
     pub context: Option<ContextMenu>,
 }
 impl Shared {
-    /// A hidden view keeps no frame buffers; they are recreated by the next paint after it is shown.
+    /// A hidden view keeps no frame buffers or GPU copier; the next paint after it is shown recreates them.
     pub fn release_frames(&mut self) {
         self.frame = None;
         self.popup = None;
         self.view_pool = Default::default();
         self.popup_pool = Default::default();
+        self.gpu = None;
     }
 }
 pub type SharedRef = Rc<RefCell<Shared>>;
