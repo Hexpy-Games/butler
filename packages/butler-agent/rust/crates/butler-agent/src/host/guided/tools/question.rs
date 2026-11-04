@@ -100,20 +100,35 @@ pub(super) async fn dispatch(
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     super::dispatch::steward_gate::check(owner, call).await?;
-    if matches!(
-        ToolName::parse(&call.name),
-        Some(ToolName::CanonRead | ToolName::CanonPropose | ToolName::CanonQueue)
-    ) {
-        return super::canon::execute(owner, call, call_id).await;
-    }
-    if call.name == ToolName::ProjectArtifacts {
-        return super::project_artifacts::execute(owner, invocation, call).await;
-    }
-    if call.name == ToolName::ResolveAsk {
-        return super::resolve_ask::execute(owner, invocation, call).await;
-    }
-    if call.name == ToolName::AskUser {
-        return execute(owner, call, call_id).await;
-    }
-    super::dispatch::execute(owner, invocation, call, call_id).await
+    route(owner, invocation, call, call_id).await
+}
+
+/// Runs a native call on its executor, whether it came by name or through `tool_call`.
+/// The boxed return ends the future type here, since a bridged call reaches this again.
+pub(super) fn route<'a>(
+    owner: &'a GuidedTools,
+    invocation: GuidedInvocation<'a>,
+    call: &'a ModelRoundToolCall,
+    call_id: &'a str,
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<JsonDocument, ToolExecutionError>> + Send + 'a>,
+> {
+    Box::pin(async move {
+        if matches!(
+            ToolName::parse(&call.name),
+            Some(ToolName::CanonRead | ToolName::CanonPropose | ToolName::CanonQueue)
+        ) {
+            return super::canon::execute(owner, call, call_id).await;
+        }
+        if call.name == ToolName::ProjectArtifacts {
+            return super::project_artifacts::execute(owner, invocation, call).await;
+        }
+        if call.name == ToolName::ResolveAsk {
+            return super::resolve_ask::execute(owner, invocation, call).await;
+        }
+        if call.name == ToolName::AskUser {
+            return execute(owner, call, call_id).await;
+        }
+        super::dispatch::execute(owner, invocation, call, call_id).await
+    })
 }

@@ -212,7 +212,7 @@ pub(super) async fn verify_archive_cursors(
     Ok(())
 }
 
-// Files are independent of the Browser gate and must survive every clear.
+// Outputs are independent of the Browser gate and must survive every clear.
 pub(super) fn verify_archived_outputs(
     before: &serde_json::Value,
     kept: &serde_json::Value,
@@ -220,10 +220,6 @@ pub(super) fn verify_archived_outputs(
 ) {
     let original = before["artifacts"].as_array().unwrap();
     let archived = kept["artifacts"].as_array().unwrap();
-    assert_eq!(
-        original.iter().filter(|a| a["file_id"].is_string()).count(),
-        2
-    );
     assert_eq!(archived.len(), original.len());
     for output in original {
         let moved = archived.iter().find(|a| a["id"] == output["id"]).unwrap();

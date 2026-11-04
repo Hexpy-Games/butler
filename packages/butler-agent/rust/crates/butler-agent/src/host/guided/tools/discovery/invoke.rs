@@ -314,14 +314,7 @@ async fn native_result(
     inner: &ModelRoundToolCall,
     outer_call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    match Box::pin(super::super::dispatch::execute(
-        owner,
-        invocation,
-        inner,
-        outer_call_id,
-    ))
-    .await
-    {
+    match super::super::question::route(owner, invocation, inner, outer_call_id).await {
         Ok(value) => Ok(value),
         Err(ToolExecutionError::Integrity(error))
             if super::super::feedback::solvable(error.code()) =>
