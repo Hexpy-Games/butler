@@ -114,7 +114,8 @@ pub(super) fn close(
 }
 
 pub(super) fn configure(connection: &mut Connection, profile: StorageProfile) -> StorageResult<()> {
-    // Every writer transaction may write; taking the lock at BEGIN lets busy_timeout wait instead of failing a read-then-write upgrade with an immediate BUSY.
+    // Every writer transaction may write. Taking the lock at BEGIN lets busy_timeout
+    // wait, instead of a read-then-write upgrade failing at once with BUSY.
     connection.set_transaction_behavior(rusqlite::TransactionBehavior::Immediate);
     // The writer no longer serves request reads. Bound its page cache so adding
     // independent readers does not retain SQLite's default 2 MiB writer cache.
