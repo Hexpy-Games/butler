@@ -19,7 +19,7 @@ enum Action {
     Source(&'static str),
     Clear(usize),
     Type(&'static str),
-    Key(u16, &'static str, u64),
+    Key(u16, u64),
     ClickField,
     Second,
     Main,
@@ -60,8 +60,8 @@ fn step(
 #[rustfmt::skip]
 fn steps() -> Vec<Step> {
     use self::Action::*;
-    let enter = Key(36, "\r", 0);
-    let delete = Key(51, "\u{7f}", 0);
+    let enter = Key(36, 0);
+    let delete = Key(51, 0);
     // Keep the action/check table in rows so it can be compared directly with the specification.
     vec![
         step("S0", false, false, &[], vec![Focus("field_a"), Source(KOREAN)], vec![("/isActive", json!(true)), ("/key_window", json!("main"))]),
@@ -70,7 +70,7 @@ fn steps() -> Vec<Step> {
         step("K2", false, false, &[], vec![Clear(0), Type("dkssud"), enter.clone()], vec![("/field_a/text", json!("안녕")), ("/field_a/marked_text", Value::Null), ("/submit_count_a", json!(1))]),
         step("K3", false, false, &[], vec![Clear(0), Type("rk.rk,rk?")], vec![("/field_a/text", json!("가.가,가?"))]),
         step("K4a", false, false, &[], vec![Clear(0), Type("gks")], vec![("/field_a/marked_text", json!("한"))]),
-        step("K4b", false, false, &[], vec![delete.clone()], vec![("/field_a/marked_text", json!("하"))]),
+        step("K4b", true, false, &[], vec![delete.clone()], vec![("/field_a/marked_text", json!("하"))]),
         step("K4c", false, false, &[], vec![delete.clone()], vec![("/field_a/marked_text", json!("ㅎ"))]),
         step("K4d", false, false, &[], vec![delete], vec![("/field_a/text", json!("")), ("/field_a/marked_text", Value::Null)]),
         step("K4e", false, false, &[], vec![Type("rk ")], vec![("/field_a/text", json!("가 "))]),
@@ -78,25 +78,25 @@ fn steps() -> Vec<Step> {
         step("K6", false, false, &[], vec![Clear(0), Source(ABC), Type("abc "), Source(KOREAN), Type("gks"), Source(ABC), Type("def")], vec![("/field_a/text", json!("abc 한def"))]),
         step("K7a", false, false, &[], vec![Clear(0), Clear(1), Focus("field_a"), Source(KOREAN), Type("gk")], vec![("/field_a/marked_text", json!("하"))]),
         step("K7b", true, false, &[], vec![ClickField], vec![("/field_a/text", json!("하")), ("/field_a/marked_text", Value::Null)]),
-        step("K7c", false, false, &[], vec![Type("s")], vec![("/field_b/text", json!("ㄴ")), ("/field_b/marked_text", json!("ㄴ")), ("/field_a/text", json!("하"))]),
-        step("K7d", false, false, &[], vec![Clear(0), Clear(1), Focus("field_a"), Type("gk"), Key(48, "\t", 0)], vec![("/field_a/text", json!("하")), ("/field_a/marked_text", Value::Null), ("/focused", json!("field_b"))]),
+        step("K7c", true, false, &[], vec![Type("s")], vec![("/field_b/text", json!("ㄴ")), ("/field_b/marked_text", json!("ㄴ")), ("/field_a/text", json!("하"))]),
+        step("K7d", false, false, &[], vec![Clear(0), Clear(1), Focus("field_a"), Type("gk"), Key(48, 0)], vec![("/field_a/text", json!("하")), ("/field_a/marked_text", Value::Null), ("/focused", json!("field_b"))]),
         step("K8a", false, false, &[], vec![Clear(0), Focus("field_a"), Type("gk"), Second, Type("s")], vec![("/field_c/text", json!("ㄴ"))]),
-        step("K8b", false, false, &[], vec![Main, Focus("field_a")], vec![("/field_a/text", json!("하")), ("/field_a/marked_text", Value::Null)]),
-        step("K9a", true, false, &[], vec![Clear(0), Type("gks"), Key(36, "\r", 1 << 19)], vec![("/foreign_window_appeared", json!(true))]),
+        step("K8b", true, false, &[], vec![Main, Focus("field_a")], vec![("/field_a/text", json!("하")), ("/field_a/marked_text", Value::Null)]),
+        step("K9a", true, false, &[], vec![Clear(0), Type("gks"), Key(36, 1 << 19)], vec![("/foreign_window_appeared", json!(true))]),
         step("K9b", false, false, &[], vec![enter.clone()], vec![("/single_hanja", json!(true)), ("/field_a/marked_text", Value::Null)]),
-        step("K10a", false, false, &[], vec![Focus("composer"), Clear(2), Type("dkssud"), Key(36, "\r", 1 << 17), Type("gktpdy ")], vec![("/composer/text", json!("안녕\n하세요 "))]),
+        step("K10a", true, false, &[], vec![Focus("composer"), Clear(2), Type("dkssud"), Key(36, 1 << 17), Type("gktpdy ")], vec![("/composer/text", json!("안녕\n하세요 "))]),
         step("K10b", false, false, &[], vec![Clear(2), Type("rkskek"), enter.clone()], vec![("/last_row", json!("가나다")), ("/composer/text", json!(""))]),
         step("K11a", true, false, &[], vec![WebClick, Type("gksrm")], vec![]),
-        step("K11b", false, false, &[], vec![Type("f "), WebRead], vec![("/web_in", json!("한글 "))]),
+        step("K11b", true, false, &[], vec![Type("f "), WebRead], vec![("/web_in", json!("한글 "))]),
         step("A1", false, true, &[], vec![Source(ABC)], vec![("/ax_checks/send_button", json!(true)), ("/ax_checks/settings_disabled", json!(true)), ("/ax_checks/title_field", json!(true)), ("/ax_checks/composer_area", json!(true)), ("/ax_checks/list_rows_match", json!(true))]),
         step("A2", false, false, &[], vec![Focus("field_a"), Tabs], vec![("/tab_sequence", json!(["field_a", "field_b", "composer", "보내기", "첨부", "더보기", "열기", "page"].into_iter().cycle().take(10) .collect::<Vec<_>>()))]),
-        step("A3a", false, true, &[], vec![Focus("더보기"), enter.clone()], vec![("/menu", json!(true)), ("/ax_checks/menu_items", json!(3)), ("/ax_checks/menu", json!(true)), ("/ax_focused_node/title", json!("복사"))]),
-        step("A3b", false, false, &[], vec![Key(125, "\u{f701}", 0)], vec![("/ax_focused_node/title", json!("편집"))]),
-        step("A3c", false, false, &[], vec![Key(53, "\u{1b}", 0)], vec![("/menu", json!(false)), ("/ax_focused_node/title", json!("더보기"))]),
+        step("A3a", true, true, &[], vec![Focus("더보기"), enter.clone()], vec![("/menu", json!(true)), ("/ax_checks/menu_items", json!(3)), ("/ax_checks/menu", json!(true)), ("/ax_focused_node/title", json!("복사"))]),
+        step("A3b", false, false, &[], vec![Key(125, 0)], vec![("/ax_focused_node/title", json!("편집"))]),
+        step("A3c", false, false, &[], vec![Key(53, 0)], vec![("/menu", json!(false)), ("/ax_focused_node/title", json!("더보기"))]),
         step("A4a", true, true, &[], vec![Focus("열기"), enter], vec![("/dialog", json!(true)), ("/ax_checks/dialog", json!(true)), ("/ax_focused_node/title", json!("확인"))]),
-        step("A4b", false, false, &[], vec![Key(48, "\t", 0), Key(48, "\t", 0)], vec![("/ax_focused_node/title", json!("확인"))]),
-        step("A4c", false, false, &[], vec![Key(53, "\u{1b}", 0)], vec![("/dialog", json!(false)), ("/ax_focused_node/title", json!("열기"))]),
-        step("A5", false, true, &[300, 1500, 2600], vec![Stream], vec![("/stream_samples_match", json!(true))]),
+        step("A4b", false, false, &[], vec![Key(48, 0), Key(48, 0)], vec![("/ax_focused_node/title", json!("확인"))]),
+        step("A4c", false, false, &[], vec![Key(53, 0)], vec![("/dialog", json!(false)), ("/ax_focused_node/title", json!("열기"))]),
+        step("A5", true, true, &[300, 1500, 2600], vec![Stream], vec![("/stream_samples_match", json!(true))]),
         step("A6", false, false, &[], vec![Cef], vec![]),
         step("END", false, false, &[], vec![Restore], vec![]),
     ]
@@ -132,6 +132,7 @@ pub async fn run(
         std::fs::File::create(runner.out.join("results.jsonl")).map_err(|e| e.to_string())?;
     for step in steps() {
         runner.extra = json!({});
+        inject::take_first_key_chars();
         for action in &step.actions {
             runner.action(action, step.sample_ms, cx).await?;
             wait(cx, step.wait_ms).await;
@@ -189,7 +190,7 @@ impl Runner {
             Action::Type(text) => {
                 inject::type_keys(text, cx).await;
             }
-            Action::Key(code, chars, mods) => inject::key(*code, chars, chars, *mods),
+            Action::Key(code, mods) => inject::key(*code, *mods),
             Action::ClickField => self.click_field(cx)?,
             Action::Second => self.open_second(cx)?,
             Action::Main => inject::make_key("main"),
@@ -265,13 +266,21 @@ impl Runner {
     }
     async fn tabs(&mut self, cx: &mut AsyncApp) -> Result<(), String> {
         let node = ax::dump_ax(inject::window("main"))["ax_focused_node"].clone();
-        let mut ids = vec![focus_id(&node)];
+        let mut ids = vec![
+            self.main
+                .update(cx, |s, w, cx| s.focused(w, cx))
+                .map_err(|e| e.to_string())?,
+        ];
         let mut focused = vec![node];
         for _ in 0..9 {
-            inject::key(48, "\t", "\t", 0);
+            inject::key(48, 0);
             wait(cx, 250).await;
             let node = ax::dump_ax(inject::window("main"))["ax_focused_node"].clone();
-            ids.push(focus_id(&node));
+            ids.push(
+                self.main
+                    .update(cx, |s, w, cx| s.focused(w, cx))
+                    .map_err(|e| e.to_string())?,
+            );
             focused.push(node);
         }
         self.extra["tab_sequence"] = json!(ids);
@@ -290,10 +299,11 @@ impl Runner {
             })
             .map_err(|e| e.to_string())?;
         let started = Instant::now();
+        let mut paused = Duration::ZERO;
         for (i, c) in text.iter().enumerate() {
             let deadline = Duration::from_millis((i as u64 + 1) * 100);
             cx.background_executor()
-                .timer(deadline.saturating_sub(started.elapsed()))
+                .timer((deadline + paused).saturating_sub(started.elapsed()))
                 .await;
             self.main
                 .update(cx, |s, _, cx| {
@@ -301,11 +311,10 @@ impl Runner {
                     cx.notify();
                 })
                 .map_err(|e| e.to_string())?;
-            // Let AccessKit publish this frame before sampling its native projection.
+            // Pause stream updates while AccessKit publishes the current model text.
             if times.contains(&((i as u64 + 1) * 100)) {
-                cx.background_executor()
-                    .timer(Duration::from_millis(1))
-                    .await;
+                let pause_started = Instant::now();
+                wait(cx, 200).await;
                 let model = self
                     .main
                     .update(cx, |s, _, _| s.stream.clone())
@@ -324,7 +333,10 @@ impl Runner {
                     .filter(|v| !v.is_empty())
                     .unwrap_or_else(|| node["title"].as_str().unwrap_or_default());
                 let matches = value == model;
-                samples.push(json!({"at_ms":started.elapsed().as_millis(),"model":model,"ax":node,"pass":matches}));
+                samples.push(
+                    json!({"at_ms":(i as u64 + 1) * 100,"model":model,"ax":node,"pass":matches}),
+                );
+                paused += pause_started.elapsed();
             }
         }
         self.extra["stream_samples_match"] = json!(samples.iter().all(|s| s["pass"] == true));
@@ -356,6 +368,7 @@ impl Runner {
         result["ax_focused"] = ax::focused();
         result["ax_focused_node"] = ax::dump_ax(inject::window("main"))["ax_focused_node"].clone();
         result["input_source"] = json!(inject::input_source());
+        result["first_key_chars"] = json!(inject::take_first_key_chars());
         result["bounds_for_range_screen"] = inject::caret_rect();
         result["single_hanja"] = json!(
             result["field_a"]["text"]
@@ -388,15 +401,6 @@ impl Runner {
         }
         Ok(false)
     }
-}
-fn focus_id(node: &Value) -> Value {
-    json!(match name(node) {
-        "제목" => "field_a",
-        "검색" => "field_b",
-        "메시지 입력" => "composer",
-        _ if node["role"] == "AXUnknown" => "page",
-        title => title,
-    })
 }
 fn name(node: &Value) -> &str {
     node["title"]

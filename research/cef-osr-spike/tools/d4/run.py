@@ -3,39 +3,39 @@ import json
 import math
 import os
 import signal
-import tempfile
 import pathlib
 import subprocess
 import sys
 import time
 
 
+def capture_rect(rects, margin_x, margin_y, dest):
+    x = max(0, math.floor(min(r['x'] for r in rects) - margin_x))
+    y = max(0, math.floor(min(r['y'] for r in rects) - margin_y))
+    right = math.ceil(max(r['x'] + r['width'] for r in rects) + margin_x)
+    bottom = math.ceil(max(r['y'] + r['height'] for r in rects) + margin_y)
+    png = dest.with_suffix('.png')
+    subprocess.run(['screencapture', '-x', '-R',
+                    f'{x},{y},{right-x},{bottom-y}', str(png)], check=True)
+    try:
+        subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '80',
+                        str(png), '--out', str(dest)],
+                       check=True, stdout=subprocess.DEVNULL)
+    finally:
+        png.unlink(missing_ok=True)
+
+
 def capture(ready, out):
     info = json.loads(ready.read_text())
     step = ready.stem.removeprefix('shot-')
-    rects = [info['window_frame']]
-    rects += [w['bounds'] for w in info['foreign_windows']]
-    scale = info['backing_scale']
-    x = max(0, math.floor((min(r['x'] for r in rects) - 40) * scale))
-    y = max(0, math.floor((min(r['y'] for r in rects) - 40) * scale))
-    right = math.ceil((max(r['x'] + r['width'] for r in rects) + 40) * scale)
-    bottom = math.ceil((max(r['y'] + r['height'] for r in rects) + 40) * scale)
-    full = out / f'full-{step}.png'
-    subprocess.run(['screencapture', '-x', str(full)], check=True)
-    try:
-        dimensions = subprocess.check_output(
-            ['sips', '-g', 'pixelWidth', '-g', 'pixelHeight', str(full)], text=True)
-        values = dict(line.strip().split(': ', 1) for line in dimensions.splitlines()[1:])
-        right = min(right, int(values['pixelWidth']))
-        bottom = min(bottom, int(values['pixelHeight']))
-        subprocess.run(['sips', '--cropToHeightWidth', str(bottom-y), str(right-x),
-                        '--cropOffset', str(y), str(x), str(full)], check=True,
-                       stdout=subprocess.DEVNULL)
-        subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '80',
-                        str(full), '--out', str(out / f'shot-{step}.jpg')],
-                       check=True, stdout=subprocess.DEVNULL)
-    finally:
-        full.unlink(missing_ok=True)
+    foreign = [w['bounds'] for w in info['foreign_windows']]
+    capture_rect([info['window_frame'], *foreign], 40, 40,
+                 out / f'shot-{step}.jpg')
+    caret = info['bounds_for_range_screen']
+    if caret is not None:
+        expanded = dict(x=caret['x']-220, y=caret['y']-120,
+                        width=caret['width']+440, height=caret['height']+240)
+        capture_rect([expanded, *foreign], 0, 0, out / f'zoom-{step}.jpg')
     ready.with_suffix('.done').write_text('{}\n')
 
 
@@ -68,45 +68,40 @@ def main():
     handled = set()
     errors = []
     timed_out = False
-    with tempfile.TemporaryDirectory(prefix='d4-home-') as home, \
-            tempfile.TemporaryDirectory(prefix='d4-data-') as data, \
-            tempfile.TemporaryDirectory(prefix='d4-tmp-') as tmp:
-        process = subprocess.Popen([
-            'open', '-n', '-W', '--stdout', str(out / 'app.log'),
-            '--stderr', str(out / 'app.log'), '--env', f'HOME={home}',
-            '--env', f'BUTLER_DATA={data}', '--env', f'TMPDIR={tmp}',
-            '--env', 'MallocNanoZone=0', '--env', 'OS_ACTIVITY_MODE=disable',
-            str(app), '--args', '--d4', str(out)])
-        try:
-            deadline = time.monotonic() + 240
-            while process.poll() is None:
-                for ready in sorted(out.glob('shot-*.ready')):
-                    if ready in handled:
-                        continue
-                    handled.add(ready)
-                    try:
-                        capture(ready, out)
-                    except (OSError, ValueError, subprocess.CalledProcessError) as error:
-                        errors.append(f'{ready.name}: {error}')
-                if time.monotonic() >= deadline:
-                    timed_out = True
-                    break
-                time.sleep(0.05)
-        finally:
-            if timed_out and (out / 'pid').exists():
-                pid = int((out / 'pid').read_text())
+    process = subprocess.Popen([
+        'open', '-n', '-W', '--stdout', str(out / 'app.log'),
+        '--stderr', str(out / 'app.log'),
+        str(app), '--args', '--d4', str(out)])
+    try:
+        deadline = time.monotonic() + 240
+        while process.poll() is None:
+            for ready in sorted(out.glob('shot-*.ready')):
+                if ready in handled:
+                    continue
+                handled.add(ready)
                 try:
-                    os.kill(pid, signal.SIGTERM)
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                    capture(ready, out)
+                except (OSError, ValueError, subprocess.CalledProcessError) as error:
+                    errors.append(f'{ready.name}: {error}')
+            if time.monotonic() >= deadline:
+                timed_out = True
+                break
+            time.sleep(0.05)
+    finally:
+        if timed_out and (out / 'pid').exists():
+            pid = int((out / 'pid').read_text())
             try:
+                os.kill(pid, signal.SIGTERM)
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
                 pass
-            summary(out, process.returncode, timed_out, errors)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        summary(out, process.returncode, timed_out, errors)
     return 0
 
 

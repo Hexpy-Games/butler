@@ -106,12 +106,21 @@ pub fn focused() -> Value {
 }
 pub fn dump_ax(window: *mut Object) -> Value {
     let tree = walk(window, 0, &mut 2000);
-    let mut all = Vec::new();
-    nodes(&tree, &mut all);
-    let node = all
-        .into_iter()
-        .find(|n| n["focused"] == true)
-        .map(|n| json!({"role":n["role"], "title":n["title"]}))
+    let mut pending = vec![(&tree, 0)];
+    let mut deepest = None;
+    while let Some((node, depth)) = pending.pop() {
+        if node["focused"] == true
+            && node["role"] != "AXWindow"
+            && deepest.is_none_or(|(_, previous)| depth > previous)
+        {
+            deepest = Some((node, depth));
+        }
+        if let Some(children) = node["children"].as_array() {
+            pending.extend(children.iter().rev().map(|child| (child, depth + 1)));
+        }
+    }
+    let node = deepest
+        .map(|(n, _)| json!({"role":n["role"], "title":n["title"]}))
         .unwrap_or(Value::Null);
     json!({"window":tree,"focused":focused(),"ax_focused_node":node})
 }

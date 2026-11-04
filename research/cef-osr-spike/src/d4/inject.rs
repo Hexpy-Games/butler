@@ -58,8 +58,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     fn CGEventCreateKeyboardEvent(source: CFTypeRef, keycode: u16, down: bool) -> CFTypeRef;
     fn CGEventSetFlags(event: CFTypeRef, flags: u64);
-    fn CGEventSetTimestamp(event: CFTypeRef, timestamp: u64);
-    fn CGEventKeyboardSetUnicodeString(event: CFTypeRef, length: usize, text: *const u16);
+    fn CGEventSourceCreate(state: i32) -> CFTypeRef;
 }
 pub struct InputSource(CFTypeRef);
 impl InputSource {
@@ -160,20 +159,27 @@ pub fn ns(text: &str) -> *mut Object {
         msg_send![class!(NSString), stringWithBytes:text.as_ptr() length:text.len() encoding:4usize]
     }
 }
-pub fn key(keycode: u16, chars: &str, _ignoring: &str, modifiers: u64) {
+thread_local! { static FIRST_KEY_CHARS: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) }; }
+pub fn take_first_key_chars() -> Option<String> {
+    FIRST_KEY_CHARS.with_borrow_mut(Option::take)
+}
+pub fn key(keycode: u16, modifiers: u64) {
     unsafe {
-        let process: *mut Object = msg_send![class!(NSProcessInfo), processInfo];
-        let uptime: f64 = msg_send![process, systemUptime];
-        let text: Vec<u16> = chars.encode_utf16().collect();
+        let source = CGEventSourceCreate(1); // kCGEventSourceStateHIDSystemState
         for down in [true, false] {
-            let cg = CGEventCreateKeyboardEvent(std::ptr::null(), keycode, down);
+            let cg = CGEventCreateKeyboardEvent(source, keycode, down);
             CGEventSetFlags(cg, modifiers);
-            CGEventSetTimestamp(cg, (uptime * 1_000_000_000.) as u64);
-            CGEventKeyboardSetUnicodeString(cg, text.len(), text.as_ptr());
             let event: *mut Object = msg_send![class!(NSEvent), eventWithCGEvent:cg];
+            FIRST_KEY_CHARS.with_borrow_mut(|first| {
+                if first.is_none() {
+                    let chars: *mut Object = msg_send![event, characters];
+                    *first = Some(string(chars));
+                }
+            });
             let _: () = msg_send![app(), postEvent:event atStart:false];
             CFRelease(cg);
         }
+        CFRelease(source);
     }
 }
 pub fn click(window: *mut Object, point: Point) {
@@ -208,8 +214,6 @@ pub fn ascii(c: char) {
         .expect("ANSI ASCII key");
     key(
         code,
-        &c.to_string(),
-        &base.to_string(),
         if c.is_ascii_uppercase() || c == '?' {
             1 << 17
         } else {
@@ -255,7 +259,7 @@ pub fn shot_info(baseline: &serde_json::Value) -> serde_json::Value {
         .collect();
     unsafe {
         let scale: f64 = msg_send![window("main"), backingScaleFactor];
-        serde_json::json!({"window_frame":top_left(frame(window("main"))),"backing_scale":scale,"foreign_windows":foreign})
+        serde_json::json!({"window_frame":top_left(frame(window("main"))),"backing_scale":scale,"foreign_windows":foreign,"bounds_for_range_screen":caret_rect()})
     }
 }
 pub fn caret_rect() -> serde_json::Value {
