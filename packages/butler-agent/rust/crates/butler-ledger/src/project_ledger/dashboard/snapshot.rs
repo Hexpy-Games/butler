@@ -241,10 +241,11 @@ fn merge_works(
         else {
             continue;
         };
-        if records
-            .iter()
-            .any(|record| record.kind == "plan" && record.id == plan.id)
+        if let Some(indexed) = records
+            .iter_mut()
+            .find(|record| record.kind == "plan" && record.id == plan.id)
         {
+            indexed.title.clone_from(&plan.objective);
             continue;
         }
         records.push(DashboardLedgerRecord {

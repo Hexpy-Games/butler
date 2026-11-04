@@ -259,15 +259,13 @@ async fn set_order_replaces_the_unfinished_steps() -> Result<(), HarnessError> {
     assert_eq!(refs.len(), 3);
     let path = format!("/sessions/{chat}/canon/queue");
     let post = |body: Value| s.gw.post(&path, body);
-    let stale = post(
-        json!({"op":"set_order","expected_revision":0,"steps":[[refs[0]],[refs[2]],[refs[1]]]}),
-    )
-    .await?;
+    let stale =
+        post(json!({"op":"set_order","run_revision":0,"steps":[[refs[0]],[refs[2]],[refs[1]]]}))
+            .await?;
     assert_eq!(stale.status, 409, "{}", stale.text);
-    let stale_after = post(
-        json!({"op":"after","expected_revision":0,"epic_id":refs[2],"target_epic_id":refs[0]}),
-    )
-    .await?;
+    let stale_after =
+        post(json!({"op":"after","run_revision":0,"epic_id":refs[2],"target_epic_id":refs[0]}))
+            .await?;
     assert_eq!(stale_after.status, 409, "{}", stale_after.text);
     let missing_revision = post(json!({"op":"set_order","steps":[[refs[2]],[refs[1]]]})).await?;
     assert_eq!(missing_revision.status, 400, "{}", missing_revision.text);
@@ -275,16 +273,18 @@ async fn set_order_replaces_the_unfinished_steps() -> Result<(), HarnessError> {
         post(json!({"op":"after","epic_id":"canon:spec/wrong","target_epic_id":refs[0]})).await?;
     assert_eq!(invalid_ref.status, 400, "{}", invalid_ref.text);
     assert!(invalid_ref.text.contains("invalid_arguments"));
-    let moved = post(json!({"op":"set_order","expected_revision":revision,"steps":[[refs[2]],[refs[0]],[refs[1]]]})).await?;
+    let moved = post(
+        json!({"op":"set_order","run_revision":revision,"steps":[[refs[2]],[refs[0]],[refs[1]]]}),
+    )
+    .await?;
     assert_ne!(moved.status, 200, "a running step stays where it is");
     let missing =
-        post(json!({"op":"set_order","expected_revision":revision,"steps":[[refs[0]],[refs[2]]]}))
+        post(json!({"op":"set_order","run_revision":revision,"steps":[[refs[0]],[refs[2]]]}))
             .await?;
     assert_ne!(missing.status, 200, "every unfinished epic is named");
     // The pinned first step may be left out: it keeps its place.
     let view = data(
-        post(json!({"op":"set_order","expected_revision":revision,"steps":[[refs[2],refs[1]]]}))
-            .await?,
+        post(json!({"op":"set_order","run_revision":revision,"steps":[[refs[2],refs[1]]]})).await?,
         200,
     );
     assert_eq!(
@@ -295,7 +295,7 @@ async fn set_order_replaces_the_unfinished_steps() -> Result<(), HarnessError> {
     assert_eq!(steps.as_array().unwrap().len(), 2, "{view}");
     assert_eq!(steps[1]["items"].as_array().unwrap().len(), 2, "{view}");
     let refs = note_refs(&script);
-    data(post(json!({"op":"after","expected_revision":view["graph_revision"],"epic_id":refs[1],"target_epic_id":refs[2]})).await?, 200);
+    data(post(json!({"op":"after","run_revision":view["graph_revision"],"epic_id":refs[1],"target_epic_id":refs[2]})).await?, 200);
     script.release();
     wait_done(&s, &chat, 3).await?;
     s.finish().await?;

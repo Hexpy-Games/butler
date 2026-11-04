@@ -129,7 +129,9 @@ pub(super) fn create_epic(
 ) -> Result<Value> {
     let input: EpicInput = input(value)?;
     if input.expected_revision.is_some() || input.status.is_some() {
-        return Err(Error::Invalid("invalid creation fields"));
+        return Err(Error::Invalid(
+            "epic.create takes no status or expected_revision",
+        ));
     }
     let title_value = input.title.clone().unwrap_or_default();
     title(&title_value)?;

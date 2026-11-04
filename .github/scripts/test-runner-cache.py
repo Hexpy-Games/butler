@@ -107,6 +107,21 @@ class RunnerEviction(unittest.TestCase):
             self.assertTrue(target.is_dir())
             self.assertGreater((target.parent / snapshots.runner_cache.MARKER).stat().st_mtime, 11)
 
+    # test-category: pure-logic
+    def test_prepare_seeds_from_newest_compatible_ref(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            older = self.seed(root, 'refs/heads/older', 10)
+            self.seed(root, 'refs/heads/unmarked', 20)
+            newest = self.seed(root, 'refs/heads/newest', 30)
+            (older / 'compatible-old' / 'ci-local.json').write_text('{}')
+            (newest / 'compatible-old' / 'ci-local.json').write_text('{}')
+            (newest / 'compatible-old' / 'output').write_bytes(b'newest')
+
+            target = snapshots.runner_cache.prepare(root, 'refs/heads/current', 'compatible-old')
+
+            self.assertEqual((target / 'output').read_bytes(), b'newest')
+
     # test-category: security
     def test_legacy_ref_names_recovered_from_remote_only_during_migration(self):
         with tempfile.TemporaryDirectory() as temporary:
