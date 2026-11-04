@@ -10,7 +10,7 @@ if ($Mode -eq 'Export') {
             Copy-Item $record.executable "$artifacts/$($record.target.name).exe"
         }
     }
-    foreach ($binary in @('butler-agent.exe', 'butler-sandbox.exe')) {
+    foreach ($binary in @('butler-agent.exe', 'butler-sandbox.exe', 'e2e-mcp-fixture.exe')) {
         $source = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/$binary"
         if (!(Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing Windows E2E binary: $source" }
         Copy-Item -LiteralPath $source -Destination $artifacts
