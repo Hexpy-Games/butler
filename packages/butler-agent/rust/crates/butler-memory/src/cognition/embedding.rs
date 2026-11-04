@@ -111,6 +111,10 @@ pub struct Tokenization {
 /// performance cores as a batch can use, up to four, and its threads sleep
 /// between requests instead of spinning.
 fn load_session(model_file: &Path) -> Result<Session, EmbeddingFailure> {
+    // ONNX Runtime parses the model path itself and stops at Windows' MAX_PATH;
+    // the canonical form keeps the extended-length prefix exactly when needed.
+    let model_file = butler_platform::secure_fs::canonicalize(model_file)
+        .map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
     let threads = butler_platform::cpu::performance_cores().clamp(1, MAX_INTRA_THREADS);
     let builder =
         Session::builder().map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
@@ -125,7 +129,7 @@ fn load_session(model_file: &Path) -> Result<Session, EmbeddingFailure> {
         .with_inter_threads(1)
         .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
     let session = builder
-        .commit_from_file(model_file)
+        .commit_from_file(&model_file)
         .map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
     if session.inputs().is_empty()
         || session.inputs().iter().any(|input| {
