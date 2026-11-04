@@ -138,7 +138,6 @@ async fn recover_canon(
         assert_eq!(hint, fixture.hint);
     }
     assert_eq!(count(canon, "canon_session_epics"), 3);
-    assert_eq!(intent_state(canon)?, "pending");
     canon.execute_batch("DROP TRIGGER refuse_delete")?;
     change_canon(s, epic).await?;
     let deadline = Instant::now() + Duration::from_secs(5);

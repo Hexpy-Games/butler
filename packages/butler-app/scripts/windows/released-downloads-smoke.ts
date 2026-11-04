@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { bridge, waitFor } from "./installer-smoke-support.ts";
-import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
+import { smartGroupInput, smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
 
 const prompt = "다운로드 폴더 정리해줘";
 const answer = "다운로드 목록을 확인했습니다: 보고서.txt, 사진.png. 이동 전에 승인을 받겠습니다.";
@@ -17,7 +17,7 @@ export function releasedDownloadsReply(body: any, proof: DownloadsProof, calls: 
   const continuesTurn = body.previous_response_id?.startsWith("resp_downloads_") ||
     (Array.isArray(body.input) && body.input.some((item: any) => item.type === "function_call_output" && item.call_id === "call_downloads"));
   if (!text.includes(prompt) && !text.includes(answer) && !continuesTurn) return null;
-  if (body.text?.format) return smokeProviderReply(body, text.includes(prompt) ? prompt : answer, answer, calls);
+  if (body.text?.format || smartGroupInput(body)) return smokeProviderReply(body, text.includes(prompt) ? prompt : answer, answer, calls);
   const result = body.input?.find((item: any) => item.type === "function_call_output" && item.call_id === "call_downloads");
   if (result) {
     const value = JSON.parse(result.output);

@@ -74,7 +74,11 @@ pub(super) async fn execute(
         )
         .await?;
         open::remember(owner, &args, &result);
-        encode_page_data(result)
+        if result["status"] == "dialog_pending" {
+            dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await
+        } else {
+            encode_page_data(result)
+        }
     };
     let status = match &result {
         Ok(value) if value.field("status").ok().flatten() == Some("ok") => "ok",

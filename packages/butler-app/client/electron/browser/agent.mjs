@@ -223,14 +223,16 @@ async function executeFrame(browser, frame) {
   }
   return { status: "refused", reason: "unsupported_op" };
 }
-// Resolves once the new document is parsed (or fully loaded, if that comes
-// first). Images and late scripts finish while the model reads the result;
-// the next observation settles a page that is still loading.
-function parsed(contents, url) {
+/** Resolves once the page is parsed, or once a page dialog pauses parsing until it is answered. */
+function parsed(tab, url) {
+  const contents = tab.view.webContents;
   const loading = contents.loadURL(url);
   const ready = new Promise(resolve => contents.once("dom-ready", resolve));
+  const waiters = tab.dialogWaiters ??= new Set();
+  let paused;
+  const dialog = new Promise(resolve => waiters.add(paused = resolve));
   void loading.catch(() => {});
-  return Promise.race([loading, ready]);
+  return Promise.race([loading, ready, dialog]).finally(() => waiters.delete(paused));
 }
 /** Ops that act in a page or hand it to the user; a tab with none was only read. */
 const INTERACTIONS = new Set(["tab.act", "tab.dialog", "tab.wait", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"]);
@@ -253,10 +255,11 @@ async function openTab(browser, { session, args, callId, signedIn, source, turn 
   connectDebugger(browser,tab);
   if (!await guardUrl(args.url, tab.view.webContents.session, tab.policy)) { browser.close(id); return { status: "refused", reason: "navigation_denied" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
-  try { await tab.identityReady; await tab.debuggerReady; await parsed(tab.view.webContents, args.url); }
+  try { await tab.identityReady; await tab.debuggerReady; await parsed(tab, args.url); }
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);
   browser.publish();
+  if (tab.dialog) return pendingDialog(tab);
   return { status: "ok", tab: id, url: tab.url, title: tab.title, epoch: tab.epoch, profile: tab.profile };
 }

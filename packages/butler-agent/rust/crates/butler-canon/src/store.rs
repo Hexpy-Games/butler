@@ -62,10 +62,13 @@ pub enum Error {
     NotFound,
     #[error("invalid fractional rank")]
     InvalidRank,
-    #[error("expected_revision required: pass the revision from the latest plan run note.")]
+    #[error("run_revision required: pass the Revision from the latest plan run note.")]
     QueueRevisionRequired,
     #[error("invalid operation: {0}")]
     Invalid(&'static str),
+    /// A request body that did not decode; serde's message names the field.
+    #[error("invalid operation: {0}")]
+    Fields(String),
     #[error(transparent)]
     Chain(#[from] crate::work_chain::ChainError),
     #[error(transparent)]

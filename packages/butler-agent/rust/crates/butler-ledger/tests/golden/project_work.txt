@@ -1689,7 +1689,7 @@ Ok(
             DashboardLedgerRecord {
                 id: "guided-plan-<sha:11>",
                 kind: "plan",
-                title: "Guided Work Plan 1",
+                title: "Follow up",
                 status: "active",
                 path: "project-ledger/projects/demo/plans/guided-plan-<sha:11>.md",
                 parent_id: Some(
@@ -1705,7 +1705,7 @@ Ok(
             DashboardLedgerRecord {
                 id: "guided-plan-<sha:2>",
                 kind: "plan",
-                title: "Guided Work Plan 1",
+                title: "Ship the feature safely",
                 status: "active",
                 path: "project-ledger/projects/demo/plans/guided-plan-<sha:2>.md",
                 parent_id: Some(

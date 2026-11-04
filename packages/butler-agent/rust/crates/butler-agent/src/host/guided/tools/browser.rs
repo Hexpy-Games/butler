@@ -147,9 +147,6 @@ async fn execute_client(
     if pixels == look::Pixels::Always || result.get("image").is_some() {
         images::finish(owner, image_class, &mut result).await?;
     }
-    if client.approval_handoff && result["status"] == "dialog_pending" {
-        return encoded(&handoff(&args, "dialog_pending"));
-    }
     if result["status"] == "dialog_pending" {
         return dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await;
     }

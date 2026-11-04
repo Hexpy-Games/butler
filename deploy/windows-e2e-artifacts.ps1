@@ -10,7 +10,7 @@ if ($Mode -eq 'Export') {
             Copy-Item $record.executable "$artifacts/$($record.target.name).exe"
         }
     }
-    foreach ($binary in @('butler-agent.exe', 'butler-sandbox.exe')) {
+    foreach ($binary in @('butler-agent.exe', 'butler-sandbox.exe', 'e2e-mcp-fixture.exe')) {
         $source = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/$binary"
         if (!(Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing Windows E2E binary: $source" }
         Copy-Item -LiteralPath $source -Destination $artifacts
@@ -21,7 +21,9 @@ if ($Mode -eq 'Export') {
     $selection = if ($WithoutE2eFixtures) { @('--skip', '::requires_e2e_fixtures::') } else { @() }
     # Hosted %TEMP% is on the C: OS disk, whose sync stalls (20 s seen) exceed hang waits.
     # Keep sandboxes on the RUNNER_TEMP disk with HOME and BUTLER_DATA.
-    $env:TMP = Join-Path $env:PREVIEW_ROOT 'tmp'
+    # BUTLER_E2E_TMP_ROOT selects a shorter root for fixtures that hold repository checkouts,
+    # so Windows path limits come from the product, not from the runner layout.
+    $env:TMP = if ($env:BUTLER_E2E_TMP_ROOT) { $env:BUTLER_E2E_TMP_ROOT } else { Join-Path $env:PREVIEW_ROOT 'tmp' }
     $env:TEMP = $env:TMP
     New-Item -ItemType Directory -Force $env:TMP | Out-Null
     $fixtures = Join-Path $env:TMP 'butler-e2e'

@@ -29,7 +29,7 @@ pub(super) async fn execute(
     let Some(session) = owner.binding.app_session_id.as_deref() else {
         return super::dispatch::encoded(&json!({"ok":false,"error":{"code":"no_app_chat"}}));
     };
-    let result = request(
+    let mut result = request(
         owner,
         if queue {
             "queue"
@@ -43,6 +43,11 @@ pub(super) async fn execute(
         "apply":writing && decision==AccessDecision::Allow}),
     )
     .await;
+    // A queue change answers with the run as it now is; say plainly that it is done.
+    if queue && result.is_object() && result.get("ok").is_none() {
+        result["ok"] = json!(true);
+        result["message"] = json!(QUEUE_SET);
+    }
     if writing && result["ok"] == true {
         let entry=(result["state"]=="draft").then(||json!({"ask_id":result["ask_id"],"kind":"canon_proposal",
             "title":call.arguments.get("summary"),"created_at":chrono::Utc::now().to_rfc3339(),"resolved_at":null}));
@@ -73,3 +78,5 @@ pub(super) async fn request(owner: &GuidedTools, action: &str, mut input: Value)
             |error| json!({"ok":false,"error":{"code":error.code(),"message":error.message()}}),
         )
 }
+
+const QUEUE_SET: &str = "The run below is current. Its steps start on their own, each in its own Turn after this reply; call canon_queue again only for a change the user asks for.";

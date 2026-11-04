@@ -58,12 +58,19 @@ async function captureCards(page: Page, theme: string) {
     // React-generated aria ids vary per mount; all content, slots and hierarchy must match.
     const structure = (node: Element): string => {
       const clone = node.cloneNode(true) as Element;
+      clone.querySelector('[data-test-class="canon-epic-status"]')?.remove();
       for (const child of [clone, ...clone.querySelectorAll("*")]) for (const attr of [...child.attributes]) {
         if (attr.name === "id" || attr.name.startsWith("aria-describedby")) child.removeAttribute(attr.name);
       }
       return clone.outerHTML;
     };
-    assert.equal(await cards.nth(i).innerText(), await board.innerText());
+    assert.deepEqual([await cards.nth(i).locator('[data-test-class="canon-epic-status"]').count(), await board.locator('[data-test-class="canon-epic-status"]').count()], [1, Number(epicCards.find(epic => epic.id === id)!.canon_status === "cancelled")]);
+    const text = (node: HTMLElement): string => {
+      const clone = node.cloneNode(true) as HTMLElement;
+      clone.querySelector('[data-test-class="canon-epic-status"]')?.remove();
+      return clone.textContent ?? "";
+    };
+    assert.equal(await cards.nth(i).evaluate(text), await board.evaluate(text));
     assert.equal(await cards.nth(i).evaluate(structure), await board.evaluate(structure));
   }
   const first = cards.first(), board = page.locator('#board-reference [data-kanban-item="docs"]');

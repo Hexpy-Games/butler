@@ -17,7 +17,7 @@ export function ChatEpicCards({ projectId, ids, render }: { projectId: string; i
     {ids.map(id => {
       if (snapshot.state === "loading") return <Card key={id} padding="md"><Stack gap="sm"><Skeleton height="title" /><Skeleton lines={2} /></Stack></Card>;
       const epic = epics?.get(id);
-      return epic ? <EpicCard key={id} epic={epic} selected={false} onSelect={epicId => openCanonEpic(projectId, epicId)} />
+      return epic ? <EpicCard key={id} epic={epic} showStatus selected={false} onSelect={epicId => openCanonEpic(projectId, epicId)} />
         : <Card key={id} padding="md"><Typo.Caption tone="secondary">{appCopy.canon.deletedTask}</Typo.Caption></Card>;
     })}
   </Grid>;
