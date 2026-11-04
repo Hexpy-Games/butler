@@ -148,7 +148,8 @@ fn runtime_owned(path: &Path, data: &Path) -> bool {
     let Some(first) = relative.components().next() else {
         return false;
     };
-    butler_platform::data_paths::OWNED_PATHS
-        .iter()
-        .any(|owned| Path::new(owned).components().next() == Some(first))
+    relative.starts_with(butler_platform::data_paths::LOGS)
+        || butler_platform::data_paths::OWNED_PATHS
+            .iter()
+            .any(|owned| Path::new(owned).components().next() == Some(first))
 }
