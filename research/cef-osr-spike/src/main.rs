@@ -230,7 +230,7 @@ fn initialize(
     );
     let s = rt.shared.clone();
     let mut client = cef_gate::ClientBuilder::new(
-        cef_gate::Paint::new(s.clone(), tx.clone()),
+        cef_gate::Paint::new(s.clone(), tx.clone(), flag("--zero-copy")),
         cef_gate::Life::new(s.clone(), tx.clone()),
         cef_gate::Display::new(s.clone(), tx.clone()),
         dialogs::Menu::new(s, tx),

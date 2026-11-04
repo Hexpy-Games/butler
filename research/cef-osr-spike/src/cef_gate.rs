@@ -42,7 +42,7 @@ cef::wrap_life_span_handler! {
     }
 }
 cef::wrap_render_handler! {
-    pub struct Paint { shared:SharedRef, tx:async_channel::Sender<()> }
+    pub struct Paint { shared:SharedRef, tx:async_channel::Sender<()>, zero_copy:bool }
     impl RenderHandler {
         fn view_rect(&self,_b:Option<&mut Browser>,rect:Option<&mut Rect>){
             if let Some(r)=rect {let s=self.shared.borrow();r.width=f32::from(s.bounds.size.width).max(1.) as i32;r.height=f32::from(s.bounds.size.height).max(1.) as i32;}
@@ -60,6 +60,14 @@ cef::wrap_render_handler! {
         }
         fn on_accelerated_paint(&self,_b:Option<&mut Browser>,kind:PaintElementType,_dirty:Option<&[Rect]>,info:Option<&AcceleratedPaintInfo>){
             let start=Instant::now();
+            // Measurement only: CEF hands this surface back to Chromium's capture pool when this callback
+            // returns (ScopedVideoFrameDone in libcef/browser/osr/video_consumer_osr.cc), and the pool reuses it
+            // for a later frame while gpui may still show it. Shipping this needs CEF to defer Done() until
+            // gpui's GPU work on the surface completes.
+            if self.zero_copy {
+                if let Some(frame)=info.and_then(crate::unsafe_boundary::wrap_accelerated){accept(&self.shared,&self.tx,frame,kind,start,"accelerated-zero-copy");}
+                return;
+            }
             let frame={let mut s=self.shared.borrow_mut();let s=&mut *s;let gpu=s.gpu.get_or_insert_with(crate::unsafe_boundary::GpuCopy::new);let pool=if kind==PaintElementType::POPUP{&mut s.popup_pool}else{&mut s.view_pool};info.and_then(|i|crate::unsafe_boundary::copy_accelerated(pool,gpu,i))};
             if let Some(frame)=frame{
                 accept(&self.shared,&self.tx,frame,kind,start,"accelerated-gpu-copy");
