@@ -230,6 +230,7 @@ fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<Strin
         .or_else(|| (call.name == "list_files").then(|| ".".into()))
 }
 
+/// The catalog tool a `tool_call` bridge call runs, else the call's own name.
 fn operation_tool_name(call: &super::contracts::ModelRoundToolCall) -> &str {
     if call.name == "tool_call"
         && let Some(name) = call
@@ -237,28 +238,6 @@ fn operation_tool_name(call: &super::contracts::ModelRoundToolCall) -> &str {
             .get("id")
             .and_then(Value::as_str)
             .and_then(|id| id.strip_prefix("native:"))
-        && matches!(
-            name,
-            "browser_open"
-                | "browser_observe"
-                | "browser_read"
-                | "browser_act"
-                | "browser_tabs"
-                | "browser_selection"
-                | "browser_devtools"
-                | "browser_screenshot"
-                | "browser_close"
-                | "browser_wait_for_user"
-                | "browser_sign_in"
-                | "browser_pay_fill"
-                | "browser_autofill_fill"
-                | "browser_history_search"
-                | "library_search"
-                | "library_organize"
-                | "document_create"
-                | "document_read"
-                | "document_edit"
-        )
     {
         name
     } else {
