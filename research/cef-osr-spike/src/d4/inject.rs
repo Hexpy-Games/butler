@@ -54,6 +54,13 @@ unsafe extern "C" {
     fn TISSelectInputSource(source: CFTypeRef) -> i32;
     fn TISGetInputSourceProperty(source: CFTypeRef, property: CFStringRef) -> CFTypeRef;
 }
+#[link(name = "CoreGraphics", kind = "framework")]
+unsafe extern "C" {
+    fn CGEventCreateKeyboardEvent(source: CFTypeRef, keycode: u16, down: bool) -> CFTypeRef;
+    fn CGEventSetFlags(event: CFTypeRef, flags: u64);
+    fn CGEventSetTimestamp(event: CFTypeRef, timestamp: u64);
+    fn CGEventKeyboardSetUnicodeString(event: CFTypeRef, length: usize, text: *const u16);
+}
 pub struct InputSource(CFTypeRef);
 impl InputSource {
     pub fn remember() -> Self {
@@ -153,15 +160,19 @@ pub fn ns(text: &str) -> *mut Object {
         msg_send![class!(NSString), stringWithBytes:text.as_ptr() length:text.len() encoding:4usize]
     }
 }
-pub fn key(keycode: u16, chars: &str, ignoring: &str, modifiers: u64) {
+pub fn key(keycode: u16, chars: &str, _ignoring: &str, modifiers: u64) {
     unsafe {
-        let number: isize = msg_send![key_window(), windowNumber];
-        for kind in [10usize, 11] {
-            let event: *mut Object = msg_send![class!(NSEvent), keyEventWithType:kind
-                location:Point::default() modifierFlags:modifiers timestamp:0f64 windowNumber:number
-                context:std::ptr::null_mut::<c_void>() characters:ns(chars)
-                charactersIgnoringModifiers:ns(ignoring) isARepeat:false keyCode:keycode];
+        let process: *mut Object = msg_send![class!(NSProcessInfo), processInfo];
+        let uptime: f64 = msg_send![process, systemUptime];
+        let text: Vec<u16> = chars.encode_utf16().collect();
+        for down in [true, false] {
+            let cg = CGEventCreateKeyboardEvent(std::ptr::null(), keycode, down);
+            CGEventSetFlags(cg, modifiers);
+            CGEventSetTimestamp(cg, (uptime * 1_000_000_000.) as u64);
+            CGEventKeyboardSetUnicodeString(cg, text.len(), text.as_ptr());
+            let event: *mut Object = msg_send![class!(NSEvent), eventWithCGEvent:cg];
             let _: () = msg_send![app(), postEvent:event atStart:false];
+            CFRelease(cg);
         }
     }
 }
