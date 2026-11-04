@@ -243,6 +243,23 @@ try {
     await phone.getByRole("button", { name: "Allow once", exact: true }).click(); await delivered();
     assert.equal(await app.main(`${contents(agent.id)}.executeJavaScript("window.clicks")`), 1, "approval resumes without replay");
   } finally { await browser.close(); }
+  // A page dialog on Butler's tab can always be answered in the pane; the answer reaches the next tool result.
+  for (const [type, label] of [["alert", "확인"], ["confirm", "취소"]] as const) {
+    await app.main(`(()=>{void ${contents(agent.id)}.executeJavaScript(${JSON.stringify(`document.querySelector('#${type}').click()`)})})()`);
+    await waitBrowser(async () => (await state()).tabs.find(t => t.id === agent.id)?.dialog?.type === type, `page ${type} on Butler's tab`);
+    for (const theme of ["light", "dark"]) {
+      await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme }) });
+      await app.main(`${app.win}.setContentSize(1440,900)`); await app.page.reload();
+      await app.click("브라우저"); await app.call("activate", { id: agent.id });
+      await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-page-dialog"] [data-slot="dialog-footer"] button')));
+      await app.shot(`ko-${theme}-1440-agent-${type}-pane`);
+    }
+    await app.click(label);
+    await waitBrowser(async () => !(await state()).tabs.find(t => t.id === agent.id)?.dialog, `owner answered ${type} in the pane`);
+  }
+  stub.set([describeBrowser, () => bridgeBrowser("browser_tabs", {})]); await send("Read the owner's dialog answers"); await delivered();
+  const answered = JSON.stringify((stub.results.at(-1) as unknown[]).at(-1));
+  for (const fact of ["Page alert", "Continue?", "dialog_accepted", "dialog_cancelled"]) assert.ok(answered.includes(fact), `${fact}: ${answered}`);
   for (const type of ["Prompt", "Beforeunload"]) {
     // Page-originated dialogs also need authority while the tab is hidden.
     const click = `document.querySelector('#${type.toLowerCase()}').click()`;
@@ -261,6 +278,17 @@ try {
     if (type === "Prompt") assert.equal(await app.main(`${contents(agent.id)}.executeJavaScript("document.querySelector('#result').textContent")`), "Guest");
   }
   assert.equal((await state()).tabs.some(t=>t.id===agent.id), false, "approved beforeunload closes the tab");
+  stub.set([
+    () => ({ name: "write_file", arguments: { path: "s4/notice.html", content: "<title>Notice</title><script>alert('Removed notice · 삭제된 공지')</script><h1>Notice</h1>" } }),
+    () => ({ name: "output_publish", arguments: { path: "s4", title: "S4 fixture" } }),
+  ]);
+  await send("Add a notice page"); await delivered();
+  const noticeView = await app.gateway.api<{ url: string }>(`/outputs/${output.id}/view`);
+  stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: new URL("notice.html", noticeView.url).href })]);
+  await send("Open a page that alerts while loading"); await delivered();
+  const opened = JSON.stringify((stub.results.at(-1) as unknown[]).at(-1));
+  assert.ok(opened.includes("Removed notice") && opened.includes('\\"status\\":\\"ok\\"'), opened);
+  assert.equal((await state()).tabs.some(t => t.agent && t.dialog), false, "the open call acknowledged the page alert");
   }
   writeFileSync(join(evidence, `acceptance-${selected ?? "all"}.json`), JSON.stringify({ status: "passed", elapsedMs: Date.now() - started, facts, toolResults: stub.results }, null, 2));
 } catch (error) {

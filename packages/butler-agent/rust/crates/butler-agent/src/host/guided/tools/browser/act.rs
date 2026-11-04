@@ -44,17 +44,17 @@ async fn run(
         invocation.cancellation,
     )
     .await?;
-    if client.approval_handoff && prepared["status"] != "ok" {
-        return executor_refusal(&args, prepared);
-    }
-    if prepared["authority_pending"] == true {
-        return finish_batch(&args, prepared);
-    }
     if prepared["status"] == "dialog_pending" {
         return dialog::finish(
             owner, invocation, call, occurrence, client, &args, &prepared,
         )
         .await;
+    }
+    if client.approval_handoff && prepared["status"] != "ok" {
+        return executor_refusal(&args, prepared);
+    }
+    if prepared["authority_pending"] == true {
+        return finish_batch(&args, prepared);
     }
     if prepared["status"] != "ok" {
         authority::refuse_resume(owner, call, occurrence).await?;
@@ -160,9 +160,6 @@ async fn apply(
         },
     )
     .await?;
-    if client.approval_handoff && result["status"] == "dialog_pending" {
-        return encoded(&handoff(args, "dialog_pending"));
-    }
     if result["status"] == "dialog_pending" {
         settle(owner, approval, "unknown").await?;
         return dialog::finish(owner, invocation, call, occurrence, client, args, &result).await;
@@ -178,7 +175,6 @@ async fn apply(
 
 fn executor_refusal(args: &Value, prepared: Value) -> Result<JsonDocument, ToolExecutionError> {
     let needs_user = prepared["status"] == "needs_approval"
-        || prepared["status"] == "dialog_pending"
         || matches!(
             prepared["reason"].as_str(),
             Some("secure_field" | "user_required")

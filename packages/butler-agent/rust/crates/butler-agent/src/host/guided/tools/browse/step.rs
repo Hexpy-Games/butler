@@ -94,6 +94,7 @@ pub(super) async fn open(
         json!({"url":url}),
     )
     .await?;
+    run.note_dialog(&result);
     if result["status"] == "ok" {
         run.tab = result["tab"].clone();
         run.opened.push(run.tab.clone());
@@ -139,6 +140,7 @@ pub(super) async fn execute(
     }
     let args = json!({"tab":run.tab,"observation":run.observation,"steps":steps,"observe":false});
     let result = browser_call(owner, invocation, occurrence, "browser_act", args).await?;
+    run.note_dialog(&result);
     if result["status"] == "needs_approval" {
         return Ok(result);
     }

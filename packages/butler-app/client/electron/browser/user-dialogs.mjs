@@ -98,7 +98,6 @@ export function wireUserDialogs(browser, tab) {
 export function answerUserDialog(browser, input) {
   const tab = browser.tabs.get(input.id);
   if (!tab?.dialog || tab.dialog.id !== input.dialog || tab.dialog.epoch !== tab.epoch) throw new Error("stale_dialog");
-  if ((tab.agent || tab.driven) && tab.holder !== "user") throw new Error("owner_approval_required");
   if (input.accept && tab.dialog.type === "print" && !tab.dialog.printers?.some(printer => printer.name === input.printer)) throw new Error("invalid_printer");
   if (tab.dialog.pageBeforeUnload) return resolveDialog(browser, tab, input);
   if (input.accept && tab.dialog.type === "beforeunload") {
