@@ -220,9 +220,7 @@ export function Tooltip({
       : null;
 
   if (isValidElement(children)) {
-    const element = children as ReactElement<TooltipTriggerProps> & {
-      ref?: Ref<HTMLElement>;
-    };
+    const element = children as ReactElement<TooltipTriggerProps>;
     const existingDescription = element.props["aria-describedby"];
     const description =
       open && label
@@ -230,7 +228,7 @@ export function Tooltip({
         : existingDescription;
     const describedChild = cloneElement(element, {
       "aria-describedby": description,
-      ref: composeRefs(element.ref ?? element.props.ref, triggerRef),
+      ref: composeRefs(element.props.ref, triggerRef),
       onBlur: composeEventHandlers(element.props.onBlur, hide),
       onFocus: composeEventHandlers(element.props.onFocus, showForKeyboardFocus),
       onPointerEnter: composeEventHandlers(
