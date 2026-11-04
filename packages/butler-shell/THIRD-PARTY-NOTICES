@@ -6,8 +6,8 @@ following third-party works.
 
 1. gpui-ce (Butler fork)
 ------------------------
-Source: https://github.com/Hexpy-Games/gpui-ce, tag butler-lens-5
-(rev 865953d6fc33589ed8f91ccfa567914be6018d68), a fork of
+Source: https://github.com/Hexpy-Games/gpui-ce, tag butler-lens-6
+(rev e5cdb0cbd84ef109c08f4a594555fd733ba7b16a), a fork of
 https://github.com/gpui-ce/gpui-ce, which derives from GPUI by Zed Industries.
 License: Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0;
 the text is LICENSE.md in that repository). Its NOTICE file reads:
@@ -69,6 +69,8 @@ the text is LICENSE.md in that repository). Its NOTICE file reads:
     - EditableText caret: edits reveal the caret's whole line, and the
       caret is hidden while text is selected (gpui_elements editable_text
       element and state).
+    - EditableText layout: measuring at several widths in one frame keeps
+      the layout of the final width (gpui_elements editable_text element).
 
     The lens model was written with reference to these MIT-licensed
     projects; no code was copied from them:
