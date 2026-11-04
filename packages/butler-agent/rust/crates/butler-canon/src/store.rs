@@ -62,7 +62,7 @@ pub enum Error {
     NotFound,
     #[error("invalid fractional rank")]
     InvalidRank,
-    #[error("expected_revision required: pass the revision from the latest plan run note.")]
+    #[error("run_revision required: pass the Revision from the latest plan run note.")]
     QueueRevisionRequired,
     #[error("invalid operation: {0}")]
     Invalid(&'static str),

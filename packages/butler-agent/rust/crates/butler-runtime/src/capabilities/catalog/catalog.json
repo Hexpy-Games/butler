@@ -7909,7 +7909,7 @@
       "definition": {
         "type": "function",
         "name": "canon_queue",
-        "description": "Runs canon epics one after another in this conversation, each step in its own Butler Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. Changes to a run pass expected_revision from the plan run note, which always shows the current queue; a stale revision is refused. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
+        "description": "Runs canon epics one after another in this conversation, each step in its own Butler Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. When a plan run note is shown, pass its Revision as run_revision; the note always shows the current queue, and a stale run_revision is refused. With no note there is no run yet: leave run_revision out. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -7946,8 +7946,9 @@
               },
               "description": "Unfinished steps in order, each a list of epic ids or refs."
             },
-            "expected_revision": {
-              "type": "integer"
+            "run_revision": {
+              "type": "integer",
+              "description": "The Revision of this conversation's plan run note, never a plan's or epic's revision. Leave it out when no plan run note is shown."
             }
           },
           "required": [
@@ -14512,7 +14513,7 @@
     "canon_queue": {
       "type": "function",
       "name": "canon_queue",
-      "description": "Runs canon epics one after another in this conversation, each step in its own Butler Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. Changes to a run pass expected_revision from the plan run note, which always shows the current queue; a stale revision is refused. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
+      "description": "Runs canon epics one after another in this conversation, each step in its own Butler Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. When a plan run note is shown, pass its Revision as run_revision; the note always shows the current queue, and a stale run_revision is refused. With no note there is no run yet: leave run_revision out. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -14549,8 +14550,9 @@
             },
             "description": "Unfinished steps in order, each a list of epic ids or refs."
           },
-          "expected_revision": {
-            "type": "integer"
+          "run_revision": {
+            "type": "integer",
+            "description": "The Revision of this conversation's plan run note, never a plan's or epic's revision. Leave it out when no plan run note is shown."
           }
         },
         "required": [

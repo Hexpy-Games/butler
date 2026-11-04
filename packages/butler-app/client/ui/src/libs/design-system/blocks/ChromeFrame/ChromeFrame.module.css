@@ -51,9 +51,12 @@
   border-left: 0;
 }
 
+/* Above the sidebar peek card and the compact drawer (--z-drawer): their
+   titlebars keep the toggle's room free, so the toggle must stay on top of
+   them to be seen and clicked. It follows them in the DOM, so it wins the tie. */
 .floatingLayer {
   position: fixed;
-  z-index: 40;
+  z-index: var(--z-drawer);
   inset: 0;
   pointer-events: none;
 }
