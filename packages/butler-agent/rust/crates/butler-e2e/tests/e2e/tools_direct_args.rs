@@ -264,3 +264,35 @@ async fn bridged_tool_rows_name_the_catalog_tool() -> Result<(), HarnessError> {
     s.finish().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn searched_tools_run_the_same_through_tool_call() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let args = json!({"op":"remove","epic_id":"ep_missing"});
+    let (server, s) = local(
+        "BRIDGE-ROUTE",
+        vec![
+            call(
+                "search",
+                "tool_search",
+                &json!({"query":"queue canon epics"}),
+            ),
+            call(
+                "bridged",
+                "tool_call",
+                &json!({"id":"native:canon_queue","arguments":args}),
+            ),
+            call("direct", "canon_queue", &args),
+            json!({"role":"assistant","content":"Done."}),
+        ],
+    )
+    .await?;
+    s.turn("general", "Take that epic out of the run.").await?;
+    let results = tool_results(&server);
+    assert_eq!(results.len(), 3, "{results:?}");
+    let direct = &results[2]["error"]["code"];
+    assert!(direct.is_string(), "{results:?}");
+    assert_eq!(&results[1]["error"]["code"], direct, "{results:?}");
+    s.finish().await?;
+    Ok(())
+}

@@ -391,6 +391,30 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
                     has_provider_tool(&selection.provider_tools, "browse"),
                     browsing_agent
                 );
+                assert_eq!(
+                    selection
+                        .authorized_names
+                        .iter()
+                        .any(|tool| tool == "browse"),
+                    browsing_agent
+                );
+                let mut worker = ordinary.clone();
+                worker.context["executionPolicy"]["role"] = "worker".into();
+                let worker_selection = select_phase(GuidedPhaseInput {
+                    browsing_agent,
+                    turn: &worker,
+                    catalog,
+                    phase_surface_flag: flag,
+                    operation_replay_flag: "off",
+                    default_workspace: "/tmp",
+                })
+                .unwrap();
+                assert!(
+                    !worker_selection
+                        .authorized_names
+                        .iter()
+                        .any(|tool| tool == "browse")
+                );
                 for name in [
                     "browser_open",
                     "browser_observe",
