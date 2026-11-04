@@ -8,6 +8,11 @@ use core_video::{
 };
 use foreign_types::ForeignTypeRef;
 
+#[link(name = "IOSurface", kind = "framework")]
+unsafe extern "C" {
+    fn IOSurfaceGetID(surface: *const std::ffi::c_void) -> u32;
+}
+
 pub fn copy_paint(
     pool: &mut crate::frame_pool::FramePool,
     buffer: *const u8,
@@ -101,8 +106,8 @@ impl GpuCopy {
         self.cache.flush(0);
     }
 }
-/// Wraps the IOSurface CEF lends for the duration of on_accelerated_paint.
-pub fn wrap_accelerated(info: &cef::AcceleratedPaintInfo) -> Option<CVPixelBuffer> {
+/// Wraps the IOSurface CEF lends for the duration of on_accelerated_paint, with the IOSurface's ID.
+pub fn wrap_accelerated(info: &cef::AcceleratedPaintInfo) -> Option<(CVPixelBuffer, u32)> {
     if info.shared_texture_io_surface.is_null() {
         return None;
     }
@@ -123,14 +128,16 @@ pub fn wrap_accelerated(info: &cef::AcceleratedPaintInfo) -> Option<CVPixelBuffe
     // SAFETY: success above transfers one non-null owned CoreVideo reference.
     let source: CVPixelBuffer = unsafe { TCFType::wrap_under_create_rule(raw) };
     assert_eq!(source.get_pixel_format(), kCVPixelFormatType_32BGRA);
-    Some(source)
+    // SAFETY: CEF lends a live IOSurfaceRef for the duration of this callback.
+    let id = unsafe { IOSurfaceGetID(info.shared_texture_io_surface.cast_const().cast()) };
+    Some((source, id))
 }
 pub fn copy_accelerated(
     pool: &mut crate::frame_pool::FramePool,
     gpu: &GpuCopy,
     info: &cef::AcceleratedPaintInfo,
 ) -> Option<CVPixelBuffer> {
-    let source = wrap_accelerated(info)?;
+    let (source, _) = wrap_accelerated(info)?;
     let frame = pool.acquire(source.get_width(), source.get_height());
     gpu.copy(&source, &frame);
     Some(frame)

@@ -65,7 +65,11 @@ cef::wrap_render_handler! {
             // for a later frame while gpui may still show it. Shipping this needs CEF to defer Done() until
             // gpui's GPU work on the surface completes.
             if self.zero_copy {
-                if let Some(frame)=info.and_then(crate::unsafe_boundary::wrap_accelerated){accept(&self.shared,&self.tx,frame,kind,start,"accelerated-zero-copy");}
+                if let Some((frame,surface))=info.and_then(crate::unsafe_boundary::wrap_accelerated){
+                    if kind==PaintElementType::VIEW{crate::begin_frame::received(&mut self.shared.borrow_mut(),&frame,surface);}
+                    accept(&self.shared,&self.tx,frame,kind,start,"accelerated-zero-copy");
+                    self.shared.borrow().want_frame();
+                }
                 return;
             }
             let frame={let mut s=self.shared.borrow_mut();let s=&mut *s;let gpu=s.gpu.get_or_insert_with(crate::unsafe_boundary::GpuCopy::new);let pool=if kind==PaintElementType::POPUP{&mut s.popup_pool}else{&mut s.view_pool};info.and_then(|i|crate::unsafe_boundary::copy_accelerated(pool,gpu,i))};
@@ -128,6 +132,9 @@ cef::wrap_display_handler! {
         fn on_cursor_change(&self,_b:Option<&mut Browser>,_cursor:*mut u8,kind:CursorType,_custom:Option<&CursorInfo>)->i32{
             self.shared.borrow_mut().cursor=if kind==CursorType::HAND{gpui::CursorStyle::PointingHand}else if kind==CursorType::IBEAM{gpui::CursorStyle::IBeam}else{gpui::CursorStyle::Arrow};
             let _=self.tx.try_send(());log("cursor",json!(format!("{kind:?}")));1
+        }
+        fn on_console_message(&self,_b:Option<&mut Browser>,_level:LogSeverity,message:Option<&CefString>,_source:Option<&CefString>,_line:i32)->i32{
+            log("console",json!(message.map(ToString::to_string)));0
         }
     }
 }

@@ -1,3 +1,4 @@
+mod begin_frame;
 mod cdp;
 mod cef_gate;
 mod dialogs;
@@ -95,6 +96,16 @@ fn start(args: cef::args::Args, cx: &mut App) {
         scale: 2.,
         ..Default::default()
     }));
+    let pacer = begin_frame::mode().map(|_| async_channel::unbounded());
+    if let Some((tx, _)) = &pacer {
+        shared.borrow_mut().pacer = Some(tx.clone());
+        let tx = tx.clone();
+        assert!(gpui_apple::surface_observer::install_released(
+            std::sync::Arc::new(move || {
+                let _ = tx.try_send(());
+            })
+        ));
+    }
     let (start_tx, start_rx) = async_channel::bounded(1);
     let rt = state::Runtime {
         shared: shared.clone(),
@@ -176,6 +187,9 @@ fn start(args: cef::args::Args, cx: &mut App) {
     }
     unsafe_boundary::observe_visibility(pump_tx.clone());
     pump::run(pump_rx, rt.clone(), cx);
+    if let Some((_, rx)) = pacer {
+        begin_frame::run(rt.clone(), rx, cx);
+    }
     let tabs: usize = option("--tabs").map(|v| v.parse().unwrap()).unwrap_or(1);
     if tabs > 1 {
         let r = rt.clone();
@@ -187,7 +201,7 @@ fn start(args: cef::args::Args, cx: &mut App) {
                     .await;
             }
             for index in 1..tabs {
-                open_background_tab(&r, index).await;
+                open_background_tab(&r, index, cx).await;
             }
         })
         .detach();
@@ -248,11 +262,16 @@ fn initialize(
     let s = rt.shared.clone();
     let mut client = client(&s, &tx);
     *rt.browser.borrow_mut() = create_browser(&mut client);
+    rt.shared.borrow().want_frame();
     assert!(rt.browser.borrow().is_some());
 }
 fn client(shared: &state::SharedRef, tx: &async_channel::Sender<()>) -> cef::Client {
     cef_gate::ClientBuilder::new(
-        cef_gate::Paint::new(shared.clone(), tx.clone(), flag("--zero-copy")),
+        cef_gate::Paint::new(
+            shared.clone(),
+            tx.clone(),
+            flag("--zero-copy") || begin_frame::mode().is_some(),
+        ),
         cef_gate::Life::new(shared.clone(), tx.clone()),
         cef_gate::Display::new(shared.clone(), tx.clone()),
         dialogs::Menu::new(shared.clone(), tx.clone()),
@@ -269,6 +288,7 @@ fn create_browser(client: &mut cef::Client) -> Option<cef::Browser> {
     cef::browser_host_create_browser_sync(
         Some(&cef::WindowInfo {
             windowless_rendering_enabled: 1,
+            external_begin_frame_enabled: i32::from(begin_frame::mode().is_some()),
             shared_texture_enabled: i32::from(!flag("--software")),
             ..Default::default()
         }),
@@ -285,7 +305,7 @@ fn create_browser(client: &mut cef::Client) -> Option<cef::Browser> {
 }
 /// Opens one background tab at the visible tab's size: it paints once, then is hidden
 /// like a tab the user switched away from.
-async fn open_background_tab(rt: &state::Runtime, index: usize) {
+async fn open_background_tab(rt: &state::Runtime, index: usize, cx: &AsyncApp) {
     let (bounds, scale) = {
         let s = rt.shared.borrow();
         (s.bounds, s.scale)
@@ -298,7 +318,15 @@ async fn open_background_tab(rt: &state::Runtime, index: usize) {
     let (tx, rx) = async_channel::bounded(1);
     let browser = create_browser(&mut client(&shared, &tx)).expect("Background tab");
     while shared.borrow().frames == 0 {
-        assert!(rx.recv().await.is_ok());
+        if begin_frame::mode().is_some() {
+            use cef::ImplBrowser;
+            browser.host().unwrap().send_external_begin_frame();
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(16))
+                .await;
+        } else {
+            assert!(rx.recv().await.is_ok());
+        }
     }
     use cef::ImplBrowser;
     browser.host().unwrap().was_hidden(1);

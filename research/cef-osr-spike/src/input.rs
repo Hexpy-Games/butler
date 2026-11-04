@@ -180,7 +180,7 @@ impl Render for Page {
             .when(picking&&!picked.is_null(),|d|d.on_drag(drag,|data,_,_,cx|{log("gpui_drag_start",data.0.clone());cx.new(|_|data.clone())}))
             .child(canvas(move |b,w,_|{
                 let mut s=rt.shared.borrow_mut();let changed=s.bounds!=b || s.scale!=w.scale_factor();s.bounds=b;s.scale=w.scale_factor();drop(s);
-                if changed {if let Some(h)=rt.host(){h.notify_screen_info_changed();h.was_resized();}log("page_layout",json!({"x":f32::from(b.origin.x),"y":f32::from(b.origin.y),"w":f32::from(b.size.width),"h":f32::from(b.size.height),"scale":w.scale_factor()}));}b
+                if changed {if let Some(h)=rt.host(){h.notify_screen_info_changed();h.was_resized();rt.shared.borrow().want_frame();}log("page_layout",json!({"x":f32::from(b.origin.x),"y":f32::from(b.origin.y),"w":f32::from(b.size.width),"h":f32::from(b.size.height),"scale":w.scale_factor()}));}b
             },move |_,b,w,cx|{
                 w.handle_input(&focus,ElementInputHandler::new(b,entity.clone()),cx);
                 let s=paint_rt.shared.borrow();

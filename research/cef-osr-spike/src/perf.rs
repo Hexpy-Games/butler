@@ -27,6 +27,14 @@ pub async fn run(h: Handle, rt: Runtime, cx: &mut AsyncApp) {
             let mut s = rt.shared.borrow_mut();
             s.copies_ms.clear();
             s.latencies_ms.clear();
+            s.begin_frame_to_frame_ms.clear();
+            (
+                s.begin_frames,
+                s.late_frames,
+                s.unsolicited_frames,
+                s.overwritten_in_flight,
+                s.resurrected,
+            ) = (0, 0, 0, 0, 0);
             (s.frames, s.pumps)
         };
         let presented = crate::presentation::snapshot()["presented"]
@@ -70,7 +78,7 @@ pub async fn run(h: Handle, rt: Runtime, cx: &mut AsyncApp) {
                         > before["videoFrames"].as_u64().unwrap());
         log(
             "metric_end",
-            json!({"mode":mode,"software":crate::flag("--software"),"large":crate::flag("--large"),"elapsed_s":elapsed,"callback_frames":count,"callback_fps":count as f64/elapsed,"presented_frames":shown,"presented_fps":shown as f64/elapsed,"unpresented_net":count as i64-shown as i64,"pump_calls":pumps,"pump_hz":pumps as f64/elapsed,"copy_ms":copy,"input_to_callback_ms":latency,"input_to_present_ms":display_latency,"page":page,"before":before,"raf_fps":page["rafCount"].as_f64().unwrap_or(0.)/page["rafElapsed"].as_f64().unwrap_or(elapsed),"correct":correct,"presentation":presentation,"view_pool":rt.shared.borrow().view_pool.snapshot(),"popup_pool":rt.shared.borrow().popup_pool.snapshot()}),
+            json!({"mode":mode,"software":crate::flag("--software"),"large":crate::flag("--large"),"elapsed_s":elapsed,"callback_frames":count,"callback_fps":count as f64/elapsed,"presented_frames":shown,"presented_fps":shown as f64/elapsed,"unpresented_net":count as i64-shown as i64,"pump_calls":pumps,"pump_hz":pumps as f64/elapsed,"copy_ms":copy,"input_to_callback_ms":latency,"input_to_present_ms":display_latency,"page":page,"before":before,"raf_fps":page["rafCount"].as_f64().unwrap_or(0.)/page["rafElapsed"].as_f64().unwrap_or(elapsed),"correct":correct,"presentation":presentation,"pacing":crate::begin_frame::snapshot(&mut rt.shared.borrow_mut()),"view_pool":rt.shared.borrow().view_pool.snapshot(),"popup_pool":rt.shared.borrow().popup_pool.snapshot()}),
         );
     }
     rt.close();

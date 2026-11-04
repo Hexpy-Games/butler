@@ -35,11 +35,16 @@ pub fn run(rx: async_channel::Receiver<Message>, rt: Runtime, cx: &mut App) {
             };
             match message {
                 Some(Message::Schedule(at)) => {
+                    if crate::begin_frame::mode() == Some("change-pump") { rt.shared.borrow().want_frame(); }
                     scheduled = Some(at);
                     deadline = Some(if visible { at.min(fallback) } else { at });
                 }
                 Some(Message::Visible(value)) => {
                     visible = value;
+                    rt.shared.borrow_mut().hidden = !value;
+                    if value {
+                        rt.shared.borrow().want_frame();
+                    }
                     if let Some(host) = rt.host() {
                         host.was_hidden(i32::from(!value));
                         if value {
