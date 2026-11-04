@@ -10,6 +10,7 @@ pub(super) use mutations::compare_and_set_title;
 mod owner;
 pub(super) mod read;
 mod reads;
+mod stopping;
 mod write;
 
 #[cfg(test)]

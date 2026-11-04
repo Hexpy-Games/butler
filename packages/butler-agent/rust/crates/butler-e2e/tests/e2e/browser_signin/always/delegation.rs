@@ -185,7 +185,7 @@ async fn reply(
             )),
             n if n == if payment { 4 } else { 2 } => Some((
                 "delegate_to_worker",
-                json!({"action_key":"check","objective":"Check account","acceptance_criteria":["Account checked"],"implementation_brief":"Check account","safe_title":"Check account"}),
+                json!({"task":{"scope":{"paths":["tasks/check"]},"output":{"format":"text","fields":["summary"]}},"action_key":"check","objective":"Check account","acceptance_criteria":["Account checked"],"implementation_brief":"Check account","safe_title":"Check account"}),
             )),
             n if n == if payment { 5 } else { 3 } => Some(("wait_for_worker", json!({}))),
             _ => None,

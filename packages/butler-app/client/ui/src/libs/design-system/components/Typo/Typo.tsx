@@ -47,6 +47,11 @@ export interface TypoTextProps {
   lineClamp?: TypoLineClamp;
   wrap?: TypoWrap;
   numeric?: TypoNumeric;
+  /**
+   * The text is an exact value (a command, path, URL or approval line): draw its own characters. Turns off the
+   * body font's ligatures and contextual alternates, which draw `2x3` as `2×3` and `->` as `→`.
+   */
+  literal?: boolean;
   /** `control`: pad the first line so it centers on a control row (text beside an IconButton). */
   alignWith?: "control";
 }
@@ -77,6 +82,7 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
       lineClamp,
       wrap,
       numeric,
+      literal,
       alignWith,
       ref,
       ...props
@@ -92,6 +98,7 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
         data-line-clamp={lineClamp}
         data-wrap={wrap}
         data-numeric={numeric}
+        data-literal={literal ? "true" : undefined}
         data-align-with={alignWith}
         data-trim={isTextContent(children) ? "" : undefined}
         {...itemAttributes}

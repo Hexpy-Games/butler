@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 pub(super) mod answer;
+mod worker_reads;
 use super::steward_presentation::stub;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup, security::AdminClient};

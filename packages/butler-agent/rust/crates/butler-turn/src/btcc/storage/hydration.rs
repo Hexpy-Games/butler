@@ -76,7 +76,13 @@ pub(super) fn find_turn(
         )
         .optional()
         .map_err(StorageError::sqlite)?;
-    row.map(|row| hydrate(connection, row)).transpose()
+    row.map(|row| {
+        let mut turn = hydrate(connection, row)?;
+        super::authority::access_revision::project(connection, &mut turn)
+            .map_err(|e| StorageError::new(StorageCode::InvalidTurnContext, e.to_string()))?;
+        Ok(turn)
+    })
+    .transpose()
 }
 
 fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {

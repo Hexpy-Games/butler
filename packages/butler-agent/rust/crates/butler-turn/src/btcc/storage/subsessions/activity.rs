@@ -87,6 +87,19 @@ fn activity_child(
     db: &rusqlite::Connection,
     r: &super::StoredSubsessionDelegation,
 ) -> Result<serde_json::Value, StorageError> {
+    let (result, status) = child_activity(db, r)?;
+    Ok(
+        serde_json::json!({"waiting_for_slot":r.packet.child_role==crate::btcc::ChildRole::Worker && r.dispatch_state==super::SubsessionDispatchState::Pending,"role":r.packet.child_role.as_str(),"title":r.safe_title,"status":status,"updated_at":r.created_at,
+        "relation":{"relation_id":r.relation_id,"parent_session_id":r.parent_session_id,"parent_turn_id":r.parent_turn_id,"ordinal":r.ordinal,"safe_title":r.safe_title,"created_at":r.created_at},
+        "result":result.map(|_|serde_json::json!({"task_id":r.task_id}))}),
+    )
+}
+
+/// Shared indexed status reads for activity and nested session-view Workers.
+pub(super) fn child_activity(
+    db: &rusqlite::Connection,
+    r: &super::StoredSubsessionDelegation,
+) -> Result<(Option<String>, &'static str), StorageError> {
     use rusqlite::OptionalExtension;
     let result: Option<String>=db.query_row("SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",[&r.relation_id],|row|row.get(0)).optional().map_err(StorageError::sqlite)?;
     let latest: Option<String> = db
@@ -105,11 +118,7 @@ fn activity_child(
         _ if latest.as_deref() == Some("admitted") => "active",
         _ => "waiting",
     };
-    Ok(
-        serde_json::json!({"waiting_for_slot":r.packet.child_role==crate::btcc::ChildRole::Worker && r.dispatch_state==super::SubsessionDispatchState::Pending,"role":r.packet.child_role.as_str(),"title":r.safe_title,"status":status,"updated_at":r.created_at,
-        "relation":{"relation_id":r.relation_id,"parent_session_id":r.parent_session_id,"parent_turn_id":r.parent_turn_id,"ordinal":r.ordinal,"safe_title":r.safe_title,"created_at":r.created_at},
-        "result":result.map(|_|serde_json::json!({"task_id":r.task_id}))}),
-    )
+    Ok((result, status))
 }
 
 impl SqliteSubsessionRepository {
@@ -141,6 +150,64 @@ impl SqliteSubsessionRepository {
 }
 
 impl SqliteSubsessionRepository {
+    /// Turns of a conversation suspended on delegated work. The App shows them as
+    /// delivered already, so only the runtime knows they are still live.
+    pub async fn turns_waiting_on_delegation(
+        &self,
+        session: String,
+    ) -> Result<Vec<String>, StorageError> {
+        self.storage
+            .read(move |db| {
+                db.prepare_cached(
+                    "SELECT turn_id FROM btcc_turns INDEXED BY idx_btcc_worker_live_turns
+                     WHERE session_id=?1 AND semantic_state IN ('admitted','delivery_committed')
+                       AND suspension_reason='waiting_for_worker'",
+                )
+                .map_err(StorageError::sqlite)?
+                .query_map([session], |row| row.get(0))
+                .map_err(StorageError::sqlite)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
+    /// Delegations below a conversation with anything left to stop, as (parent,
+    /// relation): nearest first, newest siblings first. A direction continues a
+    /// child whose activity already ended, so its latest Turn and directions count.
+    pub async fn open_delegations_below(
+        &self,
+        root: String,
+    ) -> Result<Vec<(String, String)>, StorageError> {
+        self.storage
+            .read(move |db| {
+                db.prepare_cached(
+                    r"WITH RECURSIVE below(parent,session,relation,depth,created) AS (
+                    SELECT r.parent_session_id,r.child_session_id,r.relation_id,0,r.created_at
+                    FROM btcc_session_relations r
+                    WHERE r.parent_session_id=?1 AND r.activity_role IN ('steward','worker')
+                    UNION ALL
+                    SELECT r.parent_session_id,r.child_session_id,r.relation_id,b.depth+1,r.created_at
+                    FROM below b JOIN btcc_session_relations r ON r.parent_session_id=b.session
+                    WHERE r.activity_role IN ('steward','worker'))
+                SELECT b.parent,b.relation FROM below b
+                JOIN btcc_session_relations r ON r.relation_id=b.relation
+                WHERE r.activity_terminal=0
+                    OR (SELECT t.semantic_state FROM btcc_turns t WHERE t.session_id=b.session
+                        ORDER BY t.rowid DESC LIMIT 1) IN ('admitted','delivery_committed')
+                    OR EXISTS (SELECT 1 FROM btcc_subsession_directions i
+                        WHERE i.relation_id=b.relation AND i.status='pending')
+                ORDER BY b.depth,b.created DESC",
+                )
+                .map_err(StorageError::sqlite)?
+                .query_map([root], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map_err(StorageError::sqlite)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
     /// Indexed descendant execution candidates for visible parents. No messages,
     /// Work plans or historical activity are materialized on the navigation path.
     pub async fn running_descendants(

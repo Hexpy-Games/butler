@@ -1,6 +1,9 @@
 //! Session-local epic chains. Caller owns the canon write transaction.
 mod edits;
+mod epic_delete;
+pub(crate) use epic_delete::epic_deleted;
 pub mod engine;
+mod note;
 mod operations;
 pub mod sql;
 mod view;
@@ -8,6 +11,7 @@ use super::*;
 use crate::work_chain::{Chain, Step};
 use crate::work_types::EpicId;
 pub use edits::edit;
+pub use note::note;
 pub use operations::{bound_sessions, decide_hold, owner, request, session_deleted, take_here};
 use rusqlite::params;
 use std::collections::{BTreeMap, BTreeSet};
@@ -117,7 +121,7 @@ fn held_elsewhere(
         ctx,
         &op,
         "canon_take_here",
-        &json!({"session_id":session,"epic_id":epic,"epic_title":other["title"],"other_session_id":other["session_id"],"state":"pending"}),
+        &json!({"session_id":session,"epic_id":epic,"epic_title":other["title"],"other_session_id":other["session_id"],"other_running":other["state"]=="running","state":"pending"}),
     )?;
     Ok(json!({"ok":false,"code":"held_elsewhere","other_session":other["session_id"]}))
 }
@@ -132,7 +136,7 @@ fn ordinal(value: usize) -> Result<i64> {
     i64::try_from(value).map_err(|_| Error::Invalid("index"))
 }
 
-/// Startup examines only unresolved running steps, through the live-state index.
+/// Startup reconciles live steps and held steps missing a terminal receipt.
 pub fn running(db: &Connection) -> Result<Value> {
     Ok(json!(rows(db, sql::RUNNING, [])?))
 }

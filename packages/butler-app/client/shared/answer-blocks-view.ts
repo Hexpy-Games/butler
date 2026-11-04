@@ -1,4 +1,4 @@
-import type { AnswerLeafBlock, CardItem, CardsBlock, GalleryBlock, ImageBlock } from "./app-contracts";
+import type { EpicsBlock, AnswerLeafBlock, CardItem, CardsBlock, GalleryBlock, ImageBlock } from "./app-contracts";
 
 /** Signed gateway decoration remains outside the model-facing contract. */
 export type AnswerCardView = CardItem & { image_url?: string };
@@ -10,5 +10,6 @@ export type AnswerImageView = ImageBlock & { image_url?: string; image_width?: n
 export type AnswerLeafView = Exclude<AnswerLeafBlock, CardsBlock | GalleryBlock | ImageBlock> | AnswerCardsView | AnswerGalleryView | AnswerImageView;
 export type AnswerContainerView = { type: "columns" | "group"; id?: string; title?: string; blocks: AnswerLeafView[] }
   | { type: "tabs"; id?: string; title?: string; tabs: { label: string; blocks: AnswerLeafView[] }[] };
-export type AnswerBlockView = AnswerLeafView | AnswerContainerView;
+export type AnswerEpicsView = EpicsBlock;
+export type AnswerBlockView = AnswerLeafView | AnswerContainerView | AnswerEpicsView;
 export type AnswerBlocksView = { v: 1 | 2; blocks: AnswerBlockView[] };

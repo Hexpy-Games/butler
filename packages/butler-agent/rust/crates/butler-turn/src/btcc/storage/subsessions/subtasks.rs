@@ -37,6 +37,71 @@ impl SqliteSubsessionRepository {
         &self,
         parents: Vec<String>,
     ) -> Result<Vec<OpenSubtaskRow>, StorageError> {
+        self.owner_relations(
+            OPEN_SUBTASKS_SQL,
+            parents,
+            |row| {
+                Ok((
+                    row.get::<_, String>(1)?,
+                    (row.get::<_, String>(0)?, row.get::<_, bool>(2)?),
+                ))
+            },
+            |_, relation, (parent, awaiting_decision): (String, bool)| {
+                Ok(OpenSubtaskRow {
+                    parent,
+                    relation,
+                    awaiting_decision,
+                })
+            },
+        )
+        .await
+    }
+}
+
+/// Direct Workers, including finished ones, in delegation order for each subtask.
+pub const SUBTASK_WORKERS_SQL: &str = r"SELECT r.relation_id
+    FROM json_each(?1) p
+    JOIN btcc_session_relations r INDEXED BY idx_btcc_activity_parent_page
+        ON r.parent_session_id=p.value
+    WHERE r.activity_role='worker'
+    ORDER BY r.parent_session_id,r.ordinal";
+
+impl SqliteSubsessionRepository {
+    /// One snapshot for all requested subtasks and their indexed child status reads.
+    pub(crate) async fn subtask_workers(
+        &self,
+        parents: Vec<String>,
+    ) -> Result<Vec<(StoredSubsessionDelegation, &'static str)>, StorageError> {
+        self.owner_relations(
+            SUBTASK_WORKERS_SQL,
+            parents,
+            |row| Ok((row.get::<_, String>(0)?, ())),
+            |db, relation, ()| {
+                let (_, status) = super::activity::child_activity(db, &relation)?;
+                Ok((relation, status))
+            },
+        )
+        .await
+    }
+
+    /// Runs `sql` with the owners as one JSON array (`?1`) in a single read
+    /// snapshot. `key` returns each row's relation id plus the columns `build`
+    /// needs; relations that are gone or undecodable are skipped.
+    async fn owner_relations<K, T, F, B>(
+        &self,
+        sql: &'static str,
+        parents: Vec<String>,
+        key: F,
+        build: B,
+    ) -> Result<Vec<T>, StorageError>
+    where
+        K: Send + 'static,
+        T: Send + 'static,
+        F: Fn(&rusqlite::Row<'_>) -> rusqlite::Result<(String, K)> + Send + 'static,
+        B: Fn(&rusqlite::Connection, StoredSubsessionDelegation, K) -> Result<T, StorageError>
+            + Send
+            + 'static,
+    {
         if parents.is_empty() {
             return Ok(Vec::new());
         }
@@ -48,27 +113,17 @@ impl SqliteSubsessionRepository {
         })?;
         self.storage
             .read(move |db| {
-                let ids = db
-                    .prepare_cached(OPEN_SUBTASKS_SQL)
+                let keys = db
+                    .prepare_cached(sql)
                     .map_err(StorageError::sqlite)?
-                    .query_map([parents], |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, bool>(2)?,
-                        ))
-                    })
+                    .query_map([parents], key)
                     .map_err(StorageError::sqlite)?
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(StorageError::sqlite)?;
-                let mut rows = Vec::with_capacity(ids.len());
-                for (parent, id, awaiting_decision) in ids {
+                let mut rows = Vec::with_capacity(keys.len());
+                for (id, columns) in keys {
                     match super::decode::read(db, "r.relation_id=?1", &id) {
-                        Ok(Some(relation)) => rows.push(OpenSubtaskRow {
-                            parent,
-                            relation,
-                            awaiting_decision,
-                        }),
+                        Ok(Some(relation)) => rows.push(build(db, relation, columns)?),
                         Ok(None) => {}
                         Err(error)
                             if error.code()

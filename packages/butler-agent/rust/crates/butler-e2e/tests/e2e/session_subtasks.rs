@@ -7,6 +7,7 @@
     reason = "E2E assertions"
 )]
 mod plans;
+mod workers;
 use super::steward_presentation::{self, stub};
 use butler_e2e::e2e::{
     HarnessError,
@@ -73,6 +74,7 @@ async fn working_subtask_is_listed_until_it_finishes() -> Result<(), HarnessErro
     assert_eq!(subtask["relation_id"], child["relation"]["relation_id"]);
     assert_eq!(subtask["title"], child["title"]);
     assert_eq!(subtask["state"], "working", "{subtask}");
+    assert!(subtask.get("workers").is_none(), "{subtask}");
     assert_eq!(subtask["plan_total"], 2, "{subtask}");
     assert_eq!(subtask["plan_completed"], 1, "{subtask}");
     assert_eq!(subtask["started_at"], child["relation"]["created_at"]);

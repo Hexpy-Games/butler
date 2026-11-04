@@ -18,16 +18,16 @@ pub(super) struct Host {
 
 const SHELL: &str = "<!doctype html><html><head><title>Desk lamps</title></head><body><div id=\"app\"><h1>Desk lamps</h1><p>Loading products…</p></div></body></html>";
 
-fn listing() -> String {
-    let lamps = [("Aurora", 450), ("Beacon", 1200), ("Cinder", 800)]
-        .map(|(name, lumens)| {
-            format!("<li><h2>{name}</h2><p>The {name} desk lamp gives {lumens} lumens of adjustable light with a weighted base.</p></li>")
-        })
-        .join("");
-    let details =
-        "<p>Every lamp ships with a two-year warranty and a replaceable LED module.</p>".repeat(8);
+pub(super) fn detail_paragraphs() -> Vec<String> {
+    (0..200)
+        .map(|index| format!("Measurement section {index:03}: A full-page study records light output, power usage, stability, and glare for the lamps."))
+        .collect()
+}
+
+fn page_html() -> String {
+    let details = detail_paragraphs().join("</p><p>");
     format!(
-        "<!doctype html><html><head><title>Desk lamps</title></head><body><main><h1>Desk lamps</h1><ul>{lamps}</ul>{details}</main></body></html>"
+        "<html><title>Desk lamps</title><article><h1>Desk lamps</h1><p>Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm.</p><p>{details}</p></article></html>"
     )
 }
 
@@ -130,7 +130,12 @@ impl Host {
             }
             ("tabs.list", _) => json!({"tabs":self.tabs}),
             ("tab.read", Some(tab)) => {
-                json!({"status":"ok","tab":tab["id"],"url":tab["url"],"epoch":1,"html":listing()})
+                json!({"status":"ok","tab":tab["id"],"url":tab["url"],"epoch":1,
+                "html":page_html()})
+            }
+            ("tab.observe", Some(tab)) => {
+                json!({"status":"ok","tab":tab["id"],"url":tab["url"],"obs":"o1",
+                "text":"Aurora: 450 lm. Beacon: 1200 lm. Cinder: 800 lm."})
             }
             _ => json!({"status":"refused","reason":"unsupported_op"}),
         }

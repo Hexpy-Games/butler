@@ -79,16 +79,12 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
     let served = tokio::spawn(host::Host::attach(admin).await?.serve());
     let turn = s.gw.say_turn("general", PROMPT).await?;
 
-    // Two outside-file reads suspend the turn; only the unseen URL asks then.
+    // Two outside-file reads suspend the turn; browser calls remain usable on resume.
     let mut seen = HashSet::new();
-    for web in [false, false, true] {
+    for _ in 0..2 {
         let card = next_card(&s, &mut seen).await?;
-        let kind = &card["approval"]["action_kind"];
-        assert_eq!(kind == "web_request", web, "{card}");
-        if web {
-            assert_eq!(card["approval"]["operation"]["targets"][0], UNSEEN);
-        }
-        answer(&s, &card, if web { "deny" } else { "allow" }).await?;
+        assert_eq!(card["approval"]["operation"]["tool"], "read_file", "{card}");
+        answer(&s, &card, "allow").await?;
     }
     let done =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
@@ -127,16 +123,15 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
         );
     }
 
-    // Found pages, a later chunk of one and a result from before the first
-    // resume are read without a card; the reader itself is off here.
+    // Found pages and an observation remain usable across both resumes.
     for index in [5, 6, 9] {
         let read = &outputs[index];
-        assert_eq!(read["ok"], false, "{read}");
+        assert_eq!(read["status"], "ok", "{read}");
         assert!(read.get("authority_pending").is_none(), "{read}");
         assert!(!read.to_string().contains("authority_request"), "{read}");
     }
-    assert!(outputs[10].to_string().contains("authority_request_denied"));
-    crate::access_tiers::assert_counts(&s, &turn, 3, 0)?;
+    assert!(outputs[10].to_string().contains("tool_unavailable"));
+    crate::access_tiers::assert_counts(&s, &turn, 2, 0)?;
     s.finish().await
 }
 
@@ -209,11 +204,11 @@ fn next(script: &Script, body: &Value) -> Value {
         1 | 3 => ("web_search", json!({"query":"beta harbour tides"})),
         2 => ("read_file", read_file(&files[0])),
         4 => ("browser_open", json!({"results":["r1"]})),
-        5 => ("web_read", json!({"url":page("alpha", 2)})),
-        6 => ("web_read", json!({"url":page("alpha", 2),"start_chunk":1})),
+        5 => ("browser_open", json!({"url":page("alpha", 2)})),
+        6 => ("browser_observe", json!({"tab":outputs[5]["tab"]})),
         7 => ("read_file", read_file(&files[1])),
         8 => ("browser_open", json!({"results":["r4"]})),
-        9 => ("web_read", json!({"url":page("beta", 1)})),
+        9 => ("browser_open", json!({"url":page("beta", 1)})),
         10 => ("web_read", json!({"url":UNSEEN})),
         _ => return model::message("Both harbours list the same spring tide."),
     };

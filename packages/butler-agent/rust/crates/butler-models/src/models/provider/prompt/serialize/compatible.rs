@@ -1,8 +1,8 @@
 use serde_json::{Map, Value, json};
 
 use crate::models::{
-    KIMI_ADAPTIVE_MODEL, OPENCODE_THINKING_MODEL, ProviderPromptRequest, ProviderRequestConfig,
-    ReasoningEffort,
+    ChatStructuredOutput, KIMI_ADAPTIVE_MODEL, OPENCODE_THINKING_MODEL, ProviderPromptRequest,
+    ProviderRequestConfig, ReasoningEffort,
 };
 use butler_turn::btcc::ModelRoundError;
 
@@ -120,7 +120,7 @@ pub(super) fn chat(
     let provider = config.metadata.provider_id.as_str();
     let mut instructions = request.instructions.map(str::to_owned);
     let mut response_format = request.response_format.as_ref().map(schema_value);
-    if matches!(provider, "zai" | "zai-api")
+    if config.metadata.chat_wire_policy.structured_output == ChatStructuredOutput::JsonObject
         && let Some(schema) = &request.response_format
     {
         let schema_json = butler_core::json::stringify(&Value::Object(schema.schema.clone()))

@@ -18,6 +18,30 @@
   -webkit-line-clamp: 4;
 }
 
+/* A { code } detail in the shared CodeFrame. The command keeps its own
+   spaces and line breaks at full height: the details area owns vertical
+   scrolling, and the text only scrolls sideways, under the x edge fade. A
+   focused scroller draws its ring inset (the frame clips outside it) and
+   drops its fade mask, which would cut the ring. A frame taller than the
+   details area hands its ring to that scroll area (scroll-fade.css). */
+.code {
+  margin-block: var(--space-xs);
+  padding-block: var(--space-sm);
+}
+
+.codeText {
+  padding-inline: var(--space-md);
+  overflow: auto hidden;
+  white-space: pre;
+}
+
+.codeText:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .error {
   padding-block: var(--space-sm);
   padding-inline: var(--composer-panel-inset);

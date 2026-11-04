@@ -1,5 +1,7 @@
 # ContextDonutButton
 
+Glossary: 컨텍스트 사용량 버튼 / context usage button (`ContextDonutButton`).
+
 ## What is this component
 ContextDonutButton renders the compact circular context-usage trigger used in the composer.
 

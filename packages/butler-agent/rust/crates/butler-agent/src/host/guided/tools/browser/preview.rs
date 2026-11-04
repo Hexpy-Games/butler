@@ -19,7 +19,7 @@ pub(super) async fn execute(
     occurrence: &str,
     client: Client,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode == AccessMode::ReadOnly {
+    if owner.access_mode() == AccessMode::ReadOnly {
         return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
     }
     let input = match prepare_input(owner, call, occurrence).await {
@@ -87,9 +87,9 @@ async fn prepare_input(
         let workspace = owner.active_workspace_path();
         let path = input["cwd"].as_str().unwrap_or(".").to_owned();
         let cwd = tokio::task::spawn_blocking(move || {
-            let root = workspace.canonicalize()?;
-            let cwd = root.join(path).canonicalize()?;
-            if !cwd.is_dir() || !cwd.starts_with(&root) {
+            let root = butler_platform::secure_fs::canonicalize(&workspace)?;
+            let cwd = butler_platform::secure_fs::canonicalize(root.join(path))?;
+            if !cwd.is_dir() || !butler_platform::secure_fs::is_within(&cwd, &root) {
                 return Err(std::io::Error::other("outside_workspace"));
             }
             Ok(cwd.to_string_lossy().into_owned())

@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 mod delegation;
+mod direction_workers;
 #[path = "canon_mcp/running.rs"]
 mod mcp_running;
 mod plans;
@@ -46,7 +47,7 @@ pub(super) async fn setup_at(
     setup_env(name, rejects, revise, now, None).await
 }
 
-async fn setup_env(
+pub(crate) async fn setup_env(
     name: &str,
     rejects: bool,
     revise: bool,

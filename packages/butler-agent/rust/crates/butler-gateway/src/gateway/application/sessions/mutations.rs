@@ -52,6 +52,7 @@ impl AppApplication {
                     "일반 채널은 보관하거나 삭제할 수 없습니다.",
                 ));
             }
+            self.stop_session_work(&session_id, true).await;
             self.close_session_authority(&session_id, "session_archived")
                 .await?;
         }
@@ -104,6 +105,7 @@ impl AppApplication {
                 "Session title is required.",
             ));
         }
+        self.stop_session_work(&session_id, true).await;
         self.close_session_authority(&session_id, "session_archived")
             .await?;
         let clock = self.dependencies.identity_clock.clone();
@@ -145,6 +147,7 @@ impl AppApplication {
                 "일반 채널은 보관하거나 삭제할 수 없습니다.",
             ));
         }
+        self.stop_session_work(&session_id, !permanent).await;
         self.close_session_authority(
             &session_id,
             if permanent {

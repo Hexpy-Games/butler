@@ -13,6 +13,12 @@ struct ImageState {
     requests: Mutex<Vec<ImageRequest>>,
     error: Mutex<Option<(u16, String)>>,
     png: Vec<u8>,
+    response: Mutex<Option<ImageResponse>>,
+}
+#[derive(Clone)]
+struct ImageResponse {
+    bytes: Vec<u8>,
+    truncated: bool,
 }
 pub struct ImageServer {
     pub base: String,
@@ -54,6 +60,9 @@ impl ImageServer {
     pub fn bytes(&self) -> Vec<u8> {
         self.state.png.clone()
     }
+    pub fn respond(&self, bytes: Vec<u8>, truncated: bool) {
+        *lock(&self.state.response) = Some(ImageResponse { bytes, truncated });
+    }
     pub fn fail(&self, status: u16, message: &str) {
         *lock(&self.state.error) = Some((status, message.into()));
     }
@@ -90,6 +99,13 @@ async fn image_reply(
     if let Some((status, message)) = lock(&state.error).as_ref() {
         return json_response(*status, &json!({"error":{"message":message}}));
     }
+    let response = lock(&state.response).clone();
+    if let Some(response) = response {
+        return Response::builder()
+            .header("content-type", "application/json")
+            .body(response_body(response))
+            .expect("fixture response");
+    }
     let data = STANDARD.encode(&state.png);
     let body = if path.ends_with("interactions") {
         json!({"steps":[{"type":"model_output","content":[{"type":"text","text":"Ready"},{"type":"image","data":data}]}],"usage":{"total_input_tokens":30,"total_output_tokens":40,"input_tokens_by_modality":[{"modality":"text","tokens":10},{"modality":"image","tokens":20}],"output_tokens_by_modality":[{"modality":"image","tokens":40}]}})
@@ -97,6 +113,18 @@ async fn image_reply(
         json!({"data":[{"b64_json":data}],"usage":{"input_tokens":30,"input_tokens_details":{"text_tokens":10,"image_tokens":20},"output_tokens":40}})
     };
     json_response(200, &body)
+}
+fn response_body(response: ImageResponse) -> Body {
+    let ImageResponse { bytes, truncated } = response;
+    if truncated {
+        let first = futures_util::stream::once(async move { Ok::<_, std::io::Error>(bytes) });
+        let failure = futures_util::stream::once(async {
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof))
+        });
+        return Body::from_stream(futures_util::StreamExt::chain(first, failure));
+    }
+    Body::from(bytes)
 }
 fn multipart(bytes: &[u8], boundary: &str) -> Vec<(String, Vec<u8>)> {
     let delimiter = format!("--{boundary}");

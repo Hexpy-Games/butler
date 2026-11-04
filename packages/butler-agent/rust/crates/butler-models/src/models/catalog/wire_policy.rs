@@ -24,11 +24,24 @@ use serde_json::{Map, Value, json};
 
 /// Hosted chat extensions, declared by the provider rather than the carrier.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
 pub struct ChatWirePolicy {
+    /// The strongest `response_format` the provider's chat API accepts.
+    pub structured_output: ChatStructuredOutput,
     pub reasoning_request: ChatReasoningRequest,
     pub reasoning_response_field: Option<ChatReasoningField>,
     pub reasoning_history: ChatReasoningHistory,
     pub tool_choice_required_while_thinking: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatStructuredOutput {
+    /// `json_schema` with the schema on the wire.
+    #[default]
+    JsonSchema,
+    /// `json_object`; the schema goes into the instructions.
+    JsonObject,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]

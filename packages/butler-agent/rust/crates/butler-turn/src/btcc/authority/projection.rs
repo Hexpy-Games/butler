@@ -110,16 +110,22 @@ pub(in crate::btcc::authority) fn exact_approval(
     };
     let mut approval = approval::summarize(facts);
     let mut operation = approval::exact_operation(facts);
-    if record.reason == "authority.taintReason" {
+    if !record.reusable
+        || matches!(
+            record.reason.as_str(),
+            "authority.taintReason" | "authority.unsandboxedReason"
+        )
+    {
         operation.allow_conversation = Some(false);
-        if let Some(arguments) = input.as_object()
-            && crate::btcc::CapabilityKind::of_call(&record.capability, arguments, false)
-                .persists_beyond_turn()
-        {
-            // The exact call input, never redacted: the approver must see what will persist.
-            approval.examples.push(input.to_string());
-            approval.examples_truncated.push(false);
-        }
+    }
+    if record.reason == "authority.taintReason"
+        && let Some(arguments) = input.as_object()
+        && crate::btcc::CapabilityKind::of_call(&record.capability, arguments, false)
+            .persists_beyond_turn()
+    {
+        // The exact call input, never redacted: the approver must see what will persist.
+        approval.examples.push(input.to_string());
+        approval.examples_truncated.push(false);
     }
     approval.operation = Some(operation);
     if record.capability == "create_automation" {

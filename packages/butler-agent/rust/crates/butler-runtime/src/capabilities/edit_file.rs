@@ -26,28 +26,11 @@ pub(super) async fn execute(
             return Ok(value);
         }
     };
-    let has_batch = args.contains_key("edits");
-    let has_single = [
-        "path",
-        "start_line",
-        "old_text",
-        "new_text",
-        "expected_sha256",
-    ]
-    .into_iter()
-    .any(|key| args.contains_key(key));
-    if has_batch && has_single {
-        return Ok(invalid(
-            "Provide exactly one of single edit fields or edits.",
-            "Retry with either path/old_text/new_text or edits, never both.",
-        ));
-    }
-    if !has_batch && !has_single {
-        return Ok(invalid(
-            "Provide exactly one of single edit fields or edits.",
-            "Retry with one exact edit or a 2-20 entry edits batch.",
-        ));
-    }
+    let has_batch = match edit_mode(&args) {
+        Ok(batch) => batch,
+        Err(result) => return Ok(result),
+    };
+    let root = arguments::root(&input, &args)?;
     let (edits, root) = if has_batch {
         let edits = match normalize::batch(&args["edits"]) {
             Ok(edits) => edits,
@@ -62,7 +45,7 @@ pub(super) async fn execute(
         }
         if edits
             .iter()
-            .any(|edit| !arguments::scope(&edit.path, input.mutation_scope))
+            .any(|edit| !arguments::scope(&edit.path, input.mutation_scope, &root))
         {
             return Ok(failure(
                 "invalid_arguments",
@@ -70,14 +53,13 @@ pub(super) async fn execute(
                 "Retry only within the files this task may change.",
             ));
         }
-        (edits, arguments::root(&input, &args)?)
+        (edits, root)
     } else {
         let edit = match normalize::single(&args) {
             Ok(edit) => edit,
             Err(result) => return Ok(result),
         };
-        let root = arguments::root(&input, &args)?;
-        if !arguments::scope(&edit.path, input.mutation_scope) {
+        if !arguments::scope(&edit.path, input.mutation_scope, &root) {
             return Ok(scope_failure(&root, &edit.path));
         }
         if !arguments::allowed(&input, "edit_file:workspace") {
@@ -159,4 +141,28 @@ fn safe_path(root: &std::path::Path, path: &str) -> Option<String> {
 
 fn owner_error(error: butler_turn::workspace::MutationOwnerError) -> CapabilityError {
     CapabilityError::caused(error.code(), error)
+}
+
+fn edit_mode(args: &Map<String, Value>) -> Result<bool, Value> {
+    let batch = args.contains_key("edits");
+    let single = [
+        "path",
+        "start_line",
+        "old_text",
+        "new_text",
+        "expected_sha256",
+    ]
+    .into_iter()
+    .any(|key| args.contains_key(key));
+    match (batch, single) {
+        (true, true) => Err(invalid(
+            "Provide exactly one of single edit fields or edits.",
+            "Retry with either path/old_text/new_text or edits, never both.",
+        )),
+        (false, false) => Err(invalid(
+            "Provide exactly one of single edit fields or edits.",
+            "Retry with one exact edit or a 2-20 entry edits batch.",
+        )),
+        _ => Ok(batch),
+    }
 }

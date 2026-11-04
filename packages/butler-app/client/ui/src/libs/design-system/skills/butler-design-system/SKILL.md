@@ -12,6 +12,8 @@ This skill is a component-selection and quality-gate guide, not a style
 description. It should make a new agent faster while preventing one-off CSS,
 domain-coupled blocks, or visually inconsistent UI.
 
+Call UI parts by their glossary name: references/glossary.md
+
 ## Hard Rules
 
 Product UI is assembled only from the design system. The type system and the
@@ -114,13 +116,17 @@ except Skeleton sizing, which has no size props yet) are
 under "Build a screen" in the viewer and at the
 end of `references/catalog.md`. A settings page renders only `SettingsSection`s
 (each owns its loading, error and empty states), and `SettingsField` throws
-outside a section in dev builds. For example:
+outside a section in dev builds. Every section has a title (never the page
+title again); the page header holds no actions; add, refresh, filter and
+period go in the section header (outline, small, list and status sections
+only); list rows sit flush in the section card and a paged list uses the
+section's `more` row. For example:
 
 ```tsx
 import { SettingsField, SettingsPage, SettingsSection, Switch } from "@/butler-ds";
 
 <SettingsPage>
-  <SettingsSection id="appearance" kind="form" title="Appearance" description="Applies to every window.">
+  <SettingsSection id="theme" kind="form" title="Theme" description="Applies to every window.">
     <SettingsField id="translucent" label="Translucent sidebar" description="Show the desktop behind the sidebar."
       control={<Switch id="translucent" defaultChecked />} />
   </SettingsSection>

@@ -2,6 +2,7 @@
 use crate::btcc::authority::contracts::{AuthorityRecord, AuthorityResult};
 use rusqlite::Connection;
 
+pub(in crate::btcc) mod access_revision;
 mod close;
 pub(crate) mod pending_asks;
 mod query;

@@ -112,12 +112,26 @@ impl SubsessionService {
         .await
     }
 
-    /// Whether the child turn's result is saved.
+    /// Whether the child turn has nothing left to answer: its result is saved, or
+    /// the child already ended on another Turn.
     pub async fn child_turn_closed(&self, session: &str, turn: &str) -> Result<bool, BtccError> {
-        self.repository
+        if self
+            .repository
             .has_turn_result(session.to_owned(), turn.to_owned())
             .await
-            .map_err(BtccError::from)
+            .map_err(BtccError::from)?
+        {
+            return Ok(true);
+        }
+        let Some(relation) = self
+            .repository
+            .by_child(session.to_owned())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(false);
+        };
+        self.child_ended(&relation).await
     }
 
     async fn complete_child_result(
@@ -235,6 +249,30 @@ impl SubsessionService {
         Ok(())
     }
 
+    /// Nothing can read what a stopped or closed child's own delegations report, so they
+    /// stop with it. Its result is committed first, so none of them can wake it again.
+    async fn cancel_open_children(&self, session: &str) {
+        let children = self
+            .repository
+            .open_delegations_below(session.to_owned())
+            .await;
+        let children = children.unwrap_or_else(|error| {
+            butler_core::diagnostic!(
+                "[native-btcc] stopped child delegations unread code={}",
+                error.code()
+            );
+            Vec::new()
+        });
+        for (parent, relation) in children {
+            if let Err(error) = self.cancel_by_relation(parent, relation, session).await {
+                butler_core::diagnostic!(
+                    "[native-btcc] stopped child delegation still open code={}",
+                    error.code()
+                );
+            }
+        }
+    }
+
     async fn deliver_child_result(&self, session: &str, status: &str) -> Result<(), BtccError> {
         self.notify_execution_changed(session).await?;
         let relation = self
@@ -242,6 +280,11 @@ impl SubsessionService {
             .by_child(session.into())
             .await
             .map_err(BtccError::from)?;
+        // A closed Steward Work ends every task it delegated; nothing can use their results.
+        let closed = match &relation {
+            Some(relation) => self.steward_closed(relation).await?,
+            None => false,
+        };
         if relation
             .as_ref()
             .is_some_and(|r| r.packet.child_role == ChildRole::Steward)
@@ -252,6 +295,9 @@ impl SubsessionService {
                 "[native-btcc] pending direction not released code={}",
                 error.code()
             );
+        }
+        if status == "cancelled" || closed {
+            self.cancel_open_children(session).await;
         }
         let delivery = self.deliver_worker_results().await;
         if let Some(relation) = relation
@@ -269,6 +315,7 @@ impl SubsessionService {
     /// Main's recovery order: dispatches, directions, then parent results.
     /// Worker admission follows result delivery; one failure never hides peers.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
+        self.recover_superseded_workers().await?;
         let mut failed_parents = std::collections::HashSet::new();
         for stored in self
             .repository

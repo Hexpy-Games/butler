@@ -6,7 +6,7 @@ const listeners = new Map<string, Set<() => void>>();
 const path = (id: string) => `/canon/proposals/${encodeURIComponent(id)}`;
 export const getCanonProposal = (id: string, signal?: AbortSignal) => api<CanonProposal>(path(id), { signal });
 export const resolveCanonProposal = (id: string, outcome: "accepted" | "declined", target?: { project_id?: string; new_name?: string }) =>
-  api<{ ok: boolean }>(path(id), { method: "POST", body: JSON.stringify({ outcome, ...target }) });
+  api<{ ok: boolean; error?: { code: string } }>(path(id), { method: "POST", body: JSON.stringify({ outcome, ...target }) });
 export function observeCanonProposal(id: string, listener: () => void) {
   let set = listeners.get(id);
   if (!set) { set = new Set(); listeners.set(id, set); }

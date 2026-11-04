@@ -5,10 +5,14 @@ use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 
+const OPEN_IN_TABS: &str = "Open the useful results with browser_open {results:[ids]}, then read each tab with browser_read {tab}; read different tabs in one round.";
+const READ_URLS: &str =
+    "Read the useful results with web_read {url}; read different pages in one round.";
+
 pub(super) fn supports(name: &str) -> bool {
     matches!(
         ToolName::parse(name),
-        Some(ToolName::WebSearch | ToolName::WebRead)
+        Some(ToolName::WebSearch | ToolName::WebRead | ToolName::BrowserRead)
     )
 }
 
@@ -18,6 +22,13 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if call.name == ToolName::BrowserRead {
+        let reader = ModelRoundToolCall {
+            name: ToolName::WebRead.as_str().into(),
+            ..call.clone()
+        };
+        return execute_mode(owner, invocation, &reader, call_id, false).await;
+    }
     execute_mode(owner, invocation, call, call_id, false).await
 }
 
@@ -56,7 +67,19 @@ async fn execute_mode(
             super::file_observation::Gate::Pending(result) => return super::encoded(&result),
             super::file_observation::Gate::Allowed(reference) => reference,
         };
-    let result = fetch(owner, invocation, call, &arguments, live, executor).await;
+    let mut result = fetch(owner, invocation, call, &arguments, live, executor).await;
+    if call.name == ToolName::WebSearch
+        && result["results"]
+            .as_array()
+            .is_some_and(|items| !items.is_empty())
+    {
+        let next = if owner.browser_available() {
+            OPEN_IN_TABS
+        } else {
+            READ_URLS
+        };
+        result["next"] = Value::String(next.into());
+    }
     settle(owner, approved, &result).await?;
     // Search results are the turn's provenance by their ids (the web session
     // keeps both). A page read once is requested again with nothing new, so
@@ -137,7 +160,7 @@ async fn fetch(
     } else {
         // A turn that may open tabs is sent to one for a page the reader
         // could not show in full.
-        let browsing = owner.binding.authorized_names.contains("browser_open");
+        let browsing = owner.browser_available();
         owner
             .web_session
             .web_read_from(arguments, live, browsing, invocation.cancellation)

@@ -173,7 +173,7 @@ impl ProjectWorkRepository {
         plan_preconditions(current, command)?;
         let plan_revision = codec::number(&current.manifest, "planRevision")? + 1;
         let plan_id = codec::record_id("plan", &command.input.mutation_call_id);
-        let plan = new_plan(command, &plan_id, plan_revision, at)?;
+        let plan = new_plan(command, &plan_id, plan_revision, at);
         let mut children = vec![
             json!({"schema":"butler.btcc-project-work-plan.v1","workId":current.view.work_id,
             "operationIdentity":codec::identity_value(identity),"plan":plan}),
@@ -310,6 +310,8 @@ impl ProjectWorkRepository {
         view.current_stage = Some(command.stage);
         view.allowed_next_stages = butler_turn::btcc::allowed_next_work_stages(Some(command.stage));
         view.action_progress = command.action_progress.clone();
+        // A disposition belongs to its original material; its child remains history.
+        view.latest_disposition = None;
         view.latest_checkpoint = Some(checkpoint);
         view.updated_at = at;
         let mut revisions = codec::revisions(&current.manifest);
@@ -329,18 +331,19 @@ impl ProjectWorkRepository {
 }
 
 /// The plan revision the command replaces the current plan with.
-fn new_plan(
-    command: &ReplacePlanCommand,
-    plan_id: &str,
-    revision: u64,
-    at: &str,
-) -> Result<WorkPlan, BtccError> {
-    codec::typed(json!({
-        "planRevisionId":plan_id, "revision":revision,
-        "objective":command.input.objective, "governingRefs":command.governing_refs,
-        "executionMode":command.input.execution_mode, "actions":command.input.actions,
-        "checks":command.input.checks, "originTurnId":command.input.scope.turn_id, "createdAt":at,
-    }))
+fn new_plan(command: &ReplacePlanCommand, plan_id: &str, revision: u64, at: &str) -> WorkPlan {
+    WorkPlan {
+        subjects: command.input.subjects.clone(),
+        plan_revision_id: plan_id.into(),
+        revision,
+        objective: command.input.objective.clone(),
+        governing_refs: command.governing_refs.clone(),
+        execution_mode: command.input.execution_mode,
+        actions: command.input.actions.clone(),
+        checks: command.input.checks.clone(),
+        origin_turn_id: command.input.scope.turn_id.clone(),
+        created_at: at.into(),
+    }
 }
 
 /// The plan targets the expected Work at the expected progress revision.

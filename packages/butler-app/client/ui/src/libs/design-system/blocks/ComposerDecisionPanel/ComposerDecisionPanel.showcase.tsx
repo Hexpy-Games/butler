@@ -8,7 +8,7 @@ import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
 import { SplitButton } from "../SplitButton";
 import { ComposerDecisionPanel, type ComposerDecisionPanelProps } from "./ComposerDecisionPanel";
-import { BrowserApproval, BrowserHandoff } from "./ComposerDecisionPanel.showcaseParts";
+import { BrowserApproval, BrowserHandoff, CommandScript } from "./ComposerDecisionPanel.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "ComposerDecisionPanel",
@@ -78,18 +78,18 @@ function Authority({ context, error }: { context: ShowcaseRenderContext; error?:
   );
 }
 
-/** ComposerAuthorityDecisionSurface with a structured request: a question, examples and a risk Tag. */
+/** ComposerAuthorityDecisionSurface with a structured request: a question, examples and a risk Tag, drawn literally (`2876x6` stays `x`). */
 function ApprovalRequest({ context, command, placement }: { context: ShowcaseRenderContext; command?: boolean; placement?: Placement }) {
   const copy = labels[context.locale];
   return command ? (
     <ComposerDecisionPanel icon={<Terminal aria-hidden="true" size="lg" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"} title={copy.command} onOpen={() => undefined}
-      details={[`rm -rf build && npm run build -- --out ${"dist/".repeat(16)}and a long tail of arguments that wraps`]}
+      details={[`magick shot.png -resize 2876x6 build/a->b.png && npm run build -- --out ${"dist/".repeat(16)}and a long tail of arguments that wraps`]} literal
       detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
       aside={<><Tag tone="danger">{copy.high}</Tag></>}
       actions={<AuthorityActions copy={copy} />} />
   ) : (
     <ComposerDecisionPanel placement={placement} icon={<Folder aria-hidden="true" size="lg" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"} title={copy.rename} onOpen={() => undefined}
-      details={[...screenshots, copy.more]} detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
+      details={[...screenshots, copy.more]} literal detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
       aside={<><Tag tone="warning">{copy.medium}</Tag></>}
       actions={<AuthorityActions copy={copy} />} />
   );
@@ -113,6 +113,8 @@ export const stories: ShowcaseStory[] = [
   // ComposerAuthorityDecisionSurface: a question, examples with "+N more", a risk Tag, Deny and Allow once.
   { name: "Approval request", widths: ["375", "app"], render: (context) => <ComposerCard><ApprovalRequest context={context} /></ComposerCard> },
   { name: "High-risk command", widths: ["375", "app"], render: (context) => <ComposerCard><ApprovalRequest context={context} command /></ComposerCard> },
+  // A command body as { code }: the code frame keeps indentation and line breaks; the long line scrolls sideways under the fade.
+  { name: "Command body in a code frame", widths: ["375", "app"], render: (context) => <ComposerCard><CommandScript {...context} /></ComposerCard> },
   // A short line, the tool, then a long reviewed input: clamped with Show more even though the first lines are short.
   { name: "Long reviewed input", widths: ["375", "app"], render: (context) => <ComposerCard><LongReviewedInput context={context} /></ComposerCard> },
   // An agent without structured approvals: the legacy title, a pending count.

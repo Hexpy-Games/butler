@@ -50,6 +50,8 @@ const [expanded, setExpanded] = useState(true);
 - Default child rows keep the same width and horizontal alignment as the group row
 - Use `indented` for an explicitly hierarchical tree: each child level is inset
   by `--nav-tree-indent` (defaults to `--space-lg`, 16px). Supplied header actions remain visible in this mode.
+  The indent alone shows depth: rows after a group's last child keep the normal
+  row rhythm, with no extra gap at any nesting level.
 - Expand/collapse uses the DS `Collapsible` (height via `interpolate-size` +
   opacity); collapsed children unmount after the exit transition
 - Optional `stickyDepth` pins a header inside its branch, stacking below that

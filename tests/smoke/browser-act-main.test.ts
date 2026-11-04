@@ -15,6 +15,7 @@ function subject(ending: string) {
   const image: any = { resize: () => image, toBitmap: () => Buffer.alloc(4), toJPEG: () => Buffer.from("image"), isEmpty: () => false };
   Object.assign(contents, {
     debugger: new EventEmitter(), isDestroyed: () => false, isLoading: () => false,
+    getBackgroundThrottling: () => true,
     capturePage: async () => image,
     executeJavaScriptInIsolatedWorld: async (_world: number, scripts: any[]) => {
       if (scripts[0].code.startsWith("new Promise(done=>requestAnimationFrame")) {

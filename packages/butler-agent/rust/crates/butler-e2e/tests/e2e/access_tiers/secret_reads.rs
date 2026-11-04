@@ -155,13 +155,13 @@ async fn hosts_without_secret_denial_ask_with_the_unsandboxed_card() -> Result<(
     let first = r#"echo one > "one$x.txt""#;
     let id = unsandboxed_card(&s, &chat, &script, "Write the first note.", first).await?;
     assert!(!project.join("one.txt").exists(), "ran before the approval");
-    decide(&s, &chat, "allow", "conversation").await?;
+    decide(&s, &chat, "allow", "once").await?;
     delivered(&s, &chat, &id).await?;
     assert!(
         project.join("one.txt").exists(),
         "did not run after the approval"
     );
-    // The conversation permission just granted does not cover the next one.
+    // A non-reusable approval never covers the next command.
     let second = r#"echo two > "two$x.txt""#;
     let id = unsandboxed_card(&s, &chat, &script, "Write the second note.", second).await?;
     decide(&s, &chat, "deny", "once").await?;

@@ -1,20 +1,31 @@
 use super::*;
+mod closeout;
 mod project_history;
+use closeout::Closeout;
 
 fn latest(db: &Connection, query: Query, work: &str) -> Result<Option<Value>> {
     Ok(rows(db, query.sql(), [work])?.into_iter().next())
 }
 
 pub(super) fn running(db: &Connection, work: &Value) -> Result<bool> {
-    if work["status"] != "open" {
+    if work["status"] != "open" || held(db, work)? {
         return Ok(false);
     }
-    let own = db
-        .query_row(Query::OwnActive.sql(), [text(work, "session_id")?], |_| {
-            Ok(())
-        })
+    let session = text(work, "session_id")?;
+    // 그래도 진행 leaves the stopped step's Work open; later Turns belong to other steps.
+    let continued = db
+        .query_row(
+            Query::QueueContinued.sql(),
+            params![session, text(work, "epic_id")?],
+            |_| Ok(()),
+        )
         .optional()?
         .is_some();
+    let own = !continued
+        && db
+            .query_row(Query::OwnActive.sql(), [session], |_| Ok(()))
+            .optional()?
+            .is_some();
     let child = db
         .query_row(
             Query::DelegatedActive.sql(),
@@ -23,7 +34,39 @@ pub(super) fn running(db: &Connection, work: &Value) -> Result<bool> {
         )
         .optional()?
         .is_some();
-    Ok(own || child)
+    if own || child {
+        return Ok(true);
+    }
+    let awaiting = db
+        .query_row(
+            Query::QueueAwaitingDelegation.sql(),
+            params![session, text(work, "epic_id")?, work["linked_at"].as_i64()],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    Ok(awaiting && delegation_open(db, text(work, "work_id")?)?)
+}
+
+/// Only the latest linked Work in each conversation can still run for this step.
+pub(super) fn current(works: &[Value], index: usize) -> bool {
+    !works[index + 1..]
+        .iter()
+        .any(|later| later["session_id"] == works[index]["session_id"])
+}
+
+/// Stop takes effect after the step's Turn ends. An undecided unfinished
+/// step can still finish through a live reply on its open Work, unless another
+/// unheld step owns the chat's Turn.
+fn held(db: &Connection, work: &Value) -> Result<bool> {
+    Ok(db
+        .query_row(
+            Query::QueueHeld.sql(),
+            params![text(work, "session_id")?, text(work, "epic_id")?],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
 }
 
 fn actions(db: &Connection, work: &str) -> Result<Vec<Value>> {
@@ -64,18 +107,22 @@ pub fn progress(db: &Connection, epic: &str, views: &ProjectViews) -> Result<Val
     let mut current_actions = Vec::new();
     let mut history = Vec::new();
     let mut active = None;
-    for work in &works {
+    for (index, work) in works.iter().enumerate() {
         let id = text(work, "work_id")?;
-        if running(db, work)? {
+        let current = current(&works, index);
+        if current && running(db, work)? {
             result["running"] = json!(true);
         }
         let checkpoints = checkpoints(db, work, views)?;
-        let stage = checkpoints
-            .last()
-            .map(|c| c["stage"].clone())
-            .unwrap_or(json!("conception"));
-        if active.is_none() || work["status"] == "open" || active == Some(false) {
-            result["stage"] = stage;
+        if current && (active.is_none() || work["status"] == "open" || active == Some(false)) {
+            result["stage"] = if closeout::read(db, work, views)? == Closeout::Reported {
+                json!("reporting")
+            } else {
+                checkpoints
+                    .last()
+                    .map(|c| c["stage"].clone())
+                    .unwrap_or(json!("conception"))
+            };
             active = Some(work["status"] == "open");
             current_actions = work_actions(db, work, views)?;
             result["disposition"] = disposition(db, work, views)?["disposition"].clone();
@@ -107,6 +154,10 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
             if object.contains_key("epic_id") {
                 object.insert("progress".into(), progress);
             } else {
+                let delete_blocked = super::epic_delete_running(db, id)?;
+                let queue = queue_item(db, id, object.get("home_session_id"))?;
+                object.insert("delete_blocked".into(), json!(delete_blocked));
+                object.insert("queue".into(), queue);
                 object.insert("task_counts".into(), progress["counts"].clone());
                 object.insert("running".into(), progress["running"].clone());
             }
@@ -122,81 +173,20 @@ pub fn enrich(db: &Connection, value: &mut Value, views: &ProjectViews) -> Resul
     Ok(())
 }
 
-pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
-    let id = text(work, "work_id")?;
-    let disposition = disposition(db, work, views)?;
-    let (review, checkpoint) = if work["scope_kind"] == "project" {
-        let Some(view) = views.get(id) else {
-            return Ok(false);
-        };
-        (
-            view["latestCompletionValidation"].clone(),
-            view["latestCheckpoint"].clone(),
-        )
-    } else {
-        (
-            latest(db, Query::Review, id)?.unwrap_or(Value::Null),
-            rows(db, Query::Checkpoints.sql(), [id])?
-                .pop()
-                .unwrap_or(Value::Null),
-        )
+/// The 과제's place in its home conversation's queue, which says who shows that chat's state.
+fn queue_item(db: &Connection, epic: &str, home: Option<&Value>) -> Result<Value> {
+    let Some(home) = home.and_then(Value::as_str) else {
+        return Ok(Value::Null);
     };
-    let reviewed = review["subject"] == "completion" && review["verdict"] == "accept";
-    if disposition["disposition"] != "completed"
-        || checkpoint["stage"] != "reporting"
-        || !(reviewed || delegated_completion(db, work, views)?)
-    {
-        return Ok(false);
-    }
-    let finished = |value: &Value| -> Result<bool> {
-        let turn = value
-            .get("originTurnId")
-            .or_else(|| value.get("origin_turn_id"))
-            .and_then(Value::as_str)
-            .ok_or(Error::Invalid("origin turn"))?;
-        let state: Option<String> = db
-            .query_row(Query::Turn.sql(), [turn], |r| r.get(0))
-            .optional()?;
-        Ok(state.as_deref() == Some("delivered"))
-    };
-    Ok(finished(&checkpoint)? && finished(&disposition)?)
+    Ok(rows(db, Query::QueueItem.sql(), params![home, epic])?
+        .first()
+        .map_or(Value::Null, |item| {
+            json!({"state":item["state"],"hold":!item["hold_reason"].is_null(),"finished_at":item["finished_at"]})
+        }))
 }
 
-/// A delegated parent's closeout belongs to its Steward's terminal result.
-fn delegated_completion(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
-    let id = text(work, "work_id")?;
-    let plan = if work["scope_kind"] == "project" {
-        views
-            .get(id)
-            .and_then(|view| view.get("currentPlan"))
-            .cloned()
-    } else {
-        latest(db, Query::Plan, id)?
-    };
-    let Some(plan) = plan else {
-        return Ok(false);
-    };
-    if plan
-        .get("executionMode")
-        .or_else(|| plan.get("execution_mode"))
-        .and_then(Value::as_str)
-        != Some("steward")
-    {
-        return Ok(false);
-    }
-    let plan_id = plan
-        .get("planRevisionId")
-        .or_else(|| plan.get("plan_revision_id"))
-        .and_then(Value::as_str)
-        .ok_or(Error::Invalid("delegated plan id"))?;
-    Ok(db
-        .query_row(
-            Query::DelegatedCompletion.sql(),
-            params![id, plan_id],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some())
+pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
+    Ok(closeout::read(db, work, views)? == Closeout::Reported)
 }
 
 fn disposition(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Value> {
@@ -275,6 +265,76 @@ pub fn project_works(db: &Connection, value: &Value) -> Result<Vec<Value>> {
     Ok(works)
 }
 
+/// What a Work said when it closed, for the steps after it. A delegated parent's
+/// closing is its Steward's result.
+pub(crate) fn closing_summary(db: &Connection, work: &str) -> Result<Option<String>> {
+    let mut summary = None;
+    for turn in rows(db, Query::HistoryTurns.sql(), [work])? {
+        for call in rows(db, Query::HistoryCalls.sql(), [text(&turn, "turn_id")?])? {
+            if call["tool_name"] != "record_work_disposition" {
+                continue;
+            }
+            let result: Value = serde_json::from_str(text(&call, "result_json")?)?;
+            let result = result.get("output").unwrap_or(&result);
+            let args: Value = serde_json::from_str(text(&call, "arguments_json")?)?;
+            if result["ok"] == true && result["work"]["work_id"] == work {
+                let rank = call["rowid"].as_i64();
+                if summary.as_ref().is_none_or(|(at, _)| *at < rank) {
+                    summary = args["summary"].as_str().map(|s| (rank, s.to_owned()));
+                }
+            }
+        }
+    }
+    if summary.is_some() {
+        return Ok(summary.map(|(_, text)| text));
+    }
+    Ok(db
+        .query_row(Query::DelegatedSummary.sql(), [work], |r| r.get(0))
+        .optional()?)
+}
+
+/// A step's Turn ended: it stays unfinished when no Work closed and nothing delegated
+/// for this step can still close one. Another step's Steward says nothing about this
+/// one. A closed Work settles through its closeout instead.
+pub(crate) fn step_unfinished(
+    db: &Connection,
+    epic: &str,
+    session: &str,
+    started: i64,
+    turn: Option<&str>,
+) -> Result<bool> {
+    let works = rows(
+        db,
+        crate::store::queue::sql::LINKED_WORK,
+        params![epic, session, started],
+    )?;
+    let work = works.first();
+    if work.is_some_and(|work| work["status"] != "open") {
+        return Ok(false);
+    }
+    let by_turn = match turn {
+        Some(turn) => db
+            .query_row(Query::TurnDelegationOpen.sql(), [session, turn], |_| Ok(()))
+            .optional()?
+            .is_some(),
+        None => false,
+    };
+    let by_work = match work {
+        Some(work) => delegation_open(db, text(work, "work_id")?)?,
+        None => false,
+    };
+    Ok(!by_turn && !by_work)
+}
+
+/// Open children and pending directions can finish this Work before a child
+/// Turn starts. Use the same rule for step settlement and its running indicator.
+fn delegation_open(db: &Connection, work: &str) -> Result<bool> {
+    Ok(db
+        .query_row(Query::WorkDelegationOpen.sql(), [work], |_| Ok(()))
+        .optional()?
+        .is_some())
+}
+
 /// Only links created in this run and this exact runtime session can settle it.
 pub(crate) fn queue_outcome(
     db: &Connection,
@@ -288,5 +348,14 @@ pub(crate) fn queue_outcome(
         crate::store::queue::sql::LINKED_WORK,
         params![epic, session, started],
     )?;
-    works.first().map(|work|Ok(json!({"work_id":work["work_id"],"reported":reported(db,work,views)?,"failed":matches!(work["status"].as_str(),Some("blocked"|"abandoned")) || disposition(db,work,views)?["disposition"]=="blocked"}))).transpose()
+    works
+        .first()
+        .map(|work| {
+            let closeout = closeout::read(db, work, views)?;
+            let failed = matches!(work["status"].as_str(), Some("blocked" | "abandoned"))
+                || disposition(db, work, views)?["disposition"] == "blocked"
+                || closeout == Closeout::Refused;
+            Ok(json!({"work_id":work["work_id"],"reported":closeout == Closeout::Reported,"failed":failed}))
+        })
+        .transpose()
 }

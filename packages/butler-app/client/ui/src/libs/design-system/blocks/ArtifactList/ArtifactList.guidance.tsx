@@ -15,7 +15,7 @@ function AnswerArtifacts() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "Files Butler produced in an answer: open the artifact, save it, or run another action.",
+  purpose: "Message results, the files Butler produced in an answer: open the artifact, save it, or run another action.",
   whenToUse: ["Artifacts attached to an assistant message"],
   whenNotToUse: [
     { when: "Files the user attached", use: "AttachmentList" },

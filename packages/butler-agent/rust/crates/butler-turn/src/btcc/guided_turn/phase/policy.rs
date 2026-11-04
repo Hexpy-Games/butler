@@ -4,6 +4,9 @@ use crate::btcc::{AccessMode, TurnRecord};
 
 use super::super::work::GuidedPreparationError;
 
+mod access;
+pub use access::project_turn_access_mode;
+
 /// The role a guided turn runs as; other stored names are kept verbatim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PolicyRole {
@@ -91,12 +94,31 @@ impl SubsessionPolicy {
 }
 
 impl GuidedExecutionPolicy {
+    /// Whether this policy belongs to a delegated subsession.
+    pub fn has_subsession(&self) -> bool {
+        self.subsession.is_some()
+    }
+
+    /// The file scope a delegated Worker alone owns; other roles have no Task scope.
+    pub fn worker_mutation_scope(&self) -> Option<&[String]> {
+        if self.role != PolicyRole::Worker {
+            return None;
+        }
+        self.subsession.as_ref()?.mutation_scope.as_deref()
+    }
+
     /// Root chats own their usage; legacy children retain unknown lineage.
     pub fn usage_root<'a>(&'a self, session_id: &'a str) -> Option<&'a str> {
         match &self.subsession {
             None => Some(session_id),
             Some(subsession) => subsession.root_session_id.as_deref(),
         }
+    }
+
+    /// Only the main chat's Butler may read and change canon; delegated
+    /// sessions never get the canon tools.
+    pub fn canon_writer(&self) -> bool {
+        self.role == PolicyRole::Butler && self.subsession.is_none()
     }
 
     /// Main chat usage or the writing session policy role verbatim.

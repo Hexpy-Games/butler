@@ -1,0 +1,9 @@
+/* The code frame: hairline border, panel radius, raised surface. Shared by
+   the markdown fenced block and the approval card's command body. */
+.frame {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}

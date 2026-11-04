@@ -7,7 +7,7 @@ import { composerDecisionKeyboard } from "../../lib/composerDecisionKeyboard";
 import { Typo } from "../../components/Typo";
 import { FieldError } from "../../components/Field";
 import { dsClass } from "../../lib/internal";
-import { ComposerDecisionDetails } from "./ComposerDecisionDetails";
+import { ComposerDecisionDetails, type ComposerDecisionDetail, type ComposerDecisionRenderText } from "./ComposerDecisionDetails";
 import styles from "./ComposerDecisionPanel.module.css";
 
 export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title" | "children"> {
@@ -18,10 +18,15 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   /** What is being decided; wraps in full and opens the source. */
   title: string;
   onOpen: () => void;
-  /** Optional display formatting; the full title and detail text remain available. */
-  renderText?: (text: string) => ReactNode;
-  /** Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut. */
-  details?: readonly string[];
+  /** Optional display formatting; `as` is `code` for a `{ code }` detail. The full title and detail text remain available. */
+  renderText?: ComposerDecisionRenderText;
+  /** The title and details are the exact action (commands, paths, URLs): drawn as their own characters (Typo `literal`). */
+  literal?: boolean;
+  /**
+   * Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut.
+   * `{ code }` is a command body in a code frame: monospace, its own spaces and line breaks; it scrolls both ways and fades each edge that hides content.
+   */
+  details?: readonly ComposerDecisionDetail[];
   /** With `detailsShowLessLabel`, clamps long details to four lines behind an inline "Show more". */
   detailsShowMoreLabel?: string;
   detailsShowLessLabel?: string;
@@ -58,7 +63,7 @@ function DecisionMedia({ content, label, onOpen }: ComposerDecisionMedia) {
 }
 
 /** A pending decision shown in place of the composer input: subject row, optional details and error, media, actions. */
-export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, media, renderText, placement, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
+export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, media, renderText, literal, placement, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
   const panel = useRef<HTMLDivElement>(null);
   const { defer, deferring } = useComposerPanelTransition(panel);
   const hasDetails = Boolean(details?.length);
@@ -66,10 +71,10 @@ export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, d
     onKeyDown={(event) => { if (deferring) { event.preventDefault(); event.stopPropagation(); return; } composerDecisionKeyboard(event); onKeyDown?.(event); }} {...props}>
     <ComposerPanelHeader icon={icon} eyebrow={eyebrow} dataSlot="composer-decision-subject" hasDetails={hasDetails}
       title={<Clickable variant="text" onClick={onOpen} title={title}>
-        <Typo.Label weight="medium" tone="primary" wrap="anywhere">{renderText ? renderText(title) : title}</Typo.Label>
+        <Typo.Label weight="medium" tone="primary" wrap="anywhere" literal={literal}>{renderText ? renderText(title, "text") : title}</Typo.Label>
       </Clickable>} aside={aside} />
     {hasDetails && <ComposerPanelBody dataSlot="decision-details-scroll" single>
-      <ComposerDecisionDetails lines={details!} renderText={renderText} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
+      <ComposerDecisionDetails lines={details!} renderText={renderText} literal={literal} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
     </ComposerPanelBody>}
     {error && <FieldError className={dsClass(styles.error)}><Typo.Caption as="p" tone="inherit">{error}</Typo.Caption></FieldError>}
     {media && <DecisionMedia {...media} />}

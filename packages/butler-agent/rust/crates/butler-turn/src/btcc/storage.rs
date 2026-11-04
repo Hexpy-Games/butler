@@ -1,7 +1,7 @@
 //! BTCC-owned SQLite connection lifecycle and serialized execution lane.
 
 mod admission;
-mod authority;
+pub(in crate::btcc) mod authority;
 mod bootstrap;
 mod budget;
 mod canonical;
@@ -71,7 +71,7 @@ pub use subsessions::{
     NativeStewardContext, OPEN_SUBTASKS_SQL, PacketExecutionMode, PacketPlanAction,
     PacketWorkerProfile, ParentResultInput, ParentResultRoute, ParentWorkRef,
     RESET_DIRECTION_DISPATCH_SQL, RESTORE_WAITING_DIRECTION_SQL, RETRY_WORKER_SQL,
-    RUNNING_WORKERS_SQL, SqliteSubsessionRepository, StewardResultInput,
+    RUNNING_WORKERS_SQL, SUBTASK_WORKERS_SQL, SqliteSubsessionRepository, StewardResultInput,
     StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionCreate,
     SubsessionDispatchState, SubsessionPacket, WAITING_WORKERS_SQL, WORKER_RESULT_MARKER_SQL,
     WORKER_TURN_UNSETTLED_SQL, WorkerResultInput, enqueued_workers_sql, subsession_result_id,

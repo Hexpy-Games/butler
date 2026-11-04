@@ -1,4 +1,4 @@
-//! UI diff details remain in the immutable journal, never in model projections.
+//! UI diff details and delivered files' original paths remain in the immutable journal, never in model projections.
 use butler_core::json::{JsonError, visit_raw_array, visit_raw_object};
 use butler_turn::btcc::BtccError;
 
@@ -20,7 +20,11 @@ fn project(raw: &str, output: &mut String) -> Result<(), JsonError> {
                 let name: String = serde_json::from_str(key)?;
                 if matches!(
                     name.as_str(),
-                    "changed_file" | "changed_files" | "changedFiles"
+                    "changed_file"
+                        | "changed_files"
+                        | "changedFiles"
+                        | "origin_path"
+                        | "originPath"
                 ) {
                     return Ok(());
                 }

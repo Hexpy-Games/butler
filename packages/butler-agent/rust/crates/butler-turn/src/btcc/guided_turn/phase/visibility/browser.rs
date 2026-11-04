@@ -1,5 +1,5 @@
 use super::*;
-/// Conversation browser effects have their own durable authority lane, not a Work plan.
+/// Conversation browser tools have their own durable authority lane, not a Work plan; Workers get the read-only ones.
 pub(super) fn authorize(
     names: &mut HashSet<String>,
     catalog: &GuidedCatalogSnapshot,
@@ -13,12 +13,10 @@ pub(super) fn authorize(
             }
         }
     }
-    if worker {
-        return;
-    }
     for name in [
         "browser_open",
         "browser_observe",
+        "browser_read",
         "browser_act",
         "browser_tabs",
         "browser_selection",
@@ -31,12 +29,16 @@ pub(super) fn authorize(
         "browser_pay_fill",
         "browser_autofill_fill",
     ] {
-        if catalog.tool(name).is_some()
-            && (!matches!(
-                name,
-                "browser_act" | "browser_sign_in" | "browser_pay_fill" | "browser_autofill_fill"
-            ) || policy.access_mode != AccessMode::ReadOnly)
-        {
+        let Some(tool) = catalog.tool(name) else {
+            continue;
+        };
+        // Reading a page in a tab is a read, like web_read: every role may. Acting in one stays with Butler and its Steward.
+        let reads = tool.effect_boundary.as_deref() == Some("none");
+        let ask_free = !matches!(
+            name,
+            "browser_act" | "browser_sign_in" | "browser_pay_fill" | "browser_autofill_fill"
+        ) || policy.access_mode != AccessMode::ReadOnly;
+        if reads || !worker && ask_free {
             names.insert(name.into());
         }
     }

@@ -6,7 +6,7 @@ import { extname, join, normalize, resolve, sep } from "node:path";
 import { HARNESS_MESSAGES, HARNESS_MODEL_CATALOG, HARNESS_NAVIGATION, HARNESS_SS03_OBSERVER_VIEW } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 import { EMPTY_SETTINGS } from "../../packages/butler-app/client/ui/src/app/constants.ts";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
-import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 
 const before = Bun.argv.includes("--before");
 const output = process.env.BUTLER_APPROVAL_EXACT_SHOTS;
@@ -22,6 +22,15 @@ const cases = [
   { tool: "start_topic_conversation", kind: "start_conversation", input: { title: "항목 검토", destination: "chat", follow_up: "항목을 비교하고 결과를 알려 주세요." }, text: "항목을 비교하고 결과를 알려 주세요." },
   { tool: "call_mcp_tool", kind: "use_connector", input: { recipient: "review@example.test", subject: "검토 결과" }, text: "review@example.test" },
 ];
+const cellKey = (width: number, theme: string, background: string, completed: boolean, tool: string) => `${width}-${theme}-${background}-${completed ? "completed" : "pending"}-${tool}`;
+const caseKeys = [1280, 390].flatMap(width => ["light", "dark"].flatMap(theme =>
+  ["plain", "wallpaper"].flatMap(background => [false, true].flatMap(completed =>
+    cases.map(item => cellKey(width, theme, background, completed, item.tool))))));
+if (await runSmokeCases(caseKeys, "BUTLER_APPROVAL_EXACT_CASE", import.meta.path, { isolate: true })) {
+  console.log(JSON.stringify({ ok: true, cases: caseKeys.length }));
+  process.exit(0);
+}
+
 function sessionView(item: typeof cases[number]): SessionView {
   const approval = { operation: { tool: item.tool, access: "change", targets: [item.tool], allow_conversation: false },
     action_kind: item.kind, targets: [{ kind: "other", path: item.tool }], count: 1, examples: [JSON.stringify(item.input)], risk: "medium",
@@ -51,6 +60,7 @@ try {
     const path = normalize(join(dist, decodeURIComponent(url.pathname)));
     if (path.startsWith(dist + sep) && existsSync(path) && statSync(path).isFile()) return route.fulfill({ contentType: contentTypes[extname(path)] ?? "application/octet-stream", body: readFileSync(path) });
     if (url.pathname === "/settings") return route.fulfill({ json: { ok: true, data: { ...EMPTY_SETTINGS, ...(fixture.settings as object) } } });
+    if (url.pathname === "/canon/mcp-grants") return route.fulfill({ json: { ok: true, data: { grants: [] } } });
     if (url.pathname === "/model-catalog") return route.fulfill({ json: { ok: true, data: HARNESS_MODEL_CATALOG } });
     const view = fixture.sessionView as ReturnType<typeof sessionView>;
     if (url.pathname === "/session-view") return route.fulfill({ json: { protocol_version: "butler.app.v1", data: view } });
@@ -59,6 +69,8 @@ try {
     if (url.pathname === "/navigation") return route.fulfill({ json: { ok: true, data: HARNESS_NAVIGATION } });
     if (url.pathname === "/projects/butler/canon/sidebar") return route.fulfill({ json: { ok: true, data: { project_id: "butler", groups: [] } } });
     if (url.pathname === "/projects/butler/canon") return route.fulfill({ json: { ok: true, data: { project_id: "butler", plans: [], backlog: [], backlog_revision: 0 } } });
+    if (/^\/sessions\/[^/]+\/pending-asks$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client", open_count: 0, asks: [] } } });
+    if (/^\/sessions\/[^/]+\/canon\/queue$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client", graph_revision: 0, plan: null, counts: { running: 0, failed: 0, held: 0, waiting: 0 }, chains: [] } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     const data = /^\/sessions\/[^/]+\/controls$/u.test(url.pathname) ? { session_id: "butler-client", revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-5.6-sol", access_mode: "full_access", reasoning_effort: "none", plan_mode: false } } : {};
     return route.fulfill({ json: { ok: true, data } });
@@ -66,6 +78,7 @@ try {
   for (const width of [1280, 390]) for (const theme of ["light", "dark"]) {
     for (const background of ["plain", "wallpaper"]) for (const completed of [false, true]) {
       for (const item of cases) {
+        if (process.env.BUTLER_APPROVAL_EXACT_CASE !== cellKey(width, theme, background, completed, item.tool)) continue;
         const view = sessionView(item);
         fixture = { messages: view.messages, sessionView: view, background,
           settings: { onboarding: { consent_version: 2, accepted_at: "2026-10-01T00:00:00Z", completed_at: completed ? "2026-10-01T00:00:00Z" : null } } };
@@ -86,6 +99,7 @@ try {
             return Boolean(field && field.getBoundingClientRect().bottom <= field.parentElement!.getBoundingClientRect().bottom + 1);
           }, item.text);
         }
+        assert.equal(await panel.locator('[aria-haspopup="menu"]').count(), 1, "allow keeps its scope menu; conversation option shows disabled");
         const text = await panel.innerText();
         assert.equal(text.includes(item.text), !before, `${item.tool}: exact input visibility`);
         await page.evaluate(() => document.fonts.ready);

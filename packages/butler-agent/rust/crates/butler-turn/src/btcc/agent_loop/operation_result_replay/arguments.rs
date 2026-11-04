@@ -52,6 +52,10 @@ pub(super) fn exact_read_arguments(
         return Err(error(BtccCode::OperationResultLengthInvalid));
     }
     Ok(ExactReadArguments {
+        evidence: value
+            .get("evidence")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         source,
         result_ref: result_ref.to_owned(),
         sha256: sha256.to_owned(),

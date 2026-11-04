@@ -207,3 +207,5 @@ export { desktopViewportScope } from "./lib/desktopViewport";
 
 export { WallpaperStage } from "./blocks/WallpaperStage";
 export { DEFAULT_OVERLAY_PRESENTATION, type OverlayPresentation } from "./lib/presentation";
+
+export * from "./blocks/LiveTabList";

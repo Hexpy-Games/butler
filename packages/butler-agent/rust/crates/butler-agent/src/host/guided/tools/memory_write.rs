@@ -53,8 +53,7 @@ pub(super) async fn execute(
         ));
     }
     if !owner
-        .binding
-        .access_mode
+        .access_mode()
         .allows_without_approval(ApprovalExemptAction::MemorySave)
     {
         return encoded(&json!({

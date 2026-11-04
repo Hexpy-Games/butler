@@ -29,7 +29,7 @@ function WaitingBand() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "One 40px line on a PageCard's top edge for page-scoped state: who holds the tab, an approval, your input, picking, a pop-up.",
+  purpose: "The browser control band, one 40px line on a PageCard's top edge for page-scoped state: who holds the tab, an approval, your input, picking, a pop-up.",
   whenToUse: ["State that belongs to one page, with up to three actions on it", "Butler's control verbs: Take over, Give back to Butler, Stop task"],
   whenNotToUse: [
     { when: "State of the whole app or a form", use: "Notice" },

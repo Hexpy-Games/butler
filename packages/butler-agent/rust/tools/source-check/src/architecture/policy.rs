@@ -95,8 +95,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
         "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
-        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files"
-        | "shared_locks" => &[],
+        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files" | "plugin_git"
+        | "shared_locks" | "powershell_text" | "host_file_behavior" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
@@ -128,7 +128,13 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // with secure_fs; login-start definitions live under the user's home.
         "command_launcher" => &["launcher", "user_dirs"],
         // Manager definitions own private log destinations; E2E fixtures publish executables.
-        "service_registration" => &["instance", "user_dirs", "secure_fs", "launcher"],
+        "service_registration" => &[
+            "instance",
+            "user_dirs",
+            "secure_fs",
+            "launcher",
+            "powershell_text",
+        ],
         // Native import reads source profiles, wipes secrets and opens consented exports.
         "browser_transfer" => &["browser_profiles", "secrets", "user_dirs", "desktop"],
         _ => return None,

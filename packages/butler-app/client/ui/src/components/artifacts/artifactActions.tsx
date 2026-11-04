@@ -5,8 +5,13 @@ import type { ReactNode } from "react";
 import { Button, ButtonContainer, Popup, Save, Tooltip } from "@/butler-ds";
 import { artifactUrl } from "./artifactDisplay";
 
-/** Types another app may open; the agent decides from the file's content and refuses the rest. */
-const OPEN_IN_APP_EXTENSIONS = new Set(["pdf", "docx", "xlsx", "pptx", "hwp", "hwpx"]);
+/** Name hint only; the gateway verifies content and may downgrade to reveal. */
+const OPEN_IN_APP_EXTENSIONS = new Set(["pdf", "docx", "xlsx", "pptx", "hwp", "hwpx", "png", "jpg", "jpeg", "gif", "webp", "md", "markdown", "txt", "csv"]);
+
+export function canOpenInApp(name: string): boolean {
+  const extension = /\.([^./\\]+)$/u.exec(name.trim())?.[1]?.toLowerCase() ?? "";
+  return OPEN_IN_APP_EXTENSIONS.has(extension);
+}
 
 export interface ArtifactCardAction {
   id: string;
@@ -81,8 +86,7 @@ export function OpenInAppButton({ artifact }: { artifact: SessionArtifactSummary
   const fileId = artifact.file_id;
   if (!fileId || typeof window === "undefined" || typeof window.butlerApp?.openMessageFile !== "function") return null;
   const name = artifact.safe_path_label || artifact.title;
-  const extension = /\.([^./\\]+)$/u.exec(name.trim())?.[1]?.toLocaleLowerCase("en-US") ?? "";
-  const blocked = !OPEN_IN_APP_EXTENSIONS.has(extension);
+  const blocked = !canOpenInApp(name);
   const label = appCopy.artifacts.openInApp;
   return (
     <Tooltip label={blocked ? appCopy.artifacts.openInAppBlocked : undefined}>
@@ -93,12 +97,11 @@ export function OpenInAppButton({ artifact }: { artifact: SessionArtifactSummary
   );
 }
 
-async function openInApp(fileId: string): Promise<void> {
+export async function openInApp(fileId: string): Promise<void> {
   try {
     const result = await window.butlerApp?.openMessageFile?.({ fileId }) as { opened?: boolean; code?: unknown } | undefined;
     if (result?.opened) return;
-    const refused = typeof result?.code === "string" && result.code.startsWith("open_type_");
-    notifyStatus(refused ? appCopy.artifacts.openInAppBlocked : appCopy.artifacts.openInAppFailed, { tone: "error" });
+    notifyStatus(result?.code === "original_not_found" ? appCopy.fileViewer.originalNotFound : appCopy.artifacts.openInAppFailed, { tone: "error" });
   } catch (error) {
     notifyError(error, appCopy.artifacts.openInAppFailed);
   }

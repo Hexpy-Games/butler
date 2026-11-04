@@ -50,7 +50,7 @@ if (shots) mkdirSync(shots, { recursive: true });
 const mock = JSON.parse(readFileSync(join(root, "tests/smoke/answer-blocks-mock.json"), "utf8")) as AnswerBlocks;
 const answer: MessageRecord = { id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered",
   artifacts: [{ id: "doc-focus", title: "Focus document", kind: "doc", session_id: "butler-client", message_id: "answer", created_at: "2026-10-25T00:00:00Z" }],
-  text: "조건에 맞는 후보를 비교했습니다.", created_at: "2026-10-12T08:51:00Z", answer_blocks: [{ call_id: "blocks", set_ids: [], spec: mock }] };
+  text: "조건에 맞는 후보를 비교했습니다.", created_at: "2026-10-12T08:51:00Z", answer_blocks: [{ call_id: "blocks", set_ids: [], spec: mock }, { call_id: "epic-cards", set_ids: [], spec: { v: 2, blocks: [{ type: "epics", project_id: "butler", ids: ["focus-epic"] }] } }] };
 const myTabs = ["https://news.ycombinator.com/", "https://developer.mozilla.org/"].map((url, index) => ({
   id: `m${index + 1}`, owner: "mine", url, title: `My tab ${index + 1}`, favicon: "", status: "idle", canBack: false, canForward: false,
 }));
@@ -272,6 +272,8 @@ async function auditCell(page: Page, cell: Cell) {
   await open(page, cell);
   // Conversation: answer cards' buttons, the agent tab rail and the composer.
   if (cell.width < 768) await page.keyboard.press("Escape");
+  await page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item]').waitFor();
+  await auditScope(page, cell, "chat-epic-cards", '[data-test-class="chat-epic-cards"]', 10);
   await auditScope(page, cell, "conversation", '[data-test-class~="conversation"]', 160);
   await auditSessionOrderFocus(page, (screen, scope) => auditScope(page, cell, screen, scope, 40), (screen, steps) => auditArrows(page, cell, screen, steps));
   await page.locator('[data-test-class="message-artifact-list"]').getByText("Focus document", { exact: true }).click();

@@ -40,7 +40,7 @@ export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy
   const settings = panel("settings", <>
     <SettingsHeader title={<Line id="title">{copy.title}</Line>} description={<Line id="lead">{copy.titleLead}</Line>} />
     <Box>
-      <SettingsSection id="type-hero-appearance" kind="form">
+      <SettingsSection id="type-hero-appearance" kind="form" title={copy.section}>
         <SettingsField label={<Line id="field">{copy.field}</Line>} description={<Line id="hint">{copy.fieldHint}</Line>}
           control={<Part name="switch" sketch><Switch aria-label={copy.field} checked onCheckedChange={() => undefined} /></Part>} />
         <SettingsField label={<Line id="field2">{copy.field2}</Line>} description={<Line id="hint2">{copy.field2Hint}</Line>}

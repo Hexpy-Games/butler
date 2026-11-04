@@ -5,7 +5,7 @@ use butler_e2e::e2e::scenario::Setup;
 use rusqlite::{Connection, params, params_from_iter, types::Value as SqlValue};
 
 const SQL: &str = butler_turn::btcc::storage::OPEN_SUBTASKS_SQL;
-/// The query's own CTE and table aliases; every table alias must be a SEARCH.
+/// Both queries' own CTE and table aliases; every table alias must be a SEARCH.
 const CTES: [&str; 4] = ["tops", "subtree", "t", "s"];
 const TABLES: [&str; 3] = ["r", "a", "u"];
 
@@ -23,21 +23,32 @@ async fn open_subtask_read_is_indexed_and_bounded_by_open_children() -> Result<(
 
 fn check(data: &std::path::Path) -> Result<(), HarnessError> {
     let db = butler_platform::sqlite::open(data.join("agent-runtime/btcc.sqlite"))?;
-    let plan = plan(&db)?;
-    for line in plan.lines() {
-        let name = line.split_whitespace().nth(1).unwrap_or_default();
-        if line.starts_with("SCAN ") {
-            assert!(
-                CTES.contains(&name) || line.contains("VIRTUAL TABLE") || line.contains("USING"),
-                "unindexed source: {line}\n{plan}"
-            );
-        }
-        // An automatic index is built by scanning the table on every read.
-        if TABLES.contains(&name) {
-            assert!(
-                line.starts_with("SEARCH ") && !line.contains("AUTOMATIC"),
-                "table not searched through a stored index: {line}\n{plan}"
-            );
+    let workers = plan(&db, butler_turn::btcc::storage::SUBTASK_WORKERS_SQL)?;
+    assert!(
+        workers
+            .lines()
+            .any(|line| line.starts_with("SEARCH r USING INDEX idx_btcc_activity_parent_page")),
+        "{workers}"
+    );
+    let subtasks = plan(&db, SQL)?;
+    for plan in [subtasks, workers] {
+        for line in plan.lines() {
+            let name = line.split_whitespace().nth(1).unwrap_or_default();
+            if line.starts_with("SCAN ") {
+                assert!(
+                    CTES.contains(&name)
+                        || line.contains("VIRTUAL TABLE")
+                        || line.contains("USING"),
+                    "unindexed source: {line}\n{plan}"
+                );
+            }
+            // An automatic index is built by scanning the table on every read.
+            if TABLES.contains(&name) {
+                assert!(
+                    line.starts_with("SEARCH ") && !line.contains("AUTOMATIC"),
+                    "table not searched through a stored index: {line}\n{plan}"
+                );
+            }
         }
     }
     let (parents, history, open) = seed(&db)?;
@@ -110,8 +121,8 @@ fn seed(db: &Connection) -> Result<Seeded, HarnessError> {
     Ok((parents, history, open))
 }
 
-fn plan(db: &Connection) -> Result<String, HarnessError> {
-    let mut statement = db.prepare(&format!("EXPLAIN QUERY PLAN {SQL}"))?;
+fn plan(db: &Connection, sql: &str) -> Result<String, HarnessError> {
+    let mut statement = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
     let binds = vec![SqlValue::Null; statement.parameter_count()];
     let plan = statement
         .query_map(params_from_iter(binds), |r| r.get::<_, String>(3))?

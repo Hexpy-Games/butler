@@ -1,13 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
+import { LIBRARY_VIEWER, useFileViewerState } from "@/app/fileViewerState";
 import { appCopy } from "@/app/copy";
 import { refreshSessionFileUrls } from "@/app/messageFileRefresh";
 import { useButlerStore } from "@/app/store";
 import type { SessionArtifactSummary } from "@/app/types";
-import { Library, Save } from "@/butler-ds";
+import { FolderOpen, Library, Popup, Save } from "@/butler-ds";
 import { ArtifactBody, revisionArtifact } from "../artifacts/ArtifactBody";
 import { ArtifactRevisionSelect } from "../artifacts/ArtifactViewer";
-import { artifactCardActions } from "../artifacts/artifactActions";
-import { artifactDescription, artifactMeta } from "../artifacts/artifactDisplay";
+import { artifactCardActions, canOpenInApp, openInApp } from "../artifacts/artifactActions";
+import { artifactDescription, artifactMeta, artifactPreviewMode } from "../artifacts/artifactDisplay";
 import { clearFilters, setFilters } from "../library/libraryFilters";
 import { openLibrary } from "../library/libraryNav";
 import { FileViewerHeader, FileViewerPage, type FileViewerAction } from "./FileViewerFrame";
@@ -23,25 +24,33 @@ export function FileViewerArtifact({ sessionId, artifact: latest, onClose, onBac
   const refreshFileUrls = useCallback(() => refreshSessionFileUrls(owner, { cursor }), [owner, cursor]);
   const meta = [artifactDescription(artifact), artifactMeta(artifact)].filter(Boolean).join(" · ");
   return <>
-    <FileViewerHeader title={artifact.title} meta={meta} onClose={onClose} onBack={onBack} actions={fileActions(latest, artifact)}
+    <FileViewerHeader title={artifact.title} meta={meta} onClose={onClose} onBack={onBack} actions={fileActions(latest, artifact, sessionId !== LIBRARY_VIEWER)}
       leading={<ArtifactRevisionSelect artifact={latest} index={index} onChange={setIndex} />} />
-    <FileViewerPage><ArtifactBody artifact={artifact} refreshFileUrls={refreshFileUrls} surface="page" /></FileViewerPage>
+    <FileViewerPage fill={artifactPreviewMode(artifact) === "markdown"}><ArtifactBody artifact={artifact} refreshFileUrls={refreshFileUrls} surface="page" /></FileViewerPage>
   </>;
 }
 
-function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSummary): FileViewerAction[] {
+function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSummary, outsideLibrary: boolean): FileViewerAction[] {
   const c = appCopy.fileViewer;
   const actions: FileViewerAction[] = [];
   // Only a delivered file is filed in the 서랍 (as a document); the 문서 section opens searched to it.
-  if (latest.deliverable) actions.push({ id: "open-in-library", label: c.openInLibrary, ariaLabel: `${c.openInLibrary}: ${latest.title}`,
+  if (outsideLibrary && latest.deliverable) actions.push({ id: "open-in-library", label: c.openInLibrary, ariaLabel: `${c.openInLibrary}: ${latest.title}`,
     icon: <Library size="sm" />, labelIcon: true, run: () => openInLibrary(latest.title) });
   const save = artifactCardActions(artifact).find((action) => action.id === "save");
   if (save) actions.push({ id: "save", label: c.save, ariaLabel: save.ariaLabel, icon: <Save size="sm" />,
     run: save.onClick ?? (() => download(save.href!, save.download)) });
+  const fileId = artifact.file_id;
+  if (fileId && typeof window !== "undefined" && typeof window.butlerApp?.openMessageFile === "function") {
+    const reveal = !canOpenInApp(artifact.safe_path_label || artifact.title);
+    const label = reveal ? c.showInFolder : c.openInDefaultApp;
+    actions.push({ id: "open-external", label, ariaLabel: `${label}: ${artifact.title}`, iconOnly: true,
+      icon: reveal ? <FolderOpen size="sm" /> : <Popup size="sm" />, run: () => { void openInApp(fileId); } });
+  }
   return actions;
 }
 
 function openInLibrary(title: string) {
+  useFileViewerState.getState().setShown(LIBRARY_VIEWER, false);
   clearFilters();
   setFilters({ text: title, q: title });
   openLibrary({ section: "document" });

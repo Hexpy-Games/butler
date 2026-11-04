@@ -33,6 +33,7 @@ pub(crate) struct Script {
     count: usize,
     pub(crate) requests: Mutex<Vec<(String, Value)>>,
     pub(crate) repeat_first: AtomicBool,
+    pub(super) wait_regression: AtomicBool,
     pub(crate) repeated_outputs: Mutex<Vec<Value>>,
     pub(crate) steer: AtomicBool,
     pub(crate) hold_continuation: AtomicBool,
@@ -48,6 +49,10 @@ pub(crate) struct Script {
     /// The Steward closes its Work instead of waiting for its Worker.
     pub(crate) close_before_worker: AtomicBool,
     pub(crate) hold_worker_report: AtomicBool,
+    /// Holds the Steward just before it closes its Work.
+    pub(crate) hold_steward_close: AtomicBool,
+    pub(crate) steward_closing: Gate,
+    pub(crate) steward_close_release: Gate,
     pub(crate) worker_reporting: Gate,
     pub(crate) worker_report_release: Gate,
 }
@@ -65,6 +70,7 @@ pub(crate) async fn start(
         count,
         requests: Default::default(),
         repeat_first: AtomicBool::new(false),
+        wait_regression: AtomicBool::new(false),
         repeated_outputs: Default::default(),
         steer: AtomicBool::new(false),
         hold_continuation: AtomicBool::new(false),
@@ -82,6 +88,9 @@ pub(crate) async fn start(
         waiting_wording: AtomicBool::new(false),
         close_before_worker: AtomicBool::new(false),
         hold_worker_report: AtomicBool::new(false),
+        hold_steward_close: AtomicBool::new(false),
+        steward_closing: Gate::new(),
+        steward_close_release: Gate::new(),
         worker_reporting: Gate::new(),
         worker_report_release: Gate::new(),
     });
@@ -166,7 +175,7 @@ async fn reply(
     if body["input"].as_array().is_some_and(|items| items.iter().any(|item| {
         item["output"].as_str().and_then(|text| serde_json::from_str::<Value>(text).ok()).is_some_and(|value| {
             let output = &value["output"];
-            output["status"] == "waiting" && output["message"] == format!("Worker {} is waiting because this session already has 2 Workers running. It starts automatically when one of them finishes, and its result arrives like any other. Continue your own work and do not dispatch it again.", output["delegation_id"].as_str().unwrap())
+            output["status"] == "waiting" && output["delegation_id"].as_str().is_some_and(|id| output["message"] == format!("Worker {id} is waiting because this session already has 2 Workers running. It starts automatically when one of them finishes, and its result arrives like any other. Continue your own work and do not dispatch it again."))
         })
     })) {
         script.waiting_wording.store(true, Ordering::SeqCst);
@@ -215,47 +224,58 @@ async fn reply(
     {
         script.fourth.wait().await;
     }
-    let item = match role {
-        "parent" => parent(step, group),
-        "steward" if steering && step == 5 && !script.steered.load(Ordering::SeqCst) => {
-            if script.followup.load(Ordering::SeqCst) {
-                script.direction.wait().await;
+    let item = if script.wait_regression.load(Ordering::SeqCst) {
+        super::requires_e2e_fixtures::response(role, &key.user_request, step, script.count, &body)
+    } else {
+        match role {
+            "parent" => parent(step, group),
+            "steward" if steering && step == 5 && !script.steered.load(Ordering::SeqCst) => {
+                if script.followup.load(Ordering::SeqCst) {
+                    script.direction.wait().await;
+                }
+                let outputs: Vec<_> = body["input"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|v| v["output"].as_str())
+                    .filter_map(|v| serde_json::from_str::<Value>(v).ok())
+                    .filter_map(|v| {
+                        v.pointer("/output/relation_id")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .collect();
+                let relation = if script.followup.load(Ordering::SeqCst) {
+                    outputs.first()
+                } else {
+                    outputs.last()
+                }
+                .unwrap();
+                call(
+                    "steer_worker",
+                    json!({"relation_id":relation,"instruction":"Verify the updated source"}),
+                )
             }
-            let outputs: Vec<_> = body["input"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter_map(|v| v["output"].as_str())
-                .filter_map(|v| serde_json::from_str::<Value>(v).ok())
-                .filter_map(|v| {
-                    v.pointer("/output/relation_id")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned)
-                })
-                .collect();
-            let relation = if script.followup.load(Ordering::SeqCst) {
-                outputs.first()
-            } else {
-                outputs.last()
-            }
-            .unwrap();
-            call(
-                "steer_worker",
-                json!({"relation_id":relation,"instruction":"Verify the updated source"}),
-            )
+            "steward" => steward(
+                if key.user_request.starts_with("Delegated result") {
+                    step + script.count + 2
+                } else {
+                    step
+                },
+                group,
+                script.count,
+                &body,
+            ),
+            _ => worker(step, &body),
         }
-        "steward" => steward(
-            if key.user_request.starts_with("Delegated result") {
-                step + script.count + 2
-            } else {
-                step
-            },
-            group,
-            script.count,
-            &body,
-        ),
-        _ => worker(step, &body),
     };
+    if role == "steward"
+        && item["name"] == "record_work_disposition"
+        && script.hold_steward_close.swap(false, Ordering::SeqCst)
+    {
+        script.steward_closing.add_permits(1);
+        script.steward_close_release.wait().await;
+    }
     if role == "worker"
         && item["type"] == "message"
         && script.hold_worker_report.swap(false, Ordering::SeqCst)
@@ -269,7 +289,7 @@ async fn reply(
     )
         .into_response()
 }
-fn parent(step: usize, group: &str) -> Value {
+pub(super) fn parent(step: usize, group: &str) -> Value {
     let objective = format!("Verify batch {group}");
     match step {
         0 => call(
@@ -279,7 +299,7 @@ fn parent(step: usize, group: &str) -> Value {
         _ => message("Verification delegated."),
     }
 }
-fn steward(step: usize, group: &str, count: usize, body: &Value) -> Value {
+pub(super) fn steward(step: usize, group: &str, count: usize, body: &Value) -> Value {
     match step {
         0 => call(
             "replace_work_plan",
@@ -302,7 +322,7 @@ fn steward(step: usize, group: &str, count: usize, body: &Value) -> Value {
         _ => message("Evidence verified."),
     }
 }
-fn worker(step: usize, body: &Value) -> Value {
+pub(super) fn worker(step: usize, body: &Value) -> Value {
     match step {
         0 => call("replace_work_plan", plan("Verify evidence", "direct", 1)),
         1 => call("record_work_review", review()),
@@ -332,14 +352,39 @@ fn work_id(body: &Value) -> String {
                 .and_then(Value::as_str)
                 .map(str::to_owned)
         })
+        .or_else(|| {
+            body["input"].as_array()?.iter().find_map(|item| {
+                if item["role"] != "user" {
+                    return None;
+                }
+                let content = match &item["content"] {
+                    Value::String(text) => text.clone(),
+                    Value::Array(parts) => parts
+                        .iter()
+                        .filter_map(|p| p["text"].as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    _ => String::new(),
+                };
+                content.lines().find_map(|line| {
+                    line.strip_prefix(
+                        "Explicit relation Work id (model-only; never report to user): ",
+                    )
+                    .map(str::to_owned)
+                })
+            })
+        })
         .unwrap_or_default()
 }
-fn call(name: &str, args: Value) -> Value {
+fn call(name: &str, mut args: Value) -> Value {
+    if name == "delegate_to_worker" && args.get("task").is_none() {
+        args["task"] = json!({"scope":{"paths":[format!("tasks/{}", args["action_key"].as_str().unwrap_or("work"))]},"output":{"format":"text","fields":["summary"]}});
+    }
     let mut output = json!({"type":"function_call","name":name});
     output["arguments"] = args;
     output
 }
-fn message(text: &str) -> Value {
+pub(super) fn message(text: &str) -> Value {
     json!({"type":"message","text":text})
 }
 fn wire(item: &Value, id: &str) -> String {

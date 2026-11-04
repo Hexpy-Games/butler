@@ -133,6 +133,7 @@ impl AppApplication {
                 outputs
                     .into_iter()
                     .map(|o| SessionArtifactSummary {
+                        sha256: None,
                         id: o.output_id.clone(),
                         source_label: None,
                         deliverable: true,

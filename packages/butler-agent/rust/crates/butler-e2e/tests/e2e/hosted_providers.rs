@@ -90,10 +90,40 @@ async fn register(
     assert_eq!(turn["state"], "delivered", "{turn}");
     Ok(())
 }
+/// The model add/edit page lists catalog providers in order and preselects
+/// the first: existing providers keep their place, newer ones follow.
+async fn assert_provider_picker_order(s: &Scenario) -> Result<(), HarnessError> {
+    let catalog = s.gw.get("/model-catalog").await?;
+    assert_eq!(catalog.status, 200, "{}", catalog.text);
+    let ids = catalog.data()["providers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|provider| provider["provider_id"].as_str())
+        .filter(|id| *id != "local")
+        .collect::<Vec<_>>();
+    let expected = [
+        "openai",
+        "anthropic",
+        "google",
+        "xai",
+        "qwen",
+        "kimi",
+        "zai",
+        "zai-api",
+        "opencode-go",
+        "deepseek",
+        "upstage",
+        "motif",
+    ];
+    assert_eq!(ids, expected);
+    Ok(())
+}
 #[tokio::test]
 async fn settings_keys_select_and_route_each_hosted_provider() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, _server) = start().await?;
+    assert_provider_picker_order(&s).await?;
     let mut connected = std::collections::BTreeSet::new();
     for (provider, model, effort) in [
         ("deepseek", "deepseek-flash", "high"),

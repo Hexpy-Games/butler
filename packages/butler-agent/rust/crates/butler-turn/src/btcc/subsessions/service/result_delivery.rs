@@ -56,11 +56,31 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionRelationMissing))?;
+        if self.steward_closed(&delegation).await? {
+            return self.mark_result_delivered(pending.result_id).await;
+        }
         let crate::btcc::ParentResultInput::StewardQueue(input) = &pending.input else {
             return Err(error(BtccCode::SubsessionOutboxInvalid));
         };
         let timestamp = &input.timestamp;
-        let text = &input.text;
+        let mut text = input.text.clone();
+        if let Some(worker) = self
+            .repository
+            .relation_for_result(pending.result_id.clone())
+            .await?
+            && let Some(new) = &worker.packet.superseded_by
+        {
+            let action = worker
+                .packet
+                .plan_action
+                .as_ref()
+                .map(|a| a.action_key.as_str())
+                .unwrap_or("");
+            text = format!(
+                "Superseded Worker result: {} was replaced by {new} for action {action}; it is not this action's result.\n{text}",
+                worker.relation_id
+            );
+        }
         let reasoning_effort = parent
             .metadata
             .as_ref()

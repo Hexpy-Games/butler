@@ -1,5 +1,7 @@
 # KanbanBoard
 
+Glossary: 과제 상태 열 / task status lane (`KanbanLane`); 과제 카드 / task card (`KanbanCard`).
+
 ## What is this component
 `KanbanBoard` lays out `KanbanLane`s on a grid (four columns by default); each lane is a flat surface with a title and a fixed-height (`--kanban-lane-height`) scrolling list, or (`height="content"`) a lane that grows with its cards. Inside a `KanbanDragScope`, `KanbanCard`s move within a lane, between lanes and between boards.
 

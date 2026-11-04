@@ -36,8 +36,8 @@ export function subtaskLabel(subtask: SubtaskView): string {
 }
 
 /** Opens the subtask's observer over its parent conversation. */
-export async function openSubtask(parentId: string, subtask: SubtaskView) {
+export async function openSubtask(parentId: string, sessionId: string) {
   const store = useButlerStore.getState();
   if (store.activeChatId !== parentId) await store.openSession(parentId);
-  if (useButlerStore.getState().activeChatId === parentId) useButlerStore.getState().openSessionObserver(subtask.session_id);
+  if (useButlerStore.getState().activeChatId === parentId) useButlerStore.getState().openSessionObserver(sessionId);
 }

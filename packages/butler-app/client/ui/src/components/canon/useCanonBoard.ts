@@ -1,8 +1,9 @@
+import { apiErrorCode } from "@/app/api.ts";
 import { readCanonProgress } from "./canonProgressSource.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCanon, getCanonEpic, editCanonEpic, type CanonOverview, type EpicDetail, type EpicInput, type EpicProgressSnapshot } from "@/app/canonApi.ts";
-import { subscribeCanonChanges } from "@/app/canonEvents.ts";
+import { singleFlight, subscribeCanonChanges } from "@/app/canonEvents.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import { useCanonMove } from "./useCanonMove.ts";
 import { canonWriteFailure } from "./canonFeedback.ts";
@@ -14,23 +15,32 @@ export function useCanonBoard(projectId: string) {
   const [detail, setDetail] = useState<EpicDetail | null>(null);
   const [tasks, setTasks] = useState<EpicProgressSnapshot | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [missing, setMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
   const selectedRef = useRef(selected);
   const mounted = useRef(true);
   selectedRef.current = selected;
   const movingRef = useRef(false);
-  const refresh = useCallback(async () => {
+  const read = useCallback(async () => {
     if (movingRef.current) return;
     const epoch = ++generation.current;
     const id = selectedRef.current;
     try {
-      const [board, epic, queue] = await Promise.all([getCanon(projectId), id ? getCanonEpic(id) : null, id ? readCanonProgress(id) : null]);
+      const board = await getCanon(projectId);
+      const exists = id && (board.backlog.some(epic => epic.id === id) || board.plans.some(plan => plan.works.some(epic => epic.id === id)));
+      const [epic, queue] = await Promise.all([exists ? getCanonEpic(id) : null, exists ? readCanonProgress(id) : null]);
       if (!mounted.current || epoch !== generation.current) return;
       useCanonSidebarState.getState().rememberCanon(board);
-      setCanon(board); setDetail(epic); setTasks(queue); setError(null);
-    } catch (error) { if (mounted.current && epoch === generation.current) setError(error); }
+      setCanon(board); setDetail(epic); setTasks(queue); setMissing(Boolean(id && !exists)); setError(null);
+    } catch (error) {
+      if (mounted.current && epoch === generation.current) {
+        if (apiErrorCode(error) === "work_model_not_found") { setDetail(null); setTasks(null); setMissing(true); setError(null); }
+        else setError(error);
+      }
+    }
   }, [projectId]);
+  const refresh = useMemo(() => singleFlight(read), [read]);
   const drag = useCanonMove(canon, setCanon, refresh, () => { generation.current++; }, movingRef);
   useEffect(() => {
     mounted.current = true;
@@ -47,7 +57,7 @@ export function useCanonBoard(projectId: string) {
     if (id === selectedRef.current) return;
     generation.current++;
     selectedRef.current = id;
-    setSelected(id); setDetail(null); setTasks(null);
+    setSelected(id); setDetail(null); setTasks(null); setMissing(false);
   };
   const write = async (input: EpicInput, message?: string): Promise<boolean> => {
     if (!detail || busy) return false;
@@ -60,5 +70,5 @@ export function useCanonBoard(projectId: string) {
     } catch (error) { await canonWriteFailure(error, refresh); return false; }
     finally { if (mounted.current) setBusy(false); }
   };
-  return { canon, selected, detail, tasks, error, busy, refresh, select, write, move: drag.move, moving: drag.moving };
+  return { canon, selected, detail, tasks, error, missing, busy, refresh, select, write, move: drag.move, moving: drag.moving };
 }

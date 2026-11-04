@@ -27,7 +27,7 @@ function MessageTiles({ open }: { open: (id: string) => void }) {
 
 export const guidance: ShowcaseGuidance = {
   purpose: "Files attached to a message: square tiles (composer row, sent message), a list with sizes, or removable chips.",
-  whenToUse: ["Files the user attached (composer tiles) or sent (message tiles)", "Picked page elements in the composer (chips)"],
+  whenToUse: ["Files the user attached (composer tiles) or sent (message tiles)", "Picked page elements in the composer (chips)", "Whole-image previews (thumbnail.fit=contain) alongside cropped photos (default cover)"],
   whenNotToUse: [
     { when: "Files Butler produced", use: "ArtifactList" },
     { when: "Project documents", use: "DocumentTile" },
@@ -43,6 +43,7 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: [
+    "thumbnail.fit defaults to cover. Use contain to show the whole image on the neutral background; choose from attachment origin, never its file name.",
     "tiles: a picture is a cover thumbnail (lazy, async decoded, fades in); a video (video.src) shows its first frame from metadata only, a play badge and its length; any other file shows its glyph, extension (the container passes a localized label for an unknown type), name (two lines breaking at _, - and the extension, one on phone, with an ellipsis; the tooltip shows it whole) and, on wrap tiles, its size. A broken picture falls back to the file face and calls onMediaError(item); a new src (a re-signed URL) loads again.",
     "tileLayout=\"row\" is the composer: 64px tiles in one row that scrolls sideways under the shared edge fade; a new tile grows in, a removed one shrinks out and the rest slide into the gap. tileLayout=\"wrap\" is a sent message: 96px tiles, end-aligned and wrapping; every file shows. tileAlign=\"start\" aligns wrap tiles to the start (a document or a detail pane).",
     "upload marks a file still uploading or failed: uploading (Spinner, aria-busy) or failed (alert icon, danger border); meta says how far or what to do (Uploading 40%, Over 10 MB). Clear it once the upload ends.",

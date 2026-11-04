@@ -64,18 +64,19 @@ async fn inventory_and_explicit_cleanup_preserve_memory_and_replay_receipts()
     let measured = s.gw.post("/memory/inventory/check", json!({})).await?;
     assert_eq!(measured.status, 200, "{}", measured.text);
     assert_eq!(measured.data()["kinds"][0]["item_count"], 1);
-    assert!(
-        measured.data()["kinds"][0]["allocated_bytes"]
-            .as_u64()
-            .unwrap()
-            > 0
-    );
-    assert!(
-        measured.data()["dead_letter_allocated_bytes"]
-            .as_u64()
-            .unwrap()
-            > 0
-    );
+    // Allocation is reported only where the host can measure it; elsewhere the
+    // inventory says unknown (null), never the logical length.
+    let measurable = orphan_bytes.is_some();
+    for allocated in [
+        &measured.data()["kinds"][0]["allocated_bytes"],
+        &measured.data()["dead_letter_allocated_bytes"],
+    ] {
+        if measurable {
+            assert!(allocated.as_u64().unwrap() > 0, "{allocated}");
+        } else {
+            assert!(allocated.is_null(), "{allocated}");
+        }
+    }
     let id = uuid::Uuid::new_v4().to_string();
     let input = json!({"operation_id":id,"inventory_revision":measured.data()["revision"]});
     let started = s.gw.post("/memory/cleanup", input.clone()).await?;

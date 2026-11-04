@@ -16,6 +16,18 @@ impl SubsessionService {
                 request.previous_relation_id.as_deref(),
             )
             .await?;
+        request.user_request = if request.schedule_run.is_none() {
+            self.repository
+                .user_request(
+                    request.parent_session_id.clone(),
+                    request.parent_turn_id.clone(),
+                    request.anchor_message_id.clone(),
+                )
+                .await
+                .map_err(BtccError::from)?
+        } else {
+            None
+        };
         Ok(request)
     }
 
@@ -57,7 +69,9 @@ impl SubsessionService {
                         "Previous work is missing.",
                     )
                 })?;
-            mode = mode.narrower(prior.packet.access_mode);
+            if let Some(limit) = self.repository.access_limit(prior).await? {
+                mode = mode.narrower(limit);
+            }
         }
         Ok(mode)
     }

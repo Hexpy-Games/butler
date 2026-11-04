@@ -47,6 +47,39 @@ pub(super) fn with_worker_profile_choices(
     Ok(())
 }
 
+/// Offer the same capability choices that image input validation enforces.
+pub(super) fn with_image_model_choices(
+    phase: &mut GuidedPhaseSelection,
+    settings: Option<&serde_json::Value>,
+) {
+    let selected = settings
+        .and_then(|s| s.get("selected"))
+        .filter(|s| !s.is_null());
+    let capability = settings
+        .and_then(|s| s["models"].as_array())
+        .and_then(|models| {
+            models
+                .iter()
+                .find(|m| Some(&m["model_ref"]) == selected.map(|s| &s["model_ref"]))
+        });
+    let Some(capability) = capability else {
+        for name in ["generate_image", "edit_image"] {
+            phase.authorized_names.retain(|n| n != name);
+            phase.provider_tools.retain(|t| t["name"] != name);
+        }
+        return;
+    };
+    for tool in &mut phase.provider_tools {
+        if tool["name"] != "generate_image" && tool["name"] != "edit_image" {
+            continue;
+        }
+        for (key, choices) in [("size", "sizes"), ("quality", "qualities")] {
+            let property = &mut tool["parameters"]["properties"][key];
+            property["enum"] = capability[choices].clone();
+        }
+    }
+}
+
 pub(super) fn available(
     phase: &mut GuidedPhaseSelection,
     catalog: &GuidedCatalogSnapshot,
@@ -85,4 +118,37 @@ pub(super) fn available(
             })
         })
         .collect()
+}
+
+pub(in crate::host::guided) async fn for_owner(
+    phase: &mut GuidedPhaseSelection,
+    subsessions: &butler_turn::btcc::SubsessionService,
+    monitoring: &crate::host::MonitoringReaders,
+    catalog: &GuidedCatalogSnapshot,
+) -> Result<Vec<ModelRoundTool>, BtccError> {
+    if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
+        && phase.provider_tools.iter().any(|tool| {
+            tool.get("name").and_then(serde_json::Value::as_str) == Some("delegate_to_worker")
+        })
+    {
+        let profiles = subsessions.enabled_worker_profiles().await?;
+        with_worker_profile_choices(phase, &profiles)?;
+    }
+    // Only the Steward partitions work into Tasks. Other roles retain their
+    // compact planning schema; the catalog still documents the full contract.
+    if phase.execution_policy.role != butler_turn::btcc::PolicyRole::Steward {
+        for definition in &mut phase.provider_tools {
+            if definition.get("name").and_then(serde_json::Value::as_str)
+                == Some("replace_work_plan")
+                && let Some(properties) = definition
+                    .pointer_mut("/parameters/properties")
+                    .and_then(serde_json::Value::as_object_mut)
+            {
+                properties.remove("subjects");
+            }
+        }
+    }
+    let image_settings = monitoring.configuration.image_model_settings().await.ok();
+    with_image_model_choices(phase, image_settings.as_ref());
+    available(phase, catalog)
 }

@@ -45,6 +45,7 @@
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
 //! - [`browser_profiles`]: other browsers' profiles and bookmark files, for import.
 //! - [`agent_homes`]: other AI agents' instruction and configuration files, for import.
+//! - [`powershell_text`]: PowerShell string literals for the scripts Butler starts.
 //! - [`user_auth`]: asking the user to verify themselves (Touch ID, Windows
 //!   Hello or the account password) before a secret is shown.
 //!
@@ -73,11 +74,13 @@ pub mod data_paths;
 pub mod desktop;
 pub mod download_mark;
 pub mod fs_space;
+pub mod host_file_behavior;
 pub mod install_link;
 pub mod instance;
 pub mod launcher;
 pub mod memory;
 pub mod network;
+pub mod powershell_text;
 pub mod process_control;
 pub mod process_names;
 pub mod process_priority;
@@ -102,3 +105,4 @@ pub mod hook_process;
 pub mod preview_process;
 
 pub mod plugin_files;
+pub mod plugin_git;

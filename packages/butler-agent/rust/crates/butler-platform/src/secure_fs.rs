@@ -22,6 +22,10 @@ pub use stage::{
     ReaderStaging, StageScope, StagedFiles, handoff_staged, reclaim_handoff, remove_staged,
     reset_reader_staging, stage_file,
 };
+mod canonical;
+#[cfg(windows)]
+pub(crate) use canonical::canonicalize_extended;
+pub use canonical::{Canonical, canonicalize, is_within, path_key, same_path};
 mod device;
 pub use device::same_device;
 mod read_retry;
@@ -442,35 +446,6 @@ pub fn directory_writability(path: &Path) -> Writability {
     sys::directory_writability(path)
 }
 
-/// The absolute path of `path` with every link resolved, like
-/// [`fs::canonicalize`], but in the form the rest of the host understands:
-/// Windows returns resolved paths with the `\\?\` prefix, which `cmd.exe`
-/// rejects as a working directory and which never matches a path spelled
-/// without it, so the prefix is dropped wherever the path does not need it.
-/// Every canonical path Butler compares or hands to a program comes from
-/// here, so all of them share one form.
-pub fn canonicalize(path: impl AsRef<Path>) -> io::Result<PathBuf> {
-    sys::canonicalize(path.as_ref())
-}
-
-/// [`canonicalize`] as a method, in place of [`Path::canonicalize`].
-pub trait Canonical {
-    /// See [`canonicalize`].
-    fn canonical(&self) -> io::Result<PathBuf>;
-}
-
-impl<P: AsRef<Path> + ?Sized> Canonical for P {
-    fn canonical(&self) -> io::Result<PathBuf> {
-        canonicalize(self)
-    }
-}
-
-/// The form of `path` two paths are compared in: as is where the file system
-/// is case-sensitive, lowercased with `/` separators on Windows.
-pub fn path_key(path: &Path) -> PathBuf {
-    sys::path_key(path)
-}
-
 /// Creates a symbolic link at `link` that points to `target`.
 pub fn symlink(target: &Path, link: &Path) -> io::Result<()> {
     sys::symlink(target, link)
@@ -492,7 +467,7 @@ pub mod fixture_links;
 #[cfg(feature = "test-support")]
 pub mod fixture_locks;
 mod path_identity;
-pub use path_identity::{directory_id, same_file, same_metadata, same_open_file};
+pub use path_identity::{same_file, same_metadata, same_open_file};
 
 /// Open a regular package file, refusing links in every relative component.
 pub fn open_package_file(root: &Path, relative: &Path) -> io::Result<File> {

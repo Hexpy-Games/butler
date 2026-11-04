@@ -51,6 +51,7 @@ pub async fn ready(
         .unwrap();
     service
         .replace_plan(ReplacePlanInput {
+            subjects: Vec::new(),
             scope: scope(),
             mutation_call_id: "plan-effect".into(),
             start_new: None,

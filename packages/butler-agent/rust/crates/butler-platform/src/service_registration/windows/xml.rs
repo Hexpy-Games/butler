@@ -75,7 +75,7 @@ fn script(def: &Definition, root: &std::path::Path) -> String {
 }
 
 fn quote(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "''"))
+    crate::powershell_text::literal(text)
 }
 
 fn escape(text: &str) -> String {

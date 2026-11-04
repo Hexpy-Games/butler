@@ -38,7 +38,20 @@ impl AppCanonPort for AppCanon {
         &self,
         operation: butler_gateway::gateway::AppCanonOperation,
     ) -> ApplicationFuture<Value> {
-        canon_sidebar::execute(self.storage.clone(), self.ledger.clone(), operation)
+        let (storage, ledger, after) = (
+            self.storage.clone(),
+            self.ledger.clone(),
+            self.feed_after.clone(),
+        );
+        Box::pin(async move {
+            // A delivered step is judged by its links, which the feed may not have reached.
+            if matches!(&operation, butler_gateway::gateway::AppCanonOperation::StepTurnEnded { outcome, .. } if outcome == "delivered")
+                && let Err(error) = progress::catch_up(&storage, &ledger, &after).await
+            {
+                tracing::warn!(%error, "Canon feed did not catch up before a step ended");
+            }
+            canon_sidebar::execute(storage, ledger, operation).await
+        })
     }
     fn session_epics(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<Vec<String>>> {
         let storage = self.storage.clone();
@@ -184,8 +197,8 @@ fn error(error: StorageError) -> GatewayApplicationError {
 fn store_resource(resource: AppCanonResource) -> store::api::Resource {
     use AppCanonResource::{
         Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
-        CreateTag, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, EpicProgress, Grants,
-        List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+        CreateTag, DeleteEpic, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic,
+        EpicProgress, Grants, List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
     };
     match resource {
         List => store::api::Resource::List,
@@ -209,6 +222,7 @@ fn store_resource(resource: AppCanonResource) -> store::api::Resource {
         EditPlan => store::api::Resource::EditPlan,
         CreateEpic => store::api::Resource::CreateEpic,
         EditEpic => store::api::Resource::EditEpic,
+        DeleteEpic => store::api::Resource::DeleteEpic,
         PlanOrder => store::api::Resource::PlanOrder,
         BacklogOrder => store::api::Resource::BacklogOrder,
     }

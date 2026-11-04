@@ -21,12 +21,17 @@ import type { SpaceRowData } from "@/app/space/projection";
 export function SpaceRowMenu({
   row,
   running,
+  attention,
+  quiet = false,
   nested = false,
   open,
   onOpenChange,
 }: {
   row: SpaceRowData;
   running?: boolean;
+  attention?: boolean;
+  /** The row's status belongs elsewhere: nothing rests in the trailing slot. */
+  quiet?: boolean;
   nested?: boolean;
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -138,7 +143,7 @@ export function SpaceRowMenu({
   ];
   // The activity status rests in the trailing slot; the row menu replaces it on hover or focus.
   return (
-    <NavRowSwap rest={<SpaceActivity session={row.session} running={running} nested={nested} />} open={open}>
+    <NavRowSwap rest={quiet ? null : <SpaceActivity session={row.session} running={running} attention={attention} nested={nested} />} open={open}>
       {row.node.entityId === "general" ? <GeneralChannelMenu row={row} open={open} onOpenChange={onOpenChange} /> : <OverflowActionMenu
         label={appCopy.space.rowMenu(row.title)}
         items={items}

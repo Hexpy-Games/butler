@@ -1,24 +1,13 @@
 use super::*;
 use butler_platform::hook_process::{
-    CONTEXT_OUTPUT_LIMIT, HookContainment, HookOutput, HookProcess, HookProcessError, HookSandbox,
-    OUTPUT_LIMIT, run,
+    CONTEXT_OUTPUT_LIMIT, HookOutput, HookProcess, HookProcessError, OUTPUT_LIMIT, run,
 };
 use futures_util::future::join_all;
 use std::{
     collections::HashSet,
     time::{Duration, Instant},
 };
-/// A review's hooks and the folder they were reviewed in.
-pub(super) struct ProjectScope<'a> {
-    pub(super) hooks: &'a [HookDefinition],
-    pub(super) root: Arc<str>,
-}
-
-fn matched(
-    hooks: &Hooks,
-    payload: &HookEnvelope,
-    project: &[HookDefinition],
-) -> Vec<HookDefinition> {
+fn matched(hooks: &Hooks, payload: &HookEnvelope) -> Vec<HookDefinition> {
     let mut seen = HashSet::new();
     hooks
         .state
@@ -28,7 +17,6 @@ fn matched(
         .hooks
         .iter()
         .chain(hooks.plugins.hooks().iter())
-        .chain(project)
         .filter(|h| {
             h.event == payload.hook_event_name && h.matches(payload.payload.tool_name.as_deref())
         })
@@ -50,31 +38,15 @@ pub(super) async fn dispatch(
     hooks: &Arc<Hooks>,
     payload: HookEnvelope,
     cancel: CancellationToken,
-    project: Option<ProjectScope<'_>>,
 ) -> Result<HookDispatched, String> {
-    let definitions = project.as_ref().map_or(&[][..], |scope| scope.hooks);
-    let handlers = matched(hooks, &payload, definitions);
-    let root = project.map(|scope| scope.root);
-    Ok(run_handlers(hooks, handlers, payload, cancel, root).await)
-}
-
-/// Runs these handlers for the event: joined deny reasons in order, and added text.
-pub(super) async fn run_handlers(
-    hooks: &Arc<Hooks>,
-    handlers: Vec<HookDefinition>,
-    payload: HookEnvelope,
-    cancel: CancellationToken,
-    root: Option<Arc<str>>,
-) -> HookDispatched {
+    let handlers = matched(hooks, &payload);
     let sync = handlers
         .iter()
         .filter(|h| !h.asynchronous)
-        .map(|h| execute(hooks, h, &payload, cancel.clone(), root.as_deref()));
+        .map(|h| execute(hooks, h, &payload, cancel.clone()));
     let mut reasons = Vec::new();
     let mut context = Vec::new();
-    let mut project_denied = false;
     for done in join_all(sync).await {
-        project_denied |= done.project_denied;
         reasons.extend(done.deny);
         context.extend(done.context);
     }
@@ -82,7 +54,6 @@ pub(super) async fn run_handlers(
         let hooks = hooks.clone();
         let payload = payload.clone();
         let cancel = cancel.clone();
-        let root = root.clone();
         tokio::spawn(async move {
             let permit = tokio::select! {
                 permit = hooks.pool.clone().acquire_owned() => permit.ok(),
@@ -92,40 +63,27 @@ pub(super) async fn run_handlers(
             let Some(_permit) = permit else {
                 return;
             };
-            Box::pin(execute(&hooks, &hook, &payload, cancel, root.as_deref())).await;
+            Box::pin(execute(&hooks, &hook, &payload, cancel)).await;
         });
     }
-    HookDispatched {
+    Ok(HookDispatched {
         deny: (!reasons.is_empty()).then(|| reasons.join("\n")),
         context,
-        project_denied,
-    }
+    })
 }
 /// One handler's run and what it means for its event.
 struct Executed {
     run: HookRun,
     deny: Option<String>,
     context: Option<HookContext>,
-    /// `deny` carries words from the project folder.
-    project_denied: bool,
 }
 async fn execute(
     hooks: &Hooks,
     hook: &HookDefinition,
     payload: &HookEnvelope,
     cancel: CancellationToken,
-    root: Option<&str>,
 ) -> Executed {
     let start = Instant::now();
-    // A project hook runs where it was reviewed, whichever folder raised the event.
-    let reviewed = root
-        .filter(|_| hook.id.starts_with(PROJECT_HOOK_ID_PREFIX))
-        .map(|root| HookEnvelope {
-            project_dir: Some(root.to_owned()),
-            cwd: root.to_owned(),
-            ..payload.clone()
-        });
-    let payload = reviewed.as_ref().unwrap_or(payload);
     let prepared = prepare_input(hooks, hook, payload).await;
     let (input, redact) = match prepared {
         Ok((i, r)) => (Ok(i), r),
@@ -135,11 +93,9 @@ async fn execute(
         Ok(input) => run_process(hooks, input, cancel).await,
         Err(error) => Err(error),
     };
-    let (outcome, reason) = super::decision::resolve(hook, &result);
-    if outcome == "approval_ignored" {
-        tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
-    }
-    let reason = reason.map(|s| clean(&s, &redact));
+    let resolved = hooks.resolve_run(hook, payload, &result, &redact);
+    let outcome = resolved.outcome;
+    let reason = resolved.deny;
     let exit_code = result.as_ref().ok().and_then(|o| o.exit_code);
     let stdout = result
         .as_ref()
@@ -182,9 +138,48 @@ async fn execute(
     hooks.record(record.clone());
     Executed {
         run: record,
-        project_denied: reason.is_some() && scope(hook) == "project",
         deny: reason,
         context: added.context,
+    }
+}
+impl Hooks {
+    /// Resolves a run, redacts its refusal and reports failures independently of blocking.
+    fn resolve_run(
+        &self,
+        hook: &HookDefinition,
+        payload: &HookEnvelope,
+        result: &Result<HookOutput, HookProcessError>,
+        redact: &[String],
+    ) -> super::decision::Resolved {
+        let mut resolved = super::decision::resolve(hook, result);
+        if resolved.outcome == "approval_ignored" {
+            tracing::info!(event = "approval_ignored", hook_id = %hook.id, scope = scope(hook));
+        }
+        resolved.deny = resolved.deny.map(|reason| clean(&reason, redact));
+        if resolved.failed {
+            self.blocked(hook, payload, resolved.deny.as_deref());
+        }
+        resolved
+    }
+
+    /// Reports failures for real events. Rejected admissions carry their own refusal;
+    /// hook test runs have no session and are reported by their caller.
+    fn blocked(&self, hook: &HookDefinition, payload: &HookEnvelope, reason: Option<&str>) {
+        if payload.session_id.is_none() || (reason.is_some() && payload.turn_id.is_none()) {
+            return;
+        }
+        let block = HookBlock {
+            hook: hook.label().to_owned(),
+            event: hook.event,
+            tool: payload.payload.tool_name.clone(),
+            session_id: payload.session_id.clone(),
+            reason: reason.unwrap_or_default().to_owned(),
+            blocked: reason.is_some(),
+        };
+        let listener = self.block_listener.read().clone();
+        if let Some(listener) = listener {
+            listener(block);
+        }
     }
 }
 pub(super) fn clean(text: &str, redact: &[String]) -> String {
@@ -199,8 +194,6 @@ pub(super) fn clean(text: &str, redact: &[String]) -> String {
 pub(super) fn scope(hook: &HookDefinition) -> &'static str {
     if hook.id.contains('/') {
         "plugin"
-    } else if hook.id.starts_with(PROJECT_HOOK_ID_PREFIX) {
-        "project"
     } else {
         "user"
     }
@@ -216,9 +209,13 @@ async fn run_process(
         () = hooks.shutdown.cancelled() => { cancel.cancel(); future.await },
     }
 }
-/// What a hook's own process gets: what its file names, then who it is.
-fn own_environment(hook: &HookDefinition, payload: &HookEnvelope) -> HashMap<String, String> {
-    let mut env: HashMap<String, String> = hook.env.clone().into_iter().collect();
+fn environment(
+    hooks: &Hooks,
+    hook: &HookDefinition,
+    payload: &HookEnvelope,
+) -> HashMap<String, String> {
+    let mut env = hooks.environment.clone();
+    env.extend(hook.env.clone());
     env.insert("BUTLER_HOOK".into(), "1".into());
     env.insert("BUTLER_HOOK_ID".into(), hook.id.clone());
     env.insert("BUTLER_HOOK_EVENT".into(), format!("{:?}", hook.event));
@@ -279,9 +276,7 @@ pub(super) async fn test(
             ..HookPayload::default()
         },
     };
-    Ok(Box::pin(execute(hooks, &hook, &payload, cancel, None))
-        .await
-        .run)
+    Ok(Box::pin(execute(hooks, &hook, &payload, cancel)).await.run)
 }
 
 fn input(
@@ -318,58 +313,19 @@ fn input(
             })
             .collect()
     });
-    let sandbox = sandbox(hooks, hook, payload);
-    let own = own_environment(hook, payload);
-    let mut environment = hooks.environment.clone();
-    let sandbox_environment = if matches!(sandbox, HookSandbox::None) {
-        environment.extend(own);
-        HashMap::new()
-    } else {
-        own
-    };
     Ok(HookProcess {
         command: hook.command.clone(),
         args,
-        environment,
-        sandbox_environment,
+        environment: environment(hooks, hook, payload),
         cwd: PathBuf::from(&payload.cwd),
         stdin,
         timeout: Duration::from_millis(hook.timeout_ms),
-        sandbox,
         stdout_limit: if super::context::can_add(hook) {
             CONTEXT_OUTPUT_LIMIT
         } else {
             OUTPUT_LIMIT
         },
     })
-}
-
-/// A project hook gets the sandbox of the session it runs for, in the folder it was
-/// reviewed in: only full access is exempt, and a mode it cannot name gets the least.
-fn sandbox(hooks: &Hooks, hook: &HookDefinition, payload: &HookEnvelope) -> HookSandbox {
-    if !hook.id.starts_with(PROJECT_HOOK_ID_PREFIX) {
-        return HookSandbox::None;
-    }
-    let mut policy_environment = hooks.environment.clone();
-    policy_environment.insert(
-        "BUTLER_DATA".into(),
-        hooks.data.to_string_lossy().into_owned(),
-    );
-    // The Windows sandbox refuses a command without its deadline.
-    policy_environment.insert(
-        "BUTLER_COMMAND_TIMEOUT_MS".into(),
-        hook.timeout_ms.to_string(),
-    );
-    let containment = HookContainment {
-        policy_environment,
-        root: PathBuf::from(&payload.cwd),
-        data: hooks.data.clone(),
-    };
-    match payload.access_mode.as_deref() {
-        Some("full_access") => HookSandbox::None,
-        Some("auto" | "ask_first" | "ask_except_reads") => HookSandbox::ProjectWrite(containment),
-        _ => HookSandbox::ReadOnly(containment),
-    }
 }
 
 async fn prepare_input(

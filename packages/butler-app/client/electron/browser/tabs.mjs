@@ -25,6 +25,7 @@ import { protectPartition, wireTab } from "./tab-events.mjs";
 import { clearOffer } from "./signin-offer.mjs";
 import { drainStills } from "./still-delivery.mjs";
 import { attachView, capturePage, detachView } from "./view-capture.mjs";
+import { createViewRecovery, failTab, recoverTab } from "./view-recovery.mjs";
 
 /** One registry per App; no web view before Browser activation. */
 class UserBrowser {
@@ -46,6 +47,7 @@ class UserBrowser {
   constructor(app, getWindow, getLanguage) {
     startMarkingHost();
     this.getWindow = getWindow;
+    this.viewRecovery = createViewRecovery(this);
     this.live = new BrowserLiveFrames(this);
     this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
@@ -71,6 +73,7 @@ class UserBrowser {
     this.pointer.sync(this.tabs.get(this.activeId));
     this.onState?.(this.snapshot());
     const win = this.getWindow();
+    this.viewRecovery.bind(win);
     if (win && this.boundWindow !== win) {
       this.boundWindow = win;
       win.webContents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => { if (mainFrame && !inPlace) this.hide(); });
@@ -96,7 +99,9 @@ class UserBrowser {
     const dragging = this.pointer.captures(tab?.id) && tab.id === this.activeId && !this.nativeCovers;
     if (tab?.id === this.activeId && !dragging) this.pointer.hide();
     if (tab?.attached && tab.view) {
-      void this.capture(tab);
+      // Preserve the visible frame once; repeated hidden layout passes must not
+      // keep starting readbacks while waiting to move this view.
+      if (tab.view.getVisible()) void this.capture(tab);
       detachView(tab, () => {
         if (this.tabs.get(tab.id) === tab && !tab.closing && !tab.closeRequested && tab.view && !tab.view.webContents.isDestroyed()) this.sync(tab);
       });
@@ -179,7 +184,10 @@ class UserBrowser {
     attachNativeWorlds(tab);
     this.live.watch(tab);
     tab.afterCapture = image => this.live.changed(tab, image);
+    tab.onCaptureStalled = () => failTab(this, tab, "stalled");
+    tab.onCaptureSettled = () => recoverTab(this, tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
+      fail: (item, reason) => failTab(this, item, reason), recover: (item) => recoverTab(this, item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       linkMenu: (url) => linkMenuItems(this, url, tab), language: this.getLanguage,
       window: this.getWindow, shortcut: (input) => {
@@ -331,7 +339,19 @@ class UserBrowser {
         if (tab.owner === "mine") this.restore.changed();
         void tab.identityReady.then(() => contents.loadURL(url)).catch(() => {});
       }
-    } else if (op === "reload") { tab.status = "loading"; contents.reload(); }
+    } else if (op === "reload") {
+      // A hung renderer or wedged surface survives an in-place reload: replace the renderer first.
+      const replace = (tab.failure === "unresponsive" || tab.failure === "stalled") && !contents.isCrashed();
+      tab.failure = null; tab.unresponsive = false;
+      if (replace) {
+        contents.once("render-process-gone", () => {
+          if (tab.closing || contents.isDestroyed()) return;
+          tab.failure = null; tab.status = "loading"; contents.reload(); this.sync(tab); this.publish();
+        });
+        contents.forcefullyCrashRenderer(); return;
+      }
+      tab.status = "loading"; contents.reload();
+    }
     else if (op === "stop") contents.stop();
     else if (op === "back" && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack();
     else if (op === "forward" && contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward();
@@ -413,6 +433,7 @@ class UserBrowser {
   }
   async dispose() {
     this.disposing = true;
+    this.viewRecovery.dispose();
     await this.drainStills();
     await disposeMarkingHost();
     this.live.dispose();

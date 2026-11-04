@@ -8,8 +8,11 @@ import styles from "./NativeViewSlot.module.css";
 export interface NativeViewSlotProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "children"> {
   /** Where to put the native view; called at most once per frame, only on change. */
   onBoundsChange: (bounds: NativeViewBounds) => void;
-  /** Reports initial and changed coverage: true while a DS overlay overlaps or a panel animates. */
-  onOcclusion?: (occluded: boolean) => void;
+  /**
+   * Reports initial and changed coverage: true while a DS overlay overlaps or a panel animates. A returned
+   * promise settles once the still has replaced the native view; a held motion waits for it.
+   */
+  onOcclusion?: (occluded: boolean) => void | Promise<unknown>;
   /** No native view right now (no tab, crashed page): reports visible=false and shows `children`. */
   hidden?: boolean;
   /** Forces the covered state for occluders the DOM cannot see (a native menu). */
@@ -37,6 +40,7 @@ export function NativeViewSlot({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const tracker = useRef<NativeViewTracker | null>(null);
+  const coverings = useRef(0);
   const callbacks = useRef({ onBoundsChange, onOcclusion });
   const [occluded, setOccluded] = useState(false);
   const viewportWidth = viewport?.width;
@@ -56,8 +60,12 @@ export function NativeViewSlot({
       onOcclusion: (next) => {
         // The attribute flips in the same frame as the decision; the state renders the still.
         root.toggleAttribute("data-occluded", next);
+        root.removeAttribute("data-stand-in");
         setOccluded(next);
-        callbacks.current.onOcclusion?.(next);
+        // Only the newest covering's still counts: an older capture settling says nothing about this one.
+        const covering = ++coverings.current;
+        const standIn = Promise.resolve(callbacks.current.onOcclusion?.(next));
+        if (next) void standIn.catch(() => undefined).then(() => { if (covering === coverings.current) root.setAttribute("data-stand-in", ""); });
       },
     });
     tracker.current = instance;
