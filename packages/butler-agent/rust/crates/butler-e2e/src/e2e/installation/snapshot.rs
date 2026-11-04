@@ -100,7 +100,9 @@ impl Sources {
 /// Retain namespaces while their recorded source binary still exists.
 fn sweep_orphans(cache: &Path) {
     let Some(parent) = cache.parent() else { return };
-    let Ok(entries) = fs::read_dir(parent) else { return };
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path == cache || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
