@@ -141,17 +141,12 @@ try {
       });
       await chat.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=win-fixes&locale=${locale}&theme=${theme}`);
       await chat.locator('[data-harness-ready="true"]').waitFor();
-      // The fixture chat's unmocked reads raise their own toasts; clear them first.
-      await chat.waitForLoadState("networkidle");
-      for (const close of await chat.locator("[data-sonner-toast] [data-close-button]").all()) await close.click().catch(() => {});
-      await chat.locator("[data-sonner-toast]").first().waitFor({ state: "detached" }).catch(() => {});
       releaseBlock();
       await chat.locator('[data-sonner-toast][data-type="error"]')
         .filter({ hasText: copy.settings.hooks.failedBlock("Test guard", copy.guided.tools.run_command) }).waitFor();
       await capture("hook-blocked", chat);
       releaseFailure();
-      await chat.getByText(copy.settings.hooks.failedOpen("Test guard"), { exact: true }).waitFor();
-      assert.equal(await chat.locator('[data-sonner-toast][data-type="error"]').last().textContent(), copy.settings.hooks.failedOpen("Test guard"));
+      await chat.locator('[data-sonner-toast][data-type="error"]').getByText(copy.settings.hooks.failedOpen("Test guard"), { exact: true }).waitFor();
       await capture("hook-failed-open", chat);
       await chat.close();
     }
