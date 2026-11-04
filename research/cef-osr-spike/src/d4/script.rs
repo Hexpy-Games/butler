@@ -29,6 +29,7 @@ enum Action {
     Stream,
     Cef,
     Restore,
+    RememberFieldA,
 }
 struct Step {
     id: &'static str,
@@ -82,10 +83,16 @@ fn steps() -> Vec<Step> {
         step("K7d", false, false, &[], vec![Clear(0), Clear(1), Focus("field_a"), Type("gk"), Key(48, 0)], vec![("/field_a/text", json!("하")), ("/field_a/marked_text", Value::Null), ("/focused", json!("field_b"))]),
         step("K8a", false, false, &[], vec![Clear(0), Focus("field_a"), Type("gk"), Second, Type("s")], vec![("/field_c/text", json!("ㄴ"))]),
         step("K8b", true, false, &[], vec![Main, Focus("field_a")], vec![("/field_a/text", json!("하")), ("/field_a/marked_text", Value::Null)]),
-        step("K9a", true, false, &[], vec![Clear(0), Type("gks"), Key(36, 1 << 19)], vec![("/foreign_window_appeared", json!(true))]),
+        step("K9a", true, false, &[], vec![Clear(0), Type("gks"), Key(36, 1 << 19)], vec![("/candidate_near_caret", json!(true))]),
         step("K9b", false, false, &[], vec![enter.clone()], vec![("/single_hanja", json!(true)), ("/field_a/marked_text", Value::Null)]),
         step("K10a", true, false, &[], vec![Focus("composer"), Clear(2), Type("dkssud"), Key(36, 1 << 17), Type("gktpdy ")], vec![("/composer/text", json!("안녕\n하세요 "))]),
         step("K10b", false, false, &[], vec![Clear(2), Type("rkskek"), enter.clone()], vec![("/last_row", json!("가나다")), ("/composer/text", json!(""))]),
+        step("K12a", true, false, &[], vec![Clear(0), Clear(1), Focus("field_a"), Source(KOREAN), Type("gks"), Key(36, 1 << 19)], vec![("/field_a/marked_text", json!("韓"))]),
+        step("K12b", true, false, &[], vec![ClickField, RememberFieldA], vec![("/field_a/marked_text", Value::Null), ("/field_a_hanja_or_hangul", json!(true)), ("/field_b/text", json!(""))]),
+        step("K12c", false, false, &[], vec![Type("rk")], vec![("/field_b/text", json!("가")), ("/field_a_unchanged", json!(true))]),
+        step("K13a", false, false, &[], vec![Clear(0), Clear(1), Focus("field_a"), Source(KOREAN), Type("gks"), Key(36, 1 << 19)], vec![("/field_a/marked_text", json!("韓"))]),
+        step("K13b", false, false, &[], vec![Key(48, 0), RememberFieldA], vec![("/field_a/marked_text", Value::Null), ("/focused", json!("field_b"))]),
+        step("K13c", false, false, &[], vec![Type("rk")], vec![("/field_b/text", json!("가")), ("/field_a_unchanged", json!(true))]),
         step("K11a", true, false, &[], vec![WebClick, Type("gksrm")], vec![]),
         step("K11b", true, false, &[], vec![Type("f "), WebRead], vec![("/web_in", json!("한글 "))]),
         step("A1", false, true, &[], vec![Source(ABC)], vec![("/ax_checks/send_button", json!(true)), ("/ax_checks/settings_disabled", json!(true)), ("/ax_checks/title_field", json!(true)), ("/ax_checks/composer_area", json!(true)), ("/ax_checks/list_rows_match", json!(true))]),
@@ -108,7 +115,7 @@ struct Runner {
     second: Option<WindowHandle<Auxiliary>>,
     extra: Value,
     original: inject::InputSource,
-    previous_foreign: Value,
+    saved_field_a: Value,
     baseline: Value,
 }
 pub async fn run(
@@ -125,7 +132,7 @@ pub async fn run(
         second: None,
         extra: json!({}),
         original: inject::InputSource::remember(),
-        previous_foreign: ax::foreign_windows(),
+        saved_field_a: Value::Null,
         baseline,
     };
     let mut results =
@@ -156,7 +163,6 @@ pub async fn run(
         }).collect::<Vec<_>>());
         writeln!(results, "{snapshot}").map_err(|e| e.to_string())?;
         results.flush().map_err(|e| e.to_string())?;
-        runner.previous_foreign = snapshot["foreign_windows"].clone();
     }
     runner.original.restore();
     Ok(())
@@ -174,6 +180,14 @@ impl Runner {
         cx: &mut AsyncApp,
     ) -> Result<(), String> {
         match action {
+            Action::RememberFieldA => {
+                self.saved_field_a = self
+                    .main
+                    .update(cx, |s, w, cx| {
+                        scene::field_snapshot(&s.fields[0], w, cx)["text"].clone()
+                    })
+                    .map_err(|e| e.to_string())?;
+            }
             Action::Focus(id) => {
                 self.main
                     .update(cx, |s, w, cx| s.focus(id, w, cx))
@@ -334,7 +348,7 @@ impl Runner {
                     .unwrap_or_else(|| node["title"].as_str().unwrap_or_default());
                 let matches = value == model;
                 samples.push(
-                    json!({"at_ms":(i as u64 + 1) * 100,"model":model,"ax":node,"pass":matches}),
+                    json!({"at_ms":started.elapsed().as_millis(),"model":model,"ax":node,"pass":matches}),
                 );
                 paused += pause_started.elapsed();
             }
@@ -356,20 +370,27 @@ impl Runner {
         } else {
             Value::Null
         };
-        let foreign = ax::foreign_windows();
-        result["foreign_window_appeared"] = json!(
-            foreign.as_array().unwrap().iter().any(|w| !self
-                .previous_foreign
-                .as_array()
-                .unwrap()
-                .contains(w))
-        );
-        result["foreign_windows"] = foreign;
+        result["ime_windows"] = ax::ime_windows(&self.baseline);
+        result["field_a_hanja_or_hangul"] = json!(matches!(
+            result["field_a"]["text"].as_str(),
+            Some("韓" | "한")
+        ));
+        result["field_a_unchanged"] = json!(result["field_a"]["text"] == self.saved_field_a);
+        result["saved_field_a"] = self.saved_field_a.clone();
         result["ax_focused"] = ax::focused();
         result["ax_focused_node"] = ax::dump_ax(inject::window("main"))["ax_focused_node"].clone();
         result["input_source"] = json!(inject::input_source());
         result["first_key_chars"] = json!(inject::take_first_key_chars());
         result["bounds_for_range_screen"] = inject::caret_rect();
+        result["candidate_offset"] = candidate_offset(&result);
+        result["candidate_near_caret"] = json!(
+            result["candidate_offset"]["dx"]
+                .as_f64()
+                .is_some_and(|dx| dx.abs() <= 300.)
+                && result["candidate_offset"]["dy"]
+                    .as_f64()
+                    .is_some_and(|dy| (-400. ..=80.).contains(&dy))
+        );
         result["single_hanja"] = json!(
             result["field_a"]["text"]
                 .as_str()
@@ -400,6 +421,24 @@ impl Runner {
             wait(cx, 50).await;
         }
         Ok(false)
+    }
+}
+fn candidate_offset(snapshot: &Value) -> Value {
+    let rect = &snapshot["bounds_for_range_screen"];
+    let Some(candidate) = snapshot["ime_windows"].as_array().and_then(|w| w.first()) else {
+        return Value::Null;
+    };
+    let coordinate = |value: &Value, key: &str| value[key].as_f64();
+    let bounds = &candidate["bounds"];
+    match (
+        coordinate(bounds, "x"),
+        coordinate(bounds, "y"),
+        coordinate(rect, "x"),
+        coordinate(rect, "y"),
+        coordinate(rect, "height"),
+    ) {
+        (Some(x), Some(y), Some(rx), Some(ry), Some(height)) => json!({"dx":x-rx,"dy":y-ry-height}),
+        _ => Value::Null,
     }
 }
 fn name(node: &Value) -> &str {

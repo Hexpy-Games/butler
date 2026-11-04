@@ -28,14 +28,14 @@ def capture_rect(rects, margin_x, margin_y, dest):
 def capture(ready, out):
     info = json.loads(ready.read_text())
     step = ready.stem.removeprefix('shot-')
-    foreign = [w['bounds'] for w in info['foreign_windows']]
-    capture_rect([info['window_frame'], *foreign], 40, 40,
+    ime = [w['bounds'] for w in info['ime_windows']]
+    capture_rect([info['window_frame'], *ime], 40, 40,
                  out / f'shot-{step}.jpg')
     caret = info['bounds_for_range_screen']
-    if caret is not None:
+    if caret is not None and caret['width'] > 0 and caret['height'] > 0:
         expanded = dict(x=caret['x']-220, y=caret['y']-120,
                         width=caret['width']+440, height=caret['height']+240)
-        capture_rect([expanded, *foreign], 0, 0, out / f'zoom-{step}.jpg')
+        capture_rect([expanded, *ime], 0, 0, out / f'zoom-{step}.jpg')
     ready.with_suffix('.done').write_text('{}\n')
 
 

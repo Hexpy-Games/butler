@@ -197,7 +197,7 @@ pub fn ascii(c: char) {
     let lower = c.to_ascii_lowercase();
     let codes = [
         ("asdfhgzxcv", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].as_slice()),
-        ("bqwerty", [11, 12, 13, 14, 15, 16, 17].as_slice()),
+        ("bqweryt", [11, 12, 13, 14, 15, 16, 17].as_slice()),
         (
             "123465=97-80",
             [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29].as_slice(),
@@ -242,24 +242,10 @@ pub fn status() -> serde_json::Value {
     }
 }
 pub fn shot_info(baseline: &serde_json::Value) -> serde_json::Value {
-    let foreign = super::ax::foreign_windows();
-    let foreign: Vec<_> = foreign
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|w| {
-            w["bounds"]["width"].as_f64().unwrap_or(0.) < 1000.
-                && w["bounds"]["height"].as_f64().unwrap_or(0.) < 1000.
-                && !baseline
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|b| b["pid"] == w["pid"] && b["number"] == w["number"])
-        })
-        .collect();
+    let ime = super::ax::ime_windows(baseline);
     unsafe {
         let scale: f64 = msg_send![window("main"), backingScaleFactor];
-        serde_json::json!({"window_frame":top_left(frame(window("main"))),"backing_scale":scale,"foreign_windows":foreign,"bounds_for_range_screen":caret_rect()})
+        serde_json::json!({"window_frame":top_left(frame(window("main"))),"backing_scale":scale,"ime_windows":ime,"bounds_for_range_screen":caret_rect()})
     }
 }
 pub fn caret_rect() -> serde_json::Value {

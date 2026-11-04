@@ -3,7 +3,7 @@
 use super::inject::{self, Rect};
 use cef::*;
 use core_foundation::base::{CFRelease, CFTypeRef};
-use objc::{msg_send, runtime::Object, sel, sel_impl};
+use objc::{class, msg_send, runtime::Object, sel, sel_impl};
 use serde_json::{Value, json};
 use std::{cell::RefCell, collections::VecDeque};
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -137,7 +137,7 @@ unsafe fn number(dict: *mut Object, key: &str) -> f64 {
         }
     }
 }
-pub fn foreign_windows() -> Value {
+fn on_screen_windows() -> Value {
     unsafe {
         let list = CGWindowListCopyWindowInfo(1, 0);
         if list.is_null() {
@@ -147,9 +147,6 @@ pub fn foreign_windows() -> Value {
         let mut result = Vec::new();
         for i in 0..count {
             let d: *mut Object = msg_send![list as *mut Object, objectAtIndex:i];
-            if number(d, "kCGWindowOwnerPID") as u32 == std::process::id() {
-                continue;
-            }
             let b = item(d, "kCGWindowBounds");
             let (bx, by, bw, bh) = (
                 number(b, "X"),
@@ -161,6 +158,61 @@ pub fn foreign_windows() -> Value {
         }
         CFRelease(list);
         json!(result)
+    }
+}
+pub fn foreign_windows() -> Value {
+    let windows = on_screen_windows();
+    json!(
+        windows
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|w| { w["pid"].as_f64() != Some(f64::from(std::process::id())) })
+            .collect::<Vec<_>>()
+    )
+}
+pub fn ime_windows(baseline: &Value) -> Value {
+    let gpui_numbers = gpui_window_numbers();
+    let windows = on_screen_windows();
+    let candidates: Vec<_> = windows
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|w| {
+            let width = w["bounds"]["width"].as_f64().unwrap_or(0.);
+            let height = w["bounds"]["height"].as_f64().unwrap_or(0.);
+            if w["owner"] == "Window Server" || (width <= 40. && height <= 40.) {
+                return false;
+            }
+            if w["pid"].as_f64() == Some(f64::from(std::process::id())) {
+                !gpui_numbers.contains(&w["number"].as_f64().unwrap_or(0.))
+            } else {
+                width < 1000.
+                    && height < 1000.
+                    && !baseline
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|b| b["pid"] == w["pid"] && b["number"] == w["number"])
+            }
+        })
+        .collect();
+    json!(candidates)
+}
+fn gpui_window_numbers() -> Vec<f64> {
+    unsafe {
+        let windows: *mut Object = msg_send![inject::app(), windows];
+        let count: usize = msg_send![windows, count];
+        let mut numbers = Vec::new();
+        for i in 0..count {
+            let window: *mut Object = msg_send![windows, objectAtIndex:i];
+            let gpui: bool = msg_send![window, isKindOfClass:class!(GPUIWindow)];
+            if gpui {
+                let number: isize = msg_send![window, windowNumber];
+                numbers.push(number as f64);
+            }
+        }
+        numbers
     }
 }
 #[derive(Default)]
