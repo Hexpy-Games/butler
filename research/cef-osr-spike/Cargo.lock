@@ -750,6 +750,7 @@ dependencies = [
  "futures-lite",
  "gpui-ce",
  "gpui_ce_apple",
+ "gpui_ce_elements",
  "gpui_ce_platform",
  "metal",
  "objc",
@@ -2269,6 +2270,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "gpui_ce_elements"
+version = "0.1.0"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=d15253366449d5931f6bae9c95190198fd7c23e2#d15253366449d5931f6bae9c95190198fd7c23e2"
+dependencies = [
+ "derive_setters",
+ "gpui-ce",
+ "palette",
+ "smallvec",
+ "unicode-segmentation",
 ]
 
 [[package]]

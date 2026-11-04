@@ -44,6 +44,9 @@ cef::wrap_life_span_handler! {
 cef::wrap_render_handler! {
     pub struct Paint { shared:SharedRef, tx:async_channel::Sender<()> }
     impl RenderHandler {
+        fn accessibility_handler(&self)->Option<AccessibilityHandler>{
+            crate::option("--d4").map(|_| crate::d4::ax::CefAccessibility::new())
+        }
         fn view_rect(&self,_b:Option<&mut Browser>,rect:Option<&mut Rect>){
             if let Some(r)=rect {let s=self.shared.borrow();r.width=f32::from(s.bounds.size.width).max(1.) as i32;r.height=f32::from(s.bounds.size.height).max(1.) as i32;}
         }

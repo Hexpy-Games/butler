@@ -1,5 +1,6 @@
 mod cdp;
 mod cef_gate;
+mod d4;
 mod dialogs;
 mod field;
 mod frame_pool;
@@ -79,7 +80,13 @@ fn main() {
         json!({"pid":std::process::id(),"software":flag("--software"),"self_test":flag("--self-test"),"home":std::env::var("HOME").ok()}),
     );
     presentation::install();
-    gpui_platform::application().run(move |cx| start(args, cx));
+    let app = gpui_platform::application();
+    let app = if option("--d4").is_some() {
+        app.with_accessibility_forced()
+    } else {
+        app
+    };
+    app.run(move |cx| start(args, cx));
     if CEF_STARTED.load(std::sync::atomic::Ordering::SeqCst) {
         cef::shutdown();
     }
@@ -89,6 +96,10 @@ fn main() {
     }
 }
 fn start(args: cef::args::Args, cx: &mut App) {
+    if let Some(out) = option("--d4") {
+        d4::start(args, cx, out.into());
+        return;
+    }
     let (pump_tx, pump_rx) = async_channel::unbounded();
     let (tx, rx) = async_channel::bounded(1);
     let shared = Rc::new(RefCell::new(state::Shared {
@@ -237,11 +248,11 @@ fn initialize(
         dialogs::Dialog::new(),
         dialogs::Js::new(),
     );
-    let url = option("--url").unwrap_or_else(|| format!("file://{ROOT}/src/fixture.html"));
-    assert!(
-        url == format!("file://{ROOT}/src/fixture.html")
-            || url == "https://github.com/Hexpy-Games/butler"
-    );
+    let fixture = option("--d4")
+        .map(|out| format!("file://{out}/fixture.html"))
+        .unwrap_or_else(|| format!("file://{ROOT}/src/fixture.html"));
+    let url = option("--url").unwrap_or_else(|| fixture.clone());
+    assert!(url == fixture || url == "https://github.com/Hexpy-Games/butler");
     *rt.browser.borrow_mut() = cef::browser_host_create_browser_sync(
         Some(&cef::WindowInfo {
             windowless_rendering_enabled: 1,
