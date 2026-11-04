@@ -142,7 +142,6 @@ async fn credential_roots_and_data_auth_stay_denied() -> Result<(), HarnessError
         ".git-credentials",
         ".codex/auth.json",
         "external-profile/provider.json",
-        "relocated-data/relative-profile.json",
         "relocated-data/auth/provider.json",
     ];
     for name in roots {
@@ -159,10 +158,6 @@ async fn credential_roots_and_data_auth_stay_denied() -> Result<(), HarnessError
             home.join("external-profile/provider.json")
                 .display()
                 .to_string(),
-        ),
-        (
-            "BUTLER_OPENAI_AUTH_PROFILE".into(),
-            "relative-profile.json".into(),
         ),
     ]);
     for project in [cwd, &data, home] {

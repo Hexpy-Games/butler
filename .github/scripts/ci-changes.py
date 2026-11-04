@@ -303,7 +303,7 @@ ARTIFACTS = {
     'install-macos': ['agent-darwin-arm64'],
     'build': ['agent-windows-x64'], 'stub': ['windows-e2e'],
     'release': ['windows-completed-installed'],
-    'hosted': [f'windows-completed-{n}' for n in ('remote', 'recovery', 'data', 'basics')],
+    'hosted': [f'windows-completed-{n}' for n in ('remote', 'recovery', 'data', 'basics', 'outputs')],
 }
 
 
