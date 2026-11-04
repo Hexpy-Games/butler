@@ -82,7 +82,7 @@ export type CardItem = {
 
 export type AnswerCell = string | number | null;
 
-export type AnswerBlock = CardsBlock | TableBlock | GalleryBlock | FactsBlock | MetricsBlock | ChartBlock | CalloutBlock | ActionsBlock | TimelineBlock | ChecklistBlock | ProgressBlock | TextBlock | ImageBlock | QuoteBlock | ColumnsBlock | TabsBlock | GroupBlock;
+export type AnswerBlock = AnswerLeafBlock | ColumnsBlock | TabsBlock | GroupBlock | EpicsBlock;
 
 export type AnswerSource = string;
 
@@ -282,3 +282,5 @@ export type AnswerBlockSet = {
 };
 
 export type { PendingAsk, PendingAskKind, PendingAskState, SessionPendingAsks, GlobalPendingAsks, PendingAsksChanged, PendingAsksBridge } from "./pending-asks-contracts.ts";
+
+export type EpicsBlock = { type: "epics"; project_id: string; ids: Array<string>; };

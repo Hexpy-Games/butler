@@ -25,7 +25,7 @@ function visibleLibraryTarget(): Element | null {
 async function makeDocument(block: AnswerBlockView, origin: AnswerBlockOrigin) {
   // Signed URLs are transport metadata, never part of the editable snapshot.
   const spec = JSON.stringify({ v: 2, blocks: [block] }, (key, value) => key === "image_url" ? undefined : value);
-  const title = (block.title || origin.reply?.trim().split(/\s+/u).slice(0, 10).join(" ") || block.type).slice(0, 200);
+  const title = (("title" in block && block.title) || origin.reply?.trim().split(/\s+/u).slice(0, 10).join(" ") || block.type).slice(0, 200);
   const doc = await api<EditableDocument>("/documents", { method: "POST", body: JSON.stringify({ title, body: `\`\`\`blocks\n${spec}\n\`\`\``,
     author: "user", chat_id: origin.session, message_id: origin.message }) });
   libraryChanged();
@@ -50,6 +50,6 @@ export function AnswerBlockFrame({ block, path, child, children }: { block: Answ
       notifyStatus(copy.copied);
     }) },
   ];
-  return <BlockActionFrame ref={ref} title={block.title} level={child ? "child" : "block"} actions={actions} actionsLabel={appCopy.browser.more}
+  return <BlockActionFrame ref={ref} title={"title" in block ? block.title : undefined} level={child ? "child" : "block"} actions={actions} actionsLabel={appCopy.browser.more}
     data-answer-block={block.type} data-answer-path={path}>{children}</BlockActionFrame>;
 }

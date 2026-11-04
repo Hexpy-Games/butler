@@ -399,3 +399,6 @@ async fn image_geometry_is_projected_from_asset_pixel_ratio() -> Result<(), Harn
     assert!(view.data().to_string().contains("\"image_width\":1500.0"));
     s.finish().await
 }
+
+#[path = "answer_blocks_epics.rs"]
+mod epics;

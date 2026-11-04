@@ -12,6 +12,7 @@ struct Call {
     parser: AnswerBlocksParser,
     sources: Vec<String>,
     images: std::collections::HashSet<String>,
+    epics: HashMap<String, String>,
 }
 
 pub(in crate::host::guided) struct AnswerBlocksStream {
@@ -29,24 +30,11 @@ impl AnswerBlocksStream {
         }))
     }
 
-    async fn delta(
+    async fn evidence(
         &self,
-        stream_id: String,
-        index: u64,
-        delta: String,
-        progress: &dyn AgentLoopProgress,
+        call: &mut Call,
+        units: &[answer_blocks::AnswerBlocksDraftUnit],
     ) -> Result<(), butler_turn::btcc::BtccError> {
-        let key = (stream_id.clone(), index);
-        // The relay serializes calls; move state out before awaiting evidence I/O.
-        let Some(mut call) = self.calls.lock().remove(&key) else {
-            return Ok(());
-        };
-        let mut units = call.parser.push(delta.as_bytes());
-        for unit in &mut units {
-            if let Some(value) = &mut unit.value {
-                answer_blocks::normalize_unit(value);
-            }
-        }
         let values: Vec<_> = units
             .iter()
             .filter_map(|unit| {
@@ -77,10 +65,45 @@ impl AnswerBlocksStream {
             call.images
                 .extend(super::browser::lookup_assets(&self.tools, ids).await);
         }
+        let epic_specs: Vec<_> = units
+            .iter()
+            .filter(|unit| unit.field.as_deref() == Some("ids"))
+            .map(|unit| json!({"type":"epics","ids":unit.value}))
+            .collect();
+        call.epics.extend(
+            super::answer_blocks::lookup_epics(
+                &self.tools,
+                answer_blocks::epic_ids(&json!(epic_specs)),
+            )
+            .await,
+        );
+        Ok(())
+    }
+
+    async fn delta(
+        &self,
+        stream_id: String,
+        index: u64,
+        delta: String,
+        progress: &dyn AgentLoopProgress,
+    ) -> Result<(), butler_turn::btcc::BtccError> {
+        let key = (stream_id.clone(), index);
+        // The relay serializes calls; move state out before awaiting evidence I/O.
+        let Some(mut call) = self.calls.lock().remove(&key) else {
+            return Ok(());
+        };
+        let mut units = call.parser.push(delta.as_bytes());
+        for unit in &mut units {
+            if let Some(value) = &mut unit.value {
+                answer_blocks::normalize_unit(value);
+            }
+        }
+        self.evidence(&mut call, &units).await?;
         let call_id = call.call_id.clone();
         let ops: Vec<Value> = {
             let context = AnswerBlocksContext {
                 now: chrono::Utc::now(),
+                epic_project: &|id| call.epics.get(id).cloned(),
                 image_exists: &|id| call.images.contains(id),
                 read_sources: &call.sources,
             };
@@ -121,6 +144,7 @@ impl AnswerBlocksStreamPort for AnswerBlocksStream {
                             parser: AnswerBlocksParser::default(),
                             sources: Vec::new(),
                             images: Default::default(),
+                            epics: Default::default(),
                         },
                     );
                     Ok(())
