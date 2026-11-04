@@ -69,16 +69,23 @@ async fn hanging_git_times_out_without_blocking_configuration_writes() -> Result
     assert!(empty(&s.sandbox.data.join("plugins/staging")));
     assert!(empty(&s.sandbox.data.join("plugins/work")));
     let events = fs::read_to_string(trace)?;
+    let mut pids = Vec::new();
     for line in events.lines() {
         let event: Value = serde_json::from_str(line)?;
         if event["event"] == "start" {
             let sid = event["sid"].as_str().unwrap();
             let pid = u32::from_str_radix(sid.rsplit_once("-P").unwrap().1, 16).unwrap();
-            assert_eq!(
-                butler_platform::process_control::liveness(pid),
-                butler_platform::process_control::Liveness::Gone,
-                "git child {pid} survived"
-            );
+            pids.push(pid);
+        }
+    }
+    // Windows ends a killed process asynchronously; it may stay listed briefly.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    for pid in pids {
+        while butler_platform::process_control::liveness(pid)
+            != butler_platform::process_control::Liveness::Gone
+        {
+            assert!(Instant::now() < deadline, "git child {pid} survived");
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
     eprintln!("configuration writes completed in {elapsed:?}; git transport closed");
