@@ -4,7 +4,7 @@ use super::binding;
 use crate::workspace::session_recovery::authority::{
     SessionWorkspaceAuthority, public_workspace_label, resolve_authority, safe_workspace_basename,
 };
-use crate::workspace::session_recovery::path::parse_worktrees;
+use crate::workspace::session_recovery::path::{canonical_path, parse_worktrees};
 
 fn authority_json(authority: SessionWorkspaceAuthority) -> Value {
     match authority {
@@ -76,6 +76,22 @@ fn actual_bun_authority_parser_and_label_cases() {
     }
     for (index, case) in golden["worktrees"].as_array().unwrap().iter().enumerate() {
         let entries = parse_worktrees(case["stdout"].as_str().unwrap()).unwrap();
+        // The parser canonicalizes paths, so expected paths use the same resolution.
+        let expected: Vec<_> = case["result"]["entries"]
+            .as_array()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .map(|mut entry| {
+                entry["path"] = Value::String(
+                    canonical_path(entry["path"].as_str().unwrap())
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+                entry
+            })
+            .collect();
         let actual: Vec<_> = entries
             .into_iter()
             .map(|entry| {
@@ -93,11 +109,7 @@ fn actual_bun_authority_parser_and_label_cases() {
                 Value::Object(value)
             })
             .collect();
-        assert_eq!(
-            json!(actual),
-            case["result"]["entries"],
-            "parser case {index}"
-        );
+        assert_eq!(json!(actual), json!(expected), "parser case {index}");
     }
     for case in golden["labels"].as_array().unwrap() {
         assert_eq!(
