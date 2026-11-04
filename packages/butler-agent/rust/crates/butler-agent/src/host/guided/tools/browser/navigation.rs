@@ -1,5 +1,39 @@
 //! Review the complete set of destination URLs before opening any tab.
 use super::*;
+use butler_turn::btcc::{AccessDecision, CapabilityKind, TurnTaint};
+
+/// Opening pages sends requests as web_read does, so it takes web_read's
+/// decision for each destination; a connector event's turn reviews every open.
+pub(super) fn reviewed(owner: &GuidedTools, args: &Value) -> bool {
+    !matches!(decision(owner, args), AccessDecision::Allow)
+}
+
+fn decision(owner: &GuidedTools, args: &Value) -> AccessDecision {
+    if owner.taint() == TurnTaint::ConnectorEvent {
+        return super::super::access::for_kind(
+            owner,
+            CapabilityKind::WebRequest { carries_data: true },
+        );
+    }
+    let mut decision = AccessDecision::Allow;
+    for url in destinations(owner, args) {
+        let next = super::super::access::for_kind(
+            owner,
+            CapabilityKind::WebRequest {
+                carries_data: butler_turn::btcc::web_read_carries_data(
+                    &url,
+                    owner.web_session.discovered(&url),
+                ),
+            },
+        );
+        match next {
+            AccessDecision::Deny(_) => return next,
+            AccessDecision::Ask(_) => decision = next,
+            AccessDecision::Allow => {}
+        }
+    }
+    decision
+}
 
 pub(super) async fn execute(
     owner: &GuidedTools,
@@ -9,6 +43,9 @@ pub(super) async fn execute(
     client: client::Client,
     args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if matches!(decision(owner, &args), AccessDecision::Deny(_)) {
+        return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
+    }
     let urls = destinations(owner, &args);
     let target = urls.join("\n");
     let steps: Vec<_> = urls
@@ -19,7 +56,7 @@ pub(super) async fn execute(
     if client.approval_handoff {
         return encoded(&handoff(&args, "approval_required"));
     }
-    let reference = match authority::act_gate(owner, call, occurrence, &input, &target).await? {
+    let reference = match authority::gate(owner, call, occurrence, &input, &target).await? {
         authority::Gate::Pending(value) => return encoded(&value),
         authority::Gate::Allowed(reference, _) => reference,
     };

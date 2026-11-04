@@ -6,13 +6,28 @@ use validation::check_inputs;
 pub(super) use validation::validate;
 
 pub(super) fn refusal(code: &str, detail: Value) -> Value {
-    let error = Value::Object(serde_json::Map::from_iter([
+    let mut error = serde_json::Map::from_iter([
         ("code".into(), Value::String(code.into())),
         ("detail".into(), detail),
-    ]));
+    ]);
+    let next_action = match code {
+        "task_fields_required" => Some(
+            "Give task.scope (owns: subjects with aspects, or paths) and task.output (format plus fields or files), then delegate again.",
+        ),
+        "task_subject_unknown" => Some(
+            "Use a subject key listed in registered, or add the subject to the Plan's subjects with replace_work_plan, then delegate again.",
+        ),
+        "task_scope_overlap" => Some(
+            "Another Task owns these cells. If it is done, build on its result: list it in task.inputs (use facts, artifact to revise it, or verify with a reason). If it is still running, set task.overlap to wait or merge with a reason, or narrow this Task's scope.",
+        ),
+        _ => None,
+    };
+    if let Some(next_action) = next_action {
+        error.insert("next_action".into(), Value::String(next_action.into()));
+    }
     Value::Object(serde_json::Map::from_iter([
         ("ok".into(), Value::Bool(false)),
-        ("error".into(), error),
+        ("error".into(), Value::Object(error)),
     ]))
 }
 
