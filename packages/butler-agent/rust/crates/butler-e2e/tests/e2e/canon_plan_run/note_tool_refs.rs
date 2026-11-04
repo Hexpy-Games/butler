@@ -25,9 +25,9 @@ async fn model_queue_calls_copy_note_refs_unchanged() -> Result<(), HarnessError
             200,
         );
         let args = if op == "set_order" {
-            json!({"op":op,"expected_revision":view["graph_revision"],"steps":[[refs[2]],[refs[1]]]})
+            json!({"op":op,"run_revision":view["graph_revision"],"steps":[[refs[2]],[refs[1]]]})
         } else {
-            json!({"op":op,"expected_revision":view["graph_revision"],"epic_id":refs[2],"target_epic_id":refs[0]})
+            json!({"op":op,"run_revision":view["graph_revision"],"epic_id":refs[2],"target_epic_id":refs[0]})
         };
         *script.queue_request.lock().unwrap() = Some(args.clone());
         let before = requests(&script).len();
@@ -96,15 +96,14 @@ async fn model_queue_revision_errors_reach_model_verbatim() -> Result<(), Harnes
     let expected = current - 1;
     for (args, message) in [
         (
-            json!({"op":"after","expected_revision":expected,"epic_id":refs[2],"target_epic_id":refs[0]}),
+            json!({"op":"after","run_revision":expected,"epic_id":refs[2],"target_epic_id":refs[0]}),
             format!(
                 "The run changed since revision {expected}; it is now at revision {current}. Read the order in the latest plan run note and send the change again with that revision."
             ),
         ),
         (
             json!({"op":"set_order","steps":[[refs[2]],[refs[1]]]}),
-            "expected_revision required: pass the revision from the latest plan run note."
-                .to_owned(),
+            "run_revision required: pass the Revision from the latest plan run note.".to_owned(),
         ),
     ] {
         *script.queue_request.lock().unwrap() = Some(args);

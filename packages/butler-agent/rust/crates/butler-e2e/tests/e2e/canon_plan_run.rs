@@ -133,6 +133,54 @@ async fn cb_07_plan_run_three_epics_in_canon_order() -> Result<(), HarnessError>
     Ok(())
 }
 
+/// No run yet means no plan run note: the first plan_run carries no revision, and the
+/// offered schema names the run's own revision, never canon's entity `expected_revision`.
+#[tokio::test]
+async fn cb_07c_first_plan_run_needs_no_revision() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, first, chat) = crate::canon_link::setup("CB-07C", false, false).await?;
+    let (plan, _) = plan(&s, &script, &first).await?;
+    *script.queue_request.lock().unwrap() = Some(json!({"op":"plan_run","plan_id":plan}));
+    let turn = s.gw.say(&chat, "Run this plan").await?;
+    s.gw.wait_terminal(
+        &chat,
+        &s.gw.accepted_turn(&turn).await?,
+        std::time::Duration::from_secs(60),
+    )
+    .await?;
+    let request = script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|body| body.to_string().contains("Run this plan"))
+        .unwrap()
+        .clone();
+    assert!(
+        !request
+            .to_string()
+            .contains("## Plan run in this conversation")
+    );
+    let tool = butler_e2e::e2e::chatgpt_wire::functions(&request)
+        .find(|tool| tool["name"] == "canon_queue")
+        .unwrap();
+    let properties = tool["parameters"]["properties"].as_object().unwrap();
+    assert!(properties.contains_key("run_revision"));
+    assert!(!properties.contains_key("expected_revision"));
+    assert!(script.codes.lock().unwrap().is_empty());
+    let view = data(
+        s.gw.get(&format!("/sessions/{chat}/canon/queue")).await?,
+        200,
+    );
+    assert_eq!(view["chains"][0]["steps"].as_array().unwrap().len(), 3);
+    script.wait_held().await;
+    script.release();
+    wait_done(&s, &chat, 3).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 #[tokio::test]
 async fn cn_17_completed_epic_never_starts_the_next_in_plan() -> Result<(), HarnessError> {
     butler_e2e::gate!();

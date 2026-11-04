@@ -13,11 +13,12 @@ async fn pg1_inspect_installs_nothing_then_skill_mcp_hook_work() -> Result<(), H
     let store = s
         .sandbox
         .data
-        .join("plugins/store")
+        .join("plugins")
+        .join("store")
         .join(i["digest"].as_str().unwrap());
     assert_eq!(
         i["capabilities"]["runs_on_this_computer"][0]["argv"][0],
-        store.join("server.exe").to_string_lossy().as_ref()
+        format!("{}/server.exe", store.display())
     );
     assert!(!store.exists());
     assert!(
