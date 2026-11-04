@@ -12,7 +12,7 @@ export interface SmokeProviderCalls {
 }
 
 // Mirrors butler-e2e/provider/smart_group.rs.
-function smartGroupInput(body: any): Record<string, unknown> | undefined {
+export function smartGroupInput(body: any): Record<string, unknown> | undefined {
   if (body.tools?.length) return undefined;
   const user = Array.isArray(body.input) ? body.input.find((item: any) => item.role === "user") : undefined;
   const content = user?.content;
