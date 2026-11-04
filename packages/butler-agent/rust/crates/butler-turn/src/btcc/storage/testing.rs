@@ -134,7 +134,7 @@ impl Fixture {
     /// Exercise durable shutdown after a real maintenance-thread panic.
     pub fn close_after_checkpoint_panic(&self) -> (StorageResult<()>, String, u64) {
         let mut db = sqlite::open(&self.path).expect("connection");
-        writer::configure(&mut db, StorageProfile::Durable).expect("configure");
+        writer::configure(&db, StorageProfile::Durable).expect("configure");
         bootstrap::migrate_current(&mut db).expect("migrate");
         let config = self.config("shutdown-owner");
         let owner = runtime_owner::RuntimeOwner::register(
