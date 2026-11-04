@@ -1,6 +1,14 @@
 use super::*;
 
 impl Run {
+    /// A page dialog met by a step stays in the log with its text.
+    pub(super) fn note_dialog(&mut self, result: &Value) {
+        if let Some(dialog) = result["untrusted_content"].get("dialog") {
+            self.log
+                .push(json!({"step":self.steps,"page_dialog":dialog}));
+        }
+    }
+
     pub(super) fn failed(&mut self, action: &Value, outcome: &Value) -> bool {
         self.failures += 1;
         self.log

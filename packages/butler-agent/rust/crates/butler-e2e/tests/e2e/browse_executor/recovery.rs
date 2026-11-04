@@ -1,7 +1,7 @@
 use super::*;
 use butler_e2e::e2e::cassette::Cassette;
 
-fn cassette(replies: &[String]) -> Result<Cassette, HarnessError> {
+fn cassette(url: &str, replies: &[String]) -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut c = Cassette::load("TOOL-01")?;
     c.exchanges.clear();
@@ -10,7 +10,7 @@ fn cassette(replies: &[String]) -> Result<Cassette, HarnessError> {
     first.request.key.round.clear();
     first.response = stub::response(&[stub::call(
         "browse",
-        &json!({"goal":"Inspect page","url":"https://store.example/product-b","fields":["price"]}),
+        &json!({"goal":"Inspect page","url":url,"fields":["price"]}),
         "recover",
     )]);
     c.exchanges.push(first);
@@ -35,10 +35,10 @@ async fn fenced_json_long_notes_and_stale_step_recover_with_feedback() -> Result
     let act = json!({"notes":"가".repeat(2001),"next":{"act":{"steps":[{"action":"click","ref":"f0-e90"}]}}});
     let done = json!({"notes":"Price 12","next":{"done":{"fields":{"price":"12"},"evidence":[{"field":"price","quote":"Price 12"}],"summary":"Found price."}}});
     let s = Setup::new("BROWSE-RECOVERY")?
-        .stub_cassette(cassette(&[
-            format!("Here:\n```json\n{act}\n```"),
-            done.to_string(),
-        ])?)
+        .stub_cassette(cassette(
+            "https://store.example/product-b",
+            &[format!("Here:\n```json\n{act}\n```"), done.to_string()],
+        )?)
         .start()
         .await?;
     let reply =
@@ -91,7 +91,7 @@ async fn three_consecutive_unusable_replies_or_failed_steps_end_stuck() -> Resul
         ],
     ] {
         let s = Setup::new("BROWSE-THREE-FAILURES")?
-            .stub_cassette(cassette(&replies)?)
+            .stub_cassette(cassette("https://store.example/product-b", &replies)?)
             .start()
             .await?;
         let reply =
@@ -117,4 +117,43 @@ async fn three_consecutive_unusable_replies_or_failed_steps_end_stuck() -> Resul
         s.finish().await?;
     }
     Ok(())
+}
+
+#[tokio::test]
+async fn page_alert_is_acknowledged_and_confirm_hands_off_with_its_text() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let act = json!({"notes":"","next":{"act":{"steps":[{"action":"click","ref":"f0-e90"}]}}});
+    let s = Setup::new("BROWSE-PAGE-DIALOGS")?
+        .stub_cassette(cassette(
+            "https://store.example/notice",
+            &[act.to_string()],
+        )?)
+        .start()
+        .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let (host, _) = host::start(&s).await?;
+    let (_, turn) = s.turn("general", "Recover page task").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let first = requests.iter().find(|r| executor(r)).unwrap();
+    let text = first["input"][0]["content"][0]["text"].as_str().unwrap();
+    let scope: Value = serde_json::from_str(text.split_once("Current scope:\n").unwrap().1)?;
+    assert_eq!(
+        scope["action_log"][0]["page_dialog"]["message"], "Article removed",
+        "{scope}"
+    );
+    let result = outputs(requests.last().unwrap()).pop().unwrap().0["output"].clone();
+    assert_eq!(result["status"], "needs_approval", "{result}");
+    assert_eq!(
+        result["untrusted_content"]["dialog"]["message"],
+        "Delete this?"
+    );
+    assert_eq!(result["handoff"]["tab"], "notice");
+    host.abort();
+    let _ = host.await;
+    s.finish().await
 }

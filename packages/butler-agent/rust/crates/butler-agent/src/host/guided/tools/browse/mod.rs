@@ -72,6 +72,9 @@ async fn start(
 ) -> Result<JsonDocument, ToolExecutionError> {
     if args.get("url").is_some() {
         let result = step::open(owner, invocation, occurrence, run, &args["url"]).await?;
+        if result["status"] == "needs_approval" {
+            return encoded(&run.finish(result, &model.model));
+        }
         if result["status"] != "ok" {
             run.failed(&json!({"open":args["url"]}), &result);
         }

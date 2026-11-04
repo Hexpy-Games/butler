@@ -66,7 +66,11 @@ async fn serve(
                         &[],
                     )
                     .await?;
-                json!({"status":"ok","tab":id,"url":url})
+                if url.ends_with("/notice") {
+                    json!({"status":"dialog_pending","tab":id,"url":url,"epoch":1,"dialog":{"id":"d-open","epoch":1,"type":"alert","message":"Article removed","origin":url,"untrusted":true}})
+                } else {
+                    json!({"status":"ok","tab":id,"url":url})
+                }
             }
             "tab.observe" => {
                 let index = observed.entry(tab.to_owned()).or_default();
@@ -98,6 +102,13 @@ async fn serve(
             "tab.prepare" => {
                 json!({"status":"ok","tab":tab,"url":tabs[tab]["url"],"profile":"signed_out",
                 "purchase_allowed":true,"steps":[{"action":frame["args"]["steps"][0]["action"],"hit":{"role":"button","name":"Order","frame":""},"payment":tabs[tab]["url"].as_str().unwrap().ends_with("checkout"),"submit":tabs[tab]["url"].as_str().unwrap().ends_with("checkout")}]})
+            }
+            "tab.act" if tabs[tab]["url"].as_str().unwrap().ends_with("/notice") => {
+                json!({"status":"dialog_pending","tab":tab,"url":tabs[tab]["url"],"epoch":1,"dialog":{"id":"d-act","epoch":1,"type":"confirm","message":"Delete this?","origin":tabs[tab]["url"],"untrusted":true}})
+            }
+            "tab.dialog" => {
+                assert_eq!(frame["args"]["accept"], true);
+                json!({"status":"ok","tab":tab,"epoch":1,"url":tabs[tab]["url"],"steps":[]})
             }
             "tab.act" => {
                 assert_ne!(
