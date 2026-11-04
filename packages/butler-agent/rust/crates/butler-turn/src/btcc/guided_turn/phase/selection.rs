@@ -102,6 +102,7 @@ pub fn select_phase(
     let browse = input.browsing_agent
         && matches!(policy.role, PolicyRole::Butler | PolicyRole::Steward)
         && authorized.iter().any(|tool| tool.name == "browser_open");
+    authorized.retain(|tool| tool.name != "browse" || browse);
     if browse {
         push_missing(&mut authorized, catalog, &["browse"]);
     }

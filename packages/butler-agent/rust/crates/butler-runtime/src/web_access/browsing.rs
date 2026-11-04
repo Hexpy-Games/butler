@@ -23,35 +23,51 @@ impl WebSession {
         }
         let (model, effort) = if setting == "auto" {
             let view = read.catalog.view();
-            let conversation = read.catalog.find_model_metadata(Some(conversation))?;
-            let family = butler_models::models::model_family(&conversation.model_id);
-            let multi = view.models.iter().any(|model| {
-                model.provider_id == conversation.provider_id
-                    && butler_models::models::model_family(&model.model_id) != family
-            });
-            let presets = view
-                .providers
+            let mut matches = view
+                .registered_models
                 .iter()
-                .find(|provider| provider.provider_id == conversation.provider_id)
-                .and_then(|provider| provider.presets.as_ref());
-            let resolved = butler_models::models::resolve_browsing_model(
-                &conversation,
-                effort,
-                &view.registered_models,
-                multi,
-                presets.and_then(|presets| presets.browsing.as_ref()),
-                presets.and_then(|presets| presets.planning.as_ref()),
-            );
-            (resolved.model, resolved.effort)
+                .filter(|model| model.model_ref == conversation);
+            let registered = matches.next().filter(|_| matches.next().is_none());
+            if let Some(conversation) = registered {
+                let family = butler_models::models::model_family(&conversation.model_id);
+                let multi = view.models.iter().any(|model| {
+                    model.provider_id == conversation.provider_id
+                        && butler_models::models::model_family(&model.model_id) != family
+                });
+                let presets = view
+                    .providers
+                    .iter()
+                    .find(|provider| provider.provider_id == conversation.provider_id)
+                    .and_then(|provider| provider.presets.as_ref());
+                let resolved = butler_models::models::resolve_browsing_model(
+                    conversation,
+                    effort,
+                    &view.registered_models,
+                    multi,
+                    presets.and_then(|presets| presets.browsing.as_ref()),
+                    presets.and_then(|presets| presets.planning.as_ref()),
+                );
+                (resolved.model, resolved.effort)
+            } else {
+                (conversation.to_owned(), effort)
+            }
         } else {
-            let metadata = read.catalog.find_model_metadata(Some(setting))?;
+            let metadata = read
+                .catalog
+                .view()
+                .registered_models
+                .iter()
+                .find(|model| model.model_ref == setting)?;
             if metadata.registered != Some(true)
                 || metadata.enabled == Some(false)
                 || !metadata.runtime_supported
             {
                 return None;
             }
-            (metadata.model_ref, metadata.default_reasoning_effort)
+            (
+                metadata.model_ref.clone(),
+                metadata.default_reasoning_effort,
+            )
         };
         Some(BrowseModel {
             model,

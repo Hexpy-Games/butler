@@ -3,8 +3,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import sys
+import time
 
 MARKER = 'last-used.json'
 OTHER_REFS = 3
@@ -216,6 +218,26 @@ def prepare(base, ref, identity, known_refs=()):
     log(f'Runner Cargo cache estimated bytes={total}; cap bytes={cap}')
     if total > cap:
         log('::warning::Protected main/current Cargo targets exceed the namespace cap')
+    if not lexists(target):
+        candidates = [directory / identity for directory, _, _ in retained
+                      if directory != current and lexists(directory / identity / 'ci-local.json')]
+        if candidates:
+            seed = max(candidates, key=lambda path: last_used(path.parent))
+            staging = target.with_name(target.name + '.seeding')
+            remove_tree(base, staging)
+            seed_size = tree_bytes(seed)
+            free = shutil.disk_usage(extended(base)).free
+            if free < 2 * seed_size:
+                log(f'Runner Cargo seed skipped {seed.parent.name}/{identity} -> {current.name}: '
+                    f'{free} bytes free, {2 * seed_size} required')
+            else:
+                os.makedirs(extended(current), exist_ok=True)
+                started = time.monotonic()
+                shutil.copytree(extended(seed), extended(staging), symlinks=True)
+                os.replace(extended(staging), extended(target))
+                elapsed = time.monotonic() - started
+                log(f'Runner Cargo seed {seed.parent.name}/{identity} -> {current.name}: '
+                    f'{seed_size / 1024**3:.2f} GiB in {elapsed:.2f} s')
     os.makedirs(extended(target), exist_ok=True)
     metadata = read_marker(current)
     write_marker(current, dict(metadata, ref=ref))
