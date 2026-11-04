@@ -89,6 +89,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
         "TEXT NOT NULL DEFAULT '[]'",
     )?;
     transaction.execute_batch(super::schema::task_graphs::SCHEMA)?;
+    transaction.execute_batch("DROP TRIGGER IF EXISTS work_task_owner_stop;")?;
     transaction.execute_batch(super::schema::work_tasks::SCHEMA)?;
     transaction.execute_batch(super::schema::pending_asks::SCHEMA)?;
     // Keep the Work rebuild last: it validates all FKs before restoring deferral,

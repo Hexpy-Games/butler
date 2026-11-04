@@ -190,11 +190,12 @@ async fn pending_children_restart_with_the_admitted_parent_tier() -> Result<(), 
     crate::worker_cap::workers(&s, "general", 3).await?;
     crate::worker_cap::started(&script, 2).await;
     script.fourth.add_permits(1);
-    let (_, rows) = crate::worker_cap::workers(&s, "general", 4).await?;
+    let (steward, rows) = crate::worker_cap::workers(&s, "general", 4).await?;
     assert_eq!(rows[2]["status"], "waiting");
     assert_eq!(rows[3]["status"], "waiting");
     // An unanswered composer change does not reach the admitted run's children.
     set_mode(&s, "ask_first").await?;
+    crate::worker_cap::recovery::steward_parked(&s, &steward).await?;
     s.agent.kill9()?;
     s.gw = s.agent.start_again().await?;
     crate::worker_cap::started(&script, 4).await;

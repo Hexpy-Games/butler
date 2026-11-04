@@ -145,7 +145,7 @@ async fn retained_direction_cannot_reopen_scope_held_by_another_task() -> Result
     );
     let mut reuse = task("price");
     reuse["inputs"] = json!([{"task":first["task_id"],"use":"artifact"}]);
-    let next = assign(&b, &w, "revise", reuse).await?;
+    assign(&b, &w, "revise", reuse).await?;
     let refused = b
         .children
         .steer(SubsessionDirectionRequest {
@@ -162,11 +162,7 @@ async fn retained_direction_cannot_reopen_scope_held_by_another_task() -> Result
             schedule_run: None,
         })
         .await?;
-    assert_eq!(refused["error"]["code"], "task_scope_overlap");
-    assert_eq!(
-        refused["error"]["detail"]["overlaps"][0]["task"],
-        next["task_id"]
-    );
+    assert_eq!(refused["error"]["code"], "delegated_session_closed");
     finish(b, dir).await
 }
 

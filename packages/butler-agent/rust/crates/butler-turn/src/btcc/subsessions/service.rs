@@ -280,20 +280,22 @@ impl SubsessionService {
                 source: "btcc-subsession-delegation".into(),
             },
         };
-        let previous = request.previous_relation_id.clone();
-        let mut create = ids.create(
-            delegation::Parent {
-                session_id: request.parent_session_id,
-                turn_id: request.parent_turn_id,
-                anchor_message_id: request.anchor_message_id,
-            },
-            title,
-            packet,
-            intent,
-            now,
-        );
-        create.previous_relation_id = previous;
-        let stored = self.create_and_dispatch(create).await?;
+        let stored = self
+            .create_and_dispatch(SubsessionCreate {
+                previous_relation_id: request.previous_relation_id,
+                ..ids.create(
+                    delegation::Parent {
+                        session_id: request.parent_session_id,
+                        turn_id: request.parent_turn_id,
+                        anchor_message_id: request.anchor_message_id,
+                    },
+                    title,
+                    packet,
+                    intent,
+                    now,
+                )
+            })
+            .await?;
         Ok(delegation_output(&stored))
     }
 
