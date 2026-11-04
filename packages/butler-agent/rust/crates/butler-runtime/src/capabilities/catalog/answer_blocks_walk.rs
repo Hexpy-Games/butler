@@ -28,6 +28,24 @@ pub fn image_ids(value: &Value) -> Vec<String> {
     ids.into_iter().collect()
 }
 
+/// Only ids referenced by epic blocks are resolved; no project scans.
+pub fn epic_ids(value: &Value) -> Vec<String> {
+    let mut ids = std::collections::BTreeSet::new();
+    walk(value, &mut |item| {
+        if item["type"] == "epics" {
+            for id in item["ids"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                ids.insert(id.to_owned());
+            }
+        }
+    });
+    ids.into_iter().collect()
+}
+
 pub(super) fn defaults(value: &mut Value) {
     match value {
         Value::Object(fields) => {

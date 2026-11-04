@@ -64,6 +64,7 @@ function unit(call: AnswerDraftCall, op: Unit): AnswerDraftCall {
     : block.type === "chart" ? Array.isArray(block.x) && Array.isArray(block.series) && typeof block.source === "string" && typeof block.checked === "string"
     : block.type === "columns" || block.type === "group" ? Array.isArray(block.blocks) && block.blocks.length > 0
     : block.type === "tabs" ? Array.isArray(block.tabs) && block.tabs.some(tab => (tab as Unit)?.label && ((tab as Unit)?.blocks as unknown[])?.length)
+    : block.type === "epics" ? typeof block.project_id === "string" && Array.isArray(block.ids) && block.ids.length > 0
     : block.type === "image" ? typeof block.img === "string"
     : ["callout", "text", "quote"].includes(String(block.type)) && typeof block.text === "string";
   if (block.type === "table" && !Array.isArray(block.rows)) block = { ...block, rows: [] };

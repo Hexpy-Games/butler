@@ -81,7 +81,10 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
                     .map(str::to_owned)
             });
         if let Some(epic) = epic {
-            item["arguments"] = json!(raw.replace("canon:epic/$epic", &epic));
+            item["arguments"] = json!(
+                raw.replace("canon:epic/$epic", &epic)
+                    .replace("$epic", epic.trim_start_matches("canon:epic/"))
+            );
         }
     }
     (

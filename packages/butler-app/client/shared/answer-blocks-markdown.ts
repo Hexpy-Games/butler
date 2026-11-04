@@ -51,6 +51,7 @@ function table(columns: string[], rows: (string | number | null)[][]): string {
 
 function blockMarkdown(block: AnswerBlock, imageUrl: (url?: string) => string | undefined): string {
   switch (block.type) {
+    case "epics": return "";
     case "columns": case "group": return block.blocks.map(child => titledBlock(child, imageUrl)).join("\n\n");
     case "tabs": return block.tabs.map(tab => `### ${text(tab.label)}\n\n${tab.blocks.map(child => titledBlock(child, imageUrl)).join("\n\n")}`).join("\n\n");
     case "timeline": return block.items.map(item => `- **${text(item.when)}** ${text(item.title)}${item.text ? ` — ${text(item.text)}` : ""}`).join("\n");
@@ -71,10 +72,11 @@ function blockMarkdown(block: AnswerBlock, imageUrl: (url?: string) => string | 
 }
 
 function titledBlock(block: AnswerBlock, imageUrl: (url?: string) => string | undefined): string {
+  if (block.type === "epics") return "";
   return [block.title ? `### ${text(block.title)}` : "", blockMarkdown(block, imageUrl)].filter(Boolean).join("\n\n");
 }
 
 /** Portable copy/export representation, resolving decorated image URLs as the renderer does. */
 export function toMarkdown(spec: AnswerBlocks, imageUrl: (url?: string) => string | undefined = url => url): string {
-  return spec.blocks.map(block => titledBlock(block, imageUrl)).join("\n\n");
+  return spec.blocks.map(block => titledBlock(block, imageUrl)).filter(Boolean).join("\n\n");
 }

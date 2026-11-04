@@ -17,6 +17,7 @@ static SOURCES: OnceLock<Result<Sources, String>> = OnceLock::new();
 struct Sources {
     entries: Vec<(PathBuf, PathBuf)>,
     cache: PathBuf,
+    binary: PathBuf,
     key: String,
 }
 
@@ -41,6 +42,10 @@ pub fn prepare() -> Result<Snapshot, HarnessError> {
         .as_ref()
         .map_err(harness_error)?;
     fs::create_dir_all(&sources.cache)?;
+    fs::write(
+        sources.cache.join("source"),
+        sources.binary.as_os_str().as_encoded_bytes(),
+    )?;
     let lock = OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -58,6 +63,7 @@ pub fn prepare() -> Result<Snapshot, HarnessError> {
             FixtureInstallation::remove_sandbox(&entry.path())?;
         }
     }
+    sweep_orphans(&sources.cache);
     Ok(Snapshot { path, _lock: lock })
 }
 
@@ -85,8 +91,42 @@ impl Sources {
             cache: std::env::temp_dir()
                 .join("butler-e2e/snapshots")
                 .join(format!("{:x}", namespace.finalize())),
+            binary,
             key,
         })
+    }
+}
+
+/// Retain namespaces while their recorded source binary still exists.
+fn sweep_orphans(cache: &Path) {
+    let Some(parent) = cache.parent() else { return };
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path == cache || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        let source = fs::read(path.join("source"))
+            .ok()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .map(PathBuf::from);
+        if source.as_ref().is_some_and(|source| source.exists()) {
+            continue;
+        }
+        let Ok(lock) = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(path.join("publish.lock"))
+        else {
+            continue;
+        };
+        if lock.try_lock().is_err() {
+            continue;
+        }
+        let _ = FixtureInstallation::remove_sandbox(&path);
     }
 }
 
