@@ -199,6 +199,10 @@ async fn ensure_initialized(
                 );
             }
             Err(failure) => {
+                butler_core::diagnostic!(
+                    "[embedding-worker] initialize failed code={}",
+                    failure.code()
+                );
                 kill_and_reap(child).await;
                 return Err(failure);
             }
