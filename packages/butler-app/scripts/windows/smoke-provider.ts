@@ -8,6 +8,25 @@ const contract = JSON.parse(readFileSync(new URL(
 
 export interface SmokeProviderCalls {
   chat: number; memory: number; memorySpeakers: Set<string>; briefings?: Map<string, SmokeBriefing>;
+  smartGroups?: number;
+}
+
+// Mirrors butler-e2e/provider/smart_group.rs.
+function smartGroupInput(body: any): Record<string, unknown> | undefined {
+  if (body.tools?.length) return undefined;
+  const user = Array.isArray(body.input) ? body.input.find((item: any) => item.role === "user") : undefined;
+  const content = user?.content;
+  const source = typeof content === "string" ? content
+    : Array.isArray(content) ? content[0]?.text : undefined;
+  if (typeof source !== "string") return undefined;
+  try {
+    const input: unknown = JSON.parse(source);
+    if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+    const record = input as Record<string, unknown>;
+    return typeof record.message === "string" && Array.isArray(record.candidates) ? record : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Same strict synthetic-conversation fixture as butler-e2e/provider/memory.rs. */
@@ -35,6 +54,9 @@ export function smokeProviderReply(body: any, prompt: string, answer: string,
       calls.memory++;
       calls.memorySpeakers.add(input.speaker);
       text = JSON.stringify({ status: "processed", entities: [], items: [], attributes: [] });
+    } else if (!format?.name && smartGroupInput(body)) {
+      calls.smartGroups = (calls.smartGroups ?? 0) + 1;
+      text = JSON.stringify({ topic: null, action: "none", target: null });
     } else {
       assert.ok(!format?.name, "Unexpected structured provider request");
       calls.chat++;
