@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 #[derive(Clone)]
 pub struct ShellClient {
     pub(crate) inner: Arc<Inner>,
+    traceparent: Option<String>,
 }
 pub(crate) struct Inner {
     pub(crate) data: PathBuf,
@@ -24,7 +25,95 @@ impl fmt::Debug for ShellClient {
             .finish_non_exhaustive()
     }
 }
+pub(crate) enum Body<'a> {
+    None,
+    Json(&'a Value),
+    Bytes {
+        content_type: &'a str,
+        bytes: Vec<u8>,
+    },
+}
 impl ShellClient {
+    /// Clone this connection with a validated W3C version-00 traceparent header.
+    pub fn with_trace(&self, traceparent: &str) -> Result<Self, Error> {
+        let parts: Vec<_> = traceparent.split('-').collect();
+        if parts.len() != 4
+            || parts[0] != "00"
+            || !parts[1..].iter().zip([32, 16, 2]).all(|(part, len)| {
+                part.len() == len && part.bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+        {
+            return Err(Error::Protocol);
+        }
+        let mut client = self.clone();
+        client.traceparent = Some(traceparent.into());
+        Ok(client)
+    }
+    pub(crate) async fn download(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, String)],
+    ) -> Result<crate::Download, Error> {
+        let response = self
+            .request(method, self.url(segments, query)?, &Body::None, false)
+            .await?;
+        Self::read_download(response).await
+    }
+    pub(crate) async fn read_download(response: Response) -> Result<crate::Download, Error> {
+        let header = |name| {
+            response
+                .headers()
+                .get(name)
+                .and_then(|h| h.to_str().ok())
+                .map(str::to_owned)
+        };
+        let content_type = header("content-type");
+        let etag = header("etag");
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|_| Error::Connection)?
+            .to_vec();
+        Ok(crate::Download {
+            content_type,
+            etag,
+            bytes,
+        })
+    }
+    pub(crate) async fn upload(
+        &self,
+        segments: &[&str],
+        query: &[(&str, String)],
+        fields: &[(&str, &str)],
+        file: &crate::Upload,
+    ) -> Result<Value, Error> {
+        let (content_type, bytes) = super::multipart::encode(fields, "file", file)?;
+        self.bytes_json(segments, query, &content_type, bytes).await
+    }
+    pub(crate) async fn bytes_json(
+        &self,
+        segments: &[&str],
+        query: &[(&str, String)],
+        content_type: &str,
+        bytes: Vec<u8>,
+    ) -> Result<Value, Error> {
+        let response = self
+            .request(
+                Method::POST,
+                self.url(segments, query)?,
+                &Body::Bytes {
+                    content_type,
+                    bytes,
+                },
+                false,
+            )
+            .await?;
+        let bytes = response.bytes().await.map_err(|_| Error::Connection)?;
+        let raw: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Protocol)?;
+        raw.get("data").cloned().ok_or(Error::Protocol)
+    }
+
     pub(crate) fn new(
         data: PathBuf,
         endpoint: Url,
@@ -39,6 +128,7 @@ impl ShellClient {
             .build()
             .map_err(|_| Error::Connection)?;
         Ok(Self {
+            traceparent: None,
             inner: Arc::new(Inner {
                 data,
                 endpoint,
@@ -62,15 +152,16 @@ impl ShellClient {
         &self,
         method: Method,
         url: Url,
-        body: Option<&Value>,
+        body: &Body<'_>,
         live: bool,
     ) -> Result<Response, Error> {
         // Only the message ingress dedupes client ids. Session creation and
         // authority side effects have no end-to-end retry guarantee.
-        let idempotent = method == Method::GET
-            || (method == Method::POST
-                && url.path() == "/messages"
-                && body.and_then(|b| b["client_message_id"].as_str()).is_some());
+        let idempotent = !matches!(body, Body::Bytes { .. })
+            && (method == Method::GET
+                || (method == Method::POST
+                    && url.path() == "/messages"
+                    && matches!(body, Body::Json(b) if b["client_message_id"].as_str().is_some())));
         let mut delay = Duration::from_millis(200);
         for attempt in 0..3 {
             let result = self
@@ -91,7 +182,7 @@ impl ShellClient {
         &self,
         method: Method,
         url: Url,
-        body: Option<&Value>,
+        body: &Body<'_>,
         live: bool,
     ) -> Result<Response, Error> {
         let token = self.inner.token.lock().await.clone();
@@ -102,6 +193,9 @@ impl ShellClient {
             return checked(first).await;
         }
         drop(first);
+        if matches!(body, Body::Bytes { .. }) {
+            return Err(Error::Authentication);
+        }
         // Serialize refreshes, and reuse a credential a concurrent 401 refreshed.
         let mut current = self.inner.token.lock().await;
         if *current == token {
@@ -123,7 +217,7 @@ impl ShellClient {
         &self,
         method: Method,
         url: Url,
-        body: Option<&Value>,
+        body: &Body<'_>,
         live: bool,
         token: &str,
     ) -> Result<Response, Error> {
@@ -136,9 +230,19 @@ impl ShellClient {
         if !live {
             request = request.timeout(Duration::from_secs(30));
         }
-        if let Some(body) = body {
-            request = request.json(body);
+        if let Some(traceparent) = &self.traceparent {
+            request = request.header("traceparent", traceparent);
         }
+        request = match body {
+            Body::None => request,
+            Body::Json(value) => request.json(value),
+            Body::Bytes {
+                content_type,
+                bytes,
+            } => request
+                .header("content-type", *content_type)
+                .body(bytes.clone()),
+        };
         request.send().await.map_err(|_| Error::Connection)
     }
     pub(crate) async fn json<T: DeserializeOwned>(
@@ -149,7 +253,12 @@ impl ShellClient {
         body: Option<&Value>,
     ) -> Result<T, Error> {
         let response = self
-            .request(method, self.url(segments, query)?, body, false)
+            .request(
+                method,
+                self.url(segments, query)?,
+                &body.map_or(Body::None, Body::Json),
+                false,
+            )
             .await?;
         #[derive(serde::Deserialize)]
         struct Envelope<T> {
