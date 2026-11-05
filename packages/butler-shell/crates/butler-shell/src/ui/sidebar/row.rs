@@ -58,19 +58,19 @@ impl RowSpec {
 }
 
 fn trailing(spec: &RowSpec, hovered: bool, t: &Theme) -> Option<AnyElement> {
-    let more = || icon(Icon::MoreHorizontal, 16., t.text2).into_any_element();
+    let more = || icon(Icon::MoreHorizontal, 16., t.sidebar_text2).into_any_element();
     match spec.trailing {
         Trailing::None if hovered && spec.icon == Some(Icon::MessageSquare) => Some(more()),
         Trailing::None => None,
         Trailing::Spinner | Trailing::Chevron(_) if hovered => Some(more()),
-        Trailing::Spinner => Some(spinner(t.text2).into_any_element()),
+        Trailing::Spinner => Some(spinner(t.sidebar_text2).into_any_element()),
         Trailing::Chevron(open) => {
             let glyph = if open {
                 Icon::ChevronDown
             } else {
                 Icon::ChevronRight
             };
-            Some(icon(glyph, 16., t.text2).into_any_element())
+            Some(icon(glyph, 16., t.sidebar_text2).into_any_element())
         }
     }
 }
@@ -83,15 +83,15 @@ fn meta_line(loc: SharedString, age: SharedString, t: &Theme) -> impl IntoElemen
         .pl(px(34.))
         .pr(px(8.))
         .mt(px(-4.))
-        .child(text(loc, typo::CAPTION, FontWeight::NORMAL, t.text2).truncate())
-        .child(text(age, typo::CAPTION, FontWeight::NORMAL, t.text2).flex_none())
+        .child(text(loc, typo::CAPTION, FontWeight::NORMAL, t.sidebar_text2).truncate())
+        .child(text(age, typo::CAPTION, FontWeight::NORMAL, t.sidebar_text2).flex_none())
 }
 
 /// The row's content: icon, label, trailing action target and, in flat lists, the meta line.
 fn row_block(spec: &RowSpec, hovered: bool, t: &Theme) -> gpui::Div {
     let enabled = spec.disabled.is_none();
     let label_color = if spec.muted || !enabled {
-        t.text2
+        t.sidebar_text2
     } else {
         t.text
     };
@@ -193,14 +193,19 @@ impl Shell {
         actions: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let t = self.theme.clone();
+        let t = self.theme.sidebar_scope();
         let mut row = div()
             .flex()
             .items_center()
             .justify_between()
             .min_h(px(30.))
             .px(px(4.))
-            .child(text(title, typo::LABEL, FontWeight::MEDIUM, t.text3));
+            .child(text(
+                title,
+                typo::LABEL,
+                FontWeight::MEDIUM,
+                t.sidebar_text3,
+            ));
         if actions {
             let new_chat = self.disconnected();
             let mut group = div().flex().items_center().gap(px(2.)).mr(px(-4.));
@@ -238,7 +243,11 @@ impl Shell {
             let key: SharedString = format!("tab-{label}").into();
             let active = self.sidebar.tab == tab;
             let hovered = self.hover.is(&key);
-            let fg = if active || hovered { t.text } else { t.text2 };
+            let fg = if active || hovered {
+                t.text
+            } else {
+                t.sidebar_text2
+            };
             let (off, on) = if active {
                 (t.selection, t.selection)
             } else {

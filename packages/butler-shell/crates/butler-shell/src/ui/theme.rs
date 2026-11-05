@@ -1,5 +1,6 @@
 //! Butler DS tokens (packages/butler-app/client/ui/src/libs/design-system/tokens.css), light
 //! (`:root`/.theme-light) and dark (.theme-dark), over the native window material.
+use butler_ds::tokens::{Color, FontStack, Length, Shadow, TokenContext};
 use gpui::{BoxShadow, Hsla, Rgba, SharedString, point, px};
 
 use crate::ui::i18n::Strings;
@@ -33,76 +34,158 @@ pub(crate) fn over(top: Hsla, bottom: Hsla) -> Hsla {
     ))
 }
 
-/// Pretendard is bundled (OFL). Code uses the first installed family of Butler's
-/// `--font-family-code` stack ([`code_font`]).
-pub(crate) const FONT_BODY: &str = "Pretendard";
+/// --font-body: the bundled static Pretendard family in the CSS stack.
+pub(crate) const FONT_BODY: &str = TokenContext::DEFAULT.font(FontStack::FontBody)[1];
 
-/// Butler's code font stack, in order; the body font when none is installed.
-const CODE_FONTS: [&str; 6] = [
-    "IBM Plex Mono",
-    "SF Mono",
-    "Menlo",
-    "Consolas",
-    "DejaVu Sans Mono",
-    "Liberation Mono",
-];
-
-/// The first family of [`CODE_FONTS`] among `installed`.
+/// --font-family-code: first installed family, falling back to the body face.
 pub(crate) fn code_font(installed: &[String]) -> SharedString {
-    CODE_FONTS
+    TokenContext::DEFAULT
+        .font(FontStack::FontFamilyCode)
         .iter()
         .find(|family| installed.iter().any(|name| name == *family))
         .map_or(FONT_BODY, |family| *family)
         .into()
 }
 
-/// Butler type roles (px size, px line height).
+/// Butler type roles (px size, px line height), from --typo-*.
 pub(crate) mod typo {
-    pub(crate) const BODY: (f32, f32) = (14., 20.);
-    pub(crate) const DOC: (f32, f32) = (14., 22.);
-    pub(crate) const LABEL: (f32, f32) = (13., 18.);
-    pub(crate) const CAPTION: (f32, f32) = (12., 16.);
-    pub(crate) const APP_TITLE: (f32, f32) = (15., 20.);
+    use super::{Length, TokenContext};
+    const T: TokenContext = TokenContext::DEFAULT;
+    pub(crate) const BODY: (f32, f32) = (
+        T.len(Length::TypoBodySize),
+        T.len(Length::TypoBodyLineHeight),
+    );
+    pub(crate) const DOC: (f32, f32) = (
+        T.len(Length::TypoBodySize),
+        T.len(Length::TypoBodyLineHeightDocument),
+    );
+    pub(crate) const LABEL: (f32, f32) = (
+        T.len(Length::TypoLabelSize),
+        T.len(Length::TypoLabelLineHeight),
+    );
+    pub(crate) const CAPTION: (f32, f32) = (
+        T.len(Length::TypoCaptionSize),
+        T.len(Length::TypoCaptionLineHeight),
+    );
+    pub(crate) const APP_TITLE: (f32, f32) = (
+        T.len(Length::TypoAppTitleSize),
+        T.len(Length::TypoAppTitleLineHeight),
+    );
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum Platform {
+    Mac,
+    Windows,
+    Linux,
+}
+
+impl Platform {
+    pub(crate) fn host() -> Self {
+        match butler_platform::launcher::node_platform() {
+            "darwin" => Self::Mac,
+            "win32" => Self::Windows,
+            _ => Self::Linux,
+        }
+    }
+
+    fn sidebar(self) -> (Color, Color, Color, Color, Color) {
+        // AdaptiveShellCards.module.css:11 uses the platform-mapped sidebar-bg.
+        match self {
+            // AdaptiveShell.module.css:52: macOS material, row fills and sidebar text.
+            Self::Mac => (
+                Color::MacSidebarBg,
+                Color::MacSidebarTextSecondary,
+                Color::MacSidebarTextTertiary,
+                Color::MacSidebarHoverBg,
+                Color::MacSidebarSelectedBg,
+            ),
+            // AdaptiveShell.module.css:66: Windows material, row fills and sidebar text.
+            Self::Windows => (
+                Color::WindowsSidebarBg,
+                Color::WindowsSidebarTextSecondary,
+                Color::WindowsSidebarTextTertiary,
+                Color::WindowsSidebarHoverBg,
+                Color::WindowsSidebarSelectedBg,
+            ),
+            // AdaptiveShell.module.css:32: Linux keeps the base sidebar tokens.
+            Self::Linux => (
+                Color::SidebarBg,
+                Color::SidebarTextSecondary,
+                Color::SidebarTextTertiary,
+                Color::SidebarHoverBg,
+                Color::SidebarSelectedBg,
+            ),
+        }
+    }
 }
 
 #[derive(Clone)]
 pub(crate) struct Theme {
     pub(crate) dark: bool,
+    pub(crate) platform: Platform,
     pub(crate) code_font: SharedString,
     /// The UI copy in the OS's language.
     pub(crate) strings: &'static Strings,
+    /// --text-primary.
     pub(crate) text: Hsla,
+    /// --text-secondary (workspace).
     pub(crate) text2: Hsla,
+    /// --sidebar-text-secondary, mapped by platform.
+    pub(crate) sidebar_text2: Hsla,
+    /// --text-tertiary (workspace).
     pub(crate) text3: Hsla,
+    /// --sidebar-text-tertiary, mapped by platform.
+    pub(crate) sidebar_text3: Hsla,
+    /// --placeholder.
     pub(crate) placeholder: Hsla,
     /// --color-text-disabled: disabled controls change colour, not opacity.
     pub(crate) text_disabled: Hsla,
-    /// --windows-sidebar-bg: the shell over the native acrylic.
+    /// --sidebar-bg, mapped by platform: the shell over the native material.
     pub(crate) shell: Hsla,
-    /// Tint under the shell when the native acrylic is unavailable (approximates it).
+    /// Platform sidebar background resolved in the .sidebar-solid scope.
     pub(crate) acrylic_fallback: Hsla,
     /// --shell-card-edge.
     pub(crate) card_edge: Hsla,
+    /// --riso-paper.
     pub(crate) paper: Hsla,
+    /// --selection.
     pub(crate) selection: Hsla,
+    /// --selection-strong.
     pub(crate) selection_strong: Hsla,
-    /// SidebarShell overrides: hover = selection 60%, active = selection 75%.
+    /// Platform --sidebar-hover-bg, falling back to --selection at 60%.
     pub(crate) nav_hover: Hsla,
+    /// Platform --sidebar-selected-bg, falling back to --selection at 75%.
     pub(crate) nav_active: Hsla,
+    /// --line.
     pub(crate) line: Hsla,
+    /// --line-strong.
     pub(crate) line_strong: Hsla,
+    /// --surface.
     pub(crate) surface: Hsla,
+    /// --surface-raised.
     pub(crate) surface_raised: Hsla,
+    /// --user-message-bg.
     pub(crate) user_bubble: Hsla,
+    /// --composer-glass-divider.
     pub(crate) glass_divider: Hsla,
+    /// --composer-glass-shadow.
     pub(crate) glass_shadow: BoxShadow,
+    /// --send-bg.
     pub(crate) send_bg: Hsla,
+    /// --send-fg.
     pub(crate) send_fg: Hsla,
+    /// --send-disabled-bg.
     pub(crate) send_disabled: Hsla,
+    /// --accent.
     pub(crate) accent: Hsla,
+    /// --accent-text.
     pub(crate) accent_text: Hsla,
+    /// --secondary.
     pub(crate) secondary_bg: Hsla,
+    /// --secondary-border.
     pub(crate) secondary_border: Hsla,
+    /// --surface (74% opacity).
     pub(crate) tool_chip: Hsla,
     pub(crate) syntax: Syntax,
 }
@@ -110,117 +193,116 @@ pub(crate) struct Theme {
 /// Code block highlight colours.
 #[derive(Clone, Copy)]
 pub(crate) struct Syntax {
+    /// --syntax-keyword.
     pub(crate) keyword: Hsla,
+    /// --syntax-string.
     pub(crate) string: Hsla,
+    /// --syntax-comment.
     pub(crate) comment: Hsla,
+    /// --syntax-number.
     pub(crate) number: Hsla,
+    /// --syntax-title.
     pub(crate) title: Hsla,
 }
 
-fn shadow(y: f32, blur: f32, color: Hsla) -> BoxShadow {
+fn color(context: &TokenContext, token: Color) -> Hsla {
+    let c = context.color(token);
+    gpui::rgb_to_hsla(Rgba::new(c.r, c.g, c.b, c.a))
+}
+
+fn shadow(context: &TokenContext) -> BoxShadow {
+    let layer = context.shadow(Shadow::ComposerGlassShadow)[0];
+    let c = layer.color;
     BoxShadow {
-        color: color.into(),
-        offset: point(px(0.), px(y)),
-        blur_radius: px(blur),
-        spread_radius: px(0.),
-        inset: false,
+        color: Rgba::new(c.r, c.g, c.b, c.a).into(),
+        offset: point(
+            px(layer.x.resolve(context.ui_scale, context.viewport)),
+            px(layer.y.resolve(context.ui_scale, context.viewport)),
+        ),
+        blur_radius: px(layer.blur.resolve(context.ui_scale, context.viewport)),
+        spread_radius: px(layer.spread.resolve(context.ui_scale, context.viewport)),
+        inset: layer.inset,
     }
 }
 
 impl Theme {
-    pub(crate) fn new(dark: bool, code_font: SharedString, strings: &'static Strings) -> Self {
-        if dark {
-            Self::dark(code_font, strings)
-        } else {
-            Self::light(code_font, strings)
+    /// AdaptiveShell.module.css:120 and AdaptiveShellCards.module.css:89:
+    /// inherited text aliases also reach shared controls in the shell scope.
+    pub(crate) fn sidebar_scope(&self) -> Self {
+        Self {
+            text2: self.sidebar_text2,
+            text3: self.sidebar_text3,
+            ..self.clone()
         }
     }
 
-    fn light(code_font: SharedString, strings: &'static Strings) -> Self {
-        let text = hex(0x0022_2326);
+    pub(crate) fn new(
+        dark: bool,
+        platform: Platform,
+        code_font: SharedString,
+        strings: &'static Strings,
+    ) -> Self {
+        let context = TokenContext {
+            dark,
+            ..TokenContext::DEFAULT
+        };
+        let solid = TokenContext {
+            sidebar_solid: true,
+            ..context
+        };
+        let c = |token| color(&context, token);
+        let (bg, secondary, tertiary, hover, selected) = platform.sidebar();
+        let selection = c(Color::Selection);
+        // AdaptiveShell.module.css:116-131: sidebar text aliases and optional row fills.
+        let row_fill = |token, fallback| context.try_color(token).map_or(fallback, |_| c(token));
         Self {
-            dark: false,
+            dark,
+            platform,
             code_font,
             strings,
-            text,
-            text2: hex(0x0069_6d73),
-            text3: hex(0x006d_7279),
-            placeholder: hex(0x006a_6e74),
-            text_disabled: hex(0x00a7_abb0),
-            shell: rgba(255, 255, 255, 0.36),
-            acrylic_fallback: rgba(238, 240, 243, 1.),
-            card_edge: alpha(text, 0.08),
-            paper: rgba(250, 250, 248, 1.),
-            selection: rgba(32, 35, 39, 0.07),
-            selection_strong: rgba(32, 35, 39, 0.10),
-            nav_hover: rgba(32, 35, 39, 0.07 * 0.60),
-            nav_active: rgba(32, 35, 39, 0.07 * 0.75),
-            line: hex(0x00e9_eaec),
-            line_strong: hex(0x00d5_d7da),
-            surface: rgba(255, 255, 255, 0.9),
-            surface_raised: rgba(255, 255, 255, 0.96),
-            user_bubble: rgba(244, 245, 247, 0.92),
-            glass_divider: rgba(0, 0, 0, 0.045),
-            glass_shadow: shadow(12., 28., rgba(0, 0, 0, 0.06)),
-            send_bg: hex(0x0026_282c),
-            send_fg: hex(0x00ff_ffff),
-            send_disabled: hex(0x00d5_d7da),
-            accent: hex(0x0000_7aff),
-            accent_text: hex(0x0000_66d9),
-            secondary_bg: rgba(32, 35, 39, 0.08),
-            secondary_border: rgba(0, 0, 0, 0.),
-            tool_chip: rgba(255, 255, 255, 0.9 * 0.74),
-            syntax: Syntax {
-                keyword: hex(0x0000_52b3),
-                string: hex(0x001b_7733),
-                comment: hex(0x0071_767d),
-                number: hex(0x0099_6c00),
-                title: hex(0x0000_66d9),
-            },
+            text: c(Color::TextPrimary),
+            text2: c(Color::TextSecondary),
+            text3: c(Color::TextTertiary),
+            sidebar_text2: c(secondary),
+            sidebar_text3: c(tertiary),
+            placeholder: c(Color::Placeholder),
+            text_disabled: c(Color::ColorTextDisabled),
+            shell: c(bg),
+            acrylic_fallback: color(&solid, bg),
+            card_edge: c(Color::ShellCardEdge),
+            paper: c(Color::RisoPaper),
+            selection,
+            selection_strong: c(Color::SelectionStrong),
+            nav_hover: row_fill(hover, alpha(selection, 0.60)),
+            nav_active: row_fill(selected, alpha(selection, 0.75)),
+            line: c(Color::Line),
+            line_strong: c(Color::LineStrong),
+            surface: c(Color::Surface),
+            surface_raised: c(Color::SurfaceRaised),
+            user_bubble: c(Color::UserMessageBg),
+            glass_divider: c(Color::ComposerGlassDivider),
+            glass_shadow: shadow(&context),
+            send_bg: c(Color::SendBg),
+            send_fg: c(Color::SendFg),
+            send_disabled: c(Color::SendDisabledBg),
+            accent: c(Color::Accent),
+            accent_text: c(Color::AccentText),
+            secondary_bg: c(Color::Secondary),
+            secondary_border: c(Color::SecondaryBorder),
+            tool_chip: alpha(c(Color::Surface), 0.74),
+            syntax: Syntax::new(&context),
         }
     }
+}
 
-    fn dark(code_font: SharedString, strings: &'static Strings) -> Self {
-        let text = hex(0x00f2_f3f4);
+impl Syntax {
+    fn new(context: &TokenContext) -> Self {
         Self {
-            dark: true,
-            code_font,
-            strings,
-            text,
-            text2: hex(0x00b5_b8bd),
-            text3: hex(0x008b_8f97),
-            placeholder: hex(0x0096_9a9f),
-            text_disabled: hex(0x005a_5d64),
-            shell: rgba(24, 25, 28, 0.46),
-            acrylic_fallback: rgba(32, 33, 36, 1.),
-            card_edge: alpha(text, 0.06),
-            paper: rgba(25, 28, 36, 1.),
-            selection: rgba(255, 255, 255, 0.08),
-            selection_strong: rgba(255, 255, 255, 0.13),
-            nav_hover: rgba(255, 255, 255, 0.08 * 0.60),
-            nav_active: rgba(255, 255, 255, 0.08 * 0.75),
-            line: rgba(255, 255, 255, 0.10),
-            line_strong: rgba(255, 255, 255, 0.16),
-            surface: rgba(30, 31, 34, 0.9),
-            surface_raised: rgba(35, 36, 39, 0.96),
-            user_bubble: rgba(255, 255, 255, 0.10),
-            glass_divider: rgba(255, 255, 255, 0.055),
-            glass_shadow: shadow(14., 34., rgba(0, 0, 0, 0.28)),
-            send_bg: text,
-            send_fg: hex(0x001f_2023),
-            send_disabled: hex(0x005a_5d64),
-            accent: hex(0x0000_7aff),
-            accent_text: hex(0x004d_a6ff),
-            secondary_bg: rgba(255, 255, 255, 0.08),
-            secondary_border: rgba(255, 255, 255, 0.4),
-            tool_chip: rgba(30, 31, 34, 0.9 * 0.74),
-            syntax: Syntax {
-                keyword: hex(0x0080_bfff),
-                string: hex(0x0080_d494),
-                comment: hex(0x009a_9da2),
-                number: hex(0x00ff_d44d),
-                title: hex(0x00b3_d9ff),
-            },
+            keyword: color(context, Color::SyntaxKeyword),
+            string: color(context, Color::SyntaxString),
+            comment: color(context, Color::SyntaxComment),
+            number: color(context, Color::SyntaxNumber),
+            title: color(context, Color::SyntaxTitle),
         }
     }
 }

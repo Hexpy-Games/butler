@@ -29,6 +29,7 @@ use gpui::{AnyWindowHandle, AppContext as _, HeadlessAppContext, WindowHandle, p
 use ui::i18n::Locale;
 use ui::shell::{Shell, ShellOptions};
 use ui::source::Source;
+use ui::theme::Platform;
 
 fn context(scale: f32) -> anyhow::Result<HeadlessAppContext> {
     let platform = gpui_platform::current_platform(true);
@@ -76,6 +77,7 @@ impl Harness {
                     dark: Some(dark),
                     code_font,
                     locale: Locale::Ko,
+                    platform: options.platform,
                 };
                 cx.new(|cx| Shell::new(options, window, cx))
             })?;
@@ -209,6 +211,7 @@ struct Options {
     scale: f32,
     width: f32,
     height: f32,
+    platform: Platform,
 }
 
 impl Options {
@@ -225,6 +228,13 @@ impl Options {
             .split_once('x')
             .context("--size requires <W>x<H>")?;
         let (width, height) = (width.parse::<f32>()?, height.parse::<f32>()?);
+        let platform = match value("--platform")? {
+            None => Platform::host(),
+            Some("mac") => Platform::Mac,
+            Some("windows") => Platform::Windows,
+            Some("linux") => Platform::Linux,
+            Some(_) => anyhow::bail!("--platform requires mac|windows|linux"),
+        };
         anyhow::ensure!(
             [scale, width, height]
                 .iter()
@@ -235,6 +245,7 @@ impl Options {
             scale,
             width,
             height,
+            platform,
         })
     }
 }
@@ -243,7 +254,7 @@ fn main() -> ExitCode {
     let result = (|| {
         let args: Vec<_> = std::env::args_os().collect();
         let dir = args.get(1).map(PathBuf::from).context(
-            "usage: butler-shell-shots <dir> [--data <dir>] [--scale <f32>] [--size <W>x<H>]",
+            "usage: butler-shell-shots <dir> [--data <dir>] [--scale <f32>] [--size <W>x<H>] [--platform mac|windows|linux]",
         )?;
         let options = Options::parse(&args)?;
         let data = args

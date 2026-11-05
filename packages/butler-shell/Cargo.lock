@@ -886,6 +886,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "butler-ds"
+version = "0.0.0"
+
+[[package]]
 name = "butler-log"
 version = "0.0.0"
 dependencies = [
@@ -976,6 +980,7 @@ name = "butler-shell"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "butler-ds",
  "butler-platform",
  "butler-shell-client",
  "chrono",
@@ -1724,6 +1729,10 @@ name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
+
+[[package]]
+name = "ds-tokens"
+version = "0.0.0"
 
 [[package]]
 name = "dunce"

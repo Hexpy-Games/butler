@@ -43,7 +43,7 @@ impl Shell {
 
     /// Minimize, maximize and close. On Windows they are also the native caption hit areas.
     fn window_controls(&mut self, cx: &mut Context<Self>) -> gpui::Div {
-        let t = self.theme.clone();
+        let t = self.theme.sidebar_scope();
         let mut controls = div()
             .absolute()
             .right(px(10.))
@@ -93,7 +93,7 @@ impl Shell {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let t = self.theme.clone();
+        let t = self.theme.sidebar_scope();
         let (title, subtitle) = self.title_copy();
         let identity = div()
             .flex()
@@ -104,7 +104,10 @@ impl Shell {
             .child(text(title, typo::APP_TITLE, FontWeight::SEMIBOLD, t.text).truncate())
             .children(
                 subtitle
-                    .map(|sub| text(sub, typo::CAPTION, FontWeight::NORMAL, t.text3).truncate()),
+                    // AdaptiveShellCards.module.css:92 gives the title row sidebar text tones.
+                    .map(|sub| {
+                        text(sub, typo::CAPTION, FontWeight::NORMAL, t.sidebar_text3).truncate()
+                    }),
             );
         let theme_glyph = if t.dark { Icon::Sun } else { Icon::Moon };
         let theme_spec = IconButtonSpec::new("tb-theme", theme_glyph, self.hover.is("tb-theme"));
