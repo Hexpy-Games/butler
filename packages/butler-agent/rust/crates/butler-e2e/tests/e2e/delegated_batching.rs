@@ -154,6 +154,7 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
             prompt.push_str(&item.to_string());
             prompt.push('\n');
         }
+        assert!(!prompt.contains("Choose the helper by the work."));
         let cached = previous.as_deref().map_or(0, |previous| {
             let shared = previous
                 .char_indices()

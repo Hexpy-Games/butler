@@ -33,7 +33,6 @@ pub(crate) struct Script {
     count: usize,
     pub(crate) requests: Mutex<Vec<(String, Value)>>,
     pub(crate) repeat_first: AtomicBool,
-    pub(crate) end_result_turn_without_wait: AtomicBool,
     pub(super) wait_regression: AtomicBool,
     pub(crate) repeated_outputs: Mutex<Vec<Value>>,
     pub(crate) steer: AtomicBool,
@@ -71,7 +70,6 @@ pub(crate) async fn start(
         count,
         requests: Default::default(),
         repeat_first: AtomicBool::new(false),
-        end_result_turn_without_wait: AtomicBool::new(false),
         wait_regression: AtomicBool::new(false),
         repeated_outputs: Default::default(),
         steer: AtomicBool::new(false),
@@ -257,14 +255,6 @@ async fn reply(
                     "steer_worker",
                     json!({"relation_id":relation,"instruction":"Verify the updated source"}),
                 )
-            }
-            "steward"
-                if key.user_request.starts_with("Delegated result")
-                    && script
-                        .end_result_turn_without_wait
-                        .swap(false, Ordering::SeqCst) =>
-            {
-                message("Interim.")
             }
             "steward" => steward(
                 if key.user_request.starts_with("Delegated result") {

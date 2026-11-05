@@ -100,7 +100,9 @@ pub fn select_phase(
     let delegate_names = if policy.role == PolicyRole::Steward {
         let mut worker = policy.clone();
         worker.role = PolicyRole::Worker;
-        select_policy(input, &worker)?.authorized_names
+        select_policy(input, &worker)
+            .map(|selected| selected.authorized_names)
+            .unwrap_or_default()
     } else {
         Vec::new()
     };

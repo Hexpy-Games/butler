@@ -5,6 +5,7 @@ mod canon;
 mod diagnostics;
 mod material;
 use diagnostics::request_usage;
+mod helper_choice;
 mod helpers;
 use helpers::{default_project_folder, js_truthy, json, nonempty_array};
 mod documents;
@@ -98,6 +99,9 @@ fn source_prompt(
     entries.push("scope", scope(state));
     if let Some(tools) = delegated_tools(state) {
         entries.push("delegated-tools", tools);
+    }
+    if let Some(choice) = helper_choice::helper_choice(state) {
+        entries.push("helper-choice", choice);
     }
     if !material.canon.is_empty() {
         entries.push("canon", material.canon.clone());
@@ -458,21 +462,6 @@ fn delegated_tools(state: &GuidedTextState) -> Option<String> {
             " Workers you assign can call: {}.",
             state.phase.delegate_names.join(", ")
         ));
-        if state
-            .phase
-            .authorized_names
-            .iter()
-            .any(|name| name == "browse")
-        {
-            text.push_str(" Workers read pages but do not operate them. Page operations (clicks, form input, selections) go to the browsing agent through your browse tool; it runs beside your Workers, so call it whenever such a step is needed.");
-        } else if state
-            .phase
-            .authorized_names
-            .iter()
-            .any(|name| name == "browser_act")
-        {
-            text.push_str(" Workers read pages but do not operate them; do page operations yourself with browser_act.");
-        }
     }
     Some(text)
 }
