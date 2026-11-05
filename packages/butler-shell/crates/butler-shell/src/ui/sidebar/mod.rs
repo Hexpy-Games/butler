@@ -235,7 +235,7 @@ impl Shell {
             .overflow_y_scroll()
             .track_scroll(&self.sidebar.scroll)
             .child(clip_top(content, clip_y));
-        div()
+        crate::ui::widgets::anchor(div(), "sidebar")
             .w(px(SIDEBAR_W))
             .h_full()
             .flex()

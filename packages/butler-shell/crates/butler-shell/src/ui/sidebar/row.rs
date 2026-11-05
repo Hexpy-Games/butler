@@ -167,6 +167,12 @@ impl Shell {
             .w_full()
             .rounded(px(8.))
             .on_hover(hover_listener(&spec.key, cx));
+        let el = match &click {
+            Click::Chat(Some(chat)) => {
+                crate::ui::widgets::anchor(el, &format!("sidebar-row-{}", chat.chat.0))
+            }
+            _ => el,
+        };
         let el = match spec.disabled {
             Some(reason) => el.tooltip(tooltip(reason, &t)),
             None => el

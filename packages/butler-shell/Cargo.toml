@@ -2,7 +2,7 @@
 # packages/butler-agent/rust: it pins gpui to the Butler fork of gpui-ce (tag
 # butler-lens-6) and adapts the UI-independent agent client.
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "tools/parity-diff"]
 resolver = "3"
 
 [workspace.package]

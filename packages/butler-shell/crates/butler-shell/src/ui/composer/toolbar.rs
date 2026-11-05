@@ -69,7 +69,7 @@ impl Composer {
         } else {
             (t.send_bg, Icon::SendHorizontal, 16.)
         };
-        let button = div()
+        let button = crate::ui::widgets::anchor(div(), "send-button")
             .id("send")
             .size(px(30.))
             .flex_none()

@@ -153,6 +153,7 @@ impl Composer {
         }
         let input = field::field("composer-input", &self.input, self.placeholder, &self.theme)
             .aria_label(self.theme.strings.message_composer);
+        let input = crate::ui::widgets::anchor(input, "composer-field");
         let input = if self.engaged {
             div()
                 .px(px(16.))
@@ -205,7 +206,7 @@ impl Render for Composer {
             .on_action(cx.listener(Self::submit))
             .child(probe)
             .children(self.body(cx));
-        div()
+        crate::ui::widgets::anchor(div(), "composer")
             .id("composer")
             .w_full()
             .child(card)

@@ -241,7 +241,12 @@ pub(super) fn panel(
             t.text2,
         ));
     }
-    div()
+    let name = if matches!(card.kind, CardKind::Question) {
+        "question-card"
+    } else {
+        "approval-card"
+    };
+    crate::ui::widgets::anchor(div(), name)
         .flex()
         .flex_col()
         .child(subject)

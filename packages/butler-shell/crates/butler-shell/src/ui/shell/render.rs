@@ -71,7 +71,7 @@ impl Shell {
                     .w(px(composer_w.max(200.)))
                     .child(self.composer.clone()),
             );
-        div()
+        crate::ui::widgets::anchor(div(), "chat-card")
             .id("chat-card")
             .relative()
             .h_full()
