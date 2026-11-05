@@ -1,4 +1,5 @@
-//! Embedded assets: generated Butler DS icons, the custom sidebar spinner and Pretendard faces.
+//! Embedded assets: generated Butler DS icons, the custom sidebar spinner, the Pretendard faces
+//! (--font-body) and IBM Plex Mono (--font-family-code).
 //! See THIRD-PARTY-NOTICES at the workspace root.
 use std::borrow::Cow;
 
@@ -30,4 +31,7 @@ pub const FONTS: &[&[u8]] = &[
     include_bytes!("../../assets/fonts/Pretendard-Medium.ttf"),
     include_bytes!("../../assets/fonts/Pretendard-SemiBold.ttf"),
     include_bytes!("../../assets/fonts/Pretendard-Bold.ttf"),
+    // DS fonts.css: IBM Plex Mono 2.5.0, regular and semibold only.
+    include_bytes!("../../assets/fonts/IBMPlexMono-Regular.ttf"),
+    include_bytes!("../../assets/fonts/IBMPlexMono-SemiBold.ttf"),
 ];
