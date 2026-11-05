@@ -280,9 +280,9 @@ fn client(shared: &state::SharedRef, tx: &async_channel::Sender<()>) -> cef::Cli
     )
 }
 fn create_browser(client: &mut cef::Client) -> Option<cef::Browser> {
-    let url = option("--url").unwrap_or_else(|| format!("file://{ROOT}/src/fixture.html"));
+    let url = option("--url").unwrap_or_else(|| format!("file://{ROOT}/fixtures/fixture.html"));
     assert!(
-        url == format!("file://{ROOT}/src/fixture.html")
+        url == format!("file://{ROOT}/fixtures/fixture.html")
             || url == "https://github.com/Hexpy-Games/butler"
     );
     cef::browser_host_create_browser_sync(

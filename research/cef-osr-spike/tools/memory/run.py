@@ -21,7 +21,7 @@ content = {
     "delayed": open(f"{B}/content/delayed.html").read(),
     "tab1": '<!doctype html><meta http-equiv="refresh" content="0;url=https://en.wikipedia.org/wiki/Web_browser">',
 }[scenario]
-open(f"{ROOT}/src/fixture.html", "w").write(content)
+open(f"{ROOT}/fixtures/fixture.html", "w").write(content)
 os.makedirs(f"{ROOT}/memory-evidence", exist_ok=True); os.makedirs(f"{B}/raw/detail", exist_ok=True)
 env = dict(os.environ, MallocNanoZone="0", OS_ACTIVITY_MODE="disable")
 for k in ("HOME", "BUTLER_DATA", "TMPDIR"):
