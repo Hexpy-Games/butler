@@ -18,7 +18,7 @@ mod subtasks;
 mod task_replacement;
 mod terminal;
 mod unreceived;
-pub(in crate::btcc::storage) mod work_tasks;
+mod work_tasks;
 mod worker_admission;
 mod worker_cancel;
 mod worker_failure;

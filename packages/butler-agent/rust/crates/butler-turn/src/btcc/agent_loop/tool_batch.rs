@@ -51,7 +51,6 @@ pub(super) fn prepare<'a>(
     tools: &'a [ModelRoundTool],
     call: &ModelRoundToolCall,
     runs_unoffered: bool,
-    missing_tool_hint: Option<&str>,
 ) -> PreparedCall<'a> {
     let tool = tools.iter().find(|tool| tool.name == call.name);
     if call.origin == Some(ToolCallOrigin::Truncated) {
@@ -73,16 +72,13 @@ pub(super) fn prepare<'a>(
             Some(tool_error(
                 "tool_unavailable",
                 format!(
-                    "No such tool available: {}. Choose an available tool: {}.{}",
+                    "No such tool available: {}. Choose an available tool: {}.",
                     call.name,
                     tools
                         .iter()
                         .map(|tool| tool.name.as_str())
                         .collect::<Vec<_>>()
-                        .join(", "),
-                    missing_tool_hint
-                        .map(|hint| format!(" {hint}"))
-                        .unwrap_or_default()
+                        .join(", ")
                 ),
                 None,
             )),

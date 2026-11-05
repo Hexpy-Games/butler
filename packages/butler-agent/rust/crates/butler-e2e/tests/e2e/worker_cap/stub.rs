@@ -334,7 +334,7 @@ pub(super) fn worker(step: usize, body: &Value) -> Value {
     }
 }
 fn plan(objective: &str, mode: &str, count: usize) -> Value {
-    json!({"subjects":[{"key":"batch","label":"Batch"}],"objective":objective,"execution_mode":mode,"actions":(0..count).map(|i| json!({"action_key":format!("check-{i}"),"description":"Verify evidence","dependency_keys":[]})).collect::<Vec<_>>(),"checks":["Evidence verified"]})
+    json!({"objective":objective,"execution_mode":mode,"actions":(0..count).map(|i| json!({"action_key":format!("check-{i}"),"description":"Verify evidence","dependency_keys":[]})).collect::<Vec<_>>(),"checks":["Evidence verified"]})
 }
 fn review() -> Value {
     json!({"subject":"plan","verdict":"accept","summary":"Ready"})
@@ -378,7 +378,7 @@ fn work_id(body: &Value) -> String {
 }
 fn call(name: &str, mut args: Value) -> Value {
     if name == "delegate_to_worker" && args.get("task").is_none() {
-        args["task"] = json!({"scope":{"owns":[{"subject":"batch","aspects":[args["action_key"]]}],"paths":[format!("tasks/{}", args["action_key"].as_str().unwrap_or("work"))]},"output":{"format":"text","fields":["summary"]}});
+        args["task"] = json!({"scope":{"paths":[format!("tasks/{}", args["action_key"].as_str().unwrap_or("work"))]},"output":{"format":"text","fields":["summary"]}});
     }
     let mut output = json!({"type":"function_call","name":name});
     output["arguments"] = args;

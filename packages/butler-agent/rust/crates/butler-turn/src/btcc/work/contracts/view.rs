@@ -317,8 +317,6 @@ pub struct OriginalRequest {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkContext {
-    #[serde(default)]
-    pub tasks: Vec<crate::btcc::WorkTask>,
     pub work: WorkView,
     pub original_request: OriginalRequest,
     pub result_facts: Vec<WorkResultFact>,

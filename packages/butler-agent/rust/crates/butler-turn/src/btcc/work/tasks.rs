@@ -60,7 +60,7 @@ pub struct TaskContract {
     pub merge_after: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorkTask {
     pub task_id: String,
     pub work_id: String,

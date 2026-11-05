@@ -30,19 +30,7 @@ pub(super) async fn run_tool_batch(
                 .runs_unoffered(GuidedInvocation::from(input), &call.name)
                 .await
                 .map_err(propagated)?;
-        let missing_tool_hint = input
-            .semantic
-            .context
-            .execution_policy
-            .as_ref()
-            .filter(|policy| policy.role != "butler")
-            .map(|_| super::super::CAPABILITY_HANDOFF_HINT);
-        prepared_calls.push(tool_batch::prepare(
-            tools,
-            call,
-            unoffered,
-            missing_tool_hint,
-        ));
+        prepared_calls.push(tool_batch::prepare(tools, call, unoffered));
     }
     let batch = ToolBatch {
         tools,
