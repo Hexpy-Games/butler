@@ -17,6 +17,7 @@ mod records;
 mod subtasks;
 mod task_replacement;
 mod terminal;
+mod unreceived;
 mod work_tasks;
 mod worker_admission;
 mod worker_cancel;
@@ -403,7 +404,8 @@ impl SqliteSubsessionRepository {
         self.storage.execute(decode::pending).await
     }
 
-    /// Whether a child still owes its current turn result or has a pending direction.
+    /// Whether a child still owes its current turn result, has a pending direction,
+    /// or has a result the parent has not yet received in a turn.
     pub async fn has_active_child(&self, parent: String) -> Result<bool, StorageError> {
         self.storage
             .execute(move |db| {
@@ -420,11 +422,11 @@ impl SqliteSubsessionRepository {
                                (SELECT t.turn_id FROM btcc_turns t
                                 WHERE t.session_id=r.child_session_id ORDER BY t.rowid DESC LIMIT 1),
                                d.child_turn_id))))",
-                        [parent],
+                        [&parent],
                         |row| row.get(0),
                     )
                     .map_err(StorageError::sqlite)?;
-                Ok(unfinished)
+                Ok(unfinished || unreceived::has_unreceived_worker_result(db, &parent)?)
             })
             .await
     }
