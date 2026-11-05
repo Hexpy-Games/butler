@@ -124,6 +124,7 @@ mod live;
 mod live_config;
 mod local_zone;
 mod long_paths;
+mod loop_review;
 mod mail;
 mod mcp;
 mod memory;

@@ -80,7 +80,8 @@ pub(super) fn guided_final(
 }
 
 /// The delivered content: empty for a no-visible terminal outcome, the
-/// trimmed answer, or the runtime-error message when the answer is blank.
+/// trimmed answer, nothing when only answer blocks are shown, or the
+/// runtime-error message when the answer is blank.
 fn final_content(turn: &TurnRecord, result: &super::contracts::AgentLoopResult) -> String {
     if result.terminal_outcome == Some(super::contracts::TerminalOutcome::NoVisible) {
         return String::new();
@@ -88,6 +89,10 @@ fn final_content(turn: &TurnRecord, result: &super::contracts::AgentLoopResult) 
     let trimmed = butler_core::public_text::trim_js_whitespace(&result.content);
     if !trimmed.is_empty() {
         return trimmed.to_owned();
+    }
+    // Answer blocks are visible output: prose that only repeated them is gone.
+    if result.runtime_failure.is_none() && !result.answer_blocks.is_empty() {
+        return String::new();
     }
     runtime_failure_message_for_turn(
         turn,
