@@ -2,6 +2,18 @@ use crate::input::Page;
 use cef::ImplBrowserHost;
 use gpui::*;
 use std::ops::Range;
+
+impl Page {
+    /// The selection in document offsets: inside a composition the bridge's own, otherwise CEF's.
+    fn caret(&self) -> Range<usize> {
+        if self.marked.is_some() {
+            self.selection.clone()
+        } else {
+            self.rt.shared.borrow().selection.clone()
+        }
+    }
+}
+
 impl EntityInputHandler for Page {
     fn text_for_range(
         &mut self,
@@ -10,9 +22,22 @@ impl EntityInputHandler for Page {
         _w: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<String> {
-        *actual = Some(r.clone());
-        let v = self.text.encode_utf16().collect::<Vec<_>>();
-        String::from_utf16(v.get(r)?).ok()
+        let found = self.marked.as_ref().and_then(|m| {
+            let o = r.start.max(m.start)..r.end.min(m.end);
+            if o.is_empty() {
+                return None;
+            }
+            let units = self.composition.encode_utf16().collect::<Vec<_>>();
+            let text = String::from_utf16(units.get(o.start - m.start..o.end - m.start)?).ok()?;
+            Some((o, text))
+        });
+        let (known, text) = found.unwrap_or((r.start..r.start, String::new()));
+        crate::log(
+            "ime_text_for_range",
+            serde_json::json!({"range":[r.start,r.end],"answer":[[known.start,known.end],&text]}),
+        );
+        *actual = Some(known);
+        Some(text)
     }
     fn selected_text_range(
         &mut self,
@@ -20,11 +45,7 @@ impl EntityInputHandler for Page {
         _w: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
-        let r = if self.marked.is_some() {
-            self.selection.clone()
-        } else {
-            self.rt.shared.borrow().selection.clone()
-        };
+        let r = self.caret();
         Some(UTF16Selection {
             range: r,
             reversed: false,
@@ -37,7 +58,10 @@ impl EntityInputHandler for Page {
         if let Some(h) = self.rt.host() {
             h.ime_finish_composing_text(0);
         }
-        self.marked = None;
+        if let Some(m) = self.marked.take() {
+            self.rt.shared.borrow_mut().selection = m.end..m.end;
+        }
+        self.composition.clear();
     }
     fn replace_text_in_range(
         &mut self,
@@ -46,14 +70,20 @@ impl EntityInputHandler for Page {
         _w: &mut Window,
         _cx: &mut Context<Self>,
     ) {
+        let start = r
+            .as_ref()
+            .or(self.marked.as_ref())
+            .map_or_else(|| self.caret().start, |x| x.start);
         if let Some(h) = self.rt.host() {
             self.rt.input();
             let r = cef_range(r);
             h.ime_commit_text(Some(&new.into()), Some(&r), 0);
         }
+        let end = start + new.encode_utf16().count();
         self.marked = None;
-        self.text = new.to_string();
-        self.selection = new.encode_utf16().count()..new.encode_utf16().count();
+        self.composition.clear();
+        self.selection = end..end;
+        self.rt.shared.borrow_mut().selection = end..end;
         crate::log("ime_commit", serde_json::json!({"text":new}));
     }
     fn replace_and_mark_text_in_range(
@@ -66,6 +96,10 @@ impl EntityInputHandler for Page {
     ) {
         let n = new.encode_utf16().count();
         let selected = selected.unwrap_or(n..n);
+        let start = r
+            .as_ref()
+            .or(self.marked.as_ref())
+            .map_or_else(|| self.caret().start, |x| x.start);
         if let Some(h) = self.rt.host() {
             self.rt.input();
             let r = cef_range(r);
@@ -87,9 +121,9 @@ impl EntityInputHandler for Page {
                 Some(&selection),
             );
         }
-        self.text = new.to_string();
-        self.marked = Some(0..n);
-        self.selection = selected;
+        self.composition = new.to_string();
+        self.marked = (n > 0).then_some(start..start + n);
+        self.selection = start + selected.start..start + selected.end;
         crate::log("ime_composition", serde_json::json!({"text":new}));
     }
     fn bounds_for_range(
@@ -100,7 +134,13 @@ impl EntityInputHandler for Page {
         _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let s = self.rt.shared.borrow();
-        let rect = s.ime_bounds.get(r.start).or_else(|| s.ime_bounds.last())?;
+        let i = self
+            .marked
+            .as_ref()
+            .and_then(|m| r.start.checked_sub(m.start));
+        let rect = i
+            .and_then(|i| s.ime_bounds.get(i))
+            .or_else(|| s.ime_bounds.last())?;
         Some(Bounds::new(
             b.origin + point(px(rect.x as f32), px(rect.y as f32)),
             size(px(rect.width.max(1) as f32), px(rect.height.max(1) as f32)),
@@ -112,7 +152,7 @@ impl EntityInputHandler for Page {
         _w: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
-        Some(self.selection.end)
+        None
     }
 }
 fn cef_range(r: Option<Range<usize>>) -> cef::Range {

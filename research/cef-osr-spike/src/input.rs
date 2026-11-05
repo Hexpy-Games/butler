@@ -9,7 +9,7 @@ pub struct Page {
     pub picking: bool,
     pub picked: serde_json::Value,
     pub marked: Option<Range<usize>>,
-    pub text: String,
+    pub composition: String,
     pub selection: Range<usize>,
     pub pick_busy: bool,
 }
@@ -38,7 +38,7 @@ impl Page {
             picking: false,
             picked: serde_json::Value::Null,
             marked: None,
-            text: String::new(),
+            composition: String::new(),
             selection: 0..0,
             pick_busy: false,
         }
