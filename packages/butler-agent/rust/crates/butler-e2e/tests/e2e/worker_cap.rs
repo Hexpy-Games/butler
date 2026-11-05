@@ -5,8 +5,6 @@
     clippy::panic,
     reason = "test assertions"
 )]
-#[path = "worker_cap/historical.rs"]
-mod historical;
 #[path = "worker_cap/plans.rs"]
 mod plans;
 #[path = "worker_cap/recovery.rs"]
@@ -247,12 +245,13 @@ async fn cb_11_release_races_dispatch_and_waiting_steer() -> Result<(), HarnessE
     let (_, rows) = workers(&s, "general", 4).await?;
     started(&script, 3).await;
     assert_eq!(*script.started.lock().unwrap(), ["red-0", "red-1", "red-2"]);
-    assert_direction_applied(&s, &rows[2]).await?;
+    assert_pending_direction(&s, &rows[2])?;
     assert_eq!(rows[3]["status"], "waiting");
     script.release("red-1");
     started(&script, 4).await;
     script.release("red-2");
     script.release("red-3");
+    assert_direction_applied(&s, &rows[2]).await?;
     closed(&s, rows[3]["session_id"].as_str().unwrap()).await?;
     s.finish().await?;
     server.abort();
@@ -273,14 +272,14 @@ async fn assert_direction_applied(s: &Scenario, row: &Value) -> Result<(), Harne
     loop {
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
         let applied: bool = db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM btcc_subsession_directions i JOIN btcc_subsession_delegations d USING(relation_id) WHERE i.relation_id=?1 AND i.status='applied' AND i.applied_child_turn_id=d.child_turn_id)",
+            "SELECT EXISTS(SELECT 1 FROM btcc_subsession_directions i JOIN btcc_subsession_delegations d USING(relation_id) WHERE i.relation_id=?1 AND i.status='applied' AND i.applied_child_turn_id<>d.child_turn_id AND EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.child_turn_id=i.applied_child_turn_id AND x.status='success'))",
             [row["relation"]["relation_id"].as_str().unwrap()], |r| r.get(0))?;
         if applied {
             return Ok(());
         }
         assert!(
             Instant::now() < deadline,
-            "direction missing from first turn: {}",
+            "queued direction must finish in its own turn: {}",
             s.agent.logs()
         );
         tokio::time::sleep(Duration::from_millis(20)).await;

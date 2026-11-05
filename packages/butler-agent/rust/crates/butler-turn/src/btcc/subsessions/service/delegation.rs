@@ -140,6 +140,7 @@ impl DelegationIds {
         created_at: String,
     ) -> SubsessionCreate {
         SubsessionCreate {
+            previous_relation_id: None,
             relation_id: self.relation_id,
             delegation_id: self.delegation_id,
             task_id: self.task_id,

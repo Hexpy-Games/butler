@@ -193,7 +193,7 @@ async fn assert_fifo_publication(
 }
 
 /// Wait for both the durable suspension and settlement of its dispatch lease.
-pub(super) async fn steward_parked(s: &Scenario, session: &str) -> Result<(), HarnessError> {
+pub(crate) async fn steward_parked(s: &Scenario, session: &str) -> Result<(), HarnessError> {
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let raw: String = db.query_row("SELECT dispatch_intent_json FROM btcc_subsession_delegations d JOIN btcc_session_relations r USING(relation_id) WHERE r.child_session_id=?1", [session], |r|r.get(0))?;
     let intent: Value = serde_json::from_str(&raw)?;

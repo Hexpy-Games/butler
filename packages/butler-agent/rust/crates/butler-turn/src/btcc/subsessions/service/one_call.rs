@@ -169,7 +169,7 @@ pub(super) fn build(
         now,
         schedule_run: packet.schedule_run.clone(),
     });
-    Ok(ids.create(
+    let mut create = ids.create(
         delegation::Parent {
             session_id: request.parent_session_id.clone(),
             turn_id: request.parent_turn_id.clone(),
@@ -184,12 +184,14 @@ pub(super) fn build(
             },
         },
         now.into(),
-    ))
+    );
+    create.previous_relation_id = request.previous_relation_id.clone();
+    Ok(create)
 }
 
 fn runtime_settled(work: &WorkView, result: &str, status: &str) -> bool {
     if work.status == crate::btcc::DurableWorkStatus::Abandoned {
-        return matches!(status, "cancelled" | "abandoned");
+        return matches!(status, "cancelled" | "abandoned" | "failed");
     }
     let id = match work.scope {
         crate::btcc::WorkScope::Session { .. } => format!("steward-result-disposition:{result}"),

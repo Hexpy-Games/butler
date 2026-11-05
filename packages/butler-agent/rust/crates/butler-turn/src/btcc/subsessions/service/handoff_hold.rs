@@ -13,6 +13,10 @@ pub(super) async fn direction_work(stage: &'static [u8]) -> Result<(), BtccError
     barrier("BUTLER_E2E_DIRECTION_WORK_BARRIER", stage).await
 }
 
+pub(super) async fn ending(stage: &'static [u8]) -> Result<(), BtccError> {
+    barrier("BUTLER_E2E_ENDING_BARRIER", stage).await
+}
+
 #[allow(clippy::disallowed_methods, reason = "stub-only loopback barrier")]
 async fn barrier(variable: &str, stage: &[u8]) -> Result<(), BtccError> {
     if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub") {

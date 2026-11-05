@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha256};
 
-pub(super) const TABLES: [&str; 47] = [
+pub(super) const TABLES: [&str; 48] = [
     "btcc_admission_claims",
     "btcc_authority_requests",
     "btcc_canonical_deliveries",
@@ -43,6 +43,7 @@ pub(super) const TABLES: [&str; 47] = [
     "btcc_stop_requests",
     "btcc_subsession_delegations",
     "btcc_subsession_directions",
+    "btcc_subsession_endings",
     "btcc_subsession_outbox",
     "btcc_terminal_settlement_wakes",
     "btcc_turns",

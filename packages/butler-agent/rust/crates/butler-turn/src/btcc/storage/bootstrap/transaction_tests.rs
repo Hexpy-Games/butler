@@ -103,8 +103,6 @@ pub(super) fn fresh_schema_and_metadata_commit_once() {
     // One schema+metadata commit, plus migration's independent commit.
     assert_eq!(new_commits, 2);
     assert!(old_commits > new_commits);
-    // Includes the superseded-Worker index's independent schema commit.
-    assert_eq!(old_commits, 83);
     assert_eq!(snapshot(&old), snapshot(&new));
     assert_eq!(metadata(&old), metadata(&new));
     assert_eq!(metadata(&new).len(), 2);

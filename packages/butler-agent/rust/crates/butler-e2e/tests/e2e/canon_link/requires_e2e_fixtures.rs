@@ -342,6 +342,6 @@ async fn crash_after_the_work_starts_leaves_the_relation_on_it() -> Result<(), H
         works[1].0,
         "the started Work stays reachable"
     );
-    assert_eq!(works[1].1, "open", "{works:?}");
+    assert_eq!(works[1].1, "abandoned", "{works:?}");
     flow.finish().await
 }

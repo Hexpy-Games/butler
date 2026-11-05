@@ -123,6 +123,14 @@ impl SubsessionService {
         {
             return Ok(true);
         }
+        if !self
+            .repository
+            .accepts_completion(session.into(), turn.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            return Ok(true);
+        }
         let Some(relation) = self
             .repository
             .by_child(session.to_owned())
@@ -142,6 +150,23 @@ impl SubsessionService {
         summary: String,
         failure_code: Option<String>,
     ) -> Result<(), BtccError> {
+        if self
+            .repository
+            .has_turn_result(session.into(), turn.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            self.finish_pending_ending(session).await?;
+            return self.deliver_child_result(session, status).await;
+        }
+        if !self
+            .repository
+            .accepts_completion(session.into(), turn.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            return Ok(());
+        }
         let disposition = self
             .result_disposition(session, turn, status, failure_code.as_deref())
             .await?;
@@ -179,22 +204,17 @@ impl SubsessionService {
         );
         evidence_refs.sort();
         evidence_refs.dedup();
-        self.repository
-            .commit_result(
-                crate::btcc::storage::ChildCompletion {
-                    session: session.into(),
-                    turn: turn.into(),
-                    status: status.into(),
-                    summary,
-                    failure_reason,
-                    failure_code,
-                    evidence_refs,
-                    handoff,
-                },
-                (self.now)(),
-            )
-            .await
-            .map_err(BtccError::from)?;
+        self.commit_completion(crate::btcc::storage::ChildCompletion {
+            session: session.into(),
+            turn: turn.into(),
+            status: status.into(),
+            summary,
+            failure_reason,
+            failure_code,
+            evidence_refs,
+            handoff,
+        })
+        .await?;
         self.deliver_child_result(session, status).await
     }
 
@@ -218,9 +238,6 @@ impl SubsessionService {
         }
         if status != "cancelled" || self.work.bound_work_for_turn(turn.into()).await?.is_some() {
             self.bind_result_work(session, turn, failure_code).await?;
-        }
-        if status == "cancelled" {
-            self.work.abandon_bound_work_for_turn(turn.into()).await?;
         }
         Ok(self
             .work
@@ -273,7 +290,11 @@ impl SubsessionService {
         }
     }
 
-    async fn deliver_child_result(&self, session: &str, status: &str) -> Result<(), BtccError> {
+    pub(super) async fn deliver_child_result(
+        &self,
+        session: &str,
+        status: &str,
+    ) -> Result<(), BtccError> {
         self.notify_execution_changed(session).await?;
         let relation = self
             .repository
@@ -315,6 +336,7 @@ impl SubsessionService {
     /// Main's recovery order: dispatches, directions, then parent results.
     /// Worker admission follows result delivery; one failure never hides peers.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
+        self.recover_endings().await?;
         self.recover_superseded_workers().await?;
         let mut failed_parents = std::collections::HashSet::new();
         for stored in self

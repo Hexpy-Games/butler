@@ -1,33 +1,28 @@
-//! A completed turn with an open root Work can receive a Worker direction.
+//! Ended Worker tasks cannot resume invisibly under their old card.
 use super::*;
-use crate::worker_cap::{closed, setup, started, workers};
+use crate::worker_cap::{setup, started, workers};
 use std::sync::atomic::Ordering;
 
 #[tokio::test]
-async fn finished_worker_followup_reenters_cap_fifo() -> Result<(), HarnessError> {
+async fn finished_worker_followup_is_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    followup(false, false).await
+    followup(false).await
 }
-
 #[tokio::test]
-async fn historical_finished_worker_without_intent_accepts_followup() -> Result<(), HarnessError> {
+async fn cancelled_worker_followup_is_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    followup(true, false).await
+    followup(true).await
 }
 
-#[tokio::test]
-async fn cancelled_first_worker_followup_runs_as_continuation() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    followup(false, true).await
-}
-
-async fn followup(historical: bool, cancelled: bool) -> Result<(), HarnessError> {
+async fn followup(cancelled: bool) -> Result<(), HarnessError> {
     let (s, script, server) = setup("FOLLOWUP-WORKER", 4).await?;
     script.steer.store(true, Ordering::SeqCst);
     script.followup.store(true, Ordering::SeqCst);
     s.gw.say("general", "Verify batch red").await?;
-    let (parent, rows) = workers(&s, "general", 3).await?;
+    let (_, rows) = workers(&s, "general", 3).await?;
     started(&script, 2).await;
+    let relation = rows[0]["relation"]["relation_id"].as_str().unwrap();
+    let session = rows[0]["session_id"].as_str().unwrap();
     if cancelled {
         crate::worker_cap::recovery::cancel_worker(&s, &rows[0]).await?;
     } else {
@@ -36,80 +31,61 @@ async fn followup(historical: bool, cancelled: bool) -> Result<(), HarnessError>
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-        let failed: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_steward_results x JOIN btcc_subsession_outbox o USING(result_id) WHERE x.relation_id=?1 AND x.status=?2 AND o.status='delivered')", rusqlite::params![rows[0]["relation"]["relation_id"].as_str().unwrap(), if cancelled {"cancelled"} else {"success"}], |r| r.get(0))?;
-        if failed {
+        let delivered: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_subsession_outbox WHERE relation_id=?1 AND status='delivered')", [relation], |r| r.get(0))?;
+        if delivered {
+            super::terminal::assert_closed(&db, session);
             break;
         }
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    if cancelled {
-        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-        let status: String = db.query_row("SELECT w.status FROM btcc_guided_works w JOIN btcc_subsession_delegations d ON d.root_work_id=w.work_id WHERE d.relation_id=?1", [rows[0]["relation"]["relation_id"].as_str().unwrap()], |r| r.get(0))?;
-        assert_eq!(status, "abandoned");
-        script.release("red-0");
-    }
-    started(&script, 3).await;
-    if historical {
-        // Rows predating durable dispatch intents retain main's direct-by-id behaviour.
-        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-        db.execute(
-            "UPDATE btcc_subsession_delegations SET dispatch_intent_json=NULL WHERE relation_id=?1",
-            [rows[0]["relation"]["relation_id"].as_str().unwrap()],
-        )?;
-    }
+    let worker_requests = red_0_requests(&script);
     script.direction.add_permits(1);
-    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-        let state: Option<String> = db.query_row(
-            "SELECT dispatch_state FROM btcc_subsession_delegations WHERE relation_id=?1",
-            [rows[0]["relation"]["relation_id"].as_str().unwrap()],
-            |r| r.get(0),
-        )?;
-        if script.steered.load(Ordering::SeqCst) {
-            assert_eq!(
-                state.as_deref(),
-                Some("pending"),
-                "finished Worker must wait for a slot"
-            );
-            let view =
-                s.gw.get(&format!("/session-view?session_id={parent}"))
-                    .await?;
-            let child = view.data()["workers"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|child| child["session_id"] == rows[0]["session_id"])
-                .unwrap();
-            assert_eq!(child["status"], "waiting");
-            assert_eq!(child["waiting_for_slot"], true);
+        let refused = script.requests.lock().unwrap().iter().any(|(_, request)| {
+            request["input"].as_array().is_some_and(|items| {
+                items.iter().any(|i| {
+                    i["output"]
+                        .as_str()
+                        .is_some_and(|o| o.contains("delegated_session_closed"))
+                })
+            })
+        });
+        if refused {
             break;
         }
-        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        assert!(
+            Instant::now() < deadline,
+            "steer was not refused\n{}",
+            s.agent.logs()
+        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    script.release("red-1");
-    tokio::time::timeout(Duration::from_secs(30), script.continued.wait())
-        .await
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-        let completed: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_steward_results x JOIN btcc_subsession_delegations d USING(relation_id) WHERE x.relation_id=?1 AND x.child_turn_id<>d.child_turn_id AND x.status='success')", [rows[0]["relation"]["relation_id"].as_str().unwrap()], |r| r.get(0))?;
-        if completed {
-            break;
-        }
-        assert!(Instant::now() < deadline, "{}", s.agent.logs());
-        tokio::time::sleep(Duration::from_millis(20)).await;
+    assert_eq!(
+        red_0_requests(&script),
+        worker_requests,
+        "Worker stub must receive no request after its result"
+    );
+    for n in 0..4 {
+        script.release(&format!("red-{n}"));
     }
-    script.release("red-2");
     script.fourth.add_permits(1);
-    started(&script, 4).await;
-    script.release("red-3");
-    let (_, rows) = workers(&s, "general", 4).await?;
-    closed(&s, rows[3]["session_id"].as_str().unwrap()).await?;
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+/// The Worker requests the stub routes to red-0; released cap slots start other Workers.
+fn red_0_requests(script: &crate::worker_cap::stub::Script) -> usize {
+    let others = ["red-1", "red-2", "red-3"];
+    script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(role, body)| {
+            let key = butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default());
+            role == "worker" && !others.iter().any(|o| key.user_request.contains(o))
+        })
+        .count()
 }

@@ -39,8 +39,8 @@ pub(in crate::btcc::storage) fn settle(
     }
     let disposition = match status {
         "success" | "completed" => "completed",
-        "cancelled" | "abandoned" => "abandoned",
-        _ => "blocked",
+        "blocked" => "blocked",
+        _ => "abandoned",
     };
     let mut actions = work.action_progress.clone();
     for action in &mut actions {

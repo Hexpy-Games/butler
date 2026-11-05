@@ -177,3 +177,16 @@ impl SqliteSubsessionRepository {
             .await
     }
 }
+
+/// The queued direction owned by this continuation turn, never a same-turn steer.
+pub(super) fn queued_instruction(
+    db: &rusqlite::Connection,
+    relation: &str,
+    turn: &str,
+) -> Result<Option<String>, StorageError> {
+    let id: Option<String> = db.query_row(
+        "SELECT instruction_id FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",
+        [relation], |row| row.get(0),
+    ).optional().map_err(StorageError::sqlite)?;
+    Ok(id.filter(|id| direction_turn_id(id) == turn))
+}

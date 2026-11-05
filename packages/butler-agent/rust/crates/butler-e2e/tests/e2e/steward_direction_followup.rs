@@ -280,3 +280,38 @@ async fn read_prior_delegation_mid_turn_keeps_the_packet_context() -> Result<(),
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn running_continuation_cannot_be_replaced_using_its_earlier_result()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, relation, _) =
+        hold_continuation("FOLLOWUP-STILL-RUNNING", "direction-write", false).await?;
+    assert_eq!(results(&s, &relation).len(), 1);
+    let spec = json!({"name":"delegate_to_steward","arguments":{
+        "request":"Compare the remaining source", "previous_relation_id":relation,
+        "checks":["Compare the source evidence"]}});
+    s.turn("general", &format!("fixture-call:{spec}")).await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.data()["steward_children"].as_array().unwrap().len(), 1);
+    assert_eq!(view.data()["steward_children"][0]["terminal"], false);
+    let rejected = script.requests.lock().unwrap().iter().any(|request| {
+        request["input"].as_array().unwrap().iter().any(|item| {
+            item["type"] == "function_call_output"
+                && item["call_id"] == "call_connector"
+                && item["output"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("steward_relation_not_active")
+        })
+    });
+    assert!(
+        rejected,
+        "a saved result must not authorize replacing running work"
+    );
+    script.item_release.notify_one();
+    wait_reports(&s, &relation, 2).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

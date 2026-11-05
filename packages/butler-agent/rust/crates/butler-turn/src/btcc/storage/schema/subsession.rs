@@ -1,5 +1,11 @@
 // Source-compatible SQLite schema; additive `IF NOT EXISTS` statements preserve deployed data.
 pub(in crate::btcc::storage) const SUBSESSION_SCHEMA: &str = r"
+CREATE TABLE IF NOT EXISTS btcc_subsession_endings (
+  session_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  completion_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS btcc_session_relations (
   relation_id TEXT PRIMARY KEY,
   parent_session_id TEXT NOT NULL,

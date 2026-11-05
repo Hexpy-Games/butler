@@ -974,16 +974,18 @@ Ok(
             objective: "Follow up",
             status: Abandoned,
             current_stage: Some(
-                Planning,
+                Reporting,
             ),
             allowed_next_stages: [
-                Review,
+                Validation,
             ],
             action_progress: [
                 ActionProgress {
                     action_key: "announce",
-                    status: Blocked,
-                    note: None,
+                    status: Skipped,
+                    note: Some(
+                        "Work ended.",
+                    ),
                 },
             ],
             current_plan: Some(
@@ -1008,19 +1010,21 @@ Ok(
             ),
             latest_checkpoint: Some(
                 Checkpoint {
-                    checkpoint_revision_id: "guided-checkpoint-<sha:13>",
-                    revision: 3,
+                    checkpoint_revision_id: "guided-checkpoint-<sha:15>",
+                    revision: 4,
                     plan_revision_id: "guided-plan-<sha:11>",
-                    stage: Planning,
+                    stage: Reporting,
                     action_progress: [
                         ActionProgress {
                             action_key: "announce",
-                            status: Blocked,
-                            note: None,
+                            status: Skipped,
+                            note: Some(
+                                "Work ended.",
+                            ),
                         },
                     ],
-                    public_summary: "Needs a date",
-                    next_step: "Pick a date",
+                    public_summary: "Work ended.",
+                    next_step: "",
                     referenced_result_refs: [],
                     origin_turn_id: "turn-3",
                     created_at: "<ts>",
@@ -1071,7 +1075,7 @@ Ok(
       "path": "project-ledger/projects/demo/project.json"
     },
     "counts": {
-      "records": 21,
+      "records": 22,
       "initiative": 0,
       "work": 2,
       "task": 0,
@@ -1082,7 +1086,7 @@ Ok(
       "report": 0,
       "plan": 2,
       "handoff": 0,
-      "reference": 15,
+      "reference": 16,
       "roadmap": 0
     },
     "records": [
@@ -1179,7 +1183,7 @@ Ok(
         "path": "project-ledger/projects/demo/project.json"
       },
       {
-        "id": "guided-binding-<sha:15>",
+        "id": "guided-binding-<sha:16>",
         "kind": "reference",
         "title": "Guided Work Turn binding 1",
         "status": "active",
@@ -1199,10 +1203,10 @@ Ok(
         "mitigation": null,
         "reason": null,
         "updatedAt": "<ts>",
-        "path": "project-ledger/projects/demo/references/guided-binding-<sha:15>.md"
+        "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md"
       },
       {
-        "id": "guided-binding-<sha:16>",
+        "id": "guided-binding-<sha:17>",
         "kind": "reference",
         "title": "Guided Work Turn binding 1",
         "status": "active",
@@ -1222,7 +1226,7 @@ Ok(
         "mitigation": null,
         "reason": null,
         "updatedAt": "<ts>",
-        "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md"
+        "path": "project-ledger/projects/demo/references/guided-binding-<sha:17>.md"
       },
       {
         "id": "guided-checkpoint-<sha:7>",
@@ -1294,7 +1298,7 @@ Ok(
         "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:5>.md"
       },
       {
-        "id": "guided-checkpoint-<sha:17>",
+        "id": "guided-checkpoint-<sha:18>",
         "kind": "reference",
         "title": "Guided Work checkpoint 4",
         "status": "active",
@@ -1314,10 +1318,10 @@ Ok(
         "mitigation": null,
         "reason": null,
         "updatedAt": "<ts>",
-        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:17>.md"
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md"
       },
       {
-        "id": "guided-checkpoint-<sha:18>",
+        "id": "guided-checkpoint-<sha:19>",
         "kind": "reference",
         "title": "Guided Work checkpoint 2",
         "status": "active",
@@ -1337,7 +1341,7 @@ Ok(
         "mitigation": null,
         "reason": null,
         "updatedAt": "<ts>",
-        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md"
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md"
       },
       {
         "id": "guided-checkpoint-<sha:3>",
@@ -1386,7 +1390,7 @@ Ok(
         "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md"
       },
       {
-        "id": "guided-checkpoint-<sha:19>",
+        "id": "guided-checkpoint-<sha:20>",
         "kind": "reference",
         "title": "Guided Work checkpoint 1",
         "status": "active",
@@ -1406,7 +1410,30 @@ Ok(
         "mitigation": null,
         "reason": null,
         "updatedAt": "<ts>",
-        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md"
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:20>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:15>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 4",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:10>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:15>.md"
       },
       {
         "id": "guided-checkpoint-<sha:13>",
@@ -1432,7 +1459,7 @@ Ok(
         "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:13>.md"
       },
       {
-        "id": "guided-diagnostic-<sha:20>",
+        "id": "guided-diagnostic-<sha:21>",
         "kind": "reference",
         "title": "Guided Work closeout diagnostic",
         "status": "active",
@@ -1452,7 +1479,7 @@ Ok(
         "mitigation": null,
         "reason": null,
         "updatedAt": "<ts>",
-        "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:20>.md"
+        "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:21>.md"
       },
       {
         "id": "guided-disposition-<sha:8>",
@@ -1639,7 +1666,7 @@ Ok(
       }
     ],
     "counts": {
-      "records": 21,
+      "records": 22,
       "initiative": 0,
       "work": 2,
       "task": 0,
@@ -1650,7 +1677,7 @@ Ok(
       "report": 0,
       "plan": 2,
       "handoff": 0,
-      "reference": 15,
+      "reference": 16,
       "roadmap": 0
     }
   },
@@ -1683,7 +1710,7 @@ Ok(
 === dashboard_snapshot
 Ok(
     DashboardLedgerSnapshot {
-        revision: "<sha:21>",
+        revision: "<sha:22>",
         observed_at: "<ts>",
         records: [
             DashboardLedgerRecord {
@@ -1764,7 +1791,7 @@ Ok(
                     unavailable: false,
                 },
                 revision: Some(
-                    "<sha:22>",
+                    "<sha:23>",
                 ),
                 availability: "ready",
                 managed: Some(
@@ -1773,11 +1800,11 @@ Ok(
                         session_id: "session-1",
                         status: "abandoned",
                         current_stage: Some(
-                            "planning",
+                            "reporting",
                         ),
                         action_progress: [
                             DashboardActionProgress {
-                                status: "blocked",
+                                status: "skipped",
                             },
                         ],
                         current_plan: Some(
@@ -1794,8 +1821,8 @@ Ok(
                         latest_checkpoint: Some(
                             DashboardCheckpointSummary {
                                 created_at: "<ts>",
-                                public_summary: "Needs a date",
-                                next_step: "Pick a date",
+                                public_summary: "Work ended.",
+                                next_step: "",
                             },
                         ),
                         latest_disposition: None,
@@ -1804,7 +1831,7 @@ Ok(
                         ],
                         latest_result_review_corrections: [],
                         public_summary: Some(
-                            "Needs a date",
+                            "Work ended.",
                         ),
                         remaining_actions: [],
                         followups: [],
@@ -1827,7 +1854,7 @@ Ok(
                     unavailable: false,
                 },
                 revision: Some(
-                    "<sha:23>",
+                    "<sha:24>",
                 ),
                 availability: "ready",
                 managed: Some(
@@ -1898,7 +1925,7 @@ Ok(
     DashboardLedgerSource {
         title: "Ship the feature safely",
         body: "# Ship the feature safely\n\nShipped\n\n- Announce it",
-        revision: "<sha:23>",
+        revision: "<sha:24>",
         document_type: "work",
         updated_at: "<ts>",
         status: "review",
@@ -1909,7 +1936,7 @@ Ok(
     DashboardLedgerSource {
         title: "Ship the feature safely",
         body: "# Ship the feature safely\n\n- Write the code\n\n- Test the code\n\n- tests pass",
-        revision: "<sha:24>",
+        revision: "<sha:25>",
         document_type: "plan",
         updated_at: "<ts>",
         status: "active",
@@ -1926,7 +1953,7 @@ Ok(
             action: "disposition",
             title: "Ship the feature safely",
             body: "{\n  \"disposition\": \"completed\",\n  \"summary\": \"Shipped\",\n  \"remainingActions\": [],\n  \"followups\": [\n    \"Announce it\"\n  ]\n}",
-            revision: "<sha:25>",
+            revision: "<sha:26>",
             status: "completed",
         },
         DashboardWorkHistoryEntry {
@@ -1937,7 +1964,7 @@ Ok(
             action: "reviewed",
             title: "Ship the feature safely",
             body: "{\n  \"subject\": \"result\",\n  \"verdict\": \"accept\",\n  \"summary\": \"Looks right\",\n  \"corrections\": []\n}",
-            revision: "<sha:26>",
+            revision: "<sha:27>",
             status: "accept",
         },
         DashboardWorkHistoryEntry {
@@ -1948,7 +1975,7 @@ Ok(
             action: "reviewed",
             title: "Follow up",
             body: "{\n  \"subject\": \"plan\",\n  \"verdict\": \"revise\",\n  \"summary\": \"Needs a date\",\n  \"corrections\": [\n    \"Pick a date\"\n  ]\n}",
-            revision: "<sha:27>",
+            revision: "<sha:28>",
             status: "revise",
         },
     ],
@@ -1958,7 +1985,7 @@ Ok(
     DashboardLedgerSource {
         title: "Ship the feature safely",
         body: "```json\n{\n  \"disposition\": \"completed\",\n  \"summary\": \"Shipped\",\n  \"remainingActions\": [],\n  \"followups\": [\n    \"Announce it\"\n  ]\n}\n```",
-        revision: "<sha:25>",
+        revision: "<sha:26>",
         document_type: "reference",
         updated_at: "<ts>",
         status: "completed",
@@ -1975,7 +2002,7 @@ Ok(
             action: "disposition",
             title: "Ship the feature safely",
             body: "{\n  \"disposition\": \"completed\",\n  \"summary\": \"Shipped\",\n  \"remainingActions\": [],\n  \"followups\": [\n    \"Announce it\"\n  ]\n}",
-            revision: "<sha:25>",
+            revision: "<sha:26>",
             status: "completed",
         },
         DashboardWorkHistoryEntry {
@@ -1986,7 +2013,7 @@ Ok(
             action: "reviewed",
             title: "Ship the feature safely",
             body: "{\n  \"subject\": \"result\",\n  \"verdict\": \"accept\",\n  \"summary\": \"Looks right\",\n  \"corrections\": []\n}",
-            revision: "<sha:26>",
+            revision: "<sha:27>",
             status: "accept",
         },
     ],
@@ -1996,7 +2023,7 @@ Ok(
     DashboardLedgerSource {
         title: "Ship the feature safely",
         body: "```json\n{\n  \"disposition\": \"completed\",\n  \"summary\": \"Shipped\",\n  \"remainingActions\": [],\n  \"followups\": [\n    \"Announce it\"\n  ]\n}\n```",
-        revision: "<sha:25>",
+        revision: "<sha:26>",
         document_type: "reference",
         updated_at: "<ts>",
         status: "completed",
@@ -2049,7 +2076,7 @@ Ok(
 SQLite write-reservation mutex
 persistent tables: 0
 --- file project-ledger/projects/.project-ledger-locks/demo.generation
-"<uuid:28>"
+"<uuid:29>"
 --- file project-ledger/projects/demo/index/project.json
 {
   "schema": "project-ledger.index.v1",
@@ -2061,7 +2088,7 @@ persistent tables: 0
     "path": "project-ledger/projects/demo/project.json"
   },
   "counts": {
-    "records": 21,
+    "records": 22,
     "initiative": 0,
     "work": 2,
     "task": 0,
@@ -2072,7 +2099,7 @@ persistent tables: 0
     "report": 0,
     "plan": 2,
     "handoff": 0,
-    "reference": 15,
+    "reference": 16,
     "roadmap": 0
   },
   "records": [
@@ -2169,7 +2196,7 @@ persistent tables: 0
       "path": "project-ledger/projects/demo/project.json"
     },
     {
-      "id": "guided-binding-<sha:15>",
+      "id": "guided-binding-<sha:16>",
       "kind": "reference",
       "title": "Guided Work Turn binding 1",
       "status": "active",
@@ -2189,10 +2216,10 @@ persistent tables: 0
       "mitigation": null,
       "reason": null,
       "updatedAt": "<ts>",
-      "path": "project-ledger/projects/demo/references/guided-binding-<sha:15>.md"
+      "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md"
     },
     {
-      "id": "guided-binding-<sha:16>",
+      "id": "guided-binding-<sha:17>",
       "kind": "reference",
       "title": "Guided Work Turn binding 1",
       "status": "active",
@@ -2212,7 +2239,7 @@ persistent tables: 0
       "mitigation": null,
       "reason": null,
       "updatedAt": "<ts>",
-      "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md"
+      "path": "project-ledger/projects/demo/references/guided-binding-<sha:17>.md"
     },
     {
       "id": "guided-checkpoint-<sha:7>",
@@ -2284,7 +2311,7 @@ persistent tables: 0
       "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:5>.md"
     },
     {
-      "id": "guided-checkpoint-<sha:17>",
+      "id": "guided-checkpoint-<sha:18>",
       "kind": "reference",
       "title": "Guided Work checkpoint 4",
       "status": "active",
@@ -2304,10 +2331,10 @@ persistent tables: 0
       "mitigation": null,
       "reason": null,
       "updatedAt": "<ts>",
-      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:17>.md"
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md"
     },
     {
-      "id": "guided-checkpoint-<sha:18>",
+      "id": "guided-checkpoint-<sha:19>",
       "kind": "reference",
       "title": "Guided Work checkpoint 2",
       "status": "active",
@@ -2327,7 +2354,7 @@ persistent tables: 0
       "mitigation": null,
       "reason": null,
       "updatedAt": "<ts>",
-      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md"
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md"
     },
     {
       "id": "guided-checkpoint-<sha:3>",
@@ -2376,7 +2403,7 @@ persistent tables: 0
       "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md"
     },
     {
-      "id": "guided-checkpoint-<sha:19>",
+      "id": "guided-checkpoint-<sha:20>",
       "kind": "reference",
       "title": "Guided Work checkpoint 1",
       "status": "active",
@@ -2396,7 +2423,30 @@ persistent tables: 0
       "mitigation": null,
       "reason": null,
       "updatedAt": "<ts>",
-      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md"
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:20>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:15>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 4",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:10>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:15>.md"
     },
     {
       "id": "guided-checkpoint-<sha:13>",
@@ -2422,7 +2472,7 @@ persistent tables: 0
       "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:13>.md"
     },
     {
-      "id": "guided-diagnostic-<sha:20>",
+      "id": "guided-diagnostic-<sha:21>",
       "kind": "reference",
       "title": "Guided Work closeout diagnostic",
       "status": "active",
@@ -2442,7 +2492,7 @@ persistent tables: 0
       "mitigation": null,
       "reason": null,
       "updatedAt": "<ts>",
-      "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:20>.md"
+      "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:21>.md"
     },
     {
       "id": "guided-disposition-<sha:8>",
@@ -2595,7 +2645,7 @@ persistent tables: 0
 --- file project-ledger/projects/demo/ledger.jsonl
 {"schema":"project-ledger.event.v1","ts":"<ts>","type":"project_initialized","projectId":"demo","source":"project-ledger"}
 {"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":2,"issues":0,"source":"project-ledger"}
-{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":21,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":22,"issues":0,"source":"project-ledger"}
 --- file project-ledger/projects/demo/plans/guided-plan-<sha:11>.md
 ---
 schema: "project-ledger.plan.v1"
@@ -2609,7 +2659,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:10>"
 ---
 
-{"operationIdentity":{"id":"call-plan-2","kind":"mutation_call","mutationCallId":"call-plan-2","requestSha256":"<sha:29>"},"plan":{"actions":[{"actionKey":"announce","dependencyKeys":[],"description":"Announce it"}],"checks":[],"createdAt":"<ts>","governingRefs":[],"objective":"Follow up","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","revision":1},"recordSha256":"<sha:30>","schema":"butler.btcc-project-work-plan.v1","workId":"guided-work-<sha:10>"}
+{"operationIdentity":{"id":"call-plan-2","kind":"mutation_call","mutationCallId":"call-plan-2","requestSha256":"<sha:30>"},"plan":{"actions":[{"actionKey":"announce","dependencyKeys":[],"description":"Announce it"}],"checks":[],"createdAt":"<ts>","governingRefs":[],"objective":"Follow up","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","revision":1},"recordSha256":"<sha:31>","schema":"butler.btcc-project-work-plan.v1","workId":"guided-work-<sha:10>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/plans/guided-plan-<sha:2>.md
 ---
@@ -2624,7 +2674,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:31>"},"plan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"recordSha256":"<sha:32>","schema":"butler.btcc-project-work-plan.v1","workId":"guided-work-<sha:1>"}
+{"operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:32>"},"plan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"recordSha256":"<sha:33>","schema":"butler.btcc-project-work-plan.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/project.json
 {
@@ -2635,21 +2685,6 @@ parentId: "guided-work-<sha:1>"
   "createdAt": "<ts>",
   "updatedAt": "<ts>"
 }
---- file project-ledger/projects/demo/references/guided-binding-<sha:15>.md
----
-schema: "project-ledger.reference.v1"
-kind: "reference"
-id: "guided-binding-<sha:15>"
-title: "Guided Work Turn binding 1"
-status: "active"
-createdAt: "<ts>"
-updatedAt: "<ts>"
-spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
-parentId: "guided-work-<sha:10>"
----
-
-{"binding":{"bindingRevisionId":"guided-binding-<sha:15>","boundAt":"<ts>","revision":1,"sessionId":"session-1","turnId":"turn-3"},"operationIdentity":{"id":"call-start-2","kind":"mutation_call","mutationCallId":"call-start-2","requestSha256":"<sha:33>"},"recordSha256":"<sha:34>","schema":"butler.btcc-project-work-binding.v1","workId":"guided-work-<sha:10>"}
-<no trailing newline>
 --- file project-ledger/projects/demo/references/guided-binding-<sha:16>.md
 ---
 schema: "project-ledger.reference.v1"
@@ -2660,10 +2695,25 @@ status: "active"
 createdAt: "<ts>"
 updatedAt: "<ts>"
 spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:10>"
+---
+
+{"binding":{"bindingRevisionId":"guided-binding-<sha:16>","boundAt":"<ts>","revision":1,"sessionId":"session-1","turnId":"turn-3"},"operationIdentity":{"id":"call-start-2","kind":"mutation_call","mutationCallId":"call-start-2","requestSha256":"<sha:34>"},"recordSha256":"<sha:35>","schema":"butler.btcc-project-work-binding.v1","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-binding-<sha:17>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-binding-<sha:17>"
+title: "Guided Work Turn binding 1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"binding":{"bindingRevisionId":"guided-binding-<sha:16>","boundAt":"<ts>","revision":1,"sessionId":"session-1","turnId":"turn-1"},"operationIdentity":{"id":"call-start","kind":"mutation_call","mutationCallId":"call-start","requestSha256":"<sha:35>"},"recordSha256":"<sha:36>","schema":"butler.btcc-project-work-binding.v1","workId":"guided-work-<sha:1>"}
+{"binding":{"bindingRevisionId":"guided-binding-<sha:17>","boundAt":"<ts>","revision":1,"sessionId":"session-1","turnId":"turn-1"},"operationIdentity":{"id":"call-start","kind":"mutation_call","mutationCallId":"call-start","requestSha256":"<sha:36>"},"recordSha256":"<sha:37>","schema":"butler.btcc-project-work-binding.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-checkpoint-<sha:12>.md
 ---
@@ -2678,7 +2728,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:10>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:12>","createdAt":"<ts>","nextStep":"Announce it","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Follow up","referencedResultRefs":[],"revision":1,"stage":"planning"},"checkpointIdentity":"call-plan-2\u0000plan","operationIdentity":{"id":"call-plan-2","kind":"mutation_call","mutationCallId":"call-plan-2","requestSha256":"<sha:29>"},"recordSha256":"<sha:37>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:12>","createdAt":"<ts>","nextStep":"Announce it","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Follow up","referencedResultRefs":[],"revision":1,"stage":"planning"},"checkpointIdentity":"call-plan-2\u0000plan","operationIdentity":{"id":"call-plan-2","kind":"mutation_call","mutationCallId":"call-plan-2","requestSha256":"<sha:30>"},"recordSha256":"<sha:38>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-checkpoint-<sha:13>.md
 ---
@@ -2693,13 +2743,28 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:10>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:13>","createdAt":"<ts>","nextStep":"Pick a date","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Needs a date","referencedResultRefs":[],"revision":3,"stage":"planning"},"checkpointIdentity":"call-review-2\u0000review-exit","operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:38>"},"recordSha256":"<sha:39>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:13>","createdAt":"<ts>","nextStep":"Pick a date","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Needs a date","referencedResultRefs":[],"revision":3,"stage":"planning"},"checkpointIdentity":"call-review-2\u0000review-exit","operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:39>"},"recordSha256":"<sha:40>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
 <no trailing newline>
---- file project-ledger/projects/demo/references/guided-checkpoint-<sha:17>.md
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:15>.md
 ---
 schema: "project-ledger.reference.v1"
 kind: "reference"
-id: "guided-checkpoint-<sha:17>"
+id: "guided-checkpoint-<sha:15>"
+title: "Guided Work checkpoint 4"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:10>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"announce","note":"Work ended.","status":"skipped"}],"checkpointRevisionId":"guided-checkpoint-<sha:15>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Work ended.","referencedResultRefs":[],"revision":4,"stage":"reporting"},"checkpointIdentity":"guided-abandonment-<sha:41>","operationIdentity":{"id":"guided-abandonment-<sha:41>","kind":"abandonment","requestSha256":"<sha:42>"},"recordSha256":"<sha:43>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:18>"
 title: "Guided Work checkpoint 4"
 status: "active"
 createdAt: "<ts>"
@@ -2708,13 +2773,13 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:17>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Looks right","referencedResultRefs":[],"revision":4,"stage":"review"},"checkpointIdentity":"call-review\u0000review-entry","operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:40>"},"recordSha256":"<sha:41>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:18>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Looks right","referencedResultRefs":[],"revision":4,"stage":"review"},"checkpointIdentity":"call-review\u0000review-entry","operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:44>"},"recordSha256":"<sha:45>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
---- file project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md
 ---
 schema: "project-ledger.reference.v1"
 kind: "reference"
-id: "guided-checkpoint-<sha:18>"
+id: "guided-checkpoint-<sha:19>"
 title: "Guided Work checkpoint 2"
 status: "active"
 createdAt: "<ts>"
@@ -2723,13 +2788,13 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:10>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:18>","createdAt":"<ts>","nextStep":"Pick a date","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Needs a date","referencedResultRefs":[],"revision":2,"stage":"review"},"checkpointIdentity":"call-review-2\u0000review-entry","operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:38>"},"recordSha256":"<sha:42>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:19>","createdAt":"<ts>","nextStep":"Pick a date","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Needs a date","referencedResultRefs":[],"revision":2,"stage":"review"},"checkpointIdentity":"call-review-2\u0000review-entry","operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:39>"},"recordSha256":"<sha:46>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
 <no trailing newline>
---- file project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:20>.md
 ---
 schema: "project-ledger.reference.v1"
 kind: "reference"
-id: "guided-checkpoint-<sha:19>"
+id: "guided-checkpoint-<sha:20>"
 title: "Guided Work checkpoint 1"
 status: "active"
 createdAt: "<ts>"
@@ -2738,7 +2803,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"pending"},{"actionKey":"test","status":"pending"}],"checkpointRevisionId":"guided-checkpoint-<sha:19>","createdAt":"<ts>","nextStep":"Write the code","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Ship the feature safely","referencedResultRefs":[],"revision":1,"stage":"conception"},"checkpointIdentity":"call-plan\u0000conception","operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:31>"},"recordSha256":"<sha:43>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"pending"},{"actionKey":"test","status":"pending"}],"checkpointRevisionId":"guided-checkpoint-<sha:20>","createdAt":"<ts>","nextStep":"Write the code","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Ship the feature safely","referencedResultRefs":[],"revision":1,"stage":"conception"},"checkpointIdentity":"call-plan\u0000conception","operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:32>"},"recordSha256":"<sha:47>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-checkpoint-<sha:3>.md
 ---
@@ -2753,7 +2818,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"pending"},{"actionKey":"test","status":"pending"}],"checkpointRevisionId":"guided-checkpoint-<sha:3>","createdAt":"<ts>","nextStep":"Write the code","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Ship the feature safely","referencedResultRefs":[],"revision":2,"stage":"planning"},"checkpointIdentity":"call-plan\u0000plan","operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:31>"},"recordSha256":"<sha:44>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"pending"},{"actionKey":"test","status":"pending"}],"checkpointRevisionId":"guided-checkpoint-<sha:3>","createdAt":"<ts>","nextStep":"Write the code","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Ship the feature safely","referencedResultRefs":[],"revision":2,"stage":"planning"},"checkpointIdentity":"call-plan\u0000plan","operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:32>"},"recordSha256":"<sha:48>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md
 ---
@@ -2768,7 +2833,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"active"}],"checkpointRevisionId":"guided-checkpoint-<sha:4>","createdAt":"<ts>","nextStep":"Run the tests","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Code written","referencedResultRefs":[],"revision":3,"stage":"execution"},"checkpointIdentity":"call-checkpoint","operationIdentity":{"id":"call-checkpoint","kind":"mutation_call","mutationCallId":"call-checkpoint","requestSha256":"<sha:45>"},"recordSha256":"<sha:46>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"active"}],"checkpointRevisionId":"guided-checkpoint-<sha:4>","createdAt":"<ts>","nextStep":"Run the tests","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Code written","referencedResultRefs":[],"revision":3,"stage":"execution"},"checkpointIdentity":"call-checkpoint","operationIdentity":{"id":"call-checkpoint","kind":"mutation_call","mutationCallId":"call-checkpoint","requestSha256":"<sha:49>"},"recordSha256":"<sha:50>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-checkpoint-<sha:5>.md
 ---
@@ -2783,7 +2848,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:5>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Looks right","referencedResultRefs":[],"revision":5,"stage":"validation"},"checkpointIdentity":"call-review\u0000review-exit","operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:40>"},"recordSha256":"<sha:47>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:5>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Looks right","referencedResultRefs":[],"revision":5,"stage":"validation"},"checkpointIdentity":"call-review\u0000review-exit","operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:44>"},"recordSha256":"<sha:51>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-checkpoint-<sha:7>.md
 ---
@@ -2798,13 +2863,13 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","note":"green","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:7>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Shipped","referencedResultRefs":[],"revision":6,"stage":"validation"},"checkpointIdentity":"call-disposition\u0000disposition","operationIdentity":{"id":"call-disposition","kind":"mutation_call","mutationCallId":"call-disposition","requestSha256":"<sha:48>"},"recordSha256":"<sha:49>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","note":"green","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:7>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Shipped","referencedResultRefs":[],"revision":6,"stage":"validation"},"checkpointIdentity":"call-disposition\u0000disposition","operationIdentity":{"id":"call-disposition","kind":"mutation_call","mutationCallId":"call-disposition","requestSha256":"<sha:52>"},"recordSha256":"<sha:53>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
---- file project-ledger/projects/demo/references/guided-diagnostic-<sha:20>.md
+--- file project-ledger/projects/demo/references/guided-diagnostic-<sha:21>.md
 ---
 schema: "project-ledger.reference.v1"
 kind: "reference"
-id: "guided-diagnostic-<sha:20>"
+id: "guided-diagnostic-<sha:21>"
 title: "Guided Work closeout diagnostic"
 status: "active"
 createdAt: "<ts>"
@@ -2813,7 +2878,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"diagnostic":{"code":"closeout_missing","createdAt":"<ts>","diagnosticId":"guided-diagnostic-<sha:20>","turnId":"turn-1"},"operationIdentity":{"id":"guided-diagnostic-<sha:20>","kind":"closeout_diagnostic","requestSha256":"<sha:50>"},"recordSha256":"<sha:51>","schema":"butler.btcc-project-work-closeout-diagnostic.v1","workId":"guided-work-<sha:1>"}
+{"diagnostic":{"code":"closeout_missing","createdAt":"<ts>","diagnosticId":"guided-diagnostic-<sha:21>","turnId":"turn-1"},"operationIdentity":{"id":"guided-diagnostic-<sha:21>","kind":"closeout_diagnostic","requestSha256":"<sha:54>"},"recordSha256":"<sha:55>","schema":"butler.btcc-project-work-closeout-diagnostic.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-disposition-<sha:8>.md
 ---
@@ -2828,7 +2893,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"disposition":{"actionUpdates":[{"actionKey":"test","note":"green","status":"done"}],"createdAt":"<ts>","disposition":"completed","dispositionRevisionId":"guided-disposition-<sha:8>","evidenceRefs":[],"evidenceSnapshot":[],"followups":["Announce it"],"materialFingerprint":"<sha:9>","originTurnId":"turn-1","remainingActions":[],"resultSequence":0,"revision":1,"runtimeOwnedOpen":false,"summary":"Shipped"},"materialSnapshot":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"currentPlan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:52>","latestCheckpoint":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"planRevisionId":"guided-plan-<sha:2>","referencedResultRefs":[],"resultSequence":0,"revision":6,"stage":"validation"},"materialFingerprint":"<sha:9>","resultRefs":[],"reviews":[null,{"boundActionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":null,"status":"done"}],"boundPlanRevisionId":null,"boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:6>","revision":1,"verdict":"accept"},null],"status":"completed","workId":"guided-work-<sha:1>"},"operationIdentity":{"id":"call-disposition","kind":"mutation_call","mutationCallId":"call-disposition","requestSha256":"<sha:48>"},"recordSha256":"<sha:53>","schema":"butler.btcc-project-work-disposition.v1","workId":"guided-work-<sha:1>"}
+{"disposition":{"actionUpdates":[{"actionKey":"test","note":"green","status":"done"}],"createdAt":"<ts>","disposition":"completed","dispositionRevisionId":"guided-disposition-<sha:8>","evidenceRefs":[],"evidenceSnapshot":[],"followups":["Announce it"],"materialFingerprint":"<sha:9>","originTurnId":"turn-1","remainingActions":[],"resultSequence":0,"revision":1,"runtimeOwnedOpen":false,"summary":"Shipped"},"materialSnapshot":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"currentPlan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:56>","latestCheckpoint":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"planRevisionId":"guided-plan-<sha:2>","referencedResultRefs":[],"resultSequence":0,"revision":6,"stage":"validation"},"materialFingerprint":"<sha:9>","resultRefs":[],"reviews":[null,{"boundActionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":null,"status":"done"}],"boundPlanRevisionId":null,"boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:6>","revision":1,"verdict":"accept"},null],"status":"completed","workId":"guided-work-<sha:1>"},"operationIdentity":{"id":"call-disposition","kind":"mutation_call","mutationCallId":"call-disposition","requestSha256":"<sha:52>"},"recordSha256":"<sha:57>","schema":"butler.btcc-project-work-disposition.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-review-<sha:14>.md
 ---
@@ -2843,7 +2908,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:10>"
 ---
 
-{"boundResultSequence":0,"operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:38>"},"recordSha256":"<sha:54>","review":{"boundPlanRevisionId":"guided-plan-<sha:11>","boundResultRefs":[],"corrections":["Pick a date"],"createdAt":"<ts>","originTurnId":"turn-3","reviewRevisionId":"guided-review-<sha:14>","revision":1,"subject":"plan","summary":"Needs a date","verdict":"revise"},"schema":"butler.btcc-project-work-review.v1","workId":"guided-work-<sha:10>"}
+{"boundResultSequence":0,"operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:39>"},"recordSha256":"<sha:58>","review":{"boundPlanRevisionId":"guided-plan-<sha:11>","boundResultRefs":[],"corrections":["Pick a date"],"createdAt":"<ts>","originTurnId":"turn-3","reviewRevisionId":"guided-review-<sha:14>","revision":1,"subject":"plan","summary":"Needs a date","verdict":"revise"},"schema":"butler.btcc-project-work-review.v1","workId":"guided-work-<sha:10>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/references/guided-review-<sha:6>.md
 ---
@@ -2858,7 +2923,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 parentId: "guided-work-<sha:1>"
 ---
 
-{"boundResultSequence":0,"operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:40>"},"recordSha256":"<sha:55>","review":{"boundActionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"boundResultRefs":[],"corrections":[],"createdAt":"<ts>","originTurnId":"turn-1","reviewRevisionId":"guided-review-<sha:6>","revision":1,"subject":"result","summary":"Looks right","verdict":"accept"},"schema":"butler.btcc-project-work-review.v1","workId":"guided-work-<sha:1>"}
+{"boundResultSequence":0,"operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:44>"},"recordSha256":"<sha:59>","review":{"boundActionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"boundResultRefs":[],"corrections":[],"createdAt":"<ts>","originTurnId":"turn-1","reviewRevisionId":"guided-review-<sha:6>","revision":1,"subject":"result","summary":"Looks right","verdict":"accept"},"schema":"butler.btcc-project-work-review.v1","workId":"guided-work-<sha:1>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/work/guided-work-<sha:10>/work.md
 ---
@@ -2872,7 +2937,7 @@ updatedAt: "<ts>"
 spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 ---
 
-{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"allowedNextStages":["review"],"bindingRefs":[{"bindingRevisionId":"guided-binding-<sha:15>","revision":1,"turnId":"turn-3"}],"checkpointResultSequence":0,"checkpointRevision":3,"createdAt":"<ts>","currentPlanRevisionId":"guided-plan-<sha:11>","currentStage":"planning","dispositionRevision":0,"latestCheckpointRevisionId":"guided-checkpoint-<sha:13>","latestPlanReviewRevisionId":"guided-review-<sha:14>","materialFingerprint":"<sha:56>","materialSnapshot":{"actionProgress":[{"actionKey":"announce","note":null,"status":"blocked"}],"currentPlan":{"actions":[{"actionKey":"announce","dependencyKeys":[],"description":"Announce it"}],"checks":[],"createdAt":"<ts>","governingRefs":[],"objective":"Follow up","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:52>","latestCheckpoint":{"actionProgress":[{"actionKey":"announce","note":null,"status":"blocked"}],"planRevisionId":"guided-plan-<sha:11>","referencedResultRefs":[],"resultSequence":0,"revision":3,"stage":"planning"},"materialFingerprint":"<sha:56>","resultRefs":[],"reviews":[{"boundActionProgress":null,"boundPlanRevisionId":"guided-plan-<sha:11>","boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:14>","revision":1,"verdict":"revise"},null,null],"status":"abandoned","workId":"guided-work-<sha:10>"},"objective":"Follow up","operationIdentity":{"id":"guided-abandonment-<sha:57>","kind":"abandonment","requestSha256":"<sha:58>"},"origin":{"messageId":"message-turn-3","turnId":"turn-3"},"planRevision":1,"resultRefs":[],"resultSequence":0,"reviewRevision":1,"schema":"butler.btcc-project-work.v1","scope":{"appProjectId":"app-demo","ledgerProjectId":"demo"},"sessionHead":true,"sessionId":"session-1","status":"abandoned","updatedAt":"<ts>","workId":"guided-work-<sha:10>"}
+{"actionProgress":[{"actionKey":"announce","note":"Work ended.","status":"skipped"}],"allowedNextStages":["validation"],"bindingRefs":[{"bindingRevisionId":"guided-binding-<sha:16>","revision":1,"turnId":"turn-3"}],"checkpointResultSequence":0,"checkpointRevision":4,"createdAt":"<ts>","currentPlanRevisionId":"guided-plan-<sha:11>","currentStage":"reporting","dispositionRevision":0,"latestCheckpointRevisionId":"guided-checkpoint-<sha:15>","latestPlanReviewRevisionId":"guided-review-<sha:14>","materialFingerprint":"<sha:60>","materialSnapshot":{"actionProgress":[{"actionKey":"announce","note":"Work ended.","status":"skipped"}],"currentPlan":{"actions":[{"actionKey":"announce","dependencyKeys":[],"description":"Announce it"}],"checks":[],"createdAt":"<ts>","governingRefs":[],"objective":"Follow up","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:56>","latestCheckpoint":{"actionProgress":[{"actionKey":"announce","note":"Work ended.","status":"skipped"}],"planRevisionId":"guided-plan-<sha:11>","referencedResultRefs":[],"resultSequence":0,"revision":4,"stage":"reporting"},"materialFingerprint":"<sha:60>","resultRefs":[],"reviews":[{"boundActionProgress":null,"boundPlanRevisionId":"guided-plan-<sha:11>","boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:14>","revision":1,"verdict":"revise"},null,null],"status":"abandoned","workId":"guided-work-<sha:10>"},"objective":"Follow up","operationIdentity":{"id":"guided-abandonment-<sha:41>","kind":"abandonment","requestSha256":"<sha:42>"},"origin":{"messageId":"message-turn-3","turnId":"turn-3"},"planRevision":1,"resultRefs":[],"resultSequence":0,"reviewRevision":1,"schema":"butler.btcc-project-work.v1","scope":{"appProjectId":"app-demo","ledgerProjectId":"demo"},"sessionHead":true,"sessionId":"session-1","status":"abandoned","updatedAt":"<ts>","workId":"guided-work-<sha:10>"}
 <no trailing newline>
 --- file project-ledger/projects/demo/work/guided-work-<sha:1>/work.md
 ---
@@ -2886,28 +2951,28 @@ updatedAt: "<ts>"
 spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
 ---
 
-{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","note":"green","status":"done"}],"allowedNextStages":["planning","execution","review","reporting"],"bindingRefs":[{"bindingRevisionId":"guided-binding-<sha:16>","revision":1,"turnId":"turn-1"}],"checkpointResultSequence":0,"checkpointRevision":6,"createdAt":"<ts>","currentPlanRevisionId":"guided-plan-<sha:2>","currentStage":"validation","dispositionRevision":1,"latestCheckpointRevisionId":"guided-checkpoint-<sha:7>","latestDispositionRevisionId":"guided-disposition-<sha:8>","latestResultReviewRevisionId":"guided-review-<sha:6>","materialFingerprint":"<sha:9>","materialSnapshot":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"currentPlan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:52>","latestCheckpoint":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"planRevisionId":"guided-plan-<sha:2>","referencedResultRefs":[],"resultSequence":0,"revision":6,"stage":"validation"},"materialFingerprint":"<sha:9>","resultRefs":[],"reviews":[null,{"boundActionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":null,"status":"done"}],"boundPlanRevisionId":null,"boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:6>","revision":1,"verdict":"accept"},null],"status":"completed","workId":"guided-work-<sha:1>"},"objective":"Ship the feature safely","operationIdentity":{"id":"call-start-2","kind":"mutation_call","mutationCallId":"call-start-2","requestSha256":"<sha:33>"},"origin":{"messageId":"message-turn-1","turnId":"turn-1"},"planRevision":1,"resultRefs":[],"resultSequence":0,"reviewRevision":1,"schema":"butler.btcc-project-work.v1","scope":{"appProjectId":"app-demo","ledgerProjectId":"demo"},"sessionHead":false,"sessionId":"session-1","status":"completed","updatedAt":"<ts>","workId":"guided-work-<sha:1>"}
+{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","note":"green","status":"done"}],"allowedNextStages":["planning","execution","review","reporting"],"bindingRefs":[{"bindingRevisionId":"guided-binding-<sha:17>","revision":1,"turnId":"turn-1"}],"checkpointResultSequence":0,"checkpointRevision":6,"createdAt":"<ts>","currentPlanRevisionId":"guided-plan-<sha:2>","currentStage":"validation","dispositionRevision":1,"latestCheckpointRevisionId":"guided-checkpoint-<sha:7>","latestDispositionRevisionId":"guided-disposition-<sha:8>","latestResultReviewRevisionId":"guided-review-<sha:6>","materialFingerprint":"<sha:9>","materialSnapshot":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"currentPlan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:56>","latestCheckpoint":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"planRevisionId":"guided-plan-<sha:2>","referencedResultRefs":[],"resultSequence":0,"revision":6,"stage":"validation"},"materialFingerprint":"<sha:9>","resultRefs":[],"reviews":[null,{"boundActionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":null,"status":"done"}],"boundPlanRevisionId":null,"boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:6>","revision":1,"verdict":"accept"},null],"status":"completed","workId":"guided-work-<sha:1>"},"objective":"Ship the feature safely","operationIdentity":{"id":"call-start-2","kind":"mutation_call","mutationCallId":"call-start-2","requestSha256":"<sha:34>"},"origin":{"messageId":"message-turn-1","turnId":"turn-1"},"planRevision":1,"resultRefs":[],"resultSequence":0,"reviewRevision":1,"schema":"butler.btcc-project-work.v1","scope":{"appProjectId":"app-demo","ledgerProjectId":"demo"},"sessionHead":false,"sessionId":"session-1","status":"completed","updatedAt":"<ts>","workId":"guided-work-<sha:1>"}
 <no trailing newline>
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:59>.json
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:61>.json
 {
   "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:59>",
+  "publicationId": "<sha:61>",
   "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:59>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:59>.json",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:61>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:61>.json",
   "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
   "base": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:60>",
+    "sourceSha256": "<sha:62>",
     "sourceFileCount": 1,
-    "storageSha256": "<sha:60>",
+    "storageSha256": "<sha:62>",
     "storageEntryCount": 1,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:61>.md",
-      "references/btcc-project-work-proof-<sha:62>.md",
-      "references/guided-binding-<sha:16>.md",
+      "references/btcc-project-work-proof-<sha:63>.md",
+      "references/btcc-project-work-proof-<sha:64>.md",
+      "references/guided-binding-<sha:17>.md",
       "work/guided-work-<sha:1>/work.md"
     ]
   },
@@ -2915,78 +2980,78 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
   "candidateHead": {
     "schema": "project-ledger.source-head.v2",
     "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:59>",
-    "sourceSha256": "<sha:63>",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:61>",
+    "sourceSha256": "<sha:65>",
     "sourceFileCount": 3,
-    "storageSha256": "<sha:63>",
+    "storageSha256": "<sha:65>",
     "storageEntryCount": 3,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:61>.md",
-      "references/btcc-project-work-proof-<sha:62>.md",
-      "references/guided-binding-<sha:16>.md",
+      "references/btcc-project-work-proof-<sha:63>.md",
+      "references/btcc-project-work-proof-<sha:64>.md",
+      "references/guided-binding-<sha:17>.md",
       "work/guided-work-<sha:1>/work.md"
     ]
   }
 }
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:64>.json
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:66>.json
 {
   "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:64>",
+  "publicationId": "<sha:66>",
   "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:64>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:64>.json",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:66>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:66>.json",
   "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
   "base": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:65>",
+    "sourceSha256": "<sha:67>",
     "sourceFileCount": 1,
-    "storageSha256": "<sha:65>",
+    "storageSha256": "<sha:67>",
     "storageEntryCount": 1,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:66>.md",
-      "references/guided-diagnostic-<sha:20>.md"
+      "references/btcc-project-work-proof-<sha:68>.md",
+      "references/guided-diagnostic-<sha:21>.md"
     ]
   },
   "status": "promoted",
   "candidateHead": {
     "schema": "project-ledger.source-head.v2",
     "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:64>",
-    "sourceSha256": "<sha:67>",
-    "sourceFileCount": 2,
-    "storageSha256": "<sha:67>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:66>.md",
-      "references/guided-diagnostic-<sha:20>.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:68>.json
-{
-  "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:68>",
-  "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:68>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:68>.json",
-  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
-  "base": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:66>",
     "sourceSha256": "<sha:69>",
     "sourceFileCount": 2,
     "storageSha256": "<sha:69>",
     "storageEntryCount": 2,
     "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:68>.md",
+      "references/guided-diagnostic-<sha:21>.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:70>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:70>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:70>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:70>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:71>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:71>",
+    "storageEntryCount": 2,
+    "recordPaths": [
       "plans/guided-plan-<sha:11>.md",
       "project.json",
-      "references/btcc-project-work-proof-<sha:70>.md",
-      "references/btcc-project-work-proof-<sha:71>.md",
       "references/btcc-project-work-proof-<sha:72>.md",
+      "references/btcc-project-work-proof-<sha:73>.md",
+      "references/btcc-project-work-proof-<sha:74>.md",
       "references/guided-checkpoint-<sha:12>.md",
       "work/guided-work-<sha:10>/work.md"
     ]
@@ -2995,46 +3060,46 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
   "candidateHead": {
     "schema": "project-ledger.source-head.v2",
     "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:68>",
-    "sourceSha256": "<sha:73>",
-    "sourceFileCount": 4,
-    "storageSha256": "<sha:73>",
-    "storageEntryCount": 4,
-    "recordPaths": [
-      "plans/guided-plan-<sha:11>.md",
-      "project.json",
-      "references/btcc-project-work-proof-<sha:70>.md",
-      "references/btcc-project-work-proof-<sha:71>.md",
-      "references/btcc-project-work-proof-<sha:72>.md",
-      "references/guided-checkpoint-<sha:12>.md",
-      "work/guided-work-<sha:10>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:74>.json
-{
-  "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:74>",
-  "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:74>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:74>.json",
-  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
-  "base": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:70>",
     "sourceSha256": "<sha:75>",
-    "sourceFileCount": 2,
+    "sourceFileCount": 4,
     "storageSha256": "<sha:75>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "plans/guided-plan-<sha:11>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:72>.md",
+      "references/btcc-project-work-proof-<sha:73>.md",
+      "references/btcc-project-work-proof-<sha:74>.md",
+      "references/guided-checkpoint-<sha:12>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:76>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:76>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:76>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:76>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:77>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:77>",
     "storageEntryCount": 2,
     "recordPaths": [
       "plans/guided-plan-<sha:2>.md",
       "project.json",
-      "references/btcc-project-work-proof-<sha:76>.md",
-      "references/btcc-project-work-proof-<sha:77>.md",
       "references/btcc-project-work-proof-<sha:78>.md",
       "references/btcc-project-work-proof-<sha:79>.md",
+      "references/btcc-project-work-proof-<sha:80>.md",
+      "references/btcc-project-work-proof-<sha:81>.md",
       "references/guided-checkpoint-<sha:3>.md",
-      "references/guided-checkpoint-<sha:19>.md",
+      "references/guided-checkpoint-<sha:20>.md",
       "work/guided-work-<sha:1>/work.md"
     ]
   },
@@ -3042,46 +3107,46 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
   "candidateHead": {
     "schema": "project-ledger.source-head.v2",
     "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:74>",
-    "sourceSha256": "<sha:80>",
-    "sourceFileCount": 5,
-    "storageSha256": "<sha:80>",
-    "storageEntryCount": 5,
-    "recordPaths": [
-      "plans/guided-plan-<sha:2>.md",
-      "project.json",
-      "references/btcc-project-work-proof-<sha:76>.md",
-      "references/btcc-project-work-proof-<sha:77>.md",
-      "references/btcc-project-work-proof-<sha:78>.md",
-      "references/btcc-project-work-proof-<sha:79>.md",
-      "references/guided-checkpoint-<sha:3>.md",
-      "references/guided-checkpoint-<sha:19>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:81>.json
-{
-  "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:81>",
-  "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:81>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:81>.json",
-  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
-  "base": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:76>",
     "sourceSha256": "<sha:82>",
-    "sourceFileCount": 2,
+    "sourceFileCount": 5,
     "storageSha256": "<sha:82>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "plans/guided-plan-<sha:2>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:78>.md",
+      "references/btcc-project-work-proof-<sha:79>.md",
+      "references/btcc-project-work-proof-<sha:80>.md",
+      "references/btcc-project-work-proof-<sha:81>.md",
+      "references/guided-checkpoint-<sha:3>.md",
+      "references/guided-checkpoint-<sha:20>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:83>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:83>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:83>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:83>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:84>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:84>",
     "storageEntryCount": 2,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:83>.md",
-      "references/btcc-project-work-proof-<sha:84>.md",
       "references/btcc-project-work-proof-<sha:85>.md",
       "references/btcc-project-work-proof-<sha:86>.md",
-      "references/guided-checkpoint-<sha:18>.md",
+      "references/btcc-project-work-proof-<sha:87>.md",
+      "references/btcc-project-work-proof-<sha:88>.md",
+      "references/guided-checkpoint-<sha:19>.md",
       "references/guided-checkpoint-<sha:13>.md",
       "references/guided-review-<sha:14>.md",
       "work/guided-work-<sha:10>/work.md"
@@ -3091,94 +3156,94 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
   "candidateHead": {
     "schema": "project-ledger.source-head.v2",
     "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:81>",
-    "sourceSha256": "<sha:87>",
-    "sourceFileCount": 5,
-    "storageSha256": "<sha:87>",
-    "storageEntryCount": 5,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:83>.md",
-      "references/btcc-project-work-proof-<sha:84>.md",
-      "references/btcc-project-work-proof-<sha:85>.md",
-      "references/btcc-project-work-proof-<sha:86>.md",
-      "references/guided-checkpoint-<sha:18>.md",
-      "references/guided-checkpoint-<sha:13>.md",
-      "references/guided-review-<sha:14>.md",
-      "work/guided-work-<sha:10>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:88>.json
-{
-  "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:88>",
-  "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:88>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:88>.json",
-  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
-  "base": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:83>",
     "sourceSha256": "<sha:89>",
-    "sourceFileCount": 2,
-    "storageSha256": "<sha:89>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:90>.md",
-      "references/btcc-project-work-proof-<sha:91>.md",
-      "references/btcc-project-work-proof-<sha:92>.md",
-      "references/btcc-project-work-proof-<sha:93>.md",
-      "references/guided-checkpoint-<sha:5>.md",
-      "references/guided-checkpoint-<sha:17>.md",
-      "references/guided-review-<sha:6>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  },
-  "status": "promoted",
-  "candidateHead": {
-    "schema": "project-ledger.source-head.v2",
-    "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:88>",
-    "sourceSha256": "<sha:94>",
     "sourceFileCount": 5,
-    "storageSha256": "<sha:94>",
+    "storageSha256": "<sha:89>",
     "storageEntryCount": 5,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:90>.md",
-      "references/btcc-project-work-proof-<sha:91>.md",
+      "references/btcc-project-work-proof-<sha:85>.md",
+      "references/btcc-project-work-proof-<sha:86>.md",
+      "references/btcc-project-work-proof-<sha:87>.md",
+      "references/btcc-project-work-proof-<sha:88>.md",
+      "references/guided-checkpoint-<sha:19>.md",
+      "references/guided-checkpoint-<sha:13>.md",
+      "references/guided-review-<sha:14>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:90>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:90>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:90>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:90>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:91>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:91>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
       "references/btcc-project-work-proof-<sha:92>.md",
       "references/btcc-project-work-proof-<sha:93>.md",
+      "references/btcc-project-work-proof-<sha:94>.md",
+      "references/btcc-project-work-proof-<sha:95>.md",
       "references/guided-checkpoint-<sha:5>.md",
-      "references/guided-checkpoint-<sha:17>.md",
+      "references/guided-checkpoint-<sha:18>.md",
+      "references/guided-review-<sha:6>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "status": "promoted",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v2",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:90>",
+    "sourceSha256": "<sha:96>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:96>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:92>.md",
+      "references/btcc-project-work-proof-<sha:93>.md",
+      "references/btcc-project-work-proof-<sha:94>.md",
+      "references/btcc-project-work-proof-<sha:95>.md",
+      "references/guided-checkpoint-<sha:5>.md",
+      "references/guided-checkpoint-<sha:18>.md",
       "references/guided-review-<sha:6>.md",
       "work/guided-work-<sha:1>/work.md"
     ]
   }
 }
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:95>.json
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:97>.json
 {
   "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:95>",
+  "publicationId": "<sha:97>",
   "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:95>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:95>.json",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:97>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:97>.json",
   "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
   "base": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:96>",
+    "sourceSha256": "<sha:98>",
     "sourceFileCount": 2,
-    "storageSha256": "<sha:96>",
+    "storageSha256": "<sha:98>",
     "storageEntryCount": 2,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:97>.md",
-      "references/btcc-project-work-proof-<sha:98>.md",
       "references/btcc-project-work-proof-<sha:99>.md",
-      "references/guided-binding-<sha:15>.md",
+      "references/btcc-project-work-proof-<sha:100>.md",
+      "references/btcc-project-work-proof-<sha:101>.md",
+      "references/guided-binding-<sha:16>.md",
       "work/guided-work-<sha:10>/work.md",
       "work/guided-work-<sha:1>/work.md"
     ]
@@ -3187,42 +3252,42 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
   "candidateHead": {
     "schema": "project-ledger.source-head.v2",
     "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:95>",
-    "sourceSha256": "<sha:100>",
-    "sourceFileCount": 4,
-    "storageSha256": "<sha:100>",
-    "storageEntryCount": 4,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:97>.md",
-      "references/btcc-project-work-proof-<sha:98>.md",
-      "references/btcc-project-work-proof-<sha:99>.md",
-      "references/guided-binding-<sha:15>.md",
-      "work/guided-work-<sha:10>/work.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:101>.json
-{
-  "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:101>",
-  "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:101>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:101>.json",
-  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
-  "base": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:97>",
     "sourceSha256": "<sha:102>",
-    "sourceFileCount": 2,
+    "sourceFileCount": 4,
     "storageSha256": "<sha:102>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:99>.md",
+      "references/btcc-project-work-proof-<sha:100>.md",
+      "references/btcc-project-work-proof-<sha:101>.md",
+      "references/guided-binding-<sha:16>.md",
+      "work/guided-work-<sha:10>/work.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:103>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:103>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:103>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:103>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:104>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:104>",
     "storageEntryCount": 2,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:103>.md",
-      "references/btcc-project-work-proof-<sha:104>.md",
       "references/btcc-project-work-proof-<sha:105>.md",
+      "references/btcc-project-work-proof-<sha:106>.md",
+      "references/btcc-project-work-proof-<sha:107>.md",
       "references/guided-checkpoint-<sha:7>.md",
       "references/guided-disposition-<sha:8>.md",
       "work/guided-work-<sha:1>/work.md"
@@ -3232,127 +3297,133 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
   "candidateHead": {
     "schema": "project-ledger.source-head.v2",
     "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:101>",
-    "sourceSha256": "<sha:106>",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:103>",
+    "sourceSha256": "<sha:108>",
     "sourceFileCount": 4,
-    "storageSha256": "<sha:106>",
+    "storageSha256": "<sha:108>",
     "storageEntryCount": 4,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:103>.md",
-      "references/btcc-project-work-proof-<sha:104>.md",
       "references/btcc-project-work-proof-<sha:105>.md",
+      "references/btcc-project-work-proof-<sha:106>.md",
+      "references/btcc-project-work-proof-<sha:107>.md",
       "references/guided-checkpoint-<sha:7>.md",
       "references/guided-disposition-<sha:8>.md",
       "work/guided-work-<sha:1>/work.md"
     ]
   }
 }
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:107>.json
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:109>.json
 {
   "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:107>",
+  "publicationId": "<sha:109>",
   "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:107>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:107>.json",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:109>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:109>.json",
   "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
   "base": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:108>",
+    "sourceSha256": "<sha:110>",
     "sourceFileCount": 2,
-    "storageSha256": "<sha:108>",
+    "storageSha256": "<sha:110>",
     "storageEntryCount": 2,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:109>.md",
-      "references/btcc-project-work-proof-<sha:110>.md",
-      "references/guided-checkpoint-<sha:4>.md",
-      "work/guided-work-<sha:1>/work.md"
+      "references/btcc-project-work-proof-<sha:111>.md",
+      "references/btcc-project-work-proof-<sha:112>.md",
+      "references/guided-checkpoint-<sha:15>.md",
+      "work/guided-work-<sha:10>/work.md"
     ]
   },
   "status": "promoted",
   "candidateHead": {
     "schema": "project-ledger.source-head.v2",
     "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:107>",
-    "sourceSha256": "<sha:111>",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:109>",
+    "sourceSha256": "<sha:113>",
     "sourceFileCount": 3,
-    "storageSha256": "<sha:111>",
+    "storageSha256": "<sha:113>",
     "storageEntryCount": 3,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:109>.md",
-      "references/btcc-project-work-proof-<sha:110>.md",
-      "references/guided-checkpoint-<sha:4>.md",
-      "work/guided-work-<sha:1>/work.md"
+      "references/btcc-project-work-proof-<sha:111>.md",
+      "references/btcc-project-work-proof-<sha:112>.md",
+      "references/guided-checkpoint-<sha:15>.md",
+      "work/guided-work-<sha:10>/work.md"
     ]
   }
 }
---- file runtime/btcc-project-ledger-effects-v2/journals/<sha:112>.json
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:114>.json
 {
   "schema": "project-ledger.publication-transaction.v1",
-  "publicationId": "<sha:112>",
+  "publicationId": "<sha:114>",
   "canonicalRoot": "$DATA/project-ledger/projects/demo",
-  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:112>",
-  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:112>.json",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:114>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:114>.json",
   "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
   "base": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:113>",
-    "sourceFileCount": 2,
-    "storageSha256": "<sha:113>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:114>.md",
-      "work/guided-work-<sha:10>/work.md"
-    ]
-  },
-  "status": "promoted",
-  "candidateHead": {
-    "schema": "project-ledger.source-head.v2",
-    "storageAuthority": "project-ledger-record-set-v1",
-    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:112>",
     "sourceSha256": "<sha:115>",
     "sourceFileCount": 2,
     "storageSha256": "<sha:115>",
     "storageEntryCount": 2,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:114>.md",
-      "work/guided-work-<sha:10>/work.md"
+      "references/btcc-project-work-proof-<sha:116>.md",
+      "references/btcc-project-work-proof-<sha:117>.md",
+      "references/guided-checkpoint-<sha:4>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "status": "promoted",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v2",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:114>",
+    "sourceSha256": "<sha:118>",
+    "sourceFileCount": 3,
+    "storageSha256": "<sha:118>",
+    "storageEntryCount": 3,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:116>.md",
+      "references/btcc-project-work-proof-<sha:117>.md",
+      "references/guided-checkpoint-<sha:4>.md",
+      "work/guided-work-<sha:1>/work.md"
     ]
   }
 }
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:116>.json
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:119>.json
 {
   "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
   "ledgerProjectId": "demo",
   "ledgerRoot": "$DATA/project-ledger/projects/demo",
   "operationIdentity": {
     "kind": "abandonment",
-    "id": "guided-abandonment-<sha:57>"
+    "id": "guided-abandonment-<sha:41>"
   },
-  "occurrenceId": "<sha:116>",
+  "occurrenceId": "<sha:119>",
   "status": "pending",
   "attempts": [
     {
       "number": 1,
       "status": "admitted",
-      "requestSha256": "<sha:58>",
-      "publicationId": "<sha:112>",
+      "requestSha256": "<sha:42>",
+      "publicationId": "<sha:109>",
       "expectedBase": {
         "schema": "butler.btcc-project-ledger-head.v2",
         "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:113>",
+        "sourceSha256": "<sha:110>",
         "sourceFileCount": 2,
-        "storageSha256": "<sha:113>",
+        "storageSha256": "<sha:110>",
         "storageEntryCount": 2,
         "recordPaths": [
           "project.json",
-          "references/btcc-project-work-proof-<sha:114>.md",
+          "references/btcc-project-work-proof-<sha:111>.md",
+          "references/btcc-project-work-proof-<sha:112>.md",
+          "references/guided-checkpoint-<sha:15>.md",
           "work/guided-work-<sha:10>/work.md"
         ]
       },
@@ -3363,127 +3434,26 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
           "parentId": null,
           "state": "present",
-          "rawRecordSha256": "<sha:117>"
-        },
-        {
-          "id": "btcc-project-work-proof-<sha:114>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:114>.md",
-          "parentId": null,
-          "state": "absent"
-        }
-      ]
-    }
-  ]
-}
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:118>.json
-{
-  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
-  "ledgerProjectId": "demo",
-  "ledgerRoot": "$DATA/project-ledger/projects/demo",
-  "operationIdentity": {
-    "kind": "closeout_diagnostic",
-    "id": "guided-diagnostic-<sha:20>"
-  },
-  "occurrenceId": "<sha:118>",
-  "status": "pending",
-  "attempts": [
-    {
-      "number": 1,
-      "status": "admitted",
-      "requestSha256": "<sha:50>",
-      "publicationId": "<sha:64>",
-      "expectedBase": {
-        "schema": "butler.btcc-project-ledger-head.v2",
-        "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:65>",
-        "sourceFileCount": 1,
-        "storageSha256": "<sha:65>",
-        "storageEntryCount": 1,
-        "recordPaths": [
-          "project.json",
-          "references/btcc-project-work-proof-<sha:66>.md",
-          "references/guided-diagnostic-<sha:20>.md"
-        ]
-      },
-      "targetPreconditions": [
-        {
-          "id": "guided-diagnostic-<sha:20>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:20>.md",
-          "parentId": "guided-work-<sha:1>",
-          "state": "absent"
-        },
-        {
-          "id": "btcc-project-work-proof-<sha:66>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:66>.md",
-          "parentId": null,
-          "state": "absent"
-        }
-      ]
-    }
-  ]
-}
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:119>.json
-{
-  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
-  "ledgerProjectId": "demo",
-  "ledgerRoot": "$DATA/project-ledger/projects/demo",
-  "operationIdentity": {
-    "kind": "mutation_call",
-    "id": "call-checkpoint"
-  },
-  "occurrenceId": "<sha:119>",
-  "status": "pending",
-  "attempts": [
-    {
-      "number": 1,
-      "status": "admitted",
-      "requestSha256": "<sha:45>",
-      "publicationId": "<sha:107>",
-      "expectedBase": {
-        "schema": "butler.btcc-project-ledger-head.v2",
-        "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:108>",
-        "sourceFileCount": 2,
-        "storageSha256": "<sha:108>",
-        "storageEntryCount": 2,
-        "recordPaths": [
-          "project.json",
-          "references/btcc-project-work-proof-<sha:109>.md",
-          "references/btcc-project-work-proof-<sha:110>.md",
-          "references/guided-checkpoint-<sha:4>.md",
-          "work/guided-work-<sha:1>/work.md"
-        ]
-      },
-      "targetPreconditions": [
-        {
-          "id": "guided-work-<sha:1>",
-          "kind": "work",
-          "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
-          "parentId": null,
-          "state": "present",
           "rawRecordSha256": "<sha:120>"
         },
         {
-          "id": "guided-checkpoint-<sha:4>",
+          "id": "guided-checkpoint-<sha:15>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md",
-          "parentId": "guided-work-<sha:1>",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:15>.md",
+          "parentId": "guided-work-<sha:10>",
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:110>",
+          "id": "btcc-project-work-proof-<sha:111>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:110>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:111>.md",
           "parentId": null,
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:109>",
+          "id": "btcc-project-work-proof-<sha:112>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:109>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:112>.md",
           "parentId": null,
           "state": "absent"
         }
@@ -3497,8 +3467,8 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
   "ledgerProjectId": "demo",
   "ledgerRoot": "$DATA/project-ledger/projects/demo",
   "operationIdentity": {
-    "kind": "mutation_call",
-    "id": "call-disposition"
+    "kind": "closeout_diagnostic",
+    "id": "guided-diagnostic-<sha:21>"
   },
   "occurrenceId": "<sha:121>",
   "status": "pending",
@@ -3506,20 +3476,135 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     {
       "number": 1,
       "status": "admitted",
-      "requestSha256": "<sha:48>",
-      "publicationId": "<sha:101>",
+      "requestSha256": "<sha:54>",
+      "publicationId": "<sha:66>",
       "expectedBase": {
         "schema": "butler.btcc-project-ledger-head.v2",
         "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:102>",
+        "sourceSha256": "<sha:67>",
+        "sourceFileCount": 1,
+        "storageSha256": "<sha:67>",
+        "storageEntryCount": 1,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:68>.md",
+          "references/guided-diagnostic-<sha:21>.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-diagnostic-<sha:21>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:21>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:68>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:68>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:122>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-checkpoint"
+  },
+  "occurrenceId": "<sha:122>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:49>",
+      "publicationId": "<sha:114>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v2",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:115>",
         "sourceFileCount": 2,
-        "storageSha256": "<sha:102>",
+        "storageSha256": "<sha:115>",
         "storageEntryCount": 2,
         "recordPaths": [
           "project.json",
-          "references/btcc-project-work-proof-<sha:103>.md",
-          "references/btcc-project-work-proof-<sha:104>.md",
+          "references/btcc-project-work-proof-<sha:116>.md",
+          "references/btcc-project-work-proof-<sha:117>.md",
+          "references/guided-checkpoint-<sha:4>.md",
+          "work/guided-work-<sha:1>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:1>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:123>"
+        },
+        {
+          "id": "guided-checkpoint-<sha:4>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:117>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:117>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:116>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:116>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:124>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-disposition"
+  },
+  "occurrenceId": "<sha:124>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:52>",
+      "publicationId": "<sha:103>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v2",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:104>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:104>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "project.json",
           "references/btcc-project-work-proof-<sha:105>.md",
+          "references/btcc-project-work-proof-<sha:106>.md",
+          "references/btcc-project-work-proof-<sha:107>.md",
           "references/guided-checkpoint-<sha:7>.md",
           "references/guided-disposition-<sha:8>.md",
           "work/guided-work-<sha:1>/work.md"
@@ -3532,7 +3617,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
           "parentId": null,
           "state": "present",
-          "rawRecordSha256": "<sha:122>"
+          "rawRecordSha256": "<sha:125>"
         },
         {
           "id": "guided-disposition-<sha:8>",
@@ -3549,9 +3634,16 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:104>",
+          "id": "btcc-project-work-proof-<sha:106>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:104>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:106>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:107>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:107>.md",
           "parentId": null,
           "state": "absent"
         },
@@ -3561,19 +3653,12 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:105>.md",
           "parentId": null,
           "state": "absent"
-        },
-        {
-          "id": "btcc-project-work-proof-<sha:103>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:103>.md",
-          "parentId": null,
-          "state": "absent"
         }
       ]
     }
   ]
 }
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:123>.json
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:126>.json
 {
   "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
   "ledgerProjectId": "demo",
@@ -3582,30 +3667,30 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     "kind": "mutation_call",
     "id": "call-plan"
   },
-  "occurrenceId": "<sha:123>",
+  "occurrenceId": "<sha:126>",
   "status": "pending",
   "attempts": [
     {
       "number": 1,
       "status": "admitted",
-      "requestSha256": "<sha:31>",
-      "publicationId": "<sha:74>",
+      "requestSha256": "<sha:32>",
+      "publicationId": "<sha:76>",
       "expectedBase": {
         "schema": "butler.btcc-project-ledger-head.v2",
         "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:75>",
+        "sourceSha256": "<sha:77>",
         "sourceFileCount": 2,
-        "storageSha256": "<sha:75>",
+        "storageSha256": "<sha:77>",
         "storageEntryCount": 2,
         "recordPaths": [
           "plans/guided-plan-<sha:2>.md",
           "project.json",
-          "references/btcc-project-work-proof-<sha:76>.md",
-          "references/btcc-project-work-proof-<sha:77>.md",
           "references/btcc-project-work-proof-<sha:78>.md",
           "references/btcc-project-work-proof-<sha:79>.md",
+          "references/btcc-project-work-proof-<sha:80>.md",
+          "references/btcc-project-work-proof-<sha:81>.md",
           "references/guided-checkpoint-<sha:3>.md",
-          "references/guided-checkpoint-<sha:19>.md",
+          "references/guided-checkpoint-<sha:20>.md",
           "work/guided-work-<sha:1>/work.md"
         ]
       },
@@ -3616,7 +3701,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
           "parentId": null,
           "state": "present",
-          "rawRecordSha256": "<sha:124>"
+          "rawRecordSha256": "<sha:127>"
         },
         {
           "id": "guided-plan-<sha:2>",
@@ -3626,9 +3711,9 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "guided-checkpoint-<sha:19>",
+          "id": "guided-checkpoint-<sha:20>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:20>.md",
           "parentId": "guided-work-<sha:1>",
           "state": "absent"
         },
@@ -3640,16 +3725,9 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:76>",
+          "id": "btcc-project-work-proof-<sha:78>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:76>.md",
-          "parentId": null,
-          "state": "absent"
-        },
-        {
-          "id": "btcc-project-work-proof-<sha:77>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:77>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:78>.md",
           "parentId": null,
           "state": "absent"
         },
@@ -3661,9 +3739,16 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:78>",
+          "id": "btcc-project-work-proof-<sha:81>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:78>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:81>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:80>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:80>.md",
           "parentId": null,
           "state": "absent"
         }
@@ -3671,7 +3756,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     }
   ]
 }
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:125>.json
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:128>.json
 {
   "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
   "ledgerProjectId": "demo",
@@ -3680,27 +3765,27 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     "kind": "mutation_call",
     "id": "call-plan-2"
   },
-  "occurrenceId": "<sha:125>",
+  "occurrenceId": "<sha:128>",
   "status": "pending",
   "attempts": [
     {
       "number": 1,
       "status": "admitted",
-      "requestSha256": "<sha:29>",
-      "publicationId": "<sha:68>",
+      "requestSha256": "<sha:30>",
+      "publicationId": "<sha:70>",
       "expectedBase": {
         "schema": "butler.btcc-project-ledger-head.v2",
         "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:69>",
+        "sourceSha256": "<sha:71>",
         "sourceFileCount": 2,
-        "storageSha256": "<sha:69>",
+        "storageSha256": "<sha:71>",
         "storageEntryCount": 2,
         "recordPaths": [
           "plans/guided-plan-<sha:11>.md",
           "project.json",
-          "references/btcc-project-work-proof-<sha:70>.md",
-          "references/btcc-project-work-proof-<sha:71>.md",
           "references/btcc-project-work-proof-<sha:72>.md",
+          "references/btcc-project-work-proof-<sha:73>.md",
+          "references/btcc-project-work-proof-<sha:74>.md",
           "references/guided-checkpoint-<sha:12>.md",
           "work/guided-work-<sha:10>/work.md"
         ]
@@ -3712,7 +3797,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
           "parentId": null,
           "state": "present",
-          "rawRecordSha256": "<sha:126>"
+          "rawRecordSha256": "<sha:129>"
         },
         {
           "id": "guided-plan-<sha:11>",
@@ -3729,23 +3814,23 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
+          "id": "btcc-project-work-proof-<sha:74>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:74>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:73>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:73>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
           "id": "btcc-project-work-proof-<sha:72>",
           "kind": "reference",
           "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:72>.md",
-          "parentId": null,
-          "state": "absent"
-        },
-        {
-          "id": "btcc-project-work-proof-<sha:71>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:71>.md",
-          "parentId": null,
-          "state": "absent"
-        },
-        {
-          "id": "btcc-project-work-proof-<sha:70>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:70>.md",
           "parentId": null,
           "state": "absent"
         }
@@ -3753,7 +3838,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     }
   ]
 }
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:127>.json
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:130>.json
 {
   "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
   "ledgerProjectId": "demo",
@@ -3762,29 +3847,29 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     "kind": "mutation_call",
     "id": "call-review"
   },
-  "occurrenceId": "<sha:127>",
+  "occurrenceId": "<sha:130>",
   "status": "pending",
   "attempts": [
     {
       "number": 1,
       "status": "admitted",
-      "requestSha256": "<sha:40>",
-      "publicationId": "<sha:88>",
+      "requestSha256": "<sha:44>",
+      "publicationId": "<sha:90>",
       "expectedBase": {
         "schema": "butler.btcc-project-ledger-head.v2",
         "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:89>",
+        "sourceSha256": "<sha:91>",
         "sourceFileCount": 2,
-        "storageSha256": "<sha:89>",
+        "storageSha256": "<sha:91>",
         "storageEntryCount": 2,
         "recordPaths": [
           "project.json",
-          "references/btcc-project-work-proof-<sha:90>.md",
-          "references/btcc-project-work-proof-<sha:91>.md",
           "references/btcc-project-work-proof-<sha:92>.md",
           "references/btcc-project-work-proof-<sha:93>.md",
+          "references/btcc-project-work-proof-<sha:94>.md",
+          "references/btcc-project-work-proof-<sha:95>.md",
           "references/guided-checkpoint-<sha:5>.md",
-          "references/guided-checkpoint-<sha:17>.md",
+          "references/guided-checkpoint-<sha:18>.md",
           "references/guided-review-<sha:6>.md",
           "work/guided-work-<sha:1>/work.md"
         ]
@@ -3796,12 +3881,12 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
           "parentId": null,
           "state": "present",
-          "rawRecordSha256": "<sha:128>"
+          "rawRecordSha256": "<sha:131>"
         },
         {
-          "id": "guided-checkpoint-<sha:17>",
+          "id": "guided-checkpoint-<sha:18>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:17>.md",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md",
           "parentId": "guided-work-<sha:1>",
           "state": "absent"
         },
@@ -3820,20 +3905,6 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:90>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:90>.md",
-          "parentId": null,
-          "state": "absent"
-        },
-        {
-          "id": "btcc-project-work-proof-<sha:91>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:91>.md",
-          "parentId": null,
-          "state": "absent"
-        },
-        {
           "id": "btcc-project-work-proof-<sha:92>",
           "kind": "reference",
           "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:92>.md",
@@ -3846,12 +3917,26 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:93>.md",
           "parentId": null,
           "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:94>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:94>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:95>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:95>.md",
+          "parentId": null,
+          "state": "absent"
         }
       ]
     }
   ]
 }
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:129>.json
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:132>.json
 {
   "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
   "ledgerProjectId": "demo",
@@ -3860,28 +3945,28 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     "kind": "mutation_call",
     "id": "call-review-2"
   },
-  "occurrenceId": "<sha:129>",
+  "occurrenceId": "<sha:132>",
   "status": "pending",
   "attempts": [
     {
       "number": 1,
       "status": "admitted",
-      "requestSha256": "<sha:38>",
-      "publicationId": "<sha:81>",
+      "requestSha256": "<sha:39>",
+      "publicationId": "<sha:83>",
       "expectedBase": {
         "schema": "butler.btcc-project-ledger-head.v2",
         "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:82>",
+        "sourceSha256": "<sha:84>",
         "sourceFileCount": 2,
-        "storageSha256": "<sha:82>",
+        "storageSha256": "<sha:84>",
         "storageEntryCount": 2,
         "recordPaths": [
           "project.json",
-          "references/btcc-project-work-proof-<sha:83>.md",
-          "references/btcc-project-work-proof-<sha:84>.md",
           "references/btcc-project-work-proof-<sha:85>.md",
           "references/btcc-project-work-proof-<sha:86>.md",
-          "references/guided-checkpoint-<sha:18>.md",
+          "references/btcc-project-work-proof-<sha:87>.md",
+          "references/btcc-project-work-proof-<sha:88>.md",
+          "references/guided-checkpoint-<sha:19>.md",
           "references/guided-checkpoint-<sha:13>.md",
           "references/guided-review-<sha:14>.md",
           "work/guided-work-<sha:10>/work.md"
@@ -3894,12 +3979,12 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
           "parentId": null,
           "state": "present",
-          "rawRecordSha256": "<sha:130>"
+          "rawRecordSha256": "<sha:133>"
         },
         {
-          "id": "guided-checkpoint-<sha:18>",
+          "id": "guided-checkpoint-<sha:19>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md",
           "parentId": "guided-work-<sha:10>",
           "state": "absent"
         },
@@ -3918,13 +4003,6 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:83>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:83>.md",
-          "parentId": null,
-          "state": "absent"
-        },
-        {
           "id": "btcc-project-work-proof-<sha:85>",
           "kind": "reference",
           "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:85>.md",
@@ -3932,9 +4010,9 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:84>",
+          "id": "btcc-project-work-proof-<sha:87>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:84>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:87>.md",
           "parentId": null,
           "state": "absent"
         },
@@ -3944,12 +4022,19 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:86>.md",
           "parentId": null,
           "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:88>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:88>.md",
+          "parentId": null,
+          "state": "absent"
         }
       ]
     }
   ]
 }
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:131>.json
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:134>.json
 {
   "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
   "ledgerProjectId": "demo",
@@ -3958,26 +4043,26 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     "kind": "mutation_call",
     "id": "call-start"
   },
-  "occurrenceId": "<sha:131>",
+  "occurrenceId": "<sha:134>",
   "status": "pending",
   "attempts": [
     {
       "number": 1,
       "status": "admitted",
-      "requestSha256": "<sha:35>",
-      "publicationId": "<sha:59>",
+      "requestSha256": "<sha:36>",
+      "publicationId": "<sha:61>",
       "expectedBase": {
         "schema": "butler.btcc-project-ledger-head.v2",
         "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:60>",
+        "sourceSha256": "<sha:62>",
         "sourceFileCount": 1,
-        "storageSha256": "<sha:60>",
+        "storageSha256": "<sha:62>",
         "storageEntryCount": 1,
         "recordPaths": [
           "project.json",
-          "references/btcc-project-work-proof-<sha:61>.md",
-          "references/btcc-project-work-proof-<sha:62>.md",
-          "references/guided-binding-<sha:16>.md",
+          "references/btcc-project-work-proof-<sha:63>.md",
+          "references/btcc-project-work-proof-<sha:64>.md",
+          "references/guided-binding-<sha:17>.md",
           "work/guided-work-<sha:1>/work.md"
         ]
       },
@@ -3990,23 +4075,23 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "guided-binding-<sha:16>",
+          "id": "guided-binding-<sha:17>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md",
+          "path": "project-ledger/projects/demo/references/guided-binding-<sha:17>.md",
           "parentId": "guided-work-<sha:1>",
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:62>",
+          "id": "btcc-project-work-proof-<sha:64>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:62>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:64>.md",
           "parentId": null,
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:61>",
+          "id": "btcc-project-work-proof-<sha:63>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:61>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:63>.md",
           "parentId": null,
           "state": "absent"
         }
@@ -4014,7 +4099,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     }
   ]
 }
---- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:132>.json
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:135>.json
 {
   "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
   "ledgerProjectId": "demo",
@@ -4023,27 +4108,27 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     "kind": "mutation_call",
     "id": "call-start-2"
   },
-  "occurrenceId": "<sha:132>",
+  "occurrenceId": "<sha:135>",
   "status": "pending",
   "attempts": [
     {
       "number": 1,
       "status": "admitted",
-      "requestSha256": "<sha:33>",
-      "publicationId": "<sha:95>",
+      "requestSha256": "<sha:34>",
+      "publicationId": "<sha:97>",
       "expectedBase": {
         "schema": "butler.btcc-project-ledger-head.v2",
         "projectRoot": "$DATA/project-ledger/projects/demo",
-        "sourceSha256": "<sha:96>",
+        "sourceSha256": "<sha:98>",
         "sourceFileCount": 2,
-        "storageSha256": "<sha:96>",
+        "storageSha256": "<sha:98>",
         "storageEntryCount": 2,
         "recordPaths": [
           "project.json",
-          "references/btcc-project-work-proof-<sha:97>.md",
-          "references/btcc-project-work-proof-<sha:98>.md",
           "references/btcc-project-work-proof-<sha:99>.md",
-          "references/guided-binding-<sha:15>.md",
+          "references/btcc-project-work-proof-<sha:100>.md",
+          "references/btcc-project-work-proof-<sha:101>.md",
+          "references/guided-binding-<sha:16>.md",
           "work/guided-work-<sha:10>/work.md",
           "work/guided-work-<sha:1>/work.md"
         ]
@@ -4055,7 +4140,7 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
           "parentId": null,
           "state": "present",
-          "rawRecordSha256": "<sha:133>"
+          "rawRecordSha256": "<sha:136>"
         },
         {
           "id": "guided-work-<sha:10>",
@@ -4065,16 +4150,23 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "state": "absent"
         },
         {
-          "id": "guided-binding-<sha:15>",
+          "id": "guided-binding-<sha:16>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/guided-binding-<sha:15>.md",
+          "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md",
           "parentId": "guided-work-<sha:10>",
           "state": "absent"
         },
         {
-          "id": "btcc-project-work-proof-<sha:98>",
+          "id": "btcc-project-work-proof-<sha:100>",
           "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:98>.md",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:100>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:101>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:101>.md",
           "parentId": null,
           "state": "absent"
         },
@@ -4084,101 +4176,72 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
           "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:99>.md",
           "parentId": null,
           "state": "absent"
-        },
-        {
-          "id": "btcc-project-work-proof-<sha:97>",
-          "kind": "reference",
-          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:97>.md",
-          "parentId": null,
-          "state": "absent"
         }
       ]
     }
   ]
 }
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:59>.json
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:61>.json
 {
   "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:131>",
+  "occurrenceId": "<sha:134>",
   "attemptNumber": 1,
-  "requestSha256": "<sha:35>",
-  "publicationId": "<sha:59>",
+  "requestSha256": "<sha:36>",
+  "publicationId": "<sha:61>",
   "status": "observed",
   "baseHead": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:60>",
+    "sourceSha256": "<sha:62>",
     "sourceFileCount": 1,
-    "storageSha256": "<sha:60>",
+    "storageSha256": "<sha:62>",
     "storageEntryCount": 1,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:61>.md",
-      "references/btcc-project-work-proof-<sha:62>.md",
-      "references/guided-binding-<sha:16>.md",
+      "references/btcc-project-work-proof-<sha:63>.md",
+      "references/btcc-project-work-proof-<sha:64>.md",
+      "references/guided-binding-<sha:17>.md",
       "work/guided-work-<sha:1>/work.md"
     ]
   },
   "candidateHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:63>",
-    "sourceFileCount": 3,
-    "storageSha256": "<sha:63>",
-    "storageEntryCount": 3,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:61>.md",
-      "references/btcc-project-work-proof-<sha:62>.md",
-      "references/guided-binding-<sha:16>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:64>.json
-{
-  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:118>",
-  "attemptNumber": 1,
-  "requestSha256": "<sha:50>",
-  "publicationId": "<sha:64>",
-  "status": "observed",
-  "baseHead": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
     "sourceSha256": "<sha:65>",
-    "sourceFileCount": 1,
+    "sourceFileCount": 3,
     "storageSha256": "<sha:65>",
-    "storageEntryCount": 1,
+    "storageEntryCount": 3,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:66>.md",
-      "references/guided-diagnostic-<sha:20>.md"
-    ]
-  },
-  "candidateHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:67>",
-    "sourceFileCount": 2,
-    "storageSha256": "<sha:67>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:66>.md",
-      "references/guided-diagnostic-<sha:20>.md"
+      "references/btcc-project-work-proof-<sha:63>.md",
+      "references/btcc-project-work-proof-<sha:64>.md",
+      "references/guided-binding-<sha:17>.md",
+      "work/guided-work-<sha:1>/work.md"
     ]
   }
 }
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:68>.json
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:66>.json
 {
   "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:125>",
+  "occurrenceId": "<sha:121>",
   "attemptNumber": 1,
-  "requestSha256": "<sha:29>",
-  "publicationId": "<sha:68>",
+  "requestSha256": "<sha:54>",
+  "publicationId": "<sha:66>",
   "status": "observed",
   "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:67>",
+    "sourceFileCount": 1,
+    "storageSha256": "<sha:67>",
+    "storageEntryCount": 1,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:68>.md",
+      "references/guided-diagnostic-<sha:21>.md"
+    ]
+  },
+  "candidateHead": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
     "sourceSha256": "<sha:69>",
@@ -4186,11 +4249,33 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     "storageSha256": "<sha:69>",
     "storageEntryCount": 2,
     "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:68>.md",
+      "references/guided-diagnostic-<sha:21>.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:70>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:128>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:30>",
+  "publicationId": "<sha:70>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:71>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:71>",
+    "storageEntryCount": 2,
+    "recordPaths": [
       "plans/guided-plan-<sha:11>.md",
       "project.json",
-      "references/btcc-project-work-proof-<sha:70>.md",
-      "references/btcc-project-work-proof-<sha:71>.md",
       "references/btcc-project-work-proof-<sha:72>.md",
+      "references/btcc-project-work-proof-<sha:73>.md",
+      "references/btcc-project-work-proof-<sha:74>.md",
       "references/guided-checkpoint-<sha:12>.md",
       "work/guided-work-<sha:10>/work.md"
     ]
@@ -4198,309 +4283,296 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
   "candidateHead": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:73>",
+    "sourceSha256": "<sha:75>",
     "sourceFileCount": 4,
-    "storageSha256": "<sha:73>",
+    "storageSha256": "<sha:75>",
     "storageEntryCount": 4,
     "recordPaths": [
       "plans/guided-plan-<sha:11>.md",
       "project.json",
-      "references/btcc-project-work-proof-<sha:70>.md",
-      "references/btcc-project-work-proof-<sha:71>.md",
       "references/btcc-project-work-proof-<sha:72>.md",
+      "references/btcc-project-work-proof-<sha:73>.md",
+      "references/btcc-project-work-proof-<sha:74>.md",
       "references/guided-checkpoint-<sha:12>.md",
       "work/guided-work-<sha:10>/work.md"
     ]
   }
 }
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:74>.json
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:76>.json
 {
   "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:123>",
+  "occurrenceId": "<sha:126>",
   "attemptNumber": 1,
-  "requestSha256": "<sha:31>",
-  "publicationId": "<sha:74>",
+  "requestSha256": "<sha:32>",
+  "publicationId": "<sha:76>",
   "status": "observed",
   "baseHead": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:75>",
+    "sourceSha256": "<sha:77>",
     "sourceFileCount": 2,
-    "storageSha256": "<sha:75>",
+    "storageSha256": "<sha:77>",
     "storageEntryCount": 2,
     "recordPaths": [
       "plans/guided-plan-<sha:2>.md",
       "project.json",
-      "references/btcc-project-work-proof-<sha:76>.md",
-      "references/btcc-project-work-proof-<sha:77>.md",
       "references/btcc-project-work-proof-<sha:78>.md",
       "references/btcc-project-work-proof-<sha:79>.md",
+      "references/btcc-project-work-proof-<sha:80>.md",
+      "references/btcc-project-work-proof-<sha:81>.md",
       "references/guided-checkpoint-<sha:3>.md",
-      "references/guided-checkpoint-<sha:19>.md",
+      "references/guided-checkpoint-<sha:20>.md",
       "work/guided-work-<sha:1>/work.md"
     ]
   },
   "candidateHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:80>",
-    "sourceFileCount": 5,
-    "storageSha256": "<sha:80>",
-    "storageEntryCount": 5,
-    "recordPaths": [
-      "plans/guided-plan-<sha:2>.md",
-      "project.json",
-      "references/btcc-project-work-proof-<sha:76>.md",
-      "references/btcc-project-work-proof-<sha:77>.md",
-      "references/btcc-project-work-proof-<sha:78>.md",
-      "references/btcc-project-work-proof-<sha:79>.md",
-      "references/guided-checkpoint-<sha:3>.md",
-      "references/guided-checkpoint-<sha:19>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:81>.json
-{
-  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:129>",
-  "attemptNumber": 1,
-  "requestSha256": "<sha:38>",
-  "publicationId": "<sha:81>",
-  "status": "observed",
-  "baseHead": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
     "sourceSha256": "<sha:82>",
-    "sourceFileCount": 2,
+    "sourceFileCount": 5,
     "storageSha256": "<sha:82>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:83>.md",
-      "references/btcc-project-work-proof-<sha:84>.md",
-      "references/btcc-project-work-proof-<sha:85>.md",
-      "references/btcc-project-work-proof-<sha:86>.md",
-      "references/guided-checkpoint-<sha:18>.md",
-      "references/guided-checkpoint-<sha:13>.md",
-      "references/guided-review-<sha:14>.md",
-      "work/guided-work-<sha:10>/work.md"
-    ]
-  },
-  "candidateHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:87>",
-    "sourceFileCount": 5,
-    "storageSha256": "<sha:87>",
     "storageEntryCount": 5,
     "recordPaths": [
+      "plans/guided-plan-<sha:2>.md",
       "project.json",
-      "references/btcc-project-work-proof-<sha:83>.md",
-      "references/btcc-project-work-proof-<sha:84>.md",
-      "references/btcc-project-work-proof-<sha:85>.md",
-      "references/btcc-project-work-proof-<sha:86>.md",
-      "references/guided-checkpoint-<sha:18>.md",
-      "references/guided-checkpoint-<sha:13>.md",
-      "references/guided-review-<sha:14>.md",
-      "work/guided-work-<sha:10>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:88>.json
-{
-  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:127>",
-  "attemptNumber": 1,
-  "requestSha256": "<sha:40>",
-  "publicationId": "<sha:88>",
-  "status": "observed",
-  "baseHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:89>",
-    "sourceFileCount": 2,
-    "storageSha256": "<sha:89>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:90>.md",
-      "references/btcc-project-work-proof-<sha:91>.md",
-      "references/btcc-project-work-proof-<sha:92>.md",
-      "references/btcc-project-work-proof-<sha:93>.md",
-      "references/guided-checkpoint-<sha:5>.md",
-      "references/guided-checkpoint-<sha:17>.md",
-      "references/guided-review-<sha:6>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  },
-  "candidateHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:94>",
-    "sourceFileCount": 5,
-    "storageSha256": "<sha:94>",
-    "storageEntryCount": 5,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:90>.md",
-      "references/btcc-project-work-proof-<sha:91>.md",
-      "references/btcc-project-work-proof-<sha:92>.md",
-      "references/btcc-project-work-proof-<sha:93>.md",
-      "references/guided-checkpoint-<sha:5>.md",
-      "references/guided-checkpoint-<sha:17>.md",
-      "references/guided-review-<sha:6>.md",
+      "references/btcc-project-work-proof-<sha:78>.md",
+      "references/btcc-project-work-proof-<sha:79>.md",
+      "references/btcc-project-work-proof-<sha:80>.md",
+      "references/btcc-project-work-proof-<sha:81>.md",
+      "references/guided-checkpoint-<sha:3>.md",
+      "references/guided-checkpoint-<sha:20>.md",
       "work/guided-work-<sha:1>/work.md"
     ]
   }
 }
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:95>.json
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:83>.json
 {
   "schema": "butler.btcc-project-ledger-publication-receipt.v1",
   "occurrenceId": "<sha:132>",
   "attemptNumber": 1,
-  "requestSha256": "<sha:33>",
-  "publicationId": "<sha:95>",
+  "requestSha256": "<sha:39>",
+  "publicationId": "<sha:83>",
   "status": "observed",
   "baseHead": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:96>",
+    "sourceSha256": "<sha:84>",
     "sourceFileCount": 2,
-    "storageSha256": "<sha:96>",
+    "storageSha256": "<sha:84>",
     "storageEntryCount": 2,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:97>.md",
-      "references/btcc-project-work-proof-<sha:98>.md",
-      "references/btcc-project-work-proof-<sha:99>.md",
-      "references/guided-binding-<sha:15>.md",
-      "work/guided-work-<sha:10>/work.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  },
-  "candidateHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:100>",
-    "sourceFileCount": 4,
-    "storageSha256": "<sha:100>",
-    "storageEntryCount": 4,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:97>.md",
-      "references/btcc-project-work-proof-<sha:98>.md",
-      "references/btcc-project-work-proof-<sha:99>.md",
-      "references/guided-binding-<sha:15>.md",
-      "work/guided-work-<sha:10>/work.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:101>.json
-{
-  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:121>",
-  "attemptNumber": 1,
-  "requestSha256": "<sha:48>",
-  "publicationId": "<sha:101>",
-  "status": "observed",
-  "baseHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:102>",
-    "sourceFileCount": 2,
-    "storageSha256": "<sha:102>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:103>.md",
-      "references/btcc-project-work-proof-<sha:104>.md",
-      "references/btcc-project-work-proof-<sha:105>.md",
-      "references/guided-checkpoint-<sha:7>.md",
-      "references/guided-disposition-<sha:8>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  },
-  "candidateHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:106>",
-    "sourceFileCount": 4,
-    "storageSha256": "<sha:106>",
-    "storageEntryCount": 4,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:103>.md",
-      "references/btcc-project-work-proof-<sha:104>.md",
-      "references/btcc-project-work-proof-<sha:105>.md",
-      "references/guided-checkpoint-<sha:7>.md",
-      "references/guided-disposition-<sha:8>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:107>.json
-{
-  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:119>",
-  "attemptNumber": 1,
-  "requestSha256": "<sha:45>",
-  "publicationId": "<sha:107>",
-  "status": "observed",
-  "baseHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:108>",
-    "sourceFileCount": 2,
-    "storageSha256": "<sha:108>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:109>.md",
-      "references/btcc-project-work-proof-<sha:110>.md",
-      "references/guided-checkpoint-<sha:4>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  },
-  "candidateHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:111>",
-    "sourceFileCount": 3,
-    "storageSha256": "<sha:111>",
-    "storageEntryCount": 3,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:109>.md",
-      "references/btcc-project-work-proof-<sha:110>.md",
-      "references/guided-checkpoint-<sha:4>.md",
-      "work/guided-work-<sha:1>/work.md"
-    ]
-  }
-}
---- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:112>.json
-{
-  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
-  "occurrenceId": "<sha:116>",
-  "attemptNumber": 1,
-  "requestSha256": "<sha:58>",
-  "publicationId": "<sha:112>",
-  "status": "observed",
-  "baseHead": {
-    "schema": "butler.btcc-project-ledger-head.v2",
-    "projectRoot": "$DATA/project-ledger/projects/demo",
-    "sourceSha256": "<sha:113>",
-    "sourceFileCount": 2,
-    "storageSha256": "<sha:113>",
-    "storageEntryCount": 2,
-    "recordPaths": [
-      "project.json",
-      "references/btcc-project-work-proof-<sha:114>.md",
+      "references/btcc-project-work-proof-<sha:85>.md",
+      "references/btcc-project-work-proof-<sha:86>.md",
+      "references/btcc-project-work-proof-<sha:87>.md",
+      "references/btcc-project-work-proof-<sha:88>.md",
+      "references/guided-checkpoint-<sha:19>.md",
+      "references/guided-checkpoint-<sha:13>.md",
+      "references/guided-review-<sha:14>.md",
       "work/guided-work-<sha:10>/work.md"
     ]
   },
   "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:89>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:89>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:85>.md",
+      "references/btcc-project-work-proof-<sha:86>.md",
+      "references/btcc-project-work-proof-<sha:87>.md",
+      "references/btcc-project-work-proof-<sha:88>.md",
+      "references/guided-checkpoint-<sha:19>.md",
+      "references/guided-checkpoint-<sha:13>.md",
+      "references/guided-review-<sha:14>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:90>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:130>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:44>",
+  "publicationId": "<sha:90>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:91>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:91>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:92>.md",
+      "references/btcc-project-work-proof-<sha:93>.md",
+      "references/btcc-project-work-proof-<sha:94>.md",
+      "references/btcc-project-work-proof-<sha:95>.md",
+      "references/guided-checkpoint-<sha:5>.md",
+      "references/guided-checkpoint-<sha:18>.md",
+      "references/guided-review-<sha:6>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:96>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:96>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:92>.md",
+      "references/btcc-project-work-proof-<sha:93>.md",
+      "references/btcc-project-work-proof-<sha:94>.md",
+      "references/btcc-project-work-proof-<sha:95>.md",
+      "references/guided-checkpoint-<sha:5>.md",
+      "references/guided-checkpoint-<sha:18>.md",
+      "references/guided-review-<sha:6>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:97>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:135>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:34>",
+  "publicationId": "<sha:97>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:98>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:98>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:99>.md",
+      "references/btcc-project-work-proof-<sha:100>.md",
+      "references/btcc-project-work-proof-<sha:101>.md",
+      "references/guided-binding-<sha:16>.md",
+      "work/guided-work-<sha:10>/work.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:102>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:102>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:99>.md",
+      "references/btcc-project-work-proof-<sha:100>.md",
+      "references/btcc-project-work-proof-<sha:101>.md",
+      "references/guided-binding-<sha:16>.md",
+      "work/guided-work-<sha:10>/work.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:103>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:124>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:52>",
+  "publicationId": "<sha:103>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:104>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:104>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:105>.md",
+      "references/btcc-project-work-proof-<sha:106>.md",
+      "references/btcc-project-work-proof-<sha:107>.md",
+      "references/guided-checkpoint-<sha:7>.md",
+      "references/guided-disposition-<sha:8>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:108>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:108>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:105>.md",
+      "references/btcc-project-work-proof-<sha:106>.md",
+      "references/btcc-project-work-proof-<sha:107>.md",
+      "references/guided-checkpoint-<sha:7>.md",
+      "references/guided-disposition-<sha:8>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:109>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:119>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:42>",
+  "publicationId": "<sha:109>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:110>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:110>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:111>.md",
+      "references/btcc-project-work-proof-<sha:112>.md",
+      "references/guided-checkpoint-<sha:15>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:113>",
+    "sourceFileCount": 3,
+    "storageSha256": "<sha:113>",
+    "storageEntryCount": 3,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:111>.md",
+      "references/btcc-project-work-proof-<sha:112>.md",
+      "references/guided-checkpoint-<sha:15>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:114>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:122>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:49>",
+  "publicationId": "<sha:114>",
+  "status": "observed",
+  "baseHead": {
     "schema": "butler.btcc-project-ledger-head.v2",
     "projectRoot": "$DATA/project-ledger/projects/demo",
     "sourceSha256": "<sha:115>",
@@ -4509,8 +4581,25 @@ spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
     "storageEntryCount": 2,
     "recordPaths": [
       "project.json",
-      "references/btcc-project-work-proof-<sha:114>.md",
-      "work/guided-work-<sha:10>/work.md"
+      "references/btcc-project-work-proof-<sha:116>.md",
+      "references/btcc-project-work-proof-<sha:117>.md",
+      "references/guided-checkpoint-<sha:4>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v2",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:118>",
+    "sourceFileCount": 3,
+    "storageSha256": "<sha:118>",
+    "storageEntryCount": 3,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:116>.md",
+      "references/btcc-project-work-proof-<sha:117>.md",
+      "references/guided-checkpoint-<sha:4>.md",
+      "work/guided-work-<sha:1>/work.md"
     ]
   }
 }

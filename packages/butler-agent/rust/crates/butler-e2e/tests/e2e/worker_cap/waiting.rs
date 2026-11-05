@@ -79,18 +79,23 @@ async fn a_finished_workers_continuation_still_needs_a_result() -> Result<(), Ha
     script.steer.store(true, Ordering::SeqCst);
     script.followup.store(true, Ordering::SeqCst);
     script.hold_continuation.store(true, Ordering::SeqCst);
+    script.hold_worker_report.store(true, Ordering::SeqCst);
     s.gw.say("general", "Verify batch red").await?;
     let (steward, rows) = workers(&s, "general", 3).await?;
     started(&script, 2).await;
     script.release("red-0");
-    closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
-    started(&script, 3).await;
+    tokio::time::timeout(Duration::from_secs(30), script.worker_reporting.wait())
+        .await
+        .expect("the Worker is still running while its follow-up is queued");
     script.direction.add_permits(1);
     let deadline = Instant::now() + Duration::from_secs(30);
     while !script.steered.load(Ordering::SeqCst) {
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    script.worker_report_release.add_permits(1);
+    closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
+    started(&script, 3).await;
     script.release("red-1");
     tokio::time::timeout(Duration::from_secs(30), script.continued.wait())
         .await

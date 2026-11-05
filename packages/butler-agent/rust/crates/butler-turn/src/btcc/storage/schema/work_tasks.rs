@@ -57,10 +57,12 @@ CREATE TRIGGER IF NOT EXISTS work_task_owner_stop AFTER UPDATE OF semantic_state
 WHEN NEW.semantic_state='cancelled' BEGIN
  UPDATE btcc_work_tasks SET status='cancelled',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
  WHERE work_id IN (SELECT work_id FROM btcc_guided_turn_work_bindings WHERE turn_id=NEW.turn_id AND is_current=1)
- AND status IN ('pending','active');
+ AND status IN ('pending','active')
+ AND NOT EXISTS (SELECT 1 FROM btcc_subsession_endings e WHERE e.session_id=NEW.session_id);
  UPDATE btcc_work_tasks SET status='cancelled',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
  WHERE relation_id IN (SELECT relation_id FROM btcc_session_relations WHERE child_session_id=NEW.session_id)
- AND status IN ('pending','active');
+ AND status IN ('pending','active')
+ AND NOT EXISTS (SELECT 1 FROM btcc_subsession_endings e WHERE e.session_id=NEW.session_id);
 END;
 CREATE TRIGGER IF NOT EXISTS work_task_owner_delivery AFTER UPDATE OF semantic_state ON btcc_turns
 WHEN NEW.semantic_state='delivered' BEGIN

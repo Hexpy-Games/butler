@@ -28,6 +28,7 @@ pub const WAITING_WORKERS_SQL: &str = "SELECT d.relation_id FROM btcc_session_re
  LEFT JOIN btcc_subsession_directions i ON i.instruction_id=(
    SELECT instruction_id FROM btcc_subsession_directions WHERE relation_id=d.relation_id AND status='pending' ORDER BY revision LIMIT 1)
  WHERE r.parent_session_id=?1 AND r.activity_role='worker' AND d.dispatch_state='pending'
+ AND NOT EXISTS (SELECT 1 FROM btcc_subsession_endings e WHERE e.session_id=r.child_session_id)
  AND NOT EXISTS (SELECT 1 FROM btcc_work_tasks own WHERE own.relation_id=d.relation_id
    AND (own.status NOT IN ('pending','active') OR EXISTS (
      SELECT 1 FROM btcc_work_task_waits dep JOIN btcc_work_tasks prior ON prior.task_id=dep.after_task_id
@@ -109,6 +110,12 @@ impl SqliteSubsessionRepository {
             let running: u64 = tx.query_row(RUNNING_WORKERS_SQL, [&parent], |r| r.get(0))
                 .map_err(StorageError::sqlite)?;
             if running >= cap { return Ok(None); }
+            let ending: bool = tx.query_row(concat!("SELECT EXISTS(", endings::ENDING_SCOPE_SQL!("?1"), ")"), [&parent], |r| r.get(0))
+                .map_err(StorageError::sqlite)?;
+            if ending {
+                tx.commit().map_err(StorageError::sqlite)?;
+                return Ok(None);
+            }
             loop {
                 let next: Option<String> = tx.query_row(WAITING_WORKERS_SQL, [&parent], |r| r.get(0))
                     .optional().map_err(StorageError::sqlite)?;

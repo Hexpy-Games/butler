@@ -15,6 +15,7 @@ mod project_handoff;
 mod project_settlement;
 mod projection;
 mod result_delivery;
+mod resume;
 mod selection;
 mod subtasks;
 mod task_direction;
@@ -41,6 +42,7 @@ use crate::btcc::{
 };
 use crate::workspace::{OwnOptional, SessionBindingStore, SessionRole, UpsertSessionBinding};
 
+mod endings;
 mod lifecycle;
 mod packets;
 
@@ -278,19 +280,20 @@ impl SubsessionService {
                 source: "btcc-subsession-delegation".into(),
             },
         };
-        let stored = self
-            .create_and_dispatch(ids.create(
-                delegation::Parent {
-                    session_id: request.parent_session_id,
-                    turn_id: request.parent_turn_id,
-                    anchor_message_id: request.anchor_message_id,
-                },
-                title,
-                packet,
-                intent,
-                now,
-            ))
-            .await?;
+        let previous = request.previous_relation_id.clone();
+        let mut create = ids.create(
+            delegation::Parent {
+                session_id: request.parent_session_id,
+                turn_id: request.parent_turn_id,
+                anchor_message_id: request.anchor_message_id,
+            },
+            title,
+            packet,
+            intent,
+            now,
+        );
+        create.previous_relation_id = previous;
+        let stored = Box::pin(self.create_and_dispatch(create)).await?;
         Ok(delegation_output(&stored))
     }
 

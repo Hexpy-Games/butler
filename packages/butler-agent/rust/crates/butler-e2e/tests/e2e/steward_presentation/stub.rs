@@ -44,6 +44,7 @@ pub(crate) struct Script {
     pub item_release: Notify,
     /// A direction's own turn plans and closes the fresh Work it runs on.
     pub plan_continuation: AtomicBool,
+    pub immediate_direction: AtomicBool,
     pub continuation_blocked: AtomicBool,
     pub continuation_step: AtomicUsize,
     pub second_direction_step: AtomicUsize,

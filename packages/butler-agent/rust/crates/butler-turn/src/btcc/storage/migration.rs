@@ -53,6 +53,19 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     migrate_guided_work_review_constraints(&transaction)?;
     restore_stable_work_objectives(&transaction)?;
     monitoring::indexes(&transaction)?;
+    if ensure_column(
+        &transaction,
+        "btcc_subsession_directions",
+        "immediate",
+        "INTEGER NOT NULL DEFAULT 1",
+    )? {
+        transaction.execute_batch("UPDATE btcc_session_relations SET activity_terminal=0 WHERE activity_terminal=1 AND EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=btcc_session_relations.child_session_id AND t.semantic_state IN ('admitted','delivery_committed'))")?;
+        transaction.execute_batch("UPDATE btcc_session_relations SET activity_terminal=0 WHERE activity_terminal=1 AND (SELECT status FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id ORDER BY x.rowid DESC LIMIT 1)='blocked'")?;
+        transaction.execute_batch("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE status='pending' AND relation_id IN (SELECT relation_id FROM btcc_session_relations WHERE activity_terminal=1)")?;
+    }
+    transaction.execute_batch("DROP INDEX IF EXISTS idx_btcc_subsession_direction_recovery; DROP TABLE IF EXISTS btcc_subsession_end_members; DROP TABLE IF EXISTS btcc_subsession_stop_outbox;")?;
+    transaction.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_live_session_turn ON btcc_turns(session_id) WHERE semantic_state IN ('admitted','delivery_committed');
+        CREATE INDEX IF NOT EXISTS idx_btcc_live_session_work ON btcc_guided_works(session_id) WHERE status IN ('open','blocked');")?;
     subsession::ensure_worker_admission(&transaction)?;
     // Add after the legacy column/table migrations; idle polls must never walk
     // terminal history, including databases opened before suspension_reason existed.
@@ -77,6 +90,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
         "TEXT NOT NULL DEFAULT '[]'",
     )?;
     transaction.execute_batch(super::schema::task_graphs::SCHEMA)?;
+    transaction.execute_batch("DROP TRIGGER IF EXISTS work_task_owner_stop;")?;
     transaction.execute_batch(super::schema::work_tasks::SCHEMA)?;
     transaction.execute_batch(super::schema::pending_asks::SCHEMA)?;
     // Keep the Work rebuild last: it validates all FKs before restoring deferral,
@@ -87,7 +101,8 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
 
 fn ensure_restart_handoff_columns(db: &Connection) -> rusqlite::Result<()> {
     ensure_column(db, "btcc_guided_effects", "handoff_state", "TEXT")?;
-    ensure_column(db, "btcc_guided_effects", "handoff_error", "TEXT")
+    ensure_column(db, "btcc_guided_effects", "handoff_error", "TEXT")?;
+    Ok(())
 }
 
 fn ensure_turn_columns(db: &Connection) -> rusqlite::Result<()> {
@@ -413,13 +428,14 @@ pub(super) fn ensure_column(
     table: &str,
     column: &str,
     declaration: &str,
-) -> rusqlite::Result<()> {
+) -> rusqlite::Result<bool> {
     if column_exists(db, table, column)? {
-        return Ok(());
+        return Ok(false);
     }
     db.execute_batch(&format!(
         "ALTER TABLE {table} ADD COLUMN {column} {declaration}"
-    ))
+    ))?;
+    Ok(true)
 }
 
 pub(super) fn column_exists(db: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {

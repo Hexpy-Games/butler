@@ -165,6 +165,7 @@ pub(super) async fn steer(
                 .and_then(Value::as_str)
                 .map(str::to_owned),
             instruction: instruction.into(),
+            immediate: call.arguments.get("mode").and_then(Value::as_str) == Some("steer"),
             child_role: if call.name == ToolName::SteerWorker {
                 butler_turn::workspace::SessionRole::Worker
             } else {
