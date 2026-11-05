@@ -6,23 +6,26 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    AnimationExt as _, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    KeyBinding, SharedString, Window, actions, canvas, div, prelude::*, px,
+    AnimationExt as _, App, AppContext as _, Context, Entity, EntityInputHandler as _,
+    EventEmitter, FocusHandle, Focusable, KeyBinding, SharedString, Window, actions, canvas, div,
+    prelude::*, px,
 };
 
-use crate::ui::glass;
-use crate::ui::input::{InputColors, TextInput};
+use gpui_elements::editable_text::actions::DEFAULT_INPUT_CONTEXT;
+use gpui_elements::editable_text::{EditableTextState, StringStorage};
+
 use crate::ui::motion::Hover;
 use crate::ui::source::{AuthorityCard, ComposerContext, Decision, RequestRef};
-use crate::ui::theme::{Theme, alpha};
+use crate::ui::theme::Theme;
 use crate::ui::widgets::HasHover;
+use crate::ui::{field, glass};
 
 actions!(composer, [Submit]);
 
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
-        KeyBinding::new("enter", Submit, Some("TextInput")),
-        KeyBinding::new("secondary-enter", Submit, Some("TextInput")),
+        KeyBinding::new("enter", Submit, Some(DEFAULT_INPUT_CONTEXT)),
+        KeyBinding::new("secondary-enter", Submit, Some(DEFAULT_INPUT_CONTEXT)),
     ]
 }
 
@@ -36,7 +39,9 @@ pub(crate) enum ComposerEvent {
 }
 
 pub(crate) struct Composer {
-    input: Entity<TextInput>,
+    input: Entity<EditableTextState>,
+    /// The field's placeholder (new chat or follow-up).
+    placeholder: &'static str,
     theme: Theme,
     engaged: bool,
     /// The open chat's turn is running (the send button stops it).
@@ -64,26 +69,18 @@ impl HasHover for Composer {
     }
 }
 
-pub(crate) fn input_colors(t: &Theme) -> InputColors {
-    InputColors {
-        text: t.text,
-        placeholder: t.placeholder,
-        selection: alpha(t.accent, 0.28),
-    }
-}
-
 impl Composer {
     pub(crate) fn new(theme: Theme, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let colors = input_colors(&theme);
         let placeholder = theme.strings.placeholder;
-        let input = cx.new(|cx| TextInput::new(placeholder, colors, cx));
-        let handle = input.read(cx).focus_handle.clone();
+        let input = cx.new(|cx| EditableTextState::new(StringStorage::default(), cx));
+        let handle = input.read(cx).focus_handle(cx);
         let blur = cx.on_blur(&handle, window, |this: &mut Self, _, cx| {
             this.engaged = false;
             cx.notify();
         });
         Self {
             input,
+            placeholder,
             theme,
             engaged: false,
             streaming: false,
@@ -97,21 +94,18 @@ impl Composer {
         }
     }
 
-    pub(crate) fn set_theme(&mut self, theme: Theme, cx: &mut Context<Self>) {
-        let colors = input_colors(&theme);
-        self.input.update(cx, |i, _| i.set_colors(colors));
+    pub(crate) fn set_theme(&mut self, theme: Theme, _cx: &mut Context<Self>) {
         self.theme = theme;
     }
 
     /// The placeholder for a new chat or a follow-up.
-    pub(crate) fn set_new_chat(&mut self, new_chat: bool, cx: &mut Context<Self>) {
+    pub(crate) fn set_new_chat(&mut self, new_chat: bool, _cx: &mut Context<Self>) {
         let s = self.theme.strings;
-        let p = if new_chat {
+        self.placeholder = if new_chat {
             s.placeholder
         } else {
             s.placeholder_follow_up
         };
-        self.input.update(cx, |i, _| i.set_placeholder(p));
     }
 
     pub(crate) fn engage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -119,7 +113,7 @@ impl Composer {
             return;
         }
         self.engaged = true;
-        let handle = self.input.read(cx).focus_handle.clone();
+        let handle = self.input.read(cx).focus_handle(cx);
         window.focus(&handle, cx);
         cx.notify();
     }
@@ -133,14 +127,23 @@ impl Composer {
         self.height.clone()
     }
 
+    /// An IME composition is in progress in the field.
+    fn composing(&self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.input
+            .update(cx, |i, cx| i.marked_text_range(window, cx).is_some())
+    }
+
     fn submit(&mut self, _: &Submit, window: &mut Window, cx: &mut Context<Self>) {
-        let input = self.input.read(cx);
-        let text = input.text();
-        let blocked = self.disabled.is_some() || self.streaming || input.is_composing();
+        let text = SharedString::from(self.input.read(cx).as_str().to_owned());
+        let blocked = self.disabled.is_some() || self.streaming || self.composing(window, cx);
         if blocked || text.trim().is_empty() {
             return;
         }
-        self.input.update(cx, |i, cx| i.reset(window, cx));
+        self.input.update(cx, |i, cx| {
+            i.emplace("", cx);
+            i.clear_history();
+        });
+        window.invalidate_character_coordinates();
         cx.emit(ComposerEvent::Send(text));
     }
 
@@ -148,13 +151,16 @@ impl Composer {
         if let Some((card, pending)) = self.approval.clone() {
             return vec![approval::panel(self, &card, pending, cx).into_any_element()];
         }
+        let input = field::field("composer-input", &self.input, self.placeholder, &self.theme)
+            .aria_label(self.theme.strings.message_composer);
         let input = if self.engaged {
             div()
                 .px(px(16.))
                 .py(px(12.))
                 .text_size(px(14.))
                 .line_height(px(20.))
-                .child(self.input.clone())
+                .capture_action(field::no_empty_cut(&self.input))
+                .child(input)
                 .with_animation(
                     "body-in",
                     gpui::Animation::new(crate::ui::motion::FAST),
@@ -166,7 +172,8 @@ impl Composer {
             div()
                 .h(px(0.))
                 .overflow_hidden()
-                .child(self.input.clone())
+                .capture_action(field::no_empty_cut(&self.input))
+                .child(input)
                 .into_any_element()
         };
         vec![input, self.toolbar(cx).into_any_element()]
@@ -175,7 +182,7 @@ impl Composer {
 
 impl Focusable for Composer {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        self.input.read(cx).focus_handle.clone()
+        self.input.read(cx).focus_handle(cx)
     }
 }
 
@@ -209,7 +216,7 @@ impl Render for Composer {
             }))
             // useComposerPresentation: a pointer-down anywhere else folds the composer.
             .on_mouse_down_out(cx.listener(|this, _, window, cx| {
-                if this.engaged && !this.input.read(cx).is_composing() {
+                if this.engaged && !this.composing(window, cx) {
                     this.engaged = false;
                     if let Some(f) = &this.shell_focus {
                         window.focus(f, cx);

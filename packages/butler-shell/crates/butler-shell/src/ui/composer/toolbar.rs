@@ -55,7 +55,7 @@ impl Composer {
 
     fn send_button(&self, cx: &mut Context<Self>) -> AnyElement {
         let t = &self.theme;
-        let empty = self.input.read(cx).content.trim().is_empty();
+        let empty = self.input.read(cx).as_str().trim().is_empty();
         let (bg, glyph, size) = if self.streaming {
             let stop = if t.dark {
                 rgba(232, 233, 235, 1.)
@@ -127,15 +127,14 @@ impl Composer {
     /// disabled text colour and no text cursor, and says why on hover.
     fn preview(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &self.theme;
-        let input = self.input.read(cx);
-        let draft = input.text();
+        let draft = SharedString::from(self.input.read(cx).as_str().to_owned());
         let color = match (self.disabled.is_some(), draft.is_empty()) {
             (true, _) => t.text_disabled,
             (false, true) => t.placeholder,
             (false, false) => t.text,
         };
         let line = if draft.is_empty() {
-            input.placeholder.clone()
+            self.placeholder.into()
         } else {
             draft
         };

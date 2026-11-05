@@ -3,17 +3,17 @@
 //! dialog sits over the chat card above a veil (its glass samples, and refracts, the dimmed
 //! content); a click outside closes it, and wheel scrolling over it moves the chat behind.
 use gpui::{
-    AnyElement, AppContext as _, Bounds, Context, Entity, MouseButton, Pixels, ScrollWheelEvent,
-    Window, div, prelude::*, px,
+    AnyElement, AppContext as _, Bounds, Context, Entity, Focusable as _, MouseButton, Pixels,
+    ScrollWheelEvent, Window, div, prelude::*, px,
 };
 
+use gpui_elements::editable_text::{EditableTextState, StringStorage};
+
 use super::Shell;
-use crate::ui::composer::input_colors;
 use crate::ui::dialog::{Activated, Dialog, DialogSpec};
-use crate::ui::glass;
-use crate::ui::input::TextInput;
 use crate::ui::source::{AuthorityCard, Decision};
 use crate::ui::theme::{Theme, alpha};
+use crate::ui::{field, glass};
 
 /// The dialog's bottom sits this far above the composer's top.
 const ABOVE_COMPOSER: f32 = 110.;
@@ -21,7 +21,7 @@ const ABOVE_COMPOSER: f32 = 110.;
 const MAX_INSTRUCTION: usize = 16 * 1024;
 
 /// The dialog body: the request's exact action, then the instruction field.
-fn body(action: gpui::SharedString, input: Entity<TextInput>) -> crate::ui::dialog::Body {
+fn body(action: gpui::SharedString, input: Entity<EditableTextState>) -> crate::ui::dialog::Body {
     Box::new(move |t: &Theme, s: f32| {
         let field = div()
             .mt(px(14. * s))
@@ -33,7 +33,11 @@ fn body(action: gpui::SharedString, input: Entity<TextInput>) -> crate::ui::dial
             .bg(alpha(t.surface, 0.6))
             .text_size(px(14.))
             .line_height(px(20.))
-            .child(input.clone());
+            .capture_action(field::no_empty_cut(&input))
+            .child(
+                field::field("modify-input", &input, t.strings.modify_placeholder, t)
+                    .aria_label(t.strings.modify_placeholder),
+            );
         div()
             .flex()
             .flex_col()
@@ -53,7 +57,7 @@ impl Shell {
     ) {
         let t = self.theme.clone();
         let s = t.strings;
-        let input = cx.new(|cx| TextInput::new(s.modify_placeholder, input_colors(&t), cx));
+        let input = cx.new(|cx| EditableTextState::new(StringStorage::default(), cx));
         let action = card
             .approval
             .as_ref()
@@ -75,7 +79,7 @@ impl Shell {
         let sub = cx.subscribe(
             &dialog,
             move |this: &mut Self, dialog, Activated(key), cx| {
-                let instruction = field.read(cx).text().trim().to_owned();
+                let instruction = field.read(cx).as_str().trim().to_owned();
                 if *key == "submit" {
                     if instruction.is_empty() || instruction.len() > MAX_INSTRUCTION {
                         return;
@@ -88,7 +92,8 @@ impl Shell {
         );
         self.subscriptions.push(sub);
         self.dialog = Some(dialog);
-        window.focus(&input.read(cx).focus_handle.clone(), cx);
+        let handle = input.read(cx).focus_handle(cx);
+        window.focus(&handle, cx);
         cx.notify();
     }
 
