@@ -1,5 +1,6 @@
 //! Butler motion tokens (tokens.css "Linear-crisp" scale) on gpui animations.
-use butler_ds::tokens::{Duration as DsDuration, Ease, Easing, TokenContext};
+use butler_ds::tokens::{Duration as DsDuration, Easing, TokenContext};
+use butler_ds::ui::convert;
 use std::time::Duration;
 
 use gpui::{Hsla, Rgba, SharedString, SpringAnimation, SpringConfig};
@@ -21,51 +22,12 @@ pub(crate) const BASE: Duration =
 
 /// CSS cubic-bezier(x1, y1, x2, y2) solved for y at progress x.
 pub(crate) fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32) -> impl Fn(f32) -> f32 + Clone {
-    move |x: f32| {
-        if x <= 0. {
-            return 0.;
-        }
-        if x >= 1. {
-            return 1.;
-        }
-        let bez = |t: f32, a: f32, b: f32| {
-            let u = 1. - t;
-            3. * u * u * t * a + 3. * u * t * t * b + t * t * t
-        };
-        let (mut lo, mut hi) = (0f32, 1f32);
-        let mut t = x;
-        for _ in 0..24 {
-            let v = bez(t, x1, x2);
-            if (v - x).abs() < 1e-4 {
-                break;
-            }
-            if v < x {
-                lo = t;
-            } else {
-                hi = t;
-            }
-            t = f32::midpoint(lo, hi);
-        }
-        bez(t, y1, y2)
-    }
+    move |x| convert::cubic_bezier(x1, y1, x2, y2, x)
 }
 
 /// --motion-ease-decelerate
 pub(crate) fn decelerate() -> impl Fn(f32) -> f32 + Clone {
-    let ease = TokenContext::DEFAULT.ease(Easing::MotionEaseDecelerate);
-    move |x| match ease {
-        Ease::Bezier([a, b, c, d]) => cubic_bezier(a, b, c, d)(x),
-        Ease::Linear(stops) => {
-            let right = stops.partition_point(|(_, input)| *input <= x);
-            let a = stops[right.saturating_sub(1).min(stops.len() - 1)];
-            let b = stops[right.min(stops.len() - 1)];
-            if a.1 == b.1 {
-                b.0
-            } else {
-                a.0 + (b.0 - a.0) * (x - a.1) / (b.1 - a.1)
-            }
-        }
-    }
+    convert::easing(TokenContext::DEFAULT.ease(Easing::MotionEaseDecelerate))
 }
 
 /// Critically damped springs whose 99% settle time matches a duration token. They keep

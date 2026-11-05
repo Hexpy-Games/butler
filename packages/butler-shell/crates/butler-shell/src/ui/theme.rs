@@ -1,7 +1,8 @@
 //! Butler DS tokens (packages/butler-app/client/ui/src/libs/design-system/tokens.css), light
 //! (`:root`/.theme-light) and dark (.theme-dark), over the native window material.
 use butler_ds::tokens::{Color, FontStack, Length, Shadow, TokenContext};
-use gpui::{BoxShadow, Hsla, Rgba, SharedString, point, px};
+use butler_ds::ui::convert;
+use gpui::{BoxShadow, Hsla, Rgba, SharedString};
 
 use crate::ui::i18n::Strings;
 
@@ -206,23 +207,11 @@ pub(crate) struct Syntax {
 }
 
 fn color(context: &TokenContext, token: Color) -> Hsla {
-    let c = context.color(token);
-    gpui::rgb_to_hsla(Rgba::new(c.r, c.g, c.b, c.a))
+    convert::hsla(context.color(token))
 }
 
 fn shadow(context: &TokenContext) -> BoxShadow {
-    let layer = context.shadow(Shadow::ComposerGlassShadow)[0];
-    let c = layer.color;
-    BoxShadow {
-        color: Rgba::new(c.r, c.g, c.b, c.a).into(),
-        offset: point(
-            px(layer.x.resolve(context.ui_scale, context.viewport)),
-            px(layer.y.resolve(context.ui_scale, context.viewport)),
-        ),
-        blur_radius: px(layer.blur.resolve(context.ui_scale, context.viewport)),
-        spread_radius: px(layer.spread.resolve(context.ui_scale, context.viewport)),
-        inset: layer.inset,
-    }
+    convert::box_shadows(context.shadow(Shadow::ComposerGlassShadow), context).remove(0)
 }
 
 impl Theme {

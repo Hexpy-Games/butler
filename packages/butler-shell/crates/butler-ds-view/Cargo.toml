@@ -1,0 +1,30 @@
+[package]
+name = "butler-ds-view"
+description = "Native DS View: the design-system showcases in gpui (not shipped)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "butler-ds-view"
+path = "src/main.rs"
+
+[features]
+# The headless screenshot harness (`butler-ds-view --shots <dir>`), as in butler-shell-shots.
+shots = ["gpui/test-support", "dep:gpui_wgpu", "dep:image"]
+
+[dependencies]
+butler-ds = { path = "../butler-ds" }
+
+anyhow.workspace = true
+gpui.workspace = true
+# macos-wgpu: glass is drawn by the wgpu renderer (Metal's renderer has no backdrop filter).
+gpui_platform = { workspace = true, features = ["macos-wgpu"] }
+gpui_wgpu = { workspace = true, features = ["test-support"], optional = true }
+image = { version = "0.25.10", default-features = false, features = ["png"], optional = true }
+serde_json = "1"

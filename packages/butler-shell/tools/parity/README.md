@@ -34,3 +34,22 @@ For gpui-to-gpui review, run `parity-diff <dirA> <dirB> <outDir>` directly. Exac
 RGBA differences are counted. Different dimensions and missing pairs are printed;
 matching dimensions produce a PNG overlay on B with magenta differences at 60%
 and grey at 30% elsewhere.
+
+## DS View parity (B1 primitives)
+
+`ds-view.ts` captures the React DS Viewer pages listed in `scenes/ds-view.json`; the native
+side is `butler-ds-view --shots`. It needs the repository's JavaScript dependencies (`bun install`
+at the repository root and in `packages/butler-app/client/ui`, as `run.ts` does for its imports)
+and a Chromium that Playwright can find. Build the static viewer, capture, then render the native
+pages at the React canvas width and diff:
+
+```sh
+export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d) PLAYWRIGHT_BROWSERS_PATH=/path/to/ms-playwright
+(cd packages/butler-app/client/ui && DS_SITE_OUT_DIR=$TMPDIR/ds-site npm run build:ds-site)
+bun packages/butler-shell/tools/parity/ds-view.ts --site $TMPDIR/ds-site --out $TMPDIR/ds-parity
+# <canvas-width> is the "w" of any story in $TMPDIR/ds-parity/react/<size>-<theme>/<page>.layout.json
+butler-ds-view --shots $TMPDIR/ds-parity/gpui/1280x800-light --scale 2 --size 1280x800 \
+  --canvas-width <canvas-width> --full
+parity-diff $TMPDIR/ds-parity/react/1280x800-light $TMPDIR/ds-parity/gpui/1280x800-light \
+  $TMPDIR/ds-parity/diff/1280x800-light
+```

@@ -9,8 +9,6 @@ pub(crate) mod exact_action;
 pub(crate) mod field;
 pub(crate) mod glass;
 pub(crate) mod i18n;
-mod icon_files;
-pub(crate) mod icons_generated;
 pub(crate) mod motion;
 pub(crate) mod shell;
 pub(crate) mod sidebar;
@@ -20,7 +18,7 @@ pub(crate) mod store;
 pub(crate) mod theme;
 pub(crate) mod widgets;
 
-pub(crate) use icons_generated::Icon;
+pub(crate) use butler_ds::ui::Icon;
 
 use std::borrow::Cow;
 
