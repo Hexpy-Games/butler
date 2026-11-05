@@ -168,7 +168,7 @@ impl Shell {
             .on_hover(hover_listener(&spec.key, cx));
         let el = match &click {
             Click::Chat(Some(chat)) => {
-                crate::ui::widgets::anchor(el, format!("sidebar-row-{}", chat.chat.0))
+                crate::ui::widgets::anchor(el, &format!("sidebar-row-{}", chat.chat.0))
             }
             _ => el,
         };

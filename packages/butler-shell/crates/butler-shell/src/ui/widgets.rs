@@ -162,10 +162,10 @@ pub(crate) fn icon_button(
 }
 
 /// Stable geometry selector for the screenshot harness.
-pub(crate) fn anchor<E: InteractiveElement>(el: E, name: impl Into<String>) -> E {
+pub(crate) fn anchor<E: InteractiveElement>(el: E, name: &str) -> E {
     #[cfg(feature = "shots")]
     {
-        el.debug_selector(|| name.into())
+        el.debug_selector(|| name.to_owned())
     }
     #[cfg(not(feature = "shots"))]
     {
