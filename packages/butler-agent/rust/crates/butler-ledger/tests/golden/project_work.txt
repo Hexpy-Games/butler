@@ -574,6 +574,7 @@ Ok(
 Ok(
     Some(
         WorkContext {
+            tasks: [],
             work: WorkView {
                 work_id: "guided-work-<sha:1>",
                 session_id: "session-1",
