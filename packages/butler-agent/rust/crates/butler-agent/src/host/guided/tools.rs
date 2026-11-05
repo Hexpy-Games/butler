@@ -103,6 +103,8 @@ pub(crate) struct GuidedToolBinding {
     pub authority_source_call_id: Option<String>,
     /// Whether anyone can answer an approval (D8) and the starting taint (D5).
     pub turn_guard: TurnGuard,
+    /// Lifecycle hooks, for the calls a tool makes on the model's behalf.
+    pub hooks: Option<Arc<butler_turn::btcc::GuidedHookBinding>>,
 }
 
 impl GuidedToolBinding {
