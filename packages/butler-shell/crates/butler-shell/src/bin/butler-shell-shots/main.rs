@@ -29,6 +29,7 @@ use gpui::{AnyWindowHandle, AppContext as _, HeadlessAppContext, WindowHandle, p
 use ui::i18n::Locale;
 use ui::shell::{Shell, ShellOptions};
 use ui::source::Source;
+use ui::theme::Platform;
 
 fn context() -> anyhow::Result<HeadlessAppContext> {
     let platform = gpui_platform::current_platform(true);
@@ -65,7 +66,11 @@ struct Harness {
 }
 
 impl Harness {
-    fn open(source: Option<Rc<dyn Source>>, dark: bool) -> anyhow::Result<Self> {
+    fn open(
+        source: Option<Rc<dyn Source>>,
+        dark: bool,
+        platform: Platform,
+    ) -> anyhow::Result<Self> {
         let mut cx = context()?;
         let code_font = cx.update(|cx| ui::theme::code_font(&cx.text_system().all_font_names()));
         let window = cx.open_window(size(px(800.), px(720.)), |window, cx| {
@@ -75,6 +80,7 @@ impl Harness {
                 dark: Some(dark),
                 code_font,
                 locale: Locale::Ko,
+                platform,
             };
             cx.new(|cx| Shell::new(options, window, cx))
         })?;
@@ -123,8 +129,8 @@ fn open_chat(
     shell.open_chat(chat, window, cx);
 }
 
-fn connected(dir: &Path, dark: bool, theme: &str) -> anyhow::Result<()> {
-    let mut h = Harness::open(Some(Rc::new(fixture::Fixture)), dark)?;
+fn connected(dir: &Path, dark: bool, theme: &str, platform: Platform) -> anyhow::Result<()> {
+    let mut h = Harness::open(Some(Rc::new(fixture::Fixture)), dark, platform)?;
     h.update(|shell, window, cx| open_chat(shell, fixture::LONG, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-chat"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::APPROVAL, window, cx))?;
@@ -141,18 +147,30 @@ fn connected(dir: &Path, dark: bool, theme: &str) -> anyhow::Result<()> {
     h.shot(dir, &format!("w2-1x-{theme}-new-chat"))
 }
 
-fn disconnected(dir: &Path, dark: bool, theme: &str) -> anyhow::Result<()> {
-    let mut h = Harness::open(None, dark)?;
+fn disconnected(dir: &Path, dark: bool, theme: &str, platform: Platform) -> anyhow::Result<()> {
+    let mut h = Harness::open(None, dark, platform)?;
     h.shot(dir, &format!("w2-1x-{theme}-disconnected"))
 }
 
-fn run(dir: &Path) -> anyhow::Result<()> {
+fn run(dir: &Path, platform: Platform) -> anyhow::Result<()> {
     std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     for (dark, theme) in [(false, "light"), (true, "dark")] {
-        connected(dir, dark, theme)?;
-        disconnected(dir, dark, theme)?;
+        connected(dir, dark, theme, platform)?;
+        disconnected(dir, dark, theme, platform)?;
     }
     Ok(())
+}
+
+fn platform(args: &[std::ffi::OsString]) -> anyhow::Result<Platform> {
+    let Some(index) = args.iter().position(|a| a == "--platform") else {
+        return Ok(Platform::host());
+    };
+    match args.get(index + 1).and_then(|a| a.to_str()) {
+        Some("mac") => Ok(Platform::Mac),
+        Some("windows") => Ok(Platform::Windows),
+        Some("linux") => Ok(Platform::Linux),
+        _ => Err(anyhow!("--platform requires mac|windows|linux")),
+    }
 }
 
 fn main() -> ExitCode {
@@ -166,10 +184,14 @@ fn main() -> ExitCode {
         .find(|p| p[0] == "--data")
         .map(|p| PathBuf::from(&p[1]));
     let dark = args.iter().any(|a| a == "--dark");
-    match dir.and_then(|dir| match data {
-        Some(data) => live::run(&dir, data, dark),
-        None => run(&dir),
-    }) {
+    let result = dir.and_then(|dir| {
+        let platform = platform(&args)?;
+        match data {
+            Some(data) => live::run(&dir, data, dark, platform),
+            None => run(&dir, platform),
+        }
+    });
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("butler-shell-shots: {error:#}");

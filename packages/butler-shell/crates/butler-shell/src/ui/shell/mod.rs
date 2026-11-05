@@ -96,12 +96,18 @@ pub(crate) struct ShellOptions {
     pub(crate) dark: Option<bool>,
     pub(crate) code_font: SharedString,
     pub(crate) locale: Locale,
+    pub(crate) platform: crate::ui::theme::Platform,
 }
 
 impl Shell {
     pub(crate) fn new(options: ShellOptions, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let dark = options.dark.unwrap_or_else(|| system_dark(window));
-        let theme = Theme::new(dark, options.code_font, options.locale.strings());
+        let theme = Theme::new(
+            dark,
+            options.platform,
+            options.code_font,
+            options.locale.strings(),
+        );
         let chat = cx.new(|_| Chat::new(theme.clone()));
         let composer = cx.new(|cx| Composer::new(theme.clone(), window, cx));
         let focus = cx.focus_handle();
@@ -177,7 +183,12 @@ impl Shell {
         if self.theme.dark == dark {
             return;
         }
-        self.theme = Theme::new(dark, self.theme.code_font.clone(), self.theme.strings);
+        self.theme = Theme::new(
+            dark,
+            self.theme.platform,
+            self.theme.code_font.clone(),
+            self.theme.strings,
+        );
         let t = self.theme.clone();
         self.chat.update(cx, |c, cx| {
             c.theme = t.clone();

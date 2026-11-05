@@ -77,9 +77,9 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-vault: one domain; credential stores and private files cross
         // the crate boundary declared in Cargo.toml.
         "vault" => &[],
-        // butler-shell-client: one connection domain; platform dependencies
-        // cross the crate boundary declared in Cargo.toml.
-        "shell_connection" => &[],
+        // butler-shell-client and butler-ds: independent shell leaf domains;
+        // cross-crate dependencies are declared in Cargo.toml.
+        "shell_connection" | "tokens" => &[],
         // butler-e2e: dev-only harness around the built binary; one domain.
         "e2e" | "mail_connector" => &[],
         _ => return None,

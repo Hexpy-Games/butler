@@ -1,10 +1,23 @@
 //! Butler motion tokens (tokens.css "Linear-crisp" scale) on gpui animations.
+use butler_ds::tokens::{Duration as DsDuration, Ease, Easing, TokenContext};
 use std::time::Duration;
 
 use gpui::{Hsla, Rgba, SharedString, SpringAnimation, SpringConfig};
 
-pub(crate) const FAST: Duration = Duration::from_millis(120);
-pub(crate) const BASE: Duration = Duration::from_millis(160);
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "generated CSS durations are nonnegative milliseconds"
+)]
+pub(crate) const FAST: Duration =
+    Duration::from_millis(TokenContext::DEFAULT.duration(DsDuration::MotionFast) as u64);
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "generated CSS durations are nonnegative milliseconds"
+)]
+pub(crate) const BASE: Duration =
+    Duration::from_millis(TokenContext::DEFAULT.duration(DsDuration::MotionBase) as u64);
 
 /// CSS cubic-bezier(x1, y1, x2, y2) solved for y at progress x.
 pub(crate) fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32) -> impl Fn(f32) -> f32 + Clone {
@@ -39,7 +52,20 @@ pub(crate) fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32) -> impl Fn(f32) -
 
 /// --motion-ease-decelerate
 pub(crate) fn decelerate() -> impl Fn(f32) -> f32 + Clone {
-    cubic_bezier(0., 0., 0., 1.)
+    let ease = TokenContext::DEFAULT.ease(Easing::MotionEaseDecelerate);
+    move |x| match ease {
+        Ease::Bezier([a, b, c, d]) => cubic_bezier(a, b, c, d)(x),
+        Ease::Linear(stops) => {
+            let right = stops.partition_point(|(_, input)| *input <= x);
+            let a = stops[right.saturating_sub(1).min(stops.len() - 1)];
+            let b = stops[right.min(stops.len() - 1)];
+            if a.1 == b.1 {
+                b.0
+            } else {
+                a.0 + (b.0 - a.0) * (x - a.1) / (b.1 - a.1)
+            }
+        }
+    }
 }
 
 /// Critically damped springs whose 99% settle time matches a duration token. They keep
@@ -50,15 +76,19 @@ fn critical(settle_ms: f32) -> SpringConfig {
 }
 
 pub(crate) fn spring_fast(on: bool) -> SpringAnimation<f32> {
-    SpringAnimation::new(critical(120.))
-        .to(if on { 1. } else { 0. })
-        .with_epsilon(0.004)
+    SpringAnimation::new(critical(
+        TokenContext::DEFAULT.duration(DsDuration::MotionFast),
+    ))
+    .to(if on { 1. } else { 0. })
+    .with_epsilon(0.004)
 }
 
 pub(crate) fn spring_slow(on: bool) -> SpringAnimation<f32> {
-    SpringAnimation::new(critical(220.))
-        .to(if on { 1. } else { 0. })
-        .with_epsilon(0.002)
+    SpringAnimation::new(critical(
+        TokenContext::DEFAULT.duration(DsDuration::MotionSlow),
+    ))
+    .to(if on { 1. } else { 0. })
+    .with_epsilon(0.002)
 }
 
 pub(crate) fn mix(a: Hsla, b: Hsla, t: f32) -> Hsla {

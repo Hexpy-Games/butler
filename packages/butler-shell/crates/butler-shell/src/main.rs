@@ -47,6 +47,7 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
             dark: None,
             code_font,
             locale,
+            platform: ui::theme::Platform::host(),
         };
         cx.new(|cx| {
             let mut shell = Shell::new(options, window, cx);

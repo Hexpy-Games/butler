@@ -24,6 +24,7 @@ required-features = ["shots"]
 shots = ["gpui/test-support", "dep:gpui_wgpu"]
 
 [dependencies]
+butler-ds = { path = "../butler-ds" }
 butler-shell-client = { path = "../../../butler-agent/rust/crates/butler-shell-client" }
 butler-platform = { path = "../../../butler-agent/rust/crates/butler-platform" }
 tokio = { version = "1", features = ["rt", "sync", "time", "macros", "net"] }
