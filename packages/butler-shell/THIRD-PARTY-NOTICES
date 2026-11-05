@@ -186,8 +186,11 @@ manager. Licensed under the SIL Open Font License, Version 1.1 (OFL.txt beside t
 
 3. Hugeicons (free icons)
 -------------------------
-crates/butler-shell/assets/icons/*.svg are glyphs of @hugeicons/core-free-icons 4.1.4
-(https://hugeicons.com), Butler's design-system icon set, exported as SVG. MIT License:
+The 101 generated design-system SVGs in crates/butler-shell/assets/icons represent 109 DS
+exports: 99 Hugeicons-backed exports from @hugeicons/core-free-icons 4.1.4
+(https://hugeicons.com), representing 98 distinct Hugeicons glyphs, and two Butler-drawn DS
+glyphs on the same 24px grid. Eight aliases reuse their target's SVG. The custom sidebar
+spinner is Butler artwork, documented in its SVG comment. Hugeicons is MIT-licensed:
 
     Permission is hereby granted, free of charge, to any person obtaining a copy of this
     software and associated documentation files (the "Software"), to deal in the Software

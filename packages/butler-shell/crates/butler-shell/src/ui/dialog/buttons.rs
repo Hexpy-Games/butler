@@ -7,6 +7,7 @@
 use gpui::{Context, FontWeight, MouseButton, SharedString, Stateful, canvas, div, prelude::*, px};
 
 use super::{BUTTON, Dialog};
+use crate::ui::Icon;
 use crate::ui::glass::{self, Native};
 use crate::ui::widgets::{hover_listener, icon, text};
 
@@ -37,7 +38,7 @@ impl Dialog {
     pub(super) fn round_button(
         &self,
         key: &'static str,
-        glyph: &'static str,
+        glyph: Icon,
         size: f32,
         cx: &mut Context<Self>,
     ) -> Stateful<gpui::Div> {

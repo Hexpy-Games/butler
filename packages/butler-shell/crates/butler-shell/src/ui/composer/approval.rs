@@ -8,6 +8,7 @@ use gpui::{
 };
 
 use super::{Composer, ComposerEvent};
+use crate::ui::Icon;
 use crate::ui::motion::{mix, spring_fast};
 use crate::ui::source::{AuthorityCard, CardKind, Decision};
 use crate::ui::theme::{Theme, hex, rgba, typo};
@@ -37,13 +38,13 @@ fn risk_tag(t: &Theme, label: &'static str) -> impl IntoElement {
 }
 
 /// The card's glyph and kind label.
-fn kind(card: &AuthorityCard, t: &Theme) -> (&'static str, SharedString) {
+fn kind(card: &AuthorityCard, t: &Theme) -> (Icon, SharedString) {
     let s = t.strings;
     match &card.kind {
-        CardKind::Command => ("terminal", s.category_command.into()),
-        CardKind::ReviewedEffect => ("shield-check", s.category_effect.into()),
-        CardKind::Question => ("message", s.question.into()),
-        CardKind::Other(name) => ("shield-question", name.clone()),
+        CardKind::Command => (Icon::Terminal, s.category_command.into()),
+        CardKind::ReviewedEffect => (Icon::ShieldCheck, s.category_effect.into()),
+        CardKind::Question => (Icon::MessageSquare, s.question.into()),
+        CardKind::Other(name) => (Icon::ShieldQuestion, name.clone()),
     }
 }
 

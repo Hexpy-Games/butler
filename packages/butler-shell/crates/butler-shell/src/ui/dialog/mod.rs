@@ -12,6 +12,7 @@ use gpui::{
     MouseUpEvent, SharedString, Window, canvas, div, prelude::*, px,
 };
 
+use crate::ui::Icon;
 use crate::ui::composer::Submit;
 use crate::ui::glass::{self, Native, press::Presses};
 use crate::ui::motion::{Hover, cubic_bezier};
@@ -29,8 +30,8 @@ pub(crate) type Body = Box<dyn Fn(&Theme, f32) -> AnyElement>;
 pub(crate) struct DialogSpec {
     pub(crate) title: SharedString,
     /// Round buttons: one on the left, the rest on the right (key, glyph).
-    pub(crate) leading: Option<(&'static str, &'static str)>,
-    pub(crate) trailing: Vec<(&'static str, &'static str)>,
+    pub(crate) leading: Option<(&'static str, Icon)>,
+    pub(crate) trailing: Vec<(&'static str, Icon)>,
     pub(crate) body: Body,
     /// Text buttons (key, label, primary), left to right.
     pub(crate) actions: Vec<(&'static str, &'static str, bool)>,

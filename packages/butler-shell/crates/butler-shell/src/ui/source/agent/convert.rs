@@ -8,6 +8,8 @@ use super::super::{
 use butler_shell_client::{AuthorityPage, Error};
 use serde_json::Value;
 
+use crate::ui::Icon;
+
 pub(super) fn error(error: &Error) -> SourceError {
     match error.kind() {
         butler_shell_client::FailureKind::Disconnected => SourceError::Disconnected,
@@ -189,7 +191,7 @@ fn activity(raw: &Value) -> Vec<ActivityItem> {
                     let name = row["safe_tool_name"].as_str()?;
                     let label = row["safe_input_label"].as_str().unwrap_or(name);
                     Some(ToolChip {
-                        icon: "wrench",
+                        icon: Icon::Wrench,
                         title: label.to_owned().into(),
                     })
                 })

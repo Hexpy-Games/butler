@@ -4,6 +4,7 @@
 use gpui::{AnyElement, Context, FontWeight, Hsla, SharedString, div, prelude::*, px};
 
 use super::{Composer, ComposerEvent, Submit};
+use crate::ui::Icon;
 use crate::ui::theme::{alpha, rgba, typo};
 use crate::ui::widgets::{IconButtonSpec, hover_listener, icon, icon_button, text, tooltip};
 
@@ -11,7 +12,7 @@ use crate::ui::widgets::{IconButtonSpec, hover_listener, icon, icon_button, text
 struct Pill {
     id: &'static str,
     unavailable: bool,
-    glyph: Option<(&'static str, Hsla)>,
+    glyph: Option<(Icon, Hsla)>,
     label: SharedString,
     detail: Option<SharedString>,
 }
@@ -62,11 +63,11 @@ impl Composer {
             } else {
                 rgba(31, 32, 35, 1.)
             };
-            (stop, "square", 14.)
+            (stop, Icon::Square, 14.)
         } else if empty || self.disabled.is_some() {
-            (alpha(t.send_disabled, 0.56), "send", 16.)
+            (alpha(t.send_disabled, 0.56), Icon::SendHorizontal, 16.)
         } else {
-            (t.send_bg, "send", 16.)
+            (t.send_bg, Icon::SendHorizontal, 16.)
         };
         let button = div()
             .id("send")
@@ -101,7 +102,7 @@ impl Composer {
         let access = Pill {
             unavailable,
             id: "access",
-            glyph: Some(("shield-question", self.theme.accent_text)),
+            glyph: Some((Icon::ShieldQuestion, self.theme.accent_text)),
             label: self.theme.strings.control_label(&context.permission),
             detail: None,
         };
@@ -158,7 +159,7 @@ impl Composer {
             .disabled
             .clone()
             .unwrap_or_else(|| t.strings.not_yet.into());
-        let plus = IconButtonSpec::new("plus", "plus", false).disabled(Some(attach_off));
+        let plus = IconButtonSpec::new("plus", Icon::Plus, false).disabled(Some(attach_off));
         let plus = icon_button(&t, plus, hover_listener(&"plus".into(), cx), |_, _, _| {});
         let divider = if self.engaged {
             t.glass_divider

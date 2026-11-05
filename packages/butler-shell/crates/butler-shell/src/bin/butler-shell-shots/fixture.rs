@@ -6,6 +6,7 @@ use futures::FutureExt as _;
 use futures::StreamExt as _;
 use futures::stream::LocalBoxStream;
 
+use crate::ui::Icon;
 use crate::ui::source::model::{Access, Operation, ToolChip};
 use crate::ui::source::{
     ActivityItem, Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary,
@@ -106,7 +107,7 @@ fn message(id: String, role: Role, text: &str) -> Message {
     }
 }
 
-fn tool(icon: &'static str, title: &str) -> ToolChip {
+fn tool(icon: Icon, title: &str) -> ToolChip {
     ToolChip {
         icon,
         title: title.to_owned().into(),
@@ -122,11 +123,14 @@ fn long_chat() -> Vec<Message> {
             reply.activity = vec![
                 ActivityItem {
                     title: "저장소 구조 확인".into(),
-                    tools: vec![tool("terminal", "rg --files packages/butler-app/client/ui")],
+                    tools: vec![tool(
+                        Icon::Terminal,
+                        "rg --files packages/butler-app/client/ui",
+                    )],
                 },
                 ActivityItem {
                     title: "디자인 토큰 읽기".into(),
-                    tools: vec![tool("file", "tokens.css 읽기")],
+                    tools: vec![tool(Icon::FileText, "tokens.css 읽기")],
                 },
                 ActivityItem {
                     title: "비교표 작성".into(),
@@ -148,7 +152,10 @@ fn approval_chat() -> Vec<Message> {
     reply.streaming = true;
     reply.activity = vec![ActivityItem {
         title: "빌드 명령 준비".into(),
-        tools: vec![tool("terminal", "cargo build --release -p butler-agent")],
+        tools: vec![tool(
+            Icon::Terminal,
+            "cargo build --release -p butler-agent",
+        )],
     }];
     vec![
         message(

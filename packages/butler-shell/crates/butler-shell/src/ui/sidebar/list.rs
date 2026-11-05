@@ -4,6 +4,7 @@ use gpui::{Animation, AnimationExt as _, AnyElement, Context, SharedString, div,
 
 use super::Click;
 use super::row::{RowSpec, Trailing};
+use crate::ui::Icon;
 use crate::ui::shell::Shell;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -26,7 +27,7 @@ impl Shell {
 
     fn chat_row(&mut self, chat: &ChatSummary, flat: bool, cx: &mut Context<Self>) -> AnyElement {
         let key = format!("c-{}-{flat}", chat.chat.chat.0);
-        let mut spec = RowSpec::new(key, Some("message"), chat.title.clone());
+        let mut spec = RowSpec::new(key, Some(Icon::MessageSquare), chat.title.clone());
         spec.active = self.store.selected() == Some(&chat.chat);
         if chat.running {
             spec.trailing = Trailing::Spinner;
@@ -71,7 +72,11 @@ impl Shell {
 
     fn space_block(&mut self, space: &Space, cx: &mut Context<Self>) -> AnyElement {
         let open = !self.sidebar.folded.get(&space.id).copied().unwrap_or(false);
-        let glyph = if space.project { "briefcase" } else { "folder" };
+        let glyph = if space.project {
+            Icon::Briefcase
+        } else {
+            Icon::Folder
+        };
         let mut spec = RowSpec::new(format!("g-{}", space.id), Some(glyph), space.title.clone());
         spec.trailing = Trailing::Chevron(open);
         spec.gap = 8.;

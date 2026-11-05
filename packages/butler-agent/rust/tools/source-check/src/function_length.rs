@@ -85,7 +85,9 @@ pub(crate) fn production_files(
     let mut files = BTreeSet::new();
     for group in ["crates", "tools"] {
         for package in directories(&root.join(group))? {
-            if TEST_PACKAGES.iter().any(|test| root.join(test) == package) {
+            if !package.join("Cargo.toml").is_file()
+                || TEST_PACKAGES.iter().any(|test| root.join(test) == package)
+            {
                 continue;
             }
             for entry in crate::targets::roots(&package)? {

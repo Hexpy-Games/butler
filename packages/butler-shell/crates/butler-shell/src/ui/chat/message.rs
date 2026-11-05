@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use gpui::{Animation, AnimationExt as _, AnyElement, Div, FontWeight, div, prelude::*, px};
 
 use super::markdown_view;
+use crate::ui::Icon;
 use crate::ui::motion::{BASE, decelerate};
 use crate::ui::source::{ActivityItem, Message, Role};
 use crate::ui::theme::{Theme, alpha, typo};
@@ -110,9 +111,9 @@ pub(super) fn activity_header(msg: &Message, open: bool, hovered: bool, theme: &
         t = t.underline();
     }
     let chevron = if open {
-        "chevron-down"
+        Icon::ChevronDown
     } else {
-        "chevron-right"
+        Icon::ChevronRight
     };
     div()
         .flex()
@@ -123,7 +124,7 @@ pub(super) fn activity_header(msg: &Message, open: bool, hovered: bool, theme: &
         .child(icon(chevron, 14., theme.text2))
 }
 
-fn tool_chip(icon_name: &'static str, title: gpui::SharedString, theme: &Theme) -> Div {
+fn tool_chip(icon_name: Icon, title: gpui::SharedString, theme: &Theme) -> Div {
     let muted = alpha(theme.text3, 0.78);
     div()
         .flex()

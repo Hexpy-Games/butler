@@ -13,7 +13,7 @@ use super::Shell;
 use crate::ui::dialog::{Activated, Dialog, DialogSpec};
 use crate::ui::source::{AuthorityCard, Decision};
 use crate::ui::theme::{Theme, alpha};
-use crate::ui::{field, glass};
+use crate::ui::{Icon, field, glass};
 
 /// The dialog's bottom sits this far above the composer's top.
 const ABOVE_COMPOSER: f32 = 110.;
@@ -65,7 +65,7 @@ impl Shell {
         let spec = DialogSpec {
             title: s.modify.into(),
             leading: None,
-            trailing: vec![("close", "x")],
+            trailing: vec![("close", Icon::X)],
             body: body(action.unwrap_or_else(|| card.reason.clone()), input.clone()),
             actions: vec![
                 ("cancel", s.cancel, false),
