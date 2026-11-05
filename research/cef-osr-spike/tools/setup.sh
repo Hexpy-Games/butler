@@ -4,6 +4,6 @@ set -eu
 root=${0:A:h:h}
 if [ ! -d "$root/gpui-fork" ]; then
   git clone -q https://github.com/Hexpy-Games/gpui-ce "$root/gpui-fork"
-  git -C "$root/gpui-fork" checkout -q d15253366449d5931f6bae9c95190198fd7c23e2
+  git -C "$root/gpui-fork" checkout -q e5cdb0cbd84ef109c08f4a594555fd733ba7b16a
   git -C "$root/gpui-fork" apply "$root/gpui-fork.patch"
 fi

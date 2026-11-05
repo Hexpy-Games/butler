@@ -12,7 +12,12 @@ impl EntityInputHandler for Page {
     ) -> Option<String> {
         *actual = Some(r.clone());
         let v = self.text.encode_utf16().collect::<Vec<_>>();
-        String::from_utf16(v.get(r)?).ok()
+        let answer = v.get(r.clone()).and_then(|s| String::from_utf16(s).ok());
+        crate::log(
+            "ime_text_for_range",
+            serde_json::json!({"range":[r.start,r.end],"answer":answer.as_ref().map(|t|([r.start,r.end],t))}),
+        );
+        answer
     }
     fn selected_text_range(
         &mut self,

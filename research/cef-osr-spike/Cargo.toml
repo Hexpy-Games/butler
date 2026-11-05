@@ -3,9 +3,9 @@ name = "butler-cef-spike"
 version = "0.1.0"
 edition = "2024"
 [dependencies]
-gpui_ce_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2" }
-gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", package = "gpui-ce" }
-gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", package = "gpui_ce_platform" }
+gpui_ce_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "e5cdb0cbd84ef109c08f4a594555fd733ba7b16a" }
+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "e5cdb0cbd84ef109c08f4a594555fd733ba7b16a", package = "gpui-ce" }
+gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "e5cdb0cbd84ef109c08f4a594555fd733ba7b16a", package = "gpui_ce_platform" }
 cef = { version = "=156.2.0", default-features = false }
 core-video = { version = "=0.5.2", features = ["metal"] }
 metal = "0.33"

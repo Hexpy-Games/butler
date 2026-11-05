@@ -1,5 +1,5 @@
 diff --git a/Cargo.toml b/Cargo.toml
-index 93119d862b..218a93240c 100644
+index 93119d862b..3f1d5d3aa3 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -48,7 +48,7 @@ anyhow = "1.0.86"
@@ -7,7 +7,7 @@ index 93119d862b..218a93240c 100644
  backtrace = "0.3"
  bitflags = "2.6.0"
 -collections = { path = "crates/gpui_collections", version = "0.2.2", package = "gpui_ce_collections" }
-+collections = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", version = "0.2.2", package = "gpui_ce_collections" }
++collections = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "e5cdb0cbd84ef109c08f4a594555fd733ba7b16a", version = "0.2.2", package = "gpui_ce_collections" }
  dunce = "1.0"
  etagere = "0.2"
  fontique = { version = "0.11.1", default-features = false }
@@ -16,7 +16,7 @@ index 93119d862b..218a93240c 100644
  gpui_util = { path = "crates/gpui_ce_util", version = "0.2.6", package = "gpui_ce_util" }
  
 -gpui = { path = "./crates/gpui/", version = "0.2.2", package = "gpui-ce", default-features = false }
-+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", version = "0.2.2", package = "gpui-ce", default-features = false }
++gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "e5cdb0cbd84ef109c08f4a594555fd733ba7b16a", version = "0.2.2", package = "gpui-ce", default-features = false }
  gpui_render = { path = "./crates/gpui_render/", version = "0.1.0", package = "gpui_ce_render" }
  gpui_platform = { path = "./crates/gpui_platform/", version = "0.1.0", package = "gpui_ce_platform" }
  gpui_linux = { path = "./crates/gpui_linux/", version = "0.1.0", package = "gpui_ce_linux" }
@@ -31,10 +31,10 @@ index 208d297ea1..b56bbb9c2f 100644
 +mod surface_lifetime;
 +pub mod surface_observer;
 diff --git a/crates/gpui_apple/src/metal_renderer.rs b/crates/gpui_apple/src/metal_renderer.rs
-index e7dbdf0761..b3288ab602 100644
+index 76819eea9c..ec9a4dc79e 100644
 --- a/crates/gpui_apple/src/metal_renderer.rs
 +++ b/crates/gpui_apple/src/metal_renderer.rs
-@@ -25,8 +25,9 @@ use image::RgbaImage;
+@@ -26,8 +26,9 @@ use image::RgbaImage;
  
  use core_foundation::base::TCFType;
  use core_video::{
@@ -46,7 +46,7 @@ index e7dbdf0761..b3288ab602 100644
  };
  use foreign_types::{ForeignType, ForeignTypeRef};
  use metal::{
-@@ -694,6 +695,29 @@ impl MetalRenderer {
+@@ -695,6 +696,29 @@ impl MetalRenderer {
              };
          self.release_instance_buffer_when_complete(&command_buffer, instance_buffer);
  
@@ -76,7 +76,7 @@ index e7dbdf0761..b3288ab602 100644
          if self.presents_with_transaction {
              command_buffer.commit();
              command_buffer.wait_until_scheduled();
-@@ -1035,6 +1059,7 @@ impl MetalRenderer {
+@@ -1036,6 +1060,7 @@ impl MetalRenderer {
                      &scene.surfaces[range.clone()],
                      &scene_uniforms,
                      command_encoder,
@@ -84,7 +84,7 @@ index e7dbdf0761..b3288ab602 100644
                  ),
                  RenderCommand::Batch(PrimitiveBatch::BackdropFilters(range)) => {
                      command_encoder.end_encoding();
-@@ -1865,6 +1890,7 @@ impl MetalRenderer {
+@@ -1866,6 +1891,7 @@ impl MetalRenderer {
          surfaces: &[PaintSurface],
          scene_uniforms: &SceneUniforms,
          command_encoder: &metal::RenderCommandEncoderRef,
@@ -92,7 +92,7 @@ index e7dbdf0761..b3288ab602 100644
      ) -> bool {
          command_encoder.set_render_pipeline_state(&self.surfaces_pipeline_state);
          bind_scene_uniforms(command_encoder, scene_uniforms);
-@@ -1886,38 +1912,60 @@ impl MetalRenderer {
+@@ -1887,38 +1913,60 @@ impl MetalRenderer {
                  }
              };
  
@@ -180,7 +180,7 @@ index e7dbdf0761..b3288ab602 100644
                  opacity: 1.0,
                  padding0: 0,
                  padding1: 0,
-@@ -1946,7 +1994,15 @@ impl MetalRenderer {
+@@ -1947,7 +1995,15 @@ impl MetalRenderer {
              });
  
              command_encoder.draw_primitives(metal::MTLPrimitiveType::TriangleStrip, 0, 4);
@@ -236,7 +236,7 @@ index 0000000000..5f893d88d8
 +    OBSERVER.get().cloned()
 +}
 diff --git a/crates/gpui_render/Cargo.toml b/crates/gpui_render/Cargo.toml
-index 85f4f283d2..9c7c2f6a68 100644
+index 85f4f283d2..aa362959be 100644
 --- a/crates/gpui_render/Cargo.toml
 +++ b/crates/gpui_render/Cargo.toml
 @@ -13,7 +13,7 @@ workspace = true
@@ -244,7 +244,7 @@ index 85f4f283d2..9c7c2f6a68 100644
  
  [dependencies]
 -gpui = { path = "../gpui", version = "0.2.2", package = "gpui-ce", default-features = false }
-+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", version = "0.2.2", package = "gpui-ce", default-features = false }
++gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "e5cdb0cbd84ef109c08f4a594555fd733ba7b16a", version = "0.2.2", package = "gpui-ce", default-features = false }
  smallvec.workspace = true
  wgsl-rs.workspace = true
  
@@ -253,7 +253,7 @@ index 85f4f283d2..9c7c2f6a68 100644
    "wgsl-in",
  ] }
 -gpui = { path = "../gpui", version = "0.2.2", package = "gpui-ce", default-features = false }
-+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d15253366449d5931f6bae9c95190198fd7c23e2", version = "0.2.2", package = "gpui-ce", default-features = false }
++gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "e5cdb0cbd84ef109c08f4a594555fd733ba7b16a", version = "0.2.2", package = "gpui-ce", default-features = false }
  wgsl-rs.workspace = true
  
  [dev-dependencies]
@@ -270,7 +270,7 @@ index d28513cb0d..0976256a50 100644
  
      #[repr(u32)]
 diff --git a/crates/gpui_render/src/shaders/filters.rs b/crates/gpui_render/src/shaders/filters.rs
-index def0e4a2de..e3870c42c8 100644
+index e232a3a180..fb6321bcf6 100644
 --- a/crates/gpui_render/src/shaders/filters.rs
 +++ b/crates/gpui_render/src/shaders/filters.rs
 @@ -75,6 +75,25 @@ pub mod surface {
