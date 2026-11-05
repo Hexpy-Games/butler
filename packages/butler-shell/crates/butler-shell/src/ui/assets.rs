@@ -4,16 +4,7 @@ use std::borrow::Cow;
 
 use gpui::{AssetSource, SharedString};
 
-macro_rules! icon {
-    ($name:literal) => {
-        (
-            concat!("icons/", $name, ".svg"),
-            include_bytes!(concat!("../../assets/icons/", $name, ".svg")).as_slice(),
-        )
-    };
-}
-
-include!("icon_files.rs");
+use super::icon_files::FILES;
 
 pub(crate) struct Assets;
 

@@ -9,6 +9,7 @@ pub(crate) mod exact_action;
 pub(crate) mod field;
 pub(crate) mod glass;
 pub(crate) mod i18n;
+mod icon_files;
 pub(crate) mod icons_generated;
 pub(crate) mod motion;
 pub(crate) mod shell;
