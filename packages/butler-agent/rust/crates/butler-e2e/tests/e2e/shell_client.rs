@@ -21,6 +21,7 @@ mod failures;
 mod paging;
 mod reset;
 mod retention;
+mod routes;
 mod transport;
 
 async fn start(id: &str, rounds: usize, access: Access) -> Result<Scenario, TestError> {

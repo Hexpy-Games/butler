@@ -210,3 +210,14 @@ fn wire_cursor<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<u64,
     )]
     Ok(cursor as u64)
 }
+
+/// Complete non-JSON response, including media type and revision metadata.
+#[derive(Debug)]
+pub struct Download {
+    /// Response Content-Type, when present.
+    pub content_type: Option<String>,
+    /// Response ETag, when present.
+    pub etag: Option<String>,
+    /// Complete response bytes; text decoding belongs to the caller.
+    pub bytes: Vec<u8>,
+}

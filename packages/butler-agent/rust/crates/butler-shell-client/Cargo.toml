@@ -17,6 +17,7 @@ serde_json.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true

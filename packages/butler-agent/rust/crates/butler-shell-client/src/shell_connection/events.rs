@@ -106,7 +106,11 @@ impl State {
         let url = self
             .client
             .url(&["events", "live"], &[("cursor", self.cursor.to_string())])?;
-        self.response = Some(self.client.request(Method::GET, url, None, true).await?);
+        self.response = Some(
+            self.client
+                .request(Method::GET, url, &super::transport::Body::None, true)
+                .await?,
+        );
         Ok(())
     }
     fn disconnect(&mut self) {
@@ -186,13 +190,13 @@ impl State {
 }
 
 #[derive(Default)]
-struct Decoder {
+pub(super) struct Decoder {
     bytes: Vec<u8>,
     data: Vec<String>,
     heartbeat: bool,
 }
 impl Decoder {
-    fn push(&mut self, bytes: &[u8]) -> Result<Vec<Value>, Error> {
+    pub(super) fn push(&mut self, bytes: &[u8]) -> Result<Vec<Value>, Error> {
         self.bytes.extend_from_slice(bytes);
         let mut output = Vec::new();
         let mut consumed = 0;
