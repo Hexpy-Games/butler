@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use butler_turn::btcc::{WorkContext, WorkView};
+use butler_turn::btcc::{ActionProgress, WorkContext, WorkPlan, WorkTask};
 
 fn word<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_value(value)
@@ -35,7 +35,8 @@ mod reviews;
 
 use reviews::{available_reviews, current_completion_validation, current_result_review};
 
-fn executable(work: &WorkView) -> Vec<String> {
+fn executable(context: &WorkContext) -> Vec<String> {
+    let work = &context.work;
     let Some(plan) = &work.current_plan else {
         return Vec::new();
     };
@@ -47,6 +48,12 @@ fn executable(work: &WorkView) -> Vec<String> {
     plan.actions
         .iter()
         .filter(|action| {
+            if context.tasks.iter().any(|task| {
+                task.action_key == action.action_key
+                    && matches!(task.status.as_str(), "pending" | "active")
+            }) {
+                return false;
+            }
             let status = statuses.get(action.action_key.as_str()).map(String::as_str);
             if status.is_some_and(|status| matches!(status, "done" | "skipped" | "blocked")) {
                 return false;
@@ -59,6 +66,102 @@ fn executable(work: &WorkView) -> Vec<String> {
         })
         .map(|action| action.action_key.clone())
         .collect()
+}
+
+fn action_progress(plan: &WorkPlan, statuses: &HashMap<&str, &ActionProgress>) -> String {
+    let progress = plan
+        .actions
+        .iter()
+        .map(|action| {
+            format!(
+                "{}={}",
+                line(&action.action_key, Some(52)),
+                statuses
+                    .get(action.action_key.as_str())
+                    .map(|progress| word(&progress.status))
+                    .unwrap_or_else(|| "pending".into())
+            )
+        })
+        .collect::<Vec<_>>();
+    format!(
+        "Action progress: {}",
+        if progress.is_empty() {
+            "none".into()
+        } else {
+            list(&progress, 24, 72)
+        }
+    )
+}
+
+fn task_rows(rows: &mut Vec<String>, context: &WorkContext) {
+    let delegated = context
+        .tasks
+        .iter()
+        .filter(|task| matches!(task.status.as_str(), "pending" | "active"))
+        .map(|task| {
+            let waits = task
+                .merge_after
+                .iter()
+                .chain(task.inputs.iter().map(|input| &input.task))
+                .cloned()
+                .collect::<Vec<_>>();
+            let waiting = if waits.is_empty() {
+                String::new()
+            } else {
+                format!(", waiting for: {}", waits.join(", "))
+            };
+            format!(
+                "{} → {} ({}{waiting})",
+                task.action_key, task.task_id, task.status
+            )
+        })
+        .collect::<Vec<_>>();
+    if !delegated.is_empty() {
+        rows.push(format!("Delegated actions: {}", list(&delegated, 24, 120)));
+    }
+    if let Some(plan) = &context.work.current_plan
+        && !plan.subjects.is_empty()
+    {
+        let subjects = plan
+            .subjects
+            .iter()
+            .map(|subject| format!("{} = {}", subject.key, subject.label))
+            .collect::<Vec<_>>();
+        rows.push(format!(
+            "Plan subjects (use these keys in task.scope.owns): {}",
+            list(&subjects, 24, 80)
+        ));
+    }
+    if !context.tasks.is_empty() {
+        rows.push(format!(
+            "Tasks: {}",
+            context
+                .tasks
+                .iter()
+                .filter(|task| task.status != "superseded")
+                .map(task_row)
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
+}
+
+fn task_row(task: &WorkTask) -> String {
+    let owned = task
+        .scope
+        .owns
+        .iter()
+        .map(|own| format!("{}[{}]", own.subject, own.aspects.join(", ")))
+        .chain(task.scope.paths.iter().cloned())
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!(
+        "{} {} {}: owns {}",
+        task.task_id,
+        task.action_key,
+        task.status,
+        line(&owned, None)
+    )
 }
 
 fn corrections(rows: &mut Vec<String>, label: &str, values: &[String]) {
@@ -85,7 +188,7 @@ pub(in crate::host) fn render(
     let context = context?;
     let work = &context.work;
     let plan = work.current_plan.as_ref();
-    let action_keys = executable(work);
+    let action_keys = executable(context);
     let action_set: HashSet<_> = action_keys.iter().map(String::as_str).collect();
     let statuses: HashMap<_, _> = work
         .action_progress
@@ -153,28 +256,8 @@ pub(in crate::host) fn render(
                 list(&plan.governing_refs, 12, 160)
             ));
         }
-        let progress = plan
-            .actions
-            .iter()
-            .map(|action| {
-                format!(
-                    "{}={}",
-                    line(&action.action_key, Some(52)),
-                    statuses
-                        .get(action.action_key.as_str())
-                        .map(|progress| word(&progress.status))
-                        .unwrap_or_else(|| "pending".into())
-                )
-            })
-            .collect::<Vec<_>>();
-        rows.push(format!(
-            "Action progress: {}",
-            if progress.is_empty() {
-                "none".into()
-            } else {
-                list(&progress, 24, 72)
-            }
-        ));
+        rows.push(action_progress(plan, &statuses));
+        task_rows(&mut rows, context);
         if !plan.checks.is_empty() {
             rows.push(format!("Checks: {}", list(&plan.checks, 20, 240)));
         }

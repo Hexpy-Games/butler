@@ -33,6 +33,7 @@ pub(crate) struct Script {
     count: usize,
     pub(crate) requests: Mutex<Vec<(String, Value)>>,
     pub(crate) repeat_first: AtomicBool,
+    pub(crate) end_result_turn_without_wait: AtomicBool,
     pub(super) wait_regression: AtomicBool,
     pub(crate) repeated_outputs: Mutex<Vec<Value>>,
     pub(crate) steer: AtomicBool,
@@ -70,6 +71,7 @@ pub(crate) async fn start(
         count,
         requests: Default::default(),
         repeat_first: AtomicBool::new(false),
+        end_result_turn_without_wait: AtomicBool::new(false),
         wait_regression: AtomicBool::new(false),
         repeated_outputs: Default::default(),
         steer: AtomicBool::new(false),
@@ -256,6 +258,14 @@ async fn reply(
                     json!({"relation_id":relation,"instruction":"Verify the updated source"}),
                 )
             }
+            "steward"
+                if key.user_request.starts_with("Delegated result")
+                    && script
+                        .end_result_turn_without_wait
+                        .swap(false, Ordering::SeqCst) =>
+            {
+                message("Interim.")
+            }
             "steward" => steward(
                 if key.user_request.starts_with("Delegated result") {
                     step + script.count + 2
@@ -334,7 +344,7 @@ pub(super) fn worker(step: usize, body: &Value) -> Value {
     }
 }
 fn plan(objective: &str, mode: &str, count: usize) -> Value {
-    json!({"objective":objective,"execution_mode":mode,"actions":(0..count).map(|i| json!({"action_key":format!("check-{i}"),"description":"Verify evidence","dependency_keys":[]})).collect::<Vec<_>>(),"checks":["Evidence verified"]})
+    json!({"subjects":[{"key":"batch","label":"Batch"}],"objective":objective,"execution_mode":mode,"actions":(0..count).map(|i| json!({"action_key":format!("check-{i}"),"description":"Verify evidence","dependency_keys":[]})).collect::<Vec<_>>(),"checks":["Evidence verified"]})
 }
 fn review() -> Value {
     json!({"subject":"plan","verdict":"accept","summary":"Ready"})
@@ -378,7 +388,7 @@ fn work_id(body: &Value) -> String {
 }
 fn call(name: &str, mut args: Value) -> Value {
     if name == "delegate_to_worker" && args.get("task").is_none() {
-        args["task"] = json!({"scope":{"paths":[format!("tasks/{}", args["action_key"].as_str().unwrap_or("work"))]},"output":{"format":"text","fields":["summary"]}});
+        args["task"] = json!({"scope":{"owns":[{"subject":"batch","aspects":[args["action_key"]]}],"paths":[format!("tasks/{}", args["action_key"].as_str().unwrap_or("work"))]},"output":{"format":"text","fields":["summary"]}});
     }
     let mut output = json!({"type":"function_call","name":name});
     output["arguments"] = args;

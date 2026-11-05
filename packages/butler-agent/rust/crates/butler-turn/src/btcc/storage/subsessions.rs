@@ -15,7 +15,7 @@ mod prompt_result;
 mod records;
 mod subtasks;
 mod task_replacement;
-mod work_tasks;
+pub(in crate::btcc::storage) mod work_tasks;
 mod worker_admission;
 mod worker_cancel;
 mod worker_failure;

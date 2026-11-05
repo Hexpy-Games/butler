@@ -445,7 +445,36 @@ impl PromptPort for GuidedPrompt {
 }
 
 fn delegated_tools(state: &GuidedTextState) -> Option<String> {
-    (state.phase.execution_policy.role.as_str() != "butler").then(|| format!("Granted tools in this delegated session (complete callable set; discover hidden schemas with tool_search/tool_describe): {}. Parent tools are not inherited. If a required tool is absent, record_work_disposition blocked with capability_handoff={{code:capability_unavailable_in_child,requested_action:{{tool_name,arguments}}}}; return the exact remaining action to the parent, never ask the user to solve a tool mismatch.", state.phase.authorized_names.join(", ")))
+    let role = state.phase.execution_policy.role.as_str();
+    if role == "butler" {
+        return None;
+    }
+    let mut text = format!(
+        "Granted tools in this delegated session (complete callable set; discover hidden schemas with tool_search/tool_describe): {}. Parent tools are not inherited. If a required tool is absent, record_work_disposition blocked with capability_handoff={{code:capability_unavailable_in_child,requested_action:{{tool_name,arguments}}}}; return the exact remaining action to the parent, never ask the user to solve a tool mismatch.",
+        state.phase.authorized_names.join(", ")
+    );
+    if role == "steward" {
+        text.push_str(&format!(
+            " Workers you assign can call: {}.",
+            state.phase.delegate_names.join(", ")
+        ));
+        if state
+            .phase
+            .authorized_names
+            .iter()
+            .any(|name| name == "browse")
+        {
+            text.push_str(" Workers read pages but do not operate them. Page operations (clicks, form input, selections) go to the browsing agent through your browse tool; it runs beside your Workers, so call it whenever such a step is needed.");
+        } else if state
+            .phase
+            .authorized_names
+            .iter()
+            .any(|name| name == "browser_act")
+        {
+            text.push_str(" Workers read pages but do not operate them; do page operations yourself with browser_act.");
+        }
+    }
+    Some(text)
 }
 
 fn document_edit_context(turn: &TurnRecord) -> String {

@@ -82,3 +82,91 @@ async fn cb_11_repeat_delegation_then_cancel_acknowledges_and_advances_fifo()
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn cb_11_result_turn_shows_running_task_and_names_result() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server) = setup("CB-11-RESULT-STATE", 2).await?;
+    s.gw.say("general", "Verify batch red").await?;
+    let (_, rows) = workers(&s, "general", 2).await?;
+    started(&script, 2).await;
+    let task: String = {
+        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        db.query_row(
+            "SELECT task_id FROM btcc_work_tasks WHERE relation_id=?1",
+            [rows[1]["relation"]["relation_id"].as_str().unwrap()],
+            |row| row.get(0),
+        )?
+    };
+    script.release("red-0");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let input = loop {
+        let result = script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(role, body)| {
+                role == "steward" && body["input"].to_string().contains("Delegated result")
+            })
+            .map(|(_, body)| body["input"].to_string());
+        if let Some(input) = result {
+            break input;
+        }
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert!(input.contains("Delegated actions: check-1 → "), "{input}");
+    assert!(input.contains("Plan subjects (use these keys in task.scope.owns): batch = Batch"));
+    let executable = input
+        .split("\\n")
+        .find(|line| line.starts_with("Executable action keys:"))
+        .unwrap();
+    assert!(!executable.contains("check-1"), "{executable}");
+    assert!(input.contains("action_key: check-0"));
+    assert!(input.contains(&format!("still running: {task} check-1 (active)")));
+    assert!(input.contains("Workers you assign can call: "));
+    script.release("red-1");
+    for row in &rows {
+        closed(&s, row["session_id"].as_str().unwrap()).await?;
+    }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn cb_11_open_work_keeps_running_task_when_result_turn_ends() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server) = setup("CB-11-OPEN-RESULT", 2).await?;
+    script
+        .end_result_turn_without_wait
+        .store(true, Ordering::SeqCst);
+    s.gw.say("general", "Verify batch red").await?;
+    let (steward, rows) = workers(&s, "general", 2).await?;
+    started(&script, 2).await;
+    script.release("red-0");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        let delivered: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM btcc_turns WHERE session_id=?1 AND original_message LIKE '%Delegated result%' AND semantic_state='delivered')",
+            [&steward], |row| row.get(0))?;
+        if delivered {
+            let status: String = db.query_row(
+                "SELECT status FROM btcc_work_tasks WHERE relation_id=?1",
+                [rows[1]["relation"]["relation_id"].as_str().unwrap()],
+                |row| row.get(0),
+            )?;
+            assert_eq!(status, "active");
+            break;
+        }
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    script.release("red-1");
+    closed(&s, rows[1]["session_id"].as_str().unwrap()).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

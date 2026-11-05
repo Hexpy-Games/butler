@@ -238,6 +238,7 @@ impl ProjectWorkRepository {
             .load_result_facts(work.work_id.clone())
             .await?;
         Ok(Some(WorkContext {
+            tasks: Vec::new(),
             work,
             original_request: original,
             result_facts: facts,

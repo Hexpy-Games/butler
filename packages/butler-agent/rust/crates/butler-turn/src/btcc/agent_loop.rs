@@ -23,6 +23,9 @@ mod state;
 mod stream_relay;
 mod thinking_line;
 mod tool_batch;
+
+/// Tells delegated roles how to return an unavailable capability to their parent.
+pub const CAPABILITY_HANDOFF_HINT: &str = "If this step needs a tool you do not have, end with record_work_disposition blocked and capability_handoff={code:capability_unavailable_in_child,requested_action:{tool_name,arguments}}.";
 mod turn_binding;
 
 #[cfg(any(test, feature = "test-support"))]
