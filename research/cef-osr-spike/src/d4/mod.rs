@@ -8,6 +8,17 @@ use gpui::*;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Duration};
 
 pub fn start(args: cef::args::Args, cx: &mut App, out: PathBuf) {
+    let manual = std::env::args().any(|a| a == "--manual");
+    let closed_rx = if manual {
+        let (closed_tx, closed_rx) = async_channel::bounded(1);
+        cx.on_window_closed(move |_, _| {
+            let _ = closed_tx.try_send(());
+        })
+        .detach();
+        Some(closed_rx)
+    } else {
+        None
+    };
     std::fs::create_dir_all(&out).expect("D4 output directory");
     std::fs::write(out.join("pid"), std::process::id().to_string()).expect("D4 PID");
     let baseline = ax::foreign_windows();
@@ -55,7 +66,13 @@ pub fn start(args: cef::args::Args, cx: &mut App, out: PathBuf) {
         .detach();
         cx.background_executor().timer(Duration::from_secs(2)).await;
         rt.cdp.eval(&host, r#"(async () => { await new Promise(resolve => document.readyState === 'complete' ? resolve() : addEventListener('load', resolve, {once:true})); document.querySelector('h1').textContent = '웹 제목'; document.querySelector('#text').insertAdjacentHTML('beforebegin', '<button>웹 버튼</button><input id="web_in" aria-label="웹 입력">'); return true; })()"#, false).await;
-        if let Err(error) = script::run(window, rt.clone(), out.clone(), baseline, cx).await {
+        if manual {
+            std::fs::write(out.join("manual-ready"), b"").expect("D4 manual-ready");
+            let _ = closed_rx
+                .expect("manual close receiver")
+                .recv()
+                .await;
+        } else if let Err(error) = script::run(window, rt.clone(), out.clone(), baseline, cx).await {
             let _ = std::fs::write(out.join("setup-error.txt"), error);
             rt.close();
             std::process::exit(1);
