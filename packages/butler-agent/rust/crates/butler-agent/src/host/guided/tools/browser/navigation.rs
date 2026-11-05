@@ -63,7 +63,22 @@ pub(super) async fn execute(
     let result = if args.get("results").is_some() {
         open::execute(owner, invocation, call, occurrence, client).await
     } else {
-        open_one(owner, invocation, call, occurrence, client, &args).await
+        let request = ("tab.open", &Value::Null, &args);
+        let result = grant::call(
+            owner,
+            call,
+            occurrence,
+            &client,
+            request,
+            invocation.cancellation,
+        )
+        .await?;
+        open::remember(owner, &args, &result);
+        if result["status"] == "dialog_pending" {
+            dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await
+        } else {
+            encode_page_data(result)
+        }
     };
     let status = match &result {
         Ok(value) if value.field("status").ok().flatten() == Some("ok") => "ok",
@@ -72,66 +87,6 @@ pub(super) async fn execute(
     };
     settle(owner, reference, status).await?;
     result
-}
-
-pub(in crate::host::guided::tools) async fn open_for_read(
-    owner: &GuidedTools,
-    invocation: &GuidedInvocation<'_>,
-    call: &ModelRoundToolCall,
-    occurrence: &str,
-    url: &str,
-) -> Result<Result<String, Value>, ToolExecutionError> {
-    let args = json!({"url":url});
-    if !owner.authorized("browser_open") || !admitted(owner, "browser_open") {
-        return Ok(Err(
-            json!({"status":"not_dispatched","reason":"tool_not_admitted"}),
-        ));
-    }
-    let Some(client) = client::Client::new(owner).await else {
-        return Ok(Err(json!({"status":"unavailable","reason":"no_browser"})));
-    };
-    owner.refresh_instruction_context().await?;
-    let result = if reviewed(owner, &args) {
-        execute(owner, invocation, call, occurrence, client, args).await?
-    } else {
-        open_one(owner, invocation, call, occurrence, client, &args).await?
-    };
-    let result: Value = serde_json::from_str(result.as_str()).map_err(|error| {
-        ToolExecutionError::Integrity(butler_turn::btcc::BtccError::relayed(
-            "guided_tool_result_json",
-            error.to_string(),
-        ))
-    })?;
-    match result["tab"].as_str().filter(|_| result["status"] == "ok") {
-        Some(tab) => Ok(Ok(tab.to_owned())),
-        None => Ok(Err(result)),
-    }
-}
-
-async fn open_one(
-    owner: &GuidedTools,
-    invocation: &GuidedInvocation<'_>,
-    call: &ModelRoundToolCall,
-    occurrence: &str,
-    client: client::Client,
-    args: &Value,
-) -> Result<JsonDocument, ToolExecutionError> {
-    let request = ("tab.open", &Value::Null, args);
-    let result = grant::call(
-        owner,
-        call,
-        occurrence,
-        &client,
-        request,
-        invocation.cancellation,
-    )
-    .await?;
-    open::remember(owner, args, &result);
-    if result["status"] == "dialog_pending" {
-        dialog::finish(owner, invocation, call, occurrence, client, args, &result).await
-    } else {
-        encode_page_data(result)
-    }
 }
 
 fn destinations(owner: &GuidedTools, args: &Value) -> Vec<String> {

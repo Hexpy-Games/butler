@@ -13,7 +13,7 @@ pub(super) mod images;
 mod live;
 pub(super) use live::page as live_page;
 mod look;
-pub(super) mod navigation;
+mod navigation;
 mod observe_after;
 mod open;
 mod pay;

@@ -60,9 +60,9 @@ async fn attached_host_offers_browser_read_and_withholds_web_read() -> Result<()
         assert!(
             reader["function"]["parameters"]["properties"]
                 .get("url")
-                .is_some()
+                .is_none()
         );
-        assert!(reader["function"]["parameters"].get("required").is_none());
+        assert_eq!(reader["function"]["parameters"]["required"], json!(["tab"]));
     }
     assert_eq!(
         ops.iter()
@@ -86,8 +86,8 @@ async fn attached_host_offers_browser_read_and_withholds_web_read() -> Result<()
         })
         .expect("web_read description");
     assert_eq!(described["enabled"], true, "{described}");
-    assert!(described["schema"]["properties"].get("url").is_some());
-    assert!(described["schema"].get("required").is_none());
+    assert!(described["schema"]["properties"].get("url").is_none());
+    assert_eq!(described["schema"]["required"], json!(["tab"]));
     let withheld = outputs
         .iter()
         .find_map(|o| {
@@ -255,101 +255,4 @@ fn assert_reader_projection(
     assert_eq!(&projected, model, "projection changed web content");
     assert!(raw.len() < 50 * 1024);
     Ok(())
-}
-
-#[tokio::test]
-async fn browser_read_url_opens_one_tab_and_continues_on_it() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    use axum::{Json, Router, routing::post};
-    use butler_e2e::e2e::{scenario::Setup, security::AdminClient};
-    use std::sync::{Arc, Mutex};
-    let outputs = Arc::new(Mutex::new(Vec::<Value>::new()));
-    let recorded = outputs.clone();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let base = format!("http://{}", listener.local_addr()?);
-    let app = Router::new().route(
-        "/v1/responses",
-        post(move |Json(body): Json<Value>| {
-            let outputs = recorded.clone();
-            async move {
-                let seen = super::model::outputs(&body);
-                let item = if butler_e2e::e2e::chatgpt_wire::functions(&body).next().is_none() {
-                    super::model::message("Finished.")
-                } else {
-                    *outputs.lock().unwrap() = seen.clone();
-                    match seen.len() {
-                    0 => super::model::call(
-                        0,
-                        "browser_read",
-                        &json!({"url":"https://example.com/tides/alpha"}),
-                    ),
-                    1 => super::model::call(
-                        1,
-                        "browser_read",
-                        &json!({"tab":seen[0]["tab"],"start_chunk":seen[0]["next_start_chunk"]}),
-                    ),
-                    _ => super::model::message("Finished."),
-                    }
-                };
-                let response = crate::browser_usage::stub::response(&item);
-                (
-                    [("content-type", "text/event-stream")],
-                    response
-                        .chunks
-                        .into_iter()
-                        .map(|chunk| chunk.text)
-                        .collect::<String>(),
-                )
-            }
-        }),
-    );
-    let server = tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-    let s = Setup::new("BROWSER-READ-URL")?
-        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{base}/v1"))
-        .start()
-        .await?;
-    s.patch_settings(
-        json!({"browser":{"browsing_agent":"off"}}),
-        "direct browser tools",
-    )
-    .await?;
-    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
-    let host = super::host::Host::attach(admin).await?;
-    let frames = host.log.clone();
-    let served = tokio::spawn(host.serve());
-    let (_, turn) = s
-        .turn("general", "Read https://example.com/tides/alpha.")
-        .await?;
-    served.abort();
-    server.abort();
-    assert_eq!(turn["state"], "delivered");
-    {
-        let outputs = outputs.lock().unwrap();
-        assert_eq!(outputs.len(), 2, "{outputs:?}");
-        let first = &outputs[0];
-        assert_eq!(first["ok"], true, "{first}");
-        assert_ne!(first["tab"].as_str().unwrap(), "");
-        assert_ne!(first["markdown"].as_str().unwrap(), "");
-        assert_eq!(first["content_has_more"], true);
-        assert_eq!(outputs[1]["ok"], true, "{}", outputs[1]);
-        assert_eq!(outputs[1]["tab"], first["tab"]);
-        assert_eq!(outputs[1]["start_chunk"], first["next_start_chunk"]);
-        let frames = frames.lock().unwrap();
-        let opens: Vec<_> = frames
-            .iter()
-            .filter(|frame| frame["op"] == "tab.open")
-            .collect();
-        assert_eq!(opens.len(), 1, "{frames:?}");
-        assert_eq!(opens[0]["args"]["url"], "https://example.com/tides/alpha");
-        assert_eq!(
-            frames
-                .iter()
-                .filter(|frame| frame["op"] == "tab.read")
-                .count(),
-            2
-        );
-    }
-    s.finish().await
 }
