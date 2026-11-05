@@ -32,10 +32,13 @@ pub(super) fn parent_steer(
         (true, true) => "steer-2-replay",
     };
     let by_work = script.steer_by_work.lock().unwrap().clone();
-    let arguments = match by_work.filter(|_| second) {
+    let mut arguments = match by_work.filter(|_| second) {
         Some(work) => json!({"work_id":work,"instruction":request}),
         None => json!({"relation_id":*script.relation.lock().unwrap(),"instruction":request}),
     };
+    if script.immediate_direction.load(Ordering::SeqCst) {
+        arguments["mode"] = "steer".into();
+    }
     if replay {
         script.replay_steer.store(false, Ordering::SeqCst);
     }
@@ -289,7 +292,7 @@ async fn direction_to_a_waiting_steward_arrives_with_its_workers_result() -> Res
         .as_str()
         .unwrap()
         .to_owned();
-    let spec = json!({"name":"steer_steward","arguments":{"relation_id":relation,"instruction":"Check the second source too"}});
+    let spec = json!({"name":"steer_steward","arguments":{"relation_id":relation,"instruction":"Check the second source too","mode":"steer"}});
     s.turn("general", &format!("fixture-call:{spec}")).await?;
     assert_eq!(
         count(
@@ -383,6 +386,28 @@ async fn stopped_child_does_not_take_up_its_direction_after_restart() -> Result<
         s.gw.get(&format!("/session-view?session_id={session}"))
             .await?;
     assert_eq!(view.data()["status"], "cancelled", "{view:?}");
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn default_direction_queues_until_the_running_turn_finishes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    script.plan_continuation.store(true, Ordering::SeqCst);
+    let s = started("STEWARD-DEFAULT-QUEUE", &url, &script).await?;
+    tokio::time::timeout(Duration::from_secs(30), script.held.notified())
+        .await
+        .unwrap();
+    let (relation, session, first) = steer(&s, &script).await?;
+    script.release.notify_one();
+    let continuation = applied_with_result(&s, &relation).await?;
+    assert_ne!(
+        continuation, first,
+        "default queue must not change the active turn"
+    );
+    crate::delegate_followup::terminal::assert_closed(&db(&s), &session);
     s.finish().await?;
     server.abort();
     Ok(())

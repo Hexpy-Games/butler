@@ -29,6 +29,8 @@ pub(crate) struct Script {
     pub duplicate: AtomicBool,
     pub parallel_files: AtomicBool,
     pub terminal_fault: AtomicBool,
+    pub fault_before_close: AtomicBool,
+    pub immediate_followup: AtomicBool,
     pub file_root: Mutex<String>,
     pub routed: AtomicBool,
     pub blocked: AtomicBool,
@@ -89,7 +91,10 @@ async fn reply(
         script.busy.notify_one();
         script.release_busy.notified().await;
     }
-    if child && step == 3 && script.terminal_fault.load(Ordering::SeqCst) {
+    if child
+        && ((step == 3 && script.terminal_fault.load(Ordering::SeqCst))
+            || (step == 2 && script.fault_before_close.load(Ordering::SeqCst)))
+    {
         return (axum::http::StatusCode::BAD_REQUEST,
             Json(json!({"error":{"code":"invalid_request","message":"Stub terminal provider failure"}})))
             .into_response();
@@ -138,6 +143,12 @@ async fn reply(
         } else if kind == "followup" && template["name"] == "delegate_to_steward" {
             template["arguments"]["request"] = OWNER.into();
         }
+    }
+    if kind == "followup"
+        && template["name"] == "steer_steward"
+        && script.immediate_followup.load(Ordering::SeqCst)
+    {
+        template["arguments"]["mode"] = "steer".into();
     }
     if script.routed.load(Ordering::SeqCst) && kind == "followup" {
         let instruction = MESSAGE;

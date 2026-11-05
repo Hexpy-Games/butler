@@ -20,6 +20,24 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
         params![input.relation_id,input.parent_session_id,input.parent_turn_id,input.child_session_id,input.anchor_message_id,ordinal,input.safe_title,input.created_at],
     ).map_err(StorageError::sqlite)? == 1;
     if inserted {
+        if let Some(prior) = &input.previous_relation_id
+            && !followup_ready(db, prior, &input.parent_session_id)?
+        {
+            return Err(StorageError::new(
+                StorageCode::SubsessionRelationMissing,
+                "The previous assignment has not finished closing",
+            ));
+        }
+        let closed: bool = db.query_row(
+            concat!("SELECT EXISTS (SELECT 1 FROM btcc_session_relations WHERE child_session_id=?1 AND activity_terminal=1) OR EXISTS(", endings::ENDING_SCOPE_SQL!("?1"), ")"),
+            [&input.parent_session_id], |row| row.get(0),
+        ).map_err(StorageError::sqlite)?;
+        if closed {
+            return Err(StorageError::new(
+                StorageCode::SubsessionRelationMissing,
+                "The parent delegated assignment has ended",
+            ));
+        }
         db.execute(
             "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
             params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
@@ -31,7 +49,33 @@ pub(super) fn insert(db: &Connection, input: &SubsessionCreate) -> StorageResult
     Ok(inserted)
 }
 
+/// A follow-up may replace a terminal card, or an open one whose latest report is blocked.
+fn followup_ready(db: &Connection, relation: &str, parent: &str) -> StorageResult<bool> {
+    let row: Option<(String, bool)> = db.query_row(
+        concat!("SELECT r.child_session_id,r.activity_terminal FROM btcc_session_relations r WHERE r.relation_id=?1 AND r.parent_session_id=?2 AND NOT EXISTS(", endings::ENDING_SCOPE_SQL!("r.child_session_id"), ")"),
+        params![relation,parent], |r| Ok((r.get(0)?, r.get(1)?)),
+    ).optional().map_err(StorageError::sqlite)?;
+    match row {
+        Some((child, true)) => super::terminal::invariant(db, &child),
+        Some((_, false)) => db.query_row(
+            "SELECT (SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY rowid DESC LIMIT 1)='blocked'",
+            [relation], |r| r.get::<_, Option<bool>>(0),
+        ).map(|ready| ready.unwrap_or(false)).map_err(StorageError::sqlite),
+        None => Ok(false),
+    }
+}
+
 impl SqliteSubsessionRepository {
+    pub(crate) async fn followup_ready(
+        &self,
+        relation: String,
+        parent: String,
+    ) -> StorageResult<bool> {
+        self.storage
+            .read(move |db| followup_ready(db, &relation, &parent))
+            .await
+    }
+
     pub(crate) async fn settled_parent_source(
         &self,
         session: String,

@@ -111,13 +111,6 @@ async fn cb_11_closing_steward_work_cancels_its_running_worker() -> Result<(), H
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while relation_status(&database, "btcc_subsession_outbox", worker)?.as_deref()
-        != Some("delivered")
-    {
-        assert!(Instant::now() < deadline, "{}", s.agent.logs());
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
     script.release("red-0");
     assert_eq!(
         steward_results(&database, &steward)?.len(),
@@ -200,103 +193,6 @@ async fn cb_11_worker_result_queued_before_the_steward_closes_starts_no_turn()
         "success"
     );
     assert!(view.data()["steward_children"][0]["active_turn"].is_null());
-    s.finish().await?;
-    server.abort();
-    Ok(())
-}
-
-#[tokio::test]
-async fn cb_11_cancel_finished_workers_waiting_continuation() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    cancel_continuation(false).await
-}
-
-#[tokio::test]
-async fn cb_11_cancel_finished_workers_running_continuation() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    cancel_continuation(true).await
-}
-
-async fn cancel_continuation(running: bool) -> Result<(), HarnessError> {
-    let (mut s, script, server) = setup("CB-11-CANCEL-CONTINUATION", 4).await?;
-    script.steer.store(true, Ordering::SeqCst);
-    script.followup.store(true, Ordering::SeqCst);
-    script.hold_continuation.store(true, Ordering::SeqCst);
-    s.gw.say("general", "Verify batch red").await?;
-    let (parent, rows) = workers(&s, "general", 3).await?;
-    started(&script, 2).await;
-    script.release("red-0");
-    closed(&s, rows[0]["session_id"].as_str().unwrap()).await?;
-    started(&script, 3).await;
-    script.direction.add_permits(1);
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while !script.steered.load(Ordering::SeqCst) {
-        assert!(Instant::now() < deadline, "{}", s.agent.logs());
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    assert_pending_direction(&s, &rows[0])?;
-    if running {
-        script.release("red-1");
-        tokio::time::timeout(Duration::from_secs(30), script.continued.wait())
-            .await
-            .unwrap();
-    }
-    script.fourth.add_permits(1);
-    let (_, all) = workers(&s, "general", 4).await?;
-    assert_eq!(all[3]["status"], "waiting");
-    assert_eq!(script.started.lock().unwrap().len(), 3);
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let count: u64 = db.query_row(
-        butler_turn::btcc::storage::RUNNING_WORKERS_SQL,
-        [&parent],
-        |r| r.get(0),
-    )?;
-    assert_eq!(
-        count, 2,
-        "live continuations must count after their direction is consumed"
-    );
-    drop(db);
-    let relation = rows[0]["relation"]["relation_id"].as_str().unwrap();
-    let response =
-        s.gw.post(
-            &format!("/steward-relations/{relation}/cancel"),
-            json!({"parent_session_id":parent}),
-        )
-        .await?;
-    assert_eq!(response.status, 202, "{response:?}");
-    let cancelled_turn = response.data()["child_turn_id"].as_str().unwrap();
-    script.continuation_release.add_permits(1);
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-        let cleared: bool = db.query_row("SELECT dispatch_state IS NULL AND EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id AND x.child_turn_id=?2 AND x.status='cancelled') AND NOT EXISTS (SELECT 1 FROM btcc_subsession_directions i WHERE i.relation_id=d.relation_id AND i.status='pending') FROM btcc_subsession_delegations d WHERE relation_id=?1", rusqlite::params![relation,cancelled_turn], |r| r.get(0))?;
-        if cleared {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "cancel did not settle continuation: {}",
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    if !running {
-        script.release("red-1");
-    }
-    started(&script, 4).await;
-    script.release("red-2");
-    script.release("red-3");
-    let (_, all) = workers(&s, "general", 4).await?;
-    closed(&s, all[3]["session_id"].as_str().unwrap()).await?;
-    s.agent.kill9()?;
-    s.gw = s.agent.start_again().await?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let pending: u64 = db.query_row(
-        "SELECT count(*) FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'",
-        [relation],
-        |r| r.get(0),
-    )?;
-    assert_eq!(pending, 0);
     s.finish().await?;
     server.abort();
     Ok(())

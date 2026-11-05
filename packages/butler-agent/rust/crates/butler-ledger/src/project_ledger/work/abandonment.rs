@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use butler_turn::btcc::{
     BtccError, DurableWorkStatus as WorkStatus, ProjectWorkOperationIdentity,
-    ProjectWorkOperationKind, WorkView,
+    ProjectWorkOperationKind, WorkStage, WorkView,
 };
 
 use super::super::publication::ProjectLedgerRecordOperation;
@@ -76,13 +76,14 @@ impl ProjectWorkRepository {
         let repo = self.clone();
         let prepare_identity = identity.clone();
         let target = work_id.to_owned();
+        let turn = turn_id.to_owned();
         let published = self
             .publish(
                 identity,
                 move || async move {
-                    repo.abandonment_update(&target, &prepare_identity)
+                    repo.abandonment_updates(&target, &turn, &prepare_identity)
                         .await
-                        .map(|update| Some(vec![update]))
+                        .map(Some)
                 },
                 Projection::Recover,
             )
@@ -98,11 +99,12 @@ impl ProjectWorkRepository {
     }
 
     /// The manifest of the still-open Work, marked abandoned.
-    async fn abandonment_update(
+    async fn abandonment_updates(
         &self,
         work_id: &str,
+        turn: &str,
         identity: &ProjectWorkOperationIdentity,
-    ) -> Result<ProjectLedgerRecordUpdate, BtccError> {
+    ) -> Result<Vec<ProjectLedgerRecordUpdate>, BtccError> {
         let fresh = self.require_current(work_id).await?;
         if !is_open(&fresh.view) {
             return Err(invalid("project_work_not_open"));
@@ -112,25 +114,64 @@ impl ProjectWorkRepository {
         // The earlier disposition describes its old material and stays in history.
         view.latest_disposition = None;
         view.updated_at = self.recorded_at(identity.clone()).await?;
-        self.manifest_update(super::write::ManifestPublicationInput {
-            prior: Some(&fresh),
+        let mut revisions = codec::revisions(&fresh.manifest);
+        let children = closing_checkpoint(&fresh, &mut view, identity, turn, &mut revisions)?;
+        self.view_updates(super::write::WorkViewUpdates {
+            current: &fresh,
             view: &view,
             identity,
-            binding_refs: fresh
-                .manifest
-                .get("bindingRefs")
-                .cloned()
-                .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
-            session_head: fresh
-                .manifest
-                .get("sessionHead")
-                .and_then(Value::as_bool)
-                .unwrap_or(true),
-            revisions: &codec::revisions(&fresh.manifest),
+            revisions: &revisions,
+            children,
             operation: ProjectLedgerRecordOperation::Update,
+            leading: Vec::new(),
         })
         .await
     }
+}
+
+/// Close current actions in a new immutable checkpoint with its manifest.
+fn closing_checkpoint(
+    current: &Snapshot,
+    view: &mut WorkView,
+    identity: &ProjectWorkOperationIdentity,
+    turn: &str,
+    revisions: &mut codec::Revisions,
+) -> Result<Vec<Value>, BtccError> {
+    let Some(plan) = &view.current_plan else {
+        return Ok(Vec::new());
+    };
+    let plan_id = plan.plan_revision_id.clone();
+    for action in &mut view.action_progress {
+        if !matches!(
+            action.status,
+            butler_turn::btcc::ActionStatus::Done | butler_turn::btcc::ActionStatus::Skipped
+        ) {
+            action.status = butler_turn::btcc::ActionStatus::Skipped;
+            action.note = Some("Work ended.".into());
+        }
+    }
+    view.current_stage = Some(WorkStage::Reporting);
+    view.allowed_next_stages = butler_turn::btcc::allowed_next_work_stages(view.current_stage);
+    revisions.checkpoint_revision += 1;
+    revisions.checkpoint_result_sequence = view.result_refs.len() as u64;
+    let child = super::progress::checkpoint_child(super::progress::CheckpointChildInput {
+        current,
+        turn_id: turn,
+        identity,
+        at: &view.updated_at,
+        revision: revisions.checkpoint_revision,
+        stage: WorkStage::Reporting,
+        plan_id: &plan_id,
+        progress: &view.action_progress,
+        summary: "Work ended.",
+        next: "",
+        checkpoint_identity: &identity.id,
+    });
+    view.latest_checkpoint =
+        Some(codec::typed(child.get("checkpoint").cloned().ok_or_else(
+            || invalid("project_work_managed_record_invalid"),
+        )?)?);
+    Ok(vec![child])
 }
 
 /// The revision of `turn_id`'s binding in the manifest.

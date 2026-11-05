@@ -16,7 +16,11 @@ mod read;
 mod relation;
 mod review;
 mod scope_selection;
+mod terminal;
 mod tool_result;
+pub(in crate::btcc::storage) use terminal::{
+    close_session as close_delegated_session, invariant as terminal_work_invariant,
+};
 
 #[cfg(test)]
 mod boundary_tests;

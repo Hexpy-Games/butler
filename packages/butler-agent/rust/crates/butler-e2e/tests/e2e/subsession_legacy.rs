@@ -326,10 +326,10 @@ fn assert_steward_turn_shape(stewards: &Value) {
     assert_eq!(live["latest_turn"]["state"], "thinking", "{live}");
     assert_eq!(live["latest_turn"]["cancellable"], true, "{live}");
     assert_eq!(live["active_turn"], live["latest_turn"], "{live}");
-    // A finalizing turn older than its grace is an orphan, not active work.
+    // A missing result is unfinished closeout; only a durable result can end its task.
     let orphan = &list[2];
-    assert_eq!(orphan["status"], "failed", "{orphan}");
-    assert_eq!(orphan["terminal"], true, "{orphan}");
+    assert_eq!(orphan["status"], "waiting", "{orphan}");
+    assert_eq!(orphan["terminal"], false, "{orphan}");
     assert_eq!(orphan["result_missing"], true, "{orphan}");
     assert_eq!(orphan["latest_turn"]["state"], "streaming", "{orphan}");
     assert!(orphan["active_turn"].is_null(), "{orphan}");

@@ -179,14 +179,14 @@ async fn assert_drained(
         let pending = records(&root, "pending").len();
         let processing = records(&root, "processing").len();
         if failed == 1
-            && success == 1
+            && success == 0
             && direction == "applied"
             && delivered(stub::QUEUED_REPLY)
             && messages
                 .iter()
                 .filter(|m| m["text"] == "Approach B verified." && m["status"] == "delivered")
                 .count()
-                == 2
+                == 1
             && pending == 0
             && processing == 0
         {
@@ -196,7 +196,7 @@ async fn assert_drained(
                     "SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1",
                     relation
                 ),
-                2
+                1
             );
             let original: String = db.query_row("SELECT child_turn_id FROM btcc_steward_results WHERE relation_id=?1 AND status='failed'", [relation], |row| row.get(0)).unwrap();
             assert_eq!(original, child_turn);
@@ -209,6 +209,14 @@ async fn assert_drained(
                 1
             );
             assert_requests(script);
+            let session: String = db
+                .query_row(
+                    "SELECT child_session_id FROM btcc_session_relations WHERE relation_id=?1",
+                    [relation],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            crate::delegate_followup::terminal::assert_closed(&db, &session);
             assert_eq!(script.hold_seen.load(Ordering::SeqCst), 1);
             let turn = s.gw.turn("general", held).await?.unwrap();
             assert_eq!(turn["state"], "failed", "{turn}");
@@ -227,7 +235,7 @@ async fn assert_drained(
                 );
             }
             println!(
-                "full queue recovered ({:.3}s): failed=1 success=1 direction={direction} pending={pending} processing={processing}",
+                "full queue recovered ({:.3}s): failed=1 success=0 direction={direction} pending={pending} processing={processing}",
                 started.elapsed().as_secs_f64()
             );
             return Ok(());
@@ -261,10 +269,10 @@ fn assert_requests(script: &stub::Script) {
         "failed result delivered more than once"
     );
     assert!(
-        requests
+        !requests
             .iter()
             .any(|r| stub::child_lane(r) && request_text(r).starts_with(stub::DIRECTION)),
-        "direction never ran as a child continuation"
+        "an interrupted assignment must never run its old direction"
     );
 }
 

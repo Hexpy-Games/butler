@@ -13,6 +13,8 @@ mod project;
 mod requires_e2e_fixtures;
 #[path = "delegate_followup/stub.rs"]
 pub(crate) mod stub;
+#[path = "delegate_followup/terminal.rs"]
+pub(crate) mod terminal;
 #[path = "delegate_followup/worker.rs"]
 mod worker;
 use butler_e2e::e2e::{
@@ -27,15 +29,21 @@ use std::time::{Duration, Instant};
 #[tokio::test]
 async fn completed_delegation_followup_starts_with_prior_results() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    followup(false).await
+    followup(false, false).await
 }
 #[tokio::test]
 async fn stopped_delegation_followup_starts_with_prior_context() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    followup(true).await
+    followup(true, false).await
 }
-async fn followup(stopped: bool) -> Result<(), HarnessError> {
+async fn followup(stopped: bool, failed: bool) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start(stopped).await?;
+    script
+        .fault_before_close
+        .store(failed, std::sync::atomic::Ordering::SeqCst);
+    script
+        .immediate_followup
+        .store(failed, std::sync::atomic::Ordering::SeqCst);
     let s = Setup::new(if stopped {
         "FOLLOWUP-STOPPED"
     } else {
@@ -61,9 +69,26 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
         assert_eq!(cancel.status, 202, "{cancel:?}");
         script.release.notify_one();
         wait_result(&s, relation, "cancelled").await?
+    } else if failed {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if let Some(child) = children(&s).await?.first() {
+                let relation = child["relation"]["relation_id"].as_str().unwrap();
+                break wait_result(&s, relation, "failed").await?;
+            }
+            assert!(Instant::now() < deadline);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
     } else {
         wait_first(&s).await?
     };
+    terminal::assert_closed(
+        &rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?,
+        first["session_id"].as_str().unwrap(),
+    );
+    script
+        .fault_before_close
+        .store(false, std::sync::atomic::Ordering::SeqCst);
     let relation = first["relation"]["relation_id"]
         .as_str()
         .unwrap()
@@ -76,7 +101,16 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
     let second = wait_second(&s, &relation).await?;
     assert_ne!(second["session_id"], first["session_id"]);
     assert_eq!(second["result"]["status"], "success");
-    assert_followup(&s, &script, before, &relation, stopped, &turn);
+    assert_followup(&s, &script, before, &relation, stopped, failed, &turn);
+    terminal::assert_closed(
+        &rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?,
+        second["session_id"].as_str().unwrap(),
+    );
+    assert_ne!(
+        second["relation"]["anchor_message_id"],
+        first["relation"]["anchor_message_id"]
+    );
+    assert_eq!(second["relation"]["parent_turn_id"], turn["id"]);
     assert_reply(&s, &turn).await?;
     super::steward_presentation::intent::assert_child_packets_stated_once(
         &script.requests.lock().unwrap(),
@@ -157,7 +191,8 @@ async fn wait_result(s: &Scenario, relation: &str, status: &str) -> Result<Value
             .find(|c| c["relation"]["relation_id"] == relation)
             .unwrap();
         let messages = s.gw.messages("general").await?;
-        if child["result"]["status"] == status
+        if child["terminal"] == true
+            && child["result"]["status"] == status
             && messages
                 .iter()
                 .any(|m| m["text"] == "원문 확인 결과를 정리했습니다.")
@@ -181,7 +216,7 @@ async fn wait_second(s: &Scenario, prior: &str) -> Result<Value, HarnessError> {
                 .iter()
                 .find(|c| c["relation"]["relation_id"] != prior)
                 .unwrap();
-            if second["result"]["status"] == "success" {
+            if second["terminal"] == true && second["result"]["status"] == "success" {
                 return Ok(second.clone());
             }
         }
@@ -199,6 +234,7 @@ fn assert_followup(
     before: usize,
     relation: &str,
     stopped: bool,
+    failed: bool,
     turn: &Value,
 ) {
     let requests = script.requests.lock().unwrap();
@@ -231,7 +267,13 @@ fn assert_followup(
     assert!(feedback["output"]["next_action"].get("requires").is_none());
     assert_eq!(
         feedback["output"]["prior_context"]["result"]["status"],
-        if stopped { "cancelled" } else { "success" }
+        if stopped {
+            "cancelled"
+        } else if failed {
+            "failed"
+        } else {
+            "success"
+        }
     );
     let child_request = format!(
         "role: steward user_request (the user's own words, verbatim): {} request (Butler's reading): {}",
@@ -249,7 +291,7 @@ fn assert_followup(
         .to_string();
     assert!(child.contains(stub::OWNER));
     assert!(child.contains(relation));
-    if !stopped {
+    if !stopped && !failed {
         assert!(child.contains("Original evidence: paper A verified."));
     }
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
@@ -274,7 +316,14 @@ fn assert_followup(
     };
     assert_eq!(roots.len(), 2);
     assert_ne!(roots[0].0, roots[1].0);
-    assert_eq!(roots[0].1, if stopped { "abandoned" } else { "completed" });
+    assert_eq!(
+        roots[0].1,
+        if stopped || failed {
+            "abandoned"
+        } else {
+            "completed"
+        }
+    );
     assert_eq!(roots[1].1, "completed");
 }
 async fn assert_reply(s: &Scenario, turn: &Value) -> Result<(), HarnessError> {

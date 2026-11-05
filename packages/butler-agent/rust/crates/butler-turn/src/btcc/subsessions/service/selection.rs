@@ -15,16 +15,9 @@ impl SubsessionService {
         let mut eligible = Vec::new();
         let mut closed = Vec::new();
         for candidate in owned {
-            if self.relation_is_eligible(&query, &candidate).await? {
+            if self.relation_is_eligible(&candidate).await? {
                 eligible.push(candidate);
-            } else if query.purpose == RelationPurpose::Direct
-                && self
-                    .repository
-                    .open_relation_by_work(candidate.root_work_id.clone())
-                    .await
-                    .map_err(BtccError::from)?
-                    .is_none()
-            {
+            } else if query.purpose == RelationPurpose::Direct {
                 closed.push(candidate);
             }
         }
@@ -141,59 +134,22 @@ impl SubsessionService {
         Ok(owned)
     }
 
-    /// An unfinished relation is eligible; a finished one only for a
-    /// follow-up direction addressed by Work or relation id whose root Work
-    /// is still open.
+    /// An unfinished assignment remains eligible while its queue drains.
     pub(super) async fn relation_is_eligible(
         &self,
-        query: &RelationQuery<'_>,
         candidate: &StoredSubsessionDelegation,
     ) -> Result<bool, BtccError> {
-        let terminal = self
-            .repository
-            .result_for_relation(candidate.relation_id.clone())
+        self.repository
+            .card_open(candidate.relation_id.clone())
             .await
-            .map_err(BtccError::from)?
-            .is_some();
-        if !terminal {
-            return Ok(true);
-        }
-        // A Steward's saved result ends one turn, not a direction still running.
-        if candidate.packet.child_role == crate::btcc::ChildRole::Steward
-            && self.steward_continuing(candidate).await?
-        {
-            return Ok(true);
-        }
-        if query.purpose == RelationPurpose::Cancel
-            && candidate.packet.child_role == crate::btcc::ChildRole::Worker
-        {
-            return self
-                .repository
-                .worker_cancellable(candidate.relation_id.clone())
-                .await
-                .map_err(BtccError::from);
-        }
-        if query.purpose != RelationPurpose::Direct
-            || (query.work_id.is_none() && query.relation_id.is_none())
-        {
-            return Ok(false);
-        }
-        if candidate.packet.child_role == crate::btcc::ChildRole::Worker {
-            return Ok(true);
-        }
-        Ok(self
-            .repository
-            .open_relation_by_work(candidate.root_work_id.clone())
-            .await
-            .map_err(BtccError::from)?
-            .is_some())
+            .map_err(BtccError::from)
     }
 }
 
 /// Why a parent addresses one of its subsession relations.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum RelationPurpose {
-    /// Send new direction; may follow up on a finished relation.
+    /// Send direction, returning feedback when the assignment has ended.
     Direct,
     /// Cancel an unfinished relation.
     Cancel,
@@ -207,17 +163,4 @@ pub(super) struct RelationQuery<'a> {
     pub(super) title: Option<&'a str>,
     pub(super) role: &'a SessionRole,
     pub(super) purpose: RelationPurpose,
-}
-
-impl<'a> RelationQuery<'a> {
-    pub(super) fn direction(request: &'a super::control::SubsessionDirectionRequest) -> Self {
-        Self {
-            parent: &request.parent_session_id,
-            relation_id: request.relation_id.as_deref(),
-            work_id: request.work_id.as_deref(),
-            title: request.safe_title.as_deref(),
-            role: &request.child_role,
-            purpose: RelationPurpose::Direct,
-        }
-    }
 }

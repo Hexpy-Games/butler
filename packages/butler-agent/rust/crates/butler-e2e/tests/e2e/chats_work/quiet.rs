@@ -78,7 +78,8 @@ async fn schedule_work_steered_by_user_posts_immediately_and_quietly() -> Result
         .await?;
     let started = Instant::now();
     script.release.add_permits(1);
-    let messages = wait_count(&s, "work_result", 1).await?;
+    // The default direction queues a separate Turn after the running report.
+    let messages = wait_count(&s, "work_result", 2).await?;
     let applied: i64 = runtime(&s)?.query_row("SELECT count(*) FROM btcc_subsession_directions d JOIN btcc_steward_results r ON r.child_turn_id=d.applied_child_turn_id WHERE d.status='applied' AND r.status='success'", [], |r| r.get(0))?;
     assert_eq!(applied, 1);
     assert!(

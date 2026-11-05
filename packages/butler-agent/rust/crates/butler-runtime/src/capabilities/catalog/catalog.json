@@ -4929,7 +4929,7 @@
       "definition": {
         "type": "function",
         "name": "steer_steward",
-        "description": "Send a bounded correction or user acceptance to the original Steward and Work. Use work_id from Project Ledger for an existing open/blocked Work, including after its Steward has reported or from another conversation in the same project. Completed/abandoned Work cannot be reopened. Use relation_id for an active relation or a reported relation owned by this conversation. The original Steward owns the mutation and reports back to its original Butler conversation; queued is not completed. Never create a replacement delegation just to close existing work. A closed Work returns delegated_session_closed with the prior context and next_action. Continue in this same turn with delegate_to_steward(previous_relation_id); do not report a connection failure or ask the user to restart. Open or blocked Work continues with its existing owner.",
+        "description": "Queue an instruction for delegated work by default. Set mode=steer only for an immediate correction to a currently running child turn. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened. If delegated_session_closed is returned, start new work in this same turn with delegate_to_steward(previous_relation_id) for a Steward, or delegate_to_worker for a Worker. The new assignment gets a new card. Queued is not completed.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4954,6 +4954,14 @@
               "minLength": 1,
               "maxLength": 120,
               "description": "Title selector only when neither relation_id nor work_id is supplied; exact IDs take precedence."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "queue",
+                "steer"
+              ],
+              "description": "Default: queue. Immediate steer requires a running turn."
             }
           },
           "required": [
@@ -4979,7 +4987,7 @@
       "definition": {
         "type": "function",
         "name": "steer_worker",
-        "description": "Send a bounded correction or added instruction to one active Worker relation while the Steward continues waiting for that Worker result. Continue the same Worker session and assigned work; never create a replacement Worker.",
+        "description": "Queue an instruction for delegated work by default. Set mode=steer only for an immediate correction to a currently running child turn. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened. If delegated_session_closed is returned, start new work in this same turn with delegate_to_steward(previous_relation_id) for a Steward, or delegate_to_worker for a Worker. The new assignment gets a new card. Queued is not completed.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4998,6 +5006,14 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 120
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "queue",
+                "steer"
+              ],
+              "description": "Default: queue. Immediate steer requires a running turn."
             }
           },
           "required": [
@@ -12109,7 +12125,7 @@
     "steer_steward": {
       "type": "function",
       "name": "steer_steward",
-      "description": "Send a bounded correction or user acceptance to the original Steward and Work. Use work_id from Project Ledger for an existing open/blocked Work, including after its Steward has reported or from another conversation in the same project. Completed/abandoned Work cannot be reopened. Use relation_id for an active relation or a reported relation owned by this conversation. The original Steward owns the mutation and reports back to its original Butler conversation; queued is not completed. Never create a replacement delegation just to close existing work. A closed Work returns delegated_session_closed with the prior context and next_action. Continue in this same turn with delegate_to_steward(previous_relation_id); do not report a connection failure or ask the user to restart. Open or blocked Work continues with its existing owner.",
+      "description": "Queue an instruction for delegated work by default. Set mode=steer only for an immediate correction to a currently running child turn. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened. If delegated_session_closed is returned, start new work in this same turn with delegate_to_steward(previous_relation_id) for a Steward, or delegate_to_worker for a Worker. The new assignment gets a new card. Queued is not completed.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12134,6 +12150,14 @@
             "minLength": 1,
             "maxLength": 120,
             "description": "Title selector only when neither relation_id nor work_id is supplied; exact IDs take precedence."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "steer"
+            ],
+            "description": "Default: queue. Immediate steer requires a running turn."
           }
         },
         "required": [
@@ -12148,7 +12172,7 @@
     "steer_worker": {
       "type": "function",
       "name": "steer_worker",
-      "description": "Send a bounded correction or added instruction to one active Worker relation while the Steward continues waiting for that Worker result. Continue the same Worker session and assigned work; never create a replacement Worker.",
+      "description": "Queue an instruction for delegated work by default. Set mode=steer only for an immediate correction to a currently running child turn. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened. If delegated_session_closed is returned, start new work in this same turn with delegate_to_steward(previous_relation_id) for a Steward, or delegate_to_worker for a Worker. The new assignment gets a new card. Queued is not completed.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12167,6 +12191,14 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "steer"
+            ],
+            "description": "Default: queue. Immediate steer requires a running turn."
           }
         },
         "required": [
