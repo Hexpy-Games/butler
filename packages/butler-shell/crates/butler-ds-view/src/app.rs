@@ -146,24 +146,32 @@ impl Render for DsView {
             None => div().into_any_element(),
         };
         let ds = Ds::get(cx);
-        let ds_bg = ds.color(Color::Background);
+        // The viewer's layers: the shell material over the browser canvas, then the workspace.
+        let shell = ds.color(Color::SidebarBg);
+        let workspace = ds.color(Color::WorkspaceBg);
         let root = div()
             .size_full()
-            .flex()
-            .flex_row()
-            .bg(ds_bg)
-            .text_color(ds.color(Color::TextPrimary))
-            .font_family(ds.body_font().clone())
-            .font_weight(FontWeight::NORMAL)
-            .when(!narrow, |root| root.child(self.sidebar(cx)))
+            .bg(gpui::white()) // Chromium's default canvas under the viewer
             .child(
                 div()
-                    .id("page")
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .overflow_y_scroll()
-                    .child(crate::pages::anchored(body, "page-content")),
+                    .size_full()
+                    .flex()
+                    .flex_row()
+                    .bg(shell)
+                    .text_color(ds.color(Color::TextPrimary))
+                    .font_family(ds.body_font().clone())
+                    .font_weight(FontWeight::NORMAL)
+                    .when(!narrow, |root| root.child(self.sidebar(cx)))
+                    .child(
+                        div()
+                            .id("page")
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .overflow_y_scroll()
+                            .bg(workspace)
+                            .child(crate::pages::anchored(body, "page-content")),
+                    ),
             );
         focus::track_modality(root)
     }

@@ -13,6 +13,7 @@ use super::convert;
 use super::focus;
 use super::layout::{ItemProps, WithItem};
 use super::motion::{Loop, Timing, Tween};
+use super::strut;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -214,10 +215,13 @@ impl RenderOnce for Card {
         }
         let ds = Ds::get(cx);
         let ring = self.running.then(|| self.running_ring(ds, radius));
-        self.item
-            .apply(el, ds)
-            .children(self.children)
-            .children(ring)
+        strut::scope(
+            true,
+            self.item
+                .apply(el, ds)
+                .children(self.children)
+                .children(ring),
+        )
     }
 }
 

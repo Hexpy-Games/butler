@@ -169,6 +169,14 @@ impl Role {
         }
     }
 
+    /// Roles whose element is inline (a span, label or code): headings and `Body` are blocks.
+    pub fn is_inline(self) -> bool {
+        !matches!(
+            self,
+            Self::H1 | Self::H2 | Self::H3 | Self::H4 | Self::H5 | Self::H6 | Self::Body
+        )
+    }
+
     /// Headings and title roles set `word-break: keep-all` themselves.
     pub fn keeps_words(self) -> bool {
         !matches!(

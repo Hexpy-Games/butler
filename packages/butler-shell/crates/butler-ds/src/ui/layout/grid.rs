@@ -8,6 +8,7 @@ use gpui::{
 
 use super::{ItemProps, Space, Span, WithItem};
 use crate::ui::context::Ds;
+use crate::ui::strut;
 
 /// `repeat(auto-fit, minmax(min(100%, 240px), 1fr))`: the minimum track width.
 const AUTO_TRACK_MIN: f32 = 240.; // DS: Grid.module.css:41
@@ -107,9 +108,12 @@ impl ParentElement for GridItem {
 
 impl RenderOnce for GridItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.item
-            .apply(div().min_w_0(), Ds::get(cx))
-            .children(self.children)
+        strut::scope(
+            true,
+            self.item
+                .apply(div().min_w_0(), Ds::get(cx))
+                .children(self.children),
+        )
     }
 }
 
@@ -149,8 +153,9 @@ impl Grid {
     }
 
     pub fn child(mut self, child: impl IntoElement) -> Self {
-        self.cells
-            .push((Span::One, GridItem::new().child(child).into_any_element()));
+        // The child is the grid item itself (blockified), so it has no strut.
+        let cell = strut::scope(false, div().min_w_0().child(child));
+        self.cells.push((Span::One, cell.into_any_element()));
         self
     }
 

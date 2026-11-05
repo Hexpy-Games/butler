@@ -12,6 +12,7 @@ use gpui::{
 
 use super::context::{Ds, Lang};
 use super::layout::{ItemProps, WithItem};
+use super::strut;
 use crate::tokens::{Color, Length, Number};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -284,6 +285,47 @@ impl Typo {
         (!features.is_empty()).then(|| FontFeatures(std::sync::Arc::new(features)))
     }
 
+    /// An inline span in a block: its line box is the taller of its own and the strut's (the
+    /// body role), baselines aligned. Returns the line height to use and how far the glyphs move
+    /// down from where a line of that height would put them.
+    fn strut_line(ds: &Ds, own: (&SharedString, f32, f32, f32), cx: &App) -> (f32, f32) {
+        let body = Role::Body.tokens().map(|body| {
+            (
+                f32::from(ds.len(body.size)),
+                f32::from(ds.len(body.line_height)),
+                ds.number(body.weight),
+            )
+        });
+        let Some((body_size, body_line, body_weight)) = body else {
+            return (own.2, 0.);
+        };
+        let (family, size, line, weight) = own;
+        let (own_asc, own_desc) = Self::extent(family, size, weight, cx);
+        let (body_asc, body_desc) = Self::extent(ds.body_font(), body_size, body_weight, cx);
+        let above = |asc: f32, desc: f32, line: f32| (line - (asc + desc)) / 2. + asc;
+        let (above_own, above_body) = (
+            above(own_asc, own_desc, line),
+            above(body_asc, body_desc, body_line),
+        );
+        let (below_own, below_body) = (line - above_own, body_line - above_body);
+        let top = above_own.max(above_body);
+        let total = top + below_own.max(below_body);
+        (total, top - above(own_asc, own_desc, total))
+    }
+
+    /// A face's ascent and descent at `size`.
+    fn extent(family: &SharedString, size: f32, weight: f32, cx: &App) -> (f32, f32) {
+        let system = cx.text_system();
+        let mut face = font(family.clone());
+        face.weight = FontWeight(weight);
+        let id = system.resolve_font(&face);
+        let size = px(size);
+        (
+            f32::from(system.ascent(id, size)),
+            f32::from(system.descent(id, size)),
+        )
+    }
+
     /// Distance the glyphs move down so the capitals' centre is the line's centre
     /// (`text-box: trim-both cap alphabetic` with `padding-block: (1lh - 1cap) / 2`).
     fn trim_offset(family: &SharedString, size: f32, cx: &App, weight: f32) -> f32 {
@@ -331,6 +373,11 @@ impl RenderOnce for Typo {
                 el.text_style().letter_spacing = Some(px(spacing));
             }
             trim = Some(Self::trim_offset(&family, size, cx, weight));
+            if self.role.is_inline() && strut::active(cx) {
+                let (line, shift) = Self::strut_line(ds, (&family, size, line_height, weight), cx);
+                el = el.line_height(px(line));
+                trim = Some(shift);
+            }
         } else if let Some(weight) = self.weight {
             el = el.font_weight(FontWeight(weight.value(ds)));
         }

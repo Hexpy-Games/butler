@@ -8,6 +8,7 @@ use gpui::{
 
 use super::context::Ds;
 use super::convert;
+use super::strut;
 use crate::tokens::{Color, Length, Shadow};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -204,18 +205,21 @@ impl RenderOnce for TintedGlass {
         .top_0()
         .left_0()
         .size_full();
-        div()
-            .relative()
-            .min_w_0()
-            .overflow_hidden()
-            .rounded(radius)
-            .text_color(ds.color(Color::TextPrimary))
-            .child(layer)
-            // The 1px border of the surface stays in layout, so the content keeps the DS geometry.
-            .child(
-                div()
-                    .p(padding + px(1.)) // DS: TintedGlass.module.css:5
-                    .children(self.children),
-            )
+        strut::scope(
+            true,
+            div()
+                .relative()
+                .min_w_0()
+                .overflow_hidden()
+                .rounded(radius)
+                .text_color(ds.color(Color::TextPrimary))
+                .child(layer)
+                // The 1px border of the surface stays in layout, so the content keeps the DS geometry.
+                .child(
+                    div()
+                        .p(padding + px(1.)) // DS: TintedGlass.module.css:5
+                        .children(self.children),
+                ),
+        )
     }
 }

@@ -73,7 +73,7 @@ impl gpui::Global for CanvasWidth {}
 fn frame(name: &str, content: AnyElement, ds: &Ds, forced: Option<f32>) -> AnyElement {
     let anchor = format!("story-{name}");
     let sized = match forced {
-        Some(width) => div().w(px(width)).flex_none(),
+        Some(width) => div().w(px(width)).max_w_full().flex_none(),
         None => div().w_full().min_w_0(),
     };
     let canvas = anchor_div(sized.child(content), anchor);
@@ -133,8 +133,17 @@ pub(crate) fn page(
                 .into_any_element(),
         );
     }
+    // `.content` of DesignSystemViewer.module.css: 3xl xl 4xl, and xl md 3xl on mobile.
+    let ds = Ds::get(cx);
+    let (top, side, bottom) = if ds.compact() {
+        (Length::SpaceXl, Length::SpaceMd, Length::Space3xl)
+    } else {
+        (Length::Space3xl, Length::SpaceXl, Length::Space4xl)
+    };
     div()
-        .p(Ds::get(cx).len(Length::Space3xl))
+        .pt(ds.len(top))
+        .pb(ds.len(bottom))
+        .px(ds.len(side))
         .child(
             Stack::new()
                 .gap(Space::Xxl)

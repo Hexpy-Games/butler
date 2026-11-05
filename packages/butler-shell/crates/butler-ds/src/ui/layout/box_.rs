@@ -9,6 +9,7 @@ use super::{ItemProps, Space, WithItem};
 use crate::tokens::{Color, Length, Shadow};
 use crate::ui::context::Ds;
 use crate::ui::convert;
+use crate::ui::strut;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Radius {
@@ -186,7 +187,7 @@ impl RenderOnce for Box {
                 ds.tokens(),
             ));
         }
-        self.item.apply(el, ds).children(self.children)
+        strut::scope(true, self.item.apply(el, ds).children(self.children))
     }
 }
 

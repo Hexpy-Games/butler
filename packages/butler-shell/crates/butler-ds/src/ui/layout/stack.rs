@@ -6,6 +6,7 @@ use gpui::{
 
 use super::{ItemProps, Space, WithItem};
 use crate::ui::context::Ds;
+use crate::ui::strut;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Align {
@@ -192,7 +193,7 @@ impl RenderOnce for Stack {
         if self.drag == WindowDrag::Drag {
             el = el.window_control_area(WindowControlArea::Drag);
         }
-        self.item.apply(el, ds).children(self.children)
+        strut::scope(false, self.item.apply(el, ds).children(self.children))
     }
 }
 
@@ -232,7 +233,10 @@ impl ParentElement for StackItem {
 
 impl RenderOnce for StackItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.item.apply(div(), Ds::get(cx)).children(self.children)
+        strut::scope(
+            true,
+            self.item.apply(div(), Ds::get(cx)).children(self.children),
+        )
     }
 }
 

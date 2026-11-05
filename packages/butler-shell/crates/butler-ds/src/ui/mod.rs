@@ -14,6 +14,7 @@ pub mod layout;
 pub mod motion;
 pub mod presence;
 pub mod separator;
+pub mod strut;
 pub mod tinted_glass;
 pub mod typo;
 
