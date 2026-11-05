@@ -6287,7 +6287,7 @@
       "definition": {
         "type": "function",
         "name": "browser_read",
-        "description": "Read an open tab's page text as evidence; tab is the id returned when the page was opened. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. The tab is read as it shows now and returns unchanged when the page is the same. Navigation, ads and repeated blocks come after the main content. Request reads of different tabs, and their continuations, together in one round.",
+        "description": "Read a page's text as evidence: pass tab for an open tab, or url to open the page and read it in one call; continue on the result's tab. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. The tab is read as it shows now and returns unchanged when the page is the same. Navigation, ads and repeated blocks come after the main content. Request reads of different tabs, and their continuations, together in one round.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6319,11 +6319,12 @@
             "query": {
               "type": "string",
               "description": "What you need from the page. Returns the matching passages first, with spans."
+            },
+            "url": {
+              "type": "string",
+              "description": "A page to read when no open tab shows it: it opens in a tab owned by this conversation and the result names that tab."
             }
-          },
-          "required": [
-            "tab"
-          ]
+          }
         },
         "effectBoundary": "none",
         "concurrencySafe": true,
@@ -6636,7 +6637,7 @@
       "definition": {
         "type": "function",
         "name": "browser_close",
-        "description": "Close an owned tab once you have what you need from it; open tabs count against the browser's tab limit.",
+        "description": "Optional. Tabs you only read close when your delegated turn ends or when they sit idle; close one earlier only to free the browser's tab limit.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -13068,7 +13069,7 @@
     "browser_read": {
       "type": "function",
       "name": "browser_read",
-      "description": "Read an open tab's page text as evidence; tab is the id returned when the page was opened. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. The tab is read as it shows now and returns unchanged when the page is the same. Navigation, ads and repeated blocks come after the main content. Request reads of different tabs, and their continuations, together in one round.",
+      "description": "Read a page's text as evidence: pass tab for an open tab, or url to open the page and read it in one call; continue on the result's tab. Pass query with what you need: the passages that answer it come first, each with its chunk and span. Without query the page comes in order. Continue with start_chunk=next_start_chunk. The tab is read as it shows now and returns unchanged when the page is the same. Navigation, ads and repeated blocks come after the main content. Request reads of different tabs, and their continuations, together in one round.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -13100,11 +13101,12 @@
           "query": {
             "type": "string",
             "description": "What you need from the page. Returns the matching passages first, with spans."
+          },
+          "url": {
+            "type": "string",
+            "description": "A page to read when no open tab shows it: it opens in a tab owned by this conversation and the result names that tab."
           }
-        },
-        "required": [
-          "tab"
-        ]
+        }
       },
       "effectBoundary": "none",
       "concurrencySafe": true,
@@ -13292,7 +13294,7 @@
     "browser_close": {
       "type": "function",
       "name": "browser_close",
-      "description": "Close an owned tab once you have what you need from it; open tabs count against the browser's tab limit.",
+      "description": "Optional. Tabs you only read close when your delegated turn ends or when they sit idle; close one earlier only to free the browser's tab limit.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
