@@ -9,7 +9,6 @@ use tokio::sync::Mutex;
 #[derive(Clone)]
 pub struct ShellClient {
     pub(crate) inner: Arc<Inner>,
-    traceparent: Option<String>,
 }
 pub(crate) struct Inner {
     pub(crate) data: PathBuf,
@@ -34,21 +33,6 @@ pub(crate) enum Body<'a> {
     },
 }
 impl ShellClient {
-    /// Clone this connection with a validated W3C version-00 traceparent header.
-    pub fn with_trace(&self, traceparent: &str) -> Result<Self, Error> {
-        let parts: Vec<_> = traceparent.split('-').collect();
-        if parts.len() != 4
-            || parts[0] != "00"
-            || !parts[1..].iter().zip([32, 16, 2]).all(|(part, len)| {
-                part.len() == len && part.bytes().all(|byte| byte.is_ascii_hexdigit())
-            })
-        {
-            return Err(Error::Protocol);
-        }
-        let mut client = self.clone();
-        client.traceparent = Some(traceparent.into());
-        Ok(client)
-    }
     pub(crate) async fn download(
         &self,
         method: Method,
@@ -128,7 +112,6 @@ impl ShellClient {
             .build()
             .map_err(|_| Error::Connection)?;
         Ok(Self {
-            traceparent: None,
             inner: Arc::new(Inner {
                 data,
                 endpoint,
@@ -229,9 +212,6 @@ impl ShellClient {
             .bearer_auth(token);
         if !live {
             request = request.timeout(Duration::from_secs(30));
-        }
-        if let Some(traceparent) = &self.traceparent {
-            request = request.header("traceparent", traceparent);
         }
         request = match body {
             Body::None => request,

@@ -45,11 +45,11 @@ impl ShellClient {
     pub async fn download_message_asset(
         &self,
         id: &str,
-        download: Option<u8>,
+        download: bool,
     ) -> Result<Download, Error> {
         let mut query = Vec::new();
-        if let Some(value) = download {
-            query.push(("download", value.to_string()));
+        if download {
+            query.push(("download", "1".to_string()));
         }
         self.download(Method::GET, &["message-assets", id], &query)
             .await

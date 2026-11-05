@@ -3,13 +3,12 @@ use super::{transport::Peer, *};
 use axum::{
     Router,
     body::Body,
-    http::HeaderMap,
     response::Response,
     routing::{get, post},
 };
 use butler_shell_client::{Error, Upload};
 use std::sync::{
-    Arc, Mutex,
+    Arc,
     atomic::{AtomicUsize, Ordering},
 };
 
@@ -63,37 +62,6 @@ async fn multipart_refuses_header_injection() -> Result<(), TestError> {
         Err(Error::Protocol)
     ));
     assert_eq!(requests.load(Ordering::SeqCst), 0);
-    Ok(())
-}
-
-#[tokio::test]
-async fn traceparent_is_sent_only_by_the_traced_clone() -> Result<(), TestError> {
-    butler_e2e::gate!();
-    let headers = Arc::new(Mutex::new(Vec::new()));
-    let observed = headers.clone();
-    let peer = Peer::new(Router::new().route(
-        "/messages",
-        post(move |received: HeaderMap| {
-            observed.lock().unwrap().push(
-                received
-                    .get("traceparent")
-                    .map(|v| v.to_str().unwrap().to_owned()),
-            );
-            async { axum::Json(json!({"data":{}})) }
-        }),
-    ))
-    .await?;
-    let client = peer.client().await?;
-    let trace = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01";
-    let traced = client.with_trace(trace)?;
-    traced
-        .send_message(&json!({"chat_id":"general", "text":"traced"}))
-        .await?;
-    client
-        .send_message(&json!({"chat_id":"general", "text":"original"}))
-        .await?;
-    assert_eq!(*headers.lock().unwrap(), [Some(trace.to_owned()), None]);
-    assert!(matches!(client.with_trace("invalid"), Err(Error::Protocol)));
     Ok(())
 }
 
