@@ -32,8 +32,8 @@ const { renderToStaticMarkup } = uiRequire("react-dom/server");
 const coreIcons = await loadPackage("@hugeicons/core-free-icons");
 const hugeiconsReact = await loadPackage("@hugeicons/react");
 const HugeiconsIcon = hugeiconsReact.HugeiconsIcon;
-const iconRoot = join(repoRoot, "packages/butler-shell/crates/butler-shell/assets/icons");
-const rustRoot = join(repoRoot, "packages/butler-shell/crates/butler-shell/src/ui");
+const iconRoot = join(repoRoot, "packages/butler-shell/crates/butler-ds/assets/icons");
+const rustRoot = join(repoRoot, "packages/butler-shell/crates/butler-ds/src/ui");
 const customAsset = "spinner.svg";
 const sources = [
   join(uiRoot, "src/libs/design-system/components/Icons/Icons.tsx"),

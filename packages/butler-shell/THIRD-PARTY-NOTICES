@@ -84,7 +84,7 @@ the text is LICENSE.md in that repository). Its NOTICE file reads:
 
 2. Pretendard
 -------------
-crates/butler-shell/assets/fonts/Pretendard-*.ttf are the static "alternative" faces of
+crates/butler-ds/assets/fonts/Pretendard-*.ttf are the static "alternative" faces of
 pretendard@1.3.9 (dist/public/static/alternative in the npm package), from
 https://github.com/orioncactus/pretendard, committed here so a cargo build needs no package
 manager. Licensed under the SIL Open Font License, Version 1.1 (OFL.txt beside the fonts):
@@ -186,7 +186,7 @@ manager. Licensed under the SIL Open Font License, Version 1.1 (OFL.txt beside t
 
 3. Hugeicons (free icons)
 -------------------------
-The 101 generated design-system SVGs in crates/butler-shell/assets/icons represent 109 DS
+The 101 generated design-system SVGs in crates/butler-ds/assets/icons represent 109 DS
 exports: 99 Hugeicons-backed exports from @hugeicons/core-free-icons 4.1.4
 (https://hugeicons.com), representing 98 distinct Hugeicons glyphs, and two Butler-drawn DS
 glyphs on the same 24px grid. Eight aliases reuse their target's SVG. The custom sidebar
