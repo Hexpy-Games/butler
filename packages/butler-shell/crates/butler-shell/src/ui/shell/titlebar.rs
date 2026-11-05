@@ -132,7 +132,7 @@ impl Shell {
         let controls = (!native).then(|| self.window_controls(cx));
         // The collapsed-sidebar inset (56px from the window edge) minus the collapsed track.
         let collapsed_pad = 56. - TRACK_MIN - 1.;
-        div()
+        crate::ui::widgets::anchor(div(), "titlebar")
             .id("titlebar")
             .absolute()
             .top_0()

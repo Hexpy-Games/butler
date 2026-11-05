@@ -126,12 +126,18 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             wait(h, |s, _| s.store.running().is_none())
         }
         "shot" => h.shot(dir, arg),
+        "layout" => h.layout(dir, arg),
         _ => Err(anyhow!("unknown live harness command")),
     }
 }
-pub(super) fn run(dir: &Path, data: std::path::PathBuf, dark: bool) -> anyhow::Result<()> {
+pub(super) fn run(
+    dir: &Path,
+    data: std::path::PathBuf,
+    dark: bool,
+    options: &super::Options,
+) -> anyhow::Result<()> {
     std::fs::create_dir_all(dir)?;
-    let mut h = Harness::open(None, dark)?;
+    let mut h = Harness::open(None, dark, options)?;
     let attachment = Attachment::start(Some(data));
     h.update(|s, _, cx| s.attach(attachment, cx))?;
     println!("LIVE READY");

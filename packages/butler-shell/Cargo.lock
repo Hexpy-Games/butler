@@ -4990,6 +4990,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e6eb142958d64335fb0e345c5b9ead2ecd6fc438c307e9d7d3c4fd428dbaf12"
 
 [[package]]
+name = "parity-diff"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "image",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

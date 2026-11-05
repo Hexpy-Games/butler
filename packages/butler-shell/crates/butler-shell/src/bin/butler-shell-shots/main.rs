@@ -23,14 +23,14 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context as _, anyhow};
+use anyhow::Context as _;
 use gpui::{AnyWindowHandle, AppContext as _, HeadlessAppContext, WindowHandle, px, size};
 
 use ui::i18n::Locale;
 use ui::shell::{Shell, ShellOptions};
 use ui::source::Source;
 
-fn context() -> anyhow::Result<HeadlessAppContext> {
+fn context(scale: f32) -> anyhow::Result<HeadlessAppContext> {
     let platform = gpui_platform::current_platform(true);
     let mut cx = HeadlessAppContext::with_platform(
         platform.text_system(),
@@ -41,7 +41,7 @@ fn context() -> anyhow::Result<HeadlessAppContext> {
                 .map(|r| Box::new(r) as Box<dyn gpui::PlatformHeadlessRenderer>)
         },
     );
-    cx.set_window_scale_factor(1.);
+    cx.set_window_scale_factor(scale);
     cx.update(|cx| {
         cx.set_reduce_motion(true);
         ui::init(cx)
@@ -65,19 +65,20 @@ struct Harness {
 }
 
 impl Harness {
-    fn open(source: Option<Rc<dyn Source>>, dark: bool) -> anyhow::Result<Self> {
-        let mut cx = context()?;
+    fn open(source: Option<Rc<dyn Source>>, dark: bool, options: &Options) -> anyhow::Result<Self> {
+        let mut cx = context(options.scale)?;
         let code_font = cx.update(|cx| ui::theme::code_font(&cx.text_system().all_font_names()));
-        let window = cx.open_window(size(px(800.), px(720.)), |window, cx| {
-            let options = ShellOptions {
-                source,
-                acrylic: false,
-                dark: Some(dark),
-                code_font,
-                locale: Locale::Ko,
-            };
-            cx.new(|cx| Shell::new(options, window, cx))
-        })?;
+        let window =
+            cx.open_window(size(px(options.width), px(options.height)), |window, cx| {
+                let options = ShellOptions {
+                    source,
+                    acrylic: false,
+                    dark: Some(dark),
+                    code_font,
+                    locale: Locale::Ko,
+                };
+                cx.new(|cx| Shell::new(options, window, cx))
+            })?;
         let handle: AnyWindowHandle = window.into();
         settle(&mut cx, handle);
         Ok(Self { cx, window, handle })
@@ -88,6 +89,55 @@ impl Harness {
         f: impl FnOnce(&mut Shell, &mut gpui::Window, &mut gpui::Context<Shell>),
     ) -> anyhow::Result<()> {
         self.cx.update(|app| self.window.update(app, f))
+    }
+
+    fn layout(&mut self, dir: &Path, name: &str) -> anyhow::Result<()> {
+        settle(&mut self.cx, self.handle);
+        let mut anchors = self.cx.update(|app| {
+            self.window.read(app).map(|s| {
+                let mut names = vec![
+                    "sidebar",
+                    "chat-card",
+                    "composer",
+                    "composer-field",
+                    "send-button",
+                    "approval-card",
+                    "question-card",
+                    "titlebar",
+                ]
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+                names.extend(
+                    s.store
+                        .chats
+                        .iter()
+                        .map(|c| format!("sidebar-row-{}", c.chat.chat.0)),
+                );
+                names.extend(
+                    s.chat
+                        .read(app)
+                        .messages
+                        .iter()
+                        .map(|m| format!("message-{}", m.id)),
+                );
+                names
+            })
+        })?;
+        anchors.sort();
+        anchors.dedup();
+        let mut layout = Vec::new();
+        for anchor in anchors {
+            if let Some(b) = self.cx.debug_bounds(self.handle, &anchor)? {
+                layout.push(serde_json::json!({"anchor": anchor, "x": b.origin.x.as_f32(),
+                    "y": b.origin.y.as_f32(), "w": b.size.width.as_f32(), "h": b.size.height.as_f32()}));
+            }
+        }
+        std::fs::write(
+            dir.join(format!("{name}.layout.json")),
+            serde_json::to_vec_pretty(&layout)?,
+        )?;
+        Ok(())
     }
 
     fn shot(&mut self, dir: &Path, name: &str) -> anyhow::Result<()> {
@@ -123,8 +173,8 @@ fn open_chat(
     shell.open_chat(chat, window, cx);
 }
 
-fn connected(dir: &Path, dark: bool, theme: &str) -> anyhow::Result<()> {
-    let mut h = Harness::open(Some(Rc::new(fixture::Fixture)), dark)?;
+fn connected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::Result<()> {
+    let mut h = Harness::open(Some(Rc::new(fixture::Fixture)), dark, options)?;
     h.update(|shell, window, cx| open_chat(shell, fixture::LONG, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-chat"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::APPROVAL, window, cx))?;
@@ -141,35 +191,72 @@ fn connected(dir: &Path, dark: bool, theme: &str) -> anyhow::Result<()> {
     h.shot(dir, &format!("w2-1x-{theme}-new-chat"))
 }
 
-fn disconnected(dir: &Path, dark: bool, theme: &str) -> anyhow::Result<()> {
-    let mut h = Harness::open(None, dark)?;
+fn disconnected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::Result<()> {
+    let mut h = Harness::open(None, dark, options)?;
     h.shot(dir, &format!("w2-1x-{theme}-disconnected"))
 }
 
-fn run(dir: &Path) -> anyhow::Result<()> {
+fn run(dir: &Path, options: &Options) -> anyhow::Result<()> {
     std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     for (dark, theme) in [(false, "light"), (true, "dark")] {
-        connected(dir, dark, theme)?;
-        disconnected(dir, dark, theme)?;
+        connected(dir, dark, theme, options)?;
+        disconnected(dir, dark, theme, options)?;
     }
     Ok(())
 }
 
+struct Options {
+    scale: f32,
+    width: f32,
+    height: f32,
+}
+
+impl Options {
+    fn parse(args: &[std::ffi::OsString]) -> anyhow::Result<Self> {
+        let value = |flag: &str| {
+            args.windows(2)
+                .find(|p| p[0] == flag)
+                .map(|p| p[1].to_str().context("arguments must be UTF-8"))
+                .transpose()
+        };
+        let scale = value("--scale")?.unwrap_or("1").parse::<f32>()?;
+        let (width, height) = value("--size")?
+            .unwrap_or("800x720")
+            .split_once('x')
+            .context("--size requires <W>x<H>")?;
+        let (width, height) = (width.parse::<f32>()?, height.parse::<f32>()?);
+        anyhow::ensure!(
+            [scale, width, height]
+                .iter()
+                .all(|v| v.is_finite() && *v > 0.),
+            "scale and dimensions must be finite and positive"
+        );
+        Ok(Self {
+            scale,
+            width,
+            height,
+        })
+    }
+}
+
 fn main() -> ExitCode {
-    let dir = std::env::args_os()
-        .nth(1)
-        .map(PathBuf::from)
-        .ok_or_else(|| anyhow!("usage: butler-shell-shots <dir>"));
-    let args: Vec<_> = std::env::args_os().collect();
-    let data = args
-        .windows(2)
-        .find(|p| p[0] == "--data")
-        .map(|p| PathBuf::from(&p[1]));
-    let dark = args.iter().any(|a| a == "--dark");
-    match dir.and_then(|dir| match data {
-        Some(data) => live::run(&dir, data, dark),
-        None => run(&dir),
-    }) {
+    let result = (|| {
+        let args: Vec<_> = std::env::args_os().collect();
+        let dir = args.get(1).map(PathBuf::from).context(
+            "usage: butler-shell-shots <dir> [--data <dir>] [--scale <f32>] [--size <W>x<H>]",
+        )?;
+        let options = Options::parse(&args)?;
+        let data = args
+            .windows(2)
+            .find(|p| p[0] == "--data")
+            .map(|p| PathBuf::from(&p[1]));
+        let dark = args.iter().any(|a| a == "--dark");
+        match data {
+            Some(data) => live::run(&dir, data, dark, &options),
+            None => run(&dir, &options),
+        }
+    })();
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("butler-shell-shots: {error:#}");

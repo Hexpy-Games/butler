@@ -36,7 +36,7 @@ pub(super) fn row(
     } else {
         assistant(msg, cx, activity_toggle)
     };
-    let row = div()
+    let row = crate::ui::widgets::anchor(div(), format!("message-{}", msg.id))
         .w(px(cx.column))
         .pb(px(if user { 18. } else { 26. }))
         .child(body);

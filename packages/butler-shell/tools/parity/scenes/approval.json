@@ -1,0 +1,76 @@
+{
+  "name": "approval",
+  "seed": [
+    {
+      "method": "PATCH",
+      "path": "/settings",
+      "body": {
+        "language": "ko",
+        "access_mode": "ask_first",
+        "reduce_motion": true
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "검토 자료 저장"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/messages",
+      "body": {
+        "chat_id": "${session}",
+        "text": "검토 자료를 파일에 저장하기 전에 실행할 작업을 확인해 주세요."
+      },
+      "wait": false
+    }
+  ],
+  "open": {
+    "chat": "검토 자료 저장"
+  },
+  "anchors": [
+    {
+      "anchor": "sidebar",
+      "electron": "[data-test-class=\"app-sidebar\"]"
+    },
+    {
+      "anchor": "chat-card",
+      "electron": "[data-slot=\"adaptive-shell-split-chat\"]"
+    },
+    {
+      "anchor": "composer",
+      "electron": "[data-test-class=\"composer-card\"]"
+    },
+    {
+      "anchor": "composer-field",
+      "electron": "[contenteditable=\"true\"]"
+    },
+    {
+      "anchor": "send-button",
+      "electron": "[data-test-class=\"composer-send-button\"]"
+    },
+    {
+      "anchor": "approval-card",
+      "electron": "[data-test-class=\"composer-authority-decision\"]"
+    },
+    {
+      "anchor": "question-card",
+      "electron": "[data-slot=\"composer-question-panel\"]"
+    },
+    {
+      "anchor": "titlebar",
+      "electron": "[data-test-class=\"custom-titlebar\"]"
+    },
+    {
+      "anchor": "sidebar-row-${session}",
+      "electron": "[data-test-class=\"tree-row\"][aria-label=\"검토 자료 저장\"]"
+    },
+    {
+      "anchor": "message-${message.0}",
+      "electron": "[data-test-class~=\"message\"][data-index=\"0\"]"
+    }
+  ]
+}
