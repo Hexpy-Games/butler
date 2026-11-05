@@ -153,6 +153,7 @@ async fn failed_round(failure: Failure, cleanup_error: bool) -> (AgentLoopError,
         presentation: None,
         used_tools: vec![],
         runtime_failure: None,
+        deferred_feedback: None,
     };
     let mut surface = super::contracts::ToolSurface {
         tools: prepared.tools.clone(),

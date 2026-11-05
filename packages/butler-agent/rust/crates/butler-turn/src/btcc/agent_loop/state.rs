@@ -42,6 +42,8 @@ pub(super) struct State {
     pub presentation: Option<GuidedPresentation>,
     pub used_tools: Vec<String>,
     pub runtime_failure: Option<crate::btcc::RuntimeFailure>,
+    /// Feedback for a reply that also ran tools; it follows their results.
+    pub deferred_feedback: Option<String>,
 }
 
 impl State {
@@ -70,6 +72,7 @@ impl State {
             presentation: None,
             used_tools: Vec::new(),
             runtime_failure: None,
+            deferred_feedback: None,
         }
     }
 
@@ -131,6 +134,7 @@ impl State {
             presentation: restored.presentation,
             used_tools,
             runtime_failure: None,
+            deferred_feedback: None,
         }
     }
 
@@ -145,6 +149,13 @@ impl State {
         format!(
             "{observation}\nThis identical feedback has occurred {count} times in this execution. Try a different approach if the previous one failed."
         )
+    }
+
+    /// Appends feedback held back so a reply's tool results come first.
+    pub(super) fn flush_deferred_feedback(&mut self) {
+        if let Some(feedback) = self.deferred_feedback.take() {
+            self.messages.push(ModelRoundMessage::user(feedback, None));
+        }
     }
 
     /// Starts the next iteration and returns the index of the one starting.
