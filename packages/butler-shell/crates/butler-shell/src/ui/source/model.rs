@@ -4,6 +4,8 @@
 //! approval as it was sent.
 use gpui::SharedString;
 
+use crate::ui::Icon;
+
 /// Chat identity as the agent names it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct ChatId(pub(crate) SharedString);
@@ -87,8 +89,8 @@ pub(crate) enum Role {
 /// A tool call shown under an activity step.
 #[derive(Clone, Debug)]
 pub(crate) struct ToolChip {
-    /// One of the bundled glyph names (terminal, file, ...).
-    pub(crate) icon: &'static str,
+    /// The DS icon used for the tool.
+    pub(crate) icon: Icon,
     pub(crate) title: SharedString,
 }
 

@@ -8,6 +8,7 @@ use gpui::{
 };
 
 use super::{Shell, ToggleSidebar, system_dark};
+use crate::ui::Icon;
 use crate::ui::chat::column;
 use crate::ui::motion::spring_slow;
 use crate::ui::sidebar::{SIDEBAR_W, TRACK_MIN};
@@ -178,9 +179,9 @@ impl Render for Shell {
             .unwrap_or_default();
         let toast = self.render_toast(window);
         let toggle_glyph = if open {
-            "panel-left-open"
+            Icon::PanelLeftOpen
         } else {
-            "panel-left"
+            Icon::PanelLeft
         };
         let toggle = icon_button(
             &t,

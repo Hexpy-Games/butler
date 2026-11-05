@@ -8,6 +8,7 @@ use gpui::{
 };
 
 use super::{Shell, ToggleTheme};
+use crate::ui::Icon;
 use crate::ui::motion::spring_slow;
 use crate::ui::sidebar::TRACK_MIN;
 use crate::ui::theme::typo;
@@ -53,21 +54,21 @@ impl Shell {
         for (id, glyph, area, size, control) in [
             (
                 "wc-min",
-                "minus",
+                Icon::Minus,
                 WindowControlArea::Min,
                 16.,
                 Control::Minimize,
             ),
             (
                 "wc-max",
-                "square",
+                Icon::Square,
                 WindowControlArea::Max,
                 14.,
                 Control::Maximize,
             ),
             (
                 "wc-close",
-                "x",
+                Icon::X,
                 WindowControlArea::Close,
                 16.,
                 Control::Close,
@@ -105,12 +106,12 @@ impl Shell {
                 subtitle
                     .map(|sub| text(sub, typo::CAPTION, FontWeight::NORMAL, t.text3).truncate()),
             );
-        let theme_glyph = if t.dark { "sun" } else { "moon" };
+        let theme_glyph = if t.dark { Icon::Sun } else { Icon::Moon };
         let theme_spec = IconButtonSpec::new("tb-theme", theme_glyph, self.hover.is("tb-theme"));
         let theme_click =
             cx.listener(|_, _, window, cx| window.dispatch_action(Box::new(ToggleTheme), cx));
-        let more_spec =
-            IconButtonSpec::new("tb-more", "more", false).disabled(Some(t.strings.not_yet.into()));
+        let more_spec = IconButtonSpec::new("tb-more", Icon::MoreHorizontal, false)
+            .disabled(Some(t.strings.not_yet.into()));
         let trailing = div()
             .flex()
             .flex_none()

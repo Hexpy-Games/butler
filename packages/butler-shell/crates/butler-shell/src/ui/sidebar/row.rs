@@ -3,10 +3,11 @@ use std::time::Duration;
 
 use gpui::{
     Animation, AnimationExt as _, AnyElement, Context, FontWeight, Hsla, SharedString,
-    Transformation, div, percentage, prelude::*, px,
+    Transformation, div, percentage, prelude::*, px, svg,
 };
 
 use super::{Click, Tab};
+use crate::ui::Icon;
 use crate::ui::motion::{mix, spring_fast};
 use crate::ui::shell::Shell;
 use crate::ui::theme::{Theme, alpha, typo};
@@ -20,7 +21,7 @@ pub(super) enum Trailing {
 
 pub(super) struct RowSpec {
     pub(super) key: SharedString,
-    pub(super) icon: Option<&'static str>,
+    pub(super) icon: Option<Icon>,
     pub(super) label: SharedString,
     pub(super) active: bool,
     pub(super) trailing: Trailing,
@@ -34,7 +35,7 @@ pub(super) struct RowSpec {
 impl RowSpec {
     pub(super) fn new(
         key: impl Into<SharedString>,
-        icon: Option<&'static str>,
+        icon: Option<Icon>,
         label: impl Into<SharedString>,
     ) -> Self {
         Self {
@@ -57,17 +58,17 @@ impl RowSpec {
 }
 
 fn trailing(spec: &RowSpec, hovered: bool, t: &Theme) -> Option<AnyElement> {
-    let more = || icon("more", 16., t.text2).into_any_element();
+    let more = || icon(Icon::MoreHorizontal, 16., t.text2).into_any_element();
     match spec.trailing {
-        Trailing::None if hovered && spec.icon == Some("message") => Some(more()),
+        Trailing::None if hovered && spec.icon == Some(Icon::MessageSquare) => Some(more()),
         Trailing::None => None,
         Trailing::Spinner | Trailing::Chevron(_) if hovered => Some(more()),
         Trailing::Spinner => Some(spinner(t.text2).into_any_element()),
         Trailing::Chevron(open) => {
             let glyph = if open {
-                "chevron-down"
+                Icon::ChevronDown
             } else {
-                "chevron-right"
+                Icon::ChevronRight
             };
             Some(icon(glyph, 16., t.text2).into_any_element())
         }
@@ -198,8 +199,8 @@ impl Shell {
             let new_chat = self.disconnected();
             let mut group = div().flex().items_center().gap(px(2.)).mr(px(-4.));
             for (id, glyph, disabled) in [
-                ("h-new", "pencil", new_chat),
-                ("h-folder", "folder-add", Some(t.strings.not_yet.into())),
+                ("h-new", Icon::PencilLine, new_chat),
+                ("h-folder", Icon::FolderPlus, Some(t.strings.not_yet.into())),
             ] {
                 let key: SharedString = id.into();
                 let spec = IconButtonSpec::new(id, glyph, self.hover.is(id))
@@ -224,9 +225,9 @@ impl Shell {
             .rounded(px(8.))
             .bg(t.surface);
         for (tab, glyph, label) in [
-            (Tab::All, "filter", t.strings.all),
-            (Tab::Recent, "clock", t.strings.recent),
-            (Tab::Running, "activity", t.strings.running),
+            (Tab::All, Icon::ListFilter, t.strings.all),
+            (Tab::Recent, Icon::Clock3, t.strings.recent),
+            (Tab::Running, Icon::Activity, t.strings.running),
         ] {
             let key: SharedString = format!("tab-{label}").into();
             let active = self.sidebar.tab == tab;
@@ -269,11 +270,16 @@ impl Shell {
     }
 }
 
-/// Spinner (DS components/Spinner) approximated as a rotating 270° arc.
+/// Butler's custom 270° sidebar loader arc from assets/icons/spinner.svg.
 fn spinner(color: Hsla) -> impl IntoElement {
-    icon("spinner", 16., color).with_animation(
-        "spin",
-        Animation::new(Duration::from_millis(2000)).repeat(),
-        |el, t| el.with_transformation(Transformation::rotate(percentage(t))),
-    )
+    svg()
+        .path(SharedString::from("icons/spinner.svg"))
+        .size(px(16.))
+        .flex_none()
+        .text_color(color)
+        .with_animation(
+            "spin",
+            Animation::new(Duration::from_millis(2000)).repeat(),
+            |el, t| el.with_transformation(Transformation::rotate(percentage(t))),
+        )
 }

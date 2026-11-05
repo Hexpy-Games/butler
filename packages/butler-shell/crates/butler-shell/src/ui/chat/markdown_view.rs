@@ -5,6 +5,7 @@ use std::ops::Range;
 use gpui::{AnyElement, Div, FontWeight, HighlightStyle, Hsla, StyledText, div, prelude::*, px};
 
 use super::markdown::{Block, inline, parse};
+use crate::ui::Icon;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{icon, text};
 
@@ -137,7 +138,7 @@ fn code_block(lang: &str, body: &str, theme: &Theme) -> Div {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .child(icon("copy", 14., theme.text3)),
+                        .child(icon(Icon::Copy, 14., theme.text3)),
                 ),
         )
         .child(pre)

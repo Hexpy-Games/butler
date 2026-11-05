@@ -4,6 +4,7 @@ use gpui::{
     Render, SharedString, Svg, Window, WindowControlArea, div, prelude::*, px, svg,
 };
 
+use crate::ui::Icon;
 use crate::ui::motion::{Hover, mix, spring_fast};
 use crate::ui::theme::{Theme, typo};
 
@@ -24,9 +25,9 @@ pub(crate) fn hover_listener<T: HasHover + 'static>(
     })
 }
 
-pub(crate) fn icon(name: &str, size: f32, color: Hsla) -> Svg {
+pub(crate) fn icon(icon: Icon, size: f32, color: Hsla) -> Svg {
     svg()
-        .path(SharedString::from(format!("icons/{name}.svg")))
+        .path(SharedString::from(icon.path()))
         .size(px(size))
         .flex_none()
         .text_color(color)
@@ -87,7 +88,7 @@ pub(crate) fn tooltip(
 
 pub(crate) struct IconButtonSpec {
     pub(crate) id: SharedString,
-    pub(crate) icon: &'static str,
+    pub(crate) icon: Icon,
     pub(crate) size: f32,
     pub(crate) icon_size: f32,
     pub(crate) hovered: bool,
@@ -98,7 +99,7 @@ pub(crate) struct IconButtonSpec {
 }
 
 impl IconButtonSpec {
-    pub(crate) fn new(id: impl Into<SharedString>, icon: &'static str, hovered: bool) -> Self {
+    pub(crate) fn new(id: impl Into<SharedString>, icon: Icon, hovered: bool) -> Self {
         Self {
             id: id.into(),
             icon,

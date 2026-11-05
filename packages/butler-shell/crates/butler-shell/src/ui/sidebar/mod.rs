@@ -13,6 +13,7 @@ use gpui::{
     div, prelude::*, px,
 };
 
+use crate::ui::Icon;
 use crate::ui::cliptop::clip_top;
 use crate::ui::shell::Shell;
 use crate::ui::smooth_scroll::SmoothScroll;
@@ -112,7 +113,7 @@ impl Shell {
         let heading = self.heading(title, true, cx);
         let mut top = div().flex().flex_col().gap(px(12.)).child(tabs);
         if tab == Tab::All {
-            let general = RowSpec::new("general", Some("general"), s.general)
+            let general = RowSpec::new("general", Some(Icon::GeneralChat), s.general)
                 .disabled(Some(s.not_yet.into()));
             top = top.child(self.nav_row(general, Click::Chat(None), cx));
         }
@@ -133,13 +134,13 @@ impl Shell {
         let mut primary = div().flex().flex_col().gap(px(4.));
         let new = RowSpec {
             active: self.store.selected().is_none() && new_disabled.is_none(),
-            ..RowSpec::new("p-new", Some("pencil"), s.new_chat)
+            ..RowSpec::new("p-new", Some(Icon::PencilLine), s.new_chat)
         };
         primary = primary.child(self.nav_row(new.disabled(new_disabled), Click::Chat(None), cx));
         for (key, glyph, label) in [
-            ("p-search", "search", s.search),
-            ("p-sched", "clock", s.schedules),
-            ("p-library", "library", s.library),
+            ("p-search", Icon::Search, s.search),
+            ("p-sched", Icon::Clock3, s.schedules),
+            ("p-library", Icon::Library, s.library),
         ] {
             let spec = RowSpec::new(key, Some(glyph), label).disabled(Some(s.not_yet.into()));
             primary = primary.child(self.nav_row(spec, Click::Chat(None), cx));
@@ -157,7 +158,7 @@ impl Shell {
                 active: self.store.selected() == Some(&chat.chat),
                 ..RowSpec::new(
                     format!("fav-{}", chat.chat.chat.0),
-                    Some("message"),
+                    Some(Icon::MessageSquare),
                     chat.title.clone(),
                 )
             };
@@ -209,7 +210,8 @@ impl Shell {
         });
         let rows = self.chat_rows(cx);
         let settings = self.nav_row(
-            RowSpec::new("settings", Some("settings"), s.settings).disabled(Some(s.not_yet.into())),
+            RowSpec::new("settings", Some(Icon::Settings), s.settings)
+                .disabled(Some(s.not_yet.into())),
             Click::Chat(None),
             cx,
         );

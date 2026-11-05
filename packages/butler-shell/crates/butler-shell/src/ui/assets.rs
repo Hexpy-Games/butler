@@ -1,52 +1,10 @@
-//! Embedded assets: Hugeicons glyphs (Butler's DS icon set, MIT, exported as SVG) and the
-//! Pretendard faces (OFL). See THIRD-PARTY-NOTICES at the workspace root.
+//! Embedded assets: generated Butler DS icons, the custom sidebar spinner and Pretendard faces.
+//! See THIRD-PARTY-NOTICES at the workspace root.
 use std::borrow::Cow;
 
 use gpui::{AssetSource, SharedString};
 
-macro_rules! icon {
-    ($name:literal) => {
-        (
-            concat!("icons/", $name, ".svg"),
-            include_bytes!(concat!("../../assets/icons/", $name, ".svg")).as_slice(),
-        )
-    };
-}
-
-const FILES: &[(&str, &[u8])] = &[
-    icon!("activity"),
-    icon!("arrow-left"),
-    icon!("briefcase"),
-    icon!("chevron-down"),
-    icon!("chevron-right"),
-    icon!("clock"),
-    icon!("copy"),
-    icon!("file"),
-    icon!("filter"),
-    icon!("folder"),
-    icon!("folder-add"),
-    icon!("general"),
-    icon!("library"),
-    icon!("message"),
-    icon!("minus"),
-    icon!("moon"),
-    icon!("more"),
-    icon!("panel-left"),
-    icon!("panel-left-open"),
-    icon!("pencil"),
-    icon!("plus"),
-    icon!("search"),
-    icon!("send"),
-    icon!("settings"),
-    icon!("shield-check"),
-    icon!("shield-question"),
-    icon!("spinner"),
-    icon!("square"),
-    icon!("sun"),
-    icon!("terminal"),
-    icon!("wrench"),
-    icon!("x"),
-];
+use super::icon_files::FILES;
 
 pub(crate) struct Assets;
 
