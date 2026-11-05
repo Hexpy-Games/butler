@@ -107,6 +107,7 @@ pub use agent_loop::{
 pub use agent_loop::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, TrackingMode,
 };
+pub use agent_loop::{nested_post_tool, nested_pre_tool};
 pub use authority::approval::{
     ApprovalActionKind, ApprovalRisk, ApprovalTarget, ApprovalTargetKind, AuthorityApproval,
 };

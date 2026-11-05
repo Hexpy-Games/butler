@@ -185,13 +185,8 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     .filter(|_| initial_work.bound)
                     .map(|context| &context.work),
             ));
-            if let Some(saved) = semantic
-                .authority
-                .as_ref()
-                .and_then(|value| value.presentation.as_ref())
-            {
-                activity.restore(&saved.activity)?;
-            }
+            restore_activity(&activity, semantic.authority.as_ref())?;
+            let hooks = self.hook_binding(start.turn, &phase).await?.map(Arc::new);
             let tools = Arc::new(GuidedTools::new(
                 self.capabilities.clone(),
                 self.command.clone(),
@@ -246,6 +241,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         .as_ref()
                         .map(|cursor| cursor.call_id.clone()),
                     turn_guard: TurnGuard::new(&start.turn.context, semantic.authority.as_ref()),
+                    hooks: hooks.clone(),
                     current_user_message: start.turn.original_message.clone(),
                     memory: memory_binding(start.turn, &phase),
                     project_id: policy.project_id.clone(),
@@ -269,7 +265,6 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 },
             )?);
             let journal = self.journal(&start.turn.turn_id, activity.clone());
-            let hooks = self.hook_binding(start.turn, &phase).await?;
             let text = Arc::new(
                 prompt_state::state(
                     self,
@@ -449,4 +444,15 @@ fn memory_binding(
         usage_root: policy.usage_root(&turn.session_id).map(str::to_owned),
         usage_role: Some(policy.usage_role().into()),
     }
+}
+
+/// Restores the activity a suspended execution had shown.
+fn restore_activity(
+    activity: &GuidedActivity,
+    saved: Option<&butler_turn::btcc::AuthorityLoopContinuation>,
+) -> Result<(), BtccError> {
+    if let Some(saved) = saved.and_then(|value| value.presentation.as_ref()) {
+        activity.restore(&saved.activity)?;
+    }
+    Ok(())
 }

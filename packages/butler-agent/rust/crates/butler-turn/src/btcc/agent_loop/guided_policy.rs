@@ -61,7 +61,7 @@ impl GuidedPolicyPort for GuidedPolicy {
     }
 
     fn hooks(&self) -> Option<&super::guided_ports::GuidedHookBinding> {
-        self.dependencies.hooks.as_ref()
+        self.dependencies.hooks.as_deref()
     }
 
     fn prepare<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, PreparedPolicy> {

@@ -1,18 +1,17 @@
 //! Lifecycle seams; no dispatcher means no serialization, I/O or timers.
 use super::{
     contracts::{ModelRoundToolCall, ToolResult},
-    guided_ports::GuidedInvocation,
+    guided_ports::{GuidedHookBinding, GuidedInvocation},
     ports::GuidedPolicyPort,
 };
 use butler_core::hooks::{HookEnvelope, HookEvent, HookPayload, HookToolError};
 async fn emit(
-    policy: &dyn GuidedPolicyPort,
+    binding: &GuidedHookBinding,
     input: GuidedInvocation<'_>,
     event: HookEvent,
     key: &str,
     payload: HookPayload,
 ) -> Option<String> {
-    let binding = policy.hooks()?;
     let envelope = HookEnvelope {
         schema: "butler.hook.v1".into(),
         hook_event_name: event,
@@ -34,14 +33,15 @@ async fn emit(
         .and_then(|dispatched| dispatched.deny)
 }
 fn tool_payload(
-    policy: &dyn GuidedPolicyPort,
+    name: &str,
+    tool_input: &serde_json::Map<String, serde_json::Value>,
     input: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> HookPayload {
     HookPayload {
-        tool_name: Some(policy.hook_tool_name(call).into_owned()),
+        tool_name: Some(name.to_owned()),
         tool_use_id: Some(call.id.clone()),
-        tool_input: Some(policy.hook_tool_input(call).clone()),
+        tool_input: Some(tool_input.clone()),
         resumed: Some(input.turn.authority_continuation.as_ref().is_some_and(|c| {
             c.batch
                 .calls
@@ -71,11 +71,11 @@ pub(super) async fn pre_tool(
         return None;
     }
     emit(
-        policy,
+        policy.hooks()?,
         input,
         HookEvent::PreToolUse,
         &call.id,
-        tool_payload(policy, input, call),
+        tool_payload(&name, policy.hook_tool_input(call), input, call),
     )
     .await
 }
@@ -105,14 +105,55 @@ pub(super) async fn post_tool(
     {
         return;
     }
-    let mut payload = tool_payload(policy, input, call);
+    let mut payload = tool_payload(&name, policy.hook_tool_input(call), input, call);
     payload.ok = Some(result.ok);
     payload.tool_response = result.output.clone();
     payload.error = result.error.as_ref().map(|e| HookToolError {
         code: e.code.clone(),
         message: e.message.clone(),
     });
-    emit(policy, input, HookEvent::PostToolUse, &call.id, payload).await;
+    if let Some(binding) = policy.hooks() {
+        emit(binding, input, HookEvent::PostToolUse, &call.id, payload).await;
+    }
+}
+
+/// PreToolUse for a call a tool makes on the model's behalf, under its own name.
+/// Returns the denial reason, if a hook denied it.
+pub async fn nested_pre_tool(
+    binding: &GuidedHookBinding,
+    input: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+) -> Option<String> {
+    if !binding.port.event_enabled(HookEvent::PreToolUse)
+        || !binding
+            .port
+            .enabled(HookEvent::PreToolUse, Some(&call.name))
+    {
+        return None;
+    }
+    let payload = tool_payload(&call.name, &call.arguments, input, call);
+    emit(binding, input, HookEvent::PreToolUse, &call.id, payload).await
+}
+
+/// PostToolUse for a call a tool made on the model's behalf, under its own name.
+pub async fn nested_post_tool(
+    binding: &GuidedHookBinding,
+    input: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    ok: bool,
+    response: Option<butler_core::json::JsonDocument>,
+) {
+    if !binding.port.event_enabled(HookEvent::PostToolUse)
+        || !binding
+            .port
+            .enabled(HookEvent::PostToolUse, Some(&call.name))
+    {
+        return;
+    }
+    let mut payload = tool_payload(&call.name, &call.arguments, input, call);
+    payload.ok = Some(ok);
+    payload.tool_response = response;
+    emit(binding, input, HookEvent::PostToolUse, &call.id, payload).await;
 }
 pub(super) async fn stop(
     policy: &dyn GuidedPolicyPort,
@@ -131,7 +172,7 @@ pub(super) async fn stop(
         return None;
     }
     emit(
-        policy,
+        binding,
         input,
         event,
         &iteration.to_string(),
