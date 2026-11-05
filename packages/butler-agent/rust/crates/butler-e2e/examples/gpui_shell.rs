@@ -190,13 +190,17 @@ async fn scenario(
             h.command(command).await?;
         }
         let (older, newer) = activity::prepare(s, &mut h, clock).await?;
-        h.command(&format!("send {}", stub::PROMPT)).await?;
+        h.command("compose").await?;
+        h.command(&format!("type {}", stub::PROMPT)).await?;
+        h.command("shot composer-typed").await?;
+        h.command("key enter").await?;
         h.command("approval").await?;
         h.command(&format!("before {older} {newer}")).await?;
         h.command("shot activity-reordered").await?;
         h.command(&format!("exact {}", stub::ACTION)).await?;
         h.command("shot approval").await?;
         h.command("modify").await?;
+        h.command("type Use a dry run first").await?;
         h.command("shot modify").await?;
         h.command("close").await?;
         h.command(decision).await?;

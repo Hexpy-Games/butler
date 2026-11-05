@@ -1,6 +1,7 @@
 //! W3's live harness protocol. W5 can drive these same public UI actions.
 use super::{Harness, ui};
 use anyhow::{Context as _, anyhow, bail};
+use gpui::{Keystroke, Modifiers};
 use std::{
     io::{self, BufRead as _, Write as _},
     path::Path,
@@ -26,6 +27,28 @@ fn wait(
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+/// Sends one keystroke to the focused element, as the platform would: bindings first, then
+/// the focused field's input handler.
+fn press(h: &mut Harness, keystroke: Keystroke) -> anyhow::Result<()> {
+    h.cx.update_window(h.handle, |_, window, cx| {
+        window.dispatch_keystroke(keystroke, cx);
+    })
+}
+
+/// Types `text` into the focused field, one character per keystroke.
+fn type_text(h: &mut Harness, text: &str) -> anyhow::Result<()> {
+    for c in text.chars() {
+        let key = c.to_string();
+        let keystroke = Keystroke {
+            modifiers: Modifiers::default(),
+            key: key.clone(),
+            key_char: Some(key),
+        };
+        press(h, keystroke)?;
+    }
+    Ok(())
+}
+
 fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
     let (command, arg) = line.split_once(' ').unwrap_or((line, ""));
     match command {
@@ -42,8 +65,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
                 .context
                 .as_ref()
                 .is_some_and(|context| {
-                    let loaded = context.state == ui::source::model::Controls::Loaded;
-                    loaded == (arg == "loaded")
+                    (context.state == ui::source::model::Controls::Loaded) == (arg == "loaded")
                 })
         }),
         "cursor" => {
@@ -54,6 +76,9 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "open" => h.update(|s, w, cx| super::open_chat(s, arg, w, cx)),
         "close" => h.update(|s, w, cx| s.open_chat(s.store.selected().cloned(), w, cx)),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
+        "compose" => h.update(|s, w, cx| s.composer.update(cx, |c, cx| c.engage(w, cx))),
+        "type" => type_text(h, arg),
+        "key" => press(h, Keystroke::parse(arg).map_err(|e| anyhow!("{e:?}"))?),
         "send" => h.update(|s, _, cx| s.send(arg.to_owned(), cx)),
         "answer" | "streaming" => wait(h, |s, app| {
             s.chat.read(app).messages.iter().any(|m| {

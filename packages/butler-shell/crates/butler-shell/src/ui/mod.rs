@@ -6,9 +6,9 @@ pub(crate) mod cliptop;
 pub(crate) mod composer;
 pub(crate) mod dialog;
 pub(crate) mod exact_action;
+pub(crate) mod field;
 pub(crate) mod glass;
 pub(crate) mod i18n;
-pub(crate) mod input;
 pub(crate) mod motion;
 pub(crate) mod shell;
 pub(crate) mod sidebar;
@@ -29,7 +29,7 @@ pub(crate) fn init(cx: &mut App) -> anyhow::Result<()> {
     cx.set_text_rendering_mode(TextRenderingMode::Grayscale);
     cx.text_system()
         .add_fonts(assets::FONTS.iter().map(|b| Cow::Borrowed(*b)).collect())?;
-    cx.bind_keys(input::bindings());
+    cx.bind_keys(field::bindings());
     cx.bind_keys(composer::bindings());
     cx.bind_keys(shell::bindings());
     Ok(())
