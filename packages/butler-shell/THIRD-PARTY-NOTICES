@@ -208,3 +208,17 @@ spinner is Butler artwork, documented in its SVG comment. Hugeicons is MIT-licen
     HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
     CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
     OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+4. IBM Plex Mono
+----------------
+crates/butler-ds/assets/fonts/IBMPlexMono-Regular.ttf and IBMPlexMono-SemiBold.ttf are the
+"complete" TrueType faces of @ibm/plex-mono@2.5.0 (font version 2.005), from
+https://github.com/IBM/plex (tag @ibm/plex-mono@2.5.0, packages/plex-mono/fonts/complete/ttf),
+the release whose split woff2 files the design system ships. They are committed here so a
+cargo build needs no package manager. Licensed under the SIL Open Font License, Version 1.1
+(LICENSE-IBMPlexMono.txt beside the fonts):
+
+    Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+
+    This Font Software is licensed under the SIL Open Font License, Version 1.1.
+    https://scripts.sil.org/OFL
