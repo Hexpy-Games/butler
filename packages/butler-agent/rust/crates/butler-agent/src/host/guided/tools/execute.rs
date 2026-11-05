@@ -40,6 +40,12 @@ pub(super) async fn execute(
             &call_id,
             &effective_name,
             &presentation_args,
+            invocation
+                .turn
+                .context
+                .pointer("/executionPolicy/role")
+                .and_then(Value::as_str)
+                .is_some_and(|role| role != "butler"),
         )
         .await;
     }
@@ -169,9 +175,15 @@ async fn unavailable(
     call_id: &str,
     effective_name: &str,
     presentation_args: &Value,
+    delegated: bool,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    let hint = if delegated {
+        format!(" {}", butler_turn::btcc::CAPABILITY_HANDOFF_HINT)
+    } else {
+        String::new()
+    };
     let denied = json!({"ok":false,"error":{"code":"tool_not_authorized",
-            "message":format!("{} is not available for this Turn. Use an available tool or continue with known facts.",call.name)}});
+            "message":format!("{} is not available for this Turn. Use an available tool or continue with known facts.{hint}",call.name)}});
     let denied = encoded(&denied)?;
     if record.is_none() {
         start(owner, call, call_id, effective_name, presentation_args).await?;

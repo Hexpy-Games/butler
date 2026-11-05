@@ -71,6 +71,7 @@ pub(super) fn hydrate(db: &Connection, row: &common::WorkRow) -> StorageResult<W
         })
         .collect::<StorageResult<Vec<_>>>()?;
     Ok(WorkContext {
+        tasks: crate::btcc::storage::subsessions::work_tasks::read_tasks(db, &row.id)?,
         work: super::view::hydrate(db, row)?,
         original_request: OriginalRequest {
             turn_id,

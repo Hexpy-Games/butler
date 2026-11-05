@@ -5,6 +5,7 @@ mod canon;
 mod diagnostics;
 mod material;
 use diagnostics::request_usage;
+mod helper_choice;
 mod helpers;
 use helpers::{default_project_folder, js_truthy, json, nonempty_array};
 mod documents;
@@ -98,6 +99,9 @@ fn source_prompt(
     entries.push("scope", scope(state));
     if let Some(tools) = delegated_tools(state) {
         entries.push("delegated-tools", tools);
+    }
+    if let Some(choice) = helper_choice::helper_choice(state) {
+        entries.push("helper-choice", choice);
     }
     if !material.canon.is_empty() {
         entries.push("canon", material.canon.clone());
@@ -445,7 +449,21 @@ impl PromptPort for GuidedPrompt {
 }
 
 fn delegated_tools(state: &GuidedTextState) -> Option<String> {
-    (state.phase.execution_policy.role.as_str() != "butler").then(|| format!("Granted tools in this delegated session (complete callable set; discover hidden schemas with tool_search/tool_describe): {}. Parent tools are not inherited. If a required tool is absent, record_work_disposition blocked with capability_handoff={{code:capability_unavailable_in_child,requested_action:{{tool_name,arguments}}}}; return the exact remaining action to the parent, never ask the user to solve a tool mismatch.", state.phase.authorized_names.join(", ")))
+    let role = state.phase.execution_policy.role.as_str();
+    if role == "butler" {
+        return None;
+    }
+    let mut text = format!(
+        "Granted tools in this delegated session (complete callable set; discover hidden schemas with tool_search/tool_describe): {}. Parent tools are not inherited. If a required tool is absent, record_work_disposition blocked with capability_handoff={{code:capability_unavailable_in_child,requested_action:{{tool_name,arguments}}}}; return the exact remaining action to the parent, never ask the user to solve a tool mismatch.",
+        state.phase.authorized_names.join(", ")
+    );
+    if role == "steward" {
+        text.push_str(&format!(
+            " Workers you assign can call: {}.",
+            state.phase.delegate_names.join(", ")
+        ));
+    }
+    Some(text)
 }
 
 fn document_edit_context(turn: &TurnRecord) -> String {

@@ -81,7 +81,10 @@ pub(super) fn settle_dispatch(
     Ok(())
 }
 
-fn read_tasks(db: &Connection, work: &str) -> Result<Vec<WorkTask>, StorageError> {
+pub(in crate::btcc::storage) fn read_tasks(
+    db: &Connection,
+    work: &str,
+) -> Result<Vec<WorkTask>, StorageError> {
     let mut stmt = db.prepare_cached("SELECT t.task_id,t.work_id,t.plan_revision_id,t.action_key,t.relation_id,t.status,t.scope_json,t.inputs_json,t.output_json,t.merge_after,x.result_id,x.summary FROM btcc_work_tasks t LEFT JOIN btcc_steward_results x ON x.result_id=(SELECT result_id FROM btcc_steward_results WHERE relation_id=t.relation_id ORDER BY rowid DESC LIMIT 1) WHERE t.work_id=?1 ORDER BY t.created_at,t.rowid").map_err(StorageError::sqlite)?;
     stmt.query_map([work], |r| {
         Ok(WorkTask {

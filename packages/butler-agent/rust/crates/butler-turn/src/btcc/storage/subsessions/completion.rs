@@ -197,6 +197,7 @@ fn result_text(
         &completion.summary,
         &completion.evidence_refs,
         &feedback,
+        delegation,
     )?;
     text.push_str(&super::assets::delivery_assets(tx, &completion.turn)?);
     text.push_str(&delivery_artifacts(

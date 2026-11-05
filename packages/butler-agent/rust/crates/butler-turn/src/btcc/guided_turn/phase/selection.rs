@@ -80,6 +80,7 @@ pub struct GuidedPhaseSelection {
     pub phase: GuidedPhase,
     pub execution_policy: GuidedExecutionPolicy,
     pub authorized_names: Vec<String>,
+    pub delegate_names: Vec<String>,
     /// Provider tool definitions (JSON Schema passthrough from the catalog).
     pub provider_tools: Vec<Value>,
     pub stable_instruction_prefix: String,
@@ -96,9 +97,27 @@ pub fn select_phase(
     input: GuidedPhaseInput<'_>,
 ) -> Result<GuidedPhaseSelection, GuidedPreparationError> {
     let policy = GuidedExecutionPolicy::from_turn(input.turn, input.default_workspace)?;
+    let delegate_names = if policy.role == PolicyRole::Steward {
+        let mut worker = policy.clone();
+        worker.role = PolicyRole::Worker;
+        select_policy(input, &worker)
+            .map(|selected| selected.authorized_names)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let mut selected = select_policy(input, &policy)?;
+    selected.delegate_names = delegate_names;
+    Ok(selected)
+}
+
+fn select_policy(
+    input: GuidedPhaseInput<'_>,
+    policy: &GuidedExecutionPolicy,
+) -> Result<GuidedPhaseSelection, GuidedPreparationError> {
     let catalog = input.catalog;
-    let image_tool_admitted = turn_admits_zai_image_tool(&policy);
-    let mut authorized = base_authorized(input, &policy);
+    let image_tool_admitted = turn_admits_zai_image_tool(policy);
+    let mut authorized = base_authorized(input, policy);
     let browse = input.browsing_agent
         && matches!(policy.role, PolicyRole::Butler | PolicyRole::Steward)
         && authorized.iter().any(|tool| tool.name == "browser_open");
@@ -106,27 +125,27 @@ pub fn select_phase(
     if browse {
         push_missing(&mut authorized, catalog, &["browse"]);
     }
-    let phase = phase(&policy, catalog);
+    let phase = phase(policy, catalog);
     let replay_mode = if enabled(input.operation_replay_flag) {
         ReplayMode::Available
     } else {
         ReplayMode::Disabled
     };
     if !enabled(input.phase_surface_flag) {
-        return select_legacy(input, &policy, &authorized, phase, replay_mode, browse);
+        return select_legacy(input, policy, &authorized, phase, replay_mode, browse);
     }
-    let required_profiles = required_profiles(catalog, &policy, phase)?;
-    admit_phase_tools(&mut authorized, catalog, &policy, &required_profiles);
+    let required_profiles = required_profiles(catalog, policy, phase)?;
+    admit_phase_tools(&mut authorized, catalog, policy, &required_profiles);
     authorized.retain(|tool| {
         (tool.durable && policy.subsession.is_some() && policy.tracking_mode != "none"
             || phase_allows(phase, tool))
             && (tool.name != ToolName::AnalyzeAttachedImage || image_tool_admitted)
     });
-    require_tools(&authorized, &policy, phase)?;
+    require_tools(&authorized, policy, phase)?;
     let provider_names = provider_candidates(
         catalog,
         &authorized,
-        &policy,
+        policy,
         phase,
         &required_profiles,
         browse,
@@ -142,10 +161,9 @@ pub fn select_phase(
         })
         .copied()
         .collect();
-    require_tools(&provider, &policy, phase)?;
+    require_tools(&provider, policy, phase)?;
     require_profiles_offered(catalog, &authorized, &provider, &required_profiles, phase)?;
-    let stable_instruction_prefix =
-        instructions::prefix(SurfaceMode::PhaseMinimal, phase, &policy)?;
+    let stable_instruction_prefix = instructions::prefix(SurfaceMode::PhaseMinimal, phase, policy)?;
     let stable_provider_cache_prefix = Some(json!({
         "schemaVersion":"butler.stable-provider-cache-prefix.v1",
         "stablePrefixRevision":"butler.btcc-stable-provider-prefix.v4",
@@ -157,6 +175,7 @@ pub fn select_phase(
         mode: SurfaceMode::PhaseMinimal,
         phase,
         execution_policy: policy.clone(),
+        delegate_names: Vec::new(),
         authorized_names: authorized.iter().map(|tool| tool.name.clone()).collect(),
         provider_tools: provider
             .iter()
@@ -191,6 +210,7 @@ fn select_legacy(
         mode: SurfaceMode::Legacy,
         phase,
         execution_policy: policy.clone(),
+        delegate_names: Vec::new(),
         authorized_names: authorized.iter().map(|tool| tool.name.clone()).collect(),
         provider_tools: provider
             .iter()
