@@ -157,3 +157,44 @@ async fn page_alert_is_acknowledged_and_confirm_hands_off_with_its_text() -> Res
     let _ = host.await;
     s.finish().await
 }
+
+#[tokio::test]
+async fn nested_page_steps_pass_the_pre_tool_hook() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let act = json!({"notes":"","next":{"act":{"steps":[{"action":"click","ref":"f0-e90"}]}}});
+    let setup = Setup::new("BROWSE-NESTED-HOOK")?.stub_cassette(cassette(
+        "https://store.example/product-b",
+        &[act.to_string(), act.to_string(), act.to_string()],
+    )?);
+    let deny = if butler_platform::command_sandbox::POSIX_SHELL {
+        json!(["sh", "-c", "exit 1"])
+    } else {
+        json!(["cmd.exe", "/d", "/s", "/c", "exit 1"])
+    };
+    std::fs::write(
+        setup.sandbox.data.join("hooks.json"),
+        json!({"version":1,"hooks":[{"id":"guard","name":"Act guard","event":"PreToolUse",
+            "type":"command","args":deny,"failClosed":true,"match":{"tools":["browser_act"]},
+            "timeout_ms":10000}]})
+        .to_string(),
+    )?;
+    let s = setup.start().await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let (host, actions) = host::start(&s).await?;
+    let (_, turn) = s.turn("general", "Recover page task").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let result = outputs(requests.last().unwrap()).pop().unwrap().0["output"].clone();
+    assert_eq!(result["status"], "stuck", "{result}");
+    assert!(
+        result["summary"].to_string().contains("hook_denied"),
+        "{result}"
+    );
+    assert_eq!(actions.load(std::sync::atomic::Ordering::SeqCst), 0);
+    host.abort();
+    let _ = host.await;
+    s.finish().await
+}

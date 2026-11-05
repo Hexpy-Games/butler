@@ -85,6 +85,7 @@ pub use guided_ports::{
     RenderedGuidedPrompt, RoundRequestOptions, ToolPort, TurnContextProjection, TurnSteeringPort,
     WorkFinalState, WorkPort,
 };
+pub use hooks::{nested_post_tool, nested_pre_tool};
 #[cfg(any(test, feature = "test-support"))]
 pub use operation_result_replay::OperationResultReference;
 #[cfg(any(test, feature = "test-support"))]

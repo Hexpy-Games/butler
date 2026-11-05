@@ -19,7 +19,7 @@ const DATA_URL: &str = "https://example.com/?q=external-note";
 async fn ask_except_reads_worker_reads_tabs_and_never_acts() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     run("ask_except_reads", vec![
-        ("browser_open", json!({"url":"https://example.com/"})),
+        ("browser_read", json!({"url":"https://example.com/"})),
         ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
         ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e1","commits":true}]})),
     ]).await
@@ -83,6 +83,9 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                     admin.send(Method::POST, "/internal/browser-host/events", Some(json!({"tabs":[{"id":"worker-tab","owner":"conversation:general","profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com/"}]})), &[]).await?;
                     json!({"status":"ok","tab":"worker-tab","url":"https://example.com/"})
                 }
+                "tab.read" => {
+                    json!({"status":"ok","tab":"worker-tab","url":"https://example.com/","epoch":1,"html":"<html><title>Example</title><article><h1>Example page</h1><p>Published page text.</p></article></html>"})
+                }
                 "tab.observe" => {
                     json!({"status":"ok","tab":"worker-tab","obs":"o1","url":"https://example.com/","text":"Example page"})
                 }
@@ -92,7 +95,12 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 .send(
                     Method::POST,
                     &format!(
-                        "/internal/browser-host/results/{}",
+                        "/internal/browser-host/{}/{}",
+                        if op == "tab.read" {
+                            "renders"
+                        } else {
+                            "results"
+                        },
                         frame["id"].as_str().unwrap()
                     ),
                     Some(result),
@@ -211,7 +219,7 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
             assert_eq!(finished["args"]["close_read_tabs"], true);
         }
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-        let session: String = db.query_row("SELECT t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='browser_open'", [], |row| row.get(0))?;
+        let session: String = db.query_row("SELECT t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='browser_read'", [], |row| row.get(0))?;
         assert_ne!(session, "general");
         let mode: String = db.query_row("SELECT json_extract(context_json,'$.executionPolicy.accessMode') FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1", [&session], |row| row.get(0))?;
         assert_eq!(mode, "ask_except_reads");

@@ -61,7 +61,7 @@ pub struct GuidedHookBinding {
 /// The ports a guided policy is composed of.
 pub struct GuidedPolicyDependencies {
     /// Optional user lifecycle dispatcher and immutable turn scope.
-    pub hooks: Option<GuidedHookBinding>,
+    pub hooks: Option<Arc<GuidedHookBinding>>,
     pub prompt: Arc<dyn PromptPort>,
     pub authority: Arc<dyn AuthorityPort>,
     pub context: Arc<dyn ContextPort>,

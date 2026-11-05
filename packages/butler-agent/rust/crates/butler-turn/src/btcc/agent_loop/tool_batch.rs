@@ -281,6 +281,15 @@ fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
     {
         return;
     }
+    // A result with output but no error was the operation's own outcome (such as
+    // a command's non-zero exit), not a refusal of the input.
+    if result
+        .output
+        .as_ref()
+        .is_some_and(|output| output.field("error").ok().flatten().is_none())
+    {
+        return;
+    }
     // A refusal that explains itself with a detail needs no schema dump.
     if result
         .output

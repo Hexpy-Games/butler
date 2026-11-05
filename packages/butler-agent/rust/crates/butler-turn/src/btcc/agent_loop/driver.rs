@@ -173,6 +173,7 @@ async fn run_iteration(
     cancelled(&input.cancellation)?;
     let iteration = state.begin_iteration();
     let resumed_batch = state.resumed_batch.take();
+    state.flush_deferred_feedback();
     if !state.is_replaying(resumed_batch.as_ref()) {
         observe_steering(input, state).await?;
     }
@@ -379,10 +380,9 @@ async fn reject_text_tool_calls(
                     .await
                     .map(Some);
             }
-            let observation = state.feedback(&observation);
-            state
-                .messages
-                .push(ModelRoundMessage::user(observation, None));
+            // The tools of this reply still run; their results must directly
+            // follow the assistant message, so the feedback follows them.
+            state.deferred_feedback = Some(state.feedback(&observation));
             Ok(None)
         }
         TextCallDisposition::Fail(error) => Err(propagated(error)),
