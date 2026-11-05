@@ -1,0 +1,18 @@
+{
+  "name": "ds-view",
+  "description": "DS Viewer item pages for the B1 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "pages": [
+    { "page": "presence", "entry": "components/Presence" },
+    { "page": "box", "entry": "components/Box" },
+    { "page": "stack", "entry": "components/Stack" },
+    { "page": "inline", "entry": "components/Inline" },
+    { "page": "grid", "entry": "components/Grid" },
+    { "page": "layout", "entry": "components/Layout" },
+    { "page": "typo", "entry": "components/Typo" },
+    { "page": "separator", "entry": "components/Separator" },
+    { "page": "kbd", "entry": "components/Kbd" },
+    { "page": "label", "entry": "components/Label" },
+    { "page": "tinted-glass", "entry": "components/TintedGlass" },
+    { "page": "card", "entry": "components/Card" }
+  ]
+}

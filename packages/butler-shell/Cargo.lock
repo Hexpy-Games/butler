@@ -888,6 +888,23 @@ dependencies = [
 [[package]]
 name = "butler-ds"
 version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "gpui-ce",
+]
+
+[[package]]
+name = "butler-ds-view"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "butler-ds",
+ "gpui-ce",
+ "gpui_ce_platform",
+ "gpui_ce_wgpu",
+ "image",
+ "serde_json",
+]
 
 [[package]]
 name = "butler-log"
