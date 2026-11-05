@@ -49,6 +49,23 @@ fn type_text(h: &mut Harness, text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Answers the pending approval and waits until it is gone (and, on deny, the turn stopped).
+fn decide(h: &mut Harness, allow: bool) -> anyhow::Result<()> {
+    let decision = if allow {
+        Decision::AllowOnce
+    } else {
+        Decision::Deny
+    };
+    h.update(|s, _, cx| {
+        if let Some(card) = s.store.approval().cloned() {
+            s.answer(&card.request, decision, cx);
+        }
+    })?;
+    wait(h, |s, _| {
+        s.store.approval().is_none() && (allow || s.store.running().is_none())
+    })
+}
+
 fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
     let (command, arg) = line.split_once(' ').unwrap_or((line, ""));
     match command {
@@ -98,24 +115,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         }),
         "approval" => wait(h, |s, _| s.store.approval().is_some()),
         "exact" => exact(h, arg),
-        "allow" | "deny" => {
-            h.update(|s, _, cx| {
-                if let Some(card) = s.store.approval().cloned() {
-                    s.answer(
-                        &card.request,
-                        if command == "allow" {
-                            Decision::AllowOnce
-                        } else {
-                            Decision::Deny
-                        },
-                        cx,
-                    );
-                }
-            })?;
-            wait(h, |s, _| {
-                s.store.approval().is_none() && (command == "allow" || s.store.running().is_none())
-            })
-        }
+        "allow" | "deny" => decide(h, command == "allow"),
         "modify" => h.update(|s, w, cx| {
             if let Some(c) = s.store.approval().cloned() {
                 s.open_modify(&c, w, cx);
