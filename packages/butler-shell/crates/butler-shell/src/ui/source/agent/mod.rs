@@ -5,6 +5,7 @@ mod presentation;
 mod refresh;
 mod watch;
 
+use super::wire;
 use super::{
     AuthorityCard, ChatId, ChatPage, ChatRef, ClientMessageId, ComposerContext, Decision,
     EventCursor, Fetch, LiveEvent, MessageCursor, MessagePage, PageCursor, RequestRef, SentTurn,
@@ -126,7 +127,14 @@ impl Source for Agent {
                 .list_sessions(PageRequest::new(100, cursor.map(|c| c.0))?)
                 .await?;
             let context = if first && let Some(row) = page.items.first() {
-                presentation::read(&client, convert::string(row, "id")?).await?
+                let row = convert::decode::<wire::ChatProjection>(row)?;
+                presentation::read(
+                    &client,
+                    row.id
+                        .as_deref()
+                        .ok_or(butler_shell_client::Error::Protocol)?,
+                )
+                .await?
             } else {
                 fallback
             };
@@ -166,7 +174,8 @@ impl Source for Agent {
         let client = self.client.clone();
         self.presentation.remember(self.fetch(async move {
             let raw = client.create_session(None).await?;
-            let chat = convert::identity(&raw["session"])?;
+            let raw = convert::decode::<wire::CreatedSessionProjection>(&raw)?;
+            let chat = convert::identity(&raw.session)?;
             Ok((chat, ComposerContext::unavailable()))
         }))
     }
@@ -175,13 +184,14 @@ impl Source for Agent {
         let (client, chat) = (self.client.clone(), chat.0.to_string());
         self.fetch(async move {
             let raw = client.post_message(&chat, &id.0, &text).await?;
-            let id = raw["turn_id"]
-                .as_str()
-                .or_else(|| raw["turn"]["turn_id"].as_str())
-                .or_else(|| raw["turn"]["id"].as_str())
+            let raw = convert::decode::<wire::SentTurnProjection>(&raw)?;
+            let id = raw
+                .turn_id
+                .or_else(|| raw.turn.as_ref().and_then(|t| t.turn_id.clone()))
+                .or_else(|| raw.turn.and_then(|t| t.id))
                 .ok_or(butler_shell_client::Error::Protocol)?;
             Ok(SentTurn {
-                turn: TurnId(id.to_owned().into()),
+                turn: TurnId(id.into()),
             })
         })
     }

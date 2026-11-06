@@ -59,15 +59,12 @@ pub(super) async fn read(client: &ShellClient, session: &str) -> Result<Composer
     Ok(controls(&raw).unwrap_or_else(|_| ComposerContext::unavailable()))
 }
 fn controls(raw: &serde_json::Value) -> Result<ComposerContext, Error> {
-    let controls = &raw["controls"];
+    let raw = super::convert::decode::<super::super::wire::ControlsProjection>(raw)?;
+    let controls = raw.controls;
     Ok(ComposerContext {
         state: crate::ui::source::model::Controls::Loaded,
-        permission: super::convert::string(controls, "access_mode")?
-            .to_owned()
-            .into(),
-        model: super::convert::string(controls, "model")?.to_owned().into(),
-        effort: super::convert::string(controls, "reasoning_effort")?
-            .to_owned()
-            .into(),
+        permission: controls.access_mode.into(),
+        model: controls.model.into(),
+        effort: controls.reasoning_effort.into(),
     })
 }

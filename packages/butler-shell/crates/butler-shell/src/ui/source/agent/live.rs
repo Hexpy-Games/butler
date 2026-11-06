@@ -1,4 +1,5 @@
 //! Bounded, cancellable channel bridge: dropping a gpui stream closes its Tokio socket.
+use super::super::wire;
 use super::{
     super::{ChatId, EventCursor, LiveEvent, LiveUpdate, SessionId, TurnId},
     Agent, convert,
@@ -109,17 +110,19 @@ async fn deliver(
     Ok(())
 }
 fn updates(dirty: &super::refresh::Dirty, raw: &Value) -> Result<Vec<LiveUpdate>, Error> {
-    let payload = &raw["payload"];
-    let name = convert::string(raw, "type")?;
-    match name {
+    let raw = convert::decode::<wire::EventProjection>(raw)?;
+    match raw.r#type.as_str() {
         "message.created" | "message.updated" => {
-            let message = &payload["message"];
-            let session = message["chat_id"]
-                .as_str()
-                .or_else(|| payload["chat_id"].as_str())
-                .or_else(|| payload["session_id"].as_str())
+            let payload = raw.payload.as_ref().ok_or(Error::Protocol)?;
+            let message = payload.message.as_ref().ok_or(Error::Protocol)?;
+            let session = message
+                .chat_id
+                .as_deref()
+                .or(payload.chat_id.as_deref())
+                .or(payload.session_id.as_deref())
                 .ok_or(Error::Protocol)?;
-            let delivered = message["role"] == "assistant" && message["status"] == "delivered";
+            let delivered = message.role.as_deref() == Some("assistant")
+                && message.status.as_deref() == Some("delivered");
             let mut updates = Vec::new();
             if delivered {
                 dirty.mark(session);
@@ -131,36 +134,49 @@ fn updates(dirty: &super::refresh::Dirty, raw: &Value) -> Result<Vec<LiveUpdate>
             });
             Ok(updates)
         }
-        "message.deleted" => Ok(vec![LiveUpdate::MessageDeleted {
-            session: SessionId(
-                convert::string(payload, "chat_id")
-                    .or_else(|_| convert::string(payload, "session_id"))?
-                    .to_owned()
-                    .into(),
-            ),
-            id: convert::string(payload, "message_id")?.to_owned().into(),
-        }]),
-        "turn.state_changed" => turn(dirty, payload),
+        "message.deleted" => {
+            let payload = raw.payload.ok_or(Error::Protocol)?;
+            Ok(vec![LiveUpdate::MessageDeleted {
+                session: SessionId(
+                    payload
+                        .chat_id
+                        .or(payload.session_id)
+                        .ok_or(Error::Protocol)?
+                        .into(),
+                ),
+                id: payload.message_id.ok_or(Error::Protocol)?.into(),
+            }])
+        }
+        "turn.state_changed" => turn(dirty, &raw.payload.ok_or(Error::Protocol)?),
         "session.created" | "session.updated" => {
-            Ok(vec![LiveUpdate::Chat(convert::chat(&payload["session"])?)])
+            let session = raw.payload.and_then(|p| p.session).ok_or(Error::Protocol)?;
+            Ok(vec![LiveUpdate::Chat(convert::chat_row(&session)?)])
         }
         "session.cleared" | "session.permanently_deleted" => Ok(vec![LiveUpdate::Resync]),
         _ => Ok(Vec::new()),
     }
 }
 
-fn turn(dirty: &super::refresh::Dirty, payload: &Value) -> Result<Vec<LiveUpdate>, Error> {
-    let turn = payload.get("turn").unwrap_or(payload);
-    let session = turn["chat_id"]
-        .as_str()
-        .or_else(|| payload["chat_id"].as_str())
-        .or_else(|| payload["session_id"].as_str())
+fn turn(
+    dirty: &super::refresh::Dirty,
+    payload: &wire::EventPayloadProjection,
+) -> Result<Vec<LiveUpdate>, Error> {
+    let (chat_id, state, id) = match &payload.turn {
+        wire::Field::Present(Some(turn)) => (&turn.chat_id, &turn.state, &turn.id),
+        wire::Field::Present(None) => return Err(Error::Protocol),
+        wire::Field::Missing => (&payload.chat_id, &payload.state, &payload.id),
+    };
+    let session = chat_id
+        .as_deref()
+        .or(payload.chat_id.as_deref())
+        .or(payload.session_id.as_deref())
         .ok_or(Error::Protocol)?;
-    let state = convert::string(turn, "state")?;
+    let state = state.as_deref().ok_or(Error::Protocol)?;
     let running = if convert::active(state) {
         Some(TurnId(
-            convert::string(turn, "id")
-                .or_else(|_| convert::string(payload, "turn_id"))?
+            id.as_deref()
+                .or(payload.turn_id.as_deref())
+                .ok_or(Error::Protocol)?
                 .to_owned()
                 .into(),
         ))
