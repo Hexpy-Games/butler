@@ -14,9 +14,12 @@ mod label;
 mod layout;
 mod pill_button;
 mod presence;
+mod progress_ring;
 mod segmented_control;
 mod separator;
+mod skeleton;
 mod slider;
+mod spinner;
 mod stack;
 mod success_check;
 mod switch;
@@ -83,6 +86,9 @@ pub(crate) fn all() -> Vec<Page> {
         page!("segmented-control", "SegmentedControl", segmented_control),
         page!("switch", "Switch", switch),
         page!("slider", "Slider", slider),
+        page!("spinner", "Spinner", spinner),
+        page!("skeleton", "Skeleton", skeleton),
+        page!("progress-ring", "ProgressRing", progress_ring),
         page!("success-check", "SuccessCheck", success_check),
     ]
 }
