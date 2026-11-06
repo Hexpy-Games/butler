@@ -49,7 +49,10 @@ pub fn agent_binary() -> Result<PathBuf, HarnessError> {
     if !super::config::tier_selected() {
         return Err(harness_error("agent binary requires the E2E tier gate"));
     }
-    BINARY.get_or_init(|| locate().and_then(require_fixtures)).clone().map_err(harness_error)
+    BINARY
+        .get_or_init(|| locate().and_then(require_fixtures))
+        .clone()
+        .map_err(harness_error)
 }
 
 fn locate() -> Result<PathBuf, String> {
