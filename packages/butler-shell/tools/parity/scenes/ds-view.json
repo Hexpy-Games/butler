@@ -47,6 +47,9 @@
     { "page": "icon-slot", "entry": "components/IconSlot" },
     { "page": "unread-dot", "entry": "components/UnreadDot" },
     { "page": "aspect-frame", "entry": "components/AspectFrame" },
-    { "page": "meta-list", "entry": "components/MetaList" }
+    { "page": "meta-list", "entry": "components/MetaList" },
+    { "page": "rolling-swap", "entry": "components/RollingSwap" },
+    { "page": "rolling-status-line", "entry": "components/RollingStatusLine" },
+    { "page": "animated-number", "entry": "components/AnimatedNumber" }
   ]
 }

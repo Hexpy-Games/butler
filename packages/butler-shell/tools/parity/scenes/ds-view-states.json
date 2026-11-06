@@ -466,6 +466,8 @@
     {"page": "tag", "name": "remove-hover", "state": "hover", "target": 0, "wait_ms": 200},
     {"page": "tag", "name": "remove-focus", "state": "focus", "target": 0, "wait_ms": 200},
     {"page": "tag", "name": "edit-hover", "state": "hover", "target": 1, "wait_ms": 200},
-    {"page": "unread-dot", "name": "read-click", "state": "click", "target": 0, "wait_ms": 500}
+    {"page": "unread-dot", "name": "read-click", "state": "click", "target": 0, "wait_ms": 500},
+    {"page": "animated-number", "name": "replay-click", "state": "click", "target": 0, "wait_ms": 1000},
+    {"page": "rolling-swap", "name": "next-click", "state": "click", "target": 0, "wait_ms": 500}
   ]
 }
