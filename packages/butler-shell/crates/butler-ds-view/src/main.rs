@@ -5,8 +5,12 @@
 //!   butler-ds-view
 //!   butler-ds-view --shots <dir> --scale 2 --size 1280x800 [--dark] [--lang ko|en]
 //!       (feature `shots`: renders every page headless to `<dir>/<page>.png`)
+//!   butler-ds-view --live <dir> [--scale 2 --size 1280x800 --dark --lang ko|en]
+//!       (feature `shots`: stdin commands, each answered `LIVE OK`; see live.rs)
 mod app;
 mod copy;
+#[cfg(feature = "shots")]
+mod live;
 mod pages;
 #[cfg(feature = "shots")]
 mod shots;
@@ -41,6 +45,10 @@ fn main() -> std::process::ExitCode {
     #[cfg(feature = "shots")]
     if std::env::args_os().any(|arg| arg == "--shots") {
         return shots::main();
+    }
+    #[cfg(feature = "shots")]
+    if std::env::args_os().any(|arg| arg == "--live") {
+        return live::main();
     }
     let args: Vec<_> = std::env::args_os().collect();
     let dark = args.iter().any(|arg| arg == "--dark");

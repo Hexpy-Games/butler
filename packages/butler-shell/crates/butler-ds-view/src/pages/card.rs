@@ -7,9 +7,11 @@ use butler_ds::ui::layout::{Columns, Cross, Grid, Justify, MinWidth, Space, Stac
 use butler_ds::ui::typo::{Role, Tone, Typo, Wrap};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
+use butler_ds::ui::button::{Button, Size, Variant};
+
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::{outline_button, tag};
+use crate::standins::tag;
 
 struct Board {
     title: &'static str,
@@ -143,15 +145,14 @@ fn board_card(id: String, item: &Board, selected: bool, cx: &App) -> Card {
                 .gap(Space::Md)
                 .child(Typo::body(item.title).line_clamp(2).wrap(Wrap::Anywhere))
                 .child(Typo::caption(item.progress))
-                .child(outline_button(
-                    format!("{id_for_button}-session"),
-                    item.session,
-                    true,
-                    Some(icon(Icon::MessageSquare, IconSize::Md, ds).into_any_element()),
-                    None,
-                    |_, _, _| {},
-                    cx,
-                )),
+                .child(
+                    Button::new(format!("{id_for_button}-session"))
+                        .variant(Variant::Outline)
+                        .size(Size::Sm)
+                        .icon_start(icon(Icon::MessageSquare, IconSize::Md, ds))
+                        .text(item.session)
+                        .on_click(|_, _, _| {}),
+                ),
         )
 }
 
@@ -165,7 +166,7 @@ fn project_board(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
     grid.into_any_element()
 }
 
-fn suggestion(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn suggestion(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     Card::new("card-suggestion")
         .child(
             Stack::new()
@@ -181,15 +182,13 @@ fn suggestion(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
                     ))
                     .tone(Tone::Secondary),
                 )
-                .child(outline_button(
-                    "card-start",
-                    lang.pick("Start", "시작"),
-                    true,
-                    None,
-                    None,
-                    |_, _, _| {},
-                    cx,
-                )),
+                .child(
+                    Button::new("card-start")
+                        .variant(Variant::Outline)
+                        .size(Size::Sm)
+                        .text(lang.pick("Start", "시작"))
+                        .on_click(|_, _, _| {}),
+                ),
         )
         .into_any_element()
 }
@@ -291,24 +290,20 @@ fn radius(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
     let actions = Stack::row()
         .justify(Justify::End)
         .gap(Space::Sm)
-        .child(outline_button(
-            "card-cancel",
-            cancel,
-            true,
-            None,
-            None,
-            |_, _, _| {},
-            cx,
-        ))
-        .child(outline_button(
-            "card-add",
-            add,
-            true,
-            None,
-            None,
-            |_, _, _| {},
-            cx,
-        ));
+        .child(
+            Button::new("card-cancel")
+                .variant(Variant::Outline)
+                .size(Size::Sm)
+                .text(cancel)
+                .on_click(|_, _, _| {}),
+        )
+        .child(
+            Button::new("card-add")
+                .variant(Variant::Outline)
+                .size(Size::Sm)
+                .text(add)
+                .on_click(|_, _, _| {}),
+        );
     Stack::new()
         .gap(Space::Md)
         .child(Card::new("radius-control").child(Typo::caption(control)))

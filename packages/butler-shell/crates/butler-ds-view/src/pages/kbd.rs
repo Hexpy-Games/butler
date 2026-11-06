@@ -5,11 +5,12 @@ use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::kbd::{Kbd, KbdSize};
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, IntoElement as _, Styled as _, Window};
+use gpui::{AnyElement, App, IntoElement as _, Window};
+
+use butler_ds::ui::button::{Button, Variant};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::outline_button;
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
@@ -44,23 +45,17 @@ fn hint(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
 }
 
 fn in_button(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
-    use gpui::ParentElement as _;
     let ds = Ds::get(cx);
-    let search = gpui::div()
-        .flex()
-        .child(icon(Icon::Search, IconSize::Md, ds))
-        .into_any_element();
-    let key = Kbd::new(["⌘", "K"]).size(KbdSize::Sm).into_any_element();
+    let search = icon(Icon::Search, IconSize::Md, ds);
+    let key = Kbd::new(["⌘", "K"]).size(KbdSize::Sm);
     // Button `iconStart` and `iconEnd`: the icon, the label, then the shortcut.
-    outline_button(
-        "kbd-search",
-        lang.pick("Search", "검색"),
-        false,
-        Some(search),
-        Some(key),
-        |_, _, _| {},
-        cx,
-    )
+    Button::new("kbd-search")
+        .variant(Variant::Outline)
+        .icon_start(search)
+        .icon_end(key)
+        .text(lang.pick("Search", "검색"))
+        .on_click(|_, _, _| {})
+        .into_any_element()
 }
 
 fn sizes(_: Lang, _: &mut Window, _: &mut App) -> AnyElement {

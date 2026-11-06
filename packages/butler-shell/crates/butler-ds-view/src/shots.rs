@@ -15,28 +15,29 @@ use gpui::{AnyWindowHandle, AppContext as _, HeadlessAppContext, WindowHandle, p
 use crate::app::{self, DsView};
 use crate::copy::Lang;
 
-struct Options {
-    dir: PathBuf,
-    scale: f32,
-    width: f32,
-    height: f32,
-    dark: bool,
-    lang: Lang,
+pub(crate) struct Options {
+    pub(crate) dir: PathBuf,
+    pub(crate) scale: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) dark: bool,
+    pub(crate) lang: Lang,
     /// Grow the window to the page's full height.
-    full: bool,
+    pub(crate) full: bool,
     /// Force every story canvas to this logical width.
-    canvas_width: Option<f32>,
+    pub(crate) canvas_width: Option<f32>,
 }
 
 impl Options {
-    fn parse(args: &[std::ffi::OsString]) -> anyhow::Result<Self> {
+    /// `flag` names the output directory (`--shots` or `--live`).
+    pub(crate) fn parse(args: &[std::ffi::OsString], flag: &str) -> anyhow::Result<Self> {
         let value = |flag: &str| {
             args.windows(2)
                 .find(|pair| pair[0] == flag)
                 .map(|pair| pair[1].to_str().context("arguments must be UTF-8"))
                 .transpose()
         };
-        let dir = value("--shots")?.context("--shots requires <dir>")?;
+        let dir = value(flag)?.with_context(|| format!("{flag} requires <dir>"))?;
         let scale = value("--scale")?.unwrap_or("2").parse::<f32>()?;
         let (width, height) = value("--size")?
             .unwrap_or("1280x800")
@@ -67,7 +68,7 @@ impl Options {
     }
 }
 
-fn context(options: &Options) -> anyhow::Result<HeadlessAppContext> {
+pub(crate) fn context(options: &Options) -> anyhow::Result<HeadlessAppContext> {
     let platform = gpui_platform::current_platform(true);
     let mut cx =
         HeadlessAppContext::with_platform(platform.text_system(), Arc::new(Assets), || {
@@ -88,7 +89,7 @@ fn context(options: &Options) -> anyhow::Result<HeadlessAppContext> {
     Ok(cx)
 }
 
-fn settle(cx: &mut HeadlessAppContext, window: AnyWindowHandle) {
+pub(crate) fn settle(cx: &mut HeadlessAppContext, window: AnyWindowHandle) {
     for _ in 0..16 {
         cx.advance_clock(Duration::from_millis(50));
         cx.run_until_parked();
@@ -97,7 +98,7 @@ fn settle(cx: &mut HeadlessAppContext, window: AnyWindowHandle) {
     cx.run_until_parked();
 }
 
-fn open(
+pub(crate) fn open(
     cx: &mut HeadlessAppContext,
     options: &Options,
     height: f32,
@@ -115,7 +116,10 @@ fn open(
     Ok((window, handle))
 }
 
-fn story_anchors(cx: &mut HeadlessAppContext, window: WindowHandle<DsView>) -> Vec<String> {
+pub(crate) fn story_anchors(
+    cx: &mut HeadlessAppContext,
+    window: WindowHandle<DsView>,
+) -> Vec<String> {
     cx.update(|app| {
         window
             .read(app)
@@ -125,7 +129,7 @@ fn story_anchors(cx: &mut HeadlessAppContext, window: WindowHandle<DsView>) -> V
 }
 
 /// Saves the story canvas `bounds` (logical px) of `image` as `path`, rounded to device pixels.
-fn crop(
+pub(crate) fn crop(
     image: &image::RgbaImage,
     options: &Options,
     bounds: &gpui::Bounds<gpui::Pixels>,
@@ -226,7 +230,7 @@ fn run(options: &Options) -> anyhow::Result<()> {
 
 pub(crate) fn main() -> ExitCode {
     let args: Vec<_> = std::env::args_os().collect();
-    match Options::parse(&args).and_then(|options| run(&options)) {
+    match Options::parse(&args, "--shots").and_then(|options| run(&options)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("butler-ds-view: {error:#}");
