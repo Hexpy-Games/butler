@@ -69,3 +69,10 @@ The native side of the state shots is `butler-ds-view --live <dir> --scale 2 --s
 [--dark]` (feature `shots`): commands on stdin (`page <id>`, `hover|move|press|click|focus <n>`, `release`,
 `key <keystroke>`, `wait <ms>`, `expect ...`, `shot <name>`, `quit`), each answered `LIVE OK`. `<n>` is the
 control's number in render order (DOM order of the page, as the `target` of the states scene).
+
+`key <keystroke>` sends the key going down and coming up (Enter and Space activate on release);
+`expect anchor <name>` passes when the page has the named zero-size marker (a story names the value its
+control holds, e.g. `value-percent-50`, so a smoke can check what a click or key changed);
+`--motion` keeps motion on (the default reduces it, so every frame is at rest; the Spinner is exempt and
+always runs). The React states scene lists the NavRow controls of the ProgressRing page, which the native
+page does not have yet, so its `advance-click` target is 0 natively.

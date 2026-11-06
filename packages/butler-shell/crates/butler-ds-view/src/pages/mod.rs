@@ -14,9 +14,15 @@ mod label;
 mod layout;
 mod pill_button;
 mod presence;
+mod progress_ring;
+mod segmented_control;
 mod separator;
+mod skeleton;
+mod slider;
+mod spinner;
 mod stack;
 mod success_check;
+mod switch;
 mod tinted_glass;
 mod tooltip;
 mod typo;
@@ -77,6 +83,12 @@ pub(crate) fn all() -> Vec<Page> {
         page!("copy-button", "CopyButton", copy_button),
         page!("done-icon-button", "DoneIconButton", done_icon_button),
         page!("glyph-toggle", "GlyphToggle", glyph_toggle),
+        page!("segmented-control", "SegmentedControl", segmented_control),
+        page!("switch", "Switch", switch),
+        page!("slider", "Slider", slider),
+        page!("spinner", "Spinner", spinner),
+        page!("skeleton", "Skeleton", skeleton),
+        page!("progress-ring", "ProgressRing", progress_ring),
         page!("success-check", "SuccessCheck", success_check),
     ]
 }
@@ -129,6 +141,12 @@ fn frame(name: &str, content: AnyElement, ds: &Ds, forced: Option<f32>) -> AnyEl
 /// `body` wrapped in a block with a stable geometry selector.
 pub(crate) fn anchored(body: AnyElement, name: &str) -> gpui::Div {
     anchor_div(div(), name.to_owned()).child(body)
+}
+
+/// A zero-size marker the live harness can look for (`expect anchor <name>`): a story names
+/// the value its control holds this way, so a smoke can check what a click or key changed.
+pub(crate) fn probe(name: String) -> gpui::Div {
+    anchor_div(div().absolute().size_0(), name)
 }
 
 /// A stable geometry selector for the screenshot harness (a no-op without `test-support`).

@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use super::context::Ds;
-use super::control::{Blend, Control, Disabled, DisabledLook, Ring};
+use super::control::{Blend, Control, Disabled, DisabledLook, Ring, Width};
 use super::convert;
 use crate::tokens::{Color, Length};
 
@@ -166,6 +166,15 @@ impl Clickable {
             control.bleed_y = block;
         }
         control.inline = !self.stretch;
+        if self.stretch {
+            // `width: 100%`; with the bleed, `calc(100% + 2 * padding)` is the stretched box
+            // between its negative margins.
+            control.width = if inline_bleed {
+                Width::Stretch
+            } else {
+                Width::Full
+            };
+        }
         if inline_bleed {
             let margin_x = px(-PADDING_INLINE);
             control.outer = Some(Box::new(move |el| el.ml(margin_x).mr(margin_x)));
