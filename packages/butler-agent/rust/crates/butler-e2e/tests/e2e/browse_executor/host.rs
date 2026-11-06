@@ -146,8 +146,15 @@ async fn serve(
                 json!({"status":"ok","tab":tab,"completed":1,"steps":[{"status":"completed"}]})
             }
             "tabs.list" => json!({"status":"ok","tabs":tabs.values().collect::<Vec<_>>()}),
-            "tab.read" => json!({"status":"ok","url":tabs[tab]["url"],"epoch":1,
-                "html":format!("{}<article>{}</article>", super::shop::PAGES[2].1, (0..20).map(|i| format!("<p>{} {i}</p><p>가격 price option {i}.</p>", "Complete product material. ".repeat(5))).collect::<String>())}),
+            "tab.read" => {
+                let mut passages = String::new();
+                for i in 0..20 {
+                    let material = "Complete product material. ".repeat(5);
+                    passages.push_str(&format!("<p>{material} {i}</p><p>가격 price option {i}.</p>"));
+                }
+                json!({"status":"ok","url":tabs[tab]["url"],"epoch":1,
+                    "html":format!("{}<article>{passages}</article>", super::shop::PAGES[2].1)})
+            }
             op => panic!("unexpected browser operation {op}"),
         };
         let path = format!(
