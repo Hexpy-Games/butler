@@ -193,7 +193,8 @@ impl RenderOnce for Stack {
         if self.drag == WindowDrag::Drag {
             el = el.window_control_area(WindowControlArea::Drag);
         }
-        strut::scope(false, self.item.apply(el, ds).children(self.children))
+        let stretch_column = self.align == Align::Column && self.cross == Cross::Stretch;
+        strut::flex_scope(stretch_column, self.item.apply(el, ds).children(self.children))
     }
 }
 
@@ -235,7 +236,8 @@ impl RenderOnce for StackItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         strut::scope(
             true,
-            self.item.apply(div(), Ds::get(cx)).children(self.children),
+            strut::container(self.item.apply(div(), Ds::get(cx)), Ds::get(cx))
+                .children(self.children),
         )
     }
 }

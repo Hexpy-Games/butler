@@ -216,7 +216,7 @@ impl RenderOnce for TintedGlass {
                 .child(layer)
                 // The 1px border of the surface stays in layout, so the content keeps the DS geometry.
                 .child(
-                    div()
+                    strut::container(div(), ds)
                         .p(padding + px(1.)) // DS: TintedGlass.module.css:5
                         .children(self.children),
                 ),

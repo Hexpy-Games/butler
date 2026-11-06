@@ -217,8 +217,7 @@ impl RenderOnce for Card {
         let ring = self.running.then(|| self.running_ring(ds, radius));
         strut::scope(
             true,
-            self.item
-                .apply(el, ds)
+            strut::container(self.item.apply(el, ds), ds)
                 .children(self.children)
                 .children(ring),
         )

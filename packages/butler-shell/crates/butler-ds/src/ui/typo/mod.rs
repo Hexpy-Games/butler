@@ -350,7 +350,8 @@ impl RenderOnce for Typo {
         let ds = Ds::get(cx);
         let keep = ds.lang() == Lang::Ko || self.role.keeps_words();
         let (text, highlights) = self.content(ds, keep);
-        let mut el = div();
+        let flow = self.flows(cx);
+        let mut el = if flow { div().inline() } else { div() };
         let mut trim = None;
         if let Some(role) = self.role.tokens() {
             let size = f32::from(ds.len(role.size));
@@ -373,7 +374,7 @@ impl RenderOnce for Typo {
                 el.text_style().letter_spacing = Some(px(spacing));
             }
             trim = Some(Self::trim_offset(&family, size, cx, weight));
-            if self.role.is_inline() && strut::active(cx) {
+            if self.role.is_inline() && strut::active(cx) && !flow {
                 let (line, shift) = Self::strut_line(ds, (&family, size, line_height, weight), cx);
                 el = el.line_height(px(line));
                 trim = Some(shift);
@@ -394,7 +395,7 @@ impl RenderOnce for Typo {
         }
         el = self.layout(el, ds);
         let styled = StyledText::new(text).with_highlights(highlights);
-        let body: AnyElement = match trim.filter(|_| self.line_clamp.is_none()) {
+        let body: AnyElement = match trim.filter(|_| !flow && self.line_clamp.is_none()) {
             Some(offset) => div()
                 .relative()
                 .top(px(offset))
@@ -407,6 +408,18 @@ impl RenderOnce for Typo {
 }
 
 impl Typo {
+    /// Whether this Typo joins the text flow of its block container (an inline-level span with
+    /// no block-only prop): consecutive such Typos share line boxes and wrap together, the
+    /// container's strut setting the minimum line height. Block props make it a block.
+    fn flows(&self, cx: &App) -> bool {
+        self.role.is_inline()
+            && strut::active(cx)
+            && !self.truncate
+            && self.line_clamp.is_none()
+            && !self.align_with_control
+            && self.align == TextAlign::Start
+    }
+
     /// Truncation, clamping, wrapping and the control-row padding.
     fn layout(&self, mut el: gpui::Div, ds: &Ds) -> gpui::Div {
         if self.truncate {

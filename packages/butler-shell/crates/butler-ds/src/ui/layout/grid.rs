@@ -110,9 +110,11 @@ impl RenderOnce for GridItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         strut::scope(
             true,
-            self.item
-                .apply(div().min_w_0(), Ds::get(cx))
-                .children(self.children),
+            strut::container(
+                self.item.apply(div().min_w_0(), Ds::get(cx)),
+                Ds::get(cx),
+            )
+            .children(self.children),
         )
     }
 }
