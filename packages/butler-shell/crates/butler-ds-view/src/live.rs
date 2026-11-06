@@ -2,7 +2,9 @@
 //! `butler-shell-shots` live mode. Each command answers `LIVE OK`; a failed one saves
 //! `failure.png` and exits non-zero.
 //!
-//!   page <id>             open a page (the window grows to its full height)
+//!   page <id>             open a page (the window grows to its full height, unless `viewport` set one)
+//!   viewport <h>          later pages open at this window height, scrolling inside it (0: grow again)
+//!   scrollto <story> <top>  scroll the page so story n's canvas top is `top` px from the window top
 //!   hover <n>             move the pointer onto control n (DOM order of the page)
 //!   move <n>              pointer onto control n without settling (timers keep running)
 //!   press <n>             pointer onto control n and the left button down, held
@@ -17,6 +19,7 @@
 //!   ime-commit <text>     IME commit: `replace_text_in_range` over the marked text
 //!   wait <ms>             advance the clock
 //!   expect tooltip open|closed | focused <n> | clipboard <text> | control <n> | anchor <name>
+//!         | no-anchor <name> | layers <n> | modal open|closed
 //!   shot <name>           `<page>.<name>.png`: the owning story canvas plus 64px each side
 //!   quit
 use std::io::{BufRead as _, Write as _};
@@ -26,8 +29,7 @@ use std::time::Duration;
 use anyhow::{Context as _, bail};
 use gpui::{
     AnyWindowHandle, Bounds, EntityInputHandler as _, HeadlessAppContext, Keystroke, Modifiers,
-    MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput, Point, ScrollDelta, ScrollWheelEvent,
-    TouchPhase, WindowHandle, point, px, size,
+    MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput, Point, WindowHandle, point, px, size,
 };
 
 use crate::app::DsView;
@@ -35,6 +37,8 @@ use crate::shots::{self, Options};
 
 /// Margin around the owning story canvas of a state shot (logical px).
 const MARGIN: f32 = 64.;
+
+mod scroll;
 
 struct Live {
     cx: HeadlessAppContext,
@@ -44,6 +48,8 @@ struct Live {
     page: Option<String>,
     /// Where the pointer last went (window coordinates).
     pointer: Point<gpui::Pixels>,
+    /// A window height that pages keep instead of growing to their content.
+    fixed_height: Option<f32>,
 }
 
 fn control_anchor(arg: &str) -> String {
@@ -87,7 +93,9 @@ impl Live {
             .map_or(self.options.height, |b| b.size.height.as_f32());
         self.cx
             .update_window(handle, |_, window, _| window.remove_window())?;
-        let height = content.ceil().max(self.options.height);
+        let height = self
+            .fixed_height
+            .unwrap_or_else(|| content.ceil().max(self.options.height));
         (self.window, self.handle) =
             shots::open(&mut self.cx, &self.options, height, self.options.lang)?;
         let window = self.window;
@@ -166,44 +174,6 @@ impl Live {
         Ok(())
     }
 
-    /// The wheel over the middle of story `n`'s canvas, `dx`/`dy` px further along its content.
-    fn scroll(&mut self, arg: &str) -> anyhow::Result<()> {
-        let mut parts = arg.split_whitespace();
-        let mut next = || -> anyhow::Result<f32> {
-            Ok(parts.next().context("scroll <story> <dx> <dy>")?.parse()?)
-        };
-        let (story, dx, dy) = (next()?, next()?, next()?);
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "a small index"
-        )]
-        let story = story as usize;
-        let names = self.cx.update(|app| {
-            self.window
-                .read(app)
-                .map(DsView::story_names)
-                .unwrap_or_default()
-        });
-        let name = names
-            .get(story)
-            .with_context(|| format!("no story {story}"))?;
-        let at = self
-            .cx
-            .debug_bounds(self.handle, &format!("story-{name}"))?
-            .with_context(|| format!("no canvas for story {name}"))?
-            .center();
-        self.move_to(at)?;
-        self.input(PlatformInput::ScrollWheel(ScrollWheelEvent {
-            position: at,
-            delta: ScrollDelta::Pixels(point(px(-dx), px(-dy))),
-            modifiers: Modifiers::default(),
-            touch_phase: TouchPhase::Moved,
-        }))?;
-        self.wait(100);
-        Ok(())
-    }
-
     /// Drives the focused field's `EntityInputHandler`, as the platform's IME does: `mark`
     /// composes `text` (marked, caret at its end), otherwise `text` replaces the marked text
     /// (or the selection), which ends the composition.
@@ -263,6 +233,19 @@ impl Live {
                 .debug_bounds(self.handle, &control_anchor(arg))?
                 .is_some(),
             "anchor" => self.cx.debug_bounds(self.handle, arg)?.is_some(),
+            "no-anchor" => self.cx.debug_bounds(self.handle, arg)?.is_none(),
+            "layers" => {
+                let n: usize = arg.parse()?;
+                self.cx
+                    .update(|cx| butler_ds::ui::overlay::dismiss::count(cx))
+                    == n
+            }
+            "modal" => {
+                let open = self
+                    .cx
+                    .update(|cx| butler_ds::ui::overlay::dismiss::modal_open(cx));
+                open == (arg == "open")
+            }
             _ => bail!("unknown expectation {kind}"),
         };
         anyhow::ensure!(ok, "expectation failed: {what}");
@@ -302,10 +285,15 @@ impl Live {
         let area = Bounds::new(point(px(x0), px(y0)), size(px(x1 - x0), px(y1 - y0)));
         let path = self.options.dir.join(format!("{page}.{name}.png"));
         shots::crop(&image, &self.options, &area, &path)?;
+        // The open overlay's surface, when there is one (logical px), for the geometry tables.
+        let overlay = self
+            .cx
+            .debug_bounds(self.handle, "popover-content")?
+            .map(|b| serde_json::json!({"x": b.origin.x.as_f32(), "y": b.origin.y.as_f32(), "w": b.size.width.as_f32(), "h": b.size.height.as_f32()}));
         std::fs::write(
             self.options.dir.join(format!("{page}.{name}.json")),
             serde_json::to_vec_pretty(
-                &serde_json::json!({"crop": {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}, "story": story}),
+                &serde_json::json!({"crop": {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}, "story": story, "canvas": {"x": bounds.origin.x.as_f32(), "y": bounds.origin.y.as_f32(), "w": bounds.size.width.as_f32(), "h": bounds.size.height.as_f32()}, "overlay": overlay}),
             )?,
         )?;
         Ok(())
@@ -371,6 +359,12 @@ impl Live {
                 Ok(())
             }
             "scroll" => self.scroll(arg),
+            "scrollto" => self.scroll_to(arg),
+            "viewport" => {
+                let height: f32 = arg.parse()?;
+                self.fixed_height = (height > 0.).then_some(height);
+                Ok(())
+            }
             "type" | "ime-mark" | "ime-commit" => {
                 self.compose(arg, command == "ime-mark")?;
                 self.settle();
@@ -394,6 +388,7 @@ fn run(options: Options) -> anyhow::Result<()> {
         handle,
         page: None,
         pointer: Point::default(),
+        fixed_height: None,
     };
     println!("LIVE READY");
     std::io::stdout().flush()?;

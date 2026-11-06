@@ -1,5 +1,5 @@
 {
- "readme": "State shots. 'target' is the 0-based index of the control in DOM order over all [data-ds-fixture-canvas] of the page, counting elements matching `button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input:not([type=\"hidden\"]), textarea, select, [tabindex=\"0\"]` (deduped, natively disabled included). The viewer also renders state-matrix stories after the showcase stories; targets refer to the showcase stories only. Output: <page>.<name>.png cropped to the owning story canvas +/- 64 logical px, clipped to the viewport, and <page>.<name>.json {crop,story}. hover=pointer over; press=mouse down held; focus=Shift key then element.focus(); click=element.click(). 'native' (optional) is the control number on the native page when it differs (the viewer also counts tablists and tab panels, which are tab stops there). 'scroll' states: target is the story index, dx/dy scroll its first edge-fade scroller; 'clicks' repeats a click.",
+ "readme": "State shots. 'target' is the 0-based index of the control in DOM order over all [data-ds-fixture-canvas] of the page, counting elements matching `button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input:not([type=\"hidden\"]), textarea, select, [tabindex=\"0\"]` (deduped, natively disabled included). The viewer also renders state-matrix stories after the showcase stories; targets refer to the showcase stories only. Output: <page>.<name>.png cropped to the owning story canvas +/- 64 logical px, clipped to the viewport, and <page>.<name>.json {crop,story}. hover=pointer over; press=mouse down held; focus=Shift key then element.focus(); click=element.click(). 'native' (optional) is the control number on the native page when it differs (the viewer also counts tablists and tab panels, which are tab stops there). 'scroll' states: target is the story index, dx/dy scroll its first edge-fade scroller; 'clicks' repeats a click. B4 overlays: a 'click' state opens the trigger; the popover is portalled outside the story canvas, so the shot (canvas +/- 64px) shows the part of it near the canvas. 'viewport_height' (optional) captures in a viewport of that height instead of the tall one: the page is scrolled so the target's story canvas top is 'top' logical px from the top, then the target is clicked, and the crop is taken in viewport coordinates.",
  "states": [
   {
    "page": "button",
@@ -398,6 +398,13 @@
     {"page": "field", "name": "textarea-focus", "state": "focus", "target": 3, "wait_ms": 150},
     {"page": "native-select", "name": "default-focus", "state": "focus", "target": 0, "wait_ms": 150},
     {"page": "native-select", "name": "sm-focus", "state": "focus", "target": 2, "wait_ms": 150},
-    {"page": "native-select", "name": "stretch-focus", "state": "focus", "target": 4, "wait_ms": 150}
+    {"page": "native-select", "name": "stretch-focus", "state": "focus", "target": 4, "wait_ms": 150},
+    {"page": "popover", "name": "access-open", "state": "click", "target": 0, "wait_ms": 300},
+    {"page": "popover", "name": "select-open", "state": "click", "target": 1, "wait_ms": 300},
+    {"page": "popover", "name": "anchor-open", "state": "click", "target": 2, "wait_ms": 300},
+    {"page": "popover", "name": "narrow-open", "state": "click", "target": 3, "wait_ms": 300},
+    {"page": "popover", "name": "width-open", "state": "click", "target": 5, "wait_ms": 300},
+    {"page": "popover", "name": "sheet-open", "state": "click", "target": 6, "wait_ms": 300},
+    {"page": "popover", "name": "narrow-flipped", "state": "click", "target": 3, "wait_ms": 300, "viewport_height": 400, "top": 40}
   ]
 }

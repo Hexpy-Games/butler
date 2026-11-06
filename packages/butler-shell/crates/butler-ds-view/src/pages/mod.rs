@@ -17,6 +17,7 @@ mod label;
 mod layout;
 mod native_select;
 mod pill_button;
+mod popover;
 mod presence;
 mod progress_ring;
 mod scroll_area;
@@ -87,6 +88,7 @@ pub(crate) fn all() -> Vec<Page> {
         page!("tinted-glass", "TintedGlass", tinted_glass),
         page!("card", "Card", card),
         page!("tooltip", "Tooltip", tooltip),
+        page!("popover", "Popover", popover),
         page!("button", "Button", button),
         page!("icon-button", "IconButton", icon_button),
         page!("pill-button", "PillButton", pill_button),
