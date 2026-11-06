@@ -6,13 +6,16 @@ mod clickable;
 mod collapsible;
 mod copy_button;
 mod done_icon_button;
+mod field;
 mod glyph_toggle;
 mod grid;
 mod icon_button;
 mod inline;
+mod input;
 mod kbd;
 mod label;
 mod layout;
+mod native_select;
 mod pill_button;
 mod presence;
 mod progress_ring;
@@ -26,6 +29,7 @@ mod stack;
 mod success_check;
 mod switch;
 mod tabs;
+mod textarea;
 mod tinted_glass;
 mod tooltip;
 mod typo;
@@ -76,6 +80,10 @@ pub(crate) fn all() -> Vec<Page> {
         page!("separator", "Separator", separator),
         page!("kbd", "Kbd", kbd),
         page!("label", "Label", label),
+        page!("input", "Input", input),
+        page!("textarea", "Textarea", textarea),
+        page!("field", "Field", field),
+        page!("native-select", "NativeSelect", native_select),
         page!("tinted-glass", "TintedGlass", tinted_glass),
         page!("card", "Card", card),
         page!("tooltip", "Tooltip", tooltip),

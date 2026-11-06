@@ -1,12 +1,12 @@
-//! Label.showcase.tsx. Input arrives in B3; its stand-in draws only what the label sits above.
+//! Label.showcase.tsx.
+use butler_ds::ui::field::{Field, FieldLabel};
 use butler_ds::ui::label::Label;
-use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::switch::Switch;
+use butler_ds::ui::text::Input;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::input_placeholder;
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
@@ -36,17 +36,15 @@ fn switch_field(id: &'static str, label: &'static str, on: bool, disabled: bool)
     if disabled {
         switch = switch.disabled();
     }
-    Stack::new()
-        .gap(Space::Sm)
+    Field::new(format!("{id}-field"))
         .child(Label::new().child(label))
         .child(switch)
         .into_any_element()
 }
 
-fn engine(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
-    Stack::new()
-        .gap(Space::Sm)
-        .child(Label::new().child(lang.pick("Search engine", "검색 엔진")))
-        .child(input_placeholder("DuckDuckGo", cx))
+fn engine(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    Field::new("label-engine-field")
+        .child(FieldLabel::new().child(lang.pick("Search engine", "검색 엔진")))
+        .child(Input::new("label-engine").default_value("DuckDuckGo"))
         .into_any_element()
 }

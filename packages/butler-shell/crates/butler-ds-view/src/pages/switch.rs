@@ -1,6 +1,6 @@
-//! Switch.showcase.tsx. Field, FieldLabel, FieldDescription and SettingsField are stand-ins
-//! (`standins.rs`).
+//! Switch.showcase.tsx. SettingsField is a stand-in (`standins.rs`).
 use butler_ds::ui::card::{Card, CardPadding};
+use butler_ds::ui::field::{Field, FieldContent, FieldDescription, FieldLabel, Orientation};
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::switch::{Size, Switch};
 use butler_ds::ui::typo::{Tone, Typo};
@@ -8,7 +8,7 @@ use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::{Story, probe};
 use crate::copy::Lang;
-use crate::standins::{field, field_description, field_label, field_row, settings_field};
+use crate::standins::settings_field;
 
 struct Copy {
     fallback: &'static str,
@@ -124,29 +124,28 @@ fn switch_field(
         "checked-{id}-{}",
         if on && !disabled { "on" } else { "off" }
     ));
+    let field = Field::new(format!("{id}-field"));
     if row {
-        let content = field_row(
-            field_label(label, cx),
-            field_description(hint, cx),
-            control,
-            20.,
-            cx,
-        );
+        let content = field
+            .orientation(Orientation::Horizontal)
+            .content(
+                FieldContent::new()
+                    .child(FieldLabel::new().child(label))
+                    .child(FieldDescription::new().child(hint)),
+            )
+            .child(control);
         return Card::new("switch-card")
             .padding(CardPadding::Md)
             .child(content)
             .child(marker)
             .into_any_element();
     }
-    field(
-        vec![
-            field_label(label, cx),
-            field_description(hint, cx),
-            control,
-            marker.into_any_element(),
-        ],
-        cx,
-    )
+    field
+        .child(FieldLabel::new().child(label))
+        .child(FieldDescription::new().child(hint))
+        .child(control)
+        .child(marker)
+        .into_any_element()
 }
 
 fn sizes(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
@@ -174,18 +173,16 @@ fn sizes(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-fn reason(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn reason(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let c = copy(lang);
-    field(
-        vec![
-            field_label(c.reduce_motion, cx),
+    Field::new("switch-reduce-field")
+        .child(FieldLabel::new().child(c.reduce_motion))
+        .child(
             Switch::new("switch-reduce-motion")
                 .checked(true)
-                .disabled_reason(c.follows_system)
-                .into_any_element(),
-        ],
-        cx,
-    )
+                .disabled_reason(c.follows_system),
+        )
+        .into_any_element()
 }
 
 fn sandbox(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
