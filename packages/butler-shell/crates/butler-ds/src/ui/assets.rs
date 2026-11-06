@@ -13,6 +13,7 @@ impl AssetSource for Assets {
     fn load(&self, path: &str) -> anyhow::Result<Option<Cow<'static, [u8]>>> {
         Ok(FILES
             .iter()
+            .chain(super::toast::ASSETS)
             .find(|(p, _)| *p == path)
             .map(|(_, b)| Cow::Borrowed(*b)))
     }
@@ -20,6 +21,7 @@ impl AssetSource for Assets {
     fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
         Ok(FILES
             .iter()
+            .chain(super::toast::ASSETS)
             .filter(|(p, _)| p.starts_with(path))
             .map(|(p, _)| SharedString::from(*p))
             .collect())

@@ -18,7 +18,7 @@ const locale = value("--locale", "ko")!;
 const only = value("--only")?.split(",");
 const pages = JSON.parse(readFileSync(new URL("./scenes/ds-view.json", import.meta.url), "utf8")).pages as Array<{ page: string; entry: string }>;
 /** One step after the opening click: hover, click or key a menu item, press a key, focus a control, or wait. */
-type Step = { hover?: [string, number]; click_item?: [string, number]; key?: string; focus?: number; click?: number; wait?: number };
+type Step = { hover?: [string, number]; click_item?: [string, number]; key?: string; focus?: number; click?: number; move?: [number | "center", number]; scroll?: [number, number]; wait?: number };
 type State = { page: string; name: string; state: string; target: number; wait_ms: number; clicks?: number; dx?: number; dy?: number; viewport_height?: number; top?: number; margin?: number; at?: [number, number]; steps?: Step[]; native?: number; native_menu?: string };
 const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as State[]).filter(s => !only || only.includes(s.page));
 const root = resolve(site);
@@ -37,7 +37,7 @@ const MARGIN = 64;
 const MENUS: Record<string, string> = { root: '[data-slot="dropdown-menu-content"], [data-slot="context-menu-content"], [data-slot="select-content"]', sub: '[data-slot="dropdown-menu-sub-content"]' };
 const ITEMS = '[role^="menuitem"], [role="option"]';
 /** The surfaces a shot reports the geometry of. */
-const SURFACES = ['[data-slot="popover-content"]', '[data-slot="dropdown-menu-content"]', '[data-slot="context-menu-content"]', '[data-slot="select-content"]'];
+const SURFACES = ['[data-slot="popover-content"]', '[data-slot="dialog-content"]', '[data-sonner-toast]', '[data-slot="dropdown-menu-content"]', '[data-slot="context-menu-content"]', '[data-slot="select-content"]'];
 const SELECTOR = 'button, [role="button"], [role="radio"], [role="switch"], input:not([type="hidden"]), textarea, select, [tabindex="0"]';
 async function shoot(page: import("playwright").Page, s: { page: string; name: string; margin?: number }, story: number, dir: string, width: number, height = TALL) {
   // In a short viewport the crop is in viewport coordinates (the page is scrolled); in the tall one nothing scrolls.
@@ -62,6 +62,8 @@ async function runSteps(page: import("playwright").Page, steps: Step[]) {
     else if (step.click_item) await item(page, step.click_item).click();
     else if (step.key) await page.keyboard.press(step.key);
     else if (step.focus !== undefined) { await page.keyboard.press("Shift"); await (await page.evaluateHandle(`window.__targets[${step.focus}].el`)).asElement()?.focus(); }
+    else if (step.move) await page.mouse.move(step.move[0] === "center" ? (await page.evaluate("innerWidth")) as number / 2 : step.move[0], step.move[1]);
+    else if (step.scroll) { const b = (await page.locator('[data-slot="dialog-content"]').first().boundingBox())!; await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.wheel(step.scroll[0], step.scroll[1]); }
     else if (step.click !== undefined) await (await page.evaluateHandle(`window.__targets[${step.click}].el`)).asElement()?.click();
     await page.waitForTimeout(step.wait ?? 250);
   }
@@ -106,9 +108,10 @@ try {
       const story = (await page.evaluate(`window.__targets[${s.target}].si`)) as number;
       if (!element) throw new Error(`${s.page}.${s.name}: target ${s.target} missing`);
       await element.scrollIntoViewIfNeeded();
-      if (s.viewport_height) {
+      const vh = s.viewport_height === -1 ? height : s.viewport_height;
+      if (vh) {
         // A short viewport: scroll the owning canvas to `top` px from the window top, so the overlay can collide.
-        await page.setViewportSize({ width, height: s.viewport_height });
+        await page.setViewportSize({ width, height: vh });
         await page.evaluate(`(() => { const c = document.querySelectorAll("[data-ds-fixture-canvas]")[${story}]; const scroller = (() => { for (let e = c.parentElement; e; e = e.parentElement) if (e.scrollHeight > e.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(e).overflowY)) return e; return document.scrollingElement; })(); scroller.scrollBy(0, c.getBoundingClientRect().top - ${s.top ?? 0}); })()`);
         await page.evaluate("new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))");
       }
@@ -118,7 +121,7 @@ try {
       else for (let n = 0; n < (s.clicks ?? 1); n++) { await element.click(); if (n + 1 < (s.clicks ?? 1)) await page.waitForTimeout(700); }
       await page.waitForTimeout(s.state === "press" || s.state === "focus" ? Math.max(150, s.wait_ms) : s.wait_ms);
       await runSteps(page, s.steps ?? []);
-      await shoot(page, s, story, dir, width, s.viewport_height ?? TALL);
+      await shoot(page, s, story, dir, width, vh ?? TALL);
       if (s.state === "press") await page.mouse.up();
       await page.close();
     }

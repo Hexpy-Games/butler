@@ -37,6 +37,7 @@ mod switch;
 mod tabs;
 mod textarea;
 mod tinted_glass;
+mod toast;
 mod tooltip;
 mod typo;
 
@@ -98,6 +99,7 @@ pub(crate) fn all() -> Vec<Page> {
         page!("context-menu", "ContextMenu", context_menu),
         page!("select", "Select", select),
         page!("dialog", "Dialog", dialog),
+        page!("toast", "Toast", toast),
         page!("button", "Button", button),
         page!("icon-button", "IconButton", icon_button),
         page!("pill-button", "PillButton", pill_button),

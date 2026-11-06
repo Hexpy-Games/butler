@@ -236,9 +236,12 @@ fn close_room(ds: &Ds) -> f32 {
     len(Length::Space2) + size + len(Length::FocusRingRoom) - len(Length::Space4)
 }
 
+/// Closes the dialog.
+pub(super) type Close = Rc<dyn Fn(&mut Window, &mut App)>;
+
 /// What the surface needs from the dialog: its close action and the scroll state.
 pub(super) struct Env {
-    pub close: Rc<dyn Fn(&mut Window, &mut App)>,
+    pub close: Close,
     pub scroll: ScrollHandle,
     pub grab: Entity<Option<f32>>,
 }

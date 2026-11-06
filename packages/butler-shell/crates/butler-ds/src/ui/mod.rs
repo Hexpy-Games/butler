@@ -47,6 +47,7 @@ pub mod switch;
 pub mod tabs;
 pub mod text;
 pub mod tinted_glass;
+pub mod toast;
 pub mod tooltip;
 pub mod typo;
 

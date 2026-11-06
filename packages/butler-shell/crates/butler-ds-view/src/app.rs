@@ -5,6 +5,7 @@ use butler_ds::tokens::{Color, GradientToken, Length, TokenContext};
 use butler_ds::ui::context::{Ds, Lang as DsLang, Platform};
 use butler_ds::ui::convert;
 use butler_ds::ui::focus;
+use butler_ds::ui::toast::Toaster;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
     AnyElement, App, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -50,8 +51,9 @@ pub(crate) struct DsView {
 }
 
 impl DsView {
-    pub(crate) fn new(window: &Window, _: &mut Context<Self>) -> Self {
+    pub(crate) fn new(window: &Window, cx: &mut Context<Self>) -> Self {
         let _ = window;
+        butler_ds::ui::toast::reset(cx);
         Self {
             pages: pages::all(),
             page: 0,
@@ -177,8 +179,9 @@ impl Render for DsView {
                             .bg(workspace)
                             .child(crate::pages::anchored(body, "page-content")),
                     ),
-            );
-        butler_ds::ui::overlay::track(focus::track_modality(root))
+            )
+            .child(Toaster::new());
+        butler_ds::ui::overlay::track(focus::track_modality(butler_ds::ui::toast::track(root)))
     }
 }
 
