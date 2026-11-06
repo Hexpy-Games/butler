@@ -65,6 +65,7 @@ impl Output {
 #[derive(IntoElement)]
 pub struct Popper {
     z: Z,
+    pinned: bool,
     anchor: Anchor,
     options: Options,
     frozen: Option<Resolved>,
@@ -84,12 +85,37 @@ impl Popper {
     ) -> Self {
         Self {
             z,
+            pinned: false,
             anchor: anchor.clone(),
             options,
             frozen: None,
             output: output.clone(),
             theme,
             child: child.into_any_element(),
+        }
+    }
+
+    /// A surface that is not placed against a reference: the child draws itself in window
+    /// coordinates (a sheet pinned to the bottom edge, `position: fixed`). The child is as big as
+    /// the window and puts its surface where it belongs.
+    pub fn pinned(z: Z, theme: Theme, child: impl IntoElement) -> Self {
+        let options = Options {
+            side: place::Side::Bottom,
+            align: place::Align::Center,
+            side_offset: 0.,
+            padding: place::Padding::content(0.),
+            avoid_collisions: false,
+        };
+        Self {
+            pinned: true,
+            ..Self::new(
+                z,
+                &Anchor::default(),
+                options,
+                &Output::default(),
+                theme,
+                child,
+            )
         }
     }
 
@@ -104,6 +130,7 @@ impl RenderOnce for Popper {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let priority = self.z.value(Ds::get(cx));
         deferred(Placed {
+            pinned: self.pinned,
             anchor: self.anchor,
             options: self.options,
             frozen: self.frozen,
@@ -116,6 +143,7 @@ impl RenderOnce for Popper {
 }
 
 struct Placed {
+    pinned: bool,
     anchor: Anchor,
     options: Options,
     frozen: Option<Resolved>,
@@ -183,6 +211,13 @@ impl Element for Placed {
         let size = (f32::from(size.width), f32::from(size.height));
         let viewport = window.viewport_size();
         let viewport = (f32::from(viewport.width), f32::from(viewport.height));
+        if self.pinned {
+            let origin = point(-bounds.origin.x, -bounds.origin.y);
+            self.theme.scoped(cx, |cx| {
+                window.with_element_offset(origin, |window| self.child.prepaint(window, cx));
+            });
+            return true;
+        }
         let resolved = match (self.frozen, self.anchor.bounds()) {
             (Some(frozen), _) => Some(frozen),
             (None, Some(reference)) => {

@@ -12,6 +12,9 @@ use crate::tokens::{
 /// The mobile type and sizing ramp applies at or below this viewport width (`width <= 640px`).
 const COMPACT_MAX_WIDTH: f32 = 640.;
 
+/// The row height inside a sheet. // DS: BottomSheet.module.css:29
+pub const SHEET_ROW_HEIGHT: f32 = 44.;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Platform {
     #[default]
@@ -46,6 +49,10 @@ pub struct Ds {
     lang: Lang,
     body_font: SharedString,
     code_font: SharedString,
+    /// The on-screen keyboard's height (`--sheet-keyboard-inset`), fed in by the app.
+    keyboard_inset: f32,
+    /// Inside a sheet menus and lists have touch-sized rows (`--menu-item-height: 44px`).
+    sheet_rows: bool,
 }
 
 impl Global for Ds {}
@@ -63,6 +70,8 @@ impl Ds {
             lang: Lang::default(),
             body_font,
             code_font,
+            keyboard_inset: 0.,
+            sheet_rows: false,
         }
     }
 
@@ -151,6 +160,30 @@ impl Ds {
 
     pub fn set_ui_scale(&mut self, scale: f32) {
         self.tokens.ui_scale = scale;
+    }
+
+    /// The height the on-screen keyboard covers at the bottom of the window, in px. A platform
+    /// that has one reports it here (the visual viewport's shortfall); desktop never does.
+    pub fn set_keyboard_inset(&mut self, inset: f32) {
+        self.keyboard_inset = inset.max(0.);
+    }
+
+    pub fn keyboard_inset(&self) -> f32 {
+        self.keyboard_inset
+    }
+
+    /// Whether the rows being laid out are in a sheet.
+    pub fn set_sheet_rows(&mut self, on: bool) {
+        self.sheet_rows = on;
+    }
+
+    /// `--menu-item-height`: 44px inside a sheet (DS: BottomSheet.module.css:29).
+    pub fn menu_item_height(&self) -> Pixels {
+        if self.sheet_rows {
+            gpui::px(SHEET_ROW_HEIGHT)
+        } else {
+            self.len(Length::MenuItemHeight)
+        }
     }
 
     pub fn set_modality(&mut self, modality: Modality) {

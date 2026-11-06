@@ -101,6 +101,7 @@ impl ContextMenu {
             cap_height: false,
             theme: content.theme,
             trigger_focus: None,
+            sheet: false,
         };
         self.menu.content(&spec, content.entries, window, cx)
     }

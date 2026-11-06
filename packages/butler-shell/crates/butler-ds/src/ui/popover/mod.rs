@@ -18,6 +18,8 @@ pub use content::{Density, MenuSize, PopoverContent, Width};
 pub use parts::{PopoverDescription, PopoverHeader, PopoverTitle};
 
 use crate::tokens::Duration as DsDuration;
+use crate::ui::bottom_sheet::SheetState;
+use crate::ui::bottom_sheet::present::{self, Presented};
 use crate::ui::context::Ds;
 use crate::ui::layer::Z;
 use crate::ui::menu::TriggerBox;
@@ -47,6 +49,7 @@ pub struct Popover {
     open: Entity<bool>,
     life: Entity<Lifecycle>,
     scope: Entity<Scope>,
+    sheet: Entity<SheetState>,
     parts: Parts,
     trigger_focus: FocusHandle,
     controlled: Option<bool>,
@@ -83,6 +86,7 @@ impl Popover {
             open: window.use_keyed_state((id.clone(), "open"), cx, |_, _| false),
             life: window.use_keyed_state((id.clone(), "life"), cx, |_, _| Lifecycle::default()),
             scope: window.use_keyed_state((id.clone(), "scope"), cx, |_, cx| Scope::new(cx)),
+            sheet: window.use_keyed_state((id.clone(), "sheet"), cx, |_, _| SheetState::default()),
             id,
             parts,
             trigger_focus,
@@ -164,7 +168,12 @@ impl Popover {
         cx: &mut App,
     ) -> AnyElement {
         let ds = Ds::get(cx);
-        let exit = ds.duration(DsDuration::MotionExitFast);
+        let bottom_sheet = Self::is_bottom_sheet(&content, window);
+        let exit = ds.duration(if bottom_sheet {
+            DsDuration::MotionExitSlow
+        } else {
+            DsDuration::MotionExitFast
+        });
         let open = self.is_open(cx);
         let synced = Lifecycle::sync(
             &self.life,
@@ -178,12 +187,21 @@ impl Popover {
         if synced.phase == Phase::Closed {
             return footprint(div());
         }
-        let auto_focus = content.auto_focus;
+        // A sheet takes focus in and gives it back to the trigger, unlike the anchored popover.
+        let auto_focus = content.auto_focus && !bottom_sheet;
         let scope = self.scope.clone();
         scope.update(cx, |scope, cx| {
-            scope.sync(open, auto_focus, auto_focus, window, cx);
+            scope.sync(open, auto_focus, auto_focus || bottom_sheet, window, cx);
         });
+        if let (true, Phase::Open { key }) = (bottom_sheet, synced.phase) {
+            Scope::enter_when_drawn(&scope, &self.id, key, window, cx);
+        }
         let focus = scope.read(cx).handle.clone();
+        if bottom_sheet {
+            let layers =
+                self.sheet_layers(content, synced.phase, synced.handle, &focus, window, cx);
+            return footprint(layers);
+        }
         footprint(self.layer(content, synced.phase, synced.handle, &focus, window, cx))
     }
 }
@@ -194,6 +212,54 @@ fn footprint(child: impl gpui::IntoElement) -> AnyElement {
 }
 
 impl Popover {
+    /// Whether the content is presented as a BottomSheet in this window: its `presentation`, or
+    /// the app default (popover; a field-wide `Width::Anchor` list always stays attached).
+    fn is_bottom_sheet(content: &PopoverContent, window: &Window) -> bool {
+        let default = if content.width == Width::Anchor {
+            Presentation::Popover
+        } else {
+            Presentation::default()
+        };
+        let width = f32::from(window.viewport_size().width);
+        content.presentation.unwrap_or(default).is_sheet(width)
+    }
+
+    /// The BottomSheet presentation: the content in the sheet's body under its backdrop.
+    fn sheet_layers(
+        &self,
+        content: PopoverContent,
+        phase: Phase,
+        handle: Option<crate::ui::overlay::dismiss::Handle>,
+        focus: &FocusHandle,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        let theme = content.theme.unwrap_or(self.theme);
+        let id = gpui::SharedString::from(format!("{}-popover", self.id));
+        let scroll = theme.scoped(cx, |cx| {
+            crate::ui::bottom_sheet::body((self.id.clone(), "sheet-body"), None, Ds::get(cx))
+                .children(content.into_children())
+                .into_any_element()
+        });
+        let popover = self.clone();
+        Presented {
+            grabber: present::decorative_handle(&id, &self.sheet),
+            id,
+            phase,
+            handle,
+            theme,
+            state: self.sheet.clone(),
+            focus: focus.clone(),
+            scope: Some(self.scope.clone()),
+            title: None,
+            expandable: None,
+            content: vec![scroll],
+            selector: "popover-content",
+            on_dismiss: Rc::new(move |_, window, cx| popover.set_open(false, window, cx)),
+        }
+        .layers(window, cx)
+    }
+
     /// The reference the surface is placed against: the anchor when there is one, else the trigger.
     fn reference(&self) -> &Anchor {
         if self.parts.anchor.bounds().is_some() {
@@ -215,13 +281,6 @@ impl Popover {
         let ds = Ds::get(cx);
         let viewport = window.viewport_size();
         let viewport = (f32::from(viewport.width), f32::from(viewport.height));
-        let default = if content.width == Width::Anchor {
-            Presentation::Popover
-        } else {
-            Presentation::default()
-        };
-        // A sheet presentation is BottomSheet's (batch B5): until then it stays anchored.
-        let _bottom_sheet = content.presentation.unwrap_or(default).is_sheet(viewport.0);
         let sheet = ds.compact() && content.width != Width::Anchor;
         let side = content::sheet_side(sheet, content.side.unwrap_or(Side::Bottom));
         let reference = self.reference();

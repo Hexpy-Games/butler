@@ -128,7 +128,7 @@ pub(super) fn item(env: &Env, ds: &Ds, row: &Selectable, at: At<'_>) -> AnyEleme
     full.push(row.idx);
     let (rt, leave_rt) = (env.rt.clone(), env.rt.clone());
     let selection = ds.color(Color::Selection);
-    let mut el = body(ds, row, frame(ds, PAD_X, ds.len(Length::MenuItemHeight)))
+    let mut el = body(ds, row, frame(ds, PAD_X, ds.menu_item_height()))
         .id(id)
         .debug_selector(move || name.clone())
         .on_mouse_move(move |event, window, cx| {

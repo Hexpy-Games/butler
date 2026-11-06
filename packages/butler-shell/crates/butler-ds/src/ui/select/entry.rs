@@ -131,8 +131,7 @@ impl SelectContent {
         self
     }
 
-    /// `auto | popover | sheet`. The sheet is BottomSheet's (batch B5); until then a Select that
-    /// resolves to one stays anchored.
+    /// `auto | popover | sheet`: a BottomSheet below 768px, anchored above (the app default).
     pub fn presentation(mut self, presentation: Presentation) -> Self {
         self.presentation = Some(presentation);
         self

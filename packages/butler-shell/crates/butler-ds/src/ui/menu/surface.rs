@@ -42,9 +42,14 @@ pub(super) fn root(
     cx: &mut App,
 ) -> AnyElement {
     let body = level(env, root, 0, &[], cap, None, handle, focus, window, cx);
-    let (env, root) = (env.clone(), root.clone());
-    div()
-        .track_focus(focus)
+    let (sheet, env, root) = (env.sheet, env.clone(), root.clone());
+    // In a sheet the root is a box of the sheet's column, so its body can scroll.
+    let el = if sheet {
+        crate::ui::bottom_sheet::shrinking(div())
+    } else {
+        div()
+    };
+    el.track_focus(focus)
         .tab_stop(false)
         .on_key_down(move |event, window, cx| {
             if super::keys::handle(&env.menu, &root, event, window, cx) {
@@ -110,7 +115,26 @@ fn level(
             }
         });
     }
+    if env.sheet && lvl == 0 {
+        return sheet_body(env, ds, children);
+    }
     glass(env, ds, children, lvl, cap, measure)
+}
+
+/// The root level of a menu in a sheet: its rows scroll in the sheet's body.
+fn sheet_body(env: &Env, ds: &Ds, rows: Vec<AnyElement>) -> AnyElement {
+    let rt = env.rt.clone();
+    crate::ui::bottom_sheet::body(
+        SharedString::from(format!("{}-sheet-body", env.id)),
+        None,
+        ds,
+    )
+    .text_color(ds.color(Color::TextPrimary))
+    .on_mouse_move(move |event, _, cx| {
+        rt.update(cx, |rt, _| rt.track_pointer(f32::from(event.position.x)));
+    })
+    .children(rows)
+    .into_any_element()
 }
 
 fn glass(

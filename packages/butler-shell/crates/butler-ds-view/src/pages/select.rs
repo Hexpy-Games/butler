@@ -1,7 +1,7 @@
 //! Select.showcase.tsx. ProviderLogo is a stand-in (`standins_overlay.rs`); the state matrix
 //! stories are not mirrored. The last story, "Scrolling list", is not in React: its list is
-//! taller than the window, so the scroll buttons and the item-aligned scroll show. "Bottom sheet on phones" shows the anchored list until BottomSheet
-//! (batch B5) provides the sheet presentation.
+//! taller than the window, so the scroll buttons and the item-aligned scroll show. "Bottom sheet on
+//! phones" opens as a BottomSheet below 768px.
 use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::overlay::Presentation;
 use butler_ds::ui::select::{Select, SelectContent, SelectItem, SelectTrigger};
@@ -213,8 +213,7 @@ fn filters(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-/// `presentation="auto"`: a BottomSheet below 768px, the anchored list above. The sheet is
-/// batch B5's; here the list stays anchored.
+/// `presentation="auto"`: a BottomSheet below 768px, the anchored list above.
 fn sheet(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let select = Select::new("select-sheet", window, cx).default_value("one", cx);

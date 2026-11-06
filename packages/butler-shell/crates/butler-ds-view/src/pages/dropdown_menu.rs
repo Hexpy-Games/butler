@@ -1,5 +1,5 @@
-//! DropdownMenu.showcase.tsx. The "Bottom sheet on phones" story shows the anchored menu until
-//! BottomSheet (batch B5) provides the sheet presentation.
+//! DropdownMenu.showcase.tsx. The "Bottom sheet on phones" story opens as a BottomSheet below
+//! 768px.
 use butler_ds::ui::Icon;
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
@@ -266,8 +266,7 @@ fn tags(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     story(trigger, menu.content(content, window, cx))
 }
 
-/// `presentation="auto"`: a BottomSheet below 768px, the anchored menu above. The sheet is
-/// batch B5's; here the menu stays anchored.
+/// `presentation="auto"`: a BottomSheet below 768px, the anchored menu above.
 fn sheet(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let menu = DropdownMenu::new("dm-sheet", window, cx);

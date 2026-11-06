@@ -123,6 +123,13 @@ impl PopoverContent {
     }
 }
 
+impl PopoverContent {
+    /// The children, for a presentation that lays them out itself (the sheet's body).
+    pub(super) fn into_children(self) -> Vec<AnyElement> {
+        self.children
+    }
+}
+
 impl Default for PopoverContent {
     fn default() -> Self {
         Self::new()

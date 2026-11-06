@@ -1,6 +1,6 @@
 // React side of the DS View state shots (hover, press, focus, click), driven by scenes/ds-view-states.json.
 // Output per <size>-<theme>: <out>/react/<size>-<theme>/<page>.<name>.png and <page>.<name>.json {crop, story}.
-//   bun ds-view-states.ts --site <dist-ds-site> --out <dir> [--sizes ..] [--themes ..] [--scale 2] [--locale ko] [--only page,page]
+//   bun ds-view-states.ts --site <dist-ds-site> --out <dir> [--sizes ..] [--themes ..] [--scale 2] [--locale ko] [--only page,page] [--names state,state]
 // The crop is the owning story canvas +/- 64 logical px, clipped to the viewport; the gpui side uses the same rule.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
@@ -16,11 +16,12 @@ const themes = value("--themes", "light,dark")!.split(",");
 const scale = Number(value("--scale", "2"));
 const locale = value("--locale", "ko")!;
 const only = value("--only")?.split(",");
+const names = value("--names")?.split(",");
 const pages = JSON.parse(readFileSync(new URL("./scenes/ds-view.json", import.meta.url), "utf8")).pages as Array<{ page: string; entry: string }>;
 /** One step after the opening click: hover, click or key a menu item, press a key, focus a control, or wait. */
-type Step = { hover?: [string, number]; click_item?: [string, number]; key?: string; focus?: number; click?: number; move?: [number | "center", number]; scroll?: [number, number]; wait?: number };
+type Step = { hover?: [string, number]; click_item?: [string, number]; key?: string; focus?: number; click?: number; move?: [number | "center", number]; scroll?: [number, number]; drag?: [number, number]; release?: boolean; park?: boolean; inset?: number; wait?: number };
 type State = { page: string; name: string; state: string; target: number; wait_ms: number; clicks?: number; dx?: number; dy?: number; viewport_height?: number; top?: number; margin?: number; at?: [number, number]; steps?: Step[]; native?: number; native_menu?: string };
-const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as State[]).filter(s => !only || only.includes(s.page));
+const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as State[]).filter(s => (!only || only.includes(s.page)) && (!names || names.includes(s.name)));
 const root = resolve(site);
 const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".txt": "text/plain" };
 const server = Bun.serve({
@@ -37,7 +38,7 @@ const MARGIN = 64;
 const MENUS: Record<string, string> = { root: '[data-slot="dropdown-menu-content"], [data-slot="context-menu-content"], [data-slot="select-content"]', sub: '[data-slot="dropdown-menu-sub-content"]' };
 const ITEMS = '[role^="menuitem"], [role="option"]';
 /** The surfaces a shot reports the geometry of. */
-const SURFACES = ['[data-slot="popover-content"]', '[data-slot="dialog-content"]', '[data-sonner-toast]', '[data-slot="dropdown-menu-content"]', '[data-slot="context-menu-content"]', '[data-slot="select-content"]'];
+const SURFACES = ['[data-slot="bottom-sheet"]', '[data-slot="popover-content"]', '[data-slot="dialog-content"]', '[data-sonner-toast]', '[data-slot="dropdown-menu-content"]', '[data-slot="context-menu-content"]', '[data-slot="select-content"]'];
 const SELECTOR = 'button, [role="button"], [role="radio"], [role="switch"], input:not([type="hidden"]), textarea, select, [tabindex="0"]';
 async function shoot(page: import("playwright").Page, s: { page: string; name: string; margin?: number }, story: number, dir: string, width: number, height = TALL) {
   // In a short viewport the crop is in viewport coordinates (the page is scrolled); in the tall one nothing scrolls.
@@ -56,6 +57,18 @@ async function shoot(page: import("playwright").Page, s: { page: string; name: s
 function item(page: import("playwright").Page, [level, n]: [string, number]) {
   return page.locator(MENUS[level]).locator(ITEMS).nth(n);
 }
+/** Presses the sheet's grabber row and holds it, moving `dy` px down (negative: up) over `ms` in 16ms frames, as the harness's `dragby` does. */
+async function dragHandle(page: import("playwright").Page, dy: number, ms: number) {
+  const box = (await page.locator('[data-slot="bottom-sheet-handle"]').last().boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  const frames = Math.max(1, Math.floor(ms / 16));
+  for (let n = 1; n <= frames; n++) {
+    await page.mouse.move(x, y + dy * n / frames);
+    await page.waitForTimeout(ms / frames);
+  }
+}
 async function runSteps(page: import("playwright").Page, steps: Step[]) {
   for (const step of steps) {
     if (step.hover) await item(page, step.hover).hover();
@@ -64,6 +77,10 @@ async function runSteps(page: import("playwright").Page, steps: Step[]) {
     else if (step.focus !== undefined) { await page.keyboard.press("Shift"); await (await page.evaluateHandle(`window.__targets[${step.focus}].el`)).asElement()?.focus(); }
     else if (step.move) await page.mouse.move(step.move[0] === "center" ? (await page.evaluate("innerWidth")) as number / 2 : step.move[0], step.move[1]);
     else if (step.scroll) { const b = (await page.locator('[data-slot="dialog-content"]').first().boundingBox())!; await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.wheel(step.scroll[0], step.scroll[1]); }
+    else if (step.drag) await dragHandle(page, step.drag[0], step.drag[1]);
+    else if (step.release) await page.mouse.up();
+    else if (step.park) await page.mouse.move(1, 1);
+    else if (step.inset !== undefined) await page.evaluate(`document.querySelector('[data-slot="bottom-sheet"]').style.setProperty("--sheet-keyboard-inset", "${step.inset}px")`);
     else if (step.click !== undefined) await (await page.evaluateHandle(`window.__targets[${step.click}].el`)).asElement()?.click();
     await page.waitForTimeout(step.wait ?? 250);
   }
