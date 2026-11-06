@@ -63,7 +63,13 @@ pub(super) fn handle(
         })
         .collect();
     let mut handled = match key {
-        "tab" => true,
+        "tab" => {
+            // Focus is trapped in the open list: Tab stays inside it.
+            sel.scope.update(cx, |scope, cx| {
+                scope.trap_tab(mods.shift, window, cx);
+            });
+            true
+        }
         "enter" | "space" if !(searching && key == "space") => {
             choose(sel, rows, highlight, window, cx)
         }

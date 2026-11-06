@@ -29,7 +29,7 @@ use runtime::Rt;
 use crate::ui::context::Ds;
 use crate::ui::layer::{Layer, Z};
 use crate::ui::menu::footprint;
-use crate::ui::overlay::dismiss::{Dismissable, Handle};
+use crate::ui::overlay::dismiss::{Dismissable, Handle, Reason};
 use crate::ui::overlay::lifecycle::{Lifecycle, Phase, Spec};
 use crate::ui::overlay::motion::{self, Motion};
 use crate::ui::overlay::place::{Options, Rect, Side};
@@ -354,8 +354,11 @@ impl Select {
         };
         let handle = handle.clone();
         let select = self.clone();
-        let layer = Dismissable::new(handle, animated, move |_, window, cx| {
-            select.set_open(false, window, cx);
+        let layer = Dismissable::new(handle, animated, move |reason, window, cx| {
+            // Radix Select prevents the focus-outside dismissal: the list holds focus.
+            if reason != Reason::FocusOutside {
+                select.set_open(false, window, cx);
+            }
         })
         .focus(&focus);
         match geometry {

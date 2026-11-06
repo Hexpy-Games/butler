@@ -67,6 +67,9 @@ pub(crate) struct Menu {
     scope: Entity<Scope>,
     rt: Entity<Runtime>,
     pub(crate) parts: Parts,
+    /// Set from the owner's [`Spec`] when the layer is built: focus is trapped and does not
+    /// dismiss.
+    modal: bool,
     controlled: Option<bool>,
     on_open_change: Option<OpenChange>,
     theme: Theme,
@@ -87,6 +90,7 @@ impl Menu {
             rt: window.use_keyed_state((key, "runtime"), cx, |_, _| Runtime::default()),
             id,
             parts,
+            modal: false,
             controlled: None,
             on_open_change: None,
             theme: Theme::current(cx),
@@ -132,6 +136,10 @@ impl Menu {
 
     /// A pointer down or focus outside closed the menu: focus stays where it went.
     fn dismiss(&self, reason: Reason, window: &mut Window, cx: &mut App) {
+        // A modal menu keeps focus: focus moving outside does not close it (Radix prevents it).
+        if self.modal && reason == Reason::FocusOutside {
+            return;
+        }
         if reason != Reason::Escape {
             self.rt.update(cx, |rt, _| rt.outside = true);
         }
@@ -171,7 +179,11 @@ impl Menu {
         if synced.phase == Phase::Closed {
             return footprint(div());
         }
-        let layer = self.layer(spec, &root, synced.phase, synced.handle, window, cx);
+        let this = Self {
+            modal: spec.modal,
+            ..self.clone()
+        };
+        let layer = this.layer(spec, &root, synced.phase, synced.handle, window, cx);
         let under = spec.modal.then(|| scrim(Z::Popover, window));
         footprint(div().children(under).child(layer))
     }

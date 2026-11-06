@@ -50,7 +50,15 @@ pub(super) fn handle(
         return false;
     };
     let mut handled = match key {
-        "tab" => true,
+        "tab" => {
+            if menu.modal {
+                // A trapped scope keeps Tab inside it.
+                menu.scope.update(cx, |scope, cx| {
+                    scope.trap_tab(mods.shift, window, cx);
+                });
+            }
+            true
+        }
         "left" if lvl > 0 => menu.rt.update(cx, |rt, cx| {
             cx.notify();
             rt.close_focused_sub()

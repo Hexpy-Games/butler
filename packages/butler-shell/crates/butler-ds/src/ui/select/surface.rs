@@ -240,7 +240,7 @@ fn item(
             .h(ds.len(Length::IconSizeMd))
             .child(make())
     });
-    let name = format!("{}-item-{idx}", sel.id);
+    let name = format!("{}-item-0-{idx}", sel.id);
     let mut el = item_frame(ds, PAD_RIGHT, min)
         .id(SharedString::from(name.clone()))
         .debug_selector(move || name.clone())

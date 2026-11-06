@@ -161,7 +161,9 @@ impl DropdownMenu {
     /// control.
     pub fn trigger(&self, build: impl FnOnce(Toggle) -> AnyElement) -> AnyElement {
         let (press, keys, focus) = (self.clone(), self.clone(), self.trigger_focus.clone());
+        // A flex box: the control is its item, with no line box (and strut) around it.
         let child = div()
+            .flex()
             .child(build(Toggle(self.clone())))
             .child(self.menu.parts.reference.probe())
             .relative();
