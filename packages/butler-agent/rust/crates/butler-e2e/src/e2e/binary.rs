@@ -6,9 +6,11 @@
 //! `cargo test -p butler-e2e` (and `cargo mutants` using it) always exercises
 //! the binary built from the current sources. `BUTLER_E2E_SKIP_BUILD=1` uses
 //! the existing workspace binary without rebuilding.
+//! Any located binary must answer `--e2e-fixtures` (a fixture build) unless
+//! `BUTLER_E2E_WITHOUT_FIXTURES=1` declares a shipped one.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
 use super::config::{flag, nonempty};
@@ -47,7 +49,10 @@ pub fn agent_binary() -> Result<PathBuf, HarnessError> {
     if !super::config::tier_selected() {
         return Err(harness_error("agent binary requires the E2E tier gate"));
     }
-    BINARY.get_or_init(locate).clone().map_err(harness_error)
+    BINARY
+        .get_or_init(|| locate().and_then(require_fixtures))
+        .clone()
+        .map_err(harness_error)
 }
 
 fn locate() -> Result<PathBuf, String> {
@@ -105,6 +110,35 @@ fn locate() -> Result<PathBuf, String> {
             binary.display()
         ))
     }
+}
+
+/// Scenarios pin the App clock and arm other hooks that only an `e2e-fixtures`
+/// build honours. A shipped binary must be declared, so a scenario never runs
+/// on the real clock unnoticed.
+fn require_fixtures(binary: PathBuf) -> Result<PathBuf, String> {
+    if flag("BUTLER_E2E_WITHOUT_FIXTURES") {
+        return Ok(binary);
+    }
+    let probe = Command::new(&binary)
+        .arg("--e2e-fixtures")
+        .env_clear()
+        .envs(system_environment())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| format!("cannot run {}: {error}", binary.display()))?;
+    if probe.success() {
+        return Ok(binary);
+    }
+    Err(format!(
+        "{} lacks butler-agent/e2e-fixtures, so BUTLER_E2E_APP_NOW and the other \
+         fixture hooks are inert. Build it with --features \
+         butler-platform/test-support,butler-agent/e2e-fixtures, or set \
+         BUTLER_E2E_WITHOUT_FIXTURES=1 for a shipped binary and skip \
+         ::requires_e2e_fixtures::",
+        binary.display()
+    ))
 }
 
 /// Nextest remaps non-test executables when consuming an archive. Prefer its

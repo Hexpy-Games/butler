@@ -19,6 +19,7 @@ if ($Mode -eq 'Export') {
     if ($env:BUTLER_E2E_TIER -ne 'stub') { throw 'Compiled Windows verification requires BUTLER_E2E_TIER=stub' }
     # Requirement modules describe the target binary, independently of the harness build profile.
     $selection = if ($WithoutE2eFixtures) { @('--skip', '::requires_e2e_fixtures::') } else { @() }
+    if ($WithoutE2eFixtures) { $env:BUTLER_E2E_WITHOUT_FIXTURES = '1' }
     # Hosted %TEMP% is on the C: OS disk, whose sync stalls (20 s seen) exceed hang waits.
     # Keep sandboxes on the RUNNER_TEMP disk with HOME and BUTLER_DATA.
     # BUTLER_E2E_TMP_ROOT selects a shorter root for fixtures that hold repository checkouts,

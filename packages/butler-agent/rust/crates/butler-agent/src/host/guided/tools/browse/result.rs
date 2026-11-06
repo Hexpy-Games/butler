@@ -16,7 +16,8 @@ impl Run {
         self.failures >= 3
     }
 
-    pub(super) fn remember(&mut self, view: Value) {
+    /// Records the view's text as quotable evidence and returns its url.
+    fn extend_seen(&mut self, view: &Value) -> String {
         let url = view["untrusted_content"]["url"]
             .as_str()
             .or(view["final_url"].as_str())
@@ -38,11 +39,22 @@ impl Run {
         };
         self.seen
             .extend(texts.into_iter().map(|text| (url.clone(), text.to_owned())));
-        self.url = json!(url);
+        url
+    }
+
+    pub(super) fn remember(&mut self, view: Value) {
+        self.url = json!(self.extend_seen(&view));
+        self.read = Value::Null;
         if let Some(obs) = view.get("obs") {
             self.observation = obs.clone();
         }
         self.view = view;
+    }
+
+    /// A read adds passages beside the page view; refs, url and observation stay.
+    pub(super) fn remember_read(&mut self, read: Value) {
+        self.extend_seen(&read);
+        self.read = read;
     }
 
     pub(super) fn finish(&self, mut result: Value, model: &str) -> Value {
