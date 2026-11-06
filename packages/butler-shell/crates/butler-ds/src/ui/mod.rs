@@ -36,6 +36,7 @@ pub mod kbd;
 pub mod label;
 pub mod layer;
 pub mod layout;
+pub mod markdown;
 pub mod media_frame;
 pub mod menu;
 pub mod meta_list;

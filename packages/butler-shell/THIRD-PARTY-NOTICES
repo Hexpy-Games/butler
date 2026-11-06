@@ -268,3 +268,64 @@ fonts):
 
     This Font Software is licensed under the SIL Open Font License, Version 1.1.
     https://scripts.sil.org/OFL
+
+7. pulldown-cmark
+-----------------
+crates/butler-ds/src/ui/markdown parses markdown with pulldown-cmark 0.13.6
+(https://github.com/raphlinus/pulldown-cmark), linked as a Cargo dependency (tables,
+strikethrough and task lists on). MIT-licensed:
+
+    The MIT License
+
+    Copyright 2015 Google Inc. All rights reserved.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
+
+8. syntect
+----------
+The same module highlights code with syntect 5.3.0 (https://github.com/trishume/syntect), with
+the pure-Rust regex engine (feature default-fancy). syntect carries its own bundled set of
+syntax definitions (the syntect crate's assets/default_newlines.packdump, derived from
+https://github.com/sublimehq/Packages); the code reaches only the twelve grammars the web
+client's highlighter registers. syntect is MIT-licensed. Its direct dependencies new to this
+build are fancy-regex 0.16.2 (MIT), plist 1.10.3 (MIT), bincode 1.3.3 (MIT), yaml-rust 0.4.5
+(MIT OR Apache-2.0), linked-hash-map 0.5.6 (MIT OR Apache-2.0), quick-xml 0.42.0 (MIT),
+unicase 2.10.0 (MIT OR Apache-2.0) and time-macros 0.2.32 (MIT OR Apache-2.0):
+
+    MIT License
+
+    Copyright (c) 2017 Tristan Hume, Keith Hall, Google Inc and other contributors
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
