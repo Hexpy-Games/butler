@@ -1,5 +1,6 @@
 //! Avatar.showcase.tsx. The "Sidebar row" story draws the rows with the NavRow stand-in and a
 //! plain frame for SidebarShell (blocks of a later batch).
+use butler_ds::tokens::Density;
 use butler_ds::ui::Icon;
 use butler_ds::ui::avatar::{Avatar, AvatarSize, AvatarTone};
 use butler_ds::ui::button::{Button, Size, Variant};
@@ -168,6 +169,8 @@ fn sidebar_row(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
         .child(Spinner::new("avatar-sidebar-spinner"));
     let rows = [
         NavRow::new("avatar-nav-1", c.task)
+            // SidebarShell sets `data-sidebar-density="comfortable"` on its root.
+            .density(Density::Comfortable)
             .active()
             .glyph(Icon::Notebook, cx)
             .content(title_with_avatar(
@@ -179,6 +182,8 @@ fn sidebar_row(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
             .actions(status)
             .build(cx),
         NavRow::new("avatar-nav-2", c.task2)
+            // SidebarShell sets `data-sidebar-density="comfortable"` on its root.
+            .density(Density::Comfortable)
             .glyph(Icon::Notebook, cx)
             .content(title_with_avatar(
                 c.task2,
