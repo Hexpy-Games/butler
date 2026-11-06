@@ -23,12 +23,23 @@ pub enum Platform {
     Linux,
 }
 
-/// How the last input arrived. The focus ring shows on keyboard focus only (text fields excepted).
+/// How the last input arrived. The focus ring shows on keyboard focus only (text fields
+/// excepted), and on focus moved by the app before any input arrived (Chromium's
+/// `:focus-visible` heuristic: a script's focus shows the ring unless a pointer press came last).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Modality {
     Keyboard,
-    #[default]
     Pointer,
+    /// No input yet.
+    #[default]
+    Initial,
+}
+
+impl Modality {
+    /// Whether focus that arrives now matches `:focus-visible`.
+    pub fn focus_visible(self) -> bool {
+        self != Self::Pointer
+    }
 }
 
 /// The UI language. Korean text keeps words together (`:lang(ko)`: `word-break: keep-all`).

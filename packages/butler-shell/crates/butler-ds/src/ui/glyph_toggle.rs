@@ -9,7 +9,7 @@ use gpui::{
     Window, div, px,
 };
 
-use super::context::{Ds, Modality};
+use super::context::Ds;
 use super::icon_button::IconButton;
 use crate::tokens::{Color, Length};
 
@@ -82,7 +82,7 @@ impl RenderOnce for GlyphToggle {
             + f32::from(ds.len(Length::FocusRingRoom))
             - f32::from(ds.len(Length::FocusRingWidth));
         let showing = *hover.read(cx)
-            || (handle.contains_focused(window, cx) && ds.modality() == Modality::Keyboard);
+            || (handle.contains_focused(window, cx) && ds.modality().focus_visible());
         let glyph = |content: Option<AnyElement>, visible: bool| {
             div()
                 .absolute()

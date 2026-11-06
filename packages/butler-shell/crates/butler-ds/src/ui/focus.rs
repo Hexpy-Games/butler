@@ -25,7 +25,7 @@ pub fn shadows(ds: &Ds) -> Vec<BoxShadow> {
 
 /// Whether a focused control shows its ring now.
 pub fn visible(ds: &Ds, focused: bool, text_field: bool) -> bool {
-    focused && (text_field || ds.modality() == Modality::Keyboard)
+    focused && (text_field || ds.modality().focus_visible())
 }
 
 /// Paints the ring around `bounds` (outside it, never as a border: layout does not move).

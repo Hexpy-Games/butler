@@ -147,8 +147,8 @@ fn board_card(id: String, item: &Board, selected: bool, cx: &App) -> Card {
                 .child(Typo::caption(item.progress))
                 .child(
                     Button::new(format!("{id_for_button}-session"))
-                        .variant(Variant::Outline)
-                        .size(Size::Sm)
+                        .variant(Variant::Borderless)
+                        .size(Size::Xs)
                         .icon_start(icon(Icon::MessageSquare, IconSize::Md, ds))
                         .text(item.session)
                         .on_click(|_, _, _| {}),
@@ -292,14 +292,13 @@ fn radius(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
         .gap(Space::Sm)
         .child(
             Button::new("card-cancel")
-                .variant(Variant::Outline)
+                .variant(Variant::Ghost)
                 .size(Size::Sm)
                 .text(cancel)
                 .on_click(|_, _, _| {}),
         )
         .child(
             Button::new("card-add")
-                .variant(Variant::Outline)
                 .size(Size::Sm)
                 .text(add)
                 .on_click(|_, _, _| {}),
