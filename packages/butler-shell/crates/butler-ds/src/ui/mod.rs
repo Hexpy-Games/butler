@@ -34,6 +34,7 @@ pub mod spinner;
 pub mod strut;
 pub mod success_check;
 pub mod switch;
+pub mod tabs;
 pub mod tinted_glass;
 pub mod tooltip;
 pub mod typo;
