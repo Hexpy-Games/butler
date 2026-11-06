@@ -5,6 +5,7 @@
 //! by `agent`. Without a source the shell shows its disconnected state.
 pub(crate) mod agent;
 pub(crate) mod model;
+pub(crate) mod wire;
 
 use futures::future::LocalBoxFuture;
 use futures::stream::LocalBoxStream;

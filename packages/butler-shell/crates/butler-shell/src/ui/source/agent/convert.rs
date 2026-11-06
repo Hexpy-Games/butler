@@ -1,4 +1,5 @@
 //! Wire projections retain exact approval text; unknown wire kinds remain visible.
+use super::super::wire;
 use super::super::{
     ActivityItem, Approval, AuthorityCard, CardKind, ChatId, ChatRef, ChatSummary, EventCursor,
     Message, MessageCursor, MessagePage, RequestRef, Risk, Role, SessionId, SourceError, Space,
@@ -18,48 +19,41 @@ pub(super) fn error(error: &Error) -> SourceError {
         _ => SourceError::Refused(error.to_string()),
     }
 }
-pub(super) fn string<'a>(raw: &'a Value, key: &str) -> Result<&'a str, Error> {
-    raw[key].as_str().ok_or(Error::Protocol)
+pub(super) fn decode<T: serde::de::DeserializeOwned>(raw: &Value) -> Result<T, Error> {
+    if !raw.is_object() {
+        return Err(Error::Protocol);
+    }
+    serde_json::from_value(raw.clone()).map_err(|_| Error::Protocol)
 }
-fn strings(raw: &Value) -> Vec<gpui::SharedString> {
-    raw.as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(|s| s.to_owned().into())
-        .collect()
-}
-pub(super) fn identity(raw: &Value) -> Result<ChatRef, Error> {
-    let id = string(raw, "id")?.to_owned();
+pub(super) fn identity(raw: &wire::ChatProjection) -> Result<ChatRef, Error> {
+    let id = raw.id.as_deref().ok_or(Error::Protocol)?;
     Ok(ChatRef {
-        chat: ChatId(id.clone().into()),
-        session: SessionId(id.into()),
+        chat: ChatId(id.to_owned().into()),
+        session: SessionId(id.to_owned().into()),
     })
 }
 pub(super) fn chat(raw: &Value) -> Result<ChatSummary, Error> {
-    let updated = string(raw, "updated_at")?;
+    chat_row(&decode::<wire::ChatProjection>(raw)?)
+}
+pub(super) fn chat_row(raw: &wire::ChatProjection) -> Result<ChatSummary, Error> {
+    let updated = raw.updated_at.as_deref().ok_or(Error::Protocol)?;
     let updated = chrono::DateTime::parse_from_rfc3339(updated).map_err(|_| Error::Protocol)?;
-    let project = raw.get("project").filter(|v| v.is_object());
     Ok(ChatSummary {
         chat: identity(raw)?,
-        title: string(raw, "title")?.to_owned().into(),
-        space: project.map(|p| Space {
-            id: p["id"].as_str().unwrap_or_default().to_owned().into(),
-            title: p["display_name"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned()
-                .into(),
+        title: raw.title.clone().ok_or(Error::Protocol)?.into(),
+        space: raw.project.as_ref().map(|p| Space {
+            id: p.id.clone().unwrap_or_default().into(),
+            title: p.display_name.clone().unwrap_or_default().into(),
             project: true,
         }),
-        pinned: raw["pinned"].as_bool().unwrap_or(false),
-        archived: raw["archived"].as_bool().unwrap_or(false),
+        pinned: raw.pinned.unwrap_or(false),
+        archived: raw.archived.unwrap_or(false),
         created_at: Timestamp(
-            chrono::DateTime::parse_from_rfc3339(string(raw, "created_at")?)
+            chrono::DateTime::parse_from_rfc3339(raw.created_at.as_deref().ok_or(Error::Protocol)?)
                 .map_err(|_| Error::Protocol)?
                 .timestamp_millis(),
         ),
-        running: raw["active_turn_state"].as_str().is_some_and(active),
+        running: raw.active_turn_state.as_deref().is_some_and(active),
         updated_at: Timestamp(updated.timestamp_millis()),
     })
 }
@@ -69,41 +63,42 @@ pub(super) fn active(state: &str) -> bool {
         "delivered" | "failed" | "cancelled" | "completed" | "runtime_fault"
     )
 }
-pub(super) fn message(raw: &Value) -> Result<Message, Error> {
-    let role = match string(raw, "role")? {
+pub(super) fn message(raw: &wire::MessageProjection) -> Result<Message, Error> {
+    let role = match raw.role.as_deref().ok_or(Error::Protocol)? {
         "user" => Role::User,
         "assistant" => Role::Assistant,
         other => Role::Other(other.to_owned()),
     };
     Ok(Message {
-        id: string(raw, "id")?.to_owned().into(),
+        id: raw.id.clone().ok_or(Error::Protocol)?.into(),
         role,
-        text: string(raw, "text")?.to_owned(),
+        text: raw.text.clone().ok_or(Error::Protocol)?,
         activity: activity(raw),
         streaming: matches!(
-            raw["status"].as_str(),
+            raw.status.as_deref(),
             Some("streaming" | "draft" | "provisional")
         ),
     })
 }
 pub(super) fn window(raw: &Value) -> Result<MessagePage, Error> {
-    let rows = raw["messages"].as_array().ok_or(Error::Protocol)?;
+    let raw = decode::<wire::WindowProjection>(raw)?;
     Ok(MessagePage {
-        messages: rows.iter().map(message).collect::<Result<_, _>>()?,
-        older: raw["message_window"]["previous_cursor_token"]
-            .as_str()
-            .map(|s| MessageCursor(s.into())),
-        running: raw["active_turn"]["id"]
-            .as_str()
-            .map(|s| TurnId(s.to_owned().into())),
-        events: EventCursor(raw["cursors"]["events"].as_u64().ok_or(Error::Protocol)?),
+        messages: raw.messages.iter().map(message).collect::<Result<_, _>>()?,
+        older: raw
+            .message_window
+            .and_then(|w| w.previous_cursor_token)
+            .map(MessageCursor),
+        running: raw.active_turn.and_then(|t| t.id).map(|s| TurnId(s.into())),
+        events: EventCursor(raw.cursors.events),
     })
 }
 pub(super) fn authority(page: AuthorityPage) -> Result<Vec<AuthorityCard>, Error> {
     page.requests
         .into_iter()
         .map(|card| {
-            let kind = match card.raw["category"].as_str().unwrap_or_default() {
+            let raw = decode::<wire::AuthorityProjection>(&card.raw)
+                .unwrap_or(wire::AuthorityProjection { category: None });
+            let kind = match raw.category.as_deref().unwrap_or_default() {
                 "command" => CardKind::Command,
                 "reviewed_effect" => CardKind::ReviewedEffect,
                 "ask_user" => CardKind::Question,
@@ -122,51 +117,43 @@ pub(super) fn authority(page: AuthorityPage) -> Result<Vec<AuthorityCard>, Error
         })
         .collect()
 }
-fn approval(raw: &Value) -> Result<Approval, Error> {
+fn approval(value: &Value) -> Result<Approval, Error> {
+    let raw = decode::<wire::ApprovalProjection>(value)?;
     let operation = raw
-        .get("operation")
-        .filter(|v| v.is_object())
+        .operation
         .map(|o| {
             Ok(Operation {
-                tool: string(o, "tool")?.to_owned().into(),
-                access: match string(o, "access")? {
+                tool: o.tool.ok_or(Error::Protocol)?.into(),
+                access: match o.access.as_deref().ok_or(Error::Protocol)? {
                     "read_only" => Access::ReadOnly,
                     _ => Access::Change,
                 },
-                targets: strings(&o["targets"]),
-                command: o["command"].as_str().map(|s| s.to_owned().into()),
+                targets: o.targets.into_iter().map(Into::into).collect(),
+                command: o.command.map(Into::into),
             })
         })
         .transpose()?;
-    let targets = raw["targets"]
-        .as_array()
-        .ok_or(Error::Protocol)?
-        .iter()
-        .map(|t| {
-            Ok(Target {
-                kind: string(t, "kind")?.to_owned().into(),
-                path: string(t, "path")?.to_owned().into(),
+    Ok(Approval {
+        wire: Some(value.clone()),
+        action_kind: raw.action_kind.into(),
+        operation,
+        targets: raw
+            .targets
+            .into_iter()
+            .map(|t| Target {
+                kind: t.kind.into(),
+                path: t.path.into(),
                 label: None,
             })
-        })
-        .collect::<Result<_, Error>>()?;
-    Ok(Approval {
-        wire: Some(raw.clone()),
-        action_kind: string(raw, "action_kind")?.to_owned().into(),
-        operation,
-        targets,
-        count: raw["count"]
-            .as_u64()
-            .and_then(|c| u32::try_from(c).ok())
-            .ok_or(Error::Protocol)?,
-        examples: strings(&raw["examples"]),
-        examples_truncated: raw["examples_truncated"]
-            .as_array()
+            .collect(),
+        count: u32::try_from(raw.count).map_err(|_| Error::Protocol)?,
+        examples: raw.examples.into_iter().map(Into::into).collect(),
+        examples_truncated: raw
+            .examples_truncated
             .into_iter()
-            .flatten()
             .map(|v| v.as_bool().unwrap_or(false))
             .collect(),
-        risk: match raw["risk"].as_str() {
+        risk: match raw.risk.as_deref() {
             Some("low") => Some(Risk::Low),
             Some("medium") => Some(Risk::Medium),
             Some("high") => Some(Risk::High),
@@ -176,20 +163,17 @@ fn approval(raw: &Value) -> Result<Approval, Error> {
 }
 
 /// The gateway's public activity groups, with complete tool input labels.
-fn activity(raw: &Value) -> Vec<ActivityItem> {
-    raw["work_blocks"]
-        .as_array()
-        .into_iter()
-        .flatten()
+fn activity(raw: &wire::MessageProjection) -> Vec<ActivityItem> {
+    raw.work_blocks
+        .iter()
         .filter_map(|block| {
-            let title = block["label"].as_str()?.to_owned().into();
-            let tools = block["rows"]
-                .as_array()
-                .into_iter()
-                .flatten()
+            let title = block.label.as_ref()?.to_owned().into();
+            let tools = block
+                .rows
+                .iter()
                 .filter_map(|row| {
-                    let name = row["safe_tool_name"].as_str()?;
-                    let label = row["safe_input_label"].as_str().unwrap_or(name);
+                    let name = row.safe_tool_name.as_deref()?;
+                    let label = row.safe_input_label.as_deref().unwrap_or(name);
                     Some(ToolChip {
                         icon: Icon::Wrench,
                         title: label.to_owned().into(),
