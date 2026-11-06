@@ -1,9 +1,13 @@
 //! MarkdownContent.showcase.tsx (+ MarkdownLinkSample.tsx, MarkdownImageSample.tsx), and two native
 //! checks of the engine: every GFM construct, and code in each grammar.
+use butler_ds::tokens::Length;
+use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::markdown_content::{Density, MarkdownContent};
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::card::{Card, CardPadding};
-use butler_ds::ui::layout::{Space, Stack};
+use butler_ds::ui::context::Ds;
+use butler_ds::ui::icon::icon_px;
+use butler_ds::ui::layout::{Cross, Space, Stack};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 use std::time::Duration;
 
@@ -109,82 +113,65 @@ fn fenced(lang: &str, code: &str) -> String {
 }
 
 pub(super) fn stories() -> Vec<Story> {
+    let story = |name, render| Story { name, render };
     vec![
-        Story {
-            name: "Document",
-            render: |lang, _, _| {
-                MarkdownContent::new("md-document", document(lang)).into_any_element()
-            },
-        },
-        Story {
-            name: "Links in a reply",
-            render: |lang, _, _| {
-                MarkdownContent::new("md-links", links(lang))
-                    .favicon(host_favicon)
-                    .into_any_element()
-            },
-        },
-        Story {
-            name: "Code frame with copy",
-            render: |lang, _, _| {
-                let (copy, copied) = copy_labels(lang);
-                let code = "```ts\nimport { check } from \"project-ledger\";\n\n// Fails when a spec drifts from its plan.\nconst result = await check({ strict: true });\n```\n";
-                MarkdownContent::new("md-code", code)
-                    .copy_code(copy, copied)
-                    .into_any_element()
-            },
-        },
-        Story {
-            name: "Table",
-            render: |lang, _, _| {
-                let table = lang.pick(
-                    "### Verification matrix\n\n| Check | Command | Result |\n| --- | --- | --- |\n| Types | `bun run typecheck` | Passed |\n| Design lint | `bun run lint:design` | Passed |\n",
-                    "### 검증 표\n\n| 점검 | 명령 | 결과 |\n| --- | --- | --- |\n| 타입 | `bun run typecheck` | 통과 |\n| 디자인 린트 | `bun run lint:design` | 통과 |\n",
-                );
-                MarkdownContent::new("md-table", table).into_any_element()
-            },
-        },
-        Story {
-            name: "Inline image",
-            render: |lang, _, _| {
-                let source = lang.pick(
-                    format!("An image smaller than the column keeps its natural size.\n\n![Settings screen at 375px](<{INLINE_IMAGE}>)\n"),
-                    format!("본문 폭보다 작은 이미지는 원래 크기로 보입니다.\n\n![375px 설정 화면](<{INLINE_IMAGE}>)\n"),
-                );
-                MarkdownContent::new("md-image", source).into_any_element()
-            },
-        },
-        Story {
-            name: "Compact density",
-            render: |lang, _, _| {
-                Card::new("md-compact-card")
-                    .padding(CardPadding::Sm)
-                    .child(
-                        MarkdownContent::new("md-compact", compact(lang)).density(Density::Compact),
-                    )
-                    .into_any_element()
-            },
-        },
-        Story {
-            name: "Streaming reveal",
-            render: streaming,
-        },
-        Story {
-            name: "GFM constructs (native check)",
-            render: |_, _, _| MarkdownContent::new("md-gfm", GFM).into_any_element(),
-        },
-        Story {
-            name: "Code in every grammar (native check)",
-            render: |_, _, _| {
-                let source: String = CODE
-                    .iter()
-                    .map(|(lang, code)| fenced(lang, code))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                MarkdownContent::new("md-grammars", source).into_any_element()
-            },
-        },
+        story("Document", |lang, _, _| {
+            MarkdownContent::new("md-document", document(lang)).into_any_element()
+        }),
+        story("Links in a reply", |lang, _, _| {
+            MarkdownContent::new("md-links", links(lang))
+                .favicon(host_favicon)
+                .into_any_element()
+        }),
+        story("Code frame with copy", code_frame),
+        story("Table", table),
+        story("Inline image", inline_image),
+        story("Compact density", |lang, _, _| {
+            Card::new("md-compact-card")
+                .padding(CardPadding::Sm)
+                .child(MarkdownContent::new("md-compact", compact(lang)).density(Density::Compact))
+                .into_any_element()
+        }),
+        story("Reply captures", captures),
+        story("Streaming reveal", streaming),
+        story("GFM constructs (native check)", |_, _, _| {
+            MarkdownContent::new("md-gfm", GFM).into_any_element()
+        }),
+        story("Code in every grammar (native check)", grammars),
     ]
+}
+
+fn code_frame(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let (copy, copied) = copy_labels(lang);
+    let code = "```ts\nimport { check } from \"project-ledger\";\n\n// Fails when a spec drifts from its plan.\nconst result = await check({ strict: true });\n```\n";
+    MarkdownContent::new("md-code", code)
+        .copy_code(copy, copied)
+        .into_any_element()
+}
+
+fn table(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let table = lang.pick(
+        "### Verification matrix\n\n| Check | Command | Result |\n| --- | --- | --- |\n| Types | `bun run typecheck` | Passed |\n| Design lint | `bun run lint:design` | Passed |\n",
+        "### 검증 표\n\n| 점검 | 명령 | 결과 |\n| --- | --- | --- |\n| 타입 | `bun run typecheck` | 통과 |\n| 디자인 린트 | `bun run lint:design` | 통과 |\n",
+    );
+    MarkdownContent::new("md-table", table).into_any_element()
+}
+
+fn inline_image(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let source = lang.pick(
+        format!("An image smaller than the column keeps its natural size.\n\n![Settings screen at 375px](<{INLINE_IMAGE}>)\n"),
+        format!("본문 폭보다 작은 이미지는 원래 크기로 보입니다.\n\n![375px 설정 화면](<{INLINE_IMAGE}>)\n"),
+    );
+    MarkdownContent::new("md-image", source).into_any_element()
+}
+
+fn grammars(_: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let source: String = CODE
+        .iter()
+        .map(|(lang, code)| fenced(lang, code))
+        .collect::<Vec<_>>()
+        .join("\n");
+    MarkdownContent::new("md-grammars", source).into_any_element()
 }
 
 /// MessageMarkdown while streaming: chunks arrive every 90 ms and fade in place.
@@ -222,5 +209,91 @@ fn streaming(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
         .child(super::probe(format!("md-streaming-{}", !done)))
         .child(MarkdownContent::new("md-stream", source[..end].to_owned()).streaming(!done))
         .child(replay)
+        .into_any_element()
+}
+
+/// A data-URI SVG picture of `width` by `height` with the given shapes.
+fn picture(width: u32, height: u32, shapes: &str) -> String {
+    let body = format!(
+        "<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>{shapes}</svg>"
+    )
+    .replace('<', "%3C")
+    .replace('>', "%3E")
+    .replace('#', "%23");
+    format!("data:image/svg+xml,{body}")
+}
+
+/// MarkdownImageSample.tsx: reply captures, a capture taller than the column, and a badge in its
+/// sentence. The captures sit in an `ArtifactPreviewImage` with Open and Save under them in React;
+/// that block is P2-S5's, so a capture here is the engine's image with the two buttons under it.
+fn captures(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+    let (route, open, save, page, icon, passed) = lang.pick(
+        (
+            "Here is the route: Ferry Building → Golden Gate Bridge → Sausalito, about 24 min (12.2 mi) via US-101.",
+            "Open",
+            "Save",
+            "The full page capture is tall, so it is shown at a bounded height.",
+            "Small images keep their own size: the build",
+            "badge sits in the sentence.",
+        ),
+        (
+            "경로를 짰습니다. 페리 빌딩 → 금문교 → 소살리토, US-101 경유 약 24분(12.2마일)입니다.",
+            "열기",
+            "저장하기",
+            "페이지 전체 캡처는 세로로 길어서 높이를 제한해 보여 줍니다.",
+            "작은 이미지는 원래 크기를 지킵니다. 빌드",
+            "배지가 문장 안에 놓입니다.",
+        ),
+    );
+    let route_capture = picture(
+        1600,
+        1000,
+        "<rect width='1600' height='1000' fill='#a9d3e6'/><path d='M520 0h560c-40 120 30 260-20 380s-150 170-110 300 160 220 140 320H520Z' fill='#e8eadf'/><path d='M640 120c60 40 90 120 140 170s40 140 90 210 60 160 140 230 200 60 260 120' fill='none' stroke='#4b3fd8' stroke-width='12' stroke-linecap='round'/><rect width='480' height='1000' fill='#ffffff'/><rect x='40' y='60' width='400' height='44' rx='10' fill='#f1f3f4'/><rect x='40' y='300' width='400' height='120' rx='12' fill='#e8f0fe'/>",
+    );
+    let page_capture = picture(
+        900,
+        2700,
+        "<rect width='900' height='2700' fill='#f6f7f9'/><rect width='900' height='120' fill='#202124'/><rect x='60' y='200' width='780' height='140' rx='16' fill='#dfe7f5'/><rect x='60' y='380' width='780' height='140' rx='16' fill='#ffffff'/>",
+    );
+    let badge = picture(
+        88,
+        20,
+        "<rect width='88' height='20' rx='4' fill='#2da44e'/><rect x='8' y='7' width='72' height='6' rx='3' fill='#ffffff'/>",
+    );
+    let ds = Ds::get(cx);
+    let buttons = |id: &str| {
+        butler_ds::ui::button::container(Size::Xs)
+            .child(
+                Button::new(format!("{id}-open"))
+                    .size(Size::Xs)
+                    .variant(Variant::Inline)
+                    .icon_start(icon_px(Icon::Expand, ds.len(Length::IconSizeSm)))
+                    .text(open),
+            )
+            .child(
+                Button::new(format!("{id}-save"))
+                    .size(Size::Xs)
+                    .variant(Variant::Inline)
+                    .icon_start(icon_px(Icon::Save, ds.len(Length::IconSizeSm)))
+                    .text(save),
+            )
+    };
+    let capture = |id: &str, source: String| {
+        Stack::new()
+            .gap(Space::Xs)
+            .cross(Cross::Start)
+            .child(MarkdownContent::new(format!("md-capture-{id}"), source))
+            .child(buttons(id))
+    };
+    Stack::new()
+        .gap(Space::Md)
+        .child(MarkdownContent::new("md-capture-route-text", route))
+        .child(capture("route", format!("![](<{route_capture}>)")))
+        .child(MarkdownContent::new("md-capture-page-text", page))
+        .child(capture("page", format!("![](<{page_capture}>)")))
+        .child(MarkdownContent::new(
+            "md-capture-badge",
+            format!("{icon} ![passing](<{badge}>) {passed}"),
+        ))
         .into_any_element()
 }

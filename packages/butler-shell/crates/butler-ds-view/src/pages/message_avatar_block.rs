@@ -4,7 +4,7 @@ use butler_ds::ui::blocks::message_avatar_block::{AvatarRole, MessageAvatarBlock
 use butler_ds::ui::icon::icon_px;
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, IntoElement as _, ParentElement as _, px};
+use gpui::{AnyElement, IntoElement as _, ParentElement as _, Styled as _, div, px};
 
 use super::Story;
 use crate::copy::Lang;
@@ -35,7 +35,12 @@ fn system(lang: Lang) -> AnyElement {
                 .role(AvatarRole::System)
                 .glyph(icon_px(Icon::Bot, px(28.))),
         )
-        .child(Typo::caption(text).tone(Tone::Secondary))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(Typo::caption(text).tone(Tone::Secondary)),
+        )
         .into_any_element()
 }
 

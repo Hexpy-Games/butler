@@ -15,6 +15,10 @@ use crate::ui::convert;
 use crate::ui::strut;
 use crate::ui::typo::{Tone, Typo, Weight};
 
+/// The window width at or below which the actions wrap under the heading. // DS:
+/// WorkerActivityRow.module.css:143
+const NARROW: f32 = 720.;
+
 type Toggle = std::rc::Rc<dyn Fn(&mut Window, &mut App)>;
 
 #[derive(IntoElement)]
@@ -176,12 +180,15 @@ impl RenderOnce for WorkerActivityRow {
                 .into_any_element(),
             None => div().min_w_0().child(heading_kind).into_any_element(),
         };
-        let header = div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap(ds.len(Length::Space2))
-            .min_w_0()
+        // `@media (width <= 720px)`: the actions take their own row, at the start.
+        let narrow = ds.tokens().viewport.0 <= NARROW;
+        let mut header = div().flex().min_w_0().gap(ds.len(Length::Space2));
+        header = if narrow {
+            header.flex_col().items_start().gap(ds.len(Length::Space1))
+        } else {
+            header.items_center().justify_between()
+        };
+        let header = header
             .child(div().flex_1().min_w_0().child(heading))
             // The action buttons (the xs button) set the header's height.
             .children(self.actions.map(|actions| {
