@@ -244,8 +244,10 @@ fn assert_requests(requests: &[Value]) {
             keys,
             ["fields", "step", "action_log", "notes", "view"]
                 .into_iter()
+                .chain(scope.get("read").map(|_| "read"))
                 .collect::<std::collections::BTreeSet<_>>()
         );
+        assert_ne!(scope["view"]["ranked"], true);
         assert!(scope["view"].get("delta_of").is_none());
         let view = scope["view"].to_string();
         for marker in ["Earlier listing", "First product:", "Latest product"] {
@@ -255,13 +257,13 @@ fn assert_requests(requests: &[Value]) {
         }
         assert!(!text.contains("delta_of"));
         assert!(scope["notes"].as_str().unwrap().chars().count() <= 2_000);
-        if scope["view"]["ranked"] == true {
-            let passages = scope["view"]["passages"].as_array().unwrap();
+        if let Some(read) = scope.get("read") {
+            let passages = read["passages"].as_array().unwrap();
             assert_eq!(
                 passages.len() as u64,
-                scope["view"]["returned_chunks"].as_u64().unwrap()
+                read["returned_chunks"].as_u64().unwrap()
             );
-            assert!(scope["view"].get("markdown").is_none());
+            assert!(read.get("markdown").is_none());
             for passage in passages {
                 assert!(passage["text"].is_string());
                 assert!(passage["span"][1].as_u64() >= passage["span"][0].as_u64());
