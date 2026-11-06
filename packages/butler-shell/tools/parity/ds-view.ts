@@ -63,7 +63,15 @@ try {
       })`) as Array<{ anchor: string; index: number; x: number; y: number; w: number; h: number }>;
       writeFileSync(join(dir, `${id}.layout.json`), JSON.stringify(boxes, null, 2));
       for (const box of boxes) {
-        if (box.w > 0 && box.h > 0) await page.screenshot({ path: join(dir, `${id}.${box.index}.png`), clip: { x: box.x, y: box.y, width: box.w, height: box.h } });
+        if (box.w <= 0 || box.h <= 0) continue;
+        // A page taller than the viewport scrolls inside the viewer: bring each canvas to the top before cropping it.
+        const rect = await page.evaluate(`(() => {
+          const canvas = [...document.querySelectorAll("[data-ds-story]")][${box.index}].querySelector("[data-ds-fixture-canvas]");
+          canvas.scrollIntoView({ block: "start" });
+          const b = canvas.getBoundingClientRect();
+          return { x: b.x, y: b.y, width: b.width, height: b.height };
+        })()`) as { x: number; y: number; width: number; height: number };
+        await page.screenshot({ path: join(dir, `${id}.${box.index}.png`), clip: rect });
       }
       await page.close();
     }

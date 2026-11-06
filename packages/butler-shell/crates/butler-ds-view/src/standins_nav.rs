@@ -139,7 +139,9 @@ impl NavRow {
 
     pub(crate) fn build(self, cx: &App) -> AnyElement {
         let ds = Ds::get(cx);
-        let m = metrics(ds, self.density);
+        // A SidebarShell sets the density of the rows inside it (`data-sidebar-density`).
+        let scoped = butler_ds::ui::blocks::scope::in_density(cx).then(|| ds.density());
+        let m = metrics(ds, self.density.or(scoped));
         let compact = ds.compact();
         let (size, line) = if compact {
             (Length::FontSize4, Length::TypoAppTitleLineHeight)

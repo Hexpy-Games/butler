@@ -48,6 +48,8 @@ pub(crate) struct DsView {
     pages: Vec<Page>,
     page: usize,
     pub(crate) lang: Lang,
+    /// The page's scroll position, for a headless shot of a page taller than a texture.
+    pub(crate) scroll: gpui::ScrollHandle,
 }
 
 impl DsView {
@@ -58,6 +60,7 @@ impl DsView {
             pages: pages::all(),
             page: 0,
             lang: Lang::Ko,
+            scroll: gpui::ScrollHandle::new(),
         }
     }
 
@@ -121,6 +124,24 @@ impl DsView {
     }
 }
 
+/// The logical window size of a headless run whose real window is wider (`--stage-width`): the
+/// window the viewer lays out for. A wider stage leaves room for a layout scaled down into a
+/// story (the scale composites a layer the size of the window), as the browser's ScaledFrame
+/// scales a 1440px window into a story.
+pub(crate) struct Stage(pub(crate) f32);
+
+impl gpui::Global for Stage {}
+
+/// The window's size as the viewer lays out for it: the stage's logical width when a wider stage
+/// is in use, else the real window.
+pub(crate) fn logical_viewport(window: &Window, cx: &App) -> (f32, f32) {
+    let size = window.viewport_size();
+    let width = cx
+        .try_global::<Stage>()
+        .map_or(f32::from(size.width), |stage| stage.0);
+    (width, f32::from(size.height))
+}
+
 /// The sidebar's width; the DS View's own chrome, not a DS value.
 const SIDEBAR_WIDTH: f32 = 220.;
 /// The window width at or below which the DS View drops its sidebar.
@@ -130,16 +151,17 @@ impl Render for DsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         butler_ds::ui::control::reset_anchors(cx);
         butler_ds::ui::tooltip::reset_shown(cx);
-        let size = window.viewport_size();
+        let (logical_width, height) = logical_viewport(window, cx);
         // The mobile ramp (`width <= 640`) hides the sidebar, as the viewer's nav drawer does.
-        let narrow = f32::from(size.width) <= COMPACT_WINDOW;
+        let narrow = logical_width <= COMPACT_WINDOW;
         let content = if narrow {
-            size.width
+            px(logical_width)
         } else {
-            size.width - px(SIDEBAR_WIDTH)
+            px(logical_width - SIDEBAR_WIDTH)
         };
+        let staged = cx.has_global::<Stage>();
         Ds::update(cx, |ds| {
-            ds.set_viewport(f32::from(content), f32::from(size.height));
+            ds.set_viewport(f32::from(content), height);
         });
         let lang = self.lang;
         let page = self
@@ -176,8 +198,15 @@ impl Render for DsView {
                             .min_w_0()
                             .h_full()
                             .overflow_y_scroll()
+                            .track_scroll(&self.scroll)
                             .bg(workspace)
-                            .child(crate::pages::anchored(body, "page-content")),
+                            .child(if staged {
+                                div()
+                                    .w(content)
+                                    .child(crate::pages::anchored(body, "page-content"))
+                            } else {
+                                crate::pages::anchored(body, "page-content")
+                            }),
                     ),
             )
             .child(Toaster::new())
@@ -189,6 +218,10 @@ impl Render for DsView {
 /// Tab and Shift+Tab move focus along the tab stops: the binding an app gives its window. gpui
 /// has no default one. Overlays that trap or prevent Tab handle the key first.
 fn move_focus(event: &gpui::KeyDownEvent, window: &mut Window, cx: &mut App) {
+    if event.keystroke.key == "escape" {
+        // A peeked sidebar closes on Escape wherever focus is.
+        butler_ds::ui::blocks::adaptive_shell::peek::escape(window, cx);
+    }
     if event.keystroke.key != "tab" {
         return;
     }

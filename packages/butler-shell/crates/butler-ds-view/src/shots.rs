@@ -28,6 +28,9 @@ pub(crate) struct Options {
     pub(crate) canvas_width: Option<f32>,
     /// Keep motion on (the default reduces it, so every frame is at rest).
     pub(crate) motion: bool,
+    /// A real window this wide (logical px) with the viewer laid out for `width`: room for a
+    /// layout scaled down into a story.
+    pub(crate) stage_width: Option<f32>,
     /// Render only these page ids (`--pages a,b`); all pages when unset.
     pub(crate) pages: Option<Vec<String>>,
 }
@@ -69,6 +72,7 @@ impl Options {
             full: args.iter().any(|arg| arg == "--full"),
             canvas_width: value("--canvas-width")?.map(str::parse).transpose()?,
             motion: args.iter().any(|arg| arg == "--motion"),
+            stage_width: value("--stage-width")?.map(str::parse).transpose()?,
             pages: value("--pages")?.map(|ids| ids.split(',').map(str::to_owned).collect()),
         })
     }
@@ -87,6 +91,12 @@ pub(crate) fn context(options: &Options) -> anyhow::Result<HeadlessAppContext> {
         app::init(cx)?;
         app::install(cx, options.dark, options.lang);
         Ds::update(cx, |ds| ds.set_app_reduced_motion(!options.motion));
+        if options
+            .stage_width
+            .is_some_and(|stage| stage > options.width)
+        {
+            cx.set_global(app::Stage(options.width));
+        }
         if let Some(width) = options.canvas_width {
             cx.set_global(crate::pages::CanvasWidth(width));
         }
@@ -110,7 +120,10 @@ pub(crate) fn open(
     height: f32,
     lang: Lang,
 ) -> anyhow::Result<(WindowHandle<DsView>, AnyWindowHandle)> {
-    let window = cx.open_window(size(px(options.width), px(height)), |window, cx| {
+    let window_width = options
+        .stage_width
+        .map_or(options.width, |stage| stage.max(options.width));
+    let window = cx.open_window(size(px(window_width), px(height)), |window, cx| {
         cx.new(|cx| {
             let mut view = DsView::new(window, cx);
             view.lang = lang;
@@ -161,6 +174,11 @@ pub(crate) fn crop(
         .with_context(|| format!("saving {}", path.display()))
 }
 
+/// The tallest window a page is rendered in (logical px): a readback buffer is at most 256 MiB, 13k device px of a 4800px stage.
+const MAX_WINDOW_HEIGHT: f32 = 6400.;
+/// Where a scrolled story's canvas is put under the window's top edge.
+const SCROLL_MARGIN: f32 = 16.;
+
 fn render_page(
     cx: &mut HeadlessAppContext,
     options: &Options,
@@ -178,27 +196,43 @@ fn render_page(
         (window, handle) = open(
             cx,
             options,
-            content.ceil().max(options.height),
+            content.ceil().max(options.height).min(MAX_WINDOW_HEIGHT),
             options.lang,
         )?;
         cx.update(|app| window.update(app, |view, _, cx| view.open(index, cx)))?;
         settle(cx, handle);
     }
     let mut layout = Vec::new();
-    let image = cx.capture_screenshot(handle)?;
+    let mut image = cx.capture_screenshot(handle)?;
+    let window_height = cx.update_window(handle, |_, window, _| {
+        window.viewport_size().height.as_f32()
+    })?;
     for (index, name) in story_anchors(cx, window).into_iter().enumerate() {
         let anchor = format!("story-{name}");
         if let Some(b) = cx.debug_bounds(handle, &anchor)? {
-            crop(
-                &image,
-                options,
-                &b,
-                &options.dir.join(format!("{id}.{index}.png")),
-            )?;
             layout.push(
                 serde_json::json!({"anchor": anchor, "x": b.origin.x.as_f32(),
                 "y": b.origin.y.as_f32(), "w": b.size.width.as_f32(), "h": b.size.height.as_f32()}),
             );
+            // A page taller than a texture scrolls: bring the canvas to the top, then crop it.
+            let mut shown = b;
+            if b.bottom().as_f32() > window_height {
+                let top = b.origin.y.as_f32() - SCROLL_MARGIN;
+                cx.update(|app| {
+                    window.update(app, |view, _, _| {
+                        view.scroll.set_offset(gpui::point(px(0.), px(-top)));
+                    })
+                })?;
+                settle(cx, handle);
+                image = cx.capture_screenshot(handle)?;
+                shown = cx.debug_bounds(handle, &anchor)?.unwrap_or(b);
+            }
+            crop(
+                &image,
+                options,
+                &shown,
+                &options.dir.join(format!("{id}.{index}.png")),
+            )?;
         }
     }
     let path = options.dir.join(format!("{id}.png"));

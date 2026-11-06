@@ -1,4 +1,5 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
+mod adaptive_shell;
 mod animated_number;
 mod aspect_frame;
 mod avatar;
@@ -10,6 +11,7 @@ mod card;
 mod clickable;
 mod collapsible;
 mod context_menu;
+mod conversation_shell;
 mod copy_button;
 mod dialog;
 mod dialog_contained;
@@ -25,12 +27,14 @@ mod icon_tile;
 mod inline;
 mod inline_reference;
 mod input;
+mod inspector_panel;
 mod kbd;
 mod label;
 mod layout;
 mod media_frame;
 mod meta_list;
 mod native_select;
+mod panel_header;
 mod pill_button;
 mod popover;
 mod presence;
@@ -41,20 +45,24 @@ mod scroll_area;
 mod segmented_control;
 mod select;
 mod separator;
+mod sidebar_shell;
 mod skeleton;
 mod slider;
 mod spinner;
 mod stack;
 mod success_check;
+mod surface_panel;
 mod switch;
 mod tabs;
 mod tag;
 mod textarea;
 mod tinted_glass;
+mod titlebar_shell;
 mod toast;
 mod tooltip;
 mod typo;
 mod unread_dot;
+mod wallpaper_stage;
 
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::context::Ds;
@@ -155,6 +163,18 @@ pub(crate) fn all() -> Vec<Page> {
         page!("expandable-text", "ExpandableText", expandable_text),
         page!("media-frame", "MediaFrame", media_frame),
         page!("inline-reference", "InlineReference", inline_reference),
+        page!("adaptive-shell", "AdaptiveShell", adaptive_shell),
+        page!(
+            "conversation-shell",
+            "ConversationShell",
+            conversation_shell
+        ),
+        page!("sidebar-shell", "SidebarShell", sidebar_shell),
+        page!("titlebar-shell", "TitlebarShell", titlebar_shell),
+        page!("panel-header", "PanelHeader", panel_header),
+        page!("surface-panel", "SurfacePanel", surface_panel),
+        page!("wallpaper-stage", "WallpaperStage", wallpaper_stage),
+        page!("inspector-panel", "InspectorPanel", inspector_panel),
     ]
 }
 

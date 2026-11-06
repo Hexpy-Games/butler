@@ -276,37 +276,53 @@ impl ScrollArea {
         window: &mut Window,
         cx: &mut App,
     ) -> gpui::Div {
-        let axis = self.orientation;
-        let grab: Entity<Option<f32>> =
-            window.use_keyed_state((self.id.clone(), "grab"), cx, |_, _| None);
-        let near = window.use_keyed_state((self.id.clone(), "near"), cx, |_, _| false);
-        let shown = built.lingering || *near.read(cx) || grab.read(cx).is_some();
-        let lane = metrics.lane;
-        let strip = match axis {
-            Axis::Y => div().absolute().top_0().bottom_0().right_0().w(lane),
-            Axis::X => div().absolute().left_0().right_0().bottom_0().h(lane),
-        };
-        let hover = near.clone();
-        let strip = strip
-            .id((self.id.clone(), "lane"))
-            .on_hover(move |on, _, cx| {
-                hover.update(cx, |near, cx| {
-                    *near = *on;
-                    cx.notify();
-                });
-            })
-            .child(bar::drag_layer(built.handle.clone(), axis, grab));
-        let thumb = shown
-            .then(|| bar::thumb(&built.handle, axis, color))
-            .flatten();
-        div()
-            .absolute()
-            .size_full()
-            .top_0()
-            .left_0()
-            .children(thumb)
-            .child(strip)
+        overlay(
+            &self.id,
+            built,
+            (self.orientation, metrics.lane),
+            color,
+            window,
+            cx,
+        )
     }
+}
+
+/// The thumb and its drag layer of the scroller `id`, over a lane of `lane` px past the column.
+pub(crate) fn overlay(
+    id: &ElementId,
+    built: &engine::Scroller,
+    (axis, lane): (Axis, Pixels),
+    color: gpui::Hsla,
+    window: &mut Window,
+    cx: &mut App,
+) -> gpui::Div {
+    let grab: Entity<Option<f32>> = window.use_keyed_state((id.clone(), "grab"), cx, |_, _| None);
+    let near = window.use_keyed_state((id.clone(), "near"), cx, |_, _| false);
+    let shown = built.lingering || *near.read(cx) || grab.read(cx).is_some();
+    let strip = match axis {
+        Axis::Y => div().absolute().top_0().bottom_0().right_0().w(lane),
+        Axis::X => div().absolute().left_0().right_0().bottom_0().h(lane),
+    };
+    let hover = near.clone();
+    let strip = strip
+        .id((id.clone(), "lane"))
+        .on_hover(move |on, _, cx| {
+            hover.update(cx, |near, cx| {
+                *near = *on;
+                cx.notify();
+            });
+        })
+        .child(bar::drag_layer(built.handle.clone(), axis, grab));
+    let thumb = shown
+        .then(|| bar::thumb(&built.handle, axis, color))
+        .flatten();
+    div()
+        .absolute()
+        .size_full()
+        .top_0()
+        .left_0()
+        .children(thumb)
+        .child(strip)
 }
 
 /// The scroller draws the ring of a control too large to show whole: `outline: 2px solid` at

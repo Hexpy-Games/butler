@@ -476,6 +476,11 @@
     {"page": "animated-number", "name": "replay-click", "state": "click", "target": 0, "wait_ms": 1000},
     {"page": "rolling-swap", "name": "next-click", "state": "click", "target": 0, "wait_ms": 500},
     {"page": "avatar", "name": "badge-off", "state": "click", "target": 0, "wait_ms": 500},
-    {"page": "butler-thinking-mark", "name": "toggle-click", "state": "click", "target": 0, "wait_ms": 2500}
+    {"page": "butler-thinking-mark", "name": "toggle-click", "state": "click", "target": 0, "wait_ms": 2500},
+  {"page": "adaptive-shell", "name": "inspector-open", "state": "click", "target": 3, "wait_ms": 500},
+  {"page": "adaptive-shell", "name": "sidebar-close", "state": "click", "target": 0, "wait_ms": 500},
+  {"page": "adaptive-shell", "name": "peek-open", "state": "click", "target": 76, "wait_ms": 500},
+  {"page": "adaptive-shell", "name": "pane-open", "state": "click", "target": 46, "wait_ms": 700},
+  {"page": "conversation-shell", "name": "messages-scrolled", "state": "scroll", "target": 0, "wait_ms": 300, "dx": 0, "dy": 300}
   ]
 }

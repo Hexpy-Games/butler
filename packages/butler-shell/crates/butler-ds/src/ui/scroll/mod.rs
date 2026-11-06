@@ -4,5 +4,6 @@ mod area;
 pub(crate) mod bar;
 pub mod engine;
 
+pub(crate) use area::overlay;
 pub use area::{Bleed, MaxHeight, MinHeight, ScrollArea};
 pub use engine::{Axis, Config, Fade, Flags, Scroller, fade, read, scroller};
