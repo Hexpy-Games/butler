@@ -2,7 +2,7 @@
 //! setting changes. Components read it at render time and never keep their own copies.
 use std::time::Duration;
 
-use gpui::{App, BorrowAppContext as _, Global, Hsla, Pixels, SharedString};
+use gpui::{App, BorrowAppContext as _, Font, Global, Hsla, Pixels, SharedString, font};
 
 use super::convert;
 use crate::tokens::{
@@ -48,7 +48,7 @@ pub struct Ds {
     app_reduced_motion: bool,
     lang: Lang,
     body_font: SharedString,
-    code_font: SharedString,
+    code_font: Font,
     /// The on-screen keyboard's height (`--sheet-keyboard-inset`), fed in by the app.
     keyboard_inset: f32,
     /// Inside a sheet menus and lists have touch-sized rows (`--menu-item-height: 44px`).
@@ -60,7 +60,9 @@ impl Global for Ds {}
 impl Ds {
     pub fn new(tokens: TokenContext, platform: Platform) -> Self {
         let body_font = SharedString::from(tokens.font(FontStack::FontBody)[0]);
-        let code_font = SharedString::from(tokens.font(FontStack::FontFamilyCode)[0]);
+        let code_font = font(SharedString::from(
+            tokens.font(FontStack::FontFamilyCode)[0],
+        ));
         Self {
             tokens,
             platform,
@@ -75,8 +77,8 @@ impl Ds {
         }
     }
 
-    /// Resolves `--font-body` and `--font-family-code` to the first installed family of each
-    /// stack (the code stack ends at the body face, which carries the Hangul).
+    /// Resolves `--font-body` to its first installed family, and `--font-family-code` to its
+    /// first installed family with the rest of the stack as per-glyph fallbacks (`fonts`).
     pub fn detect_fonts(&mut self, installed: &[String]) {
         let first = |stack: FontStack| {
             self.tokens
@@ -85,12 +87,10 @@ impl Ds {
                 .find(|family| installed.iter().any(|name| name == *family))
                 .map(|family| SharedString::from(*family))
         };
-        let body = first(FontStack::FontBody);
-        let code = first(FontStack::FontFamilyCode);
-        if let Some(body) = body {
+        if let Some(body) = first(FontStack::FontBody) {
             self.body_font = body;
         }
-        self.code_font = code.unwrap_or_else(|| self.body_font.clone());
+        self.code_font = super::fonts::code_font(&self.tokens, installed, &self.body_font);
     }
 
     pub fn install(self, cx: &mut App) {
@@ -126,7 +126,7 @@ impl Ds {
         &self.body_font
     }
 
-    pub fn code_font(&self) -> &SharedString {
+    pub fn code_font(&self) -> &Font {
         &self.code_font
     }
 

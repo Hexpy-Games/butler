@@ -4,7 +4,7 @@ use crate::ui::theme::Theme;
 use gpui::{
     App, AvailableSpace, Bounds, Element, ElementId, GlobalElementId, InspectorElementId,
     IntoElement, LayoutId, Pixels, ShapedText, SharedString, Style, TextAlign, TextRun, Window,
-    font, point, px, relative, size,
+    point, px, relative, size,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -27,7 +27,7 @@ struct CachedRows {
     width: Pixels,
     text: SharedString,
     dark: bool,
-    font: SharedString,
+    font: gpui::Font,
     font_size: f32,
     rows: Vec<Row>,
 }
@@ -51,7 +51,7 @@ impl ExactAction {
     fn shape(&self, text: &str, window: &mut Window) -> Option<Rc<ShapedText>> {
         let run = TextRun {
             len: text.len(),
-            font: font(self.theme.code_font.clone()),
+            font: self.theme.code_font.clone(),
             color: self.theme.text,
             ..Default::default()
         };

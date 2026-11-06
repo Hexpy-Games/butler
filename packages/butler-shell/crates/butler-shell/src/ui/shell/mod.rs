@@ -94,7 +94,7 @@ pub(crate) struct ShellOptions {
     pub(crate) acrylic: bool,
     /// Light or dark regardless of the system (`None`: follow it).
     pub(crate) dark: Option<bool>,
-    pub(crate) code_font: SharedString,
+    pub(crate) code_font: gpui::Font,
     pub(crate) locale: Locale,
     pub(crate) platform: crate::ui::theme::Platform,
 }
