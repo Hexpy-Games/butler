@@ -97,3 +97,15 @@ composition: `replace_and_mark_text_in_range`, the marked text underlined, caret
 `key backspace`, `type ab`, `ime-mark ㅎ`, `ime-mark 하`, `ime-mark 한`, `expect anchor input-server-id:ab한`,
 `ime-commit 한`, `ime-mark ㄱ`, `ime-mark 그`, `ime-mark 글`, `ime-commit 글`,
 `expect anchor input-server-id:ab한글`, `expect anchor input-server-id:caret:4`.
+
+### P2-S2 additions (layout shells)
+
+The shell showcases lay a 1440px or 1100px window out and scale it into the story (the viewer's
+`ScaledFrame`). gpui's element scale composites a layer the size of the window, so a scaled layout must fit
+inside it: pass `--stage-width 2400` to `--shots` and `--live` (a real window that wide, the viewer laid out
+for `--size`; `app::logical_viewport` is what pages read as the window). A page taller than a readback buffer
+(`MAX_WINDOW_HEIGHT`) is shot in a window of that height and scrolled to each story; `ds-view.ts` does the
+same on the React side by scrolling each canvas to the top before cropping it. Harness anchors the new
+pages name: `adaptive-toggle`, `adaptive-open-nav`, `adaptive-open-inspector`, `split-browser-toggle`,
+`split-handle`, `split-chat-<width>` (the chat column's width after a drag), `peek-edge-zone`, `peek-card`,
+`peek-edge-button`, `peek-true|false` and `jump:<label>`.
