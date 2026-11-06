@@ -347,7 +347,15 @@ impl SubsessionService {
             {
                 None
             }
-            Err(error) => return Err(error),
+            // Plan counts only decorate a subtask row or child view; one unreadable
+            // Work must not fail the list or view that shows it.
+            Err(error) => {
+                butler_core::diagnostic!(
+                    "[native-btcc] subtask plan unavailable code={}",
+                    error.code()
+                );
+                None
+            }
         };
         let Some(work) = work else {
             return Ok(None);
