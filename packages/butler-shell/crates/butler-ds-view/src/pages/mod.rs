@@ -17,6 +17,7 @@ mod copy_button;
 mod dialog;
 mod dialog_contained;
 mod done_icon_button;
+mod drag_preview;
 mod dropdown_menu;
 mod expandable_text;
 mod field;
@@ -35,6 +36,7 @@ mod layout;
 mod media_frame;
 mod meta_list;
 mod native_select;
+mod nav_drop_target;
 mod nav_parts;
 mod nav_row;
 mod nav_section;
@@ -199,6 +201,8 @@ fn blocks() -> Vec<Page> {
             "OverflowActionMenu",
             overflow_action_menu
         ),
+        page!("nav-drop-target", "NavDropTarget", nav_drop_target),
+        page!("drag-preview", "DragPreview", drag_preview),
     ]
 }
 

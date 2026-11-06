@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use anyhow::Context as _;
-use gpui::{point, px};
+use gpui::{Modifiers, MouseButton, MouseMoveEvent, PlatformInput, point, px};
 
 use super::Live;
 
@@ -68,6 +68,43 @@ impl Live {
             #[expect(clippy::cast_precision_loss, reason = "a few dozen steps")]
             let n = step as f32;
             self.move_to(point(from.x + px(each.0 * n), from.y + px(each.1 * n)))?;
+            self.cx.advance_clock(Duration::from_millis(ms / steps));
+            self.cx.run_until_parked();
+            let _ = self
+                .cx
+                .update_window(self.handle, |_, window, _| window.refresh());
+        }
+        Ok(())
+    }
+
+    /// `dragto <n|@anchor>[+dx,dy] [ms]`: the held pointer travels to the control (or anchor)
+    /// over `ms` (default 160), one move event per 16ms frame, each carrying the held left
+    /// button as a real drag's moves do, so a gpui `on_drag` starts and `on_drag_move` runs.
+    pub(super) fn drag_to(&mut self, arg: &str) -> anyhow::Result<()> {
+        let (target, ms) = arg.rsplit_once(' ').map_or((arg, "160"), |(target, ms)| {
+            if ms.chars().all(|c| c.is_ascii_digit()) {
+                (target, ms)
+            } else {
+                (arg, "160")
+            }
+        });
+        let to = self.center(target)?;
+        let ms: u64 = ms.parse()?;
+        let steps = (ms / FRAME_MS).max(1);
+        let from = self.pointer;
+        for step in 1..=steps {
+            #[expect(clippy::cast_precision_loss, reason = "a few dozen steps")]
+            let progress = step as f32 / steps as f32;
+            let at = point(
+                from.x + (to.x - from.x) * progress,
+                from.y + (to.y - from.y) * progress,
+            );
+            self.pointer = at;
+            self.input(PlatformInput::MouseMove(MouseMoveEvent {
+                position: at,
+                modifiers: Modifiers::default(),
+                pressed_button: Some(MouseButton::Left),
+            }))?;
             self.cx.advance_clock(Duration::from_millis(ms / steps));
             self.cx.run_until_parked();
             let _ = self
