@@ -1,12 +1,18 @@
 //! Approval-free entry into the same browser executor.
 use super::*;
+
+/// Whether a nested browse step of this tool would be dispatched for this caller.
+pub(in crate::host::guided::tools) fn executor_admits(owner: &GuidedTools, name: &str) -> bool {
+    admitted(owner, name) && owner.authorized(name)
+}
+
 pub(in crate::host::guided::tools) async fn execute_executor(
     owner: &GuidedTools,
     invocation: &GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if !admitted(owner, &call.name) || !owner.authorized(&call.name) {
+    if !executor_admits(owner, &call.name) {
         return encoded(&json!({"status":"not_dispatched","reason":"tool_not_admitted"}));
     }
     let Some(mut client) = client::Client::new(owner).await else {

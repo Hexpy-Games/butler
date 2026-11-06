@@ -409,12 +409,14 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
                     default_workspace: "/tmp",
                 })
                 .unwrap();
-                assert!(
-                    !worker_selection
-                        .authorized_names
-                        .iter()
-                        .any(|tool| tool == "browse")
+                let has = |name: &str| has_provider_tool(&worker_selection.provider_tools, name);
+                let worker_tools = &worker_selection.authorized_names;
+                assert_eq!(
+                    worker_tools.iter().any(|tool| tool == "browse"),
+                    browsing_agent
                 );
+                assert_eq!(has("browse"), browsing_agent);
+                assert!(!(browsing_agent && (has("browser_open") || has("browser_act"))));
                 for name in [
                     "browser_open",
                     "browser_observe",

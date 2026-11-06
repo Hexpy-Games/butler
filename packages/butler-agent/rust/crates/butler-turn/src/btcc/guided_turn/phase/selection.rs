@@ -119,7 +119,10 @@ fn select_policy(
     let image_tool_admitted = turn_admits_zai_image_tool(policy);
     let mut authorized = base_authorized(input, policy);
     let browse = input.browsing_agent
-        && matches!(policy.role, PolicyRole::Butler | PolicyRole::Steward)
+        && matches!(
+            policy.role,
+            PolicyRole::Butler | PolicyRole::Steward | PolicyRole::Worker
+        )
         && authorized.iter().any(|tool| tool.name == "browser_open");
     authorized.retain(|tool| tool.name != "browse" || browse);
     if browse {
