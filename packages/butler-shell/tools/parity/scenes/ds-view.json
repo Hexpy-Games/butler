@@ -51,6 +51,7 @@
     { "page": "rolling-swap", "entry": "components/RollingSwap" },
     { "page": "rolling-status-line", "entry": "components/RollingStatusLine" },
     { "page": "animated-number", "entry": "components/AnimatedNumber" },
-    { "page": "avatar", "entry": "components/Avatar" }
+    { "page": "avatar", "entry": "components/Avatar" },
+    { "page": "expandable-text", "entry": "components/ExpandableText" }
   ]
 }

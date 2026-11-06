@@ -18,6 +18,7 @@ pub mod copy_button;
 pub mod dialog;
 pub mod done_icon_button;
 pub mod dropdown_menu;
+pub mod expandable_text;
 pub mod field;
 pub mod focus;
 pub mod fonts;

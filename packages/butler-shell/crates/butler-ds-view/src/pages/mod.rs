@@ -14,6 +14,7 @@ mod dialog;
 mod dialog_contained;
 mod done_icon_button;
 mod dropdown_menu;
+mod expandable_text;
 mod field;
 mod glyph_toggle;
 mod grid;
@@ -137,6 +138,7 @@ pub(crate) fn all() -> Vec<Page> {
         page!("rolling-status-line", "RollingStatusLine", rolling_status_line),
         page!("animated-number", "AnimatedNumber", animated_number),
         page!("avatar", "Avatar", avatar),
+        page!("expandable-text", "ExpandableText", expandable_text),
     ]
 }
 
