@@ -1,5 +1,6 @@
-//! ProgressRing.showcase.tsx. The two NavRow stories ("Sidebar update row" and "Sidebar
-//! densities") need the NavRow block and stay out.
+//! ProgressRing.showcase.tsx. The two sidebar stories draw their rows with the NavRow stand-in.
+use butler_ds::tokens::Density;
+use butler_ds::ui::Icon;
 use butler_ds::ui::button::{Button, Size as ButtonSize, Variant, container};
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::progress_ring::{ProgressRing, Size, Tone};
@@ -9,6 +10,7 @@ use gpui::{AnyElement, App, Entity, IntoElement, ParentElement as _, Window};
 
 use super::{Story, probe};
 use crate::copy::Lang;
+use crate::standins_nav::NavRow;
 
 struct Copy {
     preparing: &'static str,
@@ -16,6 +18,10 @@ struct Copy {
     advance: &'static str,
     indeterminate: &'static str,
     reset: &'static str,
+    ready: &'static str,
+    failed: &'static str,
+    restart: &'static str,
+    settings: &'static str,
     tones: [&'static str; 4],
 }
 
@@ -27,6 +33,10 @@ fn copy(lang: Lang) -> Copy {
             advance: "Advance",
             indeterminate: "Unknown size",
             reset: "Reset",
+            ready: "Update ready",
+            failed: "Update failed",
+            restart: "Restart",
+            settings: "Settings",
             tones: ["Default", "Complete", "Low space", "Failed"],
         },
         Copy {
@@ -35,6 +45,10 @@ fn copy(lang: Lang) -> Copy {
             advance: "진행",
             indeterminate: "크기 모름",
             reset: "처음으로",
+            ready: "업데이트 준비됨",
+            failed: "업데이트 실패",
+            restart: "다시 시작",
+            settings: "설정",
             tones: ["기본", "완료", "공간 부족", "실패"],
         },
     )
@@ -57,6 +71,14 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Tones",
             render: tones,
+        },
+        Story {
+            name: "Sidebar update row",
+            render: sidebar_rows,
+        },
+        Story {
+            name: "Sidebar densities",
+            render: sidebar_densities,
         },
         Story {
             name: "Live",
@@ -153,6 +175,73 @@ fn tones(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         row = row.child(captioned(ring, c.tones[index]));
     }
     row.into_any_element()
+}
+
+/// A sidebar ring (aria-hidden: the row names itself).
+fn sidebar_ring(id: &'static str) -> ProgressRing {
+    ProgressRing::new(id).size(Size::Sidebar)
+}
+
+/// The sidebar update row: determinate, indeterminate, complete with an action, failed, settings.
+fn sidebar_rows(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let restart = Button::new("ring-restart")
+        .size(ButtonSize::Xs)
+        .variant(Variant::Outline)
+        .text(c.restart);
+    Stack::new()
+        .gap(Space::Xs)
+        .child(
+            NavRow::new("nav-downloading", c.downloading)
+                .icon(sidebar_ring("nav-ring-value").value(0.42))
+                .badge("42%")
+                .build(cx),
+        )
+        .child(
+            NavRow::new("nav-preparing", c.preparing)
+                .icon(sidebar_ring("nav-ring-indeterminate").indeterminate())
+                .build(cx),
+        )
+        .child(
+            NavRow::new("nav-ready", c.ready)
+                .icon(sidebar_ring("nav-ring-done").value(1.).tone(Tone::Success))
+                .actions(restart)
+                .build(cx),
+        )
+        .child(
+            NavRow::new("nav-failed", c.failed)
+                .glyph(Icon::CircleAlert, cx)
+                .build(cx),
+        )
+        .child(
+            NavRow::new("nav-settings", c.settings)
+                .glyph(Icon::Settings, cx)
+                .build(cx),
+        )
+        .into_any_element()
+}
+
+/// The same row at each sidebar density.
+fn sidebar_densities(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let mut rows = Stack::new().gap(Space::Xs);
+    for (density, name) in [
+        (Density::Compact, "compact"),
+        (Density::Comfortable, "comfortable"),
+        (Density::Touch, "touch"),
+    ] {
+        rows = rows.child(
+            NavRow::new(
+                format!("nav-density-{name}"),
+                format!("{} · {name}", c.downloading),
+            )
+            .icon(sidebar_ring(name).value(0.42).density(density))
+            .badge("42%")
+            .density(density)
+            .build(cx),
+        );
+    }
+    rows.into_any_element()
 }
 
 /// A row stepping through determinate and indeterminate progress: the box never moves.

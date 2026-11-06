@@ -13,7 +13,7 @@ use super::arc;
 use super::context::Ds;
 use super::convert;
 use super::spinner::Spinner;
-use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
+use crate::tokens::{Color, Density, Duration as DsDuration, Easing, Length, TokenContext};
 
 /// `r 8` in the 20-unit view box.
 const RADIUS: f32 = 8.; // DS: ProgressRing.tsx:9
@@ -31,8 +31,9 @@ pub enum Size {
 }
 
 impl Size {
-    /// The square, the stroke in view-box units and the Spinner drawn while indeterminate.
-    fn metrics(self, ds: &Ds) -> (f32, f32, f32) {
+    /// The square, the stroke in view-box units and the Spinner drawn while indeterminate;
+    /// `tokens` carry the sidebar density (`data-sidebar-density`) the sidebar size follows.
+    fn metrics(self, tokens: &TokenContext) -> (f32, f32, f32) {
         let (length, stroke, spinner) = match self {
             Self::Xs => (Length::IconSizeXs, 3., Length::IconSizeXs), // DS: ProgressRing.module.css:12
             Self::Sm => (Length::IconSizeSm, 2.75, Length::IconSizeSm), // DS: ProgressRing.module.css:17
@@ -40,11 +41,7 @@ impl Size {
             Self::Lg => (Length::IconSizeLg, 2.25, Length::IconSizeLg), // DS: ProgressRing.module.css:22
             Self::Sidebar => (Length::SidebarIconSize, 1.875, Length::IconSizeMd), // DS: ProgressRing.module.css:28
         };
-        (
-            f32::from(ds.len(length)),
-            stroke,
-            f32::from(ds.len(spinner)),
-        )
+        (tokens.len(length), stroke, tokens.len(spinner))
     }
 }
 
@@ -64,6 +61,7 @@ pub struct ProgressRing {
     indeterminate: bool,
     size: Size,
     tone: Tone,
+    density: Option<Density>,
 }
 
 impl ProgressRing {
@@ -74,6 +72,7 @@ impl ProgressRing {
             indeterminate: false,
             size: Size::Md,
             tone: Tone::Default,
+            density: None,
         }
     }
 
@@ -100,6 +99,13 @@ impl ProgressRing {
 
     pub fn tone(mut self, tone: Tone) -> Self {
         self.tone = tone;
+        self
+    }
+
+    /// The sidebar density in force where the ring sits (`data-sidebar-density` on an ancestor,
+    /// which the `sidebar` size reads); unset, the app's.
+    pub fn density(mut self, density: Density) -> Self {
+        self.density = Some(density);
         self
     }
 }
@@ -134,7 +140,11 @@ impl Glide {
 impl RenderOnce for ProgressRing {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
-        let (side, stroke, spinner) = self.size.metrics(ds);
+        let tokens = self.density.map_or(*ds.tokens(), |density| TokenContext {
+            density,
+            ..*ds.tokens()
+        });
+        let (side, stroke, spinner) = self.size.metrics(&tokens);
         if self.indeterminate {
             return div()
                 .size(px(side))
