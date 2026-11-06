@@ -316,6 +316,7 @@ impl Popover {
             &format!("{}-popover", self.id),
             phase,
             shown_side,
+            frame.resolved.map_or((0.5, 0.), |resolved| resolved.origin),
             motion_kind,
             surface,
             ds,

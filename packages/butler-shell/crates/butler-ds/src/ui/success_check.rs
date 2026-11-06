@@ -3,8 +3,8 @@
 //! over `--motion-slow` and the check mark follows one `--motion-menu` beat later. Reduced
 //! motion keeps only the fade. Strokes are drawn as paths in the inherited text colour.
 use gpui::{
-    App, Bounds, ElementId, Hsla, IntoElement, ParentElement as _, PathBuilder, Pixels, RenderOnce,
-    Styled as _, Window, canvas, div, point, px,
+    App, Bounds, Div, ElementId, Hsla, IntoElement, ParentElement as _, PathBuilder, Pixels,
+    RenderOnce, Styled as _, Window, canvas, div, point, px,
 };
 
 use super::context::Ds;
@@ -117,19 +117,18 @@ fn arc(fraction: f32) -> Vec<(f32, f32)> {
 struct Painter {
     origin: gpui::Point<Pixels>,
     unit: f32,
-    scale: f32,
     color: Hsla,
 }
 
 impl Painter {
     fn at(&self, (x, y): (f32, f32)) -> gpui::Point<Pixels> {
-        let map = |v: f32| ((v - VIEW / 2.) * self.scale + VIEW / 2.) * self.unit;
+        let map = |v: f32| v * self.unit;
         point(self.origin.x + px(map(x)), self.origin.y + px(map(y)))
     }
 
     /// A round-capped, round-joined stroke along `points`.
     fn stroke(&self, points: &[(f32, f32)], window: &mut Window) {
-        let width = STROKE * self.unit * self.scale;
+        let width = STROKE * self.unit;
         if points.len() >= 2 {
             let mut path = PathBuilder::stroke(px(width));
             path.move_to(self.at(points[0]));
@@ -166,12 +165,11 @@ impl Painter {
     }
 }
 
-fn draw(bounds: Bounds<Pixels>, window: &mut Window, ring: bool, scale: f32, progress: Progress) {
+fn draw(bounds: Bounds<Pixels>, window: &mut Window, ring: bool, progress: Progress) {
     let color = window.text_style().color;
     let painter = Painter {
         origin: bounds.origin,
         unit: f32::from(bounds.size.width) / VIEW,
-        scale,
         color,
     };
     if ring && progress.ring > 0. {
@@ -183,11 +181,11 @@ fn draw(bounds: Bounds<Pixels>, window: &mut Window, ring: bool, scale: f32, pro
     }
 }
 
-fn check(size: f32, ring: bool, scale: f32, progress: Progress) -> impl IntoElement {
+fn check(size: f32, ring: bool, progress: Progress) -> Div {
     div().size(px(size)).flex_none().child(
         canvas(
             |_, _, _| (),
-            move |bounds, (), window, _| draw(bounds, window, ring, scale, progress),
+            move |bounds, (), window, _| draw(bounds, window, ring, progress),
         )
         .size_full(),
     )
@@ -198,7 +196,7 @@ impl RenderOnce for SuccessCheck {
         let ds = Ds::get(cx);
         let done = Progress { ring: 1., mark: 1. };
         if !self.animate {
-            return check(self.size, self.ring, 1., done).into_any_element();
+            return check(self.size, self.ring, done).into_any_element();
         }
         let (base, slow, menu) = (
             ds.duration(DsDuration::MotionBase).as_secs_f32(),
@@ -229,7 +227,8 @@ impl RenderOnce for SuccessCheck {
                     mark: if draws { step(menu, slow) } else { 1. },
                 };
                 let scale = scale_from + (1. - scale_from) * pop;
-                el.opacity(pop).child(check(size, ring, scale, progress))
+                el.opacity(pop)
+                    .child(check(size, ring, progress).scale(scale))
             },
         )
         .into_any_element()

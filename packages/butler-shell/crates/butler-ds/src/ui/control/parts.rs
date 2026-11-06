@@ -4,6 +4,7 @@ use std::time::Instant;
 use gpui::{App, Hsla, SharedString};
 
 use crate::ui::convert;
+use crate::ui::motion::Ramp;
 
 /// How a control is disabled.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -157,6 +158,8 @@ pub enum Width {
 pub(crate) struct State {
     pub(crate) hovered: bool,
     pub(super) pressed: bool,
+    /// Press blend 0..=1 (the `scale` transition).
+    pub(super) press: Ramp,
     /// Hover blend 0..=1 and the animation toward `hovered`.
     pub(crate) mix: f32,
     from: f32,
@@ -172,6 +175,11 @@ impl State {
             from: f32::from(u8::from(on)),
             ..Self::default()
         }
+    }
+
+    pub(super) fn set_pressed(&mut self, on: bool, now: Instant) {
+        self.pressed = on;
+        self.press.retarget(f32::from(u8::from(on)), now, false);
     }
 
     pub(crate) fn retarget(&mut self, hovered: bool, now: Instant, at: f32) {

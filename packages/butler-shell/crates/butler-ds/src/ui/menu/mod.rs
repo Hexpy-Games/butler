@@ -292,6 +292,7 @@ impl Menu {
             &format!("{}-menu", self.id),
             phase,
             side,
+            shown.map_or((0.5, 0.), |resolved| resolved.origin),
             motion::Motion::MENU,
             content,
             ds,

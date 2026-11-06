@@ -411,6 +411,8 @@ impl Select {
                 &format!("{}-select", self.id),
                 phase,
                 Side::Bottom,
+                // DS: Select.module.css:109 `--radix-select-content-transform-origin, center top`.
+                (0.5, 0.),
                 Motion::MENU,
                 surface,
                 ds,

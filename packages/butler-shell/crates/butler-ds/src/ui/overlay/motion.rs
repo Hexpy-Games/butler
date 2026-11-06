@@ -1,12 +1,12 @@
-//! The enter and exit motion of an overlay surface, from the motion tokens. gpui has no element
-//! transform, so the `scale` of the CSS keyframes is not drawn: enter is a fade plus the travel
-//! from the trigger's side, exit a fade (and, for the mobile sheet, a short travel back).
-//! Reduced motion zeroes the travel tokens and leaves the fade.
+//! The enter and exit motion of an overlay surface, from the motion tokens: a fade, the travel
+//! from the trigger's side and the keyframes' `scale` about the surface's transform origin (exit:
+//! a fade and the scale, and for the mobile sheet a short travel back). Reduced motion zeroes the
+//! travel and scale tokens and leaves the fade.
 use gpui::{AnyElement, IntoElement as _, ParentElement as _, Styled as _, div, px};
 
 use super::lifecycle::Phase;
 use super::place::Side;
-use crate::tokens::{Duration as DsDuration, Easing, Length};
+use crate::tokens::{Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::Ds;
 use crate::ui::motion::{Timing, Tween};
 
@@ -21,6 +21,8 @@ pub struct Motion {
     pub exit_ease: Easing,
     /// How far the surface travels back toward its trigger while it exits.
     pub exit_distance: Option<Length>,
+    /// The scale the surface starts from (enter) and ends at (exit); none when it only fades.
+    pub scale: Option<Number>,
 }
 
 impl Motion {
@@ -32,12 +34,14 @@ impl Motion {
         exit: DsDuration::MotionExitFast,
         exit_ease: Easing::MotionEaseAccelerate,
         exit_distance: None,
+        scale: Some(Number::MotionScaleMenu),
     };
 
     /// `popover-sheet-enter` / `-exit`: the attached mobile sheet travels 8px in and 4px out.
     pub const POPOVER_SHEET: Self = Self {
         enter_distance: Some(Length::MotionDistanceMd),
         exit_distance: Some(Length::MotionDistanceSm),
+        scale: None,
         ..Self::POPOVER
     };
 
@@ -49,6 +53,7 @@ impl Motion {
         exit: DsDuration::MotionExitMenu,
         exit_ease: Easing::MotionEaseAccelerate,
         exit_distance: None,
+        scale: Some(Number::MotionScaleMenu),
     };
 }
 
@@ -62,12 +67,14 @@ impl Motion {
         exit: DsDuration::MotionExitFast,
         exit_ease: Easing::MotionEaseAccelerate,
         exit_distance: None,
+        scale: Some(Number::MotionScaleDialog),
     };
 
-    /// `palette-enter` / `palette-exit`: only a scale (not drawn), so a fade.
+    /// `palette-enter` / `palette-exit`: only a scale.
     pub const PALETTE: Self = Self {
         enter: DsDuration::MotionPalette,
         enter_distance: None,
+        scale: Some(Number::MotionScalePalette),
         ..Self::DIALOG
     };
 
@@ -78,6 +85,7 @@ impl Motion {
         enter_ease: Easing::MotionEaseEmphasized,
         enter_distance: Some(Length::MotionDistanceLg),
         exit_distance: Some(Length::MotionDistanceLg),
+        scale: None,
         ..Self::DIALOG
     };
 }
@@ -93,15 +101,19 @@ fn from_trigger(side: Side, distance: f32) -> (f32, f32) {
     }
 }
 
-/// `content` with the enter or exit of `phase` on `side`; nothing when closed.
+/// `content` with the enter or exit of `phase` on `side`, scaling about `origin` (fractions of
+/// its box); nothing when closed.
 pub fn animate(
     id: &str,
     phase: Phase,
     side: Side,
+    origin: (f32, f32),
     motion: Motion,
     content: AnyElement,
     ds: &Ds,
 ) -> Option<AnyElement> {
+    let scale = motion.scale.map_or(1., |token| ds.number(token));
+    let wrapper = move || div().relative().transform_origin(origin.0, origin.1);
     match phase {
         Phase::Closed => None,
         Phase::Open { key } => {
@@ -111,9 +123,12 @@ pub fn animate(
             Some(
                 Tween::new(
                     format!("{id}-in-{key}"),
-                    div().relative().child(content),
+                    wrapper().child(content),
                     timing,
-                    move |el, t| el.left(px(dx * (1. - t))).top(px(dy * (1. - t))).opacity(t),
+                    move |el, t| {
+                        let el = el.left(px(dx * (1. - t))).top(px(dy * (1. - t)));
+                        el.scale(scale + (1. - scale) * t).opacity(t)
+                    },
                 )
                 .into_any_element(),
             )
@@ -126,9 +141,12 @@ pub fn animate(
             Some(
                 Tween::new(
                     format!("{id}-out-{key}"),
-                    div().relative().child(content),
+                    wrapper().child(content),
                     timing,
-                    move |el, t| el.left(px(dx * t)).top(px(dy * t)).opacity(1. - t),
+                    move |el, t| {
+                        let el = el.left(px(dx * t)).top(px(dy * t));
+                        el.scale(1. - (1. - scale) * t).opacity(1. - t)
+                    },
                 )
                 .into_any_element(),
             )

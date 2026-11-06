@@ -4,8 +4,8 @@
 //! lifetime (a loading toast stays until it is updated or dismissed), the three newest visible,
 //! the stack collapsed (each toast behind the front one smaller by 5% and a gap lower, its
 //! content hidden) and expanded, with every timer paused, while the pointer is over it or alt+T
-//! was pressed, and a swipe up past 45px dismisses. gpui has no element transform, so the scale
-//! of a collapsed toast is applied to the size of its box (see [`layout`]).
+//! was pressed, and a swipe up past 45px dismisses. The scale of a collapsed toast is gpui's
+//! element scale about its centre (see [`layout`]).
 mod assets;
 mod layout;
 mod stack;

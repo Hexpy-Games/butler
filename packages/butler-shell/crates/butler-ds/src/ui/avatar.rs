@@ -204,14 +204,12 @@ impl RenderOnce for Avatar {
             .size(badge_side)
             .child(
                 Presence::new((self.id.clone(), "presence"), self.badge.is_some())
-                    .motion(PresenceMotion::Fade)
+                    .motion(PresenceMotion::Pop)
                     .child(held.map_or_else(
                         || div().into_any_element(),
                         |glyph| badge_disc(glyph, badge_side, ds).into_any_element(),
                     )),
             );
-        // TODO(gpui-ce butler-port-gaps): element scale transforms. The badge also pops from
-        // `--motion-scale-check` while it fades (Avatar.module.css:117,126); here it only fades.
         let mut circle = div()
             .relative()
             .flex()

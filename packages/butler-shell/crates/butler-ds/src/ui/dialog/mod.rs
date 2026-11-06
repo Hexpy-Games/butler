@@ -6,8 +6,8 @@
 //! Modal (the default): the scrim blocks and dims the page and locks its scrolling, focus moves
 //! into the dialog on open, Tab stays inside it, and focus goes back to where it was on close.
 //! Escape and a pointer down on the scrim close it. Non-modal: no scrim of its own (a contained
-//! dialog's covers its card), no trap. gpui has no element transform, so the 0.96 scale of
-//! `dialog-enter` and `dialog-exit` is not drawn: the surface fades and travels.
+//! dialog's covers its card), no trap. `dialog-enter` and `dialog-exit` fade the surface, travel it
+//! and scale it by `--motion-scale-dialog` about its centre.
 mod content;
 mod parts;
 
@@ -286,7 +286,8 @@ impl Dialog {
         let scrim = (self.modal || area.card.is_some())
             .then(|| self.scrim(&id, phase, scrim_motion, &area, ds));
         let surface = content.surface(ds, &geo, &env);
-        let Some(animated) = motion::animate(&id, phase, side, keyframes, surface, ds) else {
+        let Some(animated) = motion::animate(&id, phase, side, (0.5, 0.5), keyframes, surface, ds)
+        else {
             return div().into_any_element();
         };
         let child = self.guarded(animated, handle, focus, area.card.is_some());

@@ -10,6 +10,7 @@
 //!                         `@name+dx,dy` a point that far from its centre
 //!   move <n>              pointer onto control n without settling (timers keep running)
 //!   press <n>             pointer onto control n and the left button down, held
+//!   hold <n>              like `press` without settling (the press motion in flight; use `wait`)
 //!   release               the left button up (everything it starts settles)
 //!   park                  the pointer to the window's top-left corner (no hover left behind)
 //!   letgo                 the left button up, the motion it starts still in flight (use `wait`)
@@ -364,6 +365,7 @@ impl Live {
                 Ok(())
             }
             "press" => self.press(arg),
+            "hold" => self.hold(arg),
             "release" => self.release(),
             "park" => self.park(),
             "letgo" => self.let_go(),

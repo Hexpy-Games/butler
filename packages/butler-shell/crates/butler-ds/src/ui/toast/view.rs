@@ -343,16 +343,16 @@ pub(super) fn render(
     let tone = tone(item.toast.kind, ds);
     let scale = resolved.scale;
     let forced = scale < 1. || resolved.height != item.height.get();
-    let (w, h) = (place.width * scale, resolved.height * scale);
     let probe = measure(item, forced);
     let content = content(item, resolved, &tone, store, (now, epoch), ds);
     let id = item.id;
     let down = store.clone();
     let mut outer = div()
         .absolute()
-        .top(px(resolved.y + resolved.swipe + (resolved.height - h) / 2.))
-        .left(px(place.left + (place.width - w) / 2.))
-        .w(px(w))
+        .top(px(resolved.y + resolved.swipe))
+        .left(px(place.left))
+        .w(px(place.width))
+        .scale(scale)
         .opacity(resolved.opacity)
         .on_mouse_down(MouseButton::Left, move |event, window, cx| {
             let now = cx.background_executor().now();
@@ -361,7 +361,7 @@ pub(super) fn render(
         })
         .debug_selector(move || format!("toast-{id}"));
     if forced {
-        outer = outer.h(px(h)).overflow_hidden();
+        outer = outer.h(px(resolved.height)).overflow_hidden();
     }
     // The front toast's box, for a harness that reports geometry.
     let marker = front.then(|| {
