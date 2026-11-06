@@ -109,3 +109,16 @@ same on the React side by scrolling each canvas to the top before cropping it. H
 pages name: `adaptive-toggle`, `adaptive-open-nav`, `adaptive-open-inspector`, `split-browser-toggle`,
 `split-handle`, `split-chat-<width>` (the chat column's width after a drag), `peek-edge-zone`, `peek-card`,
 `peek-edge-button`, `peek-true|false` and `jump:<label>`.
+
+### P2-S3 additions (navigation and row blocks)
+
+`scenes/ds-view.json` lists the eleven new pages (`nav-row`, `nav-section`, `collapsible-nav-group`,
+`nav-drop-target`, `drag-preview`, `overflow-action-menu`, `list-row`, `disclosure-row`, `key-value-row`,
+`empty-line`, `status-capsule`). The live harness gains `dragto <n|@anchor>[+dx,dy] [ms]`: the held pointer
+(after `press`) travels to the target in 16 ms steps, each move carrying the held left button, so a gpui
+`on_drag` starts and `on_drag_move` runs; `release` then drops. A NavDropTarget row has the anchor
+`nav-drop:<key>`; the interactive story names `ndt-order:<ids>`, `ndt-groups:<id>><label>` and
+`ndt-dragging:<bool>`. Other anchors: `cng-space-open-<bool>` (CollapsibleNavGroup), `kv-highlight-<label|none>`
+(linked KeyValueRow), `dp-stage-<kind>-invalid-<bool>` (DragPreview). Drag smoke:
+`viewport 3000`, `page nav-drop-target`, `press @nav-drop:demo-0`, `dragto @nav-drop:demo-2+0,-10 400`,
+`wait 300`, `shot drag-before`, `release`, `expect anchor ndt-order:demo-1,demo-0,demo-2,demo-3,demo-4`.

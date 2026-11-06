@@ -7,6 +7,7 @@ use butler_ds::ui::blocks::conversation_shell::{
     AsideLayout, ConversationScroll, ConversationScrollToBottomButton, ConversationShell,
     MessageListSurface,
 };
+use butler_ds::ui::blocks::list_row::ListRow;
 use butler_ds::ui::button::{self, Button, Size, Variant};
 use butler_ds::ui::card::{Card, CardPadding};
 use butler_ds::ui::context::Ds;
@@ -25,7 +26,6 @@ use copy::{Copy, copy};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::list_row;
 use crate::standins_shell::message_row;
 use crate::standins_window::{browser_pane, scaled_frame};
 
@@ -239,13 +239,11 @@ fn session_details(_c: &Copy, layout: AsideLayout, cx: &App) -> AnyElement {
             Stack::new()
                 .gap(Space::Sm)
                 .child(title)
-                .child(list_row(
-                    Some(glyph),
-                    "preview-14.md",
-                    None,
-                    Some("Approval · 2 min ago"),
-                    cx,
-                ))
+                .child(
+                    ListRow::new("preview-14.md")
+                        .icon(glyph)
+                        .meta("Approval · 2 min ago"),
+                )
                 .into_any_element()
         })
         .collect();

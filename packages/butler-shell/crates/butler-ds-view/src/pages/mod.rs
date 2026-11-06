@@ -16,9 +16,11 @@ mod conversation_shell;
 mod copy_button;
 mod dialog;
 mod dialog_contained;
+mod disclosure_row;
 mod done_icon_button;
 mod drag_preview;
 mod dropdown_menu;
+mod empty_line;
 mod expandable_text;
 mod field;
 mod glyph_toggle;
@@ -31,8 +33,10 @@ mod inline_reference;
 mod input;
 mod inspector_panel;
 mod kbd;
+mod key_value_row;
 mod label;
 mod layout;
+mod list_row;
 mod media_frame;
 mod meta_list;
 mod native_select;
@@ -57,6 +61,7 @@ mod skeleton;
 mod slider;
 mod spinner;
 mod stack;
+mod status_capsule;
 mod success_check;
 mod surface_panel;
 mod switch;
@@ -203,6 +208,11 @@ fn blocks() -> Vec<Page> {
         ),
         page!("nav-drop-target", "NavDropTarget", nav_drop_target),
         page!("drag-preview", "DragPreview", drag_preview),
+        page!("list-row", "ListRow", list_row),
+        page!("disclosure-row", "DisclosureRow", disclosure_row),
+        page!("key-value-row", "KeyValueRow", key_value_row),
+        page!("empty-line", "EmptyLine", empty_line),
+        page!("status-capsule", "StatusCapsule", status_capsule),
     ]
 }
 

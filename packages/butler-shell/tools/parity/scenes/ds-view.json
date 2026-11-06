@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5, P2-S1 and P2-S2 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5, P2-S1, P2-S2 and P2-S3 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -64,6 +64,17 @@
     { "page": "inspector-panel", "entry": "blocks/InspectorPanel" },
     { "page": "panel-header", "entry": "blocks/PanelHeader" },
     { "page": "surface-panel", "entry": "blocks/SurfacePanel" },
-    { "page": "wallpaper-stage", "entry": "blocks/WallpaperStage" }
+    { "page": "wallpaper-stage", "entry": "blocks/WallpaperStage" },
+    { "page": "nav-row", "entry": "blocks/NavRow" },
+    { "page": "nav-section", "entry": "blocks/NavSection" },
+    { "page": "collapsible-nav-group", "entry": "blocks/CollapsibleNavGroup" },
+    { "page": "nav-drop-target", "entry": "blocks/NavDropTarget" },
+    { "page": "drag-preview", "entry": "blocks/DragPreview" },
+    { "page": "overflow-action-menu", "entry": "blocks/OverflowActionMenu" },
+    { "page": "list-row", "entry": "blocks/ListRow" },
+    { "page": "disclosure-row", "entry": "blocks/DisclosureRow" },
+    { "page": "key-value-row", "entry": "blocks/KeyValueRow" },
+    { "page": "empty-line", "entry": "blocks/EmptyLine" },
+    { "page": "status-capsule", "entry": "blocks/StatusCapsule" }
   ]
 }

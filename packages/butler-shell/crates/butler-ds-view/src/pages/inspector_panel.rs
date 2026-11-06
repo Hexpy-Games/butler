@@ -1,6 +1,9 @@
-//! InspectorPanel.showcase.tsx. KeyValueRow, ListRow, EmptyLine and Section are stand-ins.
+//! InspectorPanel.showcase.tsx. Section is a stand-in.
 use butler_ds::ui::Icon;
+use butler_ds::ui::blocks::empty_line::EmptyLine;
 use butler_ds::ui::blocks::inspector_panel::{InspectorInset, InspectorPanel};
+use butler_ds::ui::blocks::key_value_row::KeyValueRow;
+use butler_ds::ui::blocks::list_row::ListRow;
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
@@ -9,8 +12,7 @@ use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::list_row;
-use crate::standins_shell::{empty_line, key_value_row, section};
+use crate::standins_shell::section;
 
 struct Copy {
     branch: &'static str,
@@ -87,11 +89,11 @@ pub(super) fn stories() -> Vec<Story> {
     ]
 }
 
-fn summary(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn summary(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let c = copy(lang);
     InspectorPanel::new(c.branch)
-        .child(key_value_row(c.gateway, c.ready, None, cx))
-        .child(key_value_row(c.branch_label, "main", None, cx))
+        .child(KeyValueRow::new(c.gateway, c.ready))
+        .child(KeyValueRow::new(c.branch_label, "main"))
         .into_any_element()
 }
 
@@ -107,8 +109,8 @@ fn icon_description_action(lang: Lang, _: &mut Window, cx: &mut App) -> AnyEleme
                 .variant(Variant::Borderless)
                 .text(c.refresh),
         )
-        .child(key_value_row(c.tokens, "18,240", Some("62%"), cx))
-        .child(key_value_row(c.files, "8", None, cx))
+        .child(KeyValueRow::new(c.tokens, "18,240").meta("62%"))
+        .child(KeyValueRow::new(c.files, "8"))
         .into_any_element()
 }
 
@@ -117,14 +119,8 @@ fn skills(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
     let ds = Ds::get(cx);
     let glyph = icon(Icon::FileText, IconSize::Md, ds).into_any_element();
     InspectorPanel::new(c.skills)
-        .child(list_row(
-            Some(glyph),
-            "butler-design-system",
-            None,
-            None,
-            cx,
-        ))
-        .child(empty_line(Icon::Circle, c.no_skills, cx))
+        .child(ListRow::new("butler-design-system").icon(glyph))
+        .child(EmptyLine::new(c.no_skills).icon(icon(Icon::Circle, IconSize::Md, ds)))
         .into_any_element()
 }
 
@@ -132,10 +128,13 @@ fn beside_inset(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let ds = Ds::get(cx);
     let glyph = icon(Icon::FileText, IconSize::Md, ds).into_any_element();
-    let schedule = list_row(Some(glyph), c.nightly, None, Some(c.every), cx);
+    let schedule = ListRow::new(c.nightly)
+        .icon(glyph)
+        .meta(c.every)
+        .into_any_element();
     Stack::new()
         .gap(Space::Md)
-        .child(InspectorPanel::new(c.branch).child(key_value_row(c.gateway, c.ready, None, cx)))
+        .child(InspectorPanel::new(c.branch).child(KeyValueRow::new(c.gateway, c.ready)))
         .child(InspectorInset::new().child(section(c.schedules, Space::Sm, vec![schedule])))
         .into_any_element()
 }
