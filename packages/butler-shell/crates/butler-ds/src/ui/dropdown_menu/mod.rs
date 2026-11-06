@@ -65,8 +65,7 @@ impl DropdownMenuContent {
         self
     }
 
-    /// `auto | popover | sheet`. The sheet is BottomSheet's (batch B5); until then a menu that
-    /// resolves to one stays anchored.
+    /// `auto | popover | sheet`: a BottomSheet below 768px, anchored above (the app default).
     pub fn presentation(mut self, presentation: Presentation) -> Self {
         self.presentation = Some(presentation);
         self
@@ -193,9 +192,8 @@ impl DropdownMenu {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
-        // A sheet presentation is BottomSheet's (batch B5): until then it stays anchored.
         let viewport = window.viewport_size();
-        let _bottom_sheet = content
+        let sheet = content
             .presentation
             .unwrap_or_default()
             .is_sheet(f32::from(viewport.width));
@@ -207,6 +205,7 @@ impl DropdownMenu {
             cap_height: true,
             theme: content.theme,
             trigger_focus: Some(self.trigger_focus.clone()),
+            sheet,
         };
         self.menu.content(&spec, content.entries, window, cx)
     }

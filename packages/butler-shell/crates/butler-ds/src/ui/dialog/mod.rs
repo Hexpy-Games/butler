@@ -210,22 +210,7 @@ impl Dialog {
         self.scope
             .update(cx, |scope, cx| scope.sync(open, false, true, window, cx));
         if let Phase::Open { key } = synced.phase {
-            let entered = window.use_keyed_state((self.id.clone(), "entered"), cx, |_, _| 0);
-            if *entered.read(cx) != key {
-                entered.update(cx, |entered, _| *entered = key);
-                let scope = self.scope.clone();
-                window
-                    .spawn(cx, async move |cx| {
-                        cx.background_executor()
-                            .timer(std::time::Duration::from_millis(32))
-                            .await;
-                        cx.update(|window, cx| {
-                            scope.update(cx, |scope, cx| scope.focus_into(window, cx));
-                        })
-                        .ok();
-                    })
-                    .detach();
-            }
+            Scope::enter_when_drawn(&self.scope, &self.id, key, window, cx);
         }
         let focus = self.scope.read(cx).handle.clone();
         let contained = content.contained.is_some();

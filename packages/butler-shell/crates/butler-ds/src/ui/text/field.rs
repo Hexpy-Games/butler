@@ -190,7 +190,7 @@ pub(super) fn render(spec: Spec, window: &mut Window, cx: &mut App) -> AnyElemen
     {
         state.update(cx, |state, cx| state.emplace(value, cx));
     }
-    let handle = state.read(cx).focus_handle(cx);
+    let handle = focus::tab_stop(&state.read(cx).focus_handle(cx), true);
     let focused = handle.is_focused(window) && !spec.disabled;
     let progress = focus_progress(&spec, focused, window, cx);
     let hover = window.use_keyed_state((spec.id.clone(), "hover"), cx, |_, _| false);

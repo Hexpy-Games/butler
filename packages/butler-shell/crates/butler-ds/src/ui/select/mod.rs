@@ -26,6 +26,8 @@ pub use trigger::{SelectPillTrigger, SelectTrigger};
 use entry::Row;
 use runtime::Rt;
 
+use crate::ui::bottom_sheet::SheetState;
+use crate::ui::bottom_sheet::present::{self, Presented};
 use crate::ui::context::Ds;
 use crate::ui::layer::{Layer, Z};
 use crate::ui::menu::footprint;
@@ -70,6 +72,7 @@ pub struct Select {
     life: Entity<Lifecycle>,
     scope: Entity<Scope>,
     rt: Entity<Rt>,
+    sheet: Entity<SheetState>,
     parts: Parts,
     trigger_focus: FocusHandle,
     controlled: Control,
@@ -102,6 +105,7 @@ impl Select {
             life: window.use_keyed_state((key.clone(), "life"), cx, |_, _| Lifecycle::default()),
             scope: window.use_keyed_state((key.clone(), "scope"), cx, |_, cx| Scope::new(cx)),
             rt: window.use_keyed_state((key.clone(), "runtime"), cx, |_, _| Rt::default()),
+            sheet: window.use_keyed_state((key.clone(), "sheet"), cx, |_, _| SheetState::default()),
             trigger_focus: window
                 .use_keyed_state((key, "trigger-focus"), cx, |_, cx| cx.focus_handle())
                 .read(cx)
@@ -284,9 +288,20 @@ impl Select {
         let Some(handle) = synced.handle else {
             return footprint(div());
         };
-        // A sheet presentation is BottomSheet's (batch B5): until then it stays anchored.
         let width = f32::from(window.viewport_size().width);
-        let _bottom_sheet = content.presentation.unwrap_or_default().is_sheet(width);
+        if content.presentation.unwrap_or_default().is_sheet(width) {
+            let layers = self.sheet_layers(
+                content,
+                &rows,
+                start,
+                selected,
+                synced.phase,
+                &handle,
+                window,
+                cx,
+            );
+            return footprint(layers);
+        }
         let layer = self.layer(
             content,
             &rows,
@@ -298,6 +313,58 @@ impl Select {
             cx,
         );
         footprint(div().child(scrim(Z::Popover, window)).child(layer))
+    }
+
+    /// The BottomSheet presentation: the viewport of rows in the sheet's body under its backdrop.
+    /// Radix Select has no exit, so the backdrop leaves with the list.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one layer's inputs: the content, where it starts, its handle and the window"
+    )]
+    fn sheet_layers(
+        &self,
+        content: &SelectContent,
+        rows: &Rc<Vec<Row>>,
+        start: Option<usize>,
+        selected: Option<usize>,
+        phase: Phase,
+        handle: &Handle,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        let theme = content.theme.unwrap_or(self.theme);
+        let focus = self.scope.read(cx).handle.clone();
+        let view = surface::View {
+            rows,
+            value: self.selected(cx),
+            start,
+            selected,
+            geometry: None,
+            popper: true,
+        };
+        let body = theme.scoped(cx, |cx| surface::build_sheet(self, &view, &focus, cx));
+        let select = self.clone();
+        Presented {
+            grabber: present::decorative_handle(&self.id, &self.sheet),
+            id: self.id.clone(),
+            phase,
+            handle: Some(handle.clone()),
+            theme,
+            state: self.sheet.clone(),
+            focus,
+            scope: None,
+            title: None,
+            expandable: None,
+            content: vec![body],
+            selector: "select-content",
+            on_dismiss: Rc::new(move |reason, window, cx| {
+                // Radix Select prevents the focus-outside dismissal: the list holds focus.
+                if reason != Reason::FocusOutside {
+                    select.set_open(false, window, cx);
+                }
+            }),
+        }
+        .layers(window, cx)
     }
 
     #[expect(

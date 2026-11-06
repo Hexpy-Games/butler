@@ -144,6 +144,13 @@ fn editor(p: &Parts, s: &Sizing, scroll: Option<&ScrollHandle>, cx: &App) -> Any
     }
 }
 
+/// The field's tab stop. The editor's own focus handle is not one, so a zero-size element
+/// tracks it and registers it in the tab order (Tab reaches a text field as it does in React).
+/// It comes before the editor, so the editor's key context stays the one the handle resolves to.
+fn tab_stop(p: &Parts) -> Option<Div> {
+    (!p.spec.disabled).then(|| div().absolute().size_0().track_focus(&p.handle))
+}
+
 /// The box behind a bordered field: fill and border, and the ring around it.
 fn surface(p: &Parts, cx: &App) -> (Div, Option<Div>) {
     let ds = Ds::get(cx);
@@ -172,6 +179,7 @@ fn boxed(p: &Parts, frame: Div, editor: AnyElement, cx: &App) -> AnyElement {
         .debug_selector(move || anchor.to_string())
         .child(fill)
         .children(ring)
+        .children(tab_stop(p))
         .child(editor)
         .children(p.focused.then(|| focus::publish(p.handle.clone(), room)))
         .into_any_element()
@@ -266,6 +274,7 @@ fn underline_line(p: &Parts, hover: &Entity<bool>, cx: &App) -> AnyElement {
                 cx.notify();
             });
         })
+        .children(tab_stop(p))
         .child(editor(p, &sizing, None, cx))
         .child(line_under(p, p.m.lh))
         .children(p.focused.then(|| focus::publish(p.handle.clone(), room)))
@@ -301,6 +310,7 @@ fn underline_area(p: &Parts, window: &mut Window, cx: &mut App) -> AnyElement {
         .w_full()
         .mb(-reserve)
         .debug_selector(move || anchor.to_string())
+        .children(tab_stop(p))
         .child(editor)
         .child(reveal::follow_caret(
             p.state.clone(),

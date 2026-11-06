@@ -149,8 +149,7 @@ impl RenderOnce for Slider {
         if let (Some(handle), Some(on_change)) = (handle.clone(), self.on_change.clone()) {
             let (value, keys) = (self.value, on_change.clone());
             root = root
-                .track_focus(&handle)
-                .tab_stop(true)
+                .track_focus(&focus::tab_stop(&handle, true))
                 .cursor_pointer()
                 .on_key_down(move |event, window, cx| {
                     if let Some(next) = range.key(&event.keystroke.key, value) {

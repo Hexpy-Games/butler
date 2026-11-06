@@ -10,7 +10,11 @@
 //!                         `@name+dx,dy` a point that far from its centre
 //!   move <n>              pointer onto control n without settling (timers keep running)
 //!   press <n>             pointer onto control n and the left button down, held
-//!   release               the left button up
+//!   release               the left button up (everything it starts settles)
+//!   park                  the pointer to the window's top-left corner (no hover left behind)
+//!   letgo                 the left button up, the motion it starts still in flight (use `wait`)
+//!   dragby <dy> <ms> [dx] the held pointer travels dy px over ms (a sheet's drag; its flick speed)
+//!   keyboard-inset <px>   the on-screen keyboard's height, which lifts an open sheet
 //!   click <n>             a full click on control n
 //!   tap <n>               a click on control n without settling (motion in flight; use `wait`)
 //!   right <story> <dx> <dy>  a right click `dx`, `dy` px inside story n's canvas
@@ -24,6 +28,7 @@
 //!   mark <name>           remember where anchor `name` is (for `expect unmoved`)
 //!   expect tooltip open|closed | focused <n> | clipboard <text> | control <n> | anchor <name>
 //!         | no-anchor <name> | layers <n> | modal open|closed | unmoved <name> | moved <name>
+//!         | shifted <name> <dy> [tol]  (the anchor's top is `dy` px below where `mark` saw it)
 //!   shot <name> [margin]  `<page>.<name>.png`: the owning story canvas plus `margin` (64) px each side
 //!   window <name>         `<page>.<name>.window.png`: the whole window
 //!   quit
@@ -43,6 +48,7 @@ use crate::shots::{self, Options};
 /// Margin around the owning story canvas of a state shot (logical px).
 pub(crate) const MARGIN: f32 = 64.;
 
+mod drag;
 mod menu;
 mod scroll;
 
@@ -250,6 +256,7 @@ impl Live {
                 .is_some(),
             "anchor" => self.cx.debug_bounds(self.handle, arg)?.is_some(),
             "no-anchor" => self.cx.debug_bounds(self.handle, arg)?.is_none(),
+            "shifted" => self.shifted(arg),
             "unmoved" | "moved" => {
                 let now = self.cx.debug_bounds(self.handle, arg)?;
                 let same = now.is_some() && now == self.marks.get(arg).copied();
@@ -326,19 +333,6 @@ impl Live {
                 self.wait(20);
                 Ok(())
             }
-            "press" => {
-                let at = self.center(arg)?;
-                self.move_to(at)?;
-                self.settle();
-                self.button(true)?;
-                self.wait(100);
-                Ok(())
-            }
-            "release" => {
-                self.button(false)?;
-                self.settle();
-                Ok(())
-            }
             "click" => {
                 let at = self.center(arg)?;
                 self.move_to(at)?;
@@ -369,7 +363,13 @@ impl Live {
                 self.wait(arg.parse()?);
                 Ok(())
             }
+            "press" => self.press(arg),
+            "release" => self.release(),
+            "park" => self.park(),
+            "letgo" => self.let_go(),
             "right" => self.right_click(arg),
+            "dragby" => self.drag_by(arg),
+            "keyboard-inset" => self.keyboard_inset(arg),
             "mark" => self.mark(arg),
             "scroll" => self.scroll(arg),
             "scrollto" => self.scroll_to(arg),

@@ -178,8 +178,7 @@ impl RenderOnce for SelectButton {
         root = if self.disabled {
             root.cursor_default()
         } else {
-            root.track_focus(&handle)
-                .tab_stop(true)
+            root.track_focus(&focus::tab_stop(&handle, true))
                 .cursor_pointer()
                 .children(focused.then(|| focus::publish(handle, room)))
         };

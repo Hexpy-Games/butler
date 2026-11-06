@@ -71,6 +71,14 @@ pub(crate) fn register(cx: &mut App, handle: FocusHandle, state: Entity<Editable
         .push((handle, state));
 }
 
+/// Focus has just moved onto a text field by Tab or by script: a browser selects an input's text
+/// then (a mouse press does not). Call it after moving focus; it does nothing off a field.
+pub fn select_focused(window: &mut Window, cx: &mut App) {
+    if focused(window, cx).is_some() {
+        window.dispatch_action(actions::SelectAll.boxed_clone(), cx);
+    }
+}
+
 /// The editor of the focused field of the last frame.
 pub fn focused(window: &Window, cx: &App) -> Option<Entity<EditableTextState>> {
     let registry = cx.try_global::<Registry>()?;

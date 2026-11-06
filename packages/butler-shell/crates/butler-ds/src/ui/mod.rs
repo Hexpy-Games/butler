@@ -2,6 +2,7 @@
 //! `Global`) carries the token context the app keeps current; components read it at render time.
 pub mod arc;
 pub mod assets;
+pub mod bottom_sheet;
 pub mod button;
 pub mod card;
 pub mod clickable;

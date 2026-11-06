@@ -25,8 +25,8 @@ pub enum Presentation {
     /// Anchored to the trigger: the app-wide default (`DEFAULT_OVERLAY_PRESENTATION`).
     #[default]
     Popover,
-    /// Always a bottom sheet. The sheet itself is built with BottomSheet (batch B5); until then
-    /// an overlay that resolves to one keeps its anchored presentation.
+    /// Always a bottom sheet (`bottom_sheet::present`): the overlay keeps its keyboard,
+    /// typeahead and dismissal and opens pinned to the bottom edge under a backdrop.
     Sheet,
 }
 

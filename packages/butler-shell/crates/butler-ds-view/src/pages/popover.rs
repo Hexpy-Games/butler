@@ -1,6 +1,6 @@
 //! Popover.showcase.tsx. ComposerControl, FilteredSelectPopover and SuggestionList are
-//! stand-ins (`standins_overlay.rs`); the "Bottom sheet on phones" story shows its trigger and
-//! stays anchored until BottomSheet (batch B5) provides the sheet presentation.
+//! stand-ins (`standins_overlay.rs`); the "Bottom sheet on phones" story opens as a BottomSheet
+//! below 768px.
 use std::rc::Rc;
 
 use butler_ds::ui::Icon;
@@ -283,8 +283,7 @@ fn anchor_width(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-/// `presentation="auto"`: a BottomSheet below 768px, the anchored popover above. The sheet is
-/// batch B5's; here the popover stays anchored.
+/// `presentation="auto"`: a BottomSheet below 768px, the anchored popover above.
 fn sheet(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let popover = Popover::new("popover-sheet", window, cx);

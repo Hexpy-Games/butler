@@ -73,7 +73,7 @@ pub(super) fn build(sel: &Select, view: &View<'_>, focus: &FocusHandle, cx: &App
         .parts
         .item
         .bounds()
-        .map_or(f32::from(ds.len(Length::MenuItemHeight)), |b| {
+        .map_or(f32::from(ds.menu_item_height()), |b| {
             f32::from(b.size.height)
         });
     let rows = row_elements(sel, view, ds, highlight);
@@ -134,6 +134,46 @@ pub(super) fn build(sel: &Select, view: &View<'_>, focus: &FocusHandle, cx: &App
         sized = sized.max_h(px(limit));
     }
     sized.into_any_element()
+}
+
+/// The list in a BottomSheet (`position="popper"` content with the sheet props): no glass of its
+/// own, no scroll buttons; the viewport is the sheet's scrolling body. The key handler, focus and
+/// the press-drag-release listeners are the anchored list's.
+pub(super) fn build_sheet(
+    sel: &Select,
+    view: &View<'_>,
+    focus: &FocusHandle,
+    cx: &mut App,
+) -> AnyElement {
+    let (highlight, scroll) = {
+        let rt = sel.rt.read(cx);
+        (rt.highlight, rt.scroll.clone())
+    };
+    let rows = crate::ui::bottom_sheet::present::rows(cx, |cx| {
+        row_elements(sel, view, Ds::get(cx), highlight)
+    });
+    let ds = Ds::get(cx);
+    let viewport = crate::ui::bottom_sheet::body(
+        SharedString::from(format!("{}-viewport", sel.id)),
+        Some(&scroll),
+        ds,
+    )
+    .on_scroll_wheel(|_, window, _| window.refresh())
+    .children(rows);
+    let keys = (sel.clone(), view.rows.clone());
+    crate::ui::bottom_sheet::shrinking(div())
+        .relative()
+        .track_focus(focus)
+        .tab_stop(false)
+        .on_key_down(move |event, window, cx| {
+            if super::keys::handle(&keys.0, &keys.1, event, window, cx) {
+                cx.stop_propagation();
+            }
+        })
+        .child(viewport)
+        .child(sel.parts.content.probe())
+        .child(pointer_guard(sel))
+        .into_any_element()
 }
 
 /// The rows of the list, with the highlight and the chosen value marked.
@@ -222,7 +262,7 @@ fn item(
     let min = if ds.compact() {
         ds.len(Length::ControlHitTarget)
     } else {
-        ds.len(Length::MenuItemHeight)
+        ds.menu_item_height()
     };
     let selection = ds.color(Color::Selection);
     let label = div()

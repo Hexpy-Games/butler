@@ -205,8 +205,7 @@ impl Tabs {
         let ring = focus::visible(ds, handle.is_focused(window), false);
         let mut panel = div()
             .id((self.id.clone(), "panel"))
-            .track_focus(&handle)
-            .tab_stop(true)
+            .track_focus(&focus::tab_stop(&handle, true))
             .min_w_0()
             .rounded(ds.len(Length::RadiusControl))
             .text_color(ds.color(crate::tokens::Color::TextPrimary))

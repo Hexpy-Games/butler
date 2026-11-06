@@ -25,6 +25,8 @@ use level::Level;
 use runtime::{Runtime, first_enabled};
 
 use crate::tokens::Duration as DsDuration;
+use crate::ui::bottom_sheet::SheetState;
+use crate::ui::bottom_sheet::present::{self, Presented};
 use crate::ui::context::Ds;
 use crate::ui::layer::Z;
 use crate::ui::overlay::dismiss::{Dismissable, Handle, Reason};
@@ -56,6 +58,8 @@ pub(crate) struct Spec {
     pub theme: Option<Theme>,
     /// The trigger's focus handle: focus on it is not outside.
     pub trigger_focus: Option<FocusHandle>,
+    /// Presented as a BottomSheet (DropdownMenu with `presentation` resolved to a sheet).
+    pub sheet: bool,
 }
 
 /// An open menu's runtime: state owned by the keyed states of its id.
@@ -66,6 +70,7 @@ pub(crate) struct Menu {
     life: Entity<Lifecycle>,
     scope: Entity<Scope>,
     rt: Entity<Runtime>,
+    sheet: Entity<SheetState>,
     pub(crate) parts: Parts,
     /// Set from the owner's [`Spec`] when the layer is built: focus is trapped and does not
     /// dismiss.
@@ -87,7 +92,8 @@ impl Menu {
             open: window.use_keyed_state((key.clone(), "open"), cx, |_, _| false),
             life: window.use_keyed_state((key.clone(), "life"), cx, |_, _| Lifecycle::default()),
             scope: window.use_keyed_state((key.clone(), "scope"), cx, |_, cx| Scope::new(cx)),
-            rt: window.use_keyed_state((key, "runtime"), cx, |_, _| Runtime::default()),
+            rt: window.use_keyed_state((key.clone(), "runtime"), cx, |_, _| Runtime::default()),
+            sheet: window.use_keyed_state((key, "sheet"), cx, |_, _| SheetState::default()),
             id,
             parts,
             modal: false,
@@ -154,7 +160,11 @@ impl Menu {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
-        let exit = Ds::get(cx).duration(DsDuration::MotionExitMenu);
+        let exit = Ds::get(cx).duration(if spec.sheet {
+            DsDuration::MotionExitSlow
+        } else {
+            DsDuration::MotionExitMenu
+        });
         let open = self.is_open(cx);
         let root = Rc::new(Level::flatten(entries));
         let first = first_enabled(&root);
@@ -183,9 +193,61 @@ impl Menu {
             modal: spec.modal,
             ..self.clone()
         };
+        if spec.sheet {
+            let layers = this.sheet_layers(spec, &root, synced.phase, synced.handle, window, cx);
+            return footprint(layers);
+        }
         let layer = this.layer(spec, &root, synced.phase, synced.handle, window, cx);
         let under = spec.modal.then(|| scrim(Z::Popover, window));
         footprint(div().children(under).child(layer))
+    }
+
+    /// What a row and its handlers need of this menu.
+    fn env(&self, sheet: bool) -> Env {
+        Env {
+            menu: self.clone(),
+            rt: self.rt.clone(),
+            id: self.id.clone(),
+            sheet,
+        }
+    }
+
+    /// The BottomSheet presentation: the root level's rows in the sheet's body, under its
+    /// backdrop. Keyboard, typeahead and dismissal are the anchored menu's.
+    fn sheet_layers(
+        &self,
+        spec: &Spec,
+        root: &Rc<Level>,
+        phase: Phase,
+        handle: Option<Handle>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        let theme = spec.theme.unwrap_or(self.theme);
+        let focus = self.scope.read(cx).handle.clone();
+        let env = self.env(true);
+        let content = theme.scoped(cx, |cx| {
+            present::rows(cx, |cx| {
+                surface::root(&env, root, None, handle.as_ref(), &focus, window, cx)
+            })
+        });
+        let menu = self.clone();
+        Presented {
+            grabber: present::decorative_handle(&self.id, &self.sheet),
+            id: self.id.clone(),
+            phase,
+            handle,
+            theme,
+            state: self.sheet.clone(),
+            focus,
+            scope: None,
+            title: None,
+            expandable: None,
+            content: vec![content],
+            selector: "menu-content",
+            on_dismiss: Rc::new(move |reason, window, cx| menu.dismiss(reason, window, cx)),
+        }
+        .layers(window, cx)
     }
 
     fn layer(
@@ -211,11 +273,7 @@ impl Menu {
             Phase::Exiting { frozen, .. } => frozen,
             _ => None,
         };
-        let env = Env {
-            menu: self.clone(),
-            rt: self.rt.clone(),
-            id: self.id.clone(),
-        };
+        let env = self.env(false);
         let cap = spec.cap_height.then(|| shown.map(|r| r.available_height));
         let content = theme.scoped(cx, |cx| {
             surface::root(
@@ -276,6 +334,8 @@ struct Env {
     menu: Menu,
     rt: Entity<Runtime>,
     id: SharedString,
+    /// The root level is a BottomSheet's body.
+    sheet: bool,
 }
 
 /// The layer takes no room in the layout around it (Radix portals the surface out of it).

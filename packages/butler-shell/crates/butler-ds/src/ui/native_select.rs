@@ -291,8 +291,7 @@ fn assemble(
         Some(handle) => {
             let keys = menu.clone();
             let room = focus::room(ds);
-            root.track_focus(&handle)
-                .tab_stop(true)
+            root.track_focus(&focus::tab_stop(&handle, true))
                 .cursor_pointer()
                 .on_click(move |_, window, cx| menu.open(window, cx))
                 .on_key_down(move |event, window, cx| {

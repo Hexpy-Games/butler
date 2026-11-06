@@ -41,6 +41,7 @@
     { "page": "context-menu", "entry": "components/ContextMenu" },
     { "page": "select", "entry": "components/Select" },
     { "page": "dialog", "entry": "components/Dialog" },
-    { "page": "toast", "entry": "components/Toast" }
+    { "page": "toast", "entry": "components/Toast" },
+    { "page": "bottom-sheet", "entry": "components/BottomSheet" }
   ]
 }

@@ -1,4 +1,5 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
+mod bottom_sheet;
 mod boxes;
 mod button;
 mod card;
@@ -99,6 +100,7 @@ pub(crate) fn all() -> Vec<Page> {
         page!("context-menu", "ContextMenu", context_menu),
         page!("select", "Select", select),
         page!("dialog", "Dialog", dialog),
+        page!("bottom-sheet", "BottomSheet", bottom_sheet),
         page!("toast", "Toast", toast),
         page!("button", "Button", button),
         page!("icon-button", "IconButton", icon_button),
