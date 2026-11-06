@@ -76,3 +76,12 @@ control holds, e.g. `value-percent-50`, so a smoke can check what a click or key
 `--motion` keeps motion on (the default reduces it, so every frame is at rest; the Spinner is exempt and
 always runs). The React states scene lists the NavRow controls of the ProgressRing page, which the native
 page does not have yet, so its `advance-click` target is 0 natively.
+
+### B3 additions (scroll, collapsible, tabs)
+
+`ds-view-states.json` also has `scroll` states (`target` is the story index; `dx`/`dy` scroll its first
+edge-fade scroller), `clicks` (a click repeated, 700 ms apart) and an optional `native` control number
+for pages where the viewer counts more tab stops than the native page (the Tabs page: tablists and
+tab panels). The live harness gains `scroll <story> <dx> <dy>` (the wheel over story n, 0-based; positive
+moves further along the content); `focus <n>` now also points the next `shot` at the control's story.
+ScrollArea stories name zero-size markers (`expect anchor scroll-overflows:start|middle|end|fits`).

@@ -3,6 +3,7 @@ mod boxes;
 mod button;
 mod card;
 mod clickable;
+mod collapsible;
 mod copy_button;
 mod done_icon_button;
 mod glyph_toggle;
@@ -15,6 +16,7 @@ mod layout;
 mod pill_button;
 mod presence;
 mod progress_ring;
+mod scroll_area;
 mod segmented_control;
 mod separator;
 mod skeleton;
@@ -23,6 +25,7 @@ mod spinner;
 mod stack;
 mod success_check;
 mod switch;
+mod tabs;
 mod tinted_glass;
 mod tooltip;
 mod typo;
@@ -90,6 +93,9 @@ pub(crate) fn all() -> Vec<Page> {
         page!("skeleton", "Skeleton", skeleton),
         page!("progress-ring", "ProgressRing", progress_ring),
         page!("success-check", "SuccessCheck", success_check),
+        page!("scroll-area", "ScrollArea", scroll_area),
+        page!("collapsible", "Collapsible", collapsible),
+        page!("tabs", "Tabs", tabs),
     ]
 }
 

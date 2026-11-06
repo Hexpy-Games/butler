@@ -17,7 +17,7 @@ const scale = Number(value("--scale", "2"));
 const locale = value("--locale", "ko")!;
 const only = value("--only")?.split(",");
 const pages = JSON.parse(readFileSync(new URL("./scenes/ds-view.json", import.meta.url), "utf8")).pages as Array<{ page: string; entry: string }>;
-const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as Array<{ page: string; name: string; state: string; target: number; wait_ms: number }>).filter(s => !only || only.includes(s.page));
+const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as Array<{ page: string; name: string; state: string; target: number; wait_ms: number; clicks?: number; dx?: number; dy?: number }>).filter(s => !only || only.includes(s.page));
 const root = resolve(site);
 const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".txt": "text/plain" };
 const server = Bun.serve({
@@ -31,6 +31,14 @@ const server = Bun.serve({
 const TALL = 7000;
 const MARGIN = 64;
 const SELECTOR = 'button, [role="button"], [role="radio"], [role="switch"], input[type="range"], [tabindex="0"]';
+async function shoot(page: import("playwright").Page, s: { page: string; name: string }, story: number, dir: string, width: number) {
+  const canvas = await page.evaluate(`(() => { const b = document.querySelectorAll("[data-ds-fixture-canvas]")[${story}].getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, w: b.width, h: b.height }; })()`) as { x: number; y: number; w: number; h: number };
+  const x0 = Math.max(0, canvas.x - MARGIN), y0 = Math.max(0, canvas.y - MARGIN);
+  const x1 = Math.min(width, canvas.x + canvas.w + MARGIN), y1 = Math.min(TALL, canvas.y + canvas.h + MARGIN);
+  const crop = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  await page.screenshot({ path: join(dir, `${s.page}.${s.name}.png`), clip: { x: crop.x, y: crop.y, width: crop.w, height: crop.h } });
+  writeFileSync(join(dir, `${s.page}.${s.name}.json`), JSON.stringify({ crop, story }, null, 2));
+}
 const browser = await chromium.launch();
 try {
   for (const size of sizes) for (const theme of themes) {
@@ -48,6 +56,14 @@ try {
       await page.setViewportSize({ width, height: TALL });
       await page.evaluate("new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))");
       await page.evaluate(`(() => { const seen = new Set(); window.__targets = []; document.querySelectorAll("[data-ds-fixture-canvas]").forEach((c, si) => c.querySelectorAll(${JSON.stringify(SELECTOR)}).forEach(el => { if (!seen.has(el)) { seen.add(el); window.__targets.push({ el, si }); } })); })()`);
+      if (s.state === "scroll") {
+        // target is the story index; scroll its first edge-fade scroller by (dx, dy).
+        await page.evaluate(`(() => { const c = document.querySelectorAll("[data-ds-fixture-canvas]")[${s.target}]; const el = c.querySelector("[data-scroll-fade]"); el.scrollBy(${s.dx ?? 0}, ${s.dy ?? 0}); })()`);
+        await page.waitForTimeout(s.wait_ms);
+        await shoot(page, s, s.target, dir, width);
+        await page.close();
+        continue;
+      }
       const handle = await page.evaluateHandle(`window.__targets[${s.target}].el`);
       const element = handle.asElement();
       const story = (await page.evaluate(`window.__targets[${s.target}].si`)) as number;
@@ -56,14 +72,9 @@ try {
       if (s.state === "hover") await element.hover();
       else if (s.state === "press") { const b = (await element.boundingBox())!; await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.down(); }
       else if (s.state === "focus") { await page.keyboard.press("Shift"); await element.focus(); }
-      else await element.click();
+      else for (let n = 0; n < (s.clicks ?? 1); n++) { await element.click(); if (n + 1 < (s.clicks ?? 1)) await page.waitForTimeout(700); }
       await page.waitForTimeout(s.state === "press" || s.state === "focus" ? Math.max(150, s.wait_ms) : s.wait_ms);
-      const canvas = await page.evaluate(`(() => { const b = document.querySelectorAll("[data-ds-fixture-canvas]")[${story}].getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, w: b.width, h: b.height }; })()`) as { x: number; y: number; w: number; h: number };
-      const x0 = Math.max(0, canvas.x - MARGIN), y0 = Math.max(0, canvas.y - MARGIN);
-      const x1 = Math.min(width, canvas.x + canvas.w + MARGIN), y1 = Math.min(TALL, canvas.y + canvas.h + MARGIN);
-      const crop = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-      await page.screenshot({ path: join(dir, `${s.page}.${s.name}.png`), clip: { x: crop.x, y: crop.y, width: crop.w, height: crop.h } });
-      writeFileSync(join(dir, `${s.page}.${s.name}.json`), JSON.stringify({ crop, story }, null, 2));
+      await shoot(page, s, story, dir, width);
       if (s.state === "press") await page.mouse.up();
       await page.close();
     }
