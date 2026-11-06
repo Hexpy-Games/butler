@@ -42,6 +42,11 @@ impl Timing {
         }
     }
 
+    /// The eased value at linear progress `x` (0 to 1).
+    pub fn ease(&self, x: f32) -> f32 {
+        (self.ease)(x)
+    }
+
     pub fn linear(duration: Duration) -> Self {
         Self {
             duration,

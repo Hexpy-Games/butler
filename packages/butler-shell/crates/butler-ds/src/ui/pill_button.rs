@@ -38,6 +38,7 @@ pub struct PillButton {
     pressed: bool,
     count: Option<SharedString>,
     drop: bool,
+    accent: bool,
     disabled: bool,
     on_click: Option<Handler>,
 }
@@ -54,6 +55,7 @@ impl PillButton {
             pressed: false,
             count: None,
             drop: false,
+            accent: false,
             disabled: false,
             on_click: None,
         }
@@ -94,6 +96,12 @@ impl PillButton {
     /// A drag is over the chip: the accent drop ring.
     pub fn drop_target(mut self) -> Self {
         self.drop = true;
+        self
+    }
+
+    /// An accent edge and accent text (the scroll-to-bottom chip while messages are unread).
+    pub fn accent(mut self, accent: bool) -> Self {
+        self.accent = accent;
         self
     }
 
@@ -168,6 +176,12 @@ impl PillButton {
         let selection = ds.color(Color::Selection);
         if self.surface == Surface::Glass {
             Self::glass(&mut control, ds);
+        }
+        if self.accent {
+            // `color-mix(in srgb, var(--accent) 58%, var(--line))`
+            let edge = convert::mix(ds.color(Color::Accent), ds.color(Color::Line), 0.58); // DS: ConversationShell.module.css:216
+            control.border = Some((px(1.), Blend::hover(edge, ds.color(Color::LineStrong))));
+            control.fg = Blend::flat(ds.color(Color::AccentText));
         }
         if self.pressed {
             control.fill = Blend::hover(ds.color(Color::SelectionStrong), selection);

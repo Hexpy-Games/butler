@@ -8,9 +8,12 @@ use gpui::{
     SharedString, Styled as _, Window, div, linear_color_stop, linear_gradient, px,
 };
 
+use super::Icon;
+use super::blocks::scope::{self, ActionScale};
 use super::button::{Button, Size, Variant};
 use super::context::Ds;
 use super::control::{Blend, Control, Disabled, DisabledLook, Width, over};
+use super::icon::icon_px;
 use super::tooltip::Tooltip;
 use crate::tokens::{Color, Length, Number};
 
@@ -45,6 +48,8 @@ pub struct IconButton {
     id: ElementId,
     label: SharedString,
     icon: Option<AnyElement>,
+    glyph: Option<Icon>,
+    scale: Option<ActionScale>,
     selected: bool,
     optical_end: bool,
     tone: Tone,
@@ -67,6 +72,8 @@ impl IconButton {
             id: id.into(),
             label: label.into(),
             icon: None,
+            glyph: None,
+            scale: None,
             selected: false,
             optical_end: false,
             tone: Tone::Default,
@@ -84,6 +91,13 @@ impl IconButton {
 
     pub fn icon(mut self, icon: impl IntoElement) -> Self {
         self.icon = Some(icon.into_any_element());
+        self
+    }
+
+    /// A DS glyph at the icon size of the enclosing scope (`--icon-size-md` outside one): a
+    /// title row or a sidebar resizes the svg of its buttons.
+    pub fn glyph(mut self, glyph: Icon) -> Self {
+        self.glyph = Some(glyph);
         self
     }
 
@@ -176,7 +190,10 @@ impl IconButton {
             .variant(Variant::Ghost)
             .size(Size::IconSm)
             .control(ds);
-        let size = f32::from(ds.len(Length::ControlHeightMd));
+        let size = self.scale.map_or_else(
+            || f32::from(ds.len(Length::ControlHeightMd)),
+            |scale| scale.side,
+        );
         let side = if ds.compact() {
             size.max(f32::from(ds.len(Length::ControlHitTarget)))
         } else {
@@ -220,7 +237,13 @@ impl IconButton {
                 el.relative().left(px(offset)).top(px(-offset))
             }));
         }
-        control.children = self.icon.take().into_iter().collect();
+        let glyph = self.glyph.map(|glyph| {
+            let side = self
+                .scale
+                .map_or_else(|| ds.len(Length::IconSizeMd), |scale| px(scale.icon));
+            icon_px(glyph, side).into_any_element()
+        });
+        control.children = glyph.into_iter().chain(self.icon.take()).collect();
         if self.indicator {
             control.children.push(indicator(ds, self.pane_fill(ds)));
         }
@@ -281,7 +304,8 @@ fn badge(ds: &Ds, count: u32) -> AnyElement {
 }
 
 impl RenderOnce for IconButton {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        self.scale = scope::action_scale(cx);
         let (id, label, menu) = (self.id.clone(), self.label.clone(), self.menu);
         let control = self.control(Ds::get(cx));
         if menu {

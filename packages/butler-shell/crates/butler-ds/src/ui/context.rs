@@ -71,6 +71,9 @@ pub struct Ds {
     keyboard_inset: f32,
     /// Inside a sheet menus and lists have touch-sized rows (`--menu-item-height: 44px`).
     sheet_rows: bool,
+    /// Tokens a subtree re-points to others (`--text-secondary: var(--sidebar-text-secondary)`
+    /// on the shell's text): consulted by [`Self::color`], applied in order of nesting.
+    remap: Vec<(Color, Color)>,
 }
 
 impl Global for Ds {}
@@ -92,6 +95,7 @@ impl Ds {
             code_font,
             keyboard_inset: 0.,
             sheet_rows: false,
+            remap: Vec::new(),
         }
     }
 
@@ -226,7 +230,34 @@ impl Ds {
     }
 
     pub fn color(&self, token: Color) -> Hsla {
-        convert::hsla(self.tokens.color(token))
+        convert::hsla(self.tokens.color(self.remapped(token)))
+    }
+
+    /// Re-points colour tokens for a subtree and returns the mark to hand to [`Self::end_remap`].
+    pub fn begin_remap(&mut self, pairs: &[(Color, Color)]) -> usize {
+        let mark = self.remap.len();
+        self.remap.extend_from_slice(pairs);
+        mark
+    }
+
+    pub fn end_remap(&mut self, mark: usize) {
+        self.remap.truncate(mark);
+    }
+
+    /// `token`, followed through the subtree's re-pointings (the latest wins; a chain such as
+    /// text, then sidebar text, then the platform's sidebar text resolves in one go).
+    fn remapped(&self, mut token: Color) -> Color {
+        for _ in 0..4 {
+            match self.remap.iter().rev().find(|(from, _)| *from == token) {
+                Some((_, to)) if *to != token => token = *to,
+                _ => break,
+            }
+        }
+        token
+    }
+
+    pub fn density(&self) -> Density {
+        self.tokens.density
     }
 
     pub fn len(&self, token: Length) -> Pixels {
