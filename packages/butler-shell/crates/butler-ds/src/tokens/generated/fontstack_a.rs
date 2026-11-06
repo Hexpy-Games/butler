@@ -10,7 +10,7 @@ pub enum FontStack {
 #[rustfmt::skip]
 pub(in crate::tokens) static FONTSTACK_0: &[&[&str]] = &[
     &["Pretendard Variable", "Pretendard", "-apple-system", "BlinkMacSystemFont", "system-ui", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "Segoe UI", "Roboto", "sans-serif", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"],
-    &["IBM Plex Mono", "ui-monospace", "SF Mono", "Menlo", "Consolas", "Pretendard Variable", "monospace"],
+    &["IBM Plex Mono", "IBM Plex Sans KR", "ui-monospace", "SF Mono", "Menlo", "Consolas", "Pretendard Variable", "monospace"],
 ];
 #[rustfmt::skip]
 pub(in crate::tokens) static FONTSTACK_4: &[(FontStack, &[&str])] = &[
