@@ -104,7 +104,7 @@ pub(super) fn stories() -> Vec<Story> {
 fn access(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let popover = Popover::new("popover-access", window, cx);
-    let trigger = popover.trigger(cx, |toggle| {
+    let trigger = popover.trigger(|toggle| {
         composer_control(
             "popover-access-trigger",
             Icon::ShieldCheck,
