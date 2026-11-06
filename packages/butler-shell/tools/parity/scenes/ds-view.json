@@ -48,12 +48,14 @@
     { "page": "unread-dot", "entry": "components/UnreadDot" },
     { "page": "aspect-frame", "entry": "components/AspectFrame" },
     { "page": "meta-list", "entry": "components/MetaList" },
+    { "page": "icon-tile", "entry": "components/IconTile" },
     { "page": "rolling-swap", "entry": "components/RollingSwap" },
     { "page": "rolling-status-line", "entry": "components/RollingStatusLine" },
     { "page": "animated-number", "entry": "components/AnimatedNumber" },
     { "page": "avatar", "entry": "components/Avatar" },
     { "page": "expandable-text", "entry": "components/ExpandableText" },
     { "page": "media-frame", "entry": "components/MediaFrame" },
-    { "page": "inline-reference", "entry": "components/InlineReference" }
+    { "page": "inline-reference", "entry": "components/InlineReference" },
+    { "page": "butler-thinking-mark", "entry": "components/ButlerThinkingMark" }
   ]
 }
