@@ -1,10 +1,8 @@
-//! Label.showcase.tsx. Switch and Input arrive in B2/B3; the stand-ins draw only what the
-//! labels sit above.
-use butler_ds::tokens::{Color, Length};
-use butler_ds::ui::context::Ds;
+//! Label.showcase.tsx. Input arrives in B3; its stand-in draws only what the label sits above.
 use butler_ds::ui::label::Label;
 use butler_ds::ui::layout::{Space, Stack};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div, px};
+use butler_ds::ui::switch::Switch;
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
@@ -14,8 +12,9 @@ pub(super) fn stories() -> Vec<Story> {
     vec![
         Story {
             name: "Above a switch (stacked switch field)",
-            render: |lang, _, cx| {
-                switch_field(lang.pick("Developer mode", "개발자 모드"), true, false, cx)
+            render: |lang, _, _| {
+                let label = lang.pick("Developer mode", "개발자 모드");
+                switch_field("label-developer-mode", label, true, false)
             },
         },
         Story {
@@ -24,35 +23,23 @@ pub(super) fn stories() -> Vec<Story> {
         },
         Story {
             name: "Disabled control",
-            render: |lang, _, cx| {
-                switch_field(lang.pick("Search the web", "웹 검색 사용"), false, true, cx)
+            render: |lang, _, _| {
+                let label = lang.pick("Search the web", "웹 검색 사용");
+                switch_field("label-search", label, false, true)
             },
         },
     ]
 }
 
-/// A Switch stand-in (track only, 32 x 18): the control the label names.
-fn switch(on: bool, disabled: bool, cx: &App) -> AnyElement {
-    let ds = Ds::get(cx);
-    let track = ds.color(if on {
-        Color::Primary
-    } else {
-        Color::SwitchTrackBg
-    });
-    div()
-        .w(px(32.))
-        .h(px(18.))
-        .rounded(ds.len(Length::RadiusPill))
-        .bg(track)
-        .opacity(if disabled { 0.5 } else { 1. }) // DS: Switch.module.css disabled tone
-        .into_any_element()
-}
-
-fn switch_field(label: &'static str, on: bool, disabled: bool, cx: &mut App) -> AnyElement {
+fn switch_field(id: &'static str, label: &'static str, on: bool, disabled: bool) -> AnyElement {
+    let mut switch = Switch::new(id).default_checked(on);
+    if disabled {
+        switch = switch.disabled();
+    }
     Stack::new()
         .gap(Space::Sm)
         .child(Label::new().child(label))
-        .child(switch(on, disabled, cx))
+        .child(switch)
         .into_any_element()
 }
 

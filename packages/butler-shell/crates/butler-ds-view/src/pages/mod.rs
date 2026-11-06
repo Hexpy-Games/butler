@@ -14,9 +14,12 @@ mod label;
 mod layout;
 mod pill_button;
 mod presence;
+mod segmented_control;
 mod separator;
+mod slider;
 mod stack;
 mod success_check;
+mod switch;
 mod tinted_glass;
 mod tooltip;
 mod typo;
@@ -77,6 +80,9 @@ pub(crate) fn all() -> Vec<Page> {
         page!("copy-button", "CopyButton", copy_button),
         page!("done-icon-button", "DoneIconButton", done_icon_button),
         page!("glyph-toggle", "GlyphToggle", glyph_toggle),
+        page!("segmented-control", "SegmentedControl", segmented_control),
+        page!("switch", "Switch", switch),
+        page!("slider", "Slider", slider),
         page!("success-check", "SuccessCheck", success_check),
     ]
 }
