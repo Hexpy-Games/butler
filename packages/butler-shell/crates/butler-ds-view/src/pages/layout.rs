@@ -3,12 +3,13 @@ use butler_ds::ui::layout::{
     AlignSelf, Basis, Columns, Cross, Grid, GridItem, Justify, MaxWidth, MinWidth, Space, Span,
     Stack, StackItem, WithItem as _,
 };
+use butler_ds::ui::text::Input;
 use butler_ds::ui::typo::{TextAlign, Tone, Typo, Wrap};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::{input_placeholder, tag};
+use crate::standins::tag;
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
@@ -108,7 +109,7 @@ fn field_width(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
                 .basis(Basis::Md)
                 .min_width(MinWidth::Zero)
                 .max_width(MaxWidth::Field)
-                .child(input_placeholder(field, cx)),
+                .child(Input::new("layout-field").placeholder(field)),
         )
         .child(tag(period, cx))
         .into_any_element()

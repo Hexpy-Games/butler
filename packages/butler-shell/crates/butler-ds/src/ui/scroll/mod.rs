@@ -5,4 +5,4 @@ mod bar;
 pub mod engine;
 
 pub use area::{Bleed, MaxHeight, MinHeight, ScrollArea};
-pub use engine::{Axis, Config, Flags, Scroller, read, scroller};
+pub use engine::{Axis, Config, Fade, Flags, Scroller, fade, read, scroller};

@@ -890,7 +890,9 @@ name = "butler-ds"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "butler-platform",
  "gpui-ce",
+ "gpui_ce_elements",
 ]
 
 [[package]]

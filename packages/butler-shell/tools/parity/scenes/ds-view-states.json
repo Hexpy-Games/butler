@@ -1,5 +1,5 @@
 {
- "readme": "State shots. 'target' is the 0-based index of the control in DOM order over all [data-ds-fixture-canvas] of the page, counting elements matching `button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input[type=\"range\"], [tabindex=\"0\"]` (deduped, natively disabled included). The viewer also renders state-matrix stories after the showcase stories; targets refer to the showcase stories only. Output: <page>.<name>.png cropped to the owning story canvas +/- 64 logical px, clipped to the viewport, and <page>.<name>.json {crop,story}. hover=pointer over; press=mouse down held; focus=Shift key then element.focus(); click=element.click(). 'native' (optional) is the control number on the native page when it differs (the viewer also counts tablists and tab panels, which are tab stops there). 'scroll' states: target is the story index, dx/dy scroll its first edge-fade scroller; 'clicks' repeats a click.",
+ "readme": "State shots. 'target' is the 0-based index of the control in DOM order over all [data-ds-fixture-canvas] of the page, counting elements matching `button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input:not([type=\"hidden\"]), textarea, select, [tabindex=\"0\"]` (deduped, natively disabled included). The viewer also renders state-matrix stories after the showcase stories; targets refer to the showcase stories only. Output: <page>.<name>.png cropped to the owning story canvas +/- 64 logical px, clipped to the viewport, and <page>.<name>.json {crop,story}. hover=pointer over; press=mouse down held; focus=Shift key then element.focus(); click=element.click(). 'native' (optional) is the control number on the native page when it differs (the viewer also counts tablists and tab panels, which are tab stops there). 'scroll' states: target is the story index, dx/dy scroll its first edge-fade scroller; 'clicks' repeats a click.",
  "states": [
   {
    "page": "button",
@@ -386,6 +386,18 @@
    "target": 10,
    "wait_ms": 400,
    "native": 5
-  }
- ]
+  },
+    {"page": "input", "name": "default-focus", "state": "focus", "target": 0, "wait_ms": 150},
+    {"page": "input", "name": "invalid-focus", "state": "focus", "target": 7, "wait_ms": 150},
+    {"page": "input", "name": "underline-hover", "state": "hover", "target": 9, "wait_ms": 100},
+    {"page": "input", "name": "underline-focus", "state": "focus", "target": 9, "wait_ms": 150},
+    {"page": "input", "name": "quiet-focus", "state": "focus", "target": 10, "wait_ms": 300},
+    {"page": "textarea", "name": "default-focus", "state": "focus", "target": 0, "wait_ms": 150},
+    {"page": "textarea", "name": "underline-focus", "state": "focus", "target": 9, "wait_ms": 150},
+    {"page": "field", "name": "select-focus", "state": "focus", "target": 2, "wait_ms": 150},
+    {"page": "field", "name": "textarea-focus", "state": "focus", "target": 3, "wait_ms": 150},
+    {"page": "native-select", "name": "default-focus", "state": "focus", "target": 0, "wait_ms": 150},
+    {"page": "native-select", "name": "sm-focus", "state": "focus", "target": 2, "wait_ms": 150},
+    {"page": "native-select", "name": "stretch-focus", "state": "focus", "target": 4, "wait_ms": 150}
+  ]
 }

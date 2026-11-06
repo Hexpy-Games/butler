@@ -1,5 +1,5 @@
-//! Stand-ins for DS components and blocks that arrive in later batches (Tag, Input, ListRow,
-//! ProgressMeter, SettingsSection, Field, SettingsField, LoadingIndicator, DisclosureRow). They only let
+//! Stand-ins for DS components and blocks that arrive in later batches (Tag, ListRow,
+//! ProgressMeter, SettingsSection, SettingsField, LoadingIndicator, DisclosureRow). They only let
 //! the showcases that use them (Layout, Inline, Label, Clickable, ...) render their layout;
 //! each draws from tokens, follows the React CSS it replaces, and goes away when its primitive
 //! lands. They are not part of `butler-ds`.
@@ -28,28 +28,6 @@ pub(crate) fn tag(text: impl Into<gpui::SharedString>, cx: &App) -> AnyElement {
         .font_family(ds.body_font().clone())
         .text_size(size)
         .line_height(ds.len(Length::TypoCaptionLineHeightTight))
-        .child(text.into())
-        .into_any_element()
-}
-
-/// Input (default variant) showing a placeholder: a bordered field of the default height.
-pub(crate) fn input_placeholder(text: impl Into<gpui::SharedString>, cx: &App) -> AnyElement {
-    let ds = Ds::get(cx);
-    let size = ds.len(Length::FontSize3);
-    div()
-        .flex()
-        .items_center()
-        .w_full()
-        .h(ds.len(Length::ControlHeightMd))
-        .px(gpui::px(10.))
-        .border(ds.len(Length::BorderHairline))
-        .border_color(ds.color(Color::Line))
-        .rounded(ds.len(Length::RadiusControl))
-        .bg(ds.color(Color::SurfaceRaised))
-        .text_color(ds.color(Color::Placeholder))
-        .font_family(ds.body_font().clone())
-        .text_size(size)
-        .line_height(size)
         .child(text.into())
         .into_any_element()
 }
@@ -158,90 +136,6 @@ fn settings_padding(ds: &Ds) -> gpui::Pixels {
     } else {
         ds.len(Length::SettingsSectionPadding)
     }
-}
-
-/// Field (vertical): its children stacked by `--space-2`.
-pub(crate) fn field(children: Vec<AnyElement>, cx: &App) -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
-        .w_full()
-        .min_w_0()
-        .gap(Ds::get(cx).len(Length::Space2))
-        .children(children)
-        .into_any_element()
-}
-
-/// FieldLabel: a Label (`min-height: 18px`) on the label line height, which steps up on mobile.
-pub(crate) fn field_label(text: impl Into<gpui::SharedString>, cx: &App) -> AnyElement {
-    let ds = Ds::get(cx);
-    div()
-        .flex()
-        .items_center()
-        .gap(ds.len(Length::Space2))
-        .min_h(gpui::px(18.)) // DS: Label.module.css:3
-        .text_color(ds.color(Color::TextPrimary))
-        .font_family(ds.body_font().clone())
-        .text_size(ds.len(Length::FontSize3))
-        .font_weight(gpui::FontWeight(
-            ds.number(butler_ds::tokens::Number::FontWeightMedium),
-        ))
-        .line_height(ds.len(Length::TypoLabelLineHeight))
-        .child(text.into())
-        .into_any_element()
-}
-
-/// FieldDescription: `--font-size-3` on the body line, `--text-secondary`.
-pub(crate) fn field_description(text: impl Into<gpui::SharedString>, cx: &App) -> AnyElement {
-    let ds = Ds::get(cx);
-    div()
-        .text_size(ds.len(Length::FontSize3))
-        .line_height(ds.len(Length::TypoBodyLineHeight))
-        .text_color(ds.color(Color::TextSecondary))
-        .child(text.into())
-        .into_any_element()
-}
-
-/// Field `orientation="horizontal"` with a content column: the label and description at the
-/// start, the control at the row end centred on the label's line (`control_height` tall).
-pub(crate) fn field_row(
-    label: AnyElement,
-    description: AnyElement,
-    control: AnyElement,
-    control_height: f32,
-    cx: &App,
-) -> AnyElement {
-    let ds = Ds::get(cx);
-    div()
-        .flex()
-        .items_start()
-        .w_full()
-        .min_w_0()
-        .gap(ds.len(Length::Space2))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .flex_1()
-                .min_w_0()
-                .gap(gpui::px(2.)) // DS: Field.module.css:53
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .min_h(gpui::px(control_height))
-                        .child(label),
-                )
-                .child(description),
-        )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .h(gpui::px(control_height))
-                .child(control),
-        )
-        .into_any_element()
 }
 
 /// SettingsField (stacked): the label and description above the control column

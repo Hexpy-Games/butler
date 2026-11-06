@@ -12,6 +12,9 @@
 //!   focus <n>             keyboard focus on control n (the ring shows)
 //!   key <keystroke>       a keystroke to the focused element
 //!   scroll <story> <dx> <dy>  the wheel over story n (0-based) by dx, dy px (positive: further on)
+//!   type <text>           text typed into the focused field (its input handler's `replace_text_in_range`)
+//!   ime-mark <text>       IME composition: `replace_and_mark_text_in_range` (the marked text, underlined)
+//!   ime-commit <text>     IME commit: `replace_text_in_range` over the marked text
 //!   wait <ms>             advance the clock
 //!   expect tooltip open|closed | focused <n> | clipboard <text> | control <n> | anchor <name>
 //!   shot <name>           `<page>.<name>.png`: the owning story canvas plus 64px each side
@@ -22,9 +25,9 @@ use std::time::Duration;
 
 use anyhow::{Context as _, bail};
 use gpui::{
-    AnyWindowHandle, Bounds, HeadlessAppContext, Keystroke, Modifiers, MouseButton, MouseDownEvent,
-    MouseUpEvent, PlatformInput, Point, ScrollDelta, ScrollWheelEvent, TouchPhase, WindowHandle,
-    point, px, size,
+    AnyWindowHandle, Bounds, EntityInputHandler as _, HeadlessAppContext, Keystroke, Modifiers,
+    MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput, Point, ScrollDelta, ScrollWheelEvent,
+    TouchPhase, WindowHandle, point, px, size,
 };
 
 use crate::app::DsView;
@@ -201,6 +204,25 @@ impl Live {
         Ok(())
     }
 
+    /// Drives the focused field's `EntityInputHandler`, as the platform's IME does: `mark`
+    /// composes `text` (marked, caret at its end), otherwise `text` replaces the marked text
+    /// (or the selection), which ends the composition.
+    fn compose(&mut self, text: &str, mark: bool) -> anyhow::Result<()> {
+        self.cx.update_window(self.handle, |_, window, cx| {
+            let state =
+                butler_ds::ui::text::focused(window, cx).context("no focused text field")?;
+            state.update(cx, |state, cx| {
+                if mark {
+                    let end = text.encode_utf16().count();
+                    state.replace_and_mark_text_in_range(None, text, Some(end..end), window, cx);
+                } else {
+                    state.replace_text_in_range(None, text, window, cx);
+                }
+            });
+            Ok(())
+        })?
+    }
+
     fn wait(&mut self, ms: u64) {
         let steps = (ms / 20).max(1);
         for _ in 0..steps {
@@ -349,6 +371,11 @@ impl Live {
                 Ok(())
             }
             "scroll" => self.scroll(arg),
+            "type" | "ime-mark" | "ime-commit" => {
+                self.compose(arg, command == "ime-mark")?;
+                self.settle();
+                Ok(())
+            }
             "expect" => self.expect(arg),
             "shot" => self.shot(arg),
             _ => bail!("unknown live command"),

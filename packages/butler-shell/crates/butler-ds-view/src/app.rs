@@ -18,6 +18,7 @@ use crate::pages::{self, Page};
 /// Loads the bundled faces; the DS View draws grayscale text like the shell.
 pub(crate) fn init(cx: &mut App) -> anyhow::Result<()> {
     cx.set_text_rendering_mode(TextRenderingMode::Grayscale);
+    butler_ds::ui::text::bind_keys(cx);
     cx.text_system().add_fonts(
         butler_ds::ui::assets::FONTS
             .iter()

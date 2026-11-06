@@ -5,6 +5,7 @@ use gpui::{
 };
 
 use super::context::Ds;
+use super::strut;
 use crate::tokens::{Color, Length, Number};
 
 /// `min-height: 18px`.
@@ -13,13 +14,23 @@ const MIN_HEIGHT: f32 = 18.; // DS: Label.module.css:3
 #[derive(IntoElement)]
 pub struct Label {
     children: Vec<AnyElement>,
+    /// A FieldLabel: the label line height, and as wide as its text.
+    field: bool,
 }
 
 impl Label {
     pub fn new() -> Self {
         Self {
             children: Vec::new(),
+            field: false,
         }
+    }
+
+    /// FieldLabel (Field.module.css `.label`): `line-height: --typo-label-line-height`,
+    /// `width: fit-content; max-width: 100%; min-width: 0`.
+    pub(crate) fn in_field(mut self) -> Self {
+        self.field = true;
+        self
     }
 }
 
@@ -37,9 +48,15 @@ impl ParentElement for Label {
 
 impl RenderOnce for Label {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let shrink = strut::shrink_wrap(cx);
         let ds = Ds::get(cx);
         let size = ds.len(Length::FontSize3);
-        div()
+        let (line, fit) = if self.field {
+            (ds.len(Length::TypoLabelLineHeight), shrink)
+        } else {
+            (size, false)
+        };
+        let el = div()
             .flex()
             .items_center()
             .gap(ds.len(Length::Space2))
@@ -48,7 +65,13 @@ impl RenderOnce for Label {
             .font_family(ds.body_font().clone())
             .text_size(size)
             .font_weight(FontWeight(ds.number(Number::FontWeightMedium)))
-            .line_height(size)
-            .children(self.children)
+            .line_height(line);
+        let el = if self.field {
+            el.min_w_0().max_w_full()
+        } else {
+            el
+        };
+        let el = if fit { el.self_start() } else { el };
+        el.children(self.children)
     }
 }

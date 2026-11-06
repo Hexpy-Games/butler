@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1, B2 and B3 (part A) primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1, B2 and B3 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -12,6 +12,10 @@
     { "page": "separator", "entry": "components/Separator" },
     { "page": "kbd", "entry": "components/Kbd" },
     { "page": "label", "entry": "components/Label" },
+    { "page": "input", "entry": "components/Input" },
+    { "page": "textarea", "entry": "components/Textarea" },
+    { "page": "field", "entry": "components/Field" },
+    { "page": "native-select", "entry": "components/NativeSelect" },
     { "page": "tinted-glass", "entry": "components/TintedGlass" },
     { "page": "card", "entry": "components/Card" },
     { "page": "tooltip", "entry": "components/Tooltip" },

@@ -30,7 +30,7 @@ const server = Bun.serve({
 });
 const TALL = 7000;
 const MARGIN = 64;
-const SELECTOR = 'button, [role="button"], [role="radio"], [role="switch"], input[type="range"], [tabindex="0"]';
+const SELECTOR = 'button, [role="button"], [role="radio"], [role="switch"], input:not([type="hidden"]), textarea, select, [tabindex="0"]';
 async function shoot(page: import("playwright").Page, s: { page: string; name: string }, story: number, dir: string, width: number) {
   const canvas = await page.evaluate(`(() => { const b = document.querySelectorAll("[data-ds-fixture-canvas]")[${story}].getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, w: b.width, h: b.height }; })()`) as { x: number; y: number; w: number; h: number };
   const x0 = Math.max(0, canvas.x - MARGIN), y0 = Math.max(0, canvas.y - MARGIN);

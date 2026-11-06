@@ -373,7 +373,7 @@ impl Control {
 }
 
 /// The ring's spread shadows over the box, painted outside it.
-fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
+pub(crate) fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
     div().absolute().top_0().left_0().size_full().child(
         gpui::canvas(
             |_, _, _| (),

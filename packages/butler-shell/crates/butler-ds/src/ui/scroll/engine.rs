@@ -246,8 +246,52 @@ impl State {
     }
 }
 
-/// Makes `content` (a block with its own size and padding) a fading scroller.
-pub fn scroller(cfg: &Config, content: Div, window: &mut Window, cx: &mut App) -> Scroller {
+/// One frame of a fading scroller: its scroll handle, the fades to mask with and the watcher
+/// that keeps the edge flags current. [`scroller`] builds a div scroller from it; an element that
+/// scrolls itself (a text area) takes the pieces and wraps itself with [`Fade::mask`].
+pub struct Fade {
+    pub handle: ScrollHandle,
+    /// Focus inside the scroller (its own handle, or the one passed to [`fade`]).
+    pub focus: FocusHandle,
+    /// The scroller draws the focused control's ring itself.
+    pub host: bool,
+    /// The content moved a moment ago (the scrollbar shows).
+    pub lingering: bool,
+    lengths: Lengths,
+    watch: Option<AnyElement>,
+}
+
+impl Fade {
+    /// The zero-cost canvas that reads the edges after paint; place it inside the scroller (or
+    /// beside it, in the same frame).
+    pub fn watch(&mut self) -> Option<AnyElement> {
+        self.watch.take()
+    }
+
+    /// `child` painted under the fade (nothing while the scroller hosts the ring).
+    pub fn mask(&self, child: AnyElement) -> AnyElement {
+        let lengths = if self.host {
+            Lengths::default()
+        } else {
+            Lengths {
+                fade: self.lengths.fade,
+                inset: self.lengths.inset,
+            }
+        };
+        Masked::new(child, lengths).into_any_element()
+    }
+}
+
+/// Starts a fading scroller. `focus` is the handle of an element that scrolls itself and takes
+/// focus (`None`: the scroller makes its own). `text_field` shows ring-aware fades on any focus,
+/// as a text field's ring does.
+pub fn fade(
+    cfg: &Config,
+    focus: Option<FocusHandle>,
+    text_field: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> Fade {
     let state = window.use_keyed_state((cfg.id.clone(), "fade"), cx, |_, cx| State {
         handle: ScrollHandle::new(),
         focus: cx.focus_handle().tab_stop(false),
@@ -259,6 +303,9 @@ pub fn scroller(cfg: &Config, content: Div, window: &mut Window, cx: &mut App) -
         last_position: 0.,
         scrolled_at: None,
     });
+    if let Some(focus) = focus {
+        state.update(cx, |s, _| s.focus = focus);
+    }
     let now = cx.background_executor().now();
     let (duration, ease, instant, room, keyboard) = {
         let ds = Ds::get(cx);
@@ -267,7 +314,7 @@ pub fn scroller(cfg: &Config, content: Div, window: &mut Window, cx: &mut App) -
             convert::easing(ds.tokens().ease(Easing::MotionEaseDecelerate)),
             ds.reduced_motion(),
             f32::from(focus::room(ds)),
-            ds.modality() == Modality::Keyboard,
+            text_field || ds.modality() == Modality::Keyboard,
         )
     };
     let (handle, focus_handle) = {
@@ -306,21 +353,33 @@ pub fn scroller(cfg: &Config, content: Div, window: &mut Window, cx: &mut App) -
         .left_0()
         .size(px(1.))
     };
+    Fade {
+        handle,
+        focus: focus_handle,
+        host,
+        lingering,
+        lengths,
+        watch: Some(watch.into_any_element()),
+    }
+}
+
+/// Makes `content` (a block with its own size and padding) a fading scroller.
+pub fn scroller(cfg: &Config, content: Div, window: &mut Window, cx: &mut App) -> Scroller {
+    let mut fade = fade(cfg, None, false, window, cx);
     let scroller = content
         .id((cfg.id.clone(), "scroll"))
-        .track_scroll(&handle)
-        .track_focus(&focus_handle);
+        .track_scroll(&fade.handle)
+        .track_focus(&fade.focus);
     let scroller = match cfg.axis {
         Axis::X => scroller.overflow_x_scroll(),
         Axis::Y => scroller.overflow_y_scroll(),
     }
-    .child(watch);
-    let mask = if host { Lengths::default() } else { lengths };
+    .children(fade.watch());
     Scroller {
-        element: Masked::new(scroller.into_any_element(), mask).into_any_element(),
-        handle,
-        host,
-        lingering,
+        element: fade.mask(scroller.into_any_element()),
+        handle: fade.handle.clone(),
+        host: fade.host,
+        lingering: fade.lingering,
     }
 }
 
