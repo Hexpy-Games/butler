@@ -2,7 +2,7 @@
 //! when asked, moves focus to the first tabbable inside (else the container); on close it can put
 //! focus back; trapped, Tab and Shift+Tab wrap inside instead of leaving. A non-modal popover
 //! asks for none of it (the DS prevents auto-focus and restore); menus and Select do.
-use gpui::{App, FocusHandle, WeakFocusHandle, Window};
+use gpui::{App, ElementId, Entity, FocusHandle, WeakFocusHandle, Window};
 
 /// How many steps a backward wrap may walk to find the last tabbable of the scope.
 const WRAP_LIMIT: usize = 512;
@@ -50,6 +50,35 @@ impl Scope {
         }
     }
 
+    /// A modal's open (Radix: the first tabbable of the content): the tab stops are those of the
+    /// last frame, so focus goes in shortly after the content was first drawn. `key` changes with
+    /// every open (the lifecycle's), so each open enters once.
+    pub fn enter_when_drawn(
+        scope: &Entity<Self>,
+        id: &ElementId,
+        key: usize,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let entered = window.use_keyed_state((id.clone(), "entered"), cx, |_, _| 0);
+        if *entered.read(cx) == key {
+            return;
+        }
+        entered.update(cx, |entered, _| *entered = key);
+        let scope = scope.clone();
+        window
+            .spawn(cx, async move |cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(32))
+                    .await;
+                cx.update(|window, cx| {
+                    scope.update(cx, |scope, cx| scope.focus_into(window, cx));
+                })
+                .ok();
+            })
+            .detach();
+    }
+
     /// Moves focus to the first tabbable of the scope, else the container. Call it once the scope's
     /// content has been drawn (the tab stops come from the frame before).
     pub fn focus_into(&self, window: &mut Window, cx: &mut App) {
@@ -68,6 +97,7 @@ impl Scope {
             window.focus_next(cx);
         }
         if self.handle.contains_focused(window, cx) {
+            crate::ui::text::select_focused(window, cx);
             return true;
         }
         if backward {
@@ -86,6 +116,7 @@ fn focus_first(handle: &FocusHandle, window: &mut Window, cx: &mut App) {
     if !handle.contains_focused(window, cx) {
         handle.focus(window, cx);
     }
+    crate::ui::text::select_focused(window, cx);
 }
 
 /// The last tabbable of the scope: walks forward from the container until focus leaves, then
@@ -96,6 +127,7 @@ fn focus_last(handle: &FocusHandle, window: &mut Window, cx: &mut App) {
         window.focus_next(cx);
         if !handle.contains_focused(window, cx) {
             window.focus_prev(cx);
+            crate::ui::text::select_focused(window, cx);
             return;
         }
     }

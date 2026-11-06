@@ -197,6 +197,7 @@ fn move_focus(event: &gpui::KeyDownEvent, window: &mut Window, cx: &mut App) {
     } else {
         window.focus_next(cx);
     }
+    butler_ds::ui::text::select_focused(window, cx);
     cx.stop_propagation();
 }
 
