@@ -150,7 +150,9 @@ async fn serve(
                 let mut passages = String::new();
                 for i in 0..20 {
                     let material = "Complete product material. ".repeat(5);
-                    passages.push_str(&format!("<p>{material} {i}</p><p>가격 price option {i}.</p>"));
+                    passages.push_str(&format!(
+                        "<p>{material} {i}</p><p>가격 price option {i}.</p>"
+                    ));
                 }
                 json!({"status":"ok","url":tabs[tab]["url"],"epoch":1,
                     "html":format!("{}<article>{passages}</article>", super::shop::PAGES[2].1)})
