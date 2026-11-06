@@ -166,6 +166,93 @@ async fn failed_direction_continuation_closes_and_refuses_later_steering()
     Ok(())
 }
 
+/// A close that no retry can finish (its child Work's record is unreadable)
+/// settles its queue record once instead of being deferred again and again.
+#[tokio::test]
+async fn interrupted_direction_with_unreadable_work_is_not_retried() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    script.plan_continuation.store(true, Ordering::SeqCst);
+    let setup = steward_presentation::setup("STEWARD-DIRECTION-UNREADABLE", &url)?;
+    for name in ["a.txt", "b.txt"] {
+        std::fs::write(setup.sandbox.data.join(name), name)?;
+    }
+    *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
+    let mut s = setup.start().await?;
+    s.turn("general", stub::OWNER).await?;
+    tokio::time::timeout(Duration::from_secs(30), script.held.notified())
+        .await
+        .unwrap();
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    let child = &view.data()["steward_children"][0];
+    let relation = child["relation"]["relation_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    *script.relation.lock().unwrap() = relation.clone();
+    script.hold_direction.store(true, Ordering::SeqCst);
+    s.turn("general", stub::DIRECTION).await?;
+    script.release.notify_one();
+    tokio::time::timeout(Duration::from_secs(20), script.direction_held.notified())
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "continuation never reached the provider\n{}",
+                s.agent.logs()
+            )
+        });
+    let continuation = match &directions(&s, &relation)[..] {
+        [(_, status, Some(turn))] if status == "applied" => turn.clone(),
+        other => panic!("continuation did not take its direction: {other:?}"),
+    };
+    s.agent.kill9()?;
+    reopen_first_direction(&s, &relation);
+    make_work_unreadable(&s, &continuation);
+    s.gw = s.agent.start_again().await?;
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !drained(&s) {
+        assert!(
+            Instant::now() < deadline,
+            "child close still deferred\n{}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(
+        s.agent
+            .logs()
+            .contains("child result unavailable code=durable_work_hydration_failed"),
+        "{}",
+        s.agent.logs()
+    );
+    assert_eq!(result_status(&s, &relation, &continuation), None);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+/// Appends a disposition revision no reader can parse to the Work bound to `turn`.
+fn make_work_unreadable(s: &Scenario, turn: &str) {
+    let db = db(s);
+    let work: String = db
+        .query_row(
+            "SELECT work_id FROM btcc_guided_turn_work_bindings WHERE turn_id=?1 AND is_current=1",
+            [turn],
+            |row| row.get(0),
+        )
+        .unwrap();
+    db.execute(
+        "INSERT INTO btcc_guided_work_disposition_revisions (disposition_revision_id, work_id, \
+         revision, disposition, summary, action_updates_json, remaining_actions_json, \
+         evidence_refs_json, evidence_snapshot_json, followups_json, origin_turn_id, created_at) \
+         VALUES ('unreadable-'||?1, ?1, (SELECT COALESCE(MAX(revision),0)+1 FROM \
+         btcc_guided_work_disposition_revisions WHERE work_id=?1), 'open', 'unreadable', '[]', \
+         '[]', '[]', 'not json', '[]', ?2, '2026-09-27T00:00:00.000Z')",
+        [work.as_str(), turn],
+    )
+    .unwrap();
+}
+
 async fn first_failure_returned(
     s: &Scenario,
     script: &stub::Script,
