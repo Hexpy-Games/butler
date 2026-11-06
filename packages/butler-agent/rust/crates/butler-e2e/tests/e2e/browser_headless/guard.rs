@@ -7,7 +7,8 @@
 )]
 use super::{
     backend,
-    support::{admin, browser_processes, call, node, open},
+    support::{admin, browser_processes, call, node, open, publish_as, selected, setup},
+    text,
 };
 use butler_e2e::e2e::HarnessError;
 use serde_json::{Value, json};
@@ -193,4 +194,43 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         )?;
     }
     Ok(())
+}
+
+/// A page whose frames reach outside policy: a name that never resolves and a
+/// private address.
+pub(crate) const DEAD_FRAMES: &str = r#"<!doctype html><meta charset="utf-8"><title>Dead frames fixture</title>
+<main><h1>Dead frames</h1><p>The page text stays readable.</p>
+<iframe src="https://unresolvable.invalid/"></iframe>
+<iframe src="http://10.0.0.1/"></iframe><!-- privacy-hygiene: allow-private-ip (LAN-denial fixture) -->
+</main>"#;
+
+#[tokio::test]
+async fn blocked_frames_keep_the_page() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
+    let s = setup("BROWSER-HEADLESS-BLOCKED-FRAMES")?.start().await?;
+    let admin = admin(&s);
+    let (_, url) = publish_as(&s, "Publish dead frames").await?;
+    let me = "general";
+    let opened = open(&admin, me, &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let tab = opened["tab"].clone();
+    // Both frame requests are blocked; the page around them stays open and readable.
+    let page = call(&admin, me, "tab.observe", &tab, json!({"settle":true})).await?;
+    assert_eq!(page["status"], "ok", "{page}");
+    assert!(
+        text(&page).contains("The page text stays readable."),
+        "{page}"
+    );
+    assert_eq!(page["frames"].as_array().map(Vec::len), Some(3), "{page}");
+    let listed = call(&admin, me, "tabs.list", &Value::Null, json!({})).await?;
+    assert!(
+        listed["tabs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["id"] == tab),
+        "{listed}"
+    );
+    s.finish().await
 }

@@ -58,8 +58,10 @@ function profileRouter(profile) {
       }
       // While the user holds the tab they browse freely; Rust re-checks the page at hand-back.
       const policy = entry.tab.holder === "user" ? { ...entry.tab.policy, mode: undefined } : entry.tab.policy;
-      void guardUrl(detail.url, profile, policy, detail.resourceType === "mainFrame").then(allowed => {
-        done({ cancel: !allowed }); if (!allowed) entry.onViolation();
+      // A blocked frame request stays blocked; only the tab's own page leaving policy ends it.
+      const mainFrame = detail.resourceType === "mainFrame";
+      void guardUrl(detail.url, profile, policy, mainFrame).then(allowed => {
+        done({ cancel: !allowed }); if (!allowed && mainFrame) entry.onViolation();
       });
     });
   }
@@ -73,6 +75,7 @@ export function trackRequests(tab) {
   router.set(contents.id, { tab });
   contents.once("destroyed", () => router.delete(contents.id));
 }
+/** Frame navigations outside policy are cancelled; `onViolation` runs only when the tab's own page would leave policy. */
 export function installNavigationGuard(tab, onViolation) {
   const contents = tab.view.webContents;
   const router = profileRouter(contents.session);
@@ -80,7 +83,7 @@ export function installNavigationGuard(tab, onViolation) {
   contents.once("destroyed", () => router.delete(contents.id));
   contents.on("will-frame-navigate", event => {
     if ((!event.isMainFrame || tab.opener && event.url === "about:blank") && /^about:(blank|srcdoc)$/u.test(event.url)) return;
-    if (!webUrl(event.url)) { event.preventDefault(); onViolation(); }
+    if (!webUrl(event.url)) { event.preventDefault(); if (event.isMainFrame) onViolation(); }
   });
 }
 const routers = new WeakMap();

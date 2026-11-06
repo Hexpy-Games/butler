@@ -409,7 +409,8 @@ async fn page_attached(browser: Arc<Browser>, session: String, target: String, i
     }
 }
 
-/// The guard on every frame document a tab requests: a violation closes the tab.
+/// The guard on every frame document a tab requests: a request outside policy
+/// fails, and only the tab's own page leaving policy closes the tab.
 pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value) {
     let request = params["requestId"].clone();
     let url = params["request"]["url"].as_str().unwrap_or("").to_owned();
@@ -425,13 +426,14 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
                 let main = params["frameId"] == t.target.as_str();
                 (
                     t.id.clone(),
+                    main,
                     main && t.opener.is_some(),
                     t.popup_parent_url.clone().unwrap_or_default(),
                     t.policy.clone(),
                 )
             })
     };
-    let Some((tab, popup, parent, policy)) = facts else {
+    let Some((tab, main, popup, parent, policy)) = facts else {
         let _ = browser
             .cdp
             .send(
@@ -467,6 +469,9 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
             Some(&session),
         )
         .await;
+    if !main {
+        return;
+    }
     {
         let mut state = browser.shared.lock();
         if popup_violation {
