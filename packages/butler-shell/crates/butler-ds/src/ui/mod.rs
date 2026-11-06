@@ -24,6 +24,7 @@ pub mod motion;
 pub mod pill_button;
 pub mod presence;
 pub mod progress_ring;
+pub mod scroll;
 pub mod segmented_control;
 pub mod separator;
 pub mod skeleton;

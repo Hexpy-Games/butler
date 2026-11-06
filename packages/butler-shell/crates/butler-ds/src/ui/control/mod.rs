@@ -154,23 +154,45 @@ impl RenderOnce for Control {
         if self.debug.is_none() {
             self.debug = Some(next_anchor(cx, handle.as_ref()));
         }
+        let handed_off = focus::ring_handed_off(cx);
         let ds = Ds::get(cx);
         let live = !self.disabled.is_on();
         let (hover, pressed) = if live { (hover, pressed) } else { (0., false) };
         let focused = handle
             .as_ref()
             .is_some_and(|h| focus::visible(ds, h.is_focused(window), false));
+        let publish = handle
+            .as_ref()
+            .filter(|h| focused && h.is_focused(window))
+            .map(|h| (h.clone(), self.ring_reach(ds)));
+        // A scroller that cannot show the ring whole draws it itself.
+        let focused = focused && !handed_off;
         let mut el = self.frame(ds, hover, pressed, shrink);
         if let Some(outer) = self.outer.take() {
             el = outer(el);
         }
         let el = self.interact(el, &state, handle.as_ref(), live);
         let el = self.finish(el, hover, pressed, focused, ds);
+        let el = match publish {
+            Some((handle, reach)) => el.child(focus::publish(handle, reach)),
+            None => el,
+        };
         el.children(self.children)
     }
 }
 
 impl Control {
+    /// How far the ring paints past the box.
+    fn ring_reach(&self, ds: &Ds) -> Pixels {
+        let room = focus::room(ds);
+        match self.ring {
+            Ring::Spread => room,
+            Ring::Outline(offset) => {
+                room.max(px(offset) + ds.len(crate::tokens::Length::FocusRingWidth))
+            }
+        }
+    }
+
     /// The outer box: size, padding, text style and the pointer cursor.
     fn frame(&self, ds: &Ds, hover: f32, pressed: bool, shrink: bool) -> gpui::Stateful<Div> {
         let mut el = div()
@@ -319,13 +341,12 @@ impl Control {
                 .border(width)
                 .border_color(colors.at(hover, pressed));
         }
-        let mut shadows = self.shadows.clone();
+        let shadows = self.shadows.clone();
         if focused {
             match self.ring {
                 Ring::Spread => {
-                    let mut ring = focus::shadows(ds);
-                    ring.extend(shadows);
-                    shadows = ring;
+                    // Outside the box only: a transparent surface must not fill with the ring.
+                    surface = surface.child(ring_layer(focus::shadows(ds), self.radius));
                 }
                 Ring::Outline(offset) => {
                     surface = surface.child(outline(ds, self.radius, offset));
@@ -349,6 +370,23 @@ impl Control {
         }
         el
     }
+}
+
+/// The ring's spread shadows over the box, painted outside it.
+fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
+    div().absolute().top_0().left_0().size_full().child(
+        gpui::canvas(
+            |_, _, _| (),
+            move |bounds, (), window, _| {
+                let r = radius
+                    .min(bounds.size.width / 2.)
+                    .min(bounds.size.height / 2.);
+                window.paint_drop_shadows_outside(bounds, gpui::Corners::all(r), 0., &ring);
+            },
+        )
+        .absolute()
+        .size_full(),
+    )
 }
 
 /// `outline: 2px solid ring-colour` at `offset` from the box.
