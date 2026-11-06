@@ -1,6 +1,7 @@
-//! ProgressRing.showcase.tsx. The two sidebar stories draw their rows with the NavRow stand-in.
+//! ProgressRing.showcase.tsx.
 use butler_ds::tokens::Density;
 use butler_ds::ui::Icon;
+use butler_ds::ui::blocks::nav_row::NavRow;
 use butler_ds::ui::button::{Button, Size as ButtonSize, Variant, container};
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::progress_ring::{ProgressRing, Size, Tone};
@@ -10,7 +11,6 @@ use gpui::{AnyElement, App, Entity, IntoElement, ParentElement as _, Window};
 
 use super::{Story, probe};
 use crate::copy::Lang;
-use crate::standins_nav::NavRow;
 
 struct Copy {
     preparing: &'static str,
@@ -183,7 +183,7 @@ fn sidebar_ring(id: &'static str) -> ProgressRing {
 }
 
 /// The sidebar update row: determinate, indeterminate, complete with an action, failed, settings.
-fn sidebar_rows(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn sidebar_rows(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let c = copy(lang);
     let restart = Button::new("ring-restart")
         .size(ButtonSize::Xs)
@@ -195,34 +195,34 @@ fn sidebar_rows(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
             NavRow::new("nav-downloading", c.downloading)
                 .icon(sidebar_ring("nav-ring-value").value(0.42))
                 .badge("42%")
-                .build(cx),
+                .on_click(|_, _, _| {}),
         )
         .child(
             NavRow::new("nav-preparing", c.preparing)
                 .icon(sidebar_ring("nav-ring-indeterminate").indeterminate())
-                .build(cx),
+                .on_click(|_, _, _| {}),
         )
         .child(
             NavRow::new("nav-ready", c.ready)
                 .icon(sidebar_ring("nav-ring-done").value(1.).tone(Tone::Success))
                 .actions(restart)
-                .build(cx),
+                .on_click(|_, _, _| {}),
         )
         .child(
             NavRow::new("nav-failed", c.failed)
-                .glyph(Icon::CircleAlert, cx)
-                .build(cx),
+                .glyph(Icon::CircleAlert)
+                .on_click(|_, _, _| {}),
         )
         .child(
             NavRow::new("nav-settings", c.settings)
-                .glyph(Icon::Settings, cx)
-                .build(cx),
+                .glyph(Icon::Settings)
+                .on_click(|_, _, _| {}),
         )
         .into_any_element()
 }
 
 /// The same row at each sidebar density.
-fn sidebar_densities(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn sidebar_densities(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let c = copy(lang);
     let mut rows = Stack::new().gap(Space::Xs);
     for (density, name) in [
@@ -238,7 +238,7 @@ fn sidebar_densities(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
             .icon(sidebar_ring(name).value(0.42).density(density))
             .badge("42%")
             .density(density)
-            .build(cx),
+            .on_click(|_, _, _| {}),
         );
     }
     rows.into_any_element()

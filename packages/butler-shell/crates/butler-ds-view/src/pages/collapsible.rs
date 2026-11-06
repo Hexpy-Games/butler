@@ -1,14 +1,16 @@
-//! Collapsible.showcase.tsx. The tool row is a DisclosureRow stand-in (a block of a later batch).
+//! Collapsible.showcase.tsx.
 use butler_ds::ui::Icon;
+use butler_ds::ui::blocks::disclosure_row::DisclosureRow;
 use butler_ds::ui::button::{Button, Variant};
 use butler_ds::ui::collapsible::{Collapsible, CollapsibleList, Row};
+use butler_ds::ui::context::Ds;
+use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window};
 
 use super::{Story, probe};
 use crate::copy::Lang;
-use crate::standins::disclosure_row;
 
 struct Copy {
     toggle: &'static str,
@@ -108,15 +110,13 @@ fn tool_row(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let (open, toggle) = flag("collapsible-tool", window, cx);
     Stack::new()
-        .child(disclosure_row(
-            "collapsible-tool-row",
-            Icon::Terminal,
-            c.tool,
-            open,
-            Typo::caption(c.output).into_any_element(),
-            move |cx| toggle(cx),
-            cx,
-        ))
+        .child(
+            DisclosureRow::new("collapsible-tool-row", c.tool)
+                .icon(icon(Icon::Terminal, IconSize::Md, Ds::get(cx)))
+                .open(open)
+                .on_toggle(move |_, _, cx| toggle(cx))
+                .child(Typo::caption(c.output)),
+        )
         .child(probe(format!("open-tool-{open}")))
         .into_any_element()
 }

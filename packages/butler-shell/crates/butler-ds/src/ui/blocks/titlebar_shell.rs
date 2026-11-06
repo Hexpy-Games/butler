@@ -224,6 +224,7 @@ impl Metrics {
                 icon: tokens
                     .try_len(Length::TitlebarActionIconSize)
                     .unwrap_or_else(|| len(Length::IconSizeMd)),
+                fixed: false,
             },
             compact,
         }

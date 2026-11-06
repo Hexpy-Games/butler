@@ -371,6 +371,7 @@ impl Live {
             "letgo" => self.let_go(),
             "right" => self.right_click(arg),
             "dragby" => self.drag_by(arg),
+            "dragto" => self.drag_to(arg),
             "keyboard-inset" => self.keyboard_inset(arg),
             "mark" => self.mark(arg),
             "scroll" => self.scroll(arg),

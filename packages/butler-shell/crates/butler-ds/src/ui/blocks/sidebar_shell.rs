@@ -272,8 +272,16 @@ impl RenderOnce for SidebarShell {
         let density = self.density;
         let peek = scope::vars(cx).is_some_and(|vars| vars.sidebar_peek);
         // The density scopes the tokens the rows read, so build the body inside it.
+        let svg_size = {
+            let tokens = crate::tokens::TokenContext {
+                density,
+                ..*Ds::get(cx).tokens()
+            };
+            tokens.len(Length::SidebarIconSize)
+        };
         let spec = Spec {
             density: Some(density),
+            svg_size: Some(svg_size),
             ..Spec::default()
         };
         let shown = !self.collapsed || peek;

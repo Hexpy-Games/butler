@@ -1,69 +1,13 @@
-//! Stand-ins for DS components and blocks that arrive in later batches (ListRow,
-//! ProgressMeter, SettingsSection, SettingsField, LoadingIndicator, DisclosureRow). They only let
+//! Stand-ins for DS components and blocks that arrive in later batches (ProgressMeter,
+//! SettingsSection, SettingsField, LoadingIndicator). They only let
 //! the showcases that use them (Layout, Inline, Label, Clickable, ...) render their layout;
 //! each draws from tokens, follows the React CSS it replaces, and goes away when its primitive
 //! lands. They are not part of `butler-ds`.
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::layout::{Space, Stack, WithItem as _};
+use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, IntoElement, ParentElement as _, Styled as _, div};
-
-/// ListRow (ListRow.module.css): an optional icon, the title with its meta, a description.
-pub(crate) fn list_row(
-    icon: Option<AnyElement>,
-    title: &'static str,
-    description: Option<&'static str>,
-    meta: Option<&'static str>,
-    cx: &App,
-) -> AnyElement {
-    let ds = Ds::get(cx);
-    let heading = div()
-        .flex()
-        .flex_wrap()
-        .items_center()
-        .justify_between()
-        .gap_x(ds.len(Length::SpaceMd))
-        .gap_y(ds.len(Length::SpaceXs))
-        .child(
-            // `flex: 1 1 50%`: the title keeps half the line, so a long meta wraps below it.
-            div()
-                .flex_grow(1.)
-                .flex_shrink(1.)
-                .flex_basis(gpui::relative(0.5))
-                .min_w_0()
-                .child(
-                    Typo::body(title)
-                        .truncate()
-                        .weight(butler_ds::ui::typo::Weight::Regular),
-                ),
-        )
-        .children(meta.map(|meta| Typo::caption(meta).tone(Tone::Tertiary)));
-    let content = Stack::new()
-        .gap(Space::Xs)
-        .min_width(butler_ds::ui::layout::MinWidth::Zero)
-        .child(heading)
-        .children(description.map(|text| Typo::caption(text).tone(Tone::Secondary)));
-    let mut row = div()
-        .flex()
-        .w_full()
-        .items_start()
-        .gap(ds.len(Length::Space2))
-        .p(ds.len(Length::Space2));
-    if let Some(icon) = icon {
-        row = row.child(
-            div()
-                .flex()
-                .items_center()
-                .justify_center()
-                .h(ds.len(Length::TypoBodyLineHeight))
-                .text_color(ds.color(Color::TextTertiary))
-                .child(icon),
-        );
-    }
-    row.child(div().flex_1().min_w_0().child(content))
-        .into_any_element()
-}
 
 /// ProgressMeter `bare`: a 4px track filled to `value` percent.
 pub(crate) fn progress_bare(value: f32, cx: &App) -> AnyElement {
@@ -163,82 +107,4 @@ pub(crate) fn loading_indicator(
             .size(size)
             .into_any_element()
     }
-}
-
-/// DisclosureRow (DisclosureRow.module.css, `surface="selection"`, trailing chevron): a stretched
-/// Clickable with the icon, the title and a chevron that turns down when open, filled with
-/// `--selection` while open, over a Collapsible panel indented under the title.
-pub(crate) fn disclosure_row(
-    id: &'static str,
-    glyph: butler_ds::ui::Icon,
-    title: &'static str,
-    open: bool,
-    body: AnyElement,
-    toggle: impl Fn(&mut App) + 'static,
-    cx: &App,
-) -> AnyElement {
-    use butler_ds::ui::clickable::Clickable;
-    use butler_ds::ui::collapsible::Collapsible;
-    use butler_ds::ui::icon::{IconSize, icon};
-    let ds = Ds::get(cx);
-    let (inset, line, gap) = (
-        ds.len(Length::SpaceSm),
-        ds.len(Length::TypoBodyLineHeight),
-        ds.len(Length::SpaceSm),
-    );
-    let chevron = if open {
-        butler_ds::ui::Icon::ChevronDown
-    } else {
-        butler_ds::ui::Icon::ChevronRight
-    };
-    let trigger = Clickable::new(id)
-        .stretch()
-        .on_click(move |_, _, cx| toggle(cx))
-        .child(
-            div()
-                .flex()
-                .w_full()
-                .items_start()
-                .gap(gap)
-                .p(inset)
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .size(line)
-                        .flex_none()
-                        .text_color(ds.color(Color::TextTertiary))
-                        .child(icon(glyph, IconSize::Md, ds)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(ds.len(Length::SpaceXs))
-                        .min_w_0()
-                        .child(Typo::body(title).truncate())
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .h(line)
-                                .text_color(ds.color(Color::TextTertiary))
-                                .child(icon(chevron, IconSize::Sm, ds)),
-                        ),
-                ),
-        );
-    let panel = div()
-        .pb(inset)
-        .pr(inset)
-        .pl(inset + line + gap)
-        .text_color(ds.color(Color::TextSecondary))
-        .child(body);
-    let mut row = div().rounded(ds.len(Length::RadiusControl));
-    if open {
-        row = row.bg(ds.color(Color::Selection));
-    }
-    row.child(trigger)
-        .child(Collapsible::new(gpui::SharedString::from(format!("{id}-panel")), open).child(panel))
-        .into_any_element()
 }

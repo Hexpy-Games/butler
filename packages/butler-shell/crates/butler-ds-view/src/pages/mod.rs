@@ -10,13 +10,17 @@ mod button;
 mod card;
 mod clickable;
 mod collapsible;
+mod collapsible_nav_group;
 mod context_menu;
 mod conversation_shell;
 mod copy_button;
 mod dialog;
 mod dialog_contained;
+mod disclosure_row;
 mod done_icon_button;
+mod drag_preview;
 mod dropdown_menu;
+mod empty_line;
 mod expandable_text;
 mod field;
 mod glyph_toggle;
@@ -29,11 +33,18 @@ mod inline_reference;
 mod input;
 mod inspector_panel;
 mod kbd;
+mod key_value_row;
 mod label;
 mod layout;
+mod list_row;
 mod media_frame;
 mod meta_list;
 mod native_select;
+mod nav_drop_target;
+mod nav_parts;
+mod nav_row;
+mod nav_section;
+mod overflow_action_menu;
 mod panel_header;
 mod pill_button;
 mod popover;
@@ -50,6 +61,7 @@ mod skeleton;
 mod slider;
 mod spinner;
 mod stack;
+mod status_capsule;
 mod success_check;
 mod surface_panel;
 mod switch;
@@ -98,7 +110,8 @@ macro_rules! page {
     };
 }
 
-pub(crate) fn all() -> Vec<Page> {
+/// The primitives (B1 to B5, P2-S1).
+fn primitives() -> Vec<Page> {
     vec![
         page!("presence", "Presence", presence),
         page!("box", "Box", boxes),
@@ -163,6 +176,12 @@ pub(crate) fn all() -> Vec<Page> {
         page!("expandable-text", "ExpandableText", expandable_text),
         page!("media-frame", "MediaFrame", media_frame),
         page!("inline-reference", "InlineReference", inline_reference),
+    ]
+}
+
+/// The blocks (P2-S2 shells, P2-S3 navigation and rows).
+fn blocks() -> Vec<Page> {
+    vec![
         page!("adaptive-shell", "AdaptiveShell", adaptive_shell),
         page!(
             "conversation-shell",
@@ -175,7 +194,32 @@ pub(crate) fn all() -> Vec<Page> {
         page!("surface-panel", "SurfacePanel", surface_panel),
         page!("wallpaper-stage", "WallpaperStage", wallpaper_stage),
         page!("inspector-panel", "InspectorPanel", inspector_panel),
+        page!("nav-row", "NavRow", nav_row),
+        page!("nav-section", "NavSection", nav_section),
+        page!(
+            "collapsible-nav-group",
+            "CollapsibleNavGroup",
+            collapsible_nav_group
+        ),
+        page!(
+            "overflow-action-menu",
+            "OverflowActionMenu",
+            overflow_action_menu
+        ),
+        page!("nav-drop-target", "NavDropTarget", nav_drop_target),
+        page!("drag-preview", "DragPreview", drag_preview),
+        page!("list-row", "ListRow", list_row),
+        page!("disclosure-row", "DisclosureRow", disclosure_row),
+        page!("key-value-row", "KeyValueRow", key_value_row),
+        page!("empty-line", "EmptyLine", empty_line),
+        page!("status-capsule", "StatusCapsule", status_capsule),
     ]
+}
+
+pub(crate) fn all() -> Vec<Page> {
+    let mut pages = primitives();
+    pages.extend(blocks());
+    pages
 }
 
 /// Forces every story canvas to one width (logical px), so a page can be compared with the React

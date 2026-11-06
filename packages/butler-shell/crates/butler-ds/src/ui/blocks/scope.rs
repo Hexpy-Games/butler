@@ -118,6 +118,9 @@ pub fn frame(cx: &App) -> ShellFrame {
 pub struct ActionScale {
     pub side: f32,
     pub icon: f32,
+    /// The size holds in a compact window too: a Clickable's rule for the buttons in it
+    /// outranks the compact hit target.
+    pub fixed: bool,
 }
 
 #[derive(Default)]
@@ -131,9 +134,49 @@ pub fn action_scale(cx: &App) -> Option<ActionScale> {
         .and_then(|scales| scales.0.last().copied())
 }
 
+/// `--nav-hover-bg` / `--nav-selected-bg`: the colour tokens a surface points its nav rows at.
+#[derive(Default)]
+struct NavFills(Vec<(Color, Color)>);
+
+impl gpui::Global for NavFills {}
+
+/// The (hover, selected) tokens the enclosing surface points nav rows at, if it sets any.
+pub fn nav_fills(cx: &App) -> Option<(Color, Color)> {
+    cx.try_global::<NavFills>()
+        .and_then(|fills| fills.0.last().copied())
+}
+
+/// How far the row around the caller shows its swapped-in actions (0 at rest, 1 on hover or
+/// keyboard focus): `NavRowSwap` reads it, as the CSS reads `.row:hover`.
+#[derive(Default)]
+struct Reveals(Vec<f32>);
+
+impl gpui::Global for Reveals {}
+
+/// The enclosing row's reveal, if the caller is inside a row.
+pub fn row_reveal(cx: &App) -> Option<f32> {
+    cx.try_global::<Reveals>()
+        .and_then(|reveals| reveals.0.last().copied())
+}
+
+/// The side every svg in a sidebar takes (`.shell svg`), whatever size it asked for.
+#[derive(Default)]
+struct SvgSizes(Vec<f32>);
+
+impl gpui::Global for SvgSizes {}
+
+/// The enclosing sidebar's svg size, if the caller is inside one.
+pub fn svg_size(cx: &App) -> Option<f32> {
+    cx.try_global::<SvgSizes>()
+        .and_then(|sizes| sizes.0.last().copied())
+}
+
 /// What a [`Scope`] sets for its child.
 #[derive(Clone, Default)]
 pub struct Spec {
+    pub svg_size: Option<f32>,
+    pub nav_fills: Option<(Color, Color)>,
+    pub row_reveal: Option<f32>,
     pub action: Option<ActionScale>,
     pub conversation: Option<ConversationVars>,
     pub vars: Option<ShellVars>,
@@ -208,9 +251,27 @@ impl Element for Scope {
         if let Some(scale) = spec.action {
             cx.default_global::<Scales>().0.push(scale);
         }
+        if let Some(fills) = spec.nav_fills {
+            cx.default_global::<NavFills>().0.push(fills);
+        }
+        if let Some(side) = spec.svg_size {
+            cx.default_global::<SvgSizes>().0.push(side);
+        }
+        if let Some(reveal) = spec.row_reveal {
+            cx.default_global::<Reveals>().0.push(reveal);
+        }
         let layout = child.request_layout(window, cx);
         if spec.action.is_some() {
             cx.default_global::<Scales>().0.pop();
+        }
+        if spec.nav_fills.is_some() {
+            cx.default_global::<NavFills>().0.pop();
+        }
+        if spec.svg_size.is_some() {
+            cx.default_global::<SvgSizes>().0.pop();
+        }
+        if spec.row_reveal.is_some() {
+            cx.default_global::<Reveals>().0.pop();
         }
         if spec.vars.is_some() {
             cx.default_global::<Scopes>().0.pop();

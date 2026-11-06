@@ -1,6 +1,7 @@
-//! Clickable.showcase.tsx and Clickable.showcaseParts.tsx. ListRow, SettingsSection and
-//! ProgressMeter are stand-ins (`standins.rs`).
+//! Clickable.showcase.tsx and Clickable.showcaseParts.tsx. SettingsSection and ProgressMeter
+//! are stand-ins (`standins.rs`).
 use butler_ds::ui::Icon;
+use butler_ds::ui::blocks::list_row::ListRow;
 use butler_ds::ui::clickable::{Bleed, Clickable, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
@@ -12,7 +13,7 @@ use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::{list_row, progress_bare, settings_status};
+use crate::standins::{progress_bare, settings_status};
 
 struct Automation {
     title: &'static str,
@@ -142,13 +143,11 @@ fn stretched(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
             Clickable::new(format!("clickable-automation-{index}"))
                 .stretch()
                 .on_click(|_, _, _| {})
-                .child(list_row(
-                    None,
-                    automation.title,
-                    Some(automation.target),
-                    Some(automation.meta),
-                    cx,
-                )),
+                .child(
+                    ListRow::new(automation.title)
+                        .description(automation.target)
+                        .meta(automation.meta),
+                ),
         );
     }
     let ds = Ds::get(cx);
@@ -157,13 +156,11 @@ fn stretched(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
             Clickable::new("clickable-every")
                 .stretch()
                 .on_click(|_, _, _| {})
-                .child(list_row(
-                    Some(icon(Icon::Clock3, IconSize::Md, ds).into_any_element()),
-                    c.automations[1].title,
-                    None,
-                    Some(c.every),
-                    cx,
-                )),
+                .child(
+                    ListRow::new(c.automations[1].title)
+                        .icon(icon(Icon::Clock3, IconSize::Md, ds))
+                        .meta(c.every),
+                ),
         )
         .into_any_element()
 }
@@ -281,13 +278,7 @@ fn artifact(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
     let ds = Ds::get(cx);
     Clickable::new("clickable-artifact")
         .on_click(|_, _, _| {})
-        .child(list_row(
-            Some(icon(Icon::FileText, IconSize::Md, ds).into_any_element()),
-            c.artifact,
-            None,
-            None,
-            cx,
-        ))
+        .child(ListRow::new(c.artifact).icon(icon(Icon::FileText, IconSize::Md, ds)))
         .into_any_element()
 }
 

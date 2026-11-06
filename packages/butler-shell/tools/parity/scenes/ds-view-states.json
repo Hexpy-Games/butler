@@ -481,6 +481,13 @@
   {"page": "adaptive-shell", "name": "sidebar-close", "state": "click", "target": 0, "wait_ms": 500},
   {"page": "adaptive-shell", "name": "peek-open", "state": "click", "target": 76, "wait_ms": 500},
   {"page": "adaptive-shell", "name": "pane-open", "state": "click", "target": 46, "wait_ms": 700},
-  {"page": "conversation-shell", "name": "messages-scrolled", "state": "scroll", "target": 0, "wait_ms": 300, "dx": 0, "dy": 300}
+  {"page": "conversation-shell", "name": "messages-scrolled", "state": "scroll", "target": 0, "wait_ms": 300, "dx": 0, "dy": 300},
+  {"page": "nav-row", "name": "row-hover", "state": "hover", "target": 0, "wait_ms": 150},
+  {"page": "nav-row", "name": "row-focus", "state": "focus", "target": 0, "wait_ms": 150},
+  {"page": "nav-row", "name": "active-hover", "state": "hover", "target": 1, "wait_ms": 150},
+  {"page": "collapsible-nav-group", "name": "folder-collapse", "state": "click", "target": 0, "wait_ms": 500},
+  {"page": "disclosure-row", "name": "tool-hover", "state": "hover", "target": 0, "wait_ms": 150},
+  {"page": "disclosure-row", "name": "tool-collapse", "state": "click", "target": 0, "wait_ms": 500},
+  {"page": "disclosure-row", "name": "tool-focus", "state": "focus", "target": 0, "wait_ms": 150}
   ]
 }

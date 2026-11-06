@@ -194,7 +194,7 @@ impl IconButton {
             || f32::from(ds.len(Length::ControlHeightMd)),
             |scale| scale.side,
         );
-        let side = if ds.compact() {
+        let side = if ds.compact() && !self.scale.is_some_and(|scale| scale.fixed) {
             size.max(f32::from(ds.len(Length::ControlHitTarget)))
         } else {
             size

@@ -1,6 +1,7 @@
-//! SidebarShell.showcase.tsx. The rows are the NavRow stand-in (a block of a later batch).
+//! SidebarShell.showcase.tsx.
 use butler_ds::tokens::{Color, Density, Length};
 use butler_ds::ui::Icon;
+use butler_ds::ui::blocks::nav_row::NavRow;
 use butler_ds::ui::blocks::sidebar_shell::{self, SidebarShell};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Basis, Cross, MinWidth, Radius, Space, Stack, WithItem as _};
@@ -12,7 +13,6 @@ use gpui::{
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins_nav::NavRow;
 
 /// The viewer's frame: a bounded window height for the shell (`--adaptive-viewport-block-size`).
 const FRAME_HEIGHT: f32 = 440.; // DS: SidebarShell.showcase.module.css:3
@@ -116,15 +116,18 @@ fn sidebar(
     let nav = sidebar_shell::nav(
         [
             NavRow::new(row_id("new"), c.new_chat)
-                .glyph(Icon::PencilLine, cx)
+                .glyph(Icon::PencilLine)
                 .active()
-                .build(cx),
+                .on_click(|_, _, _| {})
+                .into_any_element(),
             NavRow::new(row_id("search"), c.search)
-                .glyph(Icon::Search, cx)
-                .build(cx),
+                .glyph(Icon::Search)
+                .on_click(|_, _, _| {})
+                .into_any_element(),
             NavRow::new(row_id("schedules"), c.automations)
-                .glyph(Icon::Clock3, cx)
-                .build(cx),
+                .glyph(Icon::Clock3)
+                .on_click(|_, _, _| {})
+                .into_any_element(),
         ],
         ds,
     );
@@ -132,11 +135,11 @@ fn sidebar(
         .titlebar(titlebar)
         .footer(
             NavRow::new(row_id("settings"), c.settings)
-                .glyph(Icon::Settings, cx)
-                .build(cx),
+                .glyph(Icon::Settings)
+                .on_click(|_, _, _| {}),
         )
         .scroll_header(nav)
-        .sticky_header(NavRow::new(row_id("filter"), c.filter).build(cx));
+        .sticky_header(NavRow::new(row_id("filter"), c.filter).on_click(|_, _, _| {}));
     if let Some((density, _)) = density {
         shell = shell.density(density);
     }
@@ -144,7 +147,7 @@ fn sidebar(
         shell = shell.child(
             NavRow::new(row_id(&format!("row-{index}")), *label)
                 .badge(format!("{}d", index + 1))
-                .build(cx),
+                .on_click(|_, _, _| {}),
         );
     }
     div()

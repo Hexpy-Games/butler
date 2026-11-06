@@ -101,7 +101,11 @@ impl RenderOnce for ChromeFloatingToggle {
         let icon = f32::from(ds.len(Length::ChromeFloatingToggleIconSize));
         let toggle = scope::scoped(
             Spec {
-                action: Some(ActionScale { side: size, icon }),
+                action: Some(ActionScale {
+                    side: size,
+                    icon,
+                    fixed: false,
+                }),
                 ..Spec::default()
             },
             self.toggle,
