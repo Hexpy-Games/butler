@@ -122,6 +122,7 @@ pub struct Grid {
     columns: Columns,
     gap: Space,
     cross: GridCross,
+    page_container: bool,
     cells: Vec<(Span, AnyElement)>,
 }
 
@@ -132,6 +133,7 @@ impl Grid {
             columns: Columns::AUTO_FIT,
             gap: Space::Md,
             cross: GridCross::Stretch,
+            page_container: false,
             cells: Vec::new(),
         }
     }
@@ -148,6 +150,14 @@ impl Grid {
 
     pub fn cross(mut self, cross: GridCross) -> Self {
         self.cross = cross;
+        self
+    }
+
+    /// The grid sits inside a PageContainer (`container: page`). Only then do the `compact` and
+    /// `wide` columns of a responsive choice apply (`@container page`); outside one the query
+    /// matches no container and `base` always applies.
+    pub fn page_container(mut self) -> Self {
+        self.page_container = true;
         self
     }
 
@@ -196,16 +206,26 @@ fn fallback(preset: Preset, viewport: f32) -> Preset {
 }
 
 /// The preset a responsive choice picks at the container's width (no viewport fallbacks).
-fn responsive(r: Responsive, width: f32) -> Preset {
+fn responsive(r: Responsive, width: f32, page_container: bool) -> Preset {
+    if !page_container {
+        return r.base;
+    }
     if let Some(n) = r.compact.filter(|_| width <= COMPACT_CONTAINER) {
         return Preset::Fixed(n);
     }
     r.wide.filter(|_| width >= WIDE_CONTAINER).unwrap_or(r.base)
 }
 
-fn resolve(columns: Columns, width: f32, gap: f32, items: usize, viewport: f32) -> Tracks {
+fn resolve(
+    columns: Columns,
+    page_container: bool,
+    width: f32,
+    gap: f32,
+    items: usize,
+    viewport: f32,
+) -> Tracks {
     let preset = match columns {
-        Columns::Responsive(r) => responsive(r, width),
+        Columns::Responsive(r) => responsive(r, width, page_container),
         Columns::Preset(preset) => fallback(preset, viewport),
     };
     let widths = match preset {
@@ -323,6 +343,7 @@ impl RenderOnce for Grid {
         if width > 0. {
             let tracks = resolve(
                 self.columns,
+                self.page_container,
                 width,
                 f32::from(gap),
                 self.cells.len(),

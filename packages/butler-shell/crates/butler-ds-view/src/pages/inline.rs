@@ -3,12 +3,12 @@ use butler_ds::ui::Icon;
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Inline, Space};
+use butler_ds::ui::tag::Tag;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::tag;
 
 fn chips(lang: Lang) -> [&'static str; 7] {
     lang.pick(
@@ -54,9 +54,9 @@ pub(super) fn stories() -> Vec<Story> {
     ]
 }
 
-fn chip_row(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn chip_row(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     Inline::new()
-        .children(chips(lang).map(|chip| tag(chip, cx)))
+        .children(chips(lang).map(|chip| Tag::new("tag", chip)))
         .into_any_element()
 }
 
@@ -82,9 +82,14 @@ fn row_gap(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-fn no_wrap(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn no_wrap(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     Inline::new()
         .wrap(false)
-        .children(chips(lang).into_iter().take(3).map(|chip| tag(chip, cx)))
+        .children(
+            chips(lang)
+                .into_iter()
+                .take(3)
+                .map(|chip| Tag::new("tag", chip)),
+        )
         .into_any_element()
 }

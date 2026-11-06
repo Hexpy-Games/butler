@@ -462,6 +462,20 @@
     {"page": "bottom-sheet", "name": "menu-sheet-open", "state": "click", "target": 2, "wait_ms": 500, "viewport_height": -1, "margin": 2000},
     {"page": "bottom-sheet", "name": "menu-sheet-hover", "state": "click", "target": 2, "native_menu": "sheet-menu", "wait_ms": 500, "viewport_height": -1, "margin": 2000, "steps": [{"hover": ["root", 3]}]},
     {"page": "bottom-sheet", "name": "select-auto-open", "state": "click", "target": 3, "wait_ms": 500, "viewport_height": -1, "margin": 2000},
-    {"page": "bottom-sheet", "name": "popover-sheet-open", "state": "click", "target": 4, "wait_ms": 500, "viewport_height": -1, "margin": 2000}
+    {"page": "bottom-sheet", "name": "popover-sheet-open", "state": "click", "target": 4, "wait_ms": 500, "viewport_height": -1, "margin": 2000},
+    {"page": "expandable-text", "name": "expand-click", "state": "click", "target": 0, "wait_ms": 500},
+    {"page": "expandable-text", "name": "collapse-click", "state": "click", "target": 0, "wait_ms": 500, "clicks": 2},
+    {"page": "expandable-text", "name": "row-hover", "state": "hover", "target": 0, "wait_ms": 200},
+    {"page": "expandable-text", "name": "row-focus", "state": "focus", "target": 0, "wait_ms": 200},
+    {"page": "inline-reference", "name": "mention-hover", "state": "hover", "target": 0, "wait_ms": 200},
+    {"page": "inline-reference", "name": "mention-focus", "state": "focus", "target": 0, "wait_ms": 200},
+    {"page": "tag", "name": "remove-hover", "state": "hover", "target": 0, "wait_ms": 200},
+    {"page": "tag", "name": "remove-focus", "state": "focus", "target": 0, "wait_ms": 200},
+    {"page": "tag", "name": "edit-hover", "state": "hover", "target": 1, "wait_ms": 200},
+    {"page": "unread-dot", "name": "read-click", "state": "click", "target": 0, "wait_ms": 500},
+    {"page": "animated-number", "name": "replay-click", "state": "click", "target": 0, "wait_ms": 1000},
+    {"page": "rolling-swap", "name": "next-click", "state": "click", "target": 0, "wait_ms": 500},
+    {"page": "avatar", "name": "badge-off", "state": "click", "target": 0, "wait_ms": 500},
+    {"page": "butler-thinking-mark", "name": "toggle-click", "state": "click", "target": 0, "wait_ms": 2500}
   ]
 }

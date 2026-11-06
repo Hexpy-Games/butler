@@ -3,13 +3,13 @@ use butler_ds::ui::layout::{
     AlignSelf, Basis, Columns, Cross, Grid, GridItem, Justify, MaxWidth, MinWidth, Space, Span,
     Stack, StackItem, WithItem as _,
 };
+use butler_ds::ui::tag::Tag;
 use butler_ds::ui::text::Input;
 use butler_ds::ui::typo::{TextAlign, Tone, Typo, Wrap};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::tag;
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
@@ -36,7 +36,7 @@ pub(super) fn stories() -> Vec<Story> {
     ]
 }
 
-fn basis(_: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn basis(_: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     Stack::new()
         .gap(Space::Xs)
         .children(
@@ -50,7 +50,7 @@ fn basis(_: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
                 Stack::row().child(
                     StackItem::new()
                         .basis(basis)
-                        .child(tag(format!("basis={name}"), cx)),
+                        .child(Tag::new("tag", format!("basis={name}"))),
                 )
             }),
         )
@@ -81,21 +81,25 @@ fn label_value(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-fn align_span(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn align_span(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     Grid::new("layout-align-span")
         .columns(Columns::fixed(2))
         .gap(Space::Sm)
-        .item(GridItem::new().span(Span::Full).child(tag("span=full", cx)))
+        .item(
+            GridItem::new()
+                .span(Span::Full)
+                .child(Tag::new("tag", "span=full")),
+        )
         .item(
             GridItem::new()
                 .align_self(AlignSelf::End)
-                .child(tag("alignSelf=end", cx)),
+                .child(Tag::new("tag", "alignSelf=end")),
         )
         .child(Typo::body(lang.pick(LABEL_EN, LABEL_KO)))
         .into_any_element()
 }
 
-fn field_width(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn field_width(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let field = lang.pick("Search chats", "대화 검색");
     let period = lang.pick("Last 24 hours", "최근 24시간");
     Stack::row()
@@ -111,7 +115,7 @@ fn field_width(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
                 .max_width(MaxWidth::Field)
                 .child(Input::new("layout-field").placeholder(field)),
         )
-        .child(tag(period, cx))
+        .child(Tag::new("tag", period))
         .into_any_element()
 }
 

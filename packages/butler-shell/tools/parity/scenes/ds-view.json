@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1, B2, B3, B4 and B5 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5 and P2-S1 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -42,6 +42,20 @@
     { "page": "select", "entry": "components/Select" },
     { "page": "dialog", "entry": "components/Dialog" },
     { "page": "toast", "entry": "components/Toast" },
-    { "page": "bottom-sheet", "entry": "components/BottomSheet" }
+    { "page": "bottom-sheet", "entry": "components/BottomSheet" },
+    { "page": "tag", "entry": "components/Tag" },
+    { "page": "icon-slot", "entry": "components/IconSlot" },
+    { "page": "unread-dot", "entry": "components/UnreadDot" },
+    { "page": "aspect-frame", "entry": "components/AspectFrame" },
+    { "page": "meta-list", "entry": "components/MetaList" },
+    { "page": "icon-tile", "entry": "components/IconTile" },
+    { "page": "rolling-swap", "entry": "components/RollingSwap" },
+    { "page": "rolling-status-line", "entry": "components/RollingStatusLine" },
+    { "page": "animated-number", "entry": "components/AnimatedNumber" },
+    { "page": "avatar", "entry": "components/Avatar" },
+    { "page": "expandable-text", "entry": "components/ExpandableText" },
+    { "page": "media-frame", "entry": "components/MediaFrame" },
+    { "page": "inline-reference", "entry": "components/InlineReference" },
+    { "page": "butler-thinking-mark", "entry": "components/ButlerThinkingMark" }
   ]
 }

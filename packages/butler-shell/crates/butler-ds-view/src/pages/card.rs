@@ -4,6 +4,7 @@ use butler_ds::ui::card::{Card, CardPadding, CardRadius};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Columns, Cross, Grid, Justify, MinWidth, Space, Stack, WithItem as _};
+use butler_ds::ui::tag::Tag;
 use butler_ds::ui::typo::{Role, Tone, Typo, Wrap};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
@@ -11,7 +12,6 @@ use butler_ds::ui::button::{Button, Size, Variant};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::tag;
 
 struct Board {
     title: &'static str,
@@ -239,7 +239,7 @@ fn task_card(id: String, item: &Task, running: bool, selected: bool, cx: &App) -
                     .justify(Justify::Between)
                     .cross(Cross::Center)
                     .gap(Space::Sm)
-                    .child(tag(item.status, cx))
+                    .child(Tag::new("tag", item.status))
                     .child(Typo::caption(item.time).tone(Tone::Tertiary).tabular()),
             ),
     )

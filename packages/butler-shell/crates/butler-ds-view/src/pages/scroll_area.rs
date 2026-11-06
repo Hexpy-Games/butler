@@ -1,12 +1,12 @@
 //! ScrollArea.showcase.tsx.
 use butler_ds::ui::layout::{Box, Radius, Space, Stack, Surface};
 use butler_ds::ui::scroll::{Axis, Bleed, MaxHeight, MinHeight, ScrollArea};
+use butler_ds::ui::tag::Tag;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::tag;
 
 struct Copy {
     row: fn(usize) -> String,
@@ -136,9 +136,13 @@ fn vertical(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-fn horizontal(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn horizontal(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let c = copy(lang);
-    let tags: Vec<AnyElement> = c.tags.iter().map(|text| tag(*text, cx)).collect();
+    let tags: Vec<AnyElement> = c
+        .tags
+        .iter()
+        .map(|text| Tag::new("tag", *text).into_any_element())
+        .collect();
     ScrollArea::new("scroll-horizontal")
         .orientation(Axis::X)
         .probe("scroll-horizontal")

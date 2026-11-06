@@ -1,6 +1,10 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
+mod animated_number;
+mod aspect_frame;
+mod avatar;
 mod bottom_sheet;
 mod boxes;
+mod butler_thinking_mark;
 mod button;
 mod card;
 mod clickable;
@@ -11,20 +15,28 @@ mod dialog;
 mod dialog_contained;
 mod done_icon_button;
 mod dropdown_menu;
+mod expandable_text;
 mod field;
 mod glyph_toggle;
 mod grid;
 mod icon_button;
+mod icon_slot;
+mod icon_tile;
 mod inline;
+mod inline_reference;
 mod input;
 mod kbd;
 mod label;
 mod layout;
+mod media_frame;
+mod meta_list;
 mod native_select;
 mod pill_button;
 mod popover;
 mod presence;
 mod progress_ring;
+mod rolling_status_line;
+mod rolling_swap;
 mod scroll_area;
 mod segmented_control;
 mod select;
@@ -36,11 +48,13 @@ mod stack;
 mod success_check;
 mod switch;
 mod tabs;
+mod tag;
 mod textarea;
 mod tinted_glass;
 mod toast;
 mod tooltip;
 mod typo;
+mod unread_dot;
 
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::context::Ds;
@@ -119,6 +133,28 @@ pub(crate) fn all() -> Vec<Page> {
         page!("scroll-area", "ScrollArea", scroll_area),
         page!("collapsible", "Collapsible", collapsible),
         page!("tabs", "Tabs", tabs),
+        page!("tag", "Tag", tag),
+        page!("icon-slot", "IconSlot", icon_slot),
+        page!("unread-dot", "UnreadDot", unread_dot),
+        page!("aspect-frame", "AspectFrame", aspect_frame),
+        page!("meta-list", "MetaList", meta_list),
+        page!("rolling-swap", "RollingSwap", rolling_swap),
+        page!(
+            "rolling-status-line",
+            "RollingStatusLine",
+            rolling_status_line
+        ),
+        page!("animated-number", "AnimatedNumber", animated_number),
+        page!("avatar", "Avatar", avatar),
+        page!("icon-tile", "IconTile", icon_tile),
+        page!(
+            "butler-thinking-mark",
+            "ButlerThinkingMark",
+            butler_thinking_mark
+        ),
+        page!("expandable-text", "ExpandableText", expandable_text),
+        page!("media-frame", "MediaFrame", media_frame),
+        page!("inline-reference", "InlineReference", inline_reference),
     ]
 }
 
