@@ -63,6 +63,7 @@ pub struct Toast {
     title: SharedString,
     id: Option<ToastId>,
     duration: Option<Duration>,
+    persistent: bool,
     action: Option<Action>,
     cancel: Option<Action>,
 }
@@ -74,6 +75,7 @@ impl Toast {
             title: title.into(),
             id: None,
             duration: None,
+            persistent: false,
             action: None,
             cancel: None,
         }
@@ -108,6 +110,12 @@ impl Toast {
 
     pub fn duration(mut self, duration: Duration) -> Self {
         self.duration = Some(duration);
+        self
+    }
+
+    /// Stays until it is updated (by [`Toast::id`]) or dismissed (sonner `duration: Infinity`).
+    pub fn persistent(mut self) -> Self {
+        self.persistent = true;
         self
     }
 
