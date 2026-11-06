@@ -147,7 +147,7 @@ async fn serve(
             }
             "tabs.list" => json!({"status":"ok","tabs":tabs.values().collect::<Vec<_>>()}),
             "tab.read" => json!({"status":"ok","url":tabs[tab]["url"],"epoch":1,
-                "html":format!("{}<article><p>{}</p><p>{}</p></article>", super::shop::PAGES[2].1, "Complete product material. ".repeat(100), "가격 price options. ".repeat(100))}),
+                "html":format!("{}<article>{}</article>", super::shop::PAGES[2].1, (0..20).map(|i| format!("<p>{} {i}</p><p>가격 price option {i}.</p>", "Complete product material. ".repeat(5))).collect::<String>())}),
             op => panic!("unexpected browser operation {op}"),
         };
         let path = format!(
