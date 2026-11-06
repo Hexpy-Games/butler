@@ -366,6 +366,8 @@ pub(super) fn render(
     let marker = front.then(|| {
         div()
             .absolute()
+            .top_0()
+            .left_0()
             .size_full()
             .debug_selector(|| "toast-front".to_owned())
     });

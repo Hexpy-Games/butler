@@ -49,7 +49,7 @@ async function shoot(page: import("playwright").Page, s: { page: string; name: s
   const crop = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   await page.screenshot({ path: join(dir, `${s.page}.${s.name}.png`), clip: { x: crop.x, y: crop.y, width: crop.w, height: crop.h } });
   // The open overlay's surface (a portalled popover), in logical px relative to the crop's page, when there is one.
-  const overlay = await page.evaluate(`(() => { const box = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + ${scrolled}, y: b.y + ${scrolledY}, w: b.width, h: b.height }; }; const e = document.querySelector(${JSON.stringify(SURFACES.join(", "))}); const o = box(e); if (o) o.sub = box(document.querySelector(${JSON.stringify(MENUS.sub)})); return o; })()`);
+  const overlay = await page.evaluate(`(() => { const box = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + ${scrolled}, y: b.y + ${scrolledY}, w: b.width, h: b.height }; }; const pick = (sel) => { const all = [...document.querySelectorAll(sel)]; return sel.includes("dialog-content") ? all[all.length - 1] : all[0]; }; const e = ${JSON.stringify(SURFACES)}.map(pick).find(Boolean); const o = box(e); if (o) o.sub = box(document.querySelector(${JSON.stringify(MENUS.sub)})); return o; })()`);
   writeFileSync(join(dir, `${s.page}.${s.name}.json`), JSON.stringify({ crop, story, canvas, overlay }, null, 2));
 }
 /** An item of the open menu at `level`, in DOM order. */
