@@ -54,7 +54,14 @@ export function fontWeights(catalog: TokenEntry[]): TokenEntry[] {
 export const BUNDLED_FACES: Record<string, string> = {
   "Pretendard Variable": "Latin + Hangul · variable weight 45–920 · OFL 1.1",
   "IBM Plex Mono": "Latin · 400 and 600 · OFL 1.1",
+  "IBM Plex Sans KR": "Hangul in code · 400 and 600 · OFL 1.1",
 };
+
+/** A stack's leading bundled faces: what renders once fonts load; the rest cover the swap period. */
+export function leadingBundledFaces(families: string[]): string[] {
+  const end = families.findIndex((family) => !BUNDLED_FACES[family]);
+  return end === -1 ? families : families.slice(0, end);
+}
 
 /** Weight axis samples, inside the official @font-face range (45 920). */
 export const WEIGHT_AXIS = [45, 200, 400, 600, 800, 920];

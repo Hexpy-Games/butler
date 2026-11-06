@@ -148,6 +148,12 @@ impl TabRegistry {
         self.tabs.clear();
     }
 }
+/// Whether a frame shows a document fetched from somewhere. A frame that has
+/// committed no document yet (no URL) and Chromium's error page for a blocked
+/// or failed frame request hold nothing from outside the page's policy.
+pub fn fetched_document(url: &str) -> bool {
+    !url.is_empty() && !url.starts_with("chrome-error:")
+}
 pub fn public_url(value: &str) -> Result<url::Url, &'static str> {
     let url = url::Url::parse(value).map_err(|_| "navigation_denied")?;
     if !matches!(url.scheme(), "https" | "http")

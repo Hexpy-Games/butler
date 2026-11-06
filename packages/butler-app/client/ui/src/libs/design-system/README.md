@@ -71,6 +71,10 @@ ratchet mode: existing violations are baselined per file and may only shrink.
   motion and typography, never targets DS internals (element selectors,
   `[data-slot]`, `[data-state]`, `:global(.ds-class)`), and never sets DS
   custom properties such as `--clickable-*`, `--sidebar-*` or `--icon-button-*`.
+- Text is Pretendard Variable (`--font-body`); code is IBM Plex Mono
+  (`--font-family-code`), whose missing Hangul glyphs fall back to IBM Plex
+  Sans KR. All three are bundled (`fonts/fonts.css`); never name another font
+  family.
 - Text size (큰 글자) zooms the whole App UI by `--ui-scale` (Electron page
   zoom: 1, 1.15 or 1.3). Corner radii keep their 100% size: the `--radius-*`
   tokens divide by `--ui-scale`, and any px length in a radius must too

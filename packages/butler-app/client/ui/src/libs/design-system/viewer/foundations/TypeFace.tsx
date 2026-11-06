@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { tokenCatalog } from "./catalog";
-import { BUNDLED_FACES, fontFamilies, fontWeights, typefaceTitle, WEIGHT_AXIS } from "./typeScale";
+import { BUNDLED_FACES, fontFamilies, fontWeights, leadingBundledFaces, typefaceTitle, WEIGHT_AXIS } from "./typeScale";
 import type { SampleLocale } from "./typeRoles";
 import f from "./Foundations.module.css";
 
@@ -30,6 +30,7 @@ export function TypeFace({ locale }: { locale: SampleLocale }) {
   const body = byName.get("--font-body")?.light ?? "";
   const code = byName.get("--font-family-code")?.light ?? "";
   const families = fontFamilies(body);
+  const codeFamilies = fontFamilies(code);
   const other: SampleLocale = locale === "en" ? "ko" : "en";
   return (
     <Stack gap="2xl">
@@ -84,8 +85,11 @@ export function TypeFace({ locale }: { locale: SampleLocale }) {
         <div className={f.glyphRow}>
           <Typo.SectionTitle tone="tertiary">Code · --font-family-code</Typo.SectionTitle>
           <Stack gap="xs" minWidth="0">
-            <span className={f.glyphsCode}>{"const reply = await butler.ask(\"요약해 줘\"); // 0O 1lI"}</span>
-            <Typo.Caption tone="tertiary" wrap="anywhere">{[fontFamilies(code)[0], BUNDLED_FACES[fontFamilies(code)[0] ?? ""]].filter(Boolean).join(" · ")}</Typo.Caption>
+            <span className={f.glyphsCode}>{"const reply = await butler.ask(\"요약해 줘\"); // 한글 주석 0O 1lI"}</span>
+            {leadingBundledFaces(codeFamilies).map((face) => (
+              <Typo.Caption key={face} tone="tertiary" wrap="anywhere">{`${face} · ${BUNDLED_FACES[face]}`}</Typo.Caption>
+            ))}
+            <Typo.Caption tone="tertiary" wrap="anywhere">{`Fallback: ${codeFamilies.slice(leadingBundledFaces(codeFamilies).length).join(" · ")}`}</Typo.Caption>
           </Stack>
         </div>
       </div>

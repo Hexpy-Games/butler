@@ -40,6 +40,7 @@ The harness builds `butler-agent` itself with `butler-agent/e2e-fixtures` unless
 `BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`. Prebuilt agents used
 for browser import scenarios also need this feature to inject isolated profile
 and key sources. Never enable it in shipped agents.
+The harness refuses any other binary that lacks the feature (it does not answer `--e2e-fixtures`); runs of a shipped binary set `BUTLER_E2E_WITHOUT_FIXTURES=1` and skip `::requires_e2e_fixtures::`.
 
 Put scenarios that require compiled-in hooks in a `requires_e2e_fixtures` module,
 including their hook-arming helpers. The installed Windows runner passes
