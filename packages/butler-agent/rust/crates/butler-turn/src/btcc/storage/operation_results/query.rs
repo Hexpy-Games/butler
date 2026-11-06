@@ -374,6 +374,27 @@ pub(super) fn read_exact(
     else {
         return Err(error(StorageCode::OperationResultRangeOutOfBounds));
     };
+    let text = match input.source {
+        ExactResultSource::Request => payload.raw.as_str(),
+        ExactResultSource::Result => result,
+    };
+    if text.is_char_boundary(input.offset)
+        && let Some(end) = (end.saturating_sub(3)..=end)
+            .rev()
+            .find(|end| text.is_char_boundary(*end))
+            .filter(|end| *end > input.offset)
+    {
+        return Ok(ExactResultRange {
+            encoding: "utf8",
+            data: text[input.offset..end].to_owned(),
+            offset: input.offset,
+            length: end - input.offset,
+            total_bytes: bytes.len(),
+            next_offset: (end < bytes.len()).then_some(end),
+            result_sha256: hash.to_owned(),
+            complete: input.offset == 0 && end == bytes.len(),
+        });
+    }
     Ok(ExactResultRange {
         encoding: "base64",
         data: base64::engine::general_purpose::STANDARD.encode(range),
