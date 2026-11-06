@@ -15,7 +15,6 @@ mod pages;
 #[cfg(feature = "shots")]
 mod shots;
 mod standins;
-mod standins_nav;
 mod standins_overlay;
 mod standins_shell;
 mod standins_window;

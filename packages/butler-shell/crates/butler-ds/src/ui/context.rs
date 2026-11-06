@@ -233,6 +233,19 @@ impl Ds {
         convert::hsla(self.tokens.color(self.remapped(token)))
     }
 
+    /// `token` as the subtree's re-pointings resolve it.
+    pub fn resolve(&self, token: Color) -> Color {
+        self.remapped(token)
+    }
+
+    /// The colour of `token` in the subtree, or `None` where the theme leaves it unset (CSS
+    /// `initial`), so a `var(--x, fallback)` takes its fallback.
+    pub fn try_color(&self, token: Color) -> Option<Hsla> {
+        self.tokens
+            .try_color(self.remapped(token))
+            .map(convert::hsla)
+    }
+
     /// Re-points colour tokens for a subtree and returns the mark to hand to [`Self::end_remap`].
     pub fn begin_remap(&mut self, pairs: &[(Color, Color)]) -> usize {
         let mark = self.remap.len();

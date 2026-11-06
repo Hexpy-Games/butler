@@ -5,7 +5,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, div, px,
 };
 
-use super::{AdaptiveShell, Ctx, panel_rows, shell_tones};
+use super::{AdaptiveShell, Ctx, NAV_FILLS, panel_rows, shell_tones};
 use crate::tokens::{Color, Length, Shadow};
 use crate::ui::blocks::adaptive_shell::peek::{CloseReason, SidebarPeek};
 use crate::ui::blocks::scope::{self, Spec};
@@ -37,6 +37,7 @@ pub(super) fn sidebar_peek(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -
     let enter = ctx.t.peek;
     let tones = Spec {
         remap: [shell_tones(), panel_rows()].concat(),
+        nav_fills: Some(NAV_FILLS),
         vars: Some(ctx.vars),
         ..Spec::default()
     };

@@ -58,13 +58,15 @@ pub fn icon(icon: Icon, size: IconSize, ds: &Ds) -> IconView {
 }
 
 impl RenderOnce for IconView {
-    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        // A SidebarShell sizes every svg in it (`.shell svg`, SidebarShell.module.css:45).
+        let side = super::blocks::scope::svg_size(cx).map_or(self.side, gpui::px);
         let mut glyph = svg().path(SharedString::from(self.icon.path()));
         if self.turn != 0. {
             glyph = glyph.with_transformation(Transformation::rotate(gpui::radians(self.turn)));
         }
         glyph
-            .size(self.side)
+            .size(side)
             .flex_none()
             .text_color(window.text_style().color)
     }

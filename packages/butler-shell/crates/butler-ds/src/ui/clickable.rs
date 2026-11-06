@@ -43,6 +43,8 @@ pub struct Clickable {
     disabled: bool,
     /// `--clickable-padding-inline` and `--clickable-min-height`, when a block sets its own.
     metrics: Option<(Pixels, Pixels)>,
+    /// The hover and selected fills a surface sets (`--nav-hover-bg`, `--nav-selected-bg`).
+    fills: Option<(gpui::Hsla, gpui::Hsla)>,
     on_click: Option<Handler>,
     children: Vec<AnyElement>,
 }
@@ -57,6 +59,7 @@ impl Clickable {
             stretch: false,
             disabled: false,
             metrics: None,
+            fills: None,
             on_click: None,
             children: Vec::new(),
         }
@@ -95,6 +98,12 @@ impl Clickable {
         self
     }
 
+    /// The hover fill and the selected (and pressed) fill, in place of the `--selection` shades.
+    pub fn fills(mut self, hover: gpui::Hsla, selected: gpui::Hsla) -> Self {
+        self.fills = Some((hover, selected));
+        self
+    }
+
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -129,6 +138,10 @@ impl Clickable {
         control.children = std::mem::take(&mut self.children);
         let selection = ds.color(Color::Selection);
         let strong = ds.color(Color::SelectionStrong);
+        let (selection, strong, shaded) = match self.fills {
+            Some((hover, selected)) => (hover, selected, false),
+            None => (selection, strong, true),
+        };
         if self.variant == Variant::Text {
             let secondary = ds.color(Color::TextSecondary);
             control.fg = Blend {
@@ -141,8 +154,8 @@ impl Clickable {
             return control;
         }
         let hover = match self.selected {
-            Some(_) => convert::with_alpha(selection, 0.6), // DS: Clickable.module.css:84
-            None => selection,
+            Some(_) if shaded => convert::with_alpha(selection, 0.6), // DS: Clickable.module.css:84
+            _ => selection,
         };
         control.fill = match self.selected {
             Some(true) => Blend {

@@ -258,6 +258,11 @@ impl RenderOnce for Collapsible {
         if !view.mounted {
             return div().hidden();
         }
+        if view.hidden {
+            // Closed and kept: a `height: 0` box with its clip margin netted out, still a flex
+            // item (so a parent's gap applies); the content is not laid out until it opens.
+            return div().h(px(0.));
+        }
         let room = focus::room(Ds::get(cx));
         let measure = canvas(
             |_, _, _| (),
@@ -281,9 +286,6 @@ impl RenderOnce for Collapsible {
             .child(content);
         if let Some(height) = view.height {
             frame = frame.h(px(height) + room * 2.);
-        }
-        if view.hidden {
-            frame = frame.invisible();
         }
         frame
     }

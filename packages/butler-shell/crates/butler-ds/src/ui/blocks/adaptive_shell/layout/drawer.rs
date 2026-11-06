@@ -4,7 +4,7 @@
 //! lives here too, as it shares the panel's slide.
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, div, px};
 
-use super::{AdaptiveShell, Ctx, panel_rows, root_box, shell_tones, workspace_box};
+use super::{AdaptiveShell, Ctx, NAV_FILLS, panel_rows, root_box, shell_tones, workspace_box};
 use crate::tokens::{Color, Length};
 use crate::ui::blocks::adaptive_shell::parts;
 use crate::ui::blocks::responsive::COMPACT_MAX;
@@ -86,6 +86,7 @@ fn sidebar(shell: &mut AdaptiveShell, (ctx, ds): (&Ctx, &Ds), width: f32) -> Opt
     let content = shell.sidebar.take()?;
     let spec = Spec {
         remap: [shell_tones(), panel_rows()].concat(),
+        nav_fills: Some(NAV_FILLS),
         ..Spec::default()
     };
     Some(drawer_panel(false, width, (ctx, ds), scope::scoped(spec, content)).into_any_element())

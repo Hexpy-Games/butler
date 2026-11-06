@@ -13,7 +13,7 @@ use gpui::{
     div, px,
 };
 
-use crate::standins_nav::NavRow;
+use butler_ds::ui::blocks::nav_row::NavRow;
 
 /// KeyValueRow (KeyValueRow.module.css): a label and its value on one baseline row, and under
 /// them an optional description and meta.
@@ -168,8 +168,8 @@ pub(crate) fn demo_sidebar_rows(
         .gap(Space::Xs)
         .children(names.iter().zip(glyphs).map(|(label, glyph)| {
             NavRow::new(SharedString::from(format!("nav-{label}")), *label)
-                .glyph(glyph, cx)
-                .build(cx)
+                .glyph(glyph)
+                .on_click(|_, _, _| {})
         }));
     let list = Stack::new()
         .gap(Space::Xs)
@@ -182,8 +182,9 @@ pub(crate) fn demo_sidebar_rows(
         )
         .children(rows.iter().enumerate().map(|(index, label)| {
             let row = NavRow::new(SharedString::from(format!("space-{label}")), *label)
-                .glyph(Icon::MessageSquare, cx);
-            if index == 0 { row.active() } else { row }.build(cx)
+                .glyph(Icon::MessageSquare)
+                .on_click(|_, _, _| {});
+            if index == 0 { row.active() } else { row }
         }));
     vec![
         Stack::new()

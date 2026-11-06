@@ -85,6 +85,10 @@ pub(super) fn shell_tones() -> Vec<(Color, Color)> {
     ]
 }
 
+/// `--nav-hover-bg` / `--nav-selected-bg` of `.sidebar` (AdaptiveShell.module.css:127): the nav
+/// rows of the sidebar take the shell's row fills.
+pub(super) const NAV_FILLS: (Color, Color) = (Color::SidebarHoverBg, Color::SidebarSelectedBg);
+
 /// A panel on the panel surface (a drawer, the peek card): its rows keep the selection shades.
 pub(super) fn panel_rows() -> Vec<(Color, Color)> {
     vec![
@@ -395,6 +399,7 @@ fn sidebar_layer(
     };
     let tones = Spec {
         remap: shell_tones(),
+        nav_fills: Some(NAV_FILLS),
         ..Spec::default()
     };
     let el = div()

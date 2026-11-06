@@ -1,8 +1,7 @@
-//! Avatar.showcase.tsx. The "Sidebar row" story draws the rows with the NavRow stand-in and a
-//! plain frame for SidebarShell (blocks of a later batch).
-use butler_ds::tokens::Density;
+//! Avatar.showcase.tsx.
 use butler_ds::ui::Icon;
 use butler_ds::ui::avatar::{Avatar, AvatarSize, AvatarTone};
+use butler_ds::ui::blocks::nav_row::NavRow;
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::card::Card;
 use butler_ds::ui::context::Ds;
@@ -14,8 +13,8 @@ use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
+use super::nav_parts::sidebar;
 use crate::copy::Lang;
-use crate::standins_nav::{NavRow, sidebar_shell};
 
 struct Copy {
     me: &'static str,
@@ -161,7 +160,7 @@ fn title_with_avatar(title: &'static str, avatar: Avatar) -> AnyElement {
         .into_any_element()
 }
 
-fn sidebar_row(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn sidebar_row(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let c = copy(lang);
     let status = IconSlot::new()
         .size(SlotSize::Sidebar)
@@ -169,31 +168,29 @@ fn sidebar_row(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
         .child(Spinner::new("avatar-sidebar-spinner"));
     let rows = [
         NavRow::new("avatar-nav-1", c.task)
-            // SidebarShell sets `data-sidebar-density="comfortable"` on its root.
-            .density(Density::Comfortable)
             .active()
-            .glyph(Icon::Notebook, cx)
-            .content(title_with_avatar(
+            .glyph(Icon::Notebook)
+            .on_click(|_, _, _| {})
+            .label_element(title_with_avatar(
                 c.task,
                 Avatar::new("avatar-nav-me", c.me)
                     .label(c.working)
                     .badge(Some(Icon::Bot)),
             ))
             .actions(status)
-            .build(cx),
+            .into_any_element(),
         NavRow::new("avatar-nav-2", c.task2)
-            // SidebarShell sets `data-sidebar-density="comfortable"` on its root.
-            .density(Density::Comfortable)
-            .glyph(Icon::Notebook, cx)
-            .content(title_with_avatar(
+            .glyph(Icon::Notebook)
+            .on_click(|_, _, _| {})
+            .label_element(title_with_avatar(
                 c.task2,
                 Avatar::new("avatar-nav-other", c.minji)
                     .tone(AvatarTone::Other)
                     .label(c.minji_tip),
             ))
-            .build(cx),
+            .into_any_element(),
     ];
-    sidebar_shell(rows, cx)
+    sidebar("avatar-sidebar", rows)
 }
 
 fn card_title(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
