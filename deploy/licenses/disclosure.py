@@ -9,6 +9,7 @@ HOMEPAGES = {
     "Noto Sans KR": "https://github.com/google/fonts/blob/main/ofl/notosanskr/OFL.txt",
     "SQLite": "https://www.sqlite.org/copyright.html",
     "IBM Plex Mono": "https://github.com/IBM/plex/blob/2f9ba1b25957d958db71a849e85d72e3ecfb845a/LICENSE.txt",
+    "IBM Plex Sans KR": "https://github.com/IBM/plex/blob/1da12f02587b630c07e92692d21492d722f53614/packages/plex-sans-kr/LICENSE.txt",
     "LobeHub provider logos": "https://github.com/lobehub/lobe-icons/blob/49a2130df7bfa5eb1b088261bff20a37e2967789/LICENSE",
     "JavaScriptCore V8 Date.parse adaptation": "https://v8.dev/",
     "Unicode CLDR timezone names": "https://github.com/unicode-org/icu/blob/release-78.1/LICENSE",

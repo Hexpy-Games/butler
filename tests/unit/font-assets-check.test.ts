@@ -13,7 +13,7 @@ const official = createRequire(resolve("packages/butler-app/client/ui/package.js
 const PRETENDARD = "PretendardVariable-a1.woff2";
 const FACE = `@font-face{font-family:"Pretendard Variable";font-weight:45 920;font-style:normal;font-display:swap;src:url(./${PRETENDARD}) format("woff2-variations")}`;
 
-function fixture(options: { pretendard?: "official" | "modified" | "none"; face?: string; slices?: number; css?: string; notices?: string | null } = {}): string {
+function fixture(options: { pretendard?: "official" | "modified" | "none"; face?: string; krFace?: string; slices?: number; css?: string; notices?: string | null } = {}): string {
   const dist = mkdtempSync(join(tmpdir(), "font-assets-"));
   dirs.push(dist);
   mkdirSync(join(dist, "assets"));
@@ -32,9 +32,14 @@ function fixture(options: { pretendard?: "official" | "modified" | "none"; face?
     writeFileSync(join(dist, "assets", name), Buffer.alloc(10));
     refs.push(`@font-face{font-family:"IBM Plex Mono";src:url(./${name}) format("woff2")}`);
   }
+  for (const w of ["Regular", "SemiBold"]) {
+    const name = `IBMPlexSansKR-${w}-k1.woff2`;
+    writeFileSync(join(dist, "assets", name), Buffer.alloc(10));
+    refs.push(options.krFace ?? `@font-face{font-family:"IBM Plex Sans KR";font-display:swap;src:url(./${name}) format("woff2")}`);
+  }
   writeFileSync(join(dist, "assets", "index-c1.css"), options.css ?? refs.join(""));
   if (options.notices !== null) {
-    writeFileSync(join(dist, "THIRD_PARTY_NOTICES.txt"), options.notices ?? "Pretendard\nIBM Plex Mono\nSIL OPEN FONT LICENSE Version 1.1\n");
+    writeFileSync(join(dist, "THIRD_PARTY_NOTICES.txt"), options.notices ?? "Pretendard\nIBM Plex Mono\nIBM Plex Sans KR\nSIL OPEN FONT LICENSE Version 1.1\n");
   }
   return dist;
 }
@@ -49,6 +54,8 @@ test("a complete build passes with the one official Pretendard face", () => {
   expect(report.pretendardSlices).toBe(0);
   expect(report.plexFiles).toBe(2);
   expect(report.plexBytes).toBe(20);
+  expect(report.plexSansKrFiles).toBe(2);
+  expect(report.plexSansKrFace).toBe(true);
   expect(report.missing).toEqual([]);
   expect(report.external).toEqual([]);
 });
@@ -85,6 +92,10 @@ test("the Pretendard face keeps every weight, swap and no unicode-range", () => 
 test("missing license notices fail", () => {
   expect(inspectFontAssets(fixture({ notices: null })).ok).toBe(false);
   expect(inspectFontAssets(fixture({ notices: "Pretendard only" })).ok).toBe(false);
+});
+
+test("a sliced IBM Plex Sans KR face fails", () => {
+  expect(inspectFontAssets(fixture({ krFace: '@font-face{font-family:"IBM Plex Sans KR";font-display:swap;src:url(./IBMPlexSansKR-Regular-k1.woff2) format("woff2");unicode-range:U+AC00-AC0F}' })).ok).toBe(false);
 });
 
 test("root-absolute url()s resolve against the build base", () => {

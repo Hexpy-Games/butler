@@ -2,8 +2,9 @@
 // every font url() in the emitted CSS resolves to an emitted file, no font is
 // loaded from a third-party host, the official single-file Pretendard Variable
 // face (byte-identical to the pinned package, full Hangul coverage, weights
-// 45-920) and the IBM Plex Mono files ship, no unicode-range slices of
-// Pretendard remain, and the OFL notices sit next to index.html.
+// 45-920), the IBM Plex Mono files and one IBM Plex Sans KR file per weight ship,
+// no unicode-range slices of Pretendard or IBM Plex Sans KR remain, and the OFL
+// notices sit next to index.html.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -18,6 +19,9 @@ export interface FontAssetsReport {
   pretendardSlices: number;
   plexFiles: number;
   plexBytes: number;
+  plexSansKrFiles: number;
+  plexSansKrBytes: number;
+  plexSansKrFace: boolean;
   missing: string[];
   external: string[];
   notices: boolean;
@@ -38,10 +42,12 @@ export function inspectFontAssets(distDir: string, base = "/"): FontAssetsReport
   const pretendard = assets.filter((name) => /^PretendardVariable-[\w-]+\.woff2$/u.test(name));
   const slices = assets.filter((name) => /^PretendardVariable\.subset\./u.test(name));
   const plex = assets.filter((name) => /^IBMPlexMono-[\w-]+\.woff2$/u.test(name));
+  const plexSansKr = assets.filter((name) => /^IBMPlexSansKR-[\w-]+\.woff2$/u.test(name));
   const official = sha256(officialPretendard());
   const missing: string[] = [];
   const external: string[] = [];
   let pretendardFaces = 0, pretendardFaceValid = true;
+  let plexSansKrFaces = 0, plexSansKrFaceValid = true;
   for (const css of assets.filter((name) => name.endsWith(".css"))) {
     const text = readFileSync(join(distDir, "assets", css), "utf8");
     for (const [, raw] of text.matchAll(/url\(\s*["']?([^"')]+\.woff2?)["']?\s*\)/gu)) {
@@ -57,20 +63,26 @@ export function inspectFontAssets(distDir: string, base = "/"): FontAssetsReport
     }
     // One face for every script and weight: no unicode-range, so Hangul never splits into per-slice runs.
     for (const [, face] of text.matchAll(/@font-face\s*\{([^}]*)\}/gu)) {
+      if (/font-family:\s*["']?IBM Plex Sans KR/u.test(face!)) {
+        plexSansKrFaces += 1;
+        plexSansKrFaceValid &&= /font-display:\s*swap/u.test(face!) && !/unicode-range/u.test(face!);
+      }
       if (!/font-family:\s*["']?Pretendard Variable/u.test(face!)) continue;
       pretendardFaces += 1;
       pretendardFaceValid &&= /font-weight:\s*45 920/u.test(face!) && /font-display:\s*swap/u.test(face!)
         && !/unicode-range/u.test(face!) && /PretendardVariable-[\w-]+\.woff2/u.test(face!);
     }
   }
+  const plexSansKrFace = plexSansKrFaces > 0 && plexSansKrFaceValid;
   const pretendardFace = pretendardFaces > 0 && pretendardFaceValid;
   const pretendardOfficial = pretendard.length === 1 && sha256(join(distDir, "assets", pretendard[0]!)) === official;
   const noticesPath = join(distDir, "THIRD_PARTY_NOTICES.txt");
   const noticesText = existsSync(noticesPath) ? readFileSync(noticesPath, "utf8") : "";
-  const notices = ["Pretendard", "IBM Plex Mono", "SIL OPEN FONT LICENSE Version 1.1"]
+  const notices = ["Pretendard", "IBM Plex Mono", "IBM Plex Sans KR", "SIL OPEN FONT LICENSE Version 1.1"]
     .every((needle) => noticesText.includes(needle));
   return {
     ok: pretendardOfficial && pretendardFace && slices.length === 0 && plex.length > 0
+      && plexSansKr.length === 2 && plexSansKrFace
       && missing.length === 0 && external.length === 0 && notices,
     pretendardFiles: pretendard.length,
     pretendardBytes: pretendard.reduce((total, name) => total + size(name), 0),
@@ -79,6 +91,9 @@ export function inspectFontAssets(distDir: string, base = "/"): FontAssetsReport
     pretendardSlices: slices.length,
     plexFiles: plex.length,
     plexBytes: plex.reduce((total, name) => total + size(name), 0),
+    plexSansKrFiles: plexSansKr.length,
+    plexSansKrBytes: plexSansKr.reduce((total, name) => total + size(name), 0),
+    plexSansKrFace,
     missing,
     external,
     notices,
