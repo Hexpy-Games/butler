@@ -11,6 +11,7 @@ mod boxes;
 mod butler_thinking_mark;
 mod button;
 mod card;
+mod chart;
 mod clickable;
 mod collapsible;
 mod collapsible_nav_group;
@@ -36,6 +37,7 @@ mod inline;
 mod inline_reference;
 mod input;
 mod inspector_panel;
+mod item_card;
 mod kbd;
 mod key_value_row;
 mod label;
@@ -261,6 +263,8 @@ fn blocks() -> Vec<Page> {
             question_answer_card
         ),
         page!("event-timeline", "EventTimeline", event_timeline),
+        page!("item-card", "ItemCard", item_card),
+        page!("chart", "Chart", chart),
         page!("metric-card", "MetricCard", metric_card),
         page!("metric-grid", "MetricGrid", metric_grid),
         page!("progress-meter", "ProgressMeter", progress_meter),

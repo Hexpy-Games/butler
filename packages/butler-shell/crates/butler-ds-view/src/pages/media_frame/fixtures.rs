@@ -7,7 +7,7 @@ use std::sync::Arc;
 use gpui::{Image, ImageFormat, ImageSource};
 
 #[derive(Clone, Copy)]
-pub(super) enum Kind {
+pub(in crate::pages) enum Kind {
     Paper,
     Place,
     Recipe,
@@ -29,12 +29,12 @@ fn picture(format: ImageFormat, bytes: Vec<u8>) -> ImageSource {
 }
 
 /// A URL that never loads, for the failed state: bytes that are no picture.
-pub(super) fn broken() -> ImageSource {
+pub(in crate::pages) fn broken() -> ImageSource {
     picture(ImageFormat::Png, b"broken".to_vec())
 }
 
 /// A favicon for placeholder demos: a plain mark, no brand.
-pub(super) fn favicon() -> ImageSource {
+pub(in crate::pages) fn favicon() -> ImageSource {
     svg(
         32,
         32,
@@ -69,7 +69,7 @@ fn text_lines(y0: u32, widths: &[u32]) -> String {
     out
 }
 
-pub(super) fn picture_of(kind: Kind) -> ImageSource {
+pub(in crate::pages) fn picture_of(kind: Kind) -> ImageSource {
     match kind {
         Kind::Paper => svg(
             320,

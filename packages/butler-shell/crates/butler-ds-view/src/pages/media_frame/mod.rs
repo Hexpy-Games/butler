@@ -1,5 +1,5 @@
 //! MediaFrame.showcase.tsx (and MediaFrame.demo.tsx: the pictures that arrive late).
-mod fixtures;
+pub(super) mod fixtures;
 
 use std::time::Duration;
 
@@ -217,7 +217,7 @@ fn natural(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
 }
 
 /// `useLateSrc`: `src` after `delay` ms of the round, none before.
-fn late(
+pub(super) fn late(
     window: &mut Window,
     cx: &mut App,
     key: &str,

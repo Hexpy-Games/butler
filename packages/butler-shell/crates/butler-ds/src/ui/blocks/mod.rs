@@ -15,6 +15,7 @@ pub mod drag_preview;
 pub mod empty_line;
 pub mod event_timeline;
 pub mod inspector_panel;
+pub mod item_card;
 pub mod key_value_row;
 pub mod list_row;
 pub mod markdown_content;

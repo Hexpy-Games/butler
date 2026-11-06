@@ -130,7 +130,15 @@ pub struct Grid {
     gap: Space,
     cross: GridCross,
     page_container: bool,
-    cells: Vec<(Span, AnyElement)>,
+    fill: bool,
+    cells: Vec<Cell>,
+}
+
+/// One grid item: a child still to be blockified, or a finished [`GridItem`].
+struct Cell {
+    span: Span,
+    element: AnyElement,
+    raw: bool,
 }
 
 impl Grid {
@@ -141,8 +149,16 @@ impl Grid {
             gap: Space::Md,
             cross: GridCross::Stretch,
             page_container: false,
+            fill: false,
             cells: Vec::new(),
         }
+    }
+
+    /// Items fill their cell's height: a child that grows (`flex: 1`) takes the row's height
+    /// (a card in a row of cards that share the height).
+    pub fn fill_cells(mut self) -> Self {
+        self.fill = true;
+        self
     }
 
     pub fn columns(mut self, columns: Columns) -> Self {
@@ -169,9 +185,11 @@ impl Grid {
     }
 
     pub fn child(mut self, child: impl IntoElement) -> Self {
-        // The child is the grid item itself (blockified), so it has no strut.
-        let cell = strut::scope(false, div().min_w_0().child(child));
-        self.cells.push((Span::One, cell.into_any_element()));
+        self.cells.push(Cell {
+            span: Span::One,
+            element: child.into_any_element(),
+            raw: true,
+        });
         self
     }
 
@@ -183,7 +201,11 @@ impl Grid {
     }
 
     pub fn item(mut self, item: GridItem) -> Self {
-        self.cells.push((item.span, item.into_any_element()));
+        self.cells.push(Cell {
+            span: item.span,
+            element: item.into_any_element(),
+            raw: false,
+        });
         self
     }
 }
@@ -303,7 +325,7 @@ fn row(
     cells: Vec<(usize, usize, AnyElement)>,
     tracks: &Tracks,
     gap: Pixels,
-    cross: GridCross,
+    (cross, fill): (GridCross, bool),
 ) -> Div {
     let mut row = div().flex().flex_row().gap(gap);
     row = if tracks.baseline {
@@ -316,7 +338,8 @@ fn row(
     for (start, span, cell) in cells {
         let spanned = tracks.widths.iter().skip(start).take(span).sum::<f32>();
         let width = spanned + f32::from(gap) * (span - 1) as f32;
-        row = row.child(div().w(px(width)).flex_none().min_w_0().child(cell));
+        let cell = div().w(px(width)).flex_none().min_w_0().child(cell);
+        row = row.child(if fill { cell.flex().flex_col() } else { cell });
     }
     row
 }
@@ -360,8 +383,24 @@ impl RenderOnce for Grid {
                 self.cells.len(),
                 viewport,
             );
-            for cells in place(self.cells, tracks.widths.len()) {
-                grid = grid.child(row(cells, &tracks, gap, self.cross));
+            let fill = self.fill;
+            let cells = self.cells.into_iter().map(|cell| {
+                let element = if cell.raw {
+                    // The child is the grid item itself (blockified), so it has no strut.
+                    let item = div().min_w_0();
+                    let item = if fill {
+                        item.flex().flex_col().flex_1()
+                    } else {
+                        item
+                    };
+                    strut::scope(false, item.child(cell.element)).into_any_element()
+                } else {
+                    cell.element
+                };
+                (cell.span, element)
+            });
+            for cells in place(cells.collect(), tracks.widths.len()) {
+                grid = grid.child(row(cells, &tracks, gap, (self.cross, fill)));
             }
         }
         grid
