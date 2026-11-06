@@ -38,8 +38,10 @@ mod key_value_row;
 mod label;
 mod layout;
 mod list_row;
+mod markdown_content;
 mod media_frame;
 mod message_avatar_block;
+mod message_row;
 mod meta_list;
 mod native_select;
 mod nav_drop_target;
@@ -221,6 +223,8 @@ fn blocks() -> Vec<Page> {
         page!("key-value-row", "KeyValueRow", key_value_row),
         page!("empty-line", "EmptyLine", empty_line),
         page!("status-capsule", "StatusCapsule", status_capsule),
+        page!("markdown-content", "MarkdownContent", markdown_content),
+        page!("message-row", "MessageRow", message_row),
         page!(
             "message-avatar-block",
             "MessageAvatarBlock",

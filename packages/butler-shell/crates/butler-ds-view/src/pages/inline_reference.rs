@@ -109,7 +109,7 @@ fn svg(body: &str, view_box: &str) -> ImageSource {
 }
 
 /// sampleFavicons.ts: a dark glyph, a coloured mark, a wide mark and a broken image.
-fn favicon(host: &str) -> Option<ImageSource> {
+pub(super) fn favicon(host: &str) -> Option<ImageSource> {
     match host {
         "github.com" => Some(svg(
             "<circle cx=\"16\" cy=\"16\" r=\"15\" fill=\"#1f2328\"/><circle cx=\"16\" cy=\"14\" r=\"6\" fill=\"#fff\"/><rect x=\"13\" y=\"19\" width=\"6\" height=\"9\" rx=\"2\" fill=\"#fff\"/>",

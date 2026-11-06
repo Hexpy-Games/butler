@@ -76,6 +76,8 @@
     { "page": "key-value-row", "entry": "blocks/KeyValueRow" },
     { "page": "empty-line", "entry": "blocks/EmptyLine" },
     { "page": "status-capsule", "entry": "blocks/StatusCapsule" },
+    { "page": "markdown-content", "entry": "blocks/MarkdownContent" },
+    { "page": "message-row", "entry": "blocks/MessageRow" },
     { "page": "message-avatar-block", "entry": "blocks/MessageAvatarBlock" },
     { "page": "work-activity-block", "entry": "blocks/WorkActivityBlock" },
     { "page": "worker-activity-row", "entry": "blocks/WorkerActivityRow" },

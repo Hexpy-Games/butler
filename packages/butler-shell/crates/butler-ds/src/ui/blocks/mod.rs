@@ -14,6 +14,7 @@ pub mod event_timeline;
 pub mod inspector_panel;
 pub mod key_value_row;
 pub mod list_row;
+pub mod markdown_content;
 pub mod measure;
 pub mod message_avatar_block;
 pub mod message_row;

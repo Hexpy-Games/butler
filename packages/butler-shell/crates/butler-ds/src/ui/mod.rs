@@ -53,6 +53,7 @@ pub mod scroll;
 pub mod segmented_control;
 pub mod select;
 pub mod select_button;
+pub mod selectable;
 pub mod separator;
 pub mod skeleton;
 pub mod slider;
