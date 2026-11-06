@@ -8,8 +8,10 @@
 //!   press <n>             pointer onto control n and the left button down, held
 //!   release               the left button up
 //!   click <n>             a full click on control n
+//!   tap <n>               a click on control n without settling (motion in flight; use `wait`)
 //!   focus <n>             keyboard focus on control n (the ring shows)
 //!   key <keystroke>       a keystroke to the focused element
+//!   scroll <story> <dx> <dy>  the wheel over story n (0-based) by dx, dy px (positive: further on)
 //!   wait <ms>             advance the clock
 //!   expect tooltip open|closed | focused <n> | clipboard <text> | control <n> | anchor <name>
 //!   shot <name>           `<page>.<name>.png`: the owning story canvas plus 64px each side
@@ -21,7 +23,8 @@ use std::time::Duration;
 use anyhow::{Context as _, bail};
 use gpui::{
     AnyWindowHandle, Bounds, HeadlessAppContext, Keystroke, Modifiers, MouseButton, MouseDownEvent,
-    MouseUpEvent, PlatformInput, Point, WindowHandle, point, px, size,
+    MouseUpEvent, PlatformInput, Point, ScrollDelta, ScrollWheelEvent, TouchPhase, WindowHandle,
+    point, px, size,
 };
 
 use crate::app::DsView;
@@ -142,7 +145,8 @@ impl Live {
             .with_context(|| format!("control-{n} is not focusable"))?;
         self.cx
             .update_window(self.handle, |_, window, cx| window.focus(&handle, cx))?;
-        // The pointer stays where it was; the ring is a keyboard state.
+        // The pointer stays where it was (no event); a shot crops to the story of the control.
+        self.pointer = self.center(arg)?;
         Ok(())
     }
 
@@ -156,6 +160,44 @@ impl Live {
                 cx,
             );
         })?;
+        Ok(())
+    }
+
+    /// The wheel over the middle of story `n`'s canvas, `dx`/`dy` px further along its content.
+    fn scroll(&mut self, arg: &str) -> anyhow::Result<()> {
+        let mut parts = arg.split_whitespace();
+        let mut next = || -> anyhow::Result<f32> {
+            Ok(parts.next().context("scroll <story> <dx> <dy>")?.parse()?)
+        };
+        let (story, dx, dy) = (next()?, next()?, next()?);
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a small index"
+        )]
+        let story = story as usize;
+        let names = self.cx.update(|app| {
+            self.window
+                .read(app)
+                .map(DsView::story_names)
+                .unwrap_or_default()
+        });
+        let name = names
+            .get(story)
+            .with_context(|| format!("no story {story}"))?;
+        let at = self
+            .cx
+            .debug_bounds(self.handle, &format!("story-{name}"))?
+            .with_context(|| format!("no canvas for story {name}"))?
+            .center();
+        self.move_to(at)?;
+        self.input(PlatformInput::ScrollWheel(ScrollWheelEvent {
+            position: at,
+            delta: ScrollDelta::Pixels(point(px(-dx), px(-dy))),
+            modifiers: Modifiers::default(),
+            touch_phase: TouchPhase::Moved,
+        }))?;
+        self.wait(100);
         Ok(())
     }
 
@@ -284,6 +326,14 @@ impl Live {
                 self.settle();
                 Ok(())
             }
+            "tap" => {
+                let at = self.center(arg)?;
+                self.move_to(at)?;
+                self.button(true)?;
+                self.button(false)?;
+                self.wait(1);
+                Ok(())
+            }
             "focus" => {
                 self.focus(arg)?;
                 self.settle();
@@ -298,6 +348,7 @@ impl Live {
                 self.wait(arg.parse()?);
                 Ok(())
             }
+            "scroll" => self.scroll(arg),
             "expect" => self.expect(arg),
             "shot" => self.shot(arg),
             _ => bail!("unknown live command"),

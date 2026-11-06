@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1 and B2 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1, B2 and B3 (part A) primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -28,6 +28,9 @@
     { "page": "spinner", "entry": "components/Spinner" },
     { "page": "skeleton", "entry": "components/Skeleton" },
     { "page": "progress-ring", "entry": "components/ProgressRing" },
-    { "page": "success-check", "entry": "components/SuccessCheck" }
+    { "page": "success-check", "entry": "components/SuccessCheck" },
+    { "page": "scroll-area", "entry": "blocks/ScrollArea" },
+    { "page": "collapsible", "entry": "components/Collapsible" },
+    { "page": "tabs", "entry": "components/Tabs" }
   ]
 }

@@ -1,5 +1,5 @@
 {
- "readme": "State shots. 'target' is the 0-based index of the control in DOM order over all [data-ds-fixture-canvas] of the page, counting elements matching `button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input[type=\"range\"], [tabindex=\"0\"]` (deduped, natively disabled included). The viewer also renders state-matrix stories after the showcase stories; targets refer to the showcase stories only. Output: <page>.<name>.png cropped to the owning story canvas +/- 64 logical px, clipped to the viewport, and <page>.<name>.json {crop,story}. hover=pointer over; press=mouse down held; focus=Shift key then element.focus(); click=element.click().",
+ "readme": "State shots. 'target' is the 0-based index of the control in DOM order over all [data-ds-fixture-canvas] of the page, counting elements matching `button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input[type=\"range\"], [tabindex=\"0\"]` (deduped, natively disabled included). The viewer also renders state-matrix stories after the showcase stories; targets refer to the showcase stories only. Output: <page>.<name>.png cropped to the owning story canvas +/- 64 logical px, clipped to the viewport, and <page>.<name>.json {crop,story}. hover=pointer over; press=mouse down held; focus=Shift key then element.focus(); click=element.click(). 'native' (optional) is the control number on the native page when it differs (the viewer also counts tablists and tab panels, which are tab stops there). 'scroll' states: target is the story index, dx/dy scroll its first edge-fade scroller; 'clicks' repeats a click.",
  "states": [
   {
    "page": "button",
@@ -231,6 +231,161 @@
    "state": "click",
    "target": 9,
    "wait_ms": 100
+  },
+  {
+   "page": "scroll-area",
+   "name": "overflows-middle",
+   "state": "scroll",
+   "target": 1,
+   "wait_ms": 300,
+   "dx": 0,
+   "dy": 60
+  },
+  {
+   "page": "scroll-area",
+   "name": "overflows-end",
+   "state": "scroll",
+   "target": 1,
+   "wait_ms": 300,
+   "dx": 0,
+   "dy": 1000
+  },
+  {
+   "page": "scroll-area",
+   "name": "vertical-middle",
+   "state": "scroll",
+   "target": 2,
+   "wait_ms": 300,
+   "dx": 0,
+   "dy": 120
+  },
+  {
+   "page": "scroll-area",
+   "name": "vertical-end",
+   "state": "scroll",
+   "target": 2,
+   "wait_ms": 300,
+   "dx": 0,
+   "dy": 1000
+  },
+  {
+   "page": "scroll-area",
+   "name": "horizontal-middle",
+   "state": "scroll",
+   "target": 3,
+   "wait_ms": 300,
+   "dx": 120,
+   "dy": 0
+  },
+  {
+   "page": "scroll-area",
+   "name": "horizontal-end",
+   "state": "scroll",
+   "target": 3,
+   "wait_ms": 300,
+   "dx": 1000,
+   "dy": 0
+  },
+  {
+   "page": "scroll-area",
+   "name": "bleed-middle",
+   "state": "scroll",
+   "target": 4,
+   "wait_ms": 300,
+   "dx": 0,
+   "dy": 100
+  },
+  {
+   "page": "collapsible",
+   "name": "insert",
+   "state": "click",
+   "target": 0,
+   "wait_ms": 500
+  },
+  {
+   "page": "collapsible",
+   "name": "remove",
+   "state": "click",
+   "target": 1,
+   "wait_ms": 500
+  },
+  {
+   "page": "collapsible",
+   "name": "reveal-expand",
+   "state": "click",
+   "target": 2,
+   "wait_ms": 500
+  },
+  {
+   "page": "collapsible",
+   "name": "reveal-collapse",
+   "state": "click",
+   "target": 2,
+   "wait_ms": 500,
+   "clicks": 2
+  },
+  {
+   "page": "collapsible",
+   "name": "tool-expand",
+   "state": "click",
+   "target": 3,
+   "wait_ms": 500
+  },
+  {
+   "page": "collapsible",
+   "name": "tool-collapse",
+   "state": "click",
+   "target": 3,
+   "wait_ms": 500,
+   "clicks": 2
+  },
+  {
+   "page": "tabs",
+   "name": "inspector-hover",
+   "state": "hover",
+   "target": 2,
+   "wait_ms": 100,
+   "native": 1
+  },
+  {
+   "page": "tabs",
+   "name": "inspector-focus",
+   "state": "focus",
+   "target": 1,
+   "wait_ms": 100,
+   "native": 0
+  },
+  {
+   "page": "tabs",
+   "name": "inspector-select",
+   "state": "click",
+   "target": 2,
+   "wait_ms": 300,
+   "native": 1
+  },
+  {
+   "page": "tabs",
+   "name": "line-hover",
+   "state": "hover",
+   "target": 9,
+   "wait_ms": 100,
+   "native": 4
+  },
+  {
+   "page": "tabs",
+   "name": "line-focus",
+   "state": "focus",
+   "target": 8,
+   "wait_ms": 100,
+   "native": 3
+  },
+  {
+   "page": "tabs",
+   "name": "line-select",
+   "state": "click",
+   "target": 10,
+   "wait_ms": 400,
+   "native": 5
   }
  ]
 }

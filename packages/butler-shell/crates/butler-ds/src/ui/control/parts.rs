@@ -89,6 +89,7 @@ pub fn reset_anchors(cx: &mut App) {
     let anchors = cx.default_global::<Anchors>();
     anchors.next.set(0);
     anchors.handles.borrow_mut().clear();
+    crate::ui::focus::reset_hand_off(cx);
 }
 
 /// The focus handle of control `n` of the last frame (`None` when it cannot take focus).

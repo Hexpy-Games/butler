@@ -163,3 +163,67 @@ impl<E: IntoElement + 'static> Element for Tween<E> {
         element.paint(window, cx);
     }
 }
+
+/// A value that eases toward a target over a duration (a CSS transition of one property).
+/// A new target restarts from wherever the value is now.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Ramp {
+    value: f32,
+    from: f32,
+    to: f32,
+    since: Option<Instant>,
+}
+
+impl Ramp {
+    /// At rest on `value`.
+    pub fn at(value: f32) -> Self {
+        Self {
+            value,
+            from: value,
+            to: value,
+            since: None,
+        }
+    }
+
+    pub fn target(&self) -> f32 {
+        self.to
+    }
+
+    /// Where the value is now (as of the last [`Self::sample`]).
+    pub fn value(&self) -> f32 {
+        self.value
+    }
+
+    /// Heads for `to`; `jump` lands there at once (no transition).
+    pub fn retarget(&mut self, to: f32, now: Instant, jump: bool) {
+        if (to - self.to).abs() < f32::EPSILON && !jump {
+            return;
+        }
+        self.from = if jump { to } else { self.value };
+        self.to = to;
+        self.since = (!jump).then_some(now);
+        if jump {
+            self.value = to;
+        }
+    }
+
+    /// The value at `now`, and whether it is still moving.
+    pub fn sample(
+        &mut self,
+        now: Instant,
+        duration: Duration,
+        ease: &dyn Fn(f32) -> f32,
+    ) -> (f32, bool) {
+        let Some(since) = self.since else {
+            return (self.to, false);
+        };
+        let total = duration.as_secs_f32();
+        let elapsed = now.saturating_duration_since(since).as_secs_f32();
+        if total <= 0. || elapsed >= total {
+            *self = Self::at(self.to);
+            return (self.to, false);
+        }
+        self.value = self.from + (self.to - self.from) * ease(elapsed / total);
+        (self.value, true)
+    }
+}
