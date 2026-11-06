@@ -1,7 +1,10 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
 mod adaptive_shell;
 mod animated_number;
+mod artifact_list;
+mod artifact_preview;
 mod aspect_frame;
+mod attachment_list;
 mod avatar;
 mod block_action_frame;
 mod block_columns;
@@ -11,6 +14,7 @@ mod boxes;
 mod butler_thinking_mark;
 mod button;
 mod card;
+mod changed_line_diff;
 mod chart;
 mod clickable;
 mod collapsible;
@@ -24,6 +28,7 @@ mod disclosure_row;
 mod done_icon_button;
 mod drag_preview;
 mod dropdown_menu;
+mod element_chip;
 mod empty_line;
 mod event_timeline;
 mod expandable_text;
@@ -33,6 +38,7 @@ mod grid;
 mod icon_button;
 mod icon_slot;
 mod icon_tile;
+mod image_viewer;
 mod inline;
 mod inline_reference;
 mod input;
@@ -265,6 +271,18 @@ fn blocks() -> Vec<Page> {
         page!("event-timeline", "EventTimeline", event_timeline),
         page!("item-card", "ItemCard", item_card),
         page!("chart", "Chart", chart),
+        page!("attachment-list", "AttachmentList", attachment_list),
+        page!("element-chip", "ElementChip", element_chip),
+        page!("artifact-list", "ArtifactList", artifact_list),
+        page!("artifact-preview", "ArtifactPreview", artifact_preview),
+        page!("changed-line-diff", "ChangedLineDiff", changed_line_diff),
+        page!("image-viewer", "ImageViewer", image_viewer),
+    ]
+}
+
+/// The answer, attachment and artifact blocks (P2-S5).
+fn answer_blocks() -> Vec<Page> {
+    vec![
         page!("metric-card", "MetricCard", metric_card),
         page!("metric-grid", "MetricGrid", metric_grid),
         page!("progress-meter", "ProgressMeter", progress_meter),
@@ -279,6 +297,7 @@ fn blocks() -> Vec<Page> {
 pub(crate) fn all() -> Vec<Page> {
     let mut pages = primitives();
     pages.extend(blocks());
+    pages.extend(answer_blocks());
     pages
 }
 

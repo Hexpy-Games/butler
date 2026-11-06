@@ -46,6 +46,7 @@ impl Plot {
             .max(f64::MIN_POSITIVE)
     }
 
+    #[expect(clippy::cast_possible_truncation, reason = "pixel maths in f32")]
     pub(super) fn y(&self, value: f64) -> f32 {
         self.bottom - (value / self.top_value()) as f32 * (self.bottom - self.top)
     }
@@ -61,11 +62,16 @@ impl Plot {
             Kind::Line if count > 1 => {
                 self.left + (self.right - self.left) * index as f32 / (count - 1) as f32
             }
-            Kind::Line => (self.left + self.right) / 2.,
+            Kind::Line => f32::midpoint(self.left, self.right),
         }
     }
 
     /// The category under a point of the plot (the tooltip's active index).
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a category index from a position inside the plot"
+    )]
     pub(super) fn index_at(&self, spec: &Spec, x: f32, y: f32) -> Option<usize> {
         let count = spec.categories.len();
         let inside = x >= self.left && x <= self.right && y >= self.top && y <= self.bottom;

@@ -4,9 +4,9 @@
 //! menu is open); a right click opens the same menu. An untitled block floats the button on its
 //! top end corner, on a raised chip. The frame never clips, so the button keeps its focus ring.
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, MouseButton, MouseMoveEvent,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
-    div,
+    AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, MouseButton,
+    MouseMoveEvent, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Window, div,
 };
 
 use super::anim;
@@ -91,8 +91,99 @@ fn reveal(shown: bool, id: &ElementId, window: &mut Window, cx: &mut App) -> f32
     )
 }
 
+/// Hover on the innermost block, and a right click that opens the menu.
+fn gestures(
+    frame: gpui::Stateful<gpui::Div>,
+    hovered: &Entity<bool>,
+    open: &Entity<bool>,
+) -> gpui::Stateful<gpui::Div> {
+    let (hover, closed) = (hovered.clone(), hovered.clone());
+    let menu_open = open.clone();
+    frame
+        .on_mouse_move(move |_: &MouseMoveEvent, window, cx| {
+            // Inner frames see the move first; the first claims it.
+            let claimed = window.default_prevented();
+            window.prevent_default();
+            hover.update(cx, |on, cx| {
+                if *on == claimed {
+                    *on = !claimed;
+                    cx.notify();
+                }
+            });
+        })
+        .on_hover(move |on, _, cx| {
+            if !*on {
+                closed.update(cx, |hovered, cx| {
+                    *hovered = false;
+                    cx.notify();
+                });
+            }
+        })
+        .on_mouse_down(MouseButton::Right, move |_, window, cx| {
+            window.prevent_default();
+            cx.stop_propagation();
+            menu_open.update(cx, |open, cx| {
+                *open = true;
+                cx.notify();
+            });
+        })
+}
+
+/// The title row: the heading and the menu button (on a raised chip, floating on the corner,
+/// when there is no title).
+fn header(
+    frame: &mut BlockActionFrame,
+    (open, is_open): (&Entity<bool>, bool),
+    alpha: f32,
+    ds: &Ds,
+) -> gpui::Div {
+    let titled = frame.title.is_some();
+    let heading = frame.title.take().map(|title| match frame.level {
+        Level::Block => Typo::section_title(title).into_any_element(),
+        Level::Child => Typo::label(title)
+            .weight(Weight::Semibold)
+            .into_any_element(),
+    });
+    let toggle = open.clone();
+    let menu = OverflowActionMenu::new(
+        SharedString::from(format!("{}-menu", frame.id)),
+        frame.actions_label.clone(),
+    )
+    .open(is_open)
+    .on_open_change(move |now, _, cx| {
+        toggle.update(cx, |open, cx| {
+            *open = now;
+            cx.notify();
+        });
+    })
+    .items(std::mem::take(&mut frame.actions));
+    let mut trigger = div().opacity(alpha).child(menu);
+    if !titled {
+        trigger = trigger
+            .rounded(ds.len(Length::RadiusPill))
+            .bg(ds.color(Color::SurfaceRaised))
+            .shadow(convert::box_shadows(
+                ds.tokens().shadow(Shadow::ShadowControl),
+                ds.tokens(),
+            ));
+    }
+    let header = div()
+        .flex()
+        .min_w_0()
+        .items_center()
+        .justify_between()
+        .gap(ds.len(Length::SpaceSm))
+        .children(heading.map(|heading| div().min_w_0().child(heading)))
+        .child(trigger);
+    if titled {
+        return header;
+    }
+    let edge = ds.len(Length::SpaceXs);
+    header.absolute().top(edge).right(edge)
+}
+
 impl RenderOnce for BlockActionFrame {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let id = self.id.clone();
         let hovered = window.use_keyed_state((id.clone(), "hover"), cx, |_, _| false);
         let open = window.use_keyed_state((id.clone(), "open"), cx, |_, _| false);
@@ -101,10 +192,10 @@ impl RenderOnce for BlockActionFrame {
             .read(cx)
             .clone();
         let has_actions = !self.actions.is_empty();
-        let shown = *hovered.read(cx) || *open.read(cx) || focus.contains_focused(window, cx);
+        let is_open = *open.read(cx);
+        let shown = *hovered.read(cx) || is_open || focus.contains_focused(window, cx);
         let alpha = reveal(shown && has_actions, &id, window, cx);
         let ds = Ds::get(cx);
-        let titled = self.title.is_some();
         let anchor = id.to_string();
         let mut frame = div()
             .id(id.clone())
@@ -116,83 +207,12 @@ impl RenderOnce for BlockActionFrame {
             .gap(ds.len(Length::SpaceSm))
             .track_focus(&focus);
         if has_actions {
-            let (hover, closed) = (hovered.clone(), hovered.clone());
-            let menu_open = open.clone();
-            frame = frame
-                .on_mouse_move(move |_: &MouseMoveEvent, window, cx| {
-                    // Inner frames see the move first; the first claims it.
-                    let claimed = window.default_prevented();
-                    window.prevent_default();
-                    hover.update(cx, |on, cx| {
-                        if *on == claimed {
-                            *on = !claimed;
-                            cx.notify();
-                        }
-                    });
-                })
-                .on_hover(move |on, _, cx| {
-                    if !*on {
-                        closed.update(cx, |hovered, cx| {
-                            *hovered = false;
-                            cx.notify();
-                        });
-                    }
-                })
-                .on_mouse_down(MouseButton::Right, move |_, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    menu_open.update(cx, |open, cx| {
-                        *open = true;
-                        cx.notify();
-                    });
-                });
+            frame = gestures(frame, &hovered, &open);
         }
         if self.title.is_some() || has_actions {
-            let heading = self.title.map(|title| match self.level {
-                Level::Block => Typo::section_title(title).into_any_element(),
-                Level::Child => Typo::label(title)
-                    .weight(Weight::Semibold)
-                    .into_any_element(),
-            });
-            let ds = Ds::get(cx);
-            let toggle = open.clone();
-            let mut trigger = div().opacity(alpha).child(
-                OverflowActionMenu::new(
-                    SharedString::from(format!("{id}-menu")),
-                    self.actions_label,
-                )
-                .open(*open.read(cx))
-                .on_open_change(move |now, _, cx| {
-                    toggle.update(cx, |open, cx| {
-                        *open = now;
-                        cx.notify();
-                    });
-                })
-                .items(self.actions),
-            );
-            if !titled {
-                trigger = trigger
-                    .rounded(ds.len(Length::RadiusPill))
-                    .bg(ds.color(Color::SurfaceRaised))
-                    .shadow(convert::box_shadows(
-                        ds.tokens().shadow(Shadow::ShadowControl),
-                        ds.tokens(),
-                    ));
-            }
-            let mut header = div()
-                .flex()
-                .min_w_0()
-                .items_center()
-                .justify_between()
-                .gap(ds.len(Length::SpaceSm))
-                .children(heading.map(|heading| div().min_w_0().child(heading)));
-            if has_actions {
-                header = header.child(trigger);
-            }
-            if !titled {
-                let edge = ds.len(Length::SpaceXs);
+            let header = header(&mut self, (&open, is_open), alpha, ds);
+            if self.title.is_none() {
                 // `z-index: var(--z-content)`: painted after the content, so over it.
-                header = header.absolute().top(edge).right(edge);
                 return frame.children(self.children).child(header);
             }
             frame = frame.child(header);

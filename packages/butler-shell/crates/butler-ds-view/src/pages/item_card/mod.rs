@@ -112,6 +112,10 @@ fn grid(id: &'static str, columns: Columns, gap: Space, cards: Vec<ItemCard>) ->
 }
 
 /// What a card shows, so one mapping builds the full card and the states that drop parts.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent parts of the card, as ItemCard's optional props"
+)]
 #[derive(Clone, Copy)]
 struct Show {
     media: bool,

@@ -4,16 +4,22 @@
 //! wires them in one place.
 pub mod adaptive_shell;
 pub mod anim;
+pub mod artifact_list;
+pub mod artifact_preview;
+pub mod attachment_list;
 pub mod block_action_frame;
 pub mod block_columns;
 pub mod block_tabs;
+pub mod changed_line_diff;
 pub mod collapsible_nav_group;
 pub mod composer_adjunct_panel;
 pub mod conversation_shell;
 pub mod disclosure_row;
 pub mod drag_preview;
+pub mod element_chip;
 pub mod empty_line;
 pub mod event_timeline;
+pub mod image_viewer;
 pub mod inspector_panel;
 pub mod item_card;
 pub mod key_value_row;

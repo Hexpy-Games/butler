@@ -212,10 +212,10 @@ struct Pointer {
     size: gpui::Size<Pixels>,
 }
 
-impl RenderOnce for Chart {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let ds = Ds::get(cx);
-        let spec = Rc::new(Spec {
+impl Chart {
+    /// The data with its colours resolved against the theme.
+    fn resolve(self, ds: &Ds) -> Spec {
+        Spec {
             kind: self.kind,
             categories: self.categories,
             series: self
@@ -238,9 +238,16 @@ impl RenderOnce for Chart {
             tick: grey(0.4, 1.),
             cursor: grey(0.8, 0.5),
             dot_fill: grey(1., 1.),
-        });
-        let state =
-            window.use_keyed_state((self.id.clone(), "pointer"), cx, |_, _| Pointer::default());
+        }
+    }
+}
+
+impl RenderOnce for Chart {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let ds = Ds::get(cx);
+        let (id, size) = (self.id.clone(), self.size);
+        let spec = Rc::new(self.resolve(ds));
+        let state = window.use_keyed_state((id.clone(), "pointer"), cx, |_, _| Pointer::default());
         let pointer = *state.read(cx);
         let ds = Ds::get(cx);
         let plot = paint::Plot::new(
@@ -271,12 +278,12 @@ impl RenderOnce for Chart {
         .left_0()
         .size_full();
         let (moved, left) = (state.clone(), state.clone());
-        let anchor = self.id.to_string();
+        let anchor = id.to_string();
         let tooltip = active
             .zip(local)
             .map(|(index, at)| tooltip::content(&spec, index, at, pointer.size, ds));
         let mut root = div()
-            .id(self.id.clone())
+            .id(id.clone())
             .debug_selector(move || anchor.clone())
             .relative()
             .w_full()
@@ -296,7 +303,7 @@ impl RenderOnce for Chart {
                 }
             })
             .child(surface);
-        root = match self.size {
+        root = match size {
             Size::Default => root.h(px(150.)).min_w(px(220.)),
             Size::Panel => root.h(ds.len(Length::ChartHeightPanel)).min_w_0(),
         };

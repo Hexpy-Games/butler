@@ -17,7 +17,7 @@ pub(in crate::pages) enum Kind {
     Column,
 }
 
-fn svg(width: u32, height: u32, body: &str) -> ImageSource {
+pub(in crate::pages) fn svg(width: u32, height: u32, body: &str) -> ImageSource {
     let text = format!(
         "<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>{body}</svg>"
     );

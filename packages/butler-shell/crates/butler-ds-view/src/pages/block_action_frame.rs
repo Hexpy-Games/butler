@@ -19,7 +19,7 @@ use crate::copy::Lang;
 struct Copy {
     save: &'static str,
     doc: &'static str,
-    copy: &'static str,
+    duplicate: &'static str,
     menu: &'static str,
     spend: &'static str,
     plan: &'static str,
@@ -36,7 +36,7 @@ fn copy(lang: Lang) -> Copy {
         Copy {
             save: "Save to library",
             doc: "Make a document",
-            copy: "Copy",
+            duplicate: "Copy",
             menu: "Block actions",
             spend: "Spending",
             plan: "Plan",
@@ -50,7 +50,7 @@ fn copy(lang: Lang) -> Copy {
         Copy {
             save: "서랍에 저장",
             doc: "문서로 만들기",
-            copy: "복사",
+            duplicate: "복사",
             menu: "블록 메뉴",
             spend: "지출",
             plan: "요금제",
@@ -86,7 +86,7 @@ fn actions(frame: BlockActionFrame, c: &Copy) -> BlockActionFrame {
         .actions_label(c.menu)
         .action(OverflowItem::new(c.save).icon(Icon::Library))
         .action(OverflowItem::new(c.doc).icon(Icon::FileText))
-        .action(OverflowItem::new(c.copy).icon(Icon::Copy))
+        .action(OverflowItem::new(c.duplicate).icon(Icon::Copy))
 }
 
 fn with_menu(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {

@@ -244,8 +244,10 @@ impl RenderOnce for ItemCard {
             }
             top.child(body)
         };
+        let anchor = format!("{id}-card");
         let mut card = div()
             .id((id.clone(), "card"))
+            .debug_selector(move || anchor.clone())
             .flex()
             .flex_col()
             .flex_1()

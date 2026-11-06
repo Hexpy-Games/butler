@@ -148,6 +148,18 @@ fn width_columns(width: f32, gap: f32) -> usize {
     fit.clamp(1, 4)
 }
 
+/// How many cards have arrived `elapsed` into the stream, and whether the list has closed.
+fn timeline(elapsed: std::time::Duration, total: usize) -> (usize, bool) {
+    let ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
+    let count = total as u64;
+    let arrived = if ms < FIRST {
+        0
+    } else {
+        usize::try_from(((ms - FIRST) / EVERY + 1).min(count)).unwrap_or(total)
+    };
+    (arrived, ms >= FIRST + count * EVERY)
+}
+
 /// Five cards arrive one by one into width-driven columns; a skeleton holds the next slot and
 /// cells keep their own height. At close the lone-card rule gives the final columns and rows
 /// share their height.
@@ -158,19 +170,13 @@ pub(super) fn settle(lang: Lang, reduced: bool, window: &mut Window, cx: &mut Ap
         cx.background_executor().now()
     });
     let current = *round.read(cx);
+    let (restart, tag_owned) = (started.clone(), tag.to_owned());
     let items = items(lang);
     let elapsed = cx
         .background_executor()
         .now()
         .saturating_duration_since(*started.read(cx));
-    let ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
-    let total = items.len() as u64;
-    let arrived = if ms < FIRST {
-        0
-    } else {
-        usize::try_from(((ms - FIRST) / EVERY + 1).min(total)).unwrap_or(items.len())
-    };
-    let closed = ms >= FIRST + total * EVERY;
+    let (arrived, closed) = timeline(elapsed, items.len());
     if !closed {
         window.request_animation_frame();
     }
@@ -181,16 +187,9 @@ pub(super) fn settle(lang: Lang, reduced: bool, window: &mut Window, cx: &mut Ap
     } else {
         live
     };
-    let mut cards = Vec::new();
-    for (index, item) in items.iter().take(arrived).enumerate() {
-        cards.push(stream_card(
-            item,
-            (lang, current, index),
-            reduced,
-            window,
-            cx,
-        ));
-    }
+    let cards: Vec<AnyElement> = (0..arrived)
+        .map(|index| stream_card(&items[index], (lang, current, index), reduced, window, cx))
+        .collect();
     let mut grid = Grid::new(format!("ic-settle-{tag}"))
         .columns(Columns::fixed(u8::try_from(across).unwrap_or(1)))
         .gap(Space::Sm)
@@ -212,7 +211,6 @@ pub(super) fn settle(lang: Lang, reduced: bool, window: &mut Window, cx: &mut Ap
         grid = grid.child(skeleton);
     }
     let replay = lang.pick("Replay", "다시 보기");
-    let (restart, tag_owned) = (started.clone(), tag.to_owned());
     Stack::new()
         .gap(Space::Md)
         .child(div().relative().child(recorder).child(grid))

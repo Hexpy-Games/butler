@@ -57,6 +57,68 @@ fn line(id: (ElementId, &'static str), width: Width, height: Height, box_height:
         .child(Skeleton::new(id).width(width).height(height))
 }
 
+/// The footer line: the source bar and one invisible IconButton that holds the actions' height.
+fn footer(id: &ElementId, row: bool, ds: &Ds) -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(ds.len(Length::SpaceXs))
+        .pt(ds.len(Length::SpaceXs))
+        .pl(ds.len(Length::SpaceXs))
+        .border_t(ds.len(Length::BorderHairline))
+        .border_color(ds.color(Color::Line))
+        .child(
+            div().flex_1().min_w_0().child(
+                Skeleton::new((id.clone(), "source"))
+                    .width(Width::Half)
+                    .height(Height::Line),
+            ),
+        )
+        .child(
+            button::container(Size::IconSm)
+                .gap(if row { Space::Sm } else { Space::Xs })
+                .child(
+                    div()
+                        .invisible()
+                        .child(IconButton::new((id.clone(), "action"), "")),
+                ),
+        )
+}
+
+/// The three text lines (subtitle, title, facts) of the body.
+fn text_lines(
+    id: &ElementId,
+    (caption, title, facts): (f32, f32, f32),
+    inset: gpui::Pixels,
+    ds: &Ds,
+) -> gpui::Div {
+    div()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_w_0()
+        .gap(ds.len(Length::SpaceXs))
+        .px(inset)
+        .child(line(
+            (id.clone(), "subtitle"),
+            Width::TwoFifths,
+            Height::Line,
+            caption,
+        ))
+        .child(line(
+            (id.clone(), "title"),
+            Width::ThreeQuarters,
+            Height::Title,
+            title,
+        ))
+        .child(line(
+            (id.clone(), "facts"),
+            Width::TwoThirds,
+            Height::Line,
+            facts,
+        ))
+}
+
 impl RenderOnce for ItemCardSkeleton {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let (size, recorder) = measure::track((self.id.clone(), "size"), window, cx);
@@ -72,31 +134,7 @@ impl RenderOnce for ItemCardSkeleton {
         } else {
             ds.len(Length::SpaceXs)
         };
-        let body = div()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .min_w_0()
-            .gap(ds.len(Length::SpaceXs))
-            .px(inset)
-            .child(line(
-                (id.clone(), "subtitle"),
-                Width::TwoFifths,
-                Height::Line,
-                caption_line,
-            ))
-            .child(line(
-                (id.clone(), "title"),
-                Width::ThreeQuarters,
-                Height::Title,
-                title_line,
-            ))
-            .child(line(
-                (id.clone(), "facts"),
-                Width::TwoThirds,
-                Height::Line,
-                facts_line,
-            ));
+        let body = text_lines(&id, (caption_line, title_line, facts_line), inset, ds);
         let media = self.media.map(|aspect| {
             div()
                 .min_w_0()
@@ -118,26 +156,7 @@ impl RenderOnce for ItemCardSkeleton {
                 .children(media)
                 .child(body)
         };
-        let footer = div()
-            .flex()
-            .items_center()
-            .gap(ds.len(Length::SpaceXs))
-            .pt(ds.len(Length::SpaceXs))
-            .pl(ds.len(Length::SpaceXs))
-            .border_t(ds.len(Length::BorderHairline))
-            .border_color(ds.color(Color::Line))
-            .child(
-                div().flex_1().min_w_0().child(
-                    Skeleton::new((id.clone(), "source"))
-                        .width(Width::Half)
-                        .height(Height::Line),
-                ),
-            )
-            .child(
-                button::container(Size::IconSm)
-                    .gap(if row { Space::Sm } else { Space::Xs })
-                    .child(div().invisible().child(IconButton::new((id, "action"), ""))),
-            );
+        let footer = footer(&id, row, ds);
         div()
             .relative()
             .flex()

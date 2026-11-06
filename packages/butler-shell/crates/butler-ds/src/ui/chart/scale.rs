@@ -6,6 +6,7 @@
 pub(super) const TICK_COUNT: usize = 5;
 
 /// `getDigitCount`: the number of digits before the decimal point.
+#[expect(clippy::cast_possible_truncation, reason = "a digit count")]
 fn digit_count(value: f64) -> i32 {
     if value == 0. {
         return 1;
@@ -34,6 +35,11 @@ fn adaptive_step(rough: f64, allow_decimals: bool, correction: i32) -> f64 {
 }
 
 /// The ticks of the domain `0..=max` (`max` is the largest value to show).
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a tick count from a positive ratio"
+)]
 pub(super) fn ticks(max: f64, allow_decimals: bool) -> Vec<f64> {
     if max <= 0. {
         // `getTickOfSingleValue(0)`: zero is the middle tick.

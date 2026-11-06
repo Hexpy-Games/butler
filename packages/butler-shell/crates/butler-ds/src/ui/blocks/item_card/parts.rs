@@ -342,7 +342,7 @@ pub(super) fn footer(
         }
         let actions = std::mem::take(&mut card.actions)
             .into_iter()
-            .fold(actions, |actions, action| actions.child(action));
+            .fold(actions, gpui::ParentElement::child);
         footer = footer.child(tracked(
             own_target(div().flex_none())
                 .id((id, "actions"))
