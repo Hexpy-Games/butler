@@ -21,7 +21,6 @@ use super::control::{Blend, Control, Ring, Width};
 use super::convert;
 use super::icon::{IconSize, icon};
 use super::motion::Ramp;
-use super::typo::keep_all;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 
 /// A box height in motion: grows to `to` over `--motion-base` or shrinks over `--motion-exit-base`.
@@ -78,17 +77,18 @@ impl ExpandableText {
 
 /// The body text style: `--typo-body-*` with the break rules of `.text`.
 fn body_text(text: SharedString, ds: &Ds) -> gpui::Div {
-    let keep = ds.lang() == Lang::Ko;
-    let text = if keep {
-        SharedString::from(keep_all(&text))
-    } else {
-        text
-    };
-    div()
+    let el = div()
         .min_w_0()
+        .overflow_wrap(gpui::OverflowWrap::Anywhere)
         .text_size(ds.len(Length::TypoBodySize))
         .line_height(ds.len(Length::TypoBodyLineHeight))
-        .child(text)
+        .child(text);
+    // DS: ExpandableText.module.css:63 `overflow-wrap: anywhere`, over the root's `:lang(ko)`.
+    if ds.lang() == Lang::Ko {
+        el.word_break(gpui::WordBreak::KeepAll)
+    } else {
+        el
+    }
 }
 
 type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;

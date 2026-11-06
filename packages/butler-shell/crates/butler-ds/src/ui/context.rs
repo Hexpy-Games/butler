@@ -50,6 +50,13 @@ pub enum Lang {
     Ko,
 }
 
+/// `word-break: keep-all; overflow-wrap: break-word`: Korean wraps between words, never inside one
+/// (tokens.css `:lang(ko)`), and long unbroken tokens still wrap. Also the headings' own rule.
+pub fn keep_words<E: gpui::Styled>(el: E) -> E {
+    el.word_break(gpui::WordBreak::KeepAll)
+        .overflow_wrap(gpui::OverflowWrap::BreakWord)
+}
+
 /// Token context plus the app-level inputs that are not tokens.
 pub struct Ds {
     tokens: TokenContext,

@@ -6,11 +6,11 @@ mod spec;
 pub use spec::Role;
 
 use gpui::{
-    AnyElement, App, FontFeatures, FontWeight, HighlightStyle, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, Styled as _, StyledText, Window, div, font, px,
+    AnyElement, App, FontFeatures, FontWeight, HighlightStyle, IntoElement, OverflowWrap,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, StyledText, Window, div, font, px,
 };
 
-use super::context::{Ds, Lang};
+use super::context::{Ds, Lang, keep_words};
 use super::layout::{ItemProps, WithItem};
 use super::strut;
 use crate::tokens::{Color, Length, Number};
@@ -223,41 +223,14 @@ impl WithItem for Typo {
     }
 }
 
-fn is_hangul(c: char) -> bool {
-    matches!(c, '\u{1100}'..='\u{11FF}' | '\u{3130}'..='\u{318F}' | '\u{AC00}'..='\u{D7A3}')
-}
-
-/// `word-break: keep-all`: a word joiner between Hangul letters leaves the break opportunities
-/// at spaces only.
-pub(crate) fn keep_all(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() * 2);
-    let mut previous: Option<char> = None;
-    for c in text.chars() {
-        if previous.is_some_and(is_hangul) && is_hangul(c) {
-            out.push('\u{2060}');
-        }
-        out.push(c);
-        previous = Some(c);
-    }
-    out
-}
-
 impl Typo {
     /// The joined text and the highlight runs of the runs that override tone or weight.
-    fn content(
-        &self,
-        ds: &Ds,
-        keep: bool,
-    ) -> (String, Vec<(std::ops::Range<usize>, HighlightStyle)>) {
+    fn content(&self, ds: &Ds) -> (String, Vec<(std::ops::Range<usize>, HighlightStyle)>) {
         let mut text = String::new();
         let mut highlights = Vec::new();
         for run in &self.runs {
             let start = text.len();
-            if keep {
-                text.push_str(&keep_all(&run.text));
-            } else {
-                text.push_str(&run.text);
-            }
+            text.push_str(&run.text);
             let color = run.tone.and_then(Tone::color).map(|token| ds.color(token));
             let font_weight = run.weight.map(|weight| FontWeight(weight.value(ds)));
             if color.is_some() || font_weight.is_some() {
@@ -349,7 +322,7 @@ impl RenderOnce for Typo {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let keep = ds.lang() == Lang::Ko || self.role.keeps_words();
-        let (text, highlights) = self.content(ds, keep);
+        let (text, highlights) = self.content(ds);
         let flow = self.flows(cx);
         let mut el = if flow { div().inline() } else { div() };
         let mut trim = None;
@@ -394,6 +367,9 @@ impl RenderOnce for Typo {
         };
         if let Some(features) = self.features() {
             el.text_style().font_features = Some(features);
+        }
+        if keep {
+            el = keep_words(el);
         }
         el = self.layout(el, ds);
         let styled = StyledText::new(text).with_highlights(highlights);
@@ -440,7 +416,7 @@ impl Typo {
             Wrap::Pre => el.min_w_0(),
         };
         if matches!(self.wrap, Wrap::Anywhere | Wrap::Pre) {
-            el = el.min_w_0();
+            el = el.min_w_0().overflow_wrap(OverflowWrap::Anywhere);
         }
         if self.align_with_control {
             let control = if ds.compact() {
