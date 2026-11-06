@@ -45,6 +45,8 @@
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
 //! - [`browser_profiles`]: other browsers' profiles and bookmark files, for import.
 //! - [`agent_homes`]: other AI agents' instruction and configuration files, for import.
+//! - [`popup_menu`]: the OS popup menu a native select opens (a stub until the unsafe boundary
+//!   or a gpui-ce API exists).
 //! - [`powershell_text`]: PowerShell string literals for the scripts Butler starts.
 //! - [`user_auth`]: asking the user to verify themselves (Touch ID, Windows
 //!   Hello or the account password) before a secret is shown.
@@ -80,6 +82,7 @@ pub mod instance;
 pub mod launcher;
 pub mod memory;
 pub mod network;
+pub mod popup_menu;
 pub mod powershell_text;
 pub mod process_control;
 pub mod process_names;
@@ -96,6 +99,8 @@ pub mod time_zone;
 pub mod tool_paths;
 pub mod user_auth;
 pub mod user_dirs;
+
+pub use popup_menu::popup_menu;
 
 #[cfg(windows)]
 mod process_table;
