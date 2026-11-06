@@ -35,7 +35,7 @@
     "packages/butler-app/client/ui/package.json": "8739df6bdb3dd0b3925c98fd070483d82de06619861dce3806eac6df3f15952f",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "f77a06e6ca123d65971fff38e3616fe9344efab396b6a3ebea7250a771064a90",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
-    "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-sans-kr/LICENSE.txt": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
+    "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-sans-kr/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
     "third_party/notify-windows-ledger/Cargo.toml": "d3badd5e47fb7b50cb83af425266e1dd89f14cd324d6598d7cb2d6d66a01baac",
     "third_party/notify-windows-ledger/LICENSE": "29f359024dacaa3361dcddf5a9316e8458028ff062b63105a61e04a16566f968"
   },
