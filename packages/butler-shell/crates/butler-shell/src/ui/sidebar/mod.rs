@@ -4,31 +4,14 @@
 mod list;
 mod row;
 
-use std::cell::Cell;
 use std::collections::HashMap;
-use std::rc::Rc;
 
-use gpui::{
-    AnyElement, Bounds, Context, Pixels, ScrollHandle, SharedString, WindowControlArea, canvas,
-    div, prelude::*, px,
-};
+use gpui::{AnyElement, Context, SharedString, WindowControlArea, div, prelude::*, px};
 
 use crate::ui::Icon;
-use crate::ui::cliptop::clip_top;
 use crate::ui::shell::Shell;
-use crate::ui::smooth_scroll::SmoothScroll;
 use crate::ui::source::ChatRef;
 use row::RowSpec;
-
-pub(crate) const SIDEBAR_W: f32 = 304.;
-/// The collapsed track keeps the cards' 8px window inset (7px + the workspace's 1px frame).
-pub(crate) const TRACK_MIN: f32 = 7.;
-/// The fade (14px) plus the focus-ring room (3px) below the scroll top where the browse header
-/// sticks.
-const STICK_AT: f32 = 17.;
-
-/// Bounds a canvas records each frame.
-type BoundsCell = Rc<Cell<Option<Bounds<Pixels>>>>;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tab {
@@ -52,33 +35,17 @@ pub(crate) struct SidebarState {
     /// Rows shown per space, and at the root.
     space_limit: HashMap<SharedString, usize>,
     root_limit: usize,
-    scroll: ScrollHandle,
-    smooth: SmoothScroll,
-    /// The scroll viewport and the in-flow browse header, from the last frame.
-    probe: (BoundsCell, BoundsCell),
 }
 
 impl SidebarState {
     pub(crate) fn new() -> Self {
-        let scroll = ScrollHandle::new();
         Self {
             tab: Tab::All,
             folded: HashMap::new(),
             space_limit: HashMap::new(),
             root_limit: 30,
-            smooth: SmoothScroll::handle(scroll.clone()),
-            scroll,
-            probe: (Rc::new(Cell::new(None)), Rc::new(Cell::new(None))),
         }
     }
-}
-
-fn probe(cell: BoundsCell) -> impl IntoElement {
-    canvas(move |b, _, _| cell.set(Some(b)), |_, (), _, _| {})
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
 }
 
 impl Shell {
@@ -181,85 +148,28 @@ impl Shell {
             )
     }
 
-    pub(crate) fn render_sidebar(&mut self, cx: &mut Context<Self>) -> gpui::Div {
-        let s = self.theme.strings;
-        let scroll_header = self.primary(cx);
-        // position: sticky at STICK_AT below the scroll top.
-        let (viewport, natural) = (self.sidebar.probe.0.get(), self.sidebar.probe.1.get());
-        let stuck =
-            matches!((viewport, natural), (Some(v), Some(n)) if n.top() <= v.top() + px(STICK_AT));
-        let sticky_h = natural.map(|n| n.size.height).unwrap_or_default();
-        let clip_y = viewport
-            .filter(|_| stuck)
-            .map(|v| v.top() + px(STICK_AT) + sticky_h);
-        let sticky = div()
-            .relative()
-            .child(probe(self.sidebar.probe.1.clone()))
-            .child(self.browse_header(cx))
-            .when(stuck, |d| d.opacity(0.));
-        let overlay = stuck.then(|| {
-            div()
-                .id("sticky-overlay")
-                .absolute()
-                .top_0()
-                .left_0()
-                .right_0()
-                .pt(px(STICK_AT))
-                .occlude()
-                .child(self.browse_header(cx))
-        });
+    pub(crate) fn render_sidebar(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let header = self.primary(cx);
+        let sticky = self.browse_header(cx);
         let rows = self.chat_rows(cx);
+        let s = self.theme.strings;
         let settings = self.nav_row(
             RowSpec::new("settings", Some(Icon::Settings), s.settings)
                 .disabled(Some(s.not_yet.into())),
             Click::Chat(None),
             cx,
         );
-        let content = div()
-            .flex()
-            .flex_col()
-            .py(px(3.))
-            .child(scroll_header)
-            .child(sticky)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .pt(px(3.))
-                    .children(rows),
-            );
-        let scroller = div()
-            .id("sidebar-scroll")
-            .size_full()
-            .overflow_y_scroll()
-            .track_scroll(&self.sidebar.scroll)
-            .child(clip_top(content, clip_y));
         crate::ui::widgets::anchor(div(), "sidebar")
-            .w(px(SIDEBAR_W))
-            .h_full()
-            .flex()
-            .flex_col()
-            .px(px(14.))
-            .pb(px(16.))
+            .size_full()
             .child(
-                div()
-                    .h(px(48.))
-                    .flex_none()
-                    .w_full()
-                    .window_control_area(WindowControlArea::Drag),
+                butler_ds::ui::blocks::sidebar_shell::SidebarShell::new("sidebar-shell")
+                    .titlebar(div().w_full().window_control_area(WindowControlArea::Drag))
+                    .scroll_header(header)
+                    .sticky_header(sticky)
+                    .child(div().flex().flex_col().gap(px(4.)).children(rows))
+                    .footer(settings),
             )
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .relative()
-                    .child(probe(self.sidebar.probe.0.clone()))
-                    .child(self.sidebar.smooth.layer())
-                    .child(scroller)
-                    .children(overlay),
-            )
-            .child(div().pt(px(10.)).flex_none().child(settings))
+            .into_any_element()
     }
 
     fn chat_rows(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {

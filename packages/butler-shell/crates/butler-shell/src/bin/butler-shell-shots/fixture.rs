@@ -51,6 +51,7 @@ fn chat(
     minutes: i64,
 ) -> ChatSummary {
     ChatSummary {
+        waiting: false,
         chat: chat_ref(id),
         title: title.to_owned().into(),
         space,

@@ -45,14 +45,6 @@ pub(crate) fn spring_fast(on: bool) -> SpringAnimation<f32> {
     .with_epsilon(0.004)
 }
 
-pub(crate) fn spring_slow(on: bool) -> SpringAnimation<f32> {
-    SpringAnimation::new(critical(
-        TokenContext::DEFAULT.duration(DsDuration::MotionSlow),
-    ))
-    .to(if on { 1. } else { 0. })
-    .with_epsilon(0.002)
-}
-
 pub(crate) fn mix(a: Hsla, b: Hsla, t: f32) -> Hsla {
     let (a, b) = (gpui::hsla_to_rgba(a), gpui::hsla_to_rgba(b));
     let l = |x: f32, y: f32| x + (y - x) * t;

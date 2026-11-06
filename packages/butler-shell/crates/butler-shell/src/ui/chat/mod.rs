@@ -194,7 +194,9 @@ impl Chat {
         });
         let ctx = message::RowCtx {
             theme: &self.theme,
-            column: column(self.card_w),
+            column: butler_ds::ui::blocks::scope::conversation(cx)
+                .filter(|v| v.column_width > 0.)
+                .map_or_else(|| column(self.card_w), |v| v.column_width),
             activity_open: open,
             born: self.born.get(&msg.id).copied(),
         };
@@ -209,6 +211,9 @@ impl Chat {
 
 impl Render for Chat {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(vars) = butler_ds::ui::blocks::scope::conversation(cx) {
+            self.set_layout(vars.width, vars.composer_reserve);
+        }
         div()
             .id("chat-list")
             .relative()

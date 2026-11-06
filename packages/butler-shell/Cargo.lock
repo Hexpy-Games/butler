@@ -1008,10 +1008,12 @@ dependencies = [
  "gpui_ce_platform",
  "gpui_ce_wgpu",
  "notify",
+ "percent-encoding",
  "serde",
  "serde_json",
  "sys-locale",
  "tokio",
+ "url",
 ]
 
 [[package]]

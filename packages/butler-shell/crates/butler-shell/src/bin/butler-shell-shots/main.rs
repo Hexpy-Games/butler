@@ -15,6 +15,7 @@
 mod ui;
 
 mod fixture;
+mod frame;
 mod live;
 
 use std::path::{Path, PathBuf};
@@ -73,7 +74,6 @@ impl Harness {
             cx.open_window(size(px(options.width), px(options.height)), |window, cx| {
                 let options = ShellOptions {
                     source,
-                    acrylic: false,
                     dark: Some(dark),
                     code_font,
                     locale: Locale::Ko,
@@ -81,6 +81,11 @@ impl Harness {
                 };
                 cx.new(|cx| Shell::new(options, window, cx))
             })?;
+        cx.update(|cx| {
+            window.update(cx, |shell, window, cx| {
+                window.focus(&shell.focus_handle(), cx);
+            })
+        })?;
         let handle: AnyWindowHandle = window.into();
         settle(&mut cx, handle);
         Ok(Self { cx, window, handle })

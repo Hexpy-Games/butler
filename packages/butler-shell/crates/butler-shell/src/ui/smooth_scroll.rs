@@ -15,7 +15,7 @@ use std::time::Instant;
 
 use gpui::{
     AppContext as _, DispatchPhase, EntityId, HitboxBehavior, IntoElement, ListState, ScrollDelta,
-    ScrollHandle, ScrollWheelEvent, Styled, Window, canvas, point, px,
+    ScrollWheelEvent, Styled, Window, canvas, point, px,
 };
 
 /// Time constant of the glide.
@@ -23,13 +23,8 @@ pub(crate) const TAU_MS: f32 = 50.;
 /// Pixels per wheel line: the list's own value (gpui `list`); divs use the window line height.
 const LIST_LINE: f32 = 20.;
 
-enum Target {
-    List(ListState),
-    Handle(ScrollHandle),
-}
-
 struct State {
-    target: Target,
+    target: ListState,
     /// Distance still to scroll, in px (positive = toward the end of the content).
     pending: f32,
     last: Option<Instant>,
@@ -52,16 +47,8 @@ pub(crate) fn ease(pending: f32, dt_ms: f32) -> f32 {
 
 impl SmoothScroll {
     pub(crate) fn list(list: ListState) -> Self {
-        Self::new(Target::List(list))
-    }
-
-    pub(crate) fn handle(handle: ScrollHandle) -> Self {
-        Self::new(Target::Handle(handle))
-    }
-
-    fn new(target: Target) -> Self {
         Self(Rc::new(RefCell::new(State {
-            target,
+            target: list,
             pending: 0.,
             last: None,
             view: None,
@@ -85,7 +72,6 @@ impl SmoothScroll {
             },
             move |_, hitbox, window, _| {
                 b.0.borrow_mut().view = Some(window.current_view());
-                let line = window.line_height();
                 window.on_mouse_event(move |e: &ScrollWheelEvent, phase, window, cx| {
                     if phase != DispatchPhase::Capture || !hitbox.should_handle_scroll(window) {
                         return;
@@ -94,9 +80,7 @@ impl SmoothScroll {
                         b.cancel();
                         return;
                     }
-                    let lines = matches!(b.0.borrow().target, Target::List(_))
-                        .then_some(px(LIST_LINE))
-                        .unwrap_or(line);
+                    let lines = px(LIST_LINE);
                     let dy = e.delta.pixel_delta(lines).y.as_f32();
                     if dy == 0. {
                         return;
@@ -119,12 +103,8 @@ impl SmoothScroll {
     /// A wheel event caught by something over the scroller (a dialog and its scrim): notches
     /// glide as on the scroller itself, precise (touchpad) deltas move it directly. True when
     /// the view must repaint.
-    pub(crate) fn wheel(&self, e: &ScrollWheelEvent, window: &Window) -> bool {
-        let line = if matches!(self.0.borrow().target, Target::List(_)) {
-            px(LIST_LINE)
-        } else {
-            window.line_height()
-        };
+    pub(crate) fn wheel(&self, e: &ScrollWheelEvent, _: &Window) -> bool {
+        let line = px(LIST_LINE);
         let dy = e.delta.pixel_delta(line).y.as_f32();
         if dy == 0. {
             return false;
@@ -184,21 +164,18 @@ impl SmoothScroll {
 
     /// Current scroll top and its maximum, in px.
     fn position(&self) -> (f32, f32) {
-        match &self.0.borrow().target {
-            Target::List(l) => (
-                -l.scroll_px_offset_for_scrollbar().y.as_f32(),
-                l.max_offset_for_scrollbar().y.as_f32(),
-            ),
-            Target::Handle(h) => (-h.offset().y.as_f32(), h.max_offset().y.as_f32()),
-        }
+        let state = self.0.borrow();
+        let list = &state.target;
+        (
+            -list.scroll_px_offset_for_scrollbar().y.as_f32(),
+            list.max_offset_for_scrollbar().y.as_f32(),
+        )
     }
 
     fn set_top(&self, top: f32) {
-        match &self.0.borrow().target {
-            // The scrollbar path clamps, keeps a bottom-aligned list anchored at its end and
-            // resumes tail-follow there, like the list's own wheel handler.
-            Target::List(l) => l.set_offset_from_scrollbar(point(px(0.), px(-top))),
-            Target::Handle(h) => h.set_offset(point(h.offset().x, px(-top))),
-        }
+        self.0
+            .borrow()
+            .target
+            .set_offset_from_scrollbar(point(px(0.), px(-top)));
     }
 }

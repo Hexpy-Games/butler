@@ -1,5 +1,6 @@
 //! Tokio lives on one owned background thread; gpui only receives channel results.
 mod convert;
+mod frame;
 mod live;
 mod presentation;
 mod refresh;
@@ -118,6 +119,15 @@ impl Agent {
 }
 
 impl Source for Agent {
+    fn summary(&self, session: &SessionId) -> Fetch<wire::SessionSummaryView> {
+        self.frame_summary(session)
+    }
+    fn settings(&self) -> Fetch<wire::FrameSettings> {
+        self.frame_settings()
+    }
+    fn session_action(&self, session: &SessionId, action: super::SessionAction) -> Fetch<()> {
+        self.frame_action(session, action)
+    }
     fn chats(&self, cursor: Option<PageCursor>) -> Fetch<ChatPage> {
         let client = self.client.clone();
         let fallback = self.presentation.get();

@@ -206,9 +206,14 @@ impl Render for Composer {
             .on_action(cx.listener(Self::submit))
             .child(probe)
             .children(self.body(cx));
+        let column = butler_ds::ui::blocks::scope::conversation(cx).unwrap_or_default();
+        let ds = butler_ds::ui::context::Ds::get(cx);
         crate::ui::widgets::anchor(div(), "composer")
+            .absolute()
+            .bottom(ds.len(butler_ds::tokens::Length::SpaceLg))
+            .left(px(column.column_left))
+            .w(px(column.column_width.max(0.)))
             .id("composer")
-            .w_full()
             .child(card)
             .on_click(cx.listener(|this, _, window, cx| {
                 if !this.engaged && this.approval.is_none() {

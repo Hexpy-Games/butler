@@ -23,18 +23,6 @@ pub(crate) fn alpha(c: Hsla, a: f32) -> Hsla {
     }
 }
 
-/// `top` composited over an opaque `bottom`.
-pub(crate) fn over(top: Hsla, bottom: Hsla) -> Hsla {
-    let (t, b) = (gpui::hsla_to_rgba(top), gpui::hsla_to_rgba(bottom));
-    let m = |x: f32, y: f32| x * t.alpha + y * (1. - t.alpha);
-    gpui::rgb_to_hsla(Rgba::new(
-        m(t.red, b.red),
-        m(t.green, b.green),
-        m(t.blue, b.blue),
-        1.,
-    ))
-}
-
 /// --font-body: the bundled static Pretendard family in the CSS stack.
 pub(crate) const FONT_BODY: &str = TokenContext::DEFAULT.font(FontStack::FontBody)[1];
 
@@ -63,10 +51,6 @@ pub(crate) mod typo {
     pub(crate) const CAPTION: (f32, f32) = (
         T.len(Length::TypoCaptionSize),
         T.len(Length::TypoCaptionLineHeight),
-    );
-    pub(crate) const APP_TITLE: (f32, f32) = (
-        T.len(Length::TypoAppTitleSize),
-        T.len(Length::TypoAppTitleLineHeight),
     );
 }
 
@@ -138,14 +122,6 @@ pub(crate) struct Theme {
     pub(crate) placeholder: Hsla,
     /// --color-text-disabled: disabled controls change colour, not opacity.
     pub(crate) text_disabled: Hsla,
-    /// --sidebar-bg, mapped by platform: the shell over the native material.
-    pub(crate) shell: Hsla,
-    /// Platform sidebar background resolved in the .sidebar-solid scope.
-    pub(crate) acrylic_fallback: Hsla,
-    /// --shell-card-edge.
-    pub(crate) card_edge: Hsla,
-    /// --riso-paper.
-    pub(crate) paper: Hsla,
     /// --selection.
     pub(crate) selection: Hsla,
     /// --selection-strong.
@@ -231,12 +207,8 @@ impl Theme {
             dark,
             ..TokenContext::DEFAULT
         };
-        let solid = TokenContext {
-            sidebar_solid: true,
-            ..context
-        };
         let c = |token| color(&context, token);
-        let (bg, secondary, tertiary, hover, selected) = platform.sidebar();
+        let (_, secondary, tertiary, hover, selected) = platform.sidebar();
         let selection = c(Color::Selection);
         // AdaptiveShell.module.css:116-131: sidebar text aliases and optional row fills.
         let row_fill = |token, fallback| context.try_color(token).map_or(fallback, |_| c(token));
@@ -252,10 +224,6 @@ impl Theme {
             sidebar_text3: c(tertiary),
             placeholder: c(Color::Placeholder),
             text_disabled: c(Color::ColorTextDisabled),
-            shell: c(bg),
-            acrylic_fallback: color(&solid, bg),
-            card_edge: c(Color::ShellCardEdge),
-            paper: c(Color::RisoPaper),
             selection,
             selection_strong: c(Color::SelectionStrong),
             nav_hover: row_fill(hover, alpha(selection, 0.60)),

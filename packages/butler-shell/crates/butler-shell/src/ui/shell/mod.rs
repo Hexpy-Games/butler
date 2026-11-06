@@ -2,13 +2,17 @@
 //! the sidebar track, the chat card with the floating composer, the title row, and the
 //! suggest-a-change dialog when one is open.
 mod data;
+mod frame;
 mod modify;
+pub(crate) mod navigation;
+mod notifications;
 mod render;
+mod session_menu;
 mod titlebar;
 
 use std::cell::Cell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gpui::{
     AppContext as _, Bounds, Context, Entity, FocusHandle, KeyBinding, Pixels, SharedString,
@@ -26,12 +30,25 @@ use crate::ui::store::Store;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::HasHover;
 
-actions!(shell, [ToggleTheme, ToggleSidebar, Quit]);
+actions!(
+    shell,
+    [
+        ToggleSidebar,
+        FocusComposer,
+        TextSizeUp,
+        TextSizeDown,
+        TextSizeReset,
+        Quit
+    ]
+);
 
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
-        KeyBinding::new("secondary-shift-l", ToggleTheme, None),
-        KeyBinding::new("secondary-shift-s", ToggleSidebar, None),
+        KeyBinding::new("secondary-shift-e", FocusComposer, None),
+        KeyBinding::new("secondary-=", TextSizeUp, None),
+        KeyBinding::new("secondary-+", TextSizeUp, None),
+        KeyBinding::new("secondary--", TextSizeDown, None),
+        KeyBinding::new("secondary-0", TextSizeReset, None),
         KeyBinding::new("secondary-q", Quit, None),
     ]
 }
@@ -47,14 +64,14 @@ pub(crate) struct Shell {
     pub(crate) hover: Hover,
     pub(crate) sidebar: SidebarState,
     sidebar_open: bool,
+    frame: frame::FrameState,
+    pending_navigation: Option<navigation::Navigation>,
+    attention: notifications::Attention,
+    session_menu: session_menu::SessionMenu,
     /// The agent, while one is attached; `None` shows the disconnected state.
     source: Option<Rc<dyn Source>>,
     incompatible: bool,
     pub(crate) store: Store,
-    /// A brief notice (a failed request), and when it appeared.
-    toast: Option<(SharedString, Instant)>,
-    /// The native acrylic is under the window (else the shell paints an opaque fallback).
-    acrylic: bool,
     theme_override: Option<bool>,
     /// The composer card's measured height (the conversation keeps room for it).
     composer_h: Rc<Cell<f32>>,
@@ -90,8 +107,6 @@ fn system_dark(window: &Window) -> bool {
 /// How the shell starts.
 pub(crate) struct ShellOptions {
     pub(crate) source: Option<Rc<dyn Source>>,
-    /// The native acrylic is under the window.
-    pub(crate) acrylic: bool,
     /// Light or dark regardless of the system (`None`: follow it).
     pub(crate) dark: Option<bool>,
     pub(crate) code_font: gpui::Font,
@@ -102,6 +117,7 @@ pub(crate) struct ShellOptions {
 impl Shell {
     pub(crate) fn new(options: ShellOptions, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let dark = options.dark.unwrap_or_else(|| system_dark(window));
+        Self::install_ds(&options, dark, window, cx);
         let theme = Theme::new(
             dark,
             options.platform,
@@ -112,6 +128,11 @@ impl Shell {
         let composer = cx.new(|cx| Composer::new(theme.clone(), window, cx));
         let focus = cx.focus_handle();
         let subscriptions = vec![
+            cx.observe_window_activation(window, |_, window, cx| {
+                if !window.is_window_active() {
+                    butler_ds::ui::blocks::adaptive_shell::peek::window_blurred(window, cx);
+                }
+            }),
             cx.subscribe_in(&composer, window, Self::on_composer),
             cx.subscribe(&chat, |this: &mut Self, _, e: &LoadOlder, cx| {
                 this.load_older(e, cx);
@@ -127,11 +148,13 @@ impl Shell {
             hover: Hover::default(),
             sidebar: SidebarState::new(),
             sidebar_open: true,
+            frame: frame::FrameState::default(),
+            pending_navigation: None,
+            attention: notifications::Attention::default(),
+            session_menu: session_menu::SessionMenu::default(),
             source: options.source,
             incompatible: false,
             store: Store::default(),
-            toast: None,
-            acrylic: options.acrylic,
             theme_override: options.dark,
             composer_h,
             card_bounds: Rc::new(Cell::new(None)),
@@ -141,6 +164,7 @@ impl Shell {
             connection_task: None,
             rediscover: None,
         };
+        Self::notification_responses(window, cx);
         shell.sync_composer(cx);
         shell.connect(cx);
         Self::tick_ages(cx);
@@ -205,14 +229,6 @@ impl Shell {
             });
         }
         cx.notify();
-    }
-
-    fn toggle_theme(&mut self, _: &ToggleTheme, _: &mut Window, cx: &mut Context<Self>) {
-        let dark = !self.theme.dark;
-        self.theme_override = Some(dark);
-        // The window frame and the acrylic follow the chosen theme, not the system's.
-        cx.set_window_appearance(Some(appearance(dark)));
-        self.set_dark(dark, cx);
     }
 
     fn toggle_sidebar(&mut self, _: &ToggleSidebar, _: &mut Window, cx: &mut Context<Self>) {

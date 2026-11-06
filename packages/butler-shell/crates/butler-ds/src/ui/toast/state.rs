@@ -72,6 +72,7 @@ pub(super) struct State {
 fn lifetime(toast: &Toast) -> Option<Duration> {
     match (toast.kind, toast.duration) {
         (Kind::Loading, _) => None,
+        _ if toast.persistent => None,
         (_, Some(duration)) => Some(duration),
         (_, None) => Some(LIFETIME),
     }
