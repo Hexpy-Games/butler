@@ -85,3 +85,15 @@ for pages where the viewer counts more tab stops than the native page (the Tabs 
 tab panels). The live harness gains `scroll <story> <dx> <dy>` (the wheel over story n, 0-based; positive
 moves further along the content); `focus <n>` now also points the next `shot` at the control's story.
 ScrollArea stories name zero-size markers (`expect anchor scroll-overflows:start|middle|end|fits`).
+
+### B3 additions (text fields)
+
+The viewer's state-target selector now also counts `input`, `textarea` and `select`. The live harness gains
+`type <text>` (`replace_text_in_range` on the focused field's input handler), `ime-mark <text>` (IME
+composition: `replace_and_mark_text_in_range`, the marked text underlined, caret at its end) and
+`ime-commit <text>` (`replace_text_in_range` over the marked text). `Input::probe(name)` and
+`Textarea::probe(name)` name markers `<name>:<text>`, `<name>:caret:<utf16 index>` and
+`<name>:marked:<start>-<end>|none` for `expect anchor`. Korean smoke: `page input`, `click 0`, `key cmd-a`,
+`key backspace`, `type ab`, `ime-mark ㅎ`, `ime-mark 하`, `ime-mark 한`, `expect anchor input-server-id:ab한`,
+`ime-commit 한`, `ime-mark ㄱ`, `ime-mark 그`, `ime-mark 글`, `ime-commit 글`,
+`expect anchor input-server-id:ab한글`, `expect anchor input-server-id:caret:4`.
