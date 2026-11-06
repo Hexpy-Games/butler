@@ -1,6 +1,7 @@
 //! gpui primitives of the Butler design system, built on the generated tokens. `Ds` (a gpui
 //! `Global`) carries the token context the app keeps current; components read it at render time.
 pub mod arc;
+pub mod aspect_frame;
 pub mod assets;
 pub mod bottom_sheet;
 pub mod button;
@@ -22,12 +23,14 @@ pub mod glyph_toggle;
 pub mod icon;
 pub mod icon_button;
 mod icon_files;
+pub mod icon_slot;
 mod icons_generated;
 pub mod kbd;
 pub mod label;
 pub mod layer;
 pub mod layout;
 pub mod menu;
+pub mod meta_list;
 pub mod motion;
 pub mod native_select;
 pub mod overlay;
@@ -47,10 +50,12 @@ pub mod strut;
 pub mod success_check;
 pub mod switch;
 pub mod tabs;
+pub mod tag;
 pub mod text;
 pub mod tinted_glass;
 pub mod toast;
 pub mod tooltip;
 pub mod typo;
+pub mod unread_dot;
 
 pub use icons_generated::Icon;

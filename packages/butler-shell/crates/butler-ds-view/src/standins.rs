@@ -1,4 +1,4 @@
-//! Stand-ins for DS components and blocks that arrive in later batches (Tag, ListRow,
+//! Stand-ins for DS components and blocks that arrive in later batches (ListRow,
 //! ProgressMeter, SettingsSection, SettingsField, LoadingIndicator, DisclosureRow). They only let
 //! the showcases that use them (Layout, Inline, Label, Clickable, ...) render their layout;
 //! each draws from tokens, follows the React CSS it replaces, and goes away when its primitive
@@ -8,29 +8,6 @@ use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Space, Stack, WithItem as _};
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, IntoElement, ParentElement as _, Styled as _, div};
-
-/// Tag (Tag.module.css, `size="sm"`, neutral): a pill chip.
-pub(crate) fn tag(text: impl Into<gpui::SharedString>, cx: &App) -> AnyElement {
-    let ds = Ds::get(cx);
-    let size = ds.len(Length::FontSize1);
-    div()
-        .flex()
-        .items_center()
-        .w_auto()
-        .min_h(ds.len(Length::TagHeightSm))
-        .py(ds.len(Length::TagPaddingBlock))
-        .px(ds.len(Length::TagPaddingInlineSm))
-        .border(ds.len(Length::BorderHairline))
-        .border_color(ds.color(Color::Line))
-        .rounded(ds.len(Length::RadiusPill))
-        .bg(ds.color(Color::Surface))
-        .text_color(ds.color(Color::TextSecondary))
-        .font_family(ds.body_font().clone())
-        .text_size(size)
-        .line_height(ds.len(Length::TypoCaptionLineHeightTight))
-        .child(text.into())
-        .into_any_element()
-}
 
 /// ListRow (ListRow.module.css): an optional icon, the title with its meta, a description.
 pub(crate) fn list_row(

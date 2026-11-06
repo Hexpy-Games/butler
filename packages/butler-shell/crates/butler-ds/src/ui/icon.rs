@@ -1,7 +1,9 @@
 //! A DS icon at a token size, drawn in the inherited text colour (`currentColor`). gpui paints an
 //! svg only in a colour set on the svg itself, so the colour is read from the text style the
 //! icon is laid out in.
-use gpui::{App, IntoElement, Pixels, RenderOnce, SharedString, Styled as _, Window, svg};
+use gpui::{
+    App, IntoElement, Pixels, RenderOnce, SharedString, Styled as _, Transformation, Window, svg,
+};
 
 use super::Icon;
 use super::context::Ds;
@@ -13,12 +15,33 @@ pub enum IconSize {
     Sm,
     Md,
     Lg,
+    Xl,
+    Xxl,
+    Xxxl,
 }
 
 #[derive(IntoElement)]
 pub struct IconView {
     icon: Icon,
     side: Pixels,
+    turn: f32,
+}
+
+impl IconView {
+    /// Turned clockwise by `radians` about its centre.
+    pub fn turned(mut self, radians: f32) -> Self {
+        self.turn = radians;
+        self
+    }
+}
+
+/// A DS icon at an exact pixel size.
+pub fn icon_px(icon: Icon, side: Pixels) -> IconView {
+    IconView {
+        icon,
+        side,
+        turn: 0.,
+    }
 }
 
 pub fn icon(icon: Icon, size: IconSize, ds: &Ds) -> IconView {
@@ -27,14 +50,20 @@ pub fn icon(icon: Icon, size: IconSize, ds: &Ds) -> IconView {
         IconSize::Sm => Length::IconSizeSm,
         IconSize::Md => Length::IconSizeMd,
         IconSize::Lg => Length::IconSizeLg,
+        IconSize::Xl => Length::IconSizeXl,
+        IconSize::Xxl => Length::IconSize2xl,
+        IconSize::Xxxl => Length::IconSize3xl,
     });
-    IconView { icon, side }
+    icon_px(icon, side)
 }
 
 impl RenderOnce for IconView {
     fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
-        svg()
-            .path(SharedString::from(self.icon.path()))
+        let mut glyph = svg().path(SharedString::from(self.icon.path()));
+        if self.turn != 0. {
+            glyph = glyph.with_transformation(Transformation::rotate(gpui::radians(self.turn)));
+        }
+        glyph
             .size(self.side)
             .flex_none()
             .text_color(window.text_style().color)

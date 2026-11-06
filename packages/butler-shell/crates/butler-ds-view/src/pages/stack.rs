@@ -2,6 +2,7 @@
 use butler_ds::ui::layout::{
     Align, Basis, Cross, MinWidth, Space, Stack, StackItem, WithItem as _,
 };
+use butler_ds::ui::tag::Tag;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
@@ -9,7 +10,6 @@ use butler_ds::ui::button::{Button, Size, Variant};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::tag;
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
@@ -23,7 +23,7 @@ pub(super) fn stories() -> Vec<Story> {
         },
         Story {
             name: "Item grow, basis and shrink",
-            render: |_, _, cx| items(cx),
+            render: |_, _, _| items(),
         },
         Story {
             name: "Truncation in a row",
@@ -59,17 +59,17 @@ fn row(lang: Lang) -> AnyElement {
         .into_any_element()
 }
 
-fn items(cx: &App) -> AnyElement {
+fn items() -> AnyElement {
     Stack::new()
         .gap(Space::Sm)
         .child(
             Stack::row()
                 .gap(Space::Sm)
-                .child(StackItem::new().grow().child(tag("grow", cx)))
+                .child(StackItem::new().grow().child(Tag::new("tag", "grow")))
                 .child(
                     StackItem::new()
                         .shrink(false)
-                        .child(tag("shrink={false}", cx)),
+                        .child(Tag::new("tag", "shrink={false}")),
                 ),
         )
         .child(
@@ -81,14 +81,14 @@ fn items(cx: &App) -> AnyElement {
                         .grow()
                         .basis(Basis::Md)
                         .min_width(MinWidth::Zero)
-                        .child(tag("basis=md", cx)),
+                        .child(Tag::new("tag", "basis=md")),
                 )
                 .child(
                     StackItem::new()
                         .grow()
                         .basis(Basis::Md)
                         .min_width(MinWidth::Zero)
-                        .child(tag("basis=md", cx)),
+                        .child(Tag::new("tag", "basis=md")),
                 ),
         )
         .into_any_element()

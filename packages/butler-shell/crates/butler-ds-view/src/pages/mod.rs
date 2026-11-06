@@ -1,4 +1,5 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
+mod aspect_frame;
 mod bottom_sheet;
 mod boxes;
 mod button;
@@ -15,11 +16,13 @@ mod field;
 mod glyph_toggle;
 mod grid;
 mod icon_button;
+mod icon_slot;
 mod inline;
 mod input;
 mod kbd;
 mod label;
 mod layout;
+mod meta_list;
 mod native_select;
 mod pill_button;
 mod popover;
@@ -36,11 +39,13 @@ mod stack;
 mod success_check;
 mod switch;
 mod tabs;
+mod tag;
 mod textarea;
 mod tinted_glass;
 mod toast;
 mod tooltip;
 mod typo;
+mod unread_dot;
 
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::context::Ds;
@@ -119,6 +124,11 @@ pub(crate) fn all() -> Vec<Page> {
         page!("scroll-area", "ScrollArea", scroll_area),
         page!("collapsible", "Collapsible", collapsible),
         page!("tabs", "Tabs", tabs),
+        page!("tag", "Tag", tag),
+        page!("icon-slot", "IconSlot", icon_slot),
+        page!("unread-dot", "UnreadDot", unread_dot),
+        page!("aspect-frame", "AspectFrame", aspect_frame),
+        page!("meta-list", "MetaList", meta_list),
     ]
 }
 
