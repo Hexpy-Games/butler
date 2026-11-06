@@ -71,6 +71,20 @@ fn lines(card: &AuthorityCard) -> (SharedString, Vec<SharedString>) {
     (action.unwrap_or_else(|| card.reason.clone()), details)
 }
 
+/// One line of the card: a question is prose (`Typo.Label` medium for its title, `Typo.Caption`
+/// secondary for the lines under it, in the body font), anything else is the exact action drawn
+/// as its own characters in the code font (a command, a path, a URL).
+fn line(card: &AuthorityCard, t: &Theme, text_: SharedString, title: bool) -> AnyElement {
+    if !matches!(card.kind, CardKind::Question) {
+        return crate::ui::exact_action::exact_action(text_, t, 1.).into_any_element();
+    }
+    if title {
+        text(text_, typo::LABEL, FontWeight::MEDIUM, t.text).into_any_element()
+    } else {
+        text(text_, typo::CAPTION, FontWeight::NORMAL, t.text2).into_any_element()
+    }
+}
+
 /// Button size="sm" (28px) with the composer radius. `on` is `None` when it is disabled.
 fn button(
     c: &Composer,
@@ -214,7 +228,7 @@ pub(super) fn panel(
                 .flex()
                 .flex_col()
                 .child(text(label, typo::CAPTION, FontWeight::NORMAL, t.text3))
-                .child(crate::ui::exact_action::exact_action(action, &t, 1.)),
+                .child(line(card, &t, action, true)),
         )
         .children(risk);
     let mut more = div()
@@ -224,8 +238,8 @@ pub(super) fn panel(
         .pb(px(12.))
         .flex()
         .flex_col();
-    for line in details {
-        more = more.child(crate::ui::exact_action::exact_action(line, &t, 1.));
+    for detail in details {
+        more = more.child(line(card, &t, detail, false));
     }
     if card
         .approval
