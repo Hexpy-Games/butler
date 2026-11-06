@@ -255,8 +255,24 @@ async fn read_keeps_page_refs_and_unapproved_open_returns_to_executor() -> Resul
 async fn caller_url_that_needs_approval_returns_its_url() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let url = "https://store.example/search?q=lamp";
+    // A clean turn opens any URL; after a first browse reads a page, the query URL needs approval.
+    let stuck = json!({"notes":"","next":{"stuck":{"reason":"none","needs":"none"}}}).to_string();
+    let mut c = cassette("https://store.example/product-b", &[stuck])?;
+    let mut second = c.exchanges.last().unwrap().clone();
+    second.response = stub::response(&[stub::call(
+        "browse",
+        &json!({"goal":"Inspect page","url":url,"fields":["price"]}),
+        "second",
+    )]);
+    c.exchanges.last_mut().unwrap().request.key.round = ["function_call", "function_call_output"]
+        .repeat(2)
+        .into_iter()
+        .map(Into::into)
+        .collect();
+    let at = c.exchanges.len() - 1;
+    c.exchanges.insert(at, second);
     let s = Setup::new("BROWSE-CALLER-URL-APPROVAL")?
-        .stub_cassette(cassette(url, &[])?)
+        .stub_cassette(c)
         .access(Access::AskExceptReads)
         .start()
         .await?;
@@ -272,7 +288,7 @@ async fn caller_url_that_needs_approval_returns_its_url() -> Result<(), HarnessE
     assert_eq!(result["status"], "needs_approval", "{result}");
     assert_eq!(result["handoff"], json!({"url":url}));
     assert_eq!(result["steps_used"], 0);
-    assert_eq!(requests.iter().filter(|r| executor(r)).count(), 0);
+    assert_eq!(requests.iter().filter(|r| executor(r)).count(), 1);
     host.abort();
     let _ = host.await;
     s.finish().await
