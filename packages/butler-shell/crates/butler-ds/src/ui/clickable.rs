@@ -3,8 +3,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement, RenderOnce, Styled as _,
-    Window, px,
+    AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement, Pixels, RenderOnce,
+    Styled as _, Window, px,
 };
 
 use super::context::Ds;
@@ -41,6 +41,8 @@ pub struct Clickable {
     selected: Option<bool>,
     stretch: bool,
     disabled: bool,
+    /// `--clickable-padding-inline` and `--clickable-min-height`, when a block sets its own.
+    metrics: Option<(Pixels, Pixels)>,
     on_click: Option<Handler>,
     children: Vec<AnyElement>,
 }
@@ -54,6 +56,7 @@ impl Clickable {
             selected: None,
             stretch: false,
             disabled: false,
+            metrics: None,
             on_click: None,
             children: Vec::new(),
         }
@@ -82,6 +85,13 @@ impl Clickable {
 
     pub fn disabled(mut self) -> Self {
         self.disabled = true;
+        self
+    }
+
+    /// The row's inline padding and minimum height (a block sets `--clickable-padding-inline`
+    /// and `--clickable-min-height`, as NavRow does for its density).
+    pub fn metrics(mut self, padding_inline: Pixels, min_height: Pixels) -> Self {
+        self.metrics = Some((padding_inline, min_height));
         self
     }
 
@@ -160,8 +170,9 @@ impl Clickable {
         );
         // Block bleed: the fill reaches `--space-xs` above and below while the box keeps the
         // space of an unbled row (the CSS grows the padding and takes it back with margins).
-        control.padding = [px(PADDING_INLINE), px(0.), px(PADDING_INLINE), px(0.)];
-        control.min_height = Some(px(MIN_HEIGHT));
+        let (inline, min_height) = self.metrics.unwrap_or((px(PADDING_INLINE), px(MIN_HEIGHT)));
+        control.padding = [inline, px(0.), inline, px(0.)];
+        control.min_height = Some(min_height);
         if block_bleed {
             control.bleed_y = block;
         }
@@ -176,7 +187,7 @@ impl Clickable {
             };
         }
         if inline_bleed {
-            let margin_x = px(-PADDING_INLINE);
+            let margin_x = -inline;
             control.outer = Some(Box::new(move |el| el.ml(margin_x).mr(margin_x)));
         }
     }

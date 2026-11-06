@@ -131,7 +131,7 @@ impl gpui::Global for CanvasWidth {}
 /// A story's frame (`.frame` > `.preview` > `.canvas` of DesignSystemViewer.module.css).
 fn frame(name: &str, content: AnyElement, ds: &Ds, forced: Option<f32>) -> AnyElement {
     let anchor = format!("story-{name}");
-    // `.canvas` is a one-column grid: its children are grid items, blockified.
+    // `.canvas` is a one-column grid with an auto track: its children are grid items, blockified.
     let sized = match forced {
         Some(width) => div().w(px(width)).max_w_full().flex_none(),
         None => div().w_full().min_w_0(),
@@ -139,7 +139,7 @@ fn frame(name: &str, content: AnyElement, ds: &Ds, forced: Option<f32>) -> AnyEl
     .grid()
     .grid_cols(1);
     let canvas = anchor_div(
-        sized.child(butler_ds::ui::strut::flex_scope(true, content)),
+        sized.child(butler_ds::ui::strut::grid_scope(content)),
         anchor,
     );
     let preview = div()

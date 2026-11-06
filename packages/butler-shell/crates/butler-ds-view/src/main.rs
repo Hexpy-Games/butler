@@ -15,6 +15,7 @@ mod pages;
 #[cfg(feature = "shots")]
 mod shots;
 mod standins;
+mod standins_nav;
 mod standins_overlay;
 
 use butler_ds::ui::assets::Assets;

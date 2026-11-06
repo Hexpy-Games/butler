@@ -257,14 +257,14 @@ fn assemble(
         .id(select.id.clone())
         .relative()
         .debug_selector(move || anchor.to_string());
-    root = if select.stretch {
-        root.w_full()
-    } else if shrink {
-        root.self_start()
-    } else {
-        root
-    };
-    root = root.min_w(px(MIN_WIDTH)).max_w_full().flex().flex_none();
+    if select.stretch {
+        root = root.w_full();
+    }
+    // `min-width: min(160px, 100%)`: in a track the item sizes, 100% is the item's own width.
+    if !strut::auto_track(cx) {
+        root = root.min_w(px(MIN_WIDTH));
+    }
+    root = root.max_w_full().flex().flex_none();
     let height = match select.size {
         Size::Default => HEIGHT,
         Size::Sm => HEIGHT_SM,
@@ -287,7 +287,7 @@ fn assemble(
     .top_0()
     .left_0();
     let root = root.child(content).child(measure);
-    match handle {
+    let root = match handle {
         Some(handle) => {
             let keys = menu.clone();
             let room = focus::room(ds);
@@ -304,6 +304,12 @@ fn assemble(
                 .into_any_element()
         }
         None => root.cursor_default().into_any_element(),
+    };
+    // `width: max-content` (the default): the content's width, whatever the container does.
+    if select.stretch || !shrink {
+        root
+    } else {
+        strut::max_content(root)
     }
 }
 

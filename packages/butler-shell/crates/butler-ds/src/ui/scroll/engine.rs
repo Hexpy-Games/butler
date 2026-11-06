@@ -314,7 +314,7 @@ pub fn fade(
             convert::easing(ds.tokens().ease(Easing::MotionEaseDecelerate)),
             ds.reduced_motion(),
             f32::from(focus::room(ds)),
-            text_field || ds.modality() == Modality::Keyboard,
+            text_field || ds.modality().focus_visible(),
         )
     };
     let (handle, focus_handle) = {
