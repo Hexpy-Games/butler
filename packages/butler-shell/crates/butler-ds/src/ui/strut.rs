@@ -21,7 +21,9 @@ pub fn container<E: gpui::Styled>(el: E, ds: &Ds) -> E {
     let body = Role::Body.tokens();
     let mut el = el.font_family(ds.body_font().clone());
     if let Some(body) = body {
-        el = el.text_size(ds.len(body.size)).line_height(ds.len(body.line_height));
+        el = el
+            .text_size(ds.len(body.size))
+            .line_height(ds.len(body.line_height));
     }
     el
 }

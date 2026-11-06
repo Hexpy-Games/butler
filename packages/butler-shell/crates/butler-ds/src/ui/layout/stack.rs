@@ -194,7 +194,10 @@ impl RenderOnce for Stack {
             el = el.window_control_area(WindowControlArea::Drag);
         }
         let stretch_column = self.align == Align::Column && self.cross == Cross::Stretch;
-        strut::flex_scope(stretch_column, self.item.apply(el, ds).children(self.children))
+        strut::flex_scope(
+            stretch_column,
+            self.item.apply(el, ds).children(self.children),
+        )
     }
 }
 
