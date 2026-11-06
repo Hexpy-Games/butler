@@ -1,6 +1,7 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
 mod animated_number;
 mod aspect_frame;
+mod avatar;
 mod bottom_sheet;
 mod boxes;
 mod button;
@@ -135,6 +136,7 @@ pub(crate) fn all() -> Vec<Page> {
         page!("rolling-swap", "RollingSwap", rolling_swap),
         page!("rolling-status-line", "RollingStatusLine", rolling_status_line),
         page!("animated-number", "AnimatedNumber", animated_number),
+        page!("avatar", "Avatar", avatar),
     ]
 }
 

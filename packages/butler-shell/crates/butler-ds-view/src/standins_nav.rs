@@ -53,13 +53,29 @@ fn metrics(ds: &Ds, density: Option<Density>) -> Metrics {
     }
 }
 
+/// The right-aligned caption of a row (`.badge`).
+fn badge_cell(badge: SharedString, ds: &Ds) -> gpui::Div {
+    div()
+        .flex_none()
+        .overflow_hidden()
+        .text_right()
+        .text_color(ds.color(Color::TextTertiary))
+        .font_family(ds.body_font().clone())
+        .text_size(ds.len(Length::FontSize1))
+        .line_height(ds.len(Length::TypoCaptionLineHeight))
+        .child(badge)
+}
+
 pub(crate) struct NavRow {
     id: ElementId,
     label: SharedString,
+    /// Replaces the label text (a title with an avatar after it).
+    content: Option<AnyElement>,
     icon: Option<AnyElement>,
     badge: Option<SharedString>,
     actions: Option<AnyElement>,
     density: Option<Density>,
+    active: bool,
 }
 
 impl NavRow {
@@ -67,10 +83,12 @@ impl NavRow {
         Self {
             id: id.into(),
             label: label.into(),
+            content: None,
             icon: None,
             badge: None,
             actions: None,
             density: None,
+            active: false,
         }
     }
 
@@ -93,6 +111,11 @@ impl NavRow {
         self
     }
 
+    pub(crate) fn content(mut self, content: impl gpui::IntoElement) -> Self {
+        self.content = Some(content.into_any_element());
+        self
+    }
+
     pub(crate) fn badge(mut self, badge: impl Into<SharedString>) -> Self {
         self.badge = Some(badge.into());
         self
@@ -100,6 +123,12 @@ impl NavRow {
 
     pub(crate) fn actions(mut self, actions: impl gpui::IntoElement) -> Self {
         self.actions = Some(actions.into_any_element());
+        self
+    }
+
+    /// The current row: the selected fill and a medium-weight label.
+    pub(crate) fn active(mut self) -> Self {
+        self.active = true;
         self
     }
 
@@ -124,10 +153,18 @@ impl NavRow {
             .whitespace_nowrap()
             .text_ellipsis()
             .font_family(ds.body_font().clone())
-            .font_weight(FontWeight(ds.number(Number::FontWeightRegular)))
+            .font_weight(FontWeight(ds.number(if self.active {
+                Number::FontWeightMedium
+            } else {
+                Number::FontWeightRegular
+            })))
             .text_size(ds.len(size))
             .line_height(ds.len(line))
-            .child(self.label);
+            .child(
+                self.content
+                    .unwrap_or_else(|| self.label.into_any_element()),
+            );
+        let active = self.active;
         let icon = self.icon.map(|icon| {
             div()
                 .flex()
@@ -135,7 +172,7 @@ impl NavRow {
                 .items_center()
                 .justify_center()
                 .size(px(m.icon))
-                .opacity(0.82) // DS: NavRow.module.css:164
+                .opacity(if active { 1. } else { 0.82 }) // DS: NavRow.module.css:164,93
                 .child(icon)
         });
         let labels = div()
@@ -146,17 +183,7 @@ impl NavRow {
             .gap(px(m.gap))
             .children(icon)
             .child(label);
-        let badge = self.badge.map(|badge| {
-            div()
-                .flex_none()
-                .overflow_hidden()
-                .text_right()
-                .text_color(ds.color(Color::TextTertiary))
-                .font_family(ds.body_font().clone())
-                .text_size(ds.len(Length::FontSize1))
-                .line_height(ds.len(Length::TypoCaptionLineHeight))
-                .child(badge)
-        });
+        let badge = self.badge.map(|badge| badge_cell(badge, ds));
         let controls = (badge.is_some() || self.actions.is_some()).then(|| {
             div()
                 .flex()
@@ -167,9 +194,9 @@ impl NavRow {
                 .children(badge)
                 .children(self.actions)
         });
-        Clickable::new(self.id)
-            .stretch()
-            .metrics(px(m.padding), px(m.height))
+        let row = Clickable::new(self.id).stretch();
+        let row = if self.active { row.selected(true) } else { row };
+        row.metrics(px(m.padding), px(m.height))
             .on_click(|_, _, _| {})
             .child(
                 div()
@@ -182,4 +209,25 @@ impl NavRow {
             )
             .into_any_element()
     }
+}
+
+/// Stand-in for SidebarShell's body with `scrollFade={false}` and rows as direct children
+/// (SidebarShell.module.css `.shell`, `.scrollContent`): inline padding and a bottom space around
+/// a column of rows spaced by 18px. The scroll frame's focus-ring room (a padding of the content
+/// and the same negative margin of the frame) nets out to nothing here.
+pub(crate) fn sidebar_shell(rows: impl IntoIterator<Item = AnyElement>, cx: &App) -> AnyElement {
+    let ds = Ds::get(cx);
+    div()
+        .flex()
+        .flex_col()
+        .px(ds.len(Length::SidebarPaddingInline))
+        .pb(ds.len(Length::SpaceLg))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(18.)) // DS: SidebarShell.module.css:256
+                .children(rows),
+        )
+        .into_any_element()
 }

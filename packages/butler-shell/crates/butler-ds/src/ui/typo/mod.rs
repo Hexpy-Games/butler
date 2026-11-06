@@ -229,7 +229,7 @@ fn is_hangul(c: char) -> bool {
 
 /// `word-break: keep-all`: a word joiner between Hangul letters leaves the break opportunities
 /// at spaces only.
-fn keep_all(text: &str) -> String {
+pub(crate) fn keep_all(text: &str) -> String {
     let mut out = String::with_capacity(text.len() * 2);
     let mut previous: Option<char> = None;
     for c in text.chars() {
@@ -328,7 +328,7 @@ impl Typo {
 
     /// Distance the glyphs move down so the capitals' centre is the line's centre
     /// (`text-box: trim-both cap alphabetic` with `padding-block: (1lh - 1cap) / 2`).
-    fn trim_offset(family: &SharedString, size: f32, cx: &App, weight: f32) -> f32 {
+    pub(crate) fn trim_offset(family: &SharedString, size: f32, cx: &App, weight: f32) -> f32 {
         let system = cx.text_system();
         let mut face = font(family.clone());
         face.weight = FontWeight(weight);
