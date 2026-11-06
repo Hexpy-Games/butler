@@ -36,6 +36,7 @@ try {
         Expand-Archive $zip[0].FullName "$root/agent"
         $env:BUTLER_E2E_BIN = "$root/agent/butler-agent.exe"
         $env:BUTLER_E2E_SKIP_BUILD = '1'
+        $env:BUTLER_E2E_WITHOUT_FIXTURES = '1'
         $env:BUTLER_E2E_TIER = 'stub'
         $env:BUTLER_E2E_WORKSPACE_ROOT = Join-Path $repo 'packages/butler-agent/rust'
         foreach ($test in @('updates','update_channels','process_names')) {

@@ -381,6 +381,7 @@ def vendored_components():
         ("notify Windows ledger backend", "8.2.0", "CC0-1.0", "third_party/notify-windows-ledger/LICENSE"),
         ("Noto Sans KR", "2.004", "OFL-1.1", "packages/butler-agent/rust/crates/butler-runtime/assets/OFL.txt"),
         ("IBM Plex Mono", "2.5.0", "OFL-1.1", "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt"),
+        ("IBM Plex Sans KR", "1.1.0", "OFL-1.1", "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-sans-kr/LICENSE.txt"),
         ("LobeHub provider logos", "1.95.1", "MIT", "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE"),
         ("JavaScriptCore V8 Date.parse adaptation", "2026-09-19", "BSD-2-Clause", "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt"),
         ("Unicode CLDR timezone names", "ICU 78.1 / TZ 2026e", "Unicode-3.0", "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt"),

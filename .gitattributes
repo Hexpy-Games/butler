@@ -3,3 +3,6 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 packages/butler-agent/rust/crates/butler-agent/src/context/pdf/*.pdf binary
+
+# Vendored font licenses stay verbatim (the official OFL text has trailing spaces).
+packages/butler-app/client/ui/src/libs/design-system/fonts/*/LICENSE.txt -whitespace

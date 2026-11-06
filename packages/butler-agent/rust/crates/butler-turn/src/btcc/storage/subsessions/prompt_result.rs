@@ -49,18 +49,18 @@ pub(super) fn delivery_text(
     delegation: &StoredSubsessionDelegation,
 ) -> Result<String, StorageError> {
     let evidence = super::super::operation_results::evidence::manifest(db, id, refs, summary)?;
-    let task = worker_task_lines(db, delegation)?;
+    let (task, earlier) = worker_task_lines(db, delegation)?;
     Ok(format!(
-        "Delegated result\nresult_id: {id}{task}\nstatus: {status}\nsummary: {summary}\n{evidence}{feedback}"
+        "Delegated result\nresult_id: {id}{task}\nstatus: {status}\nsummary: {summary}\n{evidence}{feedback}{earlier}"
     ))
 }
 
 fn worker_task_lines(
     db: &rusqlite::Connection,
     delegation: &StoredSubsessionDelegation,
-) -> Result<String, StorageError> {
+) -> Result<(String, String), StorageError> {
     if delegation.packet.child_role != ChildRole::Worker {
-        return Ok(String::new());
+        return Ok((String::new(), String::new()));
     }
     let work: Option<String> = db
         .query_row(
@@ -71,14 +71,14 @@ fn worker_task_lines(
         .optional()
         .map_err(StorageError::sqlite)?;
     let Some(work) = work else {
-        return Ok(String::new());
+        return Ok((String::new(), String::new()));
     };
     let tasks = super::work_tasks::read_tasks(db, &work)?;
     let Some(task) = tasks
         .iter()
         .find(|task| task.relation_id == delegation.relation_id)
     else {
-        return Ok(String::new());
+        return Ok((String::new(), String::new()));
     };
     let running = tasks
         .iter()
@@ -99,8 +99,32 @@ fn worker_task_lines(
         .chars()
         .take(200)
         .collect::<String>();
-    Ok(format!(
+    let lines = format!(
         "\ntask: {} action_key: {} relation_id: {} objective: {objective}\nstill running: {running}",
         task.task_id, task.action_key, task.relation_id
-    ))
+    );
+    Ok((lines, earlier_results(&tasks, &delegation.relation_id)))
+}
+
+fn earlier_results(tasks: &[crate::btcc::WorkTask], relation: &str) -> String {
+    let lines: String = tasks
+        .iter()
+        .filter(|task| {
+            task.relation_id != relation && matches!(task.status.as_str(), "done" | "cancelled")
+        })
+        .filter_map(|task| {
+            Some(format!(
+                "\n- result_id: {} task: {} action_key: {} ({})\n  summary: {}",
+                task.result_ref.as_deref()?,
+                task.task_id,
+                task.action_key,
+                task.status,
+                task.summary.as_deref().unwrap_or("")
+            ))
+        })
+        .collect();
+    if lines.is_empty() {
+        return lines;
+    }
+    format!("\nEarlier Worker results in this Work (delivered to earlier turns):{lines}")
 }

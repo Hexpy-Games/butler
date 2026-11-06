@@ -1,5 +1,4 @@
 use super::*;
-use base64::Engine;
 use butler_turn::btcc::{
     storage::{OperationResultRepository, read_activated_storage_manifest},
     *,
@@ -137,11 +136,8 @@ async fn read_all(
         let read = runtime.read_tool(&args).await.unwrap();
         assert_eq!(read["result_sha256"], exact["sha256"]);
         assert_eq!(read["offset"], args["offset"]);
-        bytes.extend(
-            base64::engine::general_purpose::STANDARD
-                .decode(read["data"].as_str().unwrap())
-                .unwrap(),
-        );
+        assert_eq!(read["encoding"], "utf8");
+        bytes.extend(read["data"].as_str().unwrap().as_bytes());
         let Some(next) = read["next_offset"].as_u64() else {
             assert_eq!(
                 bytes.len(),

@@ -254,6 +254,7 @@ mod schedule_cassette;
 mod btcc_corrupt_startup;
 mod btcc_cutover;
 mod btcc_history;
+mod btcc_shipped_upgrade;
 mod btcc_startup_integrity;
 mod cli_project_folder;
 mod data_perf;

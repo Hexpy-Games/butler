@@ -26,6 +26,7 @@ struct Run {
     notes_cut: bool,
     failures: usize,
     view: Value,
+    read: Value,
     seen: Vec<(String, String)>,
 }
 
@@ -73,6 +74,13 @@ async fn start(
     if args.get("url").is_some() {
         let result = step::open(owner, invocation, occurrence, run, &args["url"]).await?;
         if result["status"] == "needs_approval" {
+            let mut result = result;
+            if result["reason"] == "approval_required" {
+                result["handoff"] = json!({"url": args["url"]});
+                result["summary"] = json!(
+                    "Opening this URL needs the user's approval: open it with browser_open, then browse its tab."
+                );
+            }
             return encoded(&run.finish(result, &model.model));
         }
         if result["status"] != "ok" {
@@ -127,7 +135,7 @@ async fn drive(
         };
         if next.get("approve").is_some() && !step::valid_steps(&next["approve"]["steps"], &run.view)
         {
-            let failure = json!({"status":"invalid_steps","reason":"Approval refs must be in the current view."});
+            let failure = json!({"status":"invalid_steps","reason":"Approval refs must be in the current view.","recovery":"Write each step as {\"action\",\"ref\",\"value\"} with refs from the current view."});
             if run.failed(&next, &failure) {
                 return encoded(
                     &run.finish(json!({"status":"stuck","summary":failure}), &model.model),
@@ -147,7 +155,11 @@ async fn drive(
             run.failures = 0;
             run.log
                 .push(json!({"step":index,"action":next,"outcome":"ok"}));
-            run.remember(outcome);
+            if next.get("read").is_some() {
+                run.remember_read(outcome);
+            } else {
+                run.remember(outcome);
+            }
         } else if run.failed(&next, &outcome) {
             return encoded(&run.finish(json!({"status":"stuck","summary":outcome}), &model.model));
         }
@@ -164,6 +176,12 @@ async fn request(
     let mut scope = json!({"fields":run.fields,
         "step":format!("{} of {}", run.steps, run.max_steps),
         "action_log":run.log,"notes":run.notes,"view":run.view});
+    if !run.read.is_null() {
+        scope["read"] = run.read.clone();
+    }
+    if !browser::executor_admits(owner, "browser_act") {
+        scope["page_actions"] = json!("unavailable");
+    }
     if run.notes_cut {
         scope["notes_notice"] = json!(
             "Your notes were cut at 2,000 characters. Rewrite them to retain the goal's evidence within that limit."
@@ -225,6 +243,7 @@ impl Run {
             notes_cut: false,
             failures: 0,
             view: Value::Null,
+            read: Value::Null,
             seen: vec![],
         }
     }

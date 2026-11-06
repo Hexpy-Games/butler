@@ -8,7 +8,7 @@ import type { ShowcaseGuidance, ShowcaseModule } from "../../packages/butler-app
 import { chapterById, chapterForToken, chapterPage, chapterTokens, FOUNDATION_CHAPTERS } from "../../packages/butler-app/client/ui/src/libs/design-system/viewer/foundations/chapters";
 import { paletteFamilies } from "../../packages/butler-app/client/ui/src/libs/design-system/viewer/foundations/paletteFamilies";
 import { buildTokenCatalog, parseTokenDefinitions, TOKEN_CATEGORIES } from "../../packages/butler-app/client/ui/src/libs/design-system/viewer/foundations/tokenCatalog";
-import { BUNDLED_FACES, fontFamilies, fontWeights, typefaceTitle, typeRoles, WEIGHT_AXIS } from "../../packages/butler-app/client/ui/src/libs/design-system/viewer/foundations/typeScale";
+import { BUNDLED_FACES, fontFamilies, fontWeights, leadingBundledFaces, typefaceTitle, typeRoles, WEIGHT_AXIS } from "../../packages/butler-app/client/ui/src/libs/design-system/viewer/foundations/typeScale";
 
 describe("ds-showcase-coverage.test.ts", () => {
 // Every design-system component and block folder owns a co-located
@@ -265,7 +265,7 @@ describe("specimens are derived from tokens.css", () => {
     const families = fontFamilies(byName.get("--font-body")!.light);
     expect(typefaceTitle(families)).toBe("Pretendard Variable");
     expect(BUNDLED_FACES["Pretendard Variable"]).toContain("45–920");
-    expect(fontFamilies(byName.get("--font-family-code")!.light)[0]).toBe("IBM Plex Mono");
+    expect(leadingBundledFaces(fontFamilies(byName.get("--font-family-code")!.light))).toEqual(["IBM Plex Mono", "IBM Plex Sans KR"]);
     // Official @font-face range is 45 920; samples stay inside it.
     expect(Math.min(...WEIGHT_AXIS)).toBe(45);
     expect(Math.max(...WEIGHT_AXIS)).toBe(920);

@@ -289,7 +289,10 @@ pub(super) fn enforce_result_policy(
                     frame
                         .as_str()
                         .or_else(|| frame["url"].as_str())
-                        .is_none_or(|url| !permitted_url(state, session, url))
+                        .is_none_or(|url| {
+                            butler_runtime::browser::fetched_document(url)
+                                && !permitted_url(state, session, url)
+                        })
                 })
             });
     if !denied {

@@ -36,15 +36,12 @@ pub(super) fn canonical_schema(db: &Connection) -> StorageResult<()> {
         .map_err(StorageError::sqlite)?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(StorageError::sqlite)?;
-    let mut expected = TABLES.to_vec();
-    if actual
+    let canonical: Vec<&str> = actual
         .iter()
-        .any(|table| RUNTIME_TABLES.contains(&table.as_str()))
-    {
-        expected.extend(RUNTIME_TABLES);
-        expected.sort_unstable();
-    }
-    if actual.iter().map(String::as_str).collect::<Vec<_>>() != expected {
+        .map(String::as_str)
+        .filter(|table| !RUNTIME_TABLES.contains(table))
+        .collect();
+    if canonical != TABLES {
         return Err(error(StorageCode::AgentBtccStorageManifestMismatch));
     }
     Ok(())

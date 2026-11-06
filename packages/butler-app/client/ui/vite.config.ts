@@ -35,6 +35,7 @@ function fontLicenseNotices(): Plugin {
   const notices: Array<[name: string, file: string]> = [
     ["Pretendard Variable 1.3.9", require.resolve("pretendard/dist/LICENSE.txt")],
     ["IBM Plex Mono 2.5.0", path.resolve(designSystemRoot, "fonts/ibm-plex-mono/LICENSE.txt")],
+    ["IBM Plex Sans KR 1.1.0", path.resolve(designSystemRoot, "fonts/ibm-plex-sans-kr/LICENSE.txt")],
   ];
   return {
     name: "butler-font-license-notices",

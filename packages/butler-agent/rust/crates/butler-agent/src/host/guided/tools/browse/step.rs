@@ -1,5 +1,8 @@
 use super::*;
 
+/// web_read's largest passage window; its character budget still bounds the read.
+const READ_PASSAGES: u64 = 8;
+
 pub(super) fn parse(text: &str) -> Result<(String, Value), &'static str> {
     let value: Value = first_object(text).ok_or("invalid_executor_json")?;
     let object = value.as_object().ok_or("invalid_executor_json")?;
@@ -120,12 +123,16 @@ pub(super) async fn execute(
                 run.remember(observed.clone());
             }
             Ok(observed)
+        } else if result["status"] == "needs_approval" && result["reason"] == "approval_required" {
+            Ok(json!({"status":"not_opened","url":opened["url"],
+                "reason":"Opening this URL needs the user's approval, which only the planner can ask for.",
+                "recovery":"Continue with pages you can open, or finish with what you found."}))
         } else {
             Ok(result)
         };
     }
     if let Some(read) = next.get("read") {
-        let args = json!({"tab":run.tab,"query":read["query"],"start_chunk":read["start_chunk"]});
+        let args = json!({"tab":run.tab,"query":read["query"],"start_chunk":read["start_chunk"],"max_chunks":READ_PASSAGES});
         let call = call("web_read", &args);
         return Box::pin(super::journal::execute(
             owner, invocation, &call, occurrence,
@@ -135,7 +142,7 @@ pub(super) async fn execute(
     let steps = &next["act"]["steps"];
     if !valid_steps(steps, &run.view) {
         return Ok(
-            json!({"status":"invalid_steps","reason":"Use only supported actions and refs in the current view.","recovery":"Rewrite the steps against the latest view."}),
+            json!({"status":"invalid_steps","reason":"Use only supported actions and refs in the current view.","recovery":"Write each step as {\"action\",\"ref\",\"value\"} with refs from the current view."}),
         );
     }
     let args = json!({"tab":run.tab,"observation":run.observation,"steps":steps,"observe":false});
