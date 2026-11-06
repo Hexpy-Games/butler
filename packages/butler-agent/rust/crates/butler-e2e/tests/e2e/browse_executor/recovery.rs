@@ -198,3 +198,98 @@ async fn nested_page_steps_pass_the_pre_tool_hook() -> Result<(), HarnessError> 
     let _ = host.await;
     s.finish().await
 }
+
+#[tokio::test]
+async fn read_keeps_page_refs_and_unapproved_open_returns_to_executor() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let replies = [
+        json!({"notes":"","next":{"read":{"query":"가격 price","start_chunk":0}}}),
+        json!({"notes":"","next":{"act":{"steps":[{"action":"click","ref":"f0-e90"}]}}}),
+        json!({"notes":"","next":{"open":{"url":"https://store.example/search?q=lamp"}}}),
+        json!({"notes":"Price 12","next":{"done":{"fields":{"price":"12"},"evidence":[{"field":"price","quote":"Price 12"}],"summary":"Found price."}}}),
+    ]
+    .map(|reply| reply.to_string());
+    let s = Setup::new("BROWSE-READ-KEEPS-REFS")?
+        .stub_cassette(cassette("https://store.example/product-b", &replies)?)
+        .access(Access::AskExceptReads)
+        .start()
+        .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let (host, actions) = host::start(&s).await?;
+    let (_, turn) = s.turn("general", "Recover page task").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let result = outputs(requests.last().unwrap()).pop().unwrap().0["output"].clone();
+    assert_eq!(result["status"], "done", "{result}");
+    assert_eq!(result["fields"]["price"], "12");
+    let scopes: Vec<Value> = requests
+        .iter()
+        .filter(|r| executor(r))
+        .map(|r| {
+            let text = r["input"][0]["content"][0]["text"].as_str().unwrap();
+            serde_json::from_str(text.split_once("Current scope:\n").unwrap().1).unwrap()
+        })
+        .collect();
+    assert_eq!(scopes.len(), 4);
+    assert!(scopes[1]["view"].to_string().contains("[f0-e90]"));
+    assert!(scopes[1]["read"]["passages"].as_array().unwrap().len() > 1);
+    assert_eq!(actions.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(
+        scopes[3]["action_log"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["outcome"]["status"] == "not_opened"
+                && entry["outcome"]["url"] == "https://store.example/search?q=lamp")
+    );
+    host.abort();
+    let _ = host.await;
+    s.finish().await
+}
+
+#[tokio::test]
+async fn caller_url_that_needs_approval_returns_its_url() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let url = "https://store.example/search?q=lamp";
+    // A clean turn opens any URL; after a first browse reads a page, the query URL needs approval.
+    let stuck = json!({"notes":"","next":{"stuck":{"reason":"none","needs":"none"}}}).to_string();
+    let mut c = cassette("https://store.example/product-b", &[stuck])?;
+    let mut second = c.exchanges.last().unwrap().clone();
+    second.response = stub::response(&[stub::call(
+        "browse",
+        &json!({"goal":"Inspect page","url":url,"fields":["price"]}),
+        "second",
+    )]);
+    c.exchanges.last_mut().unwrap().request.key.round = ["function_call", "function_call_output"]
+        .repeat(2)
+        .into_iter()
+        .map(Into::into)
+        .collect();
+    let at = c.exchanges.len() - 1;
+    c.exchanges.insert(at, second);
+    let s = Setup::new("BROWSE-CALLER-URL-APPROVAL")?
+        .stub_cassette(c)
+        .access(Access::AskExceptReads)
+        .start()
+        .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let (host, _) = host::start(&s).await?;
+    let (_, turn) = s.turn("general", "Recover page task").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let result = outputs(requests.last().unwrap()).pop().unwrap().0["output"].clone();
+    assert_eq!(result["status"], "needs_approval", "{result}");
+    assert_eq!(result["handoff"], json!({"url":url}));
+    assert_eq!(result["steps_used"], 0);
+    assert_eq!(requests.iter().filter(|r| executor(r)).count(), 1);
+    host.abort();
+    let _ = host.await;
+    s.finish().await
+}
