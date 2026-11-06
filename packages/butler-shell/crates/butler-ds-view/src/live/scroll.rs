@@ -8,32 +8,38 @@ use super::Live;
 use crate::app::DsView;
 
 impl Live {
-    /// The wheel over the middle of story `n`'s canvas, `dx`/`dy` px further along its content.
+    /// The wheel over the middle of story `n`'s canvas (`@name`: over that anchor), `dx`/`dy` px
+    /// further along its content.
     pub(super) fn scroll(&mut self, arg: &str) -> anyhow::Result<()> {
         let mut parts = arg.split_whitespace();
+        let target = parts.next().context("scroll <story|@anchor> <dx> <dy>")?;
         let mut next = || -> anyhow::Result<f32> {
-            Ok(parts.next().context("scroll <story> <dx> <dy>")?.parse()?)
+            Ok(parts
+                .next()
+                .context("scroll <story|@anchor> <dx> <dy>")?
+                .parse()?)
         };
-        let (story, dx, dy) = (next()?, next()?, next()?);
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "a small index"
-        )]
-        let story = story as usize;
-        let names = self.cx.update(|app| {
-            self.window
-                .read(app)
-                .map(DsView::story_names)
-                .unwrap_or_default()
-        });
-        let name = names
-            .get(story)
-            .with_context(|| format!("no story {story}"))?;
+        let (dx, dy) = (next()?, next()?);
+        let anchor = match target.strip_prefix('@') {
+            Some(name) => name.to_owned(),
+            None => {
+                let story: usize = target.parse()?;
+                let names = self.cx.update(|app| {
+                    self.window
+                        .read(app)
+                        .map(DsView::story_names)
+                        .unwrap_or_default()
+                });
+                let name = names
+                    .get(story)
+                    .with_context(|| format!("no story {story}"))?;
+                format!("story-{name}")
+            }
+        };
         let at = self
             .cx
-            .debug_bounds(self.handle, &format!("story-{name}"))?
-            .with_context(|| format!("no canvas for story {name}"))?
+            .debug_bounds(self.handle, &anchor)?
+            .with_context(|| format!("no {anchor} on the page"))?
             .center();
         self.move_to(at)?;
         self.input(PlatformInput::ScrollWheel(ScrollWheelEvent {

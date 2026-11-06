@@ -11,6 +11,7 @@ pub mod context_menu;
 pub mod control;
 pub mod convert;
 pub mod copy_button;
+pub mod dialog;
 pub mod done_icon_button;
 pub mod dropdown_menu;
 pub mod field;
@@ -46,6 +47,7 @@ pub mod switch;
 pub mod tabs;
 pub mod text;
 pub mod tinted_glass;
+pub mod toast;
 pub mod tooltip;
 pub mod typo;
 

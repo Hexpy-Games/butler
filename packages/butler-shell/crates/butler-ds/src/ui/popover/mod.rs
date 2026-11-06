@@ -10,7 +10,7 @@ mod parts;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, Div, ElementId, Entity, FocusHandle, InteractiveElement as _,
+    AnyElement, App, ClickEvent, ElementId, Entity, FocusHandle, InteractiveElement as _,
     IntoElement as _, ParentElement as _, Styled as _, Window, div,
 };
 
@@ -20,6 +20,7 @@ pub use parts::{PopoverDescription, PopoverHeader, PopoverTitle};
 use crate::tokens::Duration as DsDuration;
 use crate::ui::context::Ds;
 use crate::ui::layer::Z;
+use crate::ui::menu::TriggerBox;
 use crate::ui::overlay::Presentation;
 use crate::ui::overlay::dismiss::Dismissable;
 use crate::ui::overlay::lifecycle::{Lifecycle, Phase, Spec};
@@ -28,7 +29,6 @@ use crate::ui::overlay::place::{Options, Side};
 use crate::ui::overlay::popper::{Anchor, Output, Popper};
 use crate::ui::overlay::scope::Scope;
 use crate::ui::overlay::theme::Theme;
-use crate::ui::strut;
 
 type OpenChange = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 
@@ -124,29 +124,27 @@ impl Popover {
     }
 
     /// The trigger: `build` makes the control from a [`Toggle`] for its click handler. The
-    /// wrapper is as wide as the control.
-    pub fn trigger(&self, cx: &App, build: impl FnOnce(Toggle) -> AnyElement) -> AnyElement {
-        let wrapper = div().relative().inline_flex().flex_none();
-        let wrapper = if strut::shrink_wrap(cx) {
-            wrapper.self_start()
-        } else {
-            wrapper
-        };
-        self.wrap_trigger(wrapper, build)
+    /// wrapper is as wide as the control, which it decides when it is laid out (a trigger in a
+    /// column that stretches its items starts at the container's edge).
+    pub fn trigger(&self, build: impl FnOnce(Toggle) -> AnyElement) -> AnyElement {
+        self.wrap_trigger(false, build)
     }
 
     /// A trigger that fills its container's width (a `SelectButton`).
     pub fn trigger_fill(&self, build: impl FnOnce(Toggle) -> AnyElement) -> AnyElement {
-        self.wrap_trigger(div().relative().flex().w_full(), build)
+        self.wrap_trigger(true, build)
     }
 
-    fn wrap_trigger(&self, wrapper: Div, build: impl FnOnce(Toggle) -> AnyElement) -> AnyElement {
-        wrapper
-            .track_focus(&self.trigger_focus)
-            .tab_stop(false)
-            .child(build(Toggle(self.clone())))
-            .child(self.parts.trigger.probe())
-            .into_any_element()
+    fn wrap_trigger(&self, fill: bool, build: impl FnOnce(Toggle) -> AnyElement) -> AnyElement {
+        let popover = self.clone();
+        let wrapper = TriggerBox::new(build(Toggle(self.clone())), move |wrapper| {
+            wrapper
+                .track_focus(&popover.trigger_focus)
+                .tab_stop(false)
+                .child(popover.parts.trigger.probe())
+        });
+        let wrapper = if fill { wrapper.fill() } else { wrapper };
+        wrapper.into_any_element()
     }
 
     /// `PopoverAnchor`: the surface is placed against this element instead of the trigger.

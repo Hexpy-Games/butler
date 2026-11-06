@@ -193,7 +193,13 @@ impl RenderOnce for ScrollArea {
             frame = frame.min_h(min);
         }
         if self.fill {
-            frame = frame.flex_1();
+            // `flex: 1 1 auto`: the content's own height up to what the column leaves. A scroll
+            // container contributes no height of its own to its parent's size, so the basis is
+            // the content height the scroller reported on the last frame.
+            frame = frame.flex_auto();
+            if let Some(basis) = content_basis(&self.id, &built.handle, window, cx) {
+                frame = frame.flex_basis(basis);
+            }
         }
         let thumb = convert::with_alpha(Ds::get(cx).color(Color::LineStrong), 0.7);
         let overlay = self.overlay(&built, &metrics, thumb, window, cx);
@@ -208,6 +214,23 @@ impl RenderOnce for ScrollArea {
             .children(ring)
             .children(probe)
     }
+}
+
+/// The scrolled content's height (the viewport plus what scrolls), once the scroller has laid out;
+/// asks for another frame when it changes, so the next one uses it.
+fn content_basis(
+    id: &ElementId,
+    handle: &gpui::ScrollHandle,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<gpui::Length> {
+    let seen = window.use_keyed_state((id.clone(), "basis"), cx, |_, _| 0_f32);
+    let height = f32::from(handle.bounds().size.height + handle.max_offset().y);
+    if (height - *seen.read(cx)).abs() > 0.5 {
+        seen.update(cx, |seen, _| *seen = height);
+        window.request_animation_frame();
+    }
+    (height > 0.).then(|| px(height).into())
 }
 
 impl ScrollArea {

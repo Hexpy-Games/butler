@@ -34,6 +34,19 @@ pub fn container<E: gpui::Styled>(el: E, ds: &Ds) -> E {
 struct Frame {
     block: bool,
     shrink_wrap: bool,
+    dialog: Option<DialogFrame>,
+}
+
+/// What a Dialog tells its header, footer and title (the CSS reads it from the parent's
+/// `data-layout` and `--dialog-close-room`).
+#[derive(Clone, Copy, Debug)]
+pub struct DialogFrame {
+    /// `layout="scroll-body"`: the header and footer carry the padding that replaces the gap.
+    pub scroll_body: bool,
+    /// How far the close button reaches into the content box (`--dialog-close-room`, 0 without it).
+    pub close_room: f32,
+    /// Inside a DialogHeader, which insets its own end.
+    pub in_header: bool,
 }
 
 #[derive(Default)]
@@ -56,12 +69,32 @@ pub fn shrink_wrap(cx: &App) -> bool {
         .is_some_and(|frame| frame.shrink_wrap)
 }
 
+/// The Dialog being laid out, when the container is inside one.
+pub fn dialog(cx: &App) -> Option<DialogFrame> {
+    cx.try_global::<Scopes>()
+        .and_then(|scopes| scopes.0.last().copied())
+        .and_then(|frame| frame.dialog)
+}
+
+/// `child` laid out in a Dialog's grid (its items stretch), or in one of its parts.
+pub fn dialog_scope(frame: DialogFrame, child: impl IntoElement) -> Scope {
+    framed(
+        Frame {
+            block: false,
+            shrink_wrap: true,
+            dialog: Some(frame),
+        },
+        child,
+    )
+}
+
 /// `child` laid out inside a block (`true`) or flex-like (`false`) container.
 pub fn scope(block: bool, child: impl IntoElement) -> Scope {
     framed(
         Frame {
             block,
             shrink_wrap: false,
+            dialog: None,
         },
         child,
     )
@@ -73,6 +106,7 @@ pub fn flex_scope(stretch_column: bool, child: impl IntoElement) -> Scope {
         Frame {
             block: false,
             shrink_wrap: stretch_column,
+            dialog: None,
         },
         child,
     )
@@ -121,7 +155,10 @@ impl Element for Scope {
             .child
             .take()
             .unwrap_or_else(|| gpui::Empty.into_any_element());
-        cx.default_global::<Scopes>().0.push(self.frame);
+        let mut frame = self.frame;
+        // A container inside a Dialog's part still sees the dialog it is in.
+        frame.dialog = frame.dialog.or_else(|| dialog(cx));
+        cx.default_global::<Scopes>().0.push(frame);
         let layout = child.request_layout(window, cx);
         cx.default_global::<Scopes>().0.pop();
         (layout, child)

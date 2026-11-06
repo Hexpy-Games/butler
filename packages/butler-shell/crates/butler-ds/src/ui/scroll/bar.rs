@@ -63,7 +63,7 @@ impl Metrics {
 }
 
 /// The thumb as an absolute box in the frame, `lane` px of room past the column.
-pub(super) fn thumb(handle: &ScrollHandle, axis: Axis, color: Hsla) -> Option<gpui::Div> {
+pub(crate) fn thumb(handle: &ScrollHandle, axis: Axis, color: Hsla) -> Option<gpui::Div> {
     let metrics = Metrics::read(handle, axis)?;
     let across = px(BORDER);
     let (start, length) = (px(metrics.start()), px(metrics.length()));
@@ -82,7 +82,7 @@ pub(super) fn thumb(handle: &ScrollHandle, axis: Axis, color: Hsla) -> Option<gp
 /// Press and drag over the lane (`lane`: its box in the window): a press on the thumb grabs it,
 /// a press elsewhere in the lane centres the thumb on the pointer, and the drag follows until the
 /// button is released, wherever the pointer goes.
-pub(super) fn drag_layer(
+pub(crate) fn drag_layer(
     handle: ScrollHandle,
     axis: Axis,
     grab: gpui::Entity<Option<f32>>,

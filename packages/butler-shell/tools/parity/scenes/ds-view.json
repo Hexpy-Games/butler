@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1, B2, B3 and B4 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1, B2, B3, B4 and B5 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -39,6 +39,8 @@
     { "page": "popover", "entry": "components/Popover" },
     { "page": "dropdown-menu", "entry": "components/DropdownMenu" },
     { "page": "context-menu", "entry": "components/ContextMenu" },
-    { "page": "select", "entry": "components/Select" }
+    { "page": "select", "entry": "components/Select" },
+    { "page": "dialog", "entry": "components/Dialog" },
+    { "page": "toast", "entry": "components/Toast" }
   ]
 }

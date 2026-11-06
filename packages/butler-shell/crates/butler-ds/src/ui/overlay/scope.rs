@@ -50,6 +50,12 @@ impl Scope {
         }
     }
 
+    /// Moves focus to the first tabbable of the scope, else the container. Call it once the scope's
+    /// content has been drawn (the tab stops come from the frame before).
+    pub fn focus_into(&self, window: &mut Window, cx: &mut App) {
+        focus_first(&self.handle, window, cx);
+    }
+
     /// Tab or Shift+Tab inside a trapped scope: moves focus one tab stop and, past either end,
     /// wraps to the other. False when focus is not inside (nothing to trap).
     pub fn trap_tab(&self, backward: bool, window: &mut Window, cx: &mut App) -> bool {
