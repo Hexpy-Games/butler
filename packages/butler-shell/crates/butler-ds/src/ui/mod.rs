@@ -5,6 +5,7 @@ pub mod arc;
 pub mod aspect_frame;
 pub mod assets;
 pub mod avatar;
+pub mod backdrop;
 pub mod bottom_sheet;
 pub mod button;
 pub mod card;

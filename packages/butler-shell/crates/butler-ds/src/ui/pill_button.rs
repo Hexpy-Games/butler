@@ -7,11 +7,12 @@ use gpui::{
     Styled as _, Window, div, px,
 };
 
+use super::backdrop::Backdrop;
 use super::button::{Button, Shape, Variant};
 use super::context::Ds;
 use super::control::{Blend, Control, Disabled};
 use super::convert;
-use crate::tokens::{Color, Length};
+use crate::tokens::{Color, Filter, Length};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Surface {
@@ -209,7 +210,7 @@ impl PillButton {
             ds.tokens().shadow(crate::tokens::Shadow::ShadowCard),
             ds.tokens(),
         );
-        control.backdrop = Some(ds.len(Length::ComposerGlassBlur));
+        control.backdrop = Some(Backdrop::new(ds, Filter::ComposerGlassFilter));
         let floor = ds.len(Length::Space4) * 2.;
         control.min_height = Some(if ds.compact() {
             ds.len(Length::ControlHitTarget)

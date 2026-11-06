@@ -1,15 +1,16 @@
 //! DS TintedGlass (TintedGlass.tsx / TintedGlass.module.css): the surface every overlay uses.
 //! A translucent base with an opaque tint in the middle and 20px edge fades, a hairline border,
-//! the soft shadow with an inset top highlight, over `blur(4px)` of what is behind.
+//! the soft shadow with an inset top highlight, over `saturate() blur(4px)` of what is behind.
 use gpui::{
-    AnyElement, App, Bounds, ContentMask, Corners, Edges, Filter, Hsla, IntoElement, ParentElement,
-    Pixels, RenderOnce, Styled as _, Window, canvas, div, linear_color_stop, linear_gradient, px,
+    AnyElement, App, Bounds, ContentMask, Corners, Edges, Hsla, IntoElement, ParentElement, Pixels,
+    RenderOnce, Styled as _, Window, canvas, div, linear_color_stop, linear_gradient, px,
 };
 
+use super::backdrop::Backdrop;
 use super::context::Ds;
 use super::convert;
 use super::strut;
-use crate::tokens::{Color, Length, Shadow};
+use crate::tokens::{Color, Filter, Length, Shadow};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GlassRadius {
@@ -43,7 +44,7 @@ struct Paint {
     edge: Pixels,
     shadow: Vec<gpui::BoxShadow>,
     highlight: gpui::BoxShadow,
-    blur: Pixels,
+    backdrop: Backdrop,
 }
 
 #[derive(IntoElement)]
@@ -145,10 +146,8 @@ impl Paint {
                 ds.tokens(),
             ),
             highlight: highlight(ds),
-            // --tinted-glass-filter: saturate(1.35) blur(4px).
-            // TODO(gpui-ce saturate): gpui-ce e5cdb0c has no saturation stage, so
-            // `saturate(1.35)` of TintedGlass.module.css:20 is left out; only the blur is drawn.
-            blur: ds.len(Length::TintedGlassBlur),
+            // DS: TintedGlass.module.css:23 `backdrop-filter: var(--tinted-glass-filter)`.
+            backdrop: Backdrop::new(ds, Filter::TintedGlassFilter),
         }
     }
 
@@ -178,7 +177,7 @@ impl Paint {
             .min(bounds.size.height / 2.);
         let radii = self.corners(r);
         window.paint_drop_shadows_outside(bounds, radii, 0., &self.shadow);
-        window.paint_backdrop_filter(bounds, radii, 0., &[Filter::Blur(self.blur)]);
+        self.backdrop.paint(bounds, radii, window);
         window.paint_quad(
             gpui::PaintQuad::new(bounds)
                 .background(self.base)

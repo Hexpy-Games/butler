@@ -11,7 +11,8 @@ use gpui::{
 use super::layout::Resolved;
 use super::state::Item;
 use super::{Action, Kind, Store, Toast};
-use crate::tokens::{Color, Length, Number, Shadow};
+use crate::tokens::{Color, Filter, Length, Number, Shadow};
+use crate::ui::backdrop::Backdrop;
 use crate::ui::context::Ds;
 use crate::ui::convert;
 
@@ -77,7 +78,7 @@ fn tone(kind: Kind, ds: &Ds) -> Tone {
 fn surface(tone: &Tone, ds: &Ds) -> gpui::Canvas<()> {
     let radius = ds.len(Length::RadiusPanel);
     let shadow = convert::box_shadows(ds.tokens().shadow(Shadow::ShadowCard), ds.tokens());
-    let blur = ds.len(Length::ComposerGlassBlur);
+    let backdrop = Backdrop::new(ds, Filter::ComposerGlassFilter);
     let (fill, border) = (tone.background, tone.border);
     canvas(
         |_, _, _| (),
@@ -87,7 +88,7 @@ fn surface(tone: &Tone, ds: &Ds) -> gpui::Canvas<()> {
                 .min(bounds.size.width / 2.);
             let radii = Corners::all(r);
             window.paint_drop_shadows_outside(bounds, radii, 0., &shadow);
-            window.paint_backdrop_filter(bounds, radii, 0., &[gpui::Filter::Blur(blur)]);
+            backdrop.paint(bounds, radii, window);
             window.paint_quad(
                 gpui::PaintQuad::new(bounds)
                     .background(fill)

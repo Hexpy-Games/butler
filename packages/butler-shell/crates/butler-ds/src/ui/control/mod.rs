@@ -13,6 +13,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Window, div, px, relative,
 };
 
+use super::backdrop::Backdrop;
 use super::context::Ds;
 use super::convert;
 use super::focus;
@@ -67,8 +68,8 @@ pub struct Control {
     pub(crate) underline: Underline,
     /// The surface reaches this far above and below the box (block bleed).
     pub(crate) bleed_y: Pixels,
-    /// `backdrop-filter: blur(..)` behind the surface (glass pills).
-    pub(crate) backdrop: Option<Pixels>,
+    /// `backdrop-filter` behind the surface (glass pills).
+    pub(crate) backdrop: Option<Backdrop>,
     /// An atomic inline-level box (false: block-level, filling its container).
     pub(crate) inline: bool,
     pub(crate) justify_center: bool,
@@ -357,8 +358,8 @@ impl Control {
             surface = surface.shadow(shadows);
         }
         let mut el = el;
-        if let Some(blur) = self.backdrop {
-            el = el.child(backdrop(blur, self.radius, inset));
+        if let Some(filter) = self.backdrop {
+            el = el.child(backdrop(filter, self.radius, inset));
         }
         let mut el = el.child(surface.children(std::mem::take(&mut self.overlay)));
         if let (true, DisabledLook::Opacity(opacity)) = (self.disabled.is_on(), self.disabled_look)
@@ -404,18 +405,13 @@ fn outline(ds: &Ds, radius: Pixels, offset: f32) -> Div {
         .border_color(ds.color(Color::ColorActionPrimary))
 }
 
-/// A `backdrop-filter: blur` over the surface's box, painted before its fill.
-fn backdrop(blur: Pixels, radius: Pixels, inset: f32) -> Div {
+/// A `backdrop-filter` over the surface's box, painted before its fill.
+fn backdrop(filter: Backdrop, radius: Pixels, inset: f32) -> Div {
     let paint = move |bounds: gpui::Bounds<Pixels>, (): (), window: &mut Window, _: &mut App| {
         let r = radius
             .min(bounds.size.width / 2.)
             .min(bounds.size.height / 2.);
-        window.paint_backdrop_filter(
-            bounds,
-            gpui::Corners::all(r),
-            0.,
-            &[gpui::Filter::Blur(blur)],
-        );
+        filter.paint(bounds, gpui::Corners::all(r), window);
     };
     div()
         .absolute()
