@@ -6,7 +6,8 @@ use super::contracts::{ExactReadArguments, ExactReadSource};
 use crate::btcc::BtccCode;
 
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
-pub(super) const MAX_EXACT_READ_BYTES: usize = 4096;
+// One page fits the provider tool-result budget once JSON-escaped.
+pub(super) const MAX_EXACT_READ_BYTES: usize = 32 * 1024;
 
 pub(super) fn exact_read_arguments(
     // Passthrough: tool arguments/results/schemas, shaped by each tool.

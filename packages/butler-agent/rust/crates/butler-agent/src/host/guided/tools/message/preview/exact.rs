@@ -1,4 +1,4 @@
-//! Exact-result base64 page shrink keeps the delivered byte cursor honest.
+//! Exact-result page shrink (utf8 or base64) keeps the delivered byte cursor honest.
 
 use std::borrow::Cow;
 
@@ -61,35 +61,57 @@ pub(super) fn fit(payload: &str, max_bytes: usize) -> Result<String, BtccError> 
     else {
         return Ok(payload.into());
     };
+    let utf8 = field(output, "encoding")?.is_some_and(|raw| raw == "\"utf8\"");
+    // Kept data prefix and its visible byte count for `count` units: utf8
+    // bytes snapped to a character boundary, or base64 quads.
+    let keep = |count: usize| -> Result<(&str, usize), BtccError> {
+        if utf8 {
+            let end = (0..=count)
+                .rev()
+                .find(|end| data.is_char_boundary(*end))
+                .unwrap_or(0);
+            return Ok((&data[..end], end));
+        }
+        let kept = &data[..count * 4];
+        let visible = base64::engine::general_purpose::STANDARD
+            .decode(kept)
+            .map_err(|source| {
+                BtccError::relayed(
+                    "guided_tool_result_base64_invalid",
+                    "Exact result page is invalid",
+                )
+                .with_source(source)
+            })?
+            .len();
+        Ok((kept, visible))
+    };
     let mut low = 0;
-    let mut high = data.len() / 4;
+    let mut high = if utf8 { data.len() } else { data.len() / 4 };
     while low < high {
         let middle = (low + high).div_ceil(2);
-        let candidate = page(payload, output, &data[..middle * 4], offset)?;
+        let (kept, visible) = keep(middle)?;
+        let candidate = page(payload, output, kept, visible, offset)?;
         if candidate.len() <= max_bytes {
             low = middle;
         } else {
             high = middle - 1;
         }
     }
-    if low == 0 {
+    let (kept, visible) = keep(low)?;
+    if visible == 0 {
         Ok(payload.into())
     } else {
-        page(payload, output, &data[..low * 4], offset)
+        page(payload, output, kept, visible, offset)
     }
 }
 
-fn page(payload: &str, output: &str, data: &str, offset: u64) -> Result<String, BtccError> {
-    let visible = base64::engine::general_purpose::STANDARD
-        .decode(data)
-        .map_err(|source| {
-            BtccError::relayed(
-                "guided_tool_result_base64_invalid",
-                "Exact result page is invalid",
-            )
-            .with_source(source)
-        })?
-        .len();
+fn page(
+    payload: &str,
+    output: &str,
+    data: &str,
+    visible: usize,
+    offset: u64,
+) -> Result<String, BtccError> {
     let mut body = String::from("{");
     if let Some(ok) = field(payload, "ok")? {
         body.push_str("\"ok\":");

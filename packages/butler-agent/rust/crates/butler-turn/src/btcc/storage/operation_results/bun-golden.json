@@ -74,8 +74,8 @@
     "scopeRef": "project"
   },
   "requestRange": {
-    "encoding": "base64",
-    "data": "cmF3Le2VnA==",
+    "encoding": "utf8",
+    "data": "raw-한",
     "offset": 0,
     "length": 7,
     "totalBytes": 10,
@@ -84,8 +84,8 @@
     "complete": false
   },
   "managedRange": {
-    "encoding": "base64",
-    "data": "eyJvayI6dHJ1ZSwidmFsdWUiOiJtYW5hZ2VkIn0=",
+    "encoding": "utf8",
+    "data": "{\"ok\":true,\"value\":\"managed\"}",
     "offset": 0,
     "length": 29,
     "totalBytes": 29,
