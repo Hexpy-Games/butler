@@ -46,7 +46,7 @@ for (const page of pages) {
   const read = (dir: string) => existsSync(join(dir, `${page}.layout.json`)) ? JSON.parse(readFileSync(join(dir, `${page}.layout.json`), "utf8")) as Array<{ anchor: string; w: number; h: number }> : [];
   const [a, b] = [read(react), read(gpui)];
   a.forEach((box) => {
-    const other = b.find(candidate => candidate.anchor === box.anchor);
+    const other = b.find(candidate => candidate.anchor.replace(/^story-/u, "") === box.anchor);
     console.log(`${page} | ${box.anchor} | ${box.w} x ${box.h} | ${other ? `${other.w} x ${other.h}${other.w === box.w && other.h === box.h ? "" : " (differs)"}` : "-"}`);
   });
 }

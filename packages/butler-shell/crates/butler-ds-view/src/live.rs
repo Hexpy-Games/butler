@@ -8,6 +8,7 @@
 //!   press <n>             pointer onto control n and the left button down, held
 //!   release               the left button up
 //!   click <n>             a full click on control n
+//!   tap <n>               a click on control n without settling (motion in flight; use `wait`)
 //!   focus <n>             keyboard focus on control n (the ring shows)
 //!   key <keystroke>       a keystroke to the focused element
 //!   scroll <story> <dx> <dy>  the wheel over story n (0-based) by dx, dy px (positive: further on)
@@ -323,6 +324,14 @@ impl Live {
                 self.button(true)?;
                 self.button(false)?;
                 self.settle();
+                Ok(())
+            }
+            "tap" => {
+                let at = self.center(arg)?;
+                self.move_to(at)?;
+                self.button(true)?;
+                self.button(false)?;
+                self.wait(1);
                 Ok(())
             }
             "focus" => {
