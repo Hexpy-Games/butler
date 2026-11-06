@@ -28,14 +28,6 @@ const INVALID_RECORD: [&str; 6] = [
     "session_binding_missing",
 ];
 
-/// Codes of a child Work whose stored record no reader accepts (BTCC cannot
-/// hydrate it, or the Project Ledger's validator rejects it). Saving the
-/// child's result reads that Work, so every later close fails the same way.
-const UNREADABLE_WORK: [&str; 2] = [
-    "durable_work_hydration_failed",
-    "project_work_managed_record_invalid",
-];
-
 /// Whether `error` names a turn that no retry can run: its stored
 /// admission and the request contradict each other, or it was never admitted.
 pub(super) fn is_rejection(error: &BtccError) -> bool {
@@ -66,8 +58,7 @@ pub(super) fn safe_code(error: &IngressError) -> Option<&str> {
 pub(super) enum ChildClose {
     /// Not a Worker or Steward turn.
     NotChild,
-    /// The child turn's result is saved (now or earlier), it has no parent,
-    /// or no retry can save it.
+    /// The child turn's result is saved (now or earlier), or it has no parent.
     Closed,
     /// The failed result could not be saved yet; the record must be retried.
     Pending,
@@ -175,7 +166,6 @@ pub(super) async fn close_child(
         error.code()
     );
     if error.code() == BtccCode::SubsessionRelationMissing.as_str()
-        || UNREADABLE_WORK.contains(&error.code())
         || subsessions
             .child_turn_closed(&binding.session_id, turn_id)
             .await
