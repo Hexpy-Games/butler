@@ -2,7 +2,7 @@
 //! AdaptiveShellSplitMotion.ts): each panel, the scrim, the peek card and the split pane ease
 //! on the panel tokens (`--adaptive-panel-duration` and `-easing`: slow, emphasized). Reduced
 //! motion, a live resize and the settings screen place panels at once; panels then only fade.
-use gpui::{App, Window};
+use gpui::{App, SharedString, Window};
 
 use super::AdaptiveShell;
 use crate::tokens::{Duration as DsDuration, Easing};
@@ -54,6 +54,80 @@ fn context_changed(shell: &AdaptiveShell, window: &mut Window, cx: &mut App) -> 
     changed
 }
 
+/// A panel's slide on the panel tokens and its reduced-motion fade, each 0 to 1.
+fn panel_pair(
+    shell: &AdaptiveShell,
+    (name, open, jump): (&'static str, bool, bool),
+    window: &mut Window,
+    cx: &mut App,
+) -> (f32, f32) {
+    let ds = Ds::get(cx);
+    let panel = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    let fade = if open {
+        Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard)
+    } else {
+        Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseStandard)
+    };
+    let slide = ramp(
+        (shell.id.clone(), name),
+        (level(open), jump),
+        &panel,
+        window,
+        cx,
+    );
+    let faded = ramp(
+        (shell.id.clone(), SharedString::from(format!("{name}-fade"))),
+        (level(open), false),
+        &fade,
+        window,
+        cx,
+    );
+    (slide, faded)
+}
+
+/// The browser pane's progress, and its fade under reduced motion.
+fn split_motion(
+    shell: &AdaptiveShell,
+    jump: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<SplitMotion> {
+    let split = shell.split?;
+    let ds = Ds::get(cx);
+    let panel = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    let fade = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
+    let reduced = ds.reduced_motion();
+    let id = &shell.id;
+    let progress = ramp(
+        (id.clone(), "split"),
+        (level(split.open), reduced || jump),
+        &panel,
+        window,
+        cx,
+    );
+    let faded = ramp(
+        (id.clone(), "split-fade"),
+        (level(split.open), jump),
+        &fade,
+        window,
+        cx,
+    );
+    Some(SplitMotion {
+        progress,
+        fade: faded,
+        open: split.open,
+        chat_width: split.chat_width,
+    })
+}
+
 pub(super) fn tracks(
     shell: &AdaptiveShell,
     facts: &Facts,
@@ -62,84 +136,32 @@ pub(super) fn tracks(
 ) -> Tracks {
     let context_changed = context_changed(shell, window, cx);
     let ds = Ds::get(cx);
-    let panel = Timing::token(
+    let reduced = ds.reduced_motion();
+    let animate = !shell.resizing && !shell.settings_active;
+    // Reduced motion and (docked) a live resize or the settings screen place a panel at once.
+    let jump = reduced || (!facts.drawer && !animate);
+    let peek_timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
+    let scrim_timing = Timing::token(
         ds,
         DsDuration::AdaptivePanelDuration,
         Easing::AdaptivePanelEasing,
     );
-    let fade_in = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
-    let fade_out = Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseStandard);
-    let peek_timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
-    let reduced = ds.reduced_motion();
-    let animate = !shell.resizing && !shell.settings_active;
-    let left_jump = reduced || (!facts.drawer && !animate);
-    let right_jump = reduced || (!facts.drawer && !animate);
-    let id = &shell.id;
-    let fade_timing = |open: bool| if open { &fade_in } else { &fade_out };
-    let left = ramp(
-        (id.clone(), "left"),
-        (level(shell.left_open), left_jump),
-        &panel,
-        window,
-        cx,
-    );
-    let left_fade = ramp(
-        (id.clone(), "left-fade"),
-        (level(shell.left_open), false),
-        fade_timing(shell.left_open),
-        window,
-        cx,
-    );
-    let right = ramp(
-        (id.clone(), "right"),
-        (level(facts.inspector_open), right_jump),
-        &panel,
-        window,
-        cx,
-    );
-    let right_fade = ramp(
-        (id.clone(), "right-fade"),
-        (level(facts.inspector_open), false),
-        fade_timing(facts.inspector_open),
-        window,
-        cx,
-    );
+    let (left, left_fade) = panel_pair(shell, ("left", shell.left_open, jump), window, cx);
+    let (right, right_fade) = panel_pair(shell, ("right", facts.inspector_open, jump), window, cx);
     let scrim = ramp(
-        (id.clone(), "scrim"),
+        (shell.id.clone(), "scrim"),
         (level(facts.scrim_open), reduced),
-        &panel,
+        &scrim_timing,
         window,
         cx,
     );
     let peek = ramp(
-        (id.clone(), "peek"),
+        (shell.id.clone(), "peek"),
         (level(facts.peeking), false),
         &peek_timing,
         window,
         cx,
     );
-    let split = shell.split.map(|split| {
-        let progress = ramp(
-            (id.clone(), "split"),
-            (level(split.open), reduced || context_changed),
-            &panel,
-            window,
-            cx,
-        );
-        let fade = ramp(
-            (id.clone(), "split-fade"),
-            (level(split.open), context_changed),
-            &peek_timing,
-            window,
-            cx,
-        );
-        SplitMotion {
-            progress,
-            fade,
-            open: split.open,
-            chat_width: split.chat_width,
-        }
-    });
     Tracks {
         left,
         left_fade,
@@ -147,6 +169,6 @@ pub(super) fn tracks(
         right_fade,
         scrim,
         peek,
-        split,
+        split: split_motion(shell, context_changed, window, cx),
     }
 }

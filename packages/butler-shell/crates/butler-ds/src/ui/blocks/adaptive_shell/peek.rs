@@ -28,6 +28,36 @@ struct State {
     last_close: Option<CloseReason>,
 }
 
+/// Every peek made so far, so the host's window-level key and activation handlers can reach
+/// them (a key reaches only the focused path of the tree, as the document's keydown does not).
+#[derive(Default)]
+struct Registry(Vec<Entity<State>>);
+
+impl gpui::Global for Registry {}
+
+/// Escape closes every open peek. The host calls it from its window-level key handler.
+pub fn escape(window: &mut Window, cx: &mut App) {
+    close_all(CloseReason::Escape, window, cx);
+}
+
+/// The window lost focus: every open peek closes. The host calls it from its activation observer.
+pub fn window_blurred(window: &mut Window, cx: &mut App) {
+    close_all(CloseReason::WindowBlur, window, cx);
+}
+
+fn close_all(reason: CloseReason, window: &mut Window, cx: &mut App) {
+    let peeks = cx.default_global::<Registry>().0.clone();
+    for state in peeks {
+        let peek = SidebarPeek {
+            state,
+            enabled: true,
+        };
+        if peek.state.read(cx).open {
+            peek.close(reason, window, cx);
+        }
+    }
+}
+
 /// The peek of one shell: its state is window state keyed by `id`.
 #[derive(Clone)]
 pub struct SidebarPeek {
@@ -40,6 +70,14 @@ impl SidebarPeek {
     /// The peek `id`; turning `enabled` off closes it.
     pub fn new(id: impl Into<ElementId>, enabled: bool, window: &mut Window, cx: &mut App) -> Self {
         let state = window.use_keyed_state((id.into(), "peek"), cx, |_, _| State::default());
+        let registry = cx.default_global::<Registry>();
+        if !registry
+            .0
+            .iter()
+            .any(|known| known.entity_id() == state.entity_id())
+        {
+            registry.0.push(state.clone());
+        }
         if !enabled && state.read(cx).open {
             state.update(cx, |state, cx| {
                 *state = State {

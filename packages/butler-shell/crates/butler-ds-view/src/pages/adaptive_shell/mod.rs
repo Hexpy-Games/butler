@@ -31,6 +31,13 @@ use demo::shell_demo;
 use window::{body, title_row};
 
 pub(super) fn stories() -> Vec<Story> {
+    let mut all = frame_stories();
+    all.extend(cards_stories());
+    all
+}
+
+/// The flat frame's stories (and the compact demo): the conversation frame, pane, peek and auto-collapse.
+fn frame_stories() -> Vec<Story> {
     vec![
         Story {
             name: "Sidebar, workspace and inspector",
@@ -82,6 +89,12 @@ pub(super) fn stories() -> Vec<Story> {
             name: "Auto-collapse below a 720px page",
             render: auto_collapse,
         },
+    ]
+}
+
+/// `cardsStories`: the cards frame beside the flat one, and the split's right slot.
+fn cards_stories() -> Vec<Story> {
+    vec![
         Story {
             name: "Cards frame: conversation (flat vs cards)",
             render: |l, w, c| flat_vs_cards(l, View::Chat, w, c),

@@ -380,6 +380,50 @@ fn flag(id: &'static str, initial: bool, window: &mut Window, cx: &mut App) -> (
     )
 }
 
+/// The title row of the split window: the session toggle before the pane toggles; while the pane
+/// is open the chat group spans the chat card (`split_chat_width`).
+fn split_title(
+    c: &Copy,
+    (viewer, pane_open, sidebar_open): (bool, bool, bool),
+    (toggle, split_width): (&Toggle, Option<f32>),
+    cx: &App,
+) -> TitlebarShell {
+    let on_viewer: Option<Toggle> = viewer.then(|| toggle.clone());
+    let on_browser: Option<Toggle> = (!viewer).then(|| toggle.clone());
+    let end = button::container(Size::IconSm);
+    let end = if viewer {
+        end.child(viewer_toggle(
+            "split-viewer-toggle".into(),
+            c,
+            pane_open,
+            on_viewer,
+        ))
+    } else {
+        end
+    };
+    let browser = browser_toggle(
+        "split-browser-toggle".into(),
+        c,
+        !viewer && pane_open,
+        on_browser,
+    );
+    let trailing = end.child(super::anchored(
+        browser.into_any_element(),
+        "split-browser-toggle",
+    ));
+    conversation_title("split-title", c, cx)
+        .collapsed(!sidebar_open)
+        .drag_region()
+        .chat_trailing(button::container(Size::IconSm).child(session_info_toggle(
+            "split-info".into(),
+            c,
+            true,
+            false,
+        )))
+        .trailing(trailing)
+        .split_chat_width(split_width)
+}
+
 /// `SplitWindowDemo`: a whole window (cards frame) with the split. The browser (or viewer)
 /// toggle opens and closes the pane; the divider drags. `kind` is the pane in the right slot.
 pub(super) fn split_window(
@@ -402,44 +446,12 @@ pub(super) fn split_window(
     let (win_width, win_height) = crate::app::logical_viewport(window, cx);
     let shell_window = ShellWindow::new(win_width, win_height);
     let viewer = kind == "viewer";
-    let on_viewer: Option<Toggle> = viewer.then(|| toggle.clone());
-    let on_browser: Option<Toggle> = (!viewer).then(|| toggle.clone());
-    let trailing = {
-        let end = button::container(Size::IconSm);
-        let end = if viewer {
-            end.child(viewer_toggle(
-                "split-viewer-toggle".into(),
-                &c,
-                pane_open,
-                on_viewer,
-            ))
-        } else {
-            end
-        };
-        end.child(super::anchored(
-            browser_toggle(
-                "split-browser-toggle".into(),
-                &c,
-                !viewer && pane_open,
-                on_browser,
-            )
-            .into_any_element(),
-            "split-browser-toggle",
-        ))
-    };
-    let mut title = conversation_title("split-title", &c, cx)
-        .collapsed(!sidebar_open)
-        .drag_region()
-        .chat_trailing(button::container(Size::IconSm).child(session_info_toggle(
-            "split-info".into(),
-            &c,
-            true,
-            false,
-        )))
-        .trailing(trailing);
-    if pane_open {
-        title = title.split_chat_width(Some(chat_width));
-    }
+    let title = split_title(
+        &c,
+        (viewer, pane_open, sidebar_open),
+        (&toggle, pane_open.then_some(chat_width)),
+        cx,
+    );
     let chrome = (!sidebar_open).then(|| {
         ChromeFloatingToggle::new(
             "split-chrome",

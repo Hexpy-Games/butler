@@ -10,7 +10,7 @@ mod scroll;
 
 use gpui::{
     AnyElement, App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    Styled as _, Window, div, px,
+    Styled as _, Window, div,
 };
 
 pub use aside::{AsideContent, AsideLayout, DOCK_MIN as ASIDE_DOCK_MIN, next_layout, shown};
@@ -148,21 +148,17 @@ fn rail_top(rail: rail::Rail, width: f32, ds: &Ds) -> f32 {
     len(Length::TabRailShelfHeight).max(touch) + len(Length::SpaceSm)
 }
 
-impl RenderOnce for ConversationShell {
-    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (size, recorder) = measure::track((self.id.clone(), "conversation"), window, cx);
-        let width = f32::from(size.width);
-        let cards = scope::vars(cx).is_some_and(|vars| vars.cards_docked);
-        let layout = aside::layout(&self.id, (self.aside.is_some(), width), window, cx);
-        let shown_aside = aside::shown(self.aside.is_some(), layout, self.aside_float_open);
-        let has_rail = self.rail.is_some();
-        let rail = rail::rail(
-            &self.id,
-            (has_rail, self.rail_showing, self.rail_view.as_ref()),
-            shown_aside.is_some(),
-            window,
-            cx,
-        );
+impl ConversationShell {
+    /// What the transcript, the message list and the jump button read: the column's width and
+    /// place (animated as the aside docks or the rail's room comes and goes), and how far the
+    /// docked aside still has to ride in.
+    fn column_facts(
+        &self,
+        (width, cards): (f32, bool),
+        (shown_aside, rail): (Option<AsideLayout>, rail::Rail),
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (ConversationVars, f32) {
         let ds = Ds::get(cx);
         let hairline = f32::from(ds.len(Length::BorderHairline));
         // The workspace container is the card's box: its border widens it by two hairlines.
@@ -201,6 +197,27 @@ impl RenderOnce for ConversationShell {
             column_shift: shift,
             top_reserve: top_reserve + rail_top(rail, width, ds),
         };
+        (vars, target - shift)
+    }
+}
+
+impl RenderOnce for ConversationShell {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let (size, recorder) = measure::track((self.id.clone(), "conversation"), window, cx);
+        let width = f32::from(size.width);
+        let cards = scope::vars(cx).is_some_and(|vars| vars.cards_docked);
+        let layout = aside::layout(&self.id, (self.aside.is_some(), width), window, cx);
+        let shown_aside = aside::shown(self.aside.is_some(), layout, self.aside_float_open);
+        let has_rail = self.rail.is_some();
+        let rail = rail::rail(
+            &self.id,
+            (has_rail, self.rail_showing, self.rail_view.as_ref()),
+            shown_aside.is_some(),
+            window,
+            cx,
+        );
+        let (vars, glide) = self.column_facts((width, cards), (shown_aside, rail), window, cx);
+        let ds = Ds::get(cx);
         let slot = aside::Slot {
             id: (self.id.clone(), "aside").into(),
             content: self.aside.take(),
@@ -212,7 +229,7 @@ impl RenderOnce for ConversationShell {
                 f32::from(ds.len(Length::TitlebarSafeAreaTop) + ds.len(Length::SpaceSm))
             },
             composer_reserve: self.composer_reserve,
-            glide: target - shift,
+            glide,
         };
         let aside_layers = aside::render(&slot, width, window, cx);
         let ds = Ds::get(cx);
@@ -253,7 +270,6 @@ impl RenderOnce for ConversationShell {
             .children(rail_layer)
             .children(aside_layers)
             .child(recorder);
-        let _ = px(0.);
         strut::scope(false, shell)
     }
 }

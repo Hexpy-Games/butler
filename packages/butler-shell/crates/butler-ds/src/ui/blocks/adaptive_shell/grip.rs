@@ -200,21 +200,29 @@ fn hint_view(
     .into_any_element()
 }
 
-impl RenderOnce for ResizeHandle {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let pointer =
-            window.use_keyed_state((self.id.clone(), "pointer"), cx, |_, _| Pointer::default());
-        let focus_handle =
-            window.use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle());
-        let tracked = focus::tab_stop(focus_handle.read(cx), !self.locked && self.on_key.is_some());
+/// How visible the grabber and the hint are this frame, and whether a drag is under way.
+struct Shown {
+    grip: f32,
+    hint: f32,
+    dragging: bool,
+}
+
+impl ResizeHandle {
+    /// The grabber and the hint ease in on hover, focus and drag; the hint waits out the tooltip
+    /// delay on hover, shows at once on focus and steps aside while dragging.
+    fn shown(
+        &self,
+        (pointer, focused): (&Entity<Pointer>, bool),
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Shown {
         let now = cx.background_executor().now();
         let ds = Ds::get(cx);
         let state = *pointer.read(cx);
-        let focused = focus::visible(ds, tracked.is_focused(window), false);
         let dragging = state.dragging.is_some();
         let live = !self.locked;
         let grip_shown = live && (state.hover_since.is_some() || focused || dragging);
-        let delay = ds.duration(DsDuration::MotionDeliberate) * 2;
+        let delay = hint_delay(ds);
         let hint_due = state
             .hover_since
             .is_some_and(|since| now.saturating_duration_since(since) >= delay);
@@ -225,69 +233,89 @@ impl RenderOnce for ResizeHandle {
         let fast = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
         let enter = Timing::token(ds, DsDuration::MotionEnterMenu, Easing::MotionEaseEnter);
         let exit = Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseAccelerate);
-        let jump = ds.reduced_motion();
+        let level = |on: bool| f32::from(u8::from(on));
         let grip = ramp(
             (self.id.clone(), "grip"),
-            (f32::from(u8::from(grip_shown)), false),
+            (level(grip_shown), false),
             &fast,
             window,
             cx,
         );
-        let hint_target = f32::from(u8::from(hint_shown));
-        let hint_timing = if hint_shown { &enter } else { &exit };
-        let hint_alpha = ramp(
+        let timing = if hint_shown { &enter } else { &exit };
+        let hint = ramp(
             (self.id.clone(), "hint"),
-            (hint_target, dragging),
-            hint_timing,
+            (level(hint_shown), dragging),
+            timing,
             window,
             cx,
         );
+        Shown {
+            grip,
+            hint,
+            dragging,
+        }
+    }
+}
+
+/// The 4x64 pill, centred on the divider; it scales up from 60% of its height as it shows.
+fn pill(shown: &Shown, ds: &Ds) -> gpui::Div {
+    let scale = if ds.reduced_motion() {
+        1.
+    } else {
+        GRIP_REST_SCALE + (1. - GRIP_REST_SCALE) * shown.grip
+    };
+    let color = if shown.dragging {
+        Color::TextSecondary
+    } else {
+        Color::TextTertiary
+    };
+    div()
+        .absolute()
+        .top(gpui::relative(0.5))
+        .left(gpui::relative(0.5))
+        .ml(px(-GRIP_WIDTH / 2.))
+        .mt(px(-GRIP_HEIGHT * scale / 2.))
+        .w(px(GRIP_WIDTH))
+        .h(px(GRIP_HEIGHT * scale))
+        .rounded(ds.len(Length::RadiusPill))
+        .bg(ds.color(color))
+        .opacity(shown.grip)
+}
+
+impl RenderOnce for ResizeHandle {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let pointer =
+            window.use_keyed_state((self.id.clone(), "pointer"), cx, |_, _| Pointer::default());
+        let focus_handle =
+            window.use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle());
+        let live = !self.locked;
+        let tracked = focus::tab_stop(focus_handle.read(cx), live && self.on_key.is_some());
+        let focused = focus::visible(Ds::get(cx), tracked.is_focused(window), false);
+        let shown = self.shown((&pointer, focused), window, cx);
         let ds = Ds::get(cx);
-        let scale = if jump {
-            1.
-        } else {
-            GRIP_REST_SCALE + (1. - GRIP_REST_SCALE) * grip
-        };
-        let color = if dragging {
-            Color::TextSecondary
-        } else {
-            Color::TextTertiary
-        };
-        let pill = div()
-            .absolute()
-            .top(gpui::relative(0.5))
-            .left(gpui::relative(0.5))
-            .ml(px(-GRIP_WIDTH / 2.))
-            .mt(px(-GRIP_HEIGHT * scale / 2.))
-            .w(px(GRIP_WIDTH))
-            .h(px(GRIP_HEIGHT * scale))
-            .rounded(ds.len(Length::RadiusPill))
-            .bg(ds.color(color))
-            .opacity(grip);
         let hint = self
             .hint
             .clone()
-            .filter(|_| hint_alpha > 0.001)
+            .filter(|_| shown.hint > 0.001)
             .map(|hint| {
                 div()
                     .absolute()
                     .size_full()
-                    .opacity(hint_alpha)
+                    .opacity(shown.hint)
                     .child(hint_view(self.label.clone(), hint, self.hint_side, ds))
             });
-        let (hover, bounds_state) = (pointer.clone(), pointer.clone());
-        let on_drag = self.on_drag.clone();
-        let on_key = self.on_key.clone();
+        let (hover, bounds_state) = (pointer.clone(), pointer);
+        let (on_drag, on_key) = (self.on_drag.clone(), self.on_key.clone());
         let mut el = div()
             .id(self.id.clone())
             .relative()
             .w(px(HANDLE_WIDTH))
             .flex_none()
             .h_full()
-            .cursor(if self.locked {
-                CursorStyle::Arrow
-            } else {
+            .cursor(if live {
                 CursorStyle::ResizeLeftRight
+            } else {
+                CursorStyle::Arrow
             })
             .on_hover(move |on, window, cx| {
                 let now = cx.background_executor().now();
@@ -296,7 +324,7 @@ impl RenderOnce for ResizeHandle {
                 });
                 window.refresh();
             })
-            .child(pill)
+            .child(pill(&shown, ds))
             .children(hint);
         if live && on_key.is_some() {
             el = el.track_focus(&tracked);

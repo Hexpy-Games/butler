@@ -5,7 +5,7 @@
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, div, px};
 
 use super::{AdaptiveShell, Ctx, panel_rows, root_box, shell_tones, workspace_box};
-use crate::tokens::Length;
+use crate::tokens::{Color, Length};
 use crate::ui::blocks::adaptive_shell::parts;
 use crate::ui::blocks::responsive::COMPACT_MAX;
 use crate::ui::blocks::scope::{self, Spec};
@@ -97,7 +97,7 @@ fn sidebar(shell: &mut AdaptiveShell, (ctx, ds): (&Ctx, &Ds), width: f32) -> Opt
 fn drawer_panel(
     right: bool,
     width: f32,
-    (ctx, _ds): (&Ctx, &Ds),
+    (ctx, ds): (&Ctx, &Ds),
     content: impl gpui::IntoElement,
 ) -> gpui::Div {
     let (open, fade) = if right {
@@ -111,6 +111,7 @@ fn drawer_panel(
         .bottom_0()
         .w(px(width))
         .overflow_hidden()
+        .bg(ds.color(Color::AdaptivePanelBg))
         .child(content);
     let el = if ctx.reduced { el.opacity(fade) } else { el };
     let slide = if ctx.reduced { 0. } else { (1. - open) * width };

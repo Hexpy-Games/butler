@@ -218,6 +218,10 @@ impl Render for DsView {
 /// Tab and Shift+Tab move focus along the tab stops: the binding an app gives its window. gpui
 /// has no default one. Overlays that trap or prevent Tab handle the key first.
 fn move_focus(event: &gpui::KeyDownEvent, window: &mut Window, cx: &mut App) {
+    if event.keystroke.key == "escape" {
+        // A peeked sidebar closes on Escape wherever focus is.
+        butler_ds::ui::blocks::adaptive_shell::peek::escape(window, cx);
+    }
     if event.keystroke.key != "tab" {
         return;
     }

@@ -205,6 +205,27 @@ pub(super) fn root_box(shell: &AdaptiveShell, ctx: &Ctx, ds: &Ds) -> Div {
         .text_color(ds.color(Color::TextPrimary))
 }
 
+/// The title slot over the workspace's first row. In the cards frame the title row belongs to
+/// the shell and reaches over the inspector's column (`right: -track`), so the trailing icons
+/// stay at the window edge; its text takes the shell text tones.
+fn title_slot(shell: &mut AdaptiveShell, ctx: &Ctx, right_track: f32) -> Option<Div> {
+    let right = if ctx.cards { -right_track } else { 0. };
+    let title = shell.title.take()?;
+    let tones = Spec {
+        remap: if ctx.cards { shell_tones() } else { Vec::new() },
+        ..Spec::default()
+    };
+    Some(
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .right(px(right))
+            .h(px(ctx.safe_top))
+            .child(scope::scoped(tones, title)),
+    )
+}
+
 /// The workspace: the title row's room, the body, the title slot over the first row.
 pub(super) fn workspace_box(
     shell: &mut AdaptiveShell,
@@ -218,7 +239,6 @@ pub(super) fn workspace_box(
         ds.len(Length::BorderHairline)
     };
     let hairline = f32::from(ds.len(Length::BorderHairline));
-    let _hairline_unused = f32::from(border);
     let inset = f32::from(ds.len(Length::ShellCardInset)) - hairline;
     let body = div()
         .flex()
@@ -267,24 +287,7 @@ pub(super) fn workspace_box(
             .bg(surface)
             .overflow_hidden()
     };
-    let right = if ctx.cards { -right_track } else { 0. };
-    let title = shell.title.take().map(|title| {
-        let tones = if ctx.cards {
-            Spec {
-                remap: shell_tones(),
-                ..Spec::default()
-            }
-        } else {
-            Spec::default()
-        };
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .right(px(right))
-            .h(px(ctx.safe_top))
-            .child(scope::scoped(tones, title))
-    });
+    let title = title_slot(shell, ctx, right_track);
     ws.child(div().h(px(ctx.safe_top)).flex_none())
         .child(body)
         .children(title)
@@ -350,7 +353,7 @@ fn docked(shell: &mut AdaptiveShell, ctx: &Ctx, window: &mut Window, cx: &mut Ap
     for (side, handle) in std::mem::take(&mut shell.handles) {
         root = root.child(handle_at(side, handle, ctx, ds));
     }
-    root = root.children(peek::sidebar_peek(shell, ctx, window, cx));
+    root = root.children(peek::sidebar_peek(shell, ctx, cx));
     root.children(shell.chrome.take()).into_any_element()
 }
 

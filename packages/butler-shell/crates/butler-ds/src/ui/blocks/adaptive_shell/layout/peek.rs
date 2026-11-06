@@ -2,7 +2,7 @@
 //! it, and the left-edge zone that asks for it.
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 
 use super::{AdaptiveShell, Ctx, panel_rows, shell_tones};
@@ -13,12 +13,7 @@ use crate::ui::context::Ds;
 use crate::ui::convert;
 
 /// The peeked sidebar: a card over the workspace while the pointer is on it.
-pub(super) fn sidebar_peek(
-    shell: &mut AdaptiveShell,
-    ctx: &Ctx,
-    window: &mut Window,
-    cx: &mut App,
-) -> Vec<AnyElement> {
+pub(super) fn sidebar_peek(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> Vec<AnyElement> {
     let ds = Ds::get(cx);
     let mut layers = Vec::new();
     let Some(peek) = shell.peek.clone() else {
@@ -49,6 +44,7 @@ pub(super) fn sidebar_peek(
     let (enter_peek, leave_peek, out_peek) = (peek.clone(), peek.clone(), peek.clone());
     let card = div()
         .id((shell.id.clone(), "peek-card"))
+        .debug_selector(|| "peek-card".to_owned())
         .absolute()
         .top(px(sm))
         .bottom(px(sm))
@@ -74,7 +70,6 @@ pub(super) fn sidebar_peek(
         })
         .child(scope::scoped(tones, content));
     layers.push(card.into_any_element());
-    layers.push(peek_dismissal(&peek, window));
     layers
 }
 
@@ -83,6 +78,7 @@ fn peek_edge(peek: &SidebarPeek, width: f32) -> AnyElement {
     let peek = peek.clone();
     div()
         .id("peek-edge")
+        .debug_selector(|| "peek-edge-zone".to_owned())
         .absolute()
         .top_0()
         .bottom_0()
@@ -94,23 +90,4 @@ fn peek_edge(peek: &SidebarPeek, width: f32) -> AnyElement {
             }
         })
         .into_any_element()
-}
-
-/// Escape closes the peek (the window-blur close is the peek's own observer).
-fn peek_dismissal(peek: &SidebarPeek, _: &mut Window) -> AnyElement {
-    let peek = peek.clone();
-    gpui::canvas(
-        |_, _, _| (),
-        move |_, (), window, _| {
-            let peek = peek.clone();
-            window.on_key_event(move |event: &gpui::KeyDownEvent, phase, window, cx| {
-                if phase == gpui::DispatchPhase::Capture && event.keystroke.key == "escape" {
-                    peek.close(CloseReason::Escape, window, cx);
-                }
-            });
-        },
-    )
-    .absolute()
-    .size_0()
-    .into_any_element()
 }

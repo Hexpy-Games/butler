@@ -220,7 +220,7 @@ fn render_page(
                 let top = b.origin.y.as_f32() - SCROLL_MARGIN;
                 cx.update(|app| {
                     window.update(app, |view, _, _| {
-                        view.scroll.set_offset(gpui::point(px(0.), px(-top)))
+                        view.scroll.set_offset(gpui::point(px(0.), px(-top)));
                     })
                 })?;
                 settle(cx, handle);

@@ -5,8 +5,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, Entity, IntoElement, KeyDownEvent, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, Window, div, px,
+    AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div, px,
 };
 
 use super::frame::{
@@ -143,6 +143,31 @@ impl AdaptiveShellSplit {
     }
 }
 
+/// The chat column: in the cards frame a card, as the content card is.
+fn chat_column(chat: Option<AnyElement>, ds: &Ds, card: Option<bool>) -> gpui::Div {
+    let column = div().relative().flex().flex_col().min_h_0();
+    match card {
+        Some(transparent) => card_surface(column, ds, transparent),
+        None => column.overflow_hidden(),
+    }
+    .children(chat)
+}
+
+/// The divider's grab zone takes no width of its own outside the cards frame: it overlaps the
+/// chat and the pane by 4px and 5px; in the cards frame it is the gap between the cards.
+fn handle_geometry(cards: bool, ds: &Ds) -> (f32, f32, f32) {
+    if cards {
+        return (f32::from(ds.len(Length::ShellCardGap)), 0., 0.);
+    }
+    // DS: AdaptiveShellFrame.module.css:50
+    let xs = f32::from(ds.len(Length::SpaceXs));
+    (
+        HANDLE_WIDTH,
+        -xs,
+        -(xs + f32::from(ds.len(Length::BorderHairline))),
+    )
+}
+
 impl RenderOnce for AdaptiveShellSplit {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let vars = scope::vars(cx);
@@ -157,17 +182,7 @@ impl RenderOnce for AdaptiveShellSplit {
         let (measured, recorder) = measure::track((self.id.clone(), "split"), window, cx);
         let ds = Ds::get(cx);
         let cards = vars.is_some_and(|v| v.cards_docked);
-        let transparent = vars.is_some_and(|v| v.transparent_workspace);
-        // In the cards frame the chat column is a card, as the content card is.
-        let chat_column = |chat: Option<AnyElement>| {
-            let column = div().relative().flex().flex_col().min_h_0();
-            if cards {
-                card_surface(column, ds, transparent)
-            } else {
-                column.overflow_hidden()
-            }
-            .children(chat)
-        };
+        let card = cards.then(|| vars.is_some_and(|v| v.transparent_workspace));
         let chat = self.chat.take();
         let mut split = div()
             .relative()
@@ -177,7 +192,8 @@ impl RenderOnce for AdaptiveShellSplit {
             .min_w_0()
             .child(recorder);
         let Some(pane) = self.pane.take().filter(|_| present) else {
-            return strut::scope(false, split.child(chat_column(chat).flex_auto().min_w_0()));
+            let column = chat_column(chat, ds, card).flex_auto().min_w_0();
+            return strut::scope(false, split.child(column));
         };
         // The chat card's edge: from the split's end to its column width, over a negative margin
         // that keeps the flow where it will rest; the pane travels the same distance.
@@ -189,21 +205,11 @@ impl RenderOnce for AdaptiveShellSplit {
         };
         let chat_now = width + travel;
         let reduced = ds.reduced_motion();
-        let handle_width = if cards {
-            f32::from(ds.len(Length::ShellCardGap))
-        } else {
-            HANDLE_WIDTH
-        };
-        let (lead, trail) = if cards {
-            (0., 0.)
-        } else {
-            // DS: AdaptiveShellFrame.module.css:50
-            let xs = f32::from(ds.len(Length::SpaceXs));
-            (-xs, -(xs + f32::from(ds.len(Length::BorderHairline))))
-        };
+        let (handle_width, lead, trail) = handle_geometry(cards, ds);
         split = split
             .child(
-                chat_column(chat)
+                chat_column(chat, ds, card)
+                    .debug_selector(move || format!("split-chat-{}", chat_now.round()))
                     .flex_none()
                     .w(px(chat_now))
                     .mr(px(width - chat_now)),
@@ -215,6 +221,7 @@ impl RenderOnce for AdaptiveShellSplit {
                     .w(px(handle_width))
                     .ml(px(lead))
                     .mr(px(trail))
+                    .debug_selector(|| "split-handle".to_owned())
                     .child(self.handle(window, cx, width)),
             );
         let pane_box = div()
