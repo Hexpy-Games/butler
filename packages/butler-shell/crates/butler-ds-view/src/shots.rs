@@ -26,6 +26,8 @@ pub(crate) struct Options {
     pub(crate) full: bool,
     /// Force every story canvas to this logical width.
     pub(crate) canvas_width: Option<f32>,
+    /// Keep motion on (the default reduces it, so every frame is at rest).
+    pub(crate) motion: bool,
 }
 
 impl Options {
@@ -64,6 +66,7 @@ impl Options {
             lang,
             full: args.iter().any(|arg| arg == "--full"),
             canvas_width: value("--canvas-width")?.map(str::parse).transpose()?,
+            motion: args.iter().any(|arg| arg == "--motion"),
         })
     }
 }
@@ -80,7 +83,7 @@ pub(crate) fn context(options: &Options) -> anyhow::Result<HeadlessAppContext> {
     cx.update(|cx| {
         app::init(cx)?;
         app::install(cx, options.dark, options.lang);
-        Ds::update(cx, |ds| ds.set_app_reduced_motion(true));
+        Ds::update(cx, |ds| ds.set_app_reduced_motion(!options.motion));
         if let Some(width) = options.canvas_width {
             cx.set_global(crate::pages::CanvasWidth(width));
         }

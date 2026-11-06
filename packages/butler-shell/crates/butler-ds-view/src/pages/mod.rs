@@ -131,6 +131,12 @@ pub(crate) fn anchored(body: AnyElement, name: &str) -> gpui::Div {
     anchor_div(div(), name.to_owned()).child(body)
 }
 
+/// A zero-size marker the live harness can look for (`expect anchor <name>`): a story names
+/// the value its control holds this way, so a smoke can check what a click or key changed.
+pub(crate) fn probe(name: String) -> gpui::Div {
+    anchor_div(div().absolute().size_0(), name)
+}
+
 /// A stable geometry selector for the screenshot harness (a no-op without `test-support`).
 fn anchor_div(el: gpui::Div, name: String) -> gpui::Div {
     el.debug_selector(|| name)

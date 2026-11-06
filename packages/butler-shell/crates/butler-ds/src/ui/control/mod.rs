@@ -24,12 +24,17 @@ pub(crate) type Outer = Box<dyn FnOnce(gpui::Stateful<Div>) -> gpui::Stateful<Di
 
 mod parts;
 
+use parts::State;
 pub use parts::{
     Blend, Disabled, DisabledLook, Ring, Underline, Width, focus_handle, over, reset_anchors,
 };
-use parts::{State, next_anchor};
+pub(crate) use parts::{State as Glide, next_anchor};
 
 /// A control being built: geometry and colours resolved by its component.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent switches of one control, as the CSS it draws"
+)]
 #[derive(IntoElement)]
 pub struct Control {
     pub(crate) id: ElementId,
@@ -50,6 +55,12 @@ pub struct Control {
     pub(crate) scale: bool,
     pub(crate) disabled: Disabled,
     pub(crate) disabled_look: DisabledLook,
+    /// `cursor: not-allowed` while disabled (the opacity family defaults to `default`).
+    pub(crate) not_allowed: bool,
+    /// Whether Tab reaches the control (a roving group leaves one stop).
+    pub(crate) tab_stop: bool,
+    /// The focus handle, when the owner keeps it (a group that moves focus between its controls).
+    pub(crate) focus: Option<gpui::FocusHandle>,
     pub(crate) text_size: Pixels,
     pub(crate) weight: f32,
     pub(crate) line_height: Option<Pixels>,
@@ -89,6 +100,9 @@ impl Control {
             scale: true,
             disabled: Disabled::No,
             disabled_look: DisabledLook::Opacity(0.48),
+            not_allowed: false,
+            tab_stop: true,
+            focus: None,
             text_size: ds.len(crate::tokens::Length::FontSize3),
             weight: ds.number(Number::FontWeightRegular),
             line_height: None,
@@ -114,10 +128,12 @@ impl RenderOnce for Control {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = window.use_keyed_state((self.id.clone(), "state"), cx, |_, _| State::default());
         let handle = (self.disabled != Disabled::Native).then(|| {
-            window
-                .use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
-                .read(cx)
-                .clone()
+            self.focus.take().unwrap_or_else(|| {
+                window
+                    .use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
+                    .read(cx)
+                    .clone()
+            })
         });
         let now = cx.background_executor().now();
         let (duration, ease) = {
@@ -186,9 +202,10 @@ impl Control {
         el = match self.width {
             // `width: max-content` is not stretched by a column's `align-items: stretch`.
             Width::Auto if shrink => el.self_start(),
-            Width::Auto => el,
+            Width::Auto | Width::Stretch => el,
             Width::Fixed(width) => el.w(px(width)),
             Width::Full => el.w_full(),
+            Width::Grow => el.flex_1(),
         };
         if self.underline == Underline::Always
             || (self.underline == Underline::OnHover && hover > 0.5)
@@ -221,13 +238,13 @@ impl Control {
     ) -> gpui::Stateful<Div> {
         let mut el = if live {
             el.cursor_pointer()
-        } else if matches!(self.disabled_look, DisabledLook::Text) {
+        } else if self.not_allowed || matches!(self.disabled_look, DisabledLook::Text) {
             el.cursor_not_allowed()
         } else {
             el.cursor_default()
         };
         if let Some(handle) = handle {
-            el = el.track_focus(handle).tab_stop(true);
+            el = el.track_focus(handle).tab_stop(self.tab_stop);
         }
         if live {
             let hover = state.clone();

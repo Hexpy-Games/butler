@@ -5,7 +5,7 @@
 //!   butler-ds-view
 //!   butler-ds-view --shots <dir> --scale 2 --size 1280x800 [--dark] [--lang ko|en]
 //!       (feature `shots`: renders every page headless to `<dir>/<page>.png`)
-//!   butler-ds-view --live <dir> [--scale 2 --size 1280x800 --dark --lang ko|en]
+//!   butler-ds-view --live <dir> [--scale 2 --size 1280x800 --dark --lang ko|en --motion]
 //!       (feature `shots`: stdin commands, each answered `LIVE OK`; see live.rs)
 mod app;
 mod copy;

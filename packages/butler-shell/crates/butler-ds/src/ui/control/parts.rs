@@ -101,7 +101,7 @@ pub fn focus_handle(cx: &App, n: usize) -> Option<gpui::FocusHandle> {
         .map(|(_, handle)| handle.clone())
 }
 
-pub(super) fn next_anchor(cx: &mut App, handle: Option<&gpui::FocusHandle>) -> SharedString {
+pub(crate) fn next_anchor(cx: &mut App, handle: Option<&gpui::FocusHandle>) -> SharedString {
     let anchors = cx.default_global::<Anchors>();
     let n = anchors.next.get();
     anchors.next.set(n + 1);
@@ -141,30 +141,45 @@ pub enum Width {
     #[default]
     Auto,
     Fixed(f32),
-    /// `width: 100%` (or the bleed's `calc(100% + ...)` is the caller's margin).
+    /// `width: 100%`.
     Full,
+    /// Fills a column's cross axis (a stretched row, or `calc(100% + ..)` with its bleed
+    /// margins): the box is not shrink-wrapped.
+    Stretch,
+    /// `flex: 1 1 0` with `min-width: 0`: equal shares of a row.
+    Grow,
 }
 
 /// Hover and press state of one control.
 #[derive(Default)]
 pub(crate) struct State {
-    pub(super) hovered: bool,
+    pub(crate) hovered: bool,
     pub(super) pressed: bool,
     /// Hover blend 0..=1 and the animation toward `hovered`.
-    pub(super) mix: f32,
+    pub(crate) mix: f32,
     from: f32,
     since: Option<Instant>,
 }
 
 impl State {
-    pub(super) fn retarget(&mut self, hovered: bool, now: Instant, at: f32) {
+    /// At rest on the target (`on`: 1, else 0).
+    pub(crate) fn settled(on: bool) -> Self {
+        Self {
+            hovered: on,
+            mix: f32::from(u8::from(on)),
+            from: f32::from(u8::from(on)),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn retarget(&mut self, hovered: bool, now: Instant, at: f32) {
         self.from = at;
         self.hovered = hovered;
         self.since = Some(now);
     }
 
     /// The hover blend now, and whether it is still moving.
-    pub(super) fn sample(
+    pub(crate) fn sample(
         &mut self,
         now: Instant,
         duration: std::time::Duration,

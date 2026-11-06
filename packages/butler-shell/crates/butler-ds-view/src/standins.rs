@@ -1,5 +1,5 @@
 //! Stand-ins for DS components and blocks that arrive in later batches (Tag, Input, ListRow,
-//! ProgressMeter, SettingsSection). They only let
+//! ProgressMeter, SettingsSection, Field, SettingsField, LoadingIndicator). They only let
 //! the showcases that use them (Layout, Inline, Label, Clickable, ...) render their layout;
 //! each draws from tokens, follows the React CSS it replaces, and goes away when its primitive
 //! lands. They are not part of `butler-ds`.
@@ -71,11 +71,17 @@ pub(crate) fn list_row(
         .gap_x(ds.len(Length::SpaceMd))
         .gap_y(ds.len(Length::SpaceXs))
         .child(
-            div().flex_1().min_w_0().child(
-                Typo::body(title)
-                    .truncate()
-                    .weight(butler_ds::ui::typo::Weight::Regular),
-            ),
+            // `flex: 1 1 50%`: the title keeps half the line, so a long meta wraps below it.
+            div()
+                .flex_grow(1.)
+                .flex_shrink(1.)
+                .flex_basis(gpui::relative(0.5))
+                .min_w_0()
+                .child(
+                    Typo::body(title)
+                        .truncate()
+                        .weight(butler_ds::ui::typo::Weight::Regular),
+                ),
         )
         .children(meta.map(|meta| Typo::caption(meta).tone(Tone::Tertiary)));
     let content = Stack::new()
@@ -134,7 +140,7 @@ pub(crate) fn settings_status(title: &'static str, body: AnyElement, cx: &App) -
                 .flex_col()
                 .gap(ds.len(Length::SpaceMd))
                 .min_w_0()
-                .p(ds.len(Length::SettingsSectionPadding))
+                .p(settings_padding(ds))
                 .border(ds.len(Length::BorderHairline))
                 .border_color(ds.color(Color::Line))
                 .rounded(ds.len(Length::RadiusPanel))
@@ -142,4 +148,148 @@ pub(crate) fn settings_status(title: &'static str, body: AnyElement, cx: &App) -
                 .child(body),
         )
         .into_any_element()
+}
+
+/// `--settings-section-padding`: `--space-lg` in a compact settings shell (`width <= 760px`,
+/// tokens.css:1095), a media query the token tables do not carry.
+fn settings_padding(ds: &Ds) -> gpui::Pixels {
+    if ds.tokens().viewport.0 <= 760. {
+        ds.len(Length::SpaceLg)
+    } else {
+        ds.len(Length::SettingsSectionPadding)
+    }
+}
+
+/// Field (vertical): its children stacked by `--space-2`.
+pub(crate) fn field(children: Vec<AnyElement>, cx: &App) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .w_full()
+        .min_w_0()
+        .gap(Ds::get(cx).len(Length::Space2))
+        .children(children)
+        .into_any_element()
+}
+
+/// FieldLabel: a Label (`min-height: 18px`) on the label line height, which steps up on mobile.
+pub(crate) fn field_label(text: impl Into<gpui::SharedString>, cx: &App) -> AnyElement {
+    let ds = Ds::get(cx);
+    div()
+        .flex()
+        .items_center()
+        .gap(ds.len(Length::Space2))
+        .min_h(gpui::px(18.)) // DS: Label.module.css:3
+        .text_color(ds.color(Color::TextPrimary))
+        .font_family(ds.body_font().clone())
+        .text_size(ds.len(Length::FontSize3))
+        .font_weight(gpui::FontWeight(
+            ds.number(butler_ds::tokens::Number::FontWeightMedium),
+        ))
+        .line_height(ds.len(Length::TypoLabelLineHeight))
+        .child(text.into())
+        .into_any_element()
+}
+
+/// FieldDescription: `--font-size-3` on the body line, `--text-secondary`.
+pub(crate) fn field_description(text: impl Into<gpui::SharedString>, cx: &App) -> AnyElement {
+    let ds = Ds::get(cx);
+    div()
+        .text_size(ds.len(Length::FontSize3))
+        .line_height(ds.len(Length::TypoBodyLineHeight))
+        .text_color(ds.color(Color::TextSecondary))
+        .child(text.into())
+        .into_any_element()
+}
+
+/// Field `orientation="horizontal"` with a content column: the label and description at the
+/// start, the control at the row end centred on the label's line (`control_height` tall).
+pub(crate) fn field_row(
+    label: AnyElement,
+    description: AnyElement,
+    control: AnyElement,
+    control_height: f32,
+    cx: &App,
+) -> AnyElement {
+    let ds = Ds::get(cx);
+    div()
+        .flex()
+        .items_start()
+        .w_full()
+        .min_w_0()
+        .gap(ds.len(Length::Space2))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_w_0()
+                .gap(gpui::px(2.)) // DS: Field.module.css:53
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .min_h(gpui::px(control_height))
+                        .child(label),
+                )
+                .child(description),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .h(gpui::px(control_height))
+                .child(control),
+        )
+        .into_any_element()
+}
+
+/// SettingsField (stacked): the label and description above the control column
+/// (`min(100%, 460px)`), inside a SettingsSection.
+pub(crate) fn settings_field(
+    label: &'static str,
+    description: &'static str,
+    control: AnyElement,
+    cx: &App,
+) -> AnyElement {
+    let ds = Ds::get(cx);
+    Stack::new()
+        .gap(Space::Sm)
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(ds.len(Length::SettingsFieldCopyGap))
+                .max_w(gpui::px(608.)) // DS: SettingsField.module.css:22 (38rem)
+                .child(butler_ds::ui::label::Label::new().child(label))
+                .child(Typo::caption(description).tone(Tone::Secondary)),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .w_full()
+                .max_w(gpui::px(460.)) // DS: SettingsField.module.css:28
+                .child(control),
+        )
+        .into_any_element()
+}
+
+/// LoadingIndicator: the Spinner while loading, the ringed success check once done.
+pub(crate) fn loading_indicator(
+    id: impl Into<gpui::ElementId>,
+    loading: bool,
+    size: f32,
+) -> AnyElement {
+    let id = id.into();
+    if loading {
+        butler_ds::ui::spinner::Spinner::new(id)
+            .size(size)
+            .into_any_element()
+    } else {
+        butler_ds::ui::success_check::SuccessCheck::new(id)
+            .ring()
+            .size(size)
+            .into_any_element()
+    }
 }

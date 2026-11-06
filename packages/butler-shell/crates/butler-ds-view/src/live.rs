@@ -11,7 +11,7 @@
 //!   focus <n>             keyboard focus on control n (the ring shows)
 //!   key <keystroke>       a keystroke to the focused element
 //!   wait <ms>             advance the clock
-//!   expect tooltip open|closed | focused <n> | clipboard <text> | control <n>
+//!   expect tooltip open|closed | focused <n> | clipboard <text> | control <n> | anchor <name>
 //!   shot <name>           `<page>.<name>.png`: the owning story canvas plus 64px each side
 //!   quit
 use std::io::{BufRead as _, Write as _};
@@ -146,8 +146,13 @@ impl Live {
 
     fn key(&mut self, keystroke: &str) -> anyhow::Result<()> {
         let parsed = Keystroke::parse(keystroke).map_err(|e| anyhow::anyhow!("{e:?}"))?;
+        // A keystroke is the key going down and coming up (Enter and Space activate on release).
         self.cx.update_window(self.handle, |_, window, cx| {
-            window.dispatch_keystroke(parsed, cx);
+            window.dispatch_keystroke(parsed.clone(), cx);
+            window.dispatch_event(
+                PlatformInput::KeyUp(gpui::KeyUpEvent { keystroke: parsed }),
+                cx,
+            );
         })?;
         Ok(())
     }
@@ -191,6 +196,7 @@ impl Live {
                 .cx
                 .debug_bounds(self.handle, &control_anchor(arg))?
                 .is_some(),
+            "anchor" => self.cx.debug_bounds(self.handle, arg)?.is_some(),
             _ => bail!("unknown expectation {kind}"),
         };
         anyhow::ensure!(ok, "expectation failed: {what}");

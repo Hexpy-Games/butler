@@ -205,20 +205,22 @@ impl RenderOnce for TintedGlass {
         .top_0()
         .left_0()
         .size_full();
+        // The paint layer sits outside the clipping box: the drop shadow falls beyond the surface.
         strut::scope(
             true,
             div()
                 .relative()
                 .min_w_0()
-                .overflow_hidden()
                 .rounded(radius)
                 .text_color(ds.color(Color::TextPrimary))
                 .child(layer)
                 // The 1px border of the surface stays in layout, so the content keeps the DS geometry.
                 .child(
-                    strut::container(div(), ds)
-                        .p(padding + px(1.)) // DS: TintedGlass.module.css:5
-                        .children(self.children),
+                    div().min_w_0().overflow_hidden().rounded(radius).child(
+                        strut::container(div(), ds)
+                            .p(padding + px(1.)) // DS: TintedGlass.module.css:5
+                            .children(self.children),
+                    ),
                 ),
         )
     }
