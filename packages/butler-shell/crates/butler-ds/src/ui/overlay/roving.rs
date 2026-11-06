@@ -88,6 +88,15 @@ pub struct Typeahead {
 }
 
 impl Typeahead {
+    /// Whether a search is running: keys were pushed less than a second ago. While it runs, a
+    /// Space is part of the search and never selects (Radix: `searchRef.current !== ""`).
+    pub fn running(&self, now: Instant) -> bool {
+        !self.buffer.is_empty()
+            && self
+                .last
+                .is_some_and(|at| now.saturating_duration_since(at) < TYPEAHEAD_RESET)
+    }
+
     /// Adds `key` (one printable character) to the search and returns the item to highlight.
     /// `labels` are the enabled items' text; `current` the highlighted one's index into them.
     pub fn push(

@@ -6,6 +6,7 @@ mod clickable;
 mod collapsible;
 mod copy_button;
 mod done_icon_button;
+mod dropdown_menu;
 mod field;
 mod glyph_toggle;
 mod grid;
@@ -89,6 +90,7 @@ pub(crate) fn all() -> Vec<Page> {
         page!("card", "Card", card),
         page!("tooltip", "Tooltip", tooltip),
         page!("popover", "Popover", popover),
+        page!("dropdown-menu", "DropdownMenu", dropdown_menu),
         page!("button", "Button", button),
         page!("icon-button", "IconButton", icon_button),
         page!("pill-button", "PillButton", pill_button),
