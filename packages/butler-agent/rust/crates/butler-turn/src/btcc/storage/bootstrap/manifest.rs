@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha256};
 
-pub(super) const TABLES: [&str; 48] = [
+pub(super) const TABLES: [&str; 47] = [
     "btcc_admission_claims",
     "btcc_authority_requests",
     "btcc_canonical_deliveries",
@@ -43,7 +43,6 @@ pub(super) const TABLES: [&str; 48] = [
     "btcc_stop_requests",
     "btcc_subsession_delegations",
     "btcc_subsession_directions",
-    "btcc_subsession_endings",
     "btcc_subsession_outbox",
     "btcc_terminal_settlement_wakes",
     "btcc_turns",
@@ -54,7 +53,12 @@ pub(super) const TABLES: [&str; 48] = [
 // Additive runtime tables are created by the current-schema migration, after
 // activation validation. They were never part of the legacy import receipt;
 // keeping that immutable manifest preserves existing activation markers.
-pub(super) const RUNTIME_TABLES: [&str; 2] = ["btcc_work_task_waits", "btcc_work_tasks"];
+// TABLES is the shipped manifest: never add to it.
+pub(super) const RUNTIME_TABLES: [&str; 3] = [
+    "btcc_subsession_endings",
+    "btcc_work_task_waits",
+    "btcc_work_tasks",
+];
 
 pub(super) fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
