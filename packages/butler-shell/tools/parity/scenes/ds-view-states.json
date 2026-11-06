@@ -467,6 +467,8 @@
     {"page": "expandable-text", "name": "collapse-click", "state": "click", "target": 0, "wait_ms": 500, "clicks": 2},
     {"page": "expandable-text", "name": "row-hover", "state": "hover", "target": 0, "wait_ms": 200},
     {"page": "expandable-text", "name": "row-focus", "state": "focus", "target": 0, "wait_ms": 200},
+    {"page": "inline-reference", "name": "mention-hover", "state": "hover", "target": 0, "wait_ms": 200},
+    {"page": "inline-reference", "name": "mention-focus", "state": "focus", "target": 0, "wait_ms": 200},
     {"page": "tag", "name": "remove-hover", "state": "hover", "target": 0, "wait_ms": 200},
     {"page": "tag", "name": "remove-focus", "state": "focus", "target": 0, "wait_ms": 200},
     {"page": "tag", "name": "edit-hover", "state": "hover", "target": 1, "wait_ms": 200},

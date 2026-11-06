@@ -21,10 +21,12 @@ mod grid;
 mod icon_button;
 mod icon_slot;
 mod inline;
+mod inline_reference;
 mod input;
 mod kbd;
 mod label;
 mod layout;
+mod media_frame;
 mod meta_list;
 mod native_select;
 mod pill_button;
@@ -139,6 +141,8 @@ pub(crate) fn all() -> Vec<Page> {
         page!("animated-number", "AnimatedNumber", animated_number),
         page!("avatar", "Avatar", avatar),
         page!("expandable-text", "ExpandableText", expandable_text),
+        page!("media-frame", "MediaFrame", media_frame),
+        page!("inline-reference", "InlineReference", inline_reference),
     ]
 }
 

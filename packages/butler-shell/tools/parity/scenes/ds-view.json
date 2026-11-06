@@ -52,6 +52,8 @@
     { "page": "rolling-status-line", "entry": "components/RollingStatusLine" },
     { "page": "animated-number", "entry": "components/AnimatedNumber" },
     { "page": "avatar", "entry": "components/Avatar" },
-    { "page": "expandable-text", "entry": "components/ExpandableText" }
+    { "page": "expandable-text", "entry": "components/ExpandableText" },
+    { "page": "media-frame", "entry": "components/MediaFrame" },
+    { "page": "inline-reference", "entry": "components/InlineReference" }
   ]
 }
