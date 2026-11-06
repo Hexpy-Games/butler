@@ -122,3 +122,22 @@ pages name: `adaptive-toggle`, `adaptive-open-nav`, `adaptive-open-inspector`, `
 (linked KeyValueRow), `dp-stage-<kind>-invalid-<bool>` (DragPreview). Drag smoke:
 `viewport 3000`, `page nav-drop-target`, `press @nav-drop:demo-0`, `dragto @nav-drop:demo-2+0,-10 400`,
 `wait 300`, `shot drag-before`, `release`, `expect anchor ndt-order:demo-1,demo-0,demo-2,demo-3,demo-4`.
+
+### P2-S4 additions (message, markdown and activity blocks)
+
+`scenes/ds-view.json` lists the ten new pages (`markdown-content`, `message-row`, `message-avatar-block`,
+`work-activity-block`, `worker-activity-row`, `worker-activity-panel`, `todo-progress-panel`, `queued-message`,
+`question-answer-card`, `event-timeline`). The markdown page also has two native checks with no React
+counterpart: "GFM constructs (native check)" and "Code in every grammar (native check)".
+
+Stories that run on a clock (the markdown streaming demo, the MessageRow send-and-stream, the QueuedMessage
+delivery, the WorkerActivityRow replay) start their clock when the page first renders, so a still of them
+shows the state at the end of the harness's settle, not the first frame the React capture shows. The live
+harness reaches each state: `wait <ms>` runs the clock, and the pages name what a state holds with
+`expect anchor` markers: `md-streaming-<bool>`, `wa-disclosure-running-expanded-<bool>`,
+`wa-disclosure-done-expanded-<bool>`, `qm-send-now-delivered-<bool>`, `qm-delivery-delivered-<bool>` and
+`worker-complete-<bool>`. Smoke (streaming and expanded):
+`page markdown-content`, `expect anchor md-streaming-true`, `wait 4000`, `expect anchor md-streaming-false`;
+`page work-activity-block`, `expect anchor wa-disclosure-running-expanded-false`, `click 0`,
+`expect anchor wa-disclosure-running-expanded-true`; `page queued-message`, `click <send now>`, `wait 1000`,
+`expect anchor qm-send-now-delivered-true`.

@@ -30,6 +30,8 @@ gpui_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d4e3761
 anyhow = "1"
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
 sys-locale = "0.3"
+pulldown-cmark = { version = "0.13", default-features = false }
+syntect = { version = "5", default-features = false, features = ["default-fancy"] }
 
 # The agent workspace's lints (packages/butler-agent/rust/Cargo.toml), without the allowances
 # that only apply there.

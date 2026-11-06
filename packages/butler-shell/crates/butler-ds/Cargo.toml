@@ -14,3 +14,5 @@ workspace = true
 anyhow.workspace = true
 gpui.workspace = true
 gpui_elements.workspace = true
+pulldown-cmark.workspace = true
+syntect.workspace = true

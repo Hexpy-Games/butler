@@ -124,7 +124,7 @@ fn hover_state(id: &ElementId, window: &mut Window, cx: &mut App) -> gpui::Entit
 
 impl InlineReference {
     /// The reference as flow items: pieces that wrap with the sentence around them.
-    fn items(self, window: &mut Window, cx: &mut App) -> Vec<AnyElement> {
+    pub(crate) fn items(self, window: &mut Window, cx: &mut App) -> Vec<AnyElement> {
         let style = window.text_style();
         let em = style.font_size.to_pixels(window.rem_size());
         match self.kind {
