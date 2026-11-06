@@ -21,6 +21,17 @@ impl Live {
         Ok(())
     }
 
+    /// `hold <n>`: the pointer onto control n and the left button down, the press motion still in
+    /// flight (use `wait`).
+    pub(super) fn hold(&mut self, arg: &str) -> anyhow::Result<()> {
+        let at = self.center(arg)?;
+        self.move_to(at)?;
+        self.settle();
+        self.button(true)?;
+        self.wait(1);
+        Ok(())
+    }
+
     /// `release`: the left button up, and everything it starts settles.
     pub(super) fn release(&mut self) -> anyhow::Result<()> {
         self.button(false)?;

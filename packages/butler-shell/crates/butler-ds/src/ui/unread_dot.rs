@@ -66,13 +66,11 @@ impl RenderOnce for UnreadDot {
         let ds = Ds::get(cx);
         // Half the glyph column. // DS: UnreadDot.module.css:2
         let side = self.size.side(ds) * 0.5;
-        // TODO(gpui-ce butler-port-gaps): element scale transforms. The dot also scales in from
-        // 60% while it fades (UnreadDot.module.css:23); here it only fades.
         // Reduced motion: no transition at all, the dot appears and goes at once.
         let motion = if ds.reduced_motion() {
             PresenceMotion::None
         } else {
-            PresenceMotion::Fade
+            PresenceMotion::ScaleIn
         };
         let dot = div().size(side).rounded_full().bg(ds.color(Color::Accent));
         let mut presence = Presence::new((self.id, "presence"), self.present)

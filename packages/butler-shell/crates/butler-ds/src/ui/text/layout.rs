@@ -1,15 +1,16 @@
 //! How a field is put together around its editor: the bordered box (default and quiet), the
 //! underline, and the line-snapped underline textarea with its scroll fade.
 use gpui::{
-    AnyElement, App, Div, Entity, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Window, div, px,
+    AnyElement, App, Div, Entity, InteractiveElement as _, IntoElement as _, OverflowWrap,
+    ParentElement as _, Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Window, div,
+    px,
 };
 use gpui_elements::editable_text::{EditableTextElement, text_area, text_input};
 
 use super::field::{Look, Parts, Shape};
 use super::reveal;
 use crate::tokens::{Length, Number};
-use crate::ui::context::Ds;
+use crate::ui::context::{Ds, Lang, keep_words};
 use crate::ui::scroll::{self, Axis, Config};
 use crate::ui::{control, convert, focus};
 
@@ -73,6 +74,21 @@ fn apply<E: Styled>(mut el: E, s: &Sizing) -> E {
     el
 }
 
+/// A multi-line field's break rules: `:lang(ko)`'s keep-all and the textarea's `break-word`
+/// (UnderlineField.module.css:83: the underline field breaks `anywhere`).
+fn wrapping<E: Styled>(el: E, p: &Parts, ds: &Ds) -> E {
+    let el = if ds.lang() == Lang::Ko {
+        keep_words(el)
+    } else {
+        el.overflow_wrap(OverflowWrap::BreakWord)
+    };
+    if p.spec.look == Look::Underline {
+        el.overflow_wrap(OverflowWrap::Anywhere)
+    } else {
+        el
+    }
+}
+
 fn editable(p: &Parts, ds: &Ds) -> EditableTextElement {
     let multiline = matches!(p.spec.shape, Shape::Area { .. });
     let id = (p.spec.id.clone(), "edit");
@@ -97,6 +113,9 @@ fn editable(p: &Parts, ds: &Ds) -> EditableTextElement {
     if let Some(weight) = p.m.weight {
         el = el.font_weight(weight);
     }
+    if multiline {
+        el = wrapping(el, p, ds);
+    }
     if let Some(placeholder) = &p.spec.placeholder {
         el = el.placeholder(placeholder.clone());
     }
@@ -107,7 +126,7 @@ fn editable(p: &Parts, ds: &Ds) -> EditableTextElement {
 }
 
 /// A disabled field: its text (or placeholder), no editor.
-fn plain_text(p: &Parts, cx: &App) -> Div {
+fn plain_text(p: &Parts, ds: &Ds, cx: &App) -> Div {
     let text = p.state.read(cx).as_str().to_owned();
     let (shown, color) = if text.is_empty() {
         (
@@ -129,13 +148,13 @@ fn plain_text(p: &Parts, cx: &App) -> Div {
     };
     match p.spec.shape {
         Shape::Line { .. } => el.whitespace_nowrap().text_ellipsis().child(shown),
-        Shape::Area { .. } => el.child(shown),
+        Shape::Area { .. } => wrapping(el, p, ds).child(shown),
     }
 }
 
 fn editor(p: &Parts, s: &Sizing, scroll: Option<&ScrollHandle>, cx: &App) -> AnyElement {
     if p.spec.disabled {
-        return apply(plain_text(p, cx), s).into_any_element();
+        return apply(plain_text(p, Ds::get(cx), cx), s).into_any_element();
     }
     let el = apply(editable(p, Ds::get(cx)), s);
     match scroll {

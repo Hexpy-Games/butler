@@ -3,16 +3,17 @@
 //! focus ring, the two disabled families and the click gate of `aria-disabled` (card sections
 //! 0.2 to 0.4). Components pick the colours and sizes; this draws and tracks them.
 //!
-//! gpui has no transform, so the press `scale` shrinks the painted surface (fill, border, ring)
-//! by the same fraction around its centre while the content keeps its place.
+//! The press `scale` is gpui's element scale about the centre: the whole control, content
+//! included, shrinks over `--motion-instant` and is released over `--motion-fast`.
 use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, BoxShadow, ClickEvent, Div, ElementId, Hsla, InteractiveElement as _,
     IntoElement, MouseButton, ParentElement as _, Pixels, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px, relative,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 
+use super::backdrop::Backdrop;
 use super::context::Ds;
 use super::convert;
 use super::focus;
@@ -67,8 +68,8 @@ pub struct Control {
     pub(crate) underline: Underline,
     /// The surface reaches this far above and below the box (block bleed).
     pub(crate) bleed_y: Pixels,
-    /// `backdrop-filter: blur(..)` behind the surface (glass pills).
-    pub(crate) backdrop: Option<Pixels>,
+    /// `backdrop-filter` behind the surface (glass pills).
+    pub(crate) backdrop: Option<Backdrop>,
     /// An atomic inline-level box (false: block-level, filling its container).
     pub(crate) inline: bool,
     pub(crate) justify_center: bool,
@@ -143,9 +144,18 @@ impl RenderOnce for Control {
                 convert::easing(ds.tokens().ease(Easing::MotionEaseStandard)),
             )
         };
-        let (hover, moving, pressed) = state.update(cx, |s, _| {
+        let (instant, press_in) = {
+            let ds = Ds::get(cx);
+            (
+                ds.duration(DsDuration::MotionInstant),
+                1. - ds.number(Number::MotionScalePress),
+            )
+        };
+        let (hover, moving, pressed, press) = state.update(cx, |s, _| {
             let (hover, moving) = s.sample(now, duration, &ease);
-            (hover, moving, s.pressed)
+            let into = if s.pressed { instant } else { duration };
+            let (press, pressing) = s.press.sample(now, into, &ease);
+            (hover, moving || pressing, s.pressed, press)
         });
         if moving {
             window.request_animation_frame();
@@ -157,7 +167,11 @@ impl RenderOnce for Control {
         let handed_off = focus::ring_handed_off(cx);
         let ds = Ds::get(cx);
         let live = !self.disabled.is_on();
-        let (hover, pressed) = if live { (hover, pressed) } else { (0., false) };
+        let (hover, pressed, press) = if live {
+            (hover, pressed, press)
+        } else {
+            (0., false, 0.)
+        };
         let focused = handle
             .as_ref()
             .is_some_and(|h| focus::visible(ds, h.is_focused(window), false));
@@ -168,6 +182,10 @@ impl RenderOnce for Control {
         // A scroller that cannot show the ring whole draws it itself.
         let focused = focused && !handed_off;
         let mut el = self.frame(ds, hover, pressed, shrink);
+        if self.scale && press > 0. {
+            // DS: Button.module.css:47 `scale: var(--motion-scale-press)`.
+            el = el.scale(1. - press_in * press);
+        }
         if let Some(outer) = self.outer.take() {
             el = outer(el);
         }
@@ -280,26 +298,29 @@ impl Control {
                         let at = s.mix;
                         s.retarget(*on, now, at);
                         if !*on {
-                            s.pressed = false;
+                            s.set_pressed(false, now);
                         }
                         cx.notify();
                     });
                 })
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                    let now = cx.background_executor().now();
                     press.update(cx, |s, cx| {
-                        s.pressed = true;
+                        s.set_pressed(true, now);
                         cx.notify();
                     });
                 })
                 .on_mouse_up(MouseButton::Left, move |_, _, cx| {
+                    let now = cx.background_executor().now();
                     release.update(cx, |s, cx| {
-                        s.pressed = false;
+                        s.set_pressed(false, now);
                         cx.notify();
                     });
                 })
                 .on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
+                    let now = cx.background_executor().now();
                     release_out.update(cx, |s, cx| {
-                        s.pressed = false;
+                        s.set_pressed(false, now);
                         cx.notify();
                     });
                 });
@@ -319,21 +340,15 @@ impl Control {
         focused: bool,
         ds: &Ds,
     ) -> gpui::Stateful<Div> {
-        let inset = if pressed && self.scale && !self.disabled.is_on() {
-            // `scale: --motion-scale-press` shrinks the surface around its centre.
-            (1. - ds.number(Number::MotionScalePress)) / 2.
-        } else {
-            0.
-        };
         let mut surface = div().absolute();
         surface = if self.bleed_y > px(0.) {
             surface.top(-self.bleed_y).bottom(-self.bleed_y)
         } else {
-            surface.top(relative(inset)).bottom(relative(inset))
+            surface.top_0().bottom_0()
         };
         let mut surface = surface
-            .left(relative(inset))
-            .right(relative(inset))
+            .left_0()
+            .right_0()
             .rounded(self.radius)
             .bg(self.fill.at(hover, pressed));
         if let Some((width, colors)) = self.border {
@@ -357,8 +372,8 @@ impl Control {
             surface = surface.shadow(shadows);
         }
         let mut el = el;
-        if let Some(blur) = self.backdrop {
-            el = el.child(backdrop(blur, self.radius, inset));
+        if let Some(filter) = self.backdrop {
+            el = el.child(backdrop(filter, self.radius));
         }
         let mut el = el.child(surface.children(std::mem::take(&mut self.overlay)));
         if let (true, DisabledLook::Opacity(opacity)) = (self.disabled.is_on(), self.disabled_look)
@@ -404,25 +419,20 @@ fn outline(ds: &Ds, radius: Pixels, offset: f32) -> Div {
         .border_color(ds.color(Color::ColorActionPrimary))
 }
 
-/// A `backdrop-filter: blur` over the surface's box, painted before its fill.
-fn backdrop(blur: Pixels, radius: Pixels, inset: f32) -> Div {
+/// A `backdrop-filter` over the surface's box, painted before its fill.
+fn backdrop(filter: Backdrop, radius: Pixels) -> Div {
     let paint = move |bounds: gpui::Bounds<Pixels>, (): (), window: &mut Window, _: &mut App| {
         let r = radius
             .min(bounds.size.width / 2.)
             .min(bounds.size.height / 2.);
-        window.paint_backdrop_filter(
-            bounds,
-            gpui::Corners::all(r),
-            0.,
-            &[gpui::Filter::Blur(blur)],
-        );
+        filter.paint(bounds, gpui::Corners::all(r), window);
     };
     div()
         .absolute()
-        .top(relative(inset))
-        .bottom(relative(inset))
-        .left(relative(inset))
-        .right(relative(inset))
+        .top_0()
+        .bottom_0()
+        .left_0()
+        .right_0()
         .child(
             gpui::canvas(|_, _, _| (), paint)
                 .absolute()

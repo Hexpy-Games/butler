@@ -11,7 +11,8 @@ use gpui::{
 use super::layout::Resolved;
 use super::state::Item;
 use super::{Action, Kind, Store, Toast};
-use crate::tokens::{Color, Length, Number, Shadow};
+use crate::tokens::{Color, Filter, Length, Number, Shadow};
+use crate::ui::backdrop::Backdrop;
 use crate::ui::context::Ds;
 use crate::ui::convert;
 
@@ -77,7 +78,7 @@ fn tone(kind: Kind, ds: &Ds) -> Tone {
 fn surface(tone: &Tone, ds: &Ds) -> gpui::Canvas<()> {
     let radius = ds.len(Length::RadiusPanel);
     let shadow = convert::box_shadows(ds.tokens().shadow(Shadow::ShadowCard), ds.tokens());
-    let blur = ds.len(Length::ComposerGlassBlur);
+    let backdrop = Backdrop::new(ds, Filter::ComposerGlassFilter);
     let (fill, border) = (tone.background, tone.border);
     canvas(
         |_, _, _| (),
@@ -87,7 +88,7 @@ fn surface(tone: &Tone, ds: &Ds) -> gpui::Canvas<()> {
                 .min(bounds.size.width / 2.);
             let radii = Corners::all(r);
             window.paint_drop_shadows_outside(bounds, radii, 0., &shadow);
-            window.paint_backdrop_filter(bounds, radii, 0., &[gpui::Filter::Blur(blur)]);
+            backdrop.paint(bounds, radii, window);
             window.paint_quad(
                 gpui::PaintQuad::new(bounds)
                     .background(fill)
@@ -342,16 +343,16 @@ pub(super) fn render(
     let tone = tone(item.toast.kind, ds);
     let scale = resolved.scale;
     let forced = scale < 1. || resolved.height != item.height.get();
-    let (w, h) = (place.width * scale, resolved.height * scale);
     let probe = measure(item, forced);
     let content = content(item, resolved, &tone, store, (now, epoch), ds);
     let id = item.id;
     let down = store.clone();
     let mut outer = div()
         .absolute()
-        .top(px(resolved.y + resolved.swipe + (resolved.height - h) / 2.))
-        .left(px(place.left + (place.width - w) / 2.))
-        .w(px(w))
+        .top(px(resolved.y + resolved.swipe))
+        .left(px(place.left))
+        .w(px(place.width))
+        .scale(scale)
         .opacity(resolved.opacity)
         .on_mouse_down(MouseButton::Left, move |event, window, cx| {
             let now = cx.background_executor().now();
@@ -360,7 +361,7 @@ pub(super) fn render(
         })
         .debug_selector(move || format!("toast-{id}"));
     if forced {
-        outer = outer.h(px(h)).overflow_hidden();
+        outer = outer.h(px(resolved.height)).overflow_hidden();
     }
     // The front toast's box, for a harness that reports geometry.
     let marker = front.then(|| {

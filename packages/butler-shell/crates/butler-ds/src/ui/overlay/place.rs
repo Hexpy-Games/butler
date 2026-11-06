@@ -57,7 +57,7 @@ pub struct Resolved {
     /// `--radix-popper-available-width` and `-height`.
     pub available_width: f32,
     pub available_height: f32,
-    /// `--radix-popper-transform-origin`, in px from the surface's top-left.
+    /// `--radix-popper-transform-origin`, as fractions of the surface's box.
     pub origin: (f32, f32),
 }
 
@@ -276,18 +276,18 @@ fn available(chosen: &Attempt, size: (f32, f32), avoid_collisions: bool) -> (f32
 }
 
 /// `--radix-popper-transform-origin` without an arrow: the edge facing the reference, at the
-/// alignment along it.
-fn origin((side, align): Placement, (w, h): (f32, f32)) -> (f32, f32) {
+/// alignment along it, as fractions of the surface's box (what `Styled::transform_origin` takes).
+pub fn origin((side, align): Placement) -> (f32, f32) {
     let along = match align {
         Align::Start => 0.,
         Align::Center => 0.5,
         Align::End => 1.,
     };
     match side {
-        Side::Bottom => (along * w, 0.),
-        Side::Top => (along * w, h),
-        Side::Right => (0., along * h),
-        Side::Left => (w, along * h),
+        Side::Bottom => (along, 0.),
+        Side::Top => (along, 1.),
+        Side::Right => (0., along),
+        Side::Left => (1., along),
     }
 }
 
@@ -316,7 +316,7 @@ pub fn resolve(
             align: options.align,
             available_width: size.0,
             available_height: size.1,
-            origin: (0., 0.),
+            origin: origin(initial),
         };
     };
     let (available_width, available_height) = available(&chosen, size, options.avoid_collisions);
@@ -327,6 +327,6 @@ pub fn resolve(
         align: chosen.placement.1,
         available_width,
         available_height,
-        origin: origin(chosen.placement, size),
+        origin: origin(chosen.placement),
     }
 }

@@ -67,11 +67,25 @@ impl RenderOnce for Label {
             .font_weight(FontWeight(ds.number(Number::FontWeightMedium)))
             .line_height(line);
         let el = if self.field {
-            el.min_w_0().max_w_full()
+            // DS: Field.module.css:86 `.label[data-slot="field-label"] { overflow-wrap: anywhere }`.
+            el.min_w_0()
+                .max_w_full()
+                .overflow_wrap(gpui::OverflowWrap::Anywhere)
         } else {
             el
         };
         let el = if fit { el.self_start() } else { el };
-        el.children(self.children)
+        if self.field {
+            // `overflow-wrap: anywhere` lets the label's text item shrink below its longest word
+            // (its min-content width is one character); gpui measures min-content unwrapped, so
+            // each item gets `min-width: 0` instead.
+            el.children(
+                self.children
+                    .into_iter()
+                    .map(|child| div().min_w_0().child(child)),
+            )
+        } else {
+            el.children(self.children)
+        }
     }
 }

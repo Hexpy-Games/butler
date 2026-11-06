@@ -214,7 +214,8 @@ fn sub_layer(
         return None;
     }
     let theme = Theme::current(cx);
-    let cap = sub.output.get().map(|resolved| resolved.available_height);
+    let resolved = sub.output.get();
+    let cap = resolved.map(|resolved| resolved.available_height);
     let content = level(
         env,
         sub_level,
@@ -228,14 +229,13 @@ fn sub_layer(
         cx,
     );
     let ds = Ds::get(cx);
-    let side = sub
-        .output
-        .get()
-        .map_or(Side::Right, |resolved| resolved.side);
+    let side = resolved.map_or(Side::Right, |resolved| resolved.side);
+    let origin = resolved.map_or((0., 0.5), |resolved| resolved.origin);
     let animated = motion::animate(
         &format!("{}-sub-{path:?}", env.id),
         synced.phase,
         side,
+        origin,
         Motion::MENU,
         content,
         ds,

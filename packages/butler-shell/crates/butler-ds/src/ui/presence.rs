@@ -10,16 +10,23 @@ use gpui::{
 
 use super::context::Ds;
 use super::motion::{Timing, Tween};
-use crate::tokens::{Duration as DsDuration, Easing, Length};
+use crate::tokens::{Duration as DsDuration, Easing, Length, Number};
 
 /// The built-in motion of a [`Presence`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PresenceMotion {
     None,
     Fade,
+    /// Fades and scales from `--motion-scale-check`, in and out (Avatar's badge).
+    Pop,
+    /// Fades in while scaling up from 60%; leaves with a fade (UnreadDot).
+    ScaleIn,
     #[default]
     Rise,
 }
+
+/// `transform: scale(0.6)` of UnreadDot's `@starting-style`.
+const SCALE_IN_FROM: f32 = 0.6; // DS: UnreadDot.module.css:21
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -120,26 +127,48 @@ impl RenderOnce for Presence {
         let id = ElementId::from(SharedString::from(format!("{}-{generation}", self.id)));
         match (phase, self.motion) {
             (_, PresenceMotion::None) => child,
-            (Phase::Exiting, _) => {
-                let timing =
-                    Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate);
-                Tween::new(id, div().child(child), timing, |el, t| el.opacity(1. - t))
-                    .into_any_element()
-            }
-            _ => {
-                let travel = match self.motion {
-                    PresenceMotion::Rise => f32::from(ds.len(Length::MotionDistanceSm)),
-                    _ => 0.,
-                };
-                let timing =
-                    Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate);
-                Tween::new(id, div().relative().child(child), timing, move |el, t| {
-                    el.top(px(travel * (1. - t))).opacity(t)
-                })
-                .into_any_element()
-            }
+            (phase, motion) => animated(id, (phase == Phase::Exiting, motion), child, ds),
         }
     }
+}
+
+/// `child` with the enter (rise and fade, scaling in for [`PresenceMotion::Pop`] and
+/// [`PresenceMotion::ScaleIn`]) or, for `exiting`, the exit fade.
+fn animated(
+    id: ElementId,
+    (exiting, motion): (bool, PresenceMotion),
+    child: AnyElement,
+    ds: &Ds,
+) -> AnyElement {
+    let pop = ds.number(Number::MotionScaleCheck);
+    if exiting {
+        let timing = Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate);
+        let to = if motion == PresenceMotion::Pop {
+            pop
+        } else {
+            1.
+        };
+        return Tween::new(id, div().child(child), timing, move |el, t| {
+            el.scale(1. - (1. - to) * t).opacity(1. - t)
+        })
+        .into_any_element();
+    }
+    let travel = match motion {
+        PresenceMotion::Rise => f32::from(ds.len(Length::MotionDistanceSm)),
+        _ => 0.,
+    };
+    let timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate);
+    let from = match motion {
+        PresenceMotion::Pop => pop,
+        PresenceMotion::ScaleIn => SCALE_IN_FROM,
+        _ => 1.,
+    };
+    Tween::new(id, div().relative().child(child), timing, move |el, t| {
+        el.top(px(travel * (1. - t)))
+            .scale(from + (1. - from) * t)
+            .opacity(t)
+    })
+    .into_any_element()
 }
 
 /// Unmounts the child once the exit has run, unless `present` changed meanwhile.

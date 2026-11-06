@@ -1,7 +1,7 @@
 //! Where a toast is and how it moves: the stack of sonner's stylesheet (`data-expanded`,
 //! `data-front`, `data-removed`, `data-visible`) turned into target values, and the CSS
-//! transitions between them (Toast.module.css). gpui has no element transform, so the `scale` of
-//! a collapsed toast behind the front one is applied to the size of its box (about its centre).
+//! transitions between them (Toast.module.css). The `scale` of a collapsed toast behind the front
+//! one is gpui's element scale about its centre.
 use std::time::{Duration, Instant};
 
 use super::state::Item;

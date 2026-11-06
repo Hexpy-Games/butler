@@ -6,8 +6,8 @@ following third-party works.
 
 1. gpui-ce (Butler fork)
 ------------------------
-Source: https://github.com/Hexpy-Games/gpui-ce, tag butler-lens-6
-(rev e5cdb0cbd84ef109c08f4a594555fd733ba7b16a), a fork of
+Source: https://github.com/Hexpy-Games/gpui-ce, branch feat/butler-port-gaps
+(rev d4e3761e6860de9feb35dde6df944635ff90a4f2), a fork of
 https://github.com/gpui-ce/gpui-ce, which derives from GPUI by Zed Industries.
 License: Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0;
 the text is LICENSE.md in that repository). Its NOTICE file reads:

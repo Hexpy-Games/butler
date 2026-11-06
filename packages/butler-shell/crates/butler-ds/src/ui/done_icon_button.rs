@@ -13,7 +13,7 @@ use super::context::Ds;
 use super::icon_button::IconButton;
 use super::motion::{Timing, Tween};
 use super::success_check::SuccessCheck;
-use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
+use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 
 /// How long the check stays before the action icon returns (`DONE_FEEDBACK_MS`).
 pub const DONE_FEEDBACK: Duration = Duration::from_millis(1500); // DS: DoneIconButton.tsx:10
@@ -175,15 +175,22 @@ impl DoneIconButton {
         let action = self.icon.take().map(IntoElement::into_any_element);
         let timing = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
         let check_color = ds.color(Color::TextPrimary);
+        // DS: DoneIconButton.module.css:20,25 `transform: scale(var(--motion-scale-menu))`.
+        let shrink = 1. - ds.number(Number::MotionScaleMenu);
         let id = (self.id.clone(), format!("morph-{flips}"));
         let body = move |el: gpui::Div, p: f32, action: Option<AnyElement>, check: SuccessCheck| {
             el.relative()
                 .size(side)
-                .child(cell(action.unwrap_or_else(|| div().into_any_element())).opacity(1. - p))
+                .child(
+                    cell(action.unwrap_or_else(|| div().into_any_element()))
+                        .opacity(1. - p)
+                        .scale(1. - shrink * p),
+                )
                 .child(
                     cell(check.into_any_element())
                         .text_color(check_color)
-                        .opacity(p),
+                        .opacity(p)
+                        .scale(1. - shrink * (1. - p)),
                 )
         };
         if flips == 0 {
