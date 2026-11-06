@@ -307,6 +307,9 @@ impl RenderOnce for Tag {
             Self::action((self.id.clone(), "remove"), Icon::X, ink, Some(handler), ds)
         });
         let mut label = div()
+            // A line box is exactly `line-height` tall; a glyph run's own (font-metric) height must not
+            // grow the pill past the token ramp.
+            .h(ds.len(line))
             .whitespace_nowrap()
             .font_family(ds.body_font().clone())
             .text_size(ds.len(size))
