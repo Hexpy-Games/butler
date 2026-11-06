@@ -6,7 +6,7 @@
 // The native side (`butler-ds-view --shots`) writes the same names under <out>/gpui/<size>-<theme>.
 //
 //   bun ds-view.ts --site <dist-ds-site> --out <dir> [--sizes 1280x800,390x844] [--themes light,dark]
-//                  [--scale 2] [--locale ko]
+//                  [--scale 2] [--locale ko] [--only page,page]
 // PLAYWRIGHT_BROWSERS_PATH must point at an installed Chromium.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
@@ -24,6 +24,7 @@ const sizes = value("--sizes", "1280x800,390x844")!.split(",");
 const themes = value("--themes", "light,dark")!.split(",");
 const scale = Number(value("--scale", "2"));
 const locale = value("--locale", "ko")!;
+const only = value("--only")?.split(",");
 if (!Number.isFinite(scale) || scale <= 0 || sizes.some(size => !/^[1-9]\d*x[1-9]\d*$/u.test(size)) || themes.some(theme => !["light", "dark"].includes(theme))) throw new Error("Invalid size, theme or scale");
 const scene = JSON.parse(readFileSync(new URL("./scenes/ds-view.json", import.meta.url), "utf8")) as { pages: Array<{ page: string; entry: string }> };
 const root = resolve(site);
@@ -46,7 +47,7 @@ try {
     const dir = join(resolve(output), "react", `${size}-${theme}`);
     mkdirSync(dir, { recursive: true });
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, colorScheme: theme as "light" | "dark", reducedMotion: "reduce" });
-    for (const { page: id, entry } of scene.pages) {
+    for (const { page: id, entry } of scene.pages.filter(p => !only || only.includes(p.page))) {
       const page = await context.newPage();
       await page.goto(`http://localhost:${server.port}/?page=${entry}&theme=${theme}&locale=${locale}&motion=reduced`);
       await page.waitForSelector("[data-ds-story]");

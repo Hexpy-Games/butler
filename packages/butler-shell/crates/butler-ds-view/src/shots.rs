@@ -28,6 +28,8 @@ pub(crate) struct Options {
     pub(crate) canvas_width: Option<f32>,
     /// Keep motion on (the default reduces it, so every frame is at rest).
     pub(crate) motion: bool,
+    /// Render only these page ids (`--pages a,b`); all pages when unset.
+    pub(crate) pages: Option<Vec<String>>,
 }
 
 impl Options {
@@ -67,6 +69,7 @@ impl Options {
             full: args.iter().any(|arg| arg == "--full"),
             canvas_width: value("--canvas-width")?.map(str::parse).transpose()?,
             motion: args.iter().any(|arg| arg == "--motion"),
+            pages: value("--pages")?.map(|ids| ids.split(',').map(str::to_owned).collect()),
         })
     }
 }
@@ -225,7 +228,9 @@ fn run(options: &Options) -> anyhow::Result<()> {
         .map(|page| page.id.to_owned())
         .collect();
     for (index, id) in pages.iter().enumerate() {
-        render_page(&mut cx, options, index, id)?;
+        if options.pages.as_ref().is_none_or(|only| only.contains(id)) {
+            render_page(&mut cx, options, index, id)?;
+        }
     }
     let _: &Path = &options.dir;
     Ok(())

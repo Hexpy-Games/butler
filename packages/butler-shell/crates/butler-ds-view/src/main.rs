@@ -3,7 +3,7 @@
 //! English and Korean). Not shipped.
 //!
 //!   butler-ds-view
-//!   butler-ds-view --shots <dir> --scale 2 --size 1280x800 [--dark] [--lang ko|en]
+//!   butler-ds-view --shots <dir> --scale 2 --size 1280x800 [--dark] [--lang ko|en] [--pages a,b]
 //!       (feature `shots`: renders every page headless to `<dir>/<page>.png`)
 //!   butler-ds-view --live <dir> [--scale 2 --size 1280x800 --dark --lang ko|en --motion]
 //!       (feature `shots`: stdin commands, each answered `LIVE OK`; see live.rs)
@@ -15,6 +15,7 @@ mod pages;
 #[cfg(feature = "shots")]
 mod shots;
 mod standins;
+mod standins_overlay;
 
 use butler_ds::ui::assets::Assets;
 use gpui::{App, AppContext as _, Bounds, WindowBounds, WindowOptions, px, size};

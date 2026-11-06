@@ -17,7 +17,7 @@ const scale = Number(value("--scale", "2"));
 const locale = value("--locale", "ko")!;
 const only = value("--only")?.split(",");
 const pages = JSON.parse(readFileSync(new URL("./scenes/ds-view.json", import.meta.url), "utf8")).pages as Array<{ page: string; entry: string }>;
-const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as Array<{ page: string; name: string; state: string; target: number; wait_ms: number; clicks?: number; dx?: number; dy?: number }>).filter(s => !only || only.includes(s.page));
+const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as Array<{ page: string; name: string; state: string; target: number; wait_ms: number; clicks?: number; dx?: number; dy?: number; viewport_height?: number; top?: number }>).filter(s => !only || only.includes(s.page));
 const root = resolve(site);
 const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".txt": "text/plain" };
 const server = Bun.serve({
@@ -31,13 +31,17 @@ const server = Bun.serve({
 const TALL = 7000;
 const MARGIN = 64;
 const SELECTOR = 'button, [role="button"], [role="radio"], [role="switch"], input:not([type="hidden"]), textarea, select, [tabindex="0"]';
-async function shoot(page: import("playwright").Page, s: { page: string; name: string }, story: number, dir: string, width: number) {
-  const canvas = await page.evaluate(`(() => { const b = document.querySelectorAll("[data-ds-fixture-canvas]")[${story}].getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, w: b.width, h: b.height }; })()`) as { x: number; y: number; w: number; h: number };
+async function shoot(page: import("playwright").Page, s: { page: string; name: string }, story: number, dir: string, width: number, height = TALL) {
+  // In a short viewport the crop is in viewport coordinates (the page is scrolled); in the tall one nothing scrolls.
+  const scrolled = height === TALL ? "scrollX" : "0", scrolledY = height === TALL ? "scrollY" : "0";
+  const canvas = await page.evaluate(`(() => { const b = document.querySelectorAll("[data-ds-fixture-canvas]")[${story}].getBoundingClientRect(); return { x: b.x + ${scrolled}, y: b.y + ${scrolledY}, w: b.width, h: b.height }; })()`) as { x: number; y: number; w: number; h: number };
   const x0 = Math.max(0, canvas.x - MARGIN), y0 = Math.max(0, canvas.y - MARGIN);
-  const x1 = Math.min(width, canvas.x + canvas.w + MARGIN), y1 = Math.min(TALL, canvas.y + canvas.h + MARGIN);
+  const x1 = Math.min(width, canvas.x + canvas.w + MARGIN), y1 = Math.min(height, canvas.y + canvas.h + MARGIN);
   const crop = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   await page.screenshot({ path: join(dir, `${s.page}.${s.name}.png`), clip: { x: crop.x, y: crop.y, width: crop.w, height: crop.h } });
-  writeFileSync(join(dir, `${s.page}.${s.name}.json`), JSON.stringify({ crop, story }, null, 2));
+  // The open overlay's surface (a portalled popover), in logical px relative to the crop's page, when there is one.
+  const overlay = await page.evaluate(`(() => { const e = document.querySelector('[data-slot="popover-content"]'); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + ${scrolled}, y: b.y + ${scrolledY}, w: b.width, h: b.height }; })()`);
+  writeFileSync(join(dir, `${s.page}.${s.name}.json`), JSON.stringify({ crop, story, canvas, overlay }, null, 2));
 }
 const browser = await chromium.launch();
 try {
@@ -69,12 +73,18 @@ try {
       const story = (await page.evaluate(`window.__targets[${s.target}].si`)) as number;
       if (!element) throw new Error(`${s.page}.${s.name}: target ${s.target} missing`);
       await element.scrollIntoViewIfNeeded();
+      if (s.viewport_height) {
+        // A short viewport: scroll the owning canvas to `top` px from the window top, so the overlay can collide.
+        await page.setViewportSize({ width, height: s.viewport_height });
+        await page.evaluate(`(() => { const c = document.querySelectorAll("[data-ds-fixture-canvas]")[${story}]; const scroller = (() => { for (let e = c.parentElement; e; e = e.parentElement) if (e.scrollHeight > e.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(e).overflowY)) return e; return document.scrollingElement; })(); scroller.scrollBy(0, c.getBoundingClientRect().top - ${s.top ?? 0}); })()`);
+        await page.evaluate("new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))");
+      }
       if (s.state === "hover") await element.hover();
       else if (s.state === "press") { const b = (await element.boundingBox())!; await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.down(); }
       else if (s.state === "focus") { await page.keyboard.press("Shift"); await element.focus(); }
       else for (let n = 0; n < (s.clicks ?? 1); n++) { await element.click(); if (n + 1 < (s.clicks ?? 1)) await page.waitForTimeout(700); }
       await page.waitForTimeout(s.state === "press" || s.state === "focus" ? Math.max(150, s.wait_ms) : s.wait_ms);
-      await shoot(page, s, story, dir, width);
+      await shoot(page, s, story, dir, width, s.viewport_height ?? TALL);
       if (s.state === "press") await page.mouse.up();
       await page.close();
     }

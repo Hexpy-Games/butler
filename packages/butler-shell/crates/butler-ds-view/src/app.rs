@@ -178,7 +178,7 @@ impl Render for DsView {
                             .child(crate::pages::anchored(body, "page-content")),
                     ),
             );
-        focus::track_modality(root)
+        butler_ds::ui::overlay::track(focus::track_modality(root))
     }
 }
 
