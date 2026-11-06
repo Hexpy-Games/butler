@@ -7,6 +7,7 @@ pub mod card;
 pub mod clickable;
 pub mod collapsible;
 pub mod context;
+pub mod context_menu;
 pub mod control;
 pub mod convert;
 pub mod copy_button;
