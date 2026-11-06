@@ -1,15 +1,24 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
 mod boxes;
+mod button;
 mod card;
+mod clickable;
+mod copy_button;
+mod done_icon_button;
+mod glyph_toggle;
 mod grid;
+mod icon_button;
 mod inline;
 mod kbd;
 mod label;
 mod layout;
+mod pill_button;
 mod presence;
 mod separator;
 mod stack;
+mod success_check;
 mod tinted_glass;
+mod tooltip;
 mod typo;
 
 use butler_ds::tokens::{Color, Length};
@@ -60,6 +69,15 @@ pub(crate) fn all() -> Vec<Page> {
         page!("label", "Label", label),
         page!("tinted-glass", "TintedGlass", tinted_glass),
         page!("card", "Card", card),
+        page!("tooltip", "Tooltip", tooltip),
+        page!("button", "Button", button),
+        page!("icon-button", "IconButton", icon_button),
+        page!("pill-button", "PillButton", pill_button),
+        page!("clickable", "Clickable", clickable),
+        page!("copy-button", "CopyButton", copy_button),
+        page!("done-icon-button", "DoneIconButton", done_icon_button),
+        page!("glyph-toggle", "GlyphToggle", glyph_toggle),
+        page!("success-check", "SuccessCheck", success_check),
     ]
 }
 
@@ -72,11 +90,17 @@ impl gpui::Global for CanvasWidth {}
 /// A story's frame (`.frame` > `.preview` > `.canvas` of DesignSystemViewer.module.css).
 fn frame(name: &str, content: AnyElement, ds: &Ds, forced: Option<f32>) -> AnyElement {
     let anchor = format!("story-{name}");
+    // `.canvas` is a one-column grid: its children are grid items, blockified.
     let sized = match forced {
         Some(width) => div().w(px(width)).max_w_full().flex_none(),
         None => div().w_full().min_w_0(),
-    };
-    let canvas = anchor_div(sized.child(content), anchor);
+    }
+    .grid()
+    .grid_cols(1);
+    let canvas = anchor_div(
+        sized.child(butler_ds::ui::strut::flex_scope(true, content)),
+        anchor,
+    );
     let preview = div()
         .flex()
         .flex_col()

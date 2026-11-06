@@ -5,9 +5,11 @@ use butler_ds::ui::layout::{
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
+use butler_ds::ui::button::{Button, Size, Variant};
+
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::{outline_button, tag};
+use crate::standins::tag;
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
@@ -92,7 +94,7 @@ fn items(cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn truncation(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn truncation(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let title = lang.pick(
         "Desktop client polish for the dashboard and the settings screens",
         "대시보드와 설정 화면을 다듬는 데스크톱 클라이언트 작업",
@@ -110,19 +112,19 @@ fn truncation(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
                 .child(Typo::body(title).truncate())
                 .child(Typo::caption(meta).tone(Tone::Secondary).truncate()),
         )
-        .child(StackItem::new().shrink(false).child(outline_button(
-            "stack-open",
-            action,
-            true,
-            None,
-            None,
-            |_, _, _| {},
-            cx,
-        )))
+        .child(
+            StackItem::new().shrink(false).child(
+                Button::new("stack-open")
+                    .variant(Variant::Outline)
+                    .size(Size::Sm)
+                    .text(action)
+                    .on_click(|_, _, _| {}),
+            ),
+        )
         .into_any_element()
 }
 
-fn runs(_: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+fn runs(_: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let list = |text: &'static str| Typo::body(text);
     Stack::new()
         .gap(Space::Md)
@@ -148,7 +150,7 @@ fn runs(_: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
                 .child(Typo::caption(
                     "windowDrag=\"drag\" makes a titlebar region draggable; buttons inside stay clickable.",
                 ).tone(Tone::Secondary))
-                .child(outline_button("stack-back", "Back", true, None, None, |_, _, _| {}, cx)),
+                .child(Button::new("stack-back").variant(Variant::Outline).size(Size::Sm).text("Back").on_click(|_, _, _| {})),
         )
         .into_any_element()
 }

@@ -5,9 +5,10 @@ use butler_ds::ui::presence::{Presence, PresenceMotion};
 use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window, div};
 
+use butler_ds::ui::button::{Button, Variant};
+
 use super::Story;
 use crate::copy::Lang;
-use crate::standins::outline_button;
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
@@ -44,20 +45,15 @@ fn demo(
         "Enters with a fade and a small rise, exits faster.",
         "살짝 떠오르며 나타나고 더 빨리 사라집니다.",
     );
-    let toggle = outline_button(
-        format!("{id}-toggle"),
-        label,
-        false,
-        None,
-        None,
-        move |_, _, cx| {
+    let toggle = Button::new(format!("{id}-toggle"))
+        .variant(Variant::Outline)
+        .text(label)
+        .on_click(move |_, _, cx| {
             present.update(cx, |on, cx| {
                 *on = !*on;
                 cx.notify();
             });
-        },
-        cx,
-    );
+        });
     Stack::new()
         .gap(Space::Md)
         .child(toggle)

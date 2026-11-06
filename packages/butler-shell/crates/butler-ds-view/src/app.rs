@@ -125,6 +125,8 @@ const COMPACT_WINDOW: f32 = 640.;
 
 impl Render for DsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        butler_ds::ui::control::reset_anchors(cx);
+        butler_ds::ui::tooltip::reset_shown(cx);
         let size = window.viewport_size();
         // The mobile ramp (`width <= 640`) hides the sidebar, as the viewer's nav drawer does.
         let narrow = f32::from(size.width) <= COMPACT_WINDOW;
@@ -160,6 +162,8 @@ impl Render for DsView {
                     .bg(shell)
                     .text_color(ds.color(Color::TextPrimary))
                     .font_family(ds.body_font().clone())
+                    .text_size(ds.len(Length::TypoBodySize)) // the viewer's body: 14px / 20px
+                    .line_height(ds.len(Length::TypoBodyLineHeight))
                     .font_weight(FontWeight::NORMAL)
                     .when(!narrow, |root| root.child(self.sidebar(cx)))
                     .child(
