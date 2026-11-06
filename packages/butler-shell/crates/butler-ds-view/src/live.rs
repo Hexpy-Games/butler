@@ -5,12 +5,15 @@
 //!   page <id>             open a page (the window grows to its full height, unless `viewport` set one)
 //!   viewport <h>          later pages open at this window height, scrolling inside it (0: grow again)
 //!   scrollto <story> <top>  scroll the page so story n's canvas top is `top` px from the window top
-//!   hover <n>             move the pointer onto control n (DOM order of the page)
+//!   hover <n>             move the pointer onto control n (DOM order of the page); `@name` is an
+//!                         anchor of the page instead (a menu item: `@dm-session-item-0-1`), and
+//!                         `@name+dx,dy` a point that far from its centre
 //!   move <n>              pointer onto control n without settling (timers keep running)
 //!   press <n>             pointer onto control n and the left button down, held
 //!   release               the left button up
 //!   click <n>             a full click on control n
 //!   tap <n>               a click on control n without settling (motion in flight; use `wait`)
+//!   right <story> <dx> <dy>  a right click `dx`, `dy` px inside story n's canvas
 //!   focus <n>             keyboard focus on control n (the ring shows)
 //!   key <keystroke>       a keystroke to the focused element
 //!   scroll <story> <dx> <dy>  the wheel over story n (0-based) by dx, dy px (positive: further on)
@@ -18,9 +21,11 @@
 //!   ime-mark <text>       IME composition: `replace_and_mark_text_in_range` (the marked text, underlined)
 //!   ime-commit <text>     IME commit: `replace_text_in_range` over the marked text
 //!   wait <ms>             advance the clock
+//!   mark <name>           remember where anchor `name` is (for `expect unmoved`)
 //!   expect tooltip open|closed | focused <n> | clipboard <text> | control <n> | anchor <name>
-//!         | no-anchor <name> | layers <n> | modal open|closed
-//!   shot <name>           `<page>.<name>.png`: the owning story canvas plus 64px each side
+//!         | no-anchor <name> | layers <n> | modal open|closed | unmoved <name> | moved <name>
+//!   shot <name> [margin]  `<page>.<name>.png`: the owning story canvas plus `margin` (64) px each side
+//!   window <name>         `<page>.<name>.window.png`: the whole window
 //!   quit
 use std::io::{BufRead as _, Write as _};
 use std::process::ExitCode;
@@ -36,8 +41,9 @@ use crate::app::DsView;
 use crate::shots::{self, Options};
 
 /// Margin around the owning story canvas of a state shot (logical px).
-const MARGIN: f32 = 64.;
+pub(crate) const MARGIN: f32 = 64.;
 
+mod menu;
 mod scroll;
 
 struct Live {
@@ -50,6 +56,11 @@ struct Live {
     pointer: Point<gpui::Pixels>,
     /// A window height that pages keep instead of growing to their content.
     fixed_height: Option<f32>,
+    /// The story the pointer last pointed at: a shot of an overlay that opens outside every
+    /// canvas crops around it.
+    owner: Option<usize>,
+    /// Anchor positions remembered by `mark`.
+    marks: std::collections::HashMap<String, Bounds<gpui::Pixels>>,
 }
 
 fn control_anchor(arg: &str) -> String {
@@ -59,12 +70,17 @@ fn control_anchor(arg: &str) -> String {
 
 impl Live {
     fn center(&mut self, arg: &str) -> anyhow::Result<Point<gpui::Pixels>> {
-        let anchor = control_anchor(arg);
+        let (arg, offset) = arg.split_once('+').unwrap_or((arg, "0,0"));
+        let (dx, dy) = offset.split_once(',').context("@name+dx,dy")?;
+        let anchor = match arg.strip_prefix('@') {
+            Some(name) => name.to_owned(),
+            None => control_anchor(arg),
+        };
         let bounds = self
             .cx
             .debug_bounds(self.handle, &anchor)?
             .with_context(|| format!("no {anchor} on the page"))?;
-        Ok(bounds.center())
+        Ok(bounds.center() + point(px(dx.parse()?), px(dy.parse()?)))
     }
 
     fn settle(&mut self) {
@@ -234,6 +250,11 @@ impl Live {
                 .is_some(),
             "anchor" => self.cx.debug_bounds(self.handle, arg)?.is_some(),
             "no-anchor" => self.cx.debug_bounds(self.handle, arg)?.is_none(),
+            "unmoved" | "moved" => {
+                let now = self.cx.debug_bounds(self.handle, arg)?;
+                let same = now.is_some() && now == self.marks.get(arg).copied();
+                same == (kind == "unmoved")
+            }
             "layers" => {
                 let n: usize = arg.parse()?;
                 self.cx
@@ -253,7 +274,7 @@ impl Live {
     }
 
     /// `<page>.<name>.png`: the story canvas under the pointer plus a margin, clipped to the window.
-    fn shot(&mut self, name: &str) -> anyhow::Result<()> {
+    fn shot(&mut self, name: &str, margin: f32) -> anyhow::Result<()> {
         let page = self.page.clone().context("no page open")?;
         let image = self.cx.capture_screenshot(self.handle)?;
         let names = self.cx.update(|app| {
@@ -262,34 +283,18 @@ impl Live {
                 .map(DsView::story_names)
                 .unwrap_or_default()
         });
-        let mut crop = None;
-        for (index, story) in names.iter().enumerate() {
-            let Some(b) = self
-                .cx
-                .debug_bounds(self.handle, &format!("story-{story}"))?
-            else {
-                continue;
-            };
-            if b.contains(&self.pointer) || crop.is_none() && self.pointer == Point::default() {
-                crop = Some((index, b));
-            }
-        }
-        let (story, bounds) = crop.context("the pointer is on no story canvas")?;
+        let (story, bounds) = self.story_of_pointer(&names)?;
         let window = self
             .cx
             .update_window(self.handle, |_, w, _| w.viewport_size())?;
-        let x0 = (bounds.origin.x.as_f32() - MARGIN).max(0.);
-        let y0 = (bounds.origin.y.as_f32() - MARGIN).max(0.);
-        let x1 = (bounds.right().as_f32() + MARGIN).min(window.width.as_f32());
-        let y1 = (bounds.bottom().as_f32() + MARGIN).min(window.height.as_f32());
+        let x0 = (bounds.origin.x.as_f32() - margin).max(0.);
+        let y0 = (bounds.origin.y.as_f32() - margin).max(0.);
+        let x1 = (bounds.right().as_f32() + margin).min(window.width.as_f32());
+        let y1 = (bounds.bottom().as_f32() + margin).min(window.height.as_f32());
         let area = Bounds::new(point(px(x0), px(y0)), size(px(x1 - x0), px(y1 - y0)));
         let path = self.options.dir.join(format!("{page}.{name}.png"));
         shots::crop(&image, &self.options, &area, &path)?;
-        // The open overlay's surface, when there is one (logical px), for the geometry tables.
-        let overlay = self
-            .cx
-            .debug_bounds(self.handle, "popover-content")?
-            .map(|b| serde_json::json!({"x": b.origin.x.as_f32(), "y": b.origin.y.as_f32(), "w": b.size.width.as_f32(), "h": b.size.height.as_f32()}));
+        let overlay = self.overlay_json()?;
         std::fs::write(
             self.options.dir.join(format!("{page}.{name}.json")),
             serde_json::to_vec_pretty(
@@ -300,6 +305,12 @@ impl Live {
     }
 
     fn command(&mut self, line: &str) -> anyhow::Result<()> {
+        let result = self.run(line);
+        self.remember_owner();
+        result
+    }
+
+    fn run(&mut self, line: &str) -> anyhow::Result<()> {
         let (command, arg) = line.split_once(' ').unwrap_or((line, ""));
         match command {
             "page" => self.open_page(arg),
@@ -358,6 +369,8 @@ impl Live {
                 self.wait(arg.parse()?);
                 Ok(())
             }
+            "right" => self.right_click(arg),
+            "mark" => self.mark(arg),
             "scroll" => self.scroll(arg),
             "scrollto" => self.scroll_to(arg),
             "viewport" => {
@@ -371,7 +384,8 @@ impl Live {
                 Ok(())
             }
             "expect" => self.expect(arg),
-            "shot" => self.shot(arg),
+            "shot" => self.shot_command(arg),
+            "window" => self.window_shot(arg),
             _ => bail!("unknown live command"),
         }
     }
@@ -389,6 +403,8 @@ fn run(options: Options) -> anyhow::Result<()> {
         page: None,
         pointer: Point::default(),
         fixed_height: None,
+        owner: None,
+        marks: std::collections::HashMap::new(),
     };
     println!("LIVE READY");
     std::io::stdout().flush()?;

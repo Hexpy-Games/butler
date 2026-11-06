@@ -34,6 +34,8 @@ pub struct SelectButton {
     id: ElementId,
     size: Size,
     count: Option<usize>,
+    placeholder: bool,
+    disabled: bool,
     children: Vec<AnyElement>,
     text: Option<SharedString>,
     on_click: Option<Handler>,
@@ -45,6 +47,8 @@ impl SelectButton {
             id: id.into(),
             size: Size::Default,
             count: None,
+            placeholder: false,
+            disabled: false,
             children: Vec::new(),
             text: None,
             on_click: None,
@@ -59,6 +63,19 @@ impl SelectButton {
     /// How many values are chosen: an accent badge, and the button reads as active.
     pub fn count(mut self, count: usize) -> Self {
         self.count = Some(count);
+        self
+    }
+
+    /// The text is a placeholder (`data-placeholder`): it reads in `--placeholder`.
+    pub fn placeholder(mut self) -> Self {
+        self.placeholder = true;
+        self
+    }
+
+    /// `disabled`: not focusable and not pressed. Radix sets the attribute and the DS styles
+    /// nothing more for it.
+    pub fn disabled(mut self) -> Self {
+        self.disabled = true;
         self
     }
 
@@ -85,14 +102,19 @@ impl ParentElement for SelectButton {
 /// `padding: 0 9px` (DS: Select.module.css:7).
 const PADDING: f32 = 9.;
 
+/// Where the value starts inside the trigger: its border and padding.
+pub(crate) fn value_inset(ds: &Ds) -> f32 {
+    PADDING + f32::from(ds.len(Length::BorderHairline))
+}
+
 impl RenderOnce for SelectButton {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let handle = window
             .use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
             .read(cx)
             .clone();
-        let anchor = next_anchor(cx, Some(&handle));
-        let focused = handle.is_focused(window);
+        let anchor = next_anchor(cx, (!self.disabled).then_some(&handle));
+        let focused = !self.disabled && handle.is_focused(window);
         let ds = Ds::get(cx);
         let ring = focused && focus::visible(ds, true, false) && !focus::ring_handed_off(cx);
         let active = self.count.is_some_and(|count| count > 0);
@@ -138,6 +160,8 @@ impl RenderOnce for SelectButton {
             .gap(ds.len(Length::SpaceSm))
             .text_color(if active {
                 ds.color(Color::AccentText)
+            } else if self.placeholder {
+                ds.color(Color::Placeholder)
             } else {
                 ds.color(Color::TextPrimary)
             })
@@ -150,11 +174,15 @@ impl RenderOnce for SelectButton {
                     .flex_none()
                     .child(icon(Icon::ChevronDown, IconSize::Md, ds)),
             )
-            .track_focus(&handle)
-            .tab_stop(true)
-            .cursor_pointer()
-            .debug_selector(move || anchor.to_string())
-            .children(focused.then(|| focus::publish(handle, room)));
+            .debug_selector(move || anchor.to_string());
+        root = if self.disabled {
+            root.cursor_default()
+        } else {
+            root.track_focus(&handle)
+                .tab_stop(true)
+                .cursor_pointer()
+                .children(focused.then(|| focus::publish(handle, room)))
+        };
         if let Some(handler) = self.on_click {
             root = root.on_click(move |event, window, cx| handler(event, window, cx));
         }

@@ -36,6 +36,9 @@
     { "page": "scroll-area", "entry": "blocks/ScrollArea" },
     { "page": "collapsible", "entry": "components/Collapsible" },
     { "page": "tabs", "entry": "components/Tabs" },
-    { "page": "popover", "entry": "components/Popover" }
+    { "page": "popover", "entry": "components/Popover" },
+    { "page": "dropdown-menu", "entry": "components/DropdownMenu" },
+    { "page": "context-menu", "entry": "components/ContextMenu" },
+    { "page": "select", "entry": "components/Select" }
   ]
 }
