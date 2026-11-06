@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    RenderOnce, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 
 use crate::tokens::{Color, Length};
@@ -127,10 +127,10 @@ pub fn toggle_bounds(ds: &Ds, left: f32) -> (f32, f32, f32, f32) {
     )
 }
 
-/// `AdaptiveShellScrim`: the drawer's dimmed backdrop; a press dismisses.
+/// `AdaptiveShellScrim`: the drawer's dimmed backdrop; a press dismisses. (Its accessible name,
+/// `label` in React, arrives with gpui accessibility.)
 pub fn scrim(
     id: impl Into<ElementId>,
-    label: SharedString,
     alpha: f32,
     on_dismiss: Option<Callback>,
     ds: &Ds,
@@ -145,7 +145,7 @@ pub fn scrim(
         .bg(color);
     match on_dismiss {
         Some(dismiss) => el
-            .debug_selector(move || format!("scrim:{label}"))
+            .debug_selector(|| "adaptive-scrim".to_owned())
             .on_click(move |_, window, cx| dismiss(window, cx))
             .into_any_element(),
         None => el.into_any_element(),

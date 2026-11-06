@@ -14,7 +14,7 @@ mod track;
 
 use std::rc::Rc;
 
-use gpui::{AnyElement, App, ElementId, IntoElement, RenderOnce, SharedString, Window};
+use gpui::{AnyElement, App, ElementId, IntoElement, RenderOnce, Window};
 
 pub use super::scope::ShellFrame;
 pub use frame_cfg::{HandleSide, ShellPlatform, ShellWindow, SplitConfig};
@@ -57,7 +57,7 @@ pub struct AdaptiveShell {
     pub(crate) workspace: Option<AnyElement>,
     pub(crate) handles: Vec<(HandleSide, AnyElement)>,
     pub(crate) inspector: Option<Inspector>,
-    pub(crate) scrim: Option<(SharedString, Callback)>,
+    pub(crate) scrim: Option<Callback>,
 }
 
 impl AdaptiveShell {
@@ -206,13 +206,9 @@ impl AdaptiveShell {
         self
     }
 
-    /// The drawer's backdrop: `label` names it, a press calls `on_dismiss`.
-    pub fn scrim(
-        mut self,
-        label: impl Into<SharedString>,
-        on_dismiss: impl Fn(&mut Window, &mut App) + 'static,
-    ) -> Self {
-        self.scrim = Some((label.into(), Rc::new(on_dismiss)));
+    /// The drawer's backdrop: a press calls `on_dismiss`.
+    pub fn scrim(mut self, on_dismiss: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.scrim = Some(Rc::new(on_dismiss));
         self
     }
 }

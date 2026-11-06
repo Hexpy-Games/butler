@@ -122,7 +122,7 @@ pub(super) fn shell_demo(lang: Lang, window: &mut Window, cx: &mut App) -> AnyEl
                 .child(Typo::panel_title(c.inspector)),
         )
         .inspector_titlebar(close_button)
-        .scrim(c.scrim, dismiss);
+        .scrim(dismiss);
     if current == Some("left") {
         shell = shell.resize_handle(
             HandleSide::Left,

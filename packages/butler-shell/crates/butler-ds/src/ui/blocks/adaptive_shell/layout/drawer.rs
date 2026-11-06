@@ -59,11 +59,10 @@ pub(super) fn root(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> AnyEle
         .scrim
         .take()
         .filter(|_| t.scrim > 0.001)
-        .map(|(label, dismiss)| {
+        .map(|dismiss| {
             let open = shell.left_open || ctx.inspector_open;
             parts::scrim(
                 (shell.id.clone(), "scrim"),
-                label,
                 t.scrim,
                 open.then_some(dismiss),
                 ds,
