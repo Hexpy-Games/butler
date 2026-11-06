@@ -2,10 +2,10 @@
 //! snapshot (connect, resync) gets its own live stream, started after the snapshot's event
 //! cursor; a stream or result of an older snapshot is dropped.
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures::StreamExt as _;
-use gpui::{Context, SharedString, Window};
+use gpui::{Context, Window};
 
 use super::Shell;
 use crate::ui::chat::LoadOlder;
@@ -29,7 +29,7 @@ fn client_message_id() -> ClientMessageId {
 
 impl Shell {
     /// Runs `fetch` and hands its result to `done` on the UI thread.
-    fn run<T: 'static>(
+    pub(super) fn run<T: 'static>(
         fetch: Fetch<T>,
         cx: &mut Context<Self>,
         done: impl FnOnce(&mut Self, Result<T, SourceError>, &mut Context<Self>) + 'static,
@@ -52,7 +52,6 @@ impl Shell {
             while let Some(source) = attachment.next().await {
                 if this
                     .update(cx, |this, cx| {
-                        this.source = None;
                         this.lost(cx);
                         this.incompatible = false;
                         this.source = source;
@@ -89,6 +88,8 @@ impl Shell {
                             if let Some(monitor) = &this.rediscover {
                                 let _ = monitor.send(MonitorSignal::SnapshotLoaded);
                             }
+                            this.connected_notice(cx);
+                            this.sync_attention(cx);
                             this.subscribe(load.epoch, after, cx);
                             this.reload_open_chat(cx);
                         }
@@ -125,6 +126,7 @@ impl Shell {
     }
 
     fn apply(&mut self, epoch: u64, event: crate::ui::source::LiveEvent, cx: &mut Context<Self>) {
+        let attention_changed = matches!(&event.update, crate::ui::source::LiveUpdate::Chat(_));
         match self.store.apply(epoch, event) {
             Applied::Store => {}
             Applied::Failed(error) => self.failed(&error, self.theme.strings.load_failed, cx),
@@ -137,6 +139,9 @@ impl Shell {
                 cx.notify();
             }),
             Applied::Resync => self.connect(cx),
+        }
+        if attention_changed {
+            self.sync_attention(cx);
         }
         self.sync_composer(cx);
         cx.notify();
@@ -163,6 +168,12 @@ impl Shell {
         self.close_dialog(cx);
         let new_chat = chat.is_none();
         self.chat.update(cx, |c, _| c.show(chat.clone(), None));
+        self.session_menu.rename = None;
+        if let Some(chat) = &chat {
+            self.load_summary(chat, cx);
+        } else {
+            self.session_menu.summary = None;
+        }
         self.store.open(chat);
         self.composer.update(cx, |c, cx| {
             c.set_new_chat(new_chat, cx);
@@ -243,6 +254,13 @@ impl Shell {
     /// The agent went away: back to the disconnected state.
     fn lost(&mut self, cx: &mut Context<Self>) {
         self.live_task = None;
+        if self.source.is_some() {
+            butler_ds::ui::toast::show(
+                cx,
+                butler_ds::ui::toast::Toast::message(self.copy("Connection lost", "연결 끊김")),
+            );
+            self.attention.disconnected = true;
+        }
         if self.source.take().is_some()
             && let Some(retry) = &self.rediscover
         {
@@ -392,7 +410,13 @@ impl Shell {
     }
 
     /// A failed request: a brief toast, or the disconnected state when the agent is gone.
-    fn failed(&mut self, error: &SourceError, toast: &'static str, cx: &mut Context<Self>) {
+    pub(super) fn failed(
+        &mut self,
+        error: &SourceError,
+        toast: &'static str,
+        cx: &mut Context<Self>,
+    ) {
+        butler_ds::ui::toast::show(cx, butler_ds::ui::toast::Toast::error(toast));
         match error {
             SourceError::Disconnected => self.lost(cx),
             SourceError::Incompatible => {
@@ -402,9 +426,7 @@ impl Shell {
                 self.store.lost();
                 self.sync_composer(cx);
             }
-            SourceError::Missing | SourceError::Refused(_) => {
-                self.toast = Some((SharedString::from(toast), Instant::now()));
-            }
+            SourceError::Missing | SourceError::Refused(_) => {}
         }
         cx.notify();
     }

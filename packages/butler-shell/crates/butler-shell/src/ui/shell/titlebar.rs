@@ -1,160 +1,140 @@
-//! The title row (blocks/TitlebarShell, components/layout/Titlebar.tsx, WindowControls.tsx):
-//! 48px, title at 18px (56px from the window edge with the sidebar collapsed), trailing
-//! icon buttons, then the app-drawn window controls 10px from the edge, where the platform
-//! does not draw its own (macOS keeps its traffic lights).
-use gpui::{
-    AnimationExt as _, AnyElement, Context, FontWeight, SharedString, Window, WindowControlArea,
-    div, prelude::*, px,
-};
-
-use super::{Shell, ToggleTheme};
-use crate::ui::Icon;
-use crate::ui::motion::spring_slow;
-use crate::ui::sidebar::TRACK_MIN;
-use crate::ui::theme::typo;
-use crate::ui::widgets::{IconButtonSpec, hover_listener, icon_button, text};
-
-/// Room the drawn window controls take at the right edge.
-const CONTROLS_W: f32 = 138.;
-
-#[derive(Clone, Copy)]
-enum Control {
-    Minimize,
-    Maximize,
-    Close,
-}
+//! Product title and workspace identity inside the DS titlebar.
+use super::Shell;
+use crate::ui::{Icon, source::wire};
+use butler_ds::ui::{blocks::titlebar_shell::TitlebarShell, icon_button::IconButton, typo::Typo};
+use gpui::{AnyElement, Context, IntoElement as _, Window, WindowControlArea, div, prelude::*};
 
 impl Shell {
-    /// The open chat's title and, for a project chat, the project's name.
-    fn title_copy(&self) -> (SharedString, Option<SharedString>) {
-        let chat = self.store.selected().and_then(|c| self.store.summary(c));
-        match chat {
-            None => (self.theme.strings.new_chat.into(), None),
-            Some(chat) => {
-                let project = chat
-                    .space
-                    .as_ref()
-                    .filter(|s| s.project)
-                    .map(|s| s.title.clone());
-                (chat.title.clone(), project)
-            }
-        }
+    fn title_copy(&self, cx: &Context<Self>) -> (gpui::SharedString, Option<AnyElement>) {
+        let row = self.store.selected().and_then(|c| self.store.summary(c));
+        let title = row.map_or_else(|| self.theme.strings.new_chat.into(), |r| r.title.clone());
+        let project = row
+            .and_then(|r| r.space.as_ref())
+            .filter(|s| s.project)
+            .map(|s| s.title.to_string());
+        let workspace = self
+            .session_menu
+            .summary
+            .as_ref()
+            .and_then(|s| s.branch_info.as_ref())
+            .and_then(|b| {
+                let branch = b
+                    .branch_name
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|b| !b.is_empty());
+                let label = match b.workspace_binding.as_ref()? {
+                    wire::SessionViewBranchWorkspaceBinding::SessionFolder => b
+                        .workspace_label
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|label| !label.is_empty())?,
+                    wire::SessionViewBranchWorkspaceBinding::SessionWorktree => {
+                        self.copy("Worktree", "워크트리")
+                    }
+                    wire::SessionViewBranchWorkspaceBinding::Project => self.copy("Local", "로컬"),
+                    wire::SessionViewBranchWorkspaceBinding::Unknown => return None,
+                };
+                let glyph = if matches!(
+                    b.workspace_binding,
+                    Some(wire::SessionViewBranchWorkspaceBinding::SessionFolder)
+                ) {
+                    Icon::Folder
+                } else {
+                    Icon::GitBranch
+                };
+                Some((
+                    glyph,
+                    branch.map_or_else(|| label.to_owned(), |b| format!("{label} · {b}")),
+                ))
+            });
+        use butler_ds::ui::{
+            context::Ds,
+            icon::{IconSize, icon},
+            icon_slot::{IconSlot, SlotSize, SlotTone},
+            layout::{Cross, Space, Stack},
+        };
+        let subtitle = (project.is_some() || workspace.is_some()).then(|| {
+            Stack::row()
+                .cross(Cross::Center)
+                .gap(Space::Sm)
+                .children(project.map(|label| Typo::caption(label).truncate()))
+                .children(workspace.map(|(glyph, label)| {
+                    Stack::row()
+                        .cross(Cross::Center)
+                        .gap(Space::Xs)
+                        .child(
+                            IconSlot::new()
+                                .size(SlotSize::Xs)
+                                .tone(SlotTone::Secondary)
+                                .child(icon(glyph, IconSize::Xs, Ds::get(cx))),
+                        )
+                        .child(Typo::caption(label).truncate())
+                }))
+                .into_any_element()
+        });
+        (title, subtitle)
     }
 
-    /// Minimize, maximize and close. On Windows they are also the native caption hit areas.
-    fn window_controls(&mut self, cx: &mut Context<Self>) -> gpui::Div {
-        let t = self.theme.sidebar_scope();
-        let mut controls = div()
-            .absolute()
-            .right(px(10.))
-            .top(px(9.))
-            .flex()
-            .items_center()
-            .gap(px(8.));
-        for (id, glyph, area, size, control) in [
+    fn window_controls(&self) -> AnyElement {
+        let mut row = div().flex().items_center();
+        for (id, label, glyph, area) in [
             (
                 "wc-min",
+                self.copy("Minimize", "최소화"),
                 Icon::Minus,
                 WindowControlArea::Min,
-                16.,
-                Control::Minimize,
             ),
             (
                 "wc-max",
+                self.copy("Maximize", "최대화"),
                 Icon::Square,
                 WindowControlArea::Max,
-                14.,
-                Control::Maximize,
             ),
             (
                 "wc-close",
+                self.copy("Close", "닫기"),
                 Icon::X,
                 WindowControlArea::Close,
-                16.,
-                Control::Close,
             ),
         ] {
-            let key: SharedString = id.into();
-            let mut spec = IconButtonSpec::new(id, glyph, self.hover.is(id)).size(30., size);
-            spec.control = Some(area);
-            let click = cx.listener(move |_, _, window, _| match control {
-                Control::Minimize => window.minimize_window(),
-                Control::Maximize => window.zoom_window(),
-                Control::Close => window.remove_window(),
-            });
-            controls = controls.child(icon_button(&t, spec, hover_listener(&key, cx), click));
+            row = row.child(
+                div().window_control_area(area).child(
+                    IconButton::new(id, label)
+                        .glyph(glyph)
+                        .on_click(move |_, w, _| match area {
+                            WindowControlArea::Min => w.minimize_window(),
+                            WindowControlArea::Max => w.zoom_window(),
+                            _ => w.remove_window(),
+                        }),
+                ),
+            );
         }
-        controls
+        row.into_any_element()
     }
 
     pub(super) fn render_titlebar(
         &mut self,
-        sidebar_open: bool,
-        window: &Window,
+        open: bool,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let t = self.theme.sidebar_scope();
-        let (title, subtitle) = self.title_copy();
-        let identity = div()
-            .flex()
-            .flex_1()
-            .min_w_0()
-            .items_baseline()
-            .gap(px(8.))
-            .child(text(title, typo::APP_TITLE, FontWeight::SEMIBOLD, t.text).truncate())
-            .children(
-                subtitle
-                    // AdaptiveShellCards.module.css:92 gives the title row sidebar text tones.
-                    .map(|sub| {
-                        text(sub, typo::CAPTION, FontWeight::NORMAL, t.sidebar_text3).truncate()
-                    }),
-            );
-        let theme_glyph = if t.dark { Icon::Sun } else { Icon::Moon };
-        let theme_spec = IconButtonSpec::new("tb-theme", theme_glyph, self.hover.is("tb-theme"));
-        let theme_click =
-            cx.listener(|_, _, window, cx| window.dispatch_action(Box::new(ToggleTheme), cx));
-        let more_spec = IconButtonSpec::new("tb-more", Icon::MoreHorizontal, false)
-            .disabled(Some(t.strings.not_yet.into()));
-        let trailing = div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .gap(px(8.))
-            .child(icon_button(
-                &t,
-                theme_spec,
-                hover_listener(&"tb-theme".into(), cx),
-                theme_click,
-            ))
-            .child(icon_button(
-                &t,
-                more_spec,
-                hover_listener(&"tb-more".into(), cx),
-                |_, _, _| {},
-            ));
-        let native = window.has_native_window_buttons();
-        let controls = (!native).then(|| self.window_controls(cx));
-        // The collapsed-sidebar inset (56px from the window edge) minus the collapsed track.
-        let collapsed_pad = 56. - TRACK_MIN - 1.;
+        let (title, subtitle) = self.title_copy(cx);
+        let mut bar = TitlebarShell::new("workspace-title", title)
+            .collapsed(!open)
+            .drag_region();
+        if let Some(subtitle) = subtitle {
+            bar = bar.subtitle(subtitle);
+        }
+        if self.store.selected().is_some() {
+            bar = bar.title_actions(self.render_session_menu(window, cx));
+        }
+        if !matches!(self.theme.platform, crate::ui::theme::Platform::Mac) {
+            bar = bar.window_controls(self.window_controls());
+        }
         crate::ui::widgets::anchor(div(), "titlebar")
-            .id("titlebar")
-            .absolute()
-            .top_0()
-            .left_0()
-            .right_0()
-            .h(px(48.))
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap(px(12.))
-            .pr(px(18. + if native { 0. } else { CONTROLS_W }))
-            .window_control_area(WindowControlArea::Drag)
-            .child(identity)
-            .child(trailing)
-            .children(controls)
-            .with_spring("titlebar-pad", spring_slow(sidebar_open), move |el, v| {
-                el.pl(px(collapsed_pad + (18. - collapsed_pad) * v))
-            })
+            .w_full()
+            .child(bar)
             .into_any_element()
     }
 }

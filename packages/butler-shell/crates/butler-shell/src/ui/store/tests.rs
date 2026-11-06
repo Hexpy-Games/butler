@@ -16,6 +16,7 @@ use crate::ui::source::{
 
 fn chat(n: u32) -> ChatSummary {
     ChatSummary {
+        waiting: false,
         chat: ChatRef {
             chat: ChatId(format!("c{n}").into()),
             session: SessionId(format!("s{n}").into()),

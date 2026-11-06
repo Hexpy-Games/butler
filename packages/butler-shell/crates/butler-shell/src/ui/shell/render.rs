@@ -1,151 +1,143 @@
-//! The shell's frame: the sidebar track (it springs open and shut), the chat card (plain paper
-//! under the glass composer, or the disconnected state), the title row, the dialog and toasts.
-use std::time::Duration;
-
-use gpui::{
-    AnimationExt as _, AnyElement, Context, FontWeight, IntoElement, Render, Window, canvas, div,
-    prelude::*, px,
+//! The app's DS cards frame; the rows and composer retain their existing content.
+use blocks::adaptive_shell::{AdaptiveShell, HandleSide, ShellPlatform, ShellWindow};
+use blocks::adaptive_shell::{
+    grip::{HintSide, ResizeHandle},
+    parts::{ChromeFloatingToggle, ShellCard},
+    peek::{self, SidebarPeek},
 };
+use blocks::{
+    conversation_shell::ConversationShell, responsive::ChromeEnvironment, scope::ShellFrame,
+};
+use butler_ds::tokens::{Color, Length};
+use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay, toast};
+use gpui::{AnyElement, Context, IntoElement, Render, Window, canvas, div, prelude::*};
 
-use super::{Shell, ToggleSidebar, system_dark};
+use super::{Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, system_dark};
 use crate::ui::Icon;
-use crate::ui::chat::column;
-use crate::ui::motion::spring_slow;
-use crate::ui::sidebar::{SIDEBAR_W, TRACK_MIN};
-use crate::ui::theme::{FONT_BODY, over, typo};
-use crate::ui::widgets::{IconButtonSpec, hover_listener, icon_button, text};
-
-/// How long a toast stays.
-const TOAST_FOR: Duration = Duration::from_millis(3000);
+use crate::ui::widgets::anchor;
 
 impl Shell {
-    fn sync_children(&mut self, card_w: f32, cx: &mut Context<Self>) {
-        let composer_h = self.composer_h.get();
-        self.chat
-            .update(cx, |c, _| c.set_layout(card_w, composer_h + 22. + 24.));
-    }
-
-    /// The disconnected state: one line in the middle of the card.
-    fn disconnected_card(&self) -> AnyElement {
-        let t = &self.theme;
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .pb(px(80.))
-            .child(text(
-                t.strings.not_running,
-                typo::BODY,
-                FontWeight::NORMAL,
-                t.text2,
-            ))
-            .into_any_element()
-    }
-
-    fn chat_card(&mut self, card_w: f32) -> AnyElement {
-        let t = &self.theme;
-        let composer_w = if card_w <= 560. {
-            card_w - 24.
-        } else {
-            (card_w - 88.).min(column(card_w))
-        };
+    fn conversation(&self, cx: &Context<Self>) -> AnyElement {
         let bounds = self.card_bounds.clone();
         let content = if self.source.is_some() {
             self.chat.clone().into_any_element()
         } else {
-            self.disconnected_card()
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(butler_ds::ui::typo::Typo::body(
+                    self.theme.strings.not_running,
+                ))
+                .into_any_element()
         };
-        let composer = div()
-            .absolute()
-            .left_0()
-            .right_0()
-            .bottom(px(22.))
-            .flex()
-            .justify_center()
-            .child(
-                div()
-                    .w(px(composer_w.max(200.)))
-                    .child(self.composer.clone()),
-            );
-        crate::ui::widgets::anchor(div(), "chat-card")
-            .id("chat-card")
+        let reserve = self.composer_h.get() + f32::from(Ds::get(cx).len(Length::SpaceLg)) * 2.;
+        anchor(div(), "chat-card")
+            .size_full()
             .relative()
-            .h_full()
-            .flex_1()
-            .min_w_0()
-            .rounded(px(12.))
-            .border_1()
-            .border_color(t.card_edge)
-            .bg(t.paper)
-            .overflow_hidden()
+            .flex()
+            .flex_col()
             .child(
                 canvas(move |b, _, _| bounds.set(Some(b)), |_, (), _, _| {})
                     .absolute()
-                    .top_0()
-                    .left_0()
                     .size_full(),
             )
-            .child(content)
-            .child(composer)
+            .child(
+                ShellCard::new().child(
+                    ConversationShell::new("conversation", reserve)
+                        .child(content)
+                        .child(self.composer.clone()),
+                ),
+            )
             .into_any_element()
     }
 
-    fn render_toast(&mut self, window: &mut Window) -> Option<AnyElement> {
-        let (message, at) = self.toast.clone()?;
-        let left = TOAST_FOR.saturating_sub(at.elapsed());
-        if left.is_zero() {
-            self.toast = None;
-            return None;
-        }
-        window.request_animation_frame();
-        let t = &self.theme;
-        let toast = div()
-            .px(px(12.))
-            .py(px(6.))
-            .rounded_full()
-            .bg(t.surface_raised)
-            .border_1()
-            .border_color(t.line)
-            .shadow(vec![t.glass_shadow.clone()])
-            .child(text(message, typo::LABEL, FontWeight::NORMAL, t.text));
-        Some(
-            div()
-                .absolute()
-                .top(px(56.))
-                .left_0()
-                .right_0()
-                .flex()
-                .justify_center()
-                .child(toast)
-                .into_any_element(),
-        )
+    fn resize_handle(&self, cx: &Context<Self>) -> ResizeHandle {
+        let drag = cx.entity().downgrade();
+        let key = drag.clone();
+        ResizeHandle::new("sidebar-resize", HintSide::End)
+            .label(self.copy("Resize sidebar", "사이드바 크기 조절"))
+            .hint(self.copy("Drag to resize", "드래그하여 조절"))
+            .on_drag(move |event, _, cx| {
+                let _ = drag.update(cx, |s, cx| s.sidebar_drag(event, cx));
+            })
+            .on_key_down(move |event, _, cx| {
+                let _ = key.update(cx, |s, cx| {
+                    let width = match event.keystroke.key.as_str() {
+                        "left" => s.sidebar_width(cx) - 16.,
+                        "right" => s.sidebar_width(cx) + 16.,
+                        "home" => 248.,
+                        "end" => 420.,
+                        _ => return,
+                    };
+                    cx.stop_propagation();
+                    s.resize_sidebar(width, cx);
+                });
+            })
     }
 
-    fn sidebar_track(&mut self, open: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    fn adaptive_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let size = window.viewport_size();
+        let mut input = ShellWindow::new(size.width.into(), size.height.into());
+        input.fullscreen = window.is_fullscreen();
+        let platform = match self.theme.platform {
+            crate::ui::theme::Platform::Mac => ShellPlatform::Darwin,
+            crate::ui::theme::Platform::Windows => ShellPlatform::Win32,
+            crate::ui::theme::Platform::Linux => ShellPlatform::Linux,
+        };
+        let drawer = input.width <= 640.;
+        let open = self.sidebar_open && (drawer || input.width >= 720.);
+        let peek = SidebarPeek::new("sidebar-peek", !drawer && !open, window, cx);
+        let toggle = IconButton::new(
+            "sidebar-toggle",
+            if open {
+                self.copy("Hide sidebar", "사이드바 숨기기")
+            } else {
+                self.copy("Show sidebar", "사이드바 보기")
+            },
+        )
+        .glyph(if open {
+            Icon::PanelLeftOpen
+        } else {
+            Icon::PanelLeft
+        })
+        .on_click(cx.listener(|s, _, w, cx| s.toggle_sidebar(&ToggleSidebar, w, cx)));
+        let dismiss = cx.entity().downgrade();
+        let width = self.sidebar_width(cx);
         let sidebar = self.render_sidebar(cx);
-        div()
-            .id("sidebar-track")
-            .h_full()
-            .flex_none()
-            .relative()
-            .overflow_hidden()
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .right_0()
-                    .w(px(SIDEBAR_W))
+        let title = self.render_titlebar(open, window, cx);
+        let mut shell = AdaptiveShell::new("app-frame", input)
+            .frame(ShellFrame::Cards)
+            .chrome_environment(ChromeEnvironment::Electron)
+            .platform(platform)
+            .left_open(open)
+            .compact_sidebar_full_width(true)
+            .panel_widths(width, 376.)
+            .resizing(self.frame.resize_start.is_some())
+            .peek(peek)
+            .sidebar(sidebar)
+            .title(title)
+            .workspace(self.conversation(cx))
+            .chrome(ChromeFloatingToggle::new(
+                "chrome",
+                anchor(div(), "sidebar-toggle").child(toggle),
+            ))
+            .scrim(move |_, cx| {
+                let _ = dismiss.update(cx, |s, cx| {
+                    s.sidebar_open = false;
+                    cx.notify();
+                });
+            });
+        if open && !drawer {
+            shell = shell.resize_handle(
+                HandleSide::Left,
+                anchor(div(), "sidebar-resize")
                     .h_full()
-                    .child(sidebar),
-            )
-            .with_spring("sidebar-track", spring_slow(open), |el, v| {
-                el.w(px(TRACK_MIN + (SIDEBAR_W - TRACK_MIN) * v))
-                    .opacity((v * 1.6).min(1.))
-            })
+                    .child(self.resize_handle(cx)),
+            );
+        }
+        shell.into_any_element()
     }
 }
 
@@ -154,76 +146,46 @@ impl Render for Shell {
         if self.theme_override.is_none() {
             self.set_dark(system_dark(window), cx);
         }
-        let open = self.sidebar_open;
-        let track = if open { SIDEBAR_W } else { TRACK_MIN };
-        let card_w = self
-            .card_bounds
-            .get()
-            .map_or(window.viewport_size().width.as_f32() - track - 9., |b| {
-                b.size.width.as_f32()
-            });
-        self.sync_children(card_w, cx);
-        let t = self.theme.clone();
-        let shell_bg = if self.acrylic {
-            t.shell
-        } else {
-            over(t.shell, t.acrylic_fallback)
-        };
-        let track_el = self.sidebar_track(open, cx);
-        let titlebar = self.render_titlebar(open, window, cx);
-        let chat_card = self.chat_card(card_w);
+        self.frame_inputs(window, cx);
+        if self.source.is_some()
+            && let Some(request) = self.pending_navigation.take()
+        {
+            self.navigate(request, window, cx);
+        }
+        let frame = self.adaptive_frame(window, cx);
         let dialog = self
             .card_bounds
             .get()
-            .map(|card| self.render_dialog(card, window, cx))
+            .map(|b| self.render_dialog(b, window, cx))
             .unwrap_or_default();
-        let toast = self.render_toast(window);
-        let toggle_glyph = if open {
-            Icon::PanelLeftOpen
-        } else {
-            Icon::PanelLeft
-        };
-        let toggle = icon_button(
-            &t,
-            IconButtonSpec::new(
-                "sidebar-toggle",
-                toggle_glyph,
-                self.hover.is("sidebar-toggle"),
-            ),
-            hover_listener(&"sidebar-toggle".into(), cx),
-            cx.listener(|this, _, window, cx| this.toggle_sidebar(&ToggleSidebar, window, cx)),
-        );
-        let main = div()
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .relative()
-            .pt(px(49.))
-            .pr(px(8.))
-            .pb(px(8.))
-            .pl(px(1.))
-            .flex()
-            .gap(px(8.))
-            .child(chat_card)
-            .child(titlebar);
-        div()
-            .id("shell")
+        let rename = self.render_rename(window, cx);
+        let ds = Ds::get(cx);
+        let root = div()
             .track_focus(&self.focus)
             .key_context("Shell")
-            .on_action(cx.listener(Self::toggle_theme))
             .on_action(cx.listener(Self::toggle_sidebar))
+            .on_action(cx.listener(Self::focus_composer))
+            .on_action(|_: &TextSizeUp, _, cx| Self::text_size(1, cx))
+            .on_action(|_: &TextSizeDown, _, cx| Self::text_size(-1, cx))
+            .on_action(|_: &TextSizeReset, _, cx| Self::text_size(0, cx))
+            .capture_key_down(|e, w, cx| {
+                if e.keystroke.key == "escape" {
+                    peek::escape(w, cx);
+                }
+            })
             .size_full()
             .relative()
-            .flex()
-            .bg(shell_bg)
-            .font_family(FONT_BODY)
-            .text_size(px(14.))
-            .line_height(px(20.))
-            .text_color(t.text)
-            .child(track_el)
-            .child(main)
+            .font_family(ds.body_font().clone())
+            .text_size(ds.len(Length::TypoBodySize))
+            .line_height(ds.len(Length::TypoBodyLineHeight))
+            .text_color(ds.color(Color::TextPrimary))
+            .child(frame)
             .children(dialog)
-            .child(div().absolute().left(px(14.)).top(px(9.)).child(toggle))
-            .children(toast)
+            .child(rename)
+            .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));
+        overlay::track(toast::track(focus::track_modality(div())))
+            .id("shell-root")
+            .size_full()
+            .child(root)
     }
 }

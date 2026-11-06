@@ -33,7 +33,22 @@ pub(crate) enum SourceError {
 /// A request in flight.
 pub(crate) type Fetch<T> = LocalBoxFuture<'static, Result<T, SourceError>>;
 
+pub(crate) enum SessionAction {
+    Rename(String),
+    Archive,
+    Delete,
+}
+
 pub(crate) trait Source {
+    fn summary(&self, _: &SessionId) -> Fetch<wire::SessionSummaryView> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn settings(&self) -> Fetch<wire::FrameSettings> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn session_action(&self, _: &SessionId, _: SessionAction) -> Fetch<()> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
     /// One page of chats, newest activity first; `None` starts a fresh snapshot.
     fn chats(&self, cursor: Option<PageCursor>) -> Fetch<ChatPage>;
     /// A session's latest message window, or the window before `before`.

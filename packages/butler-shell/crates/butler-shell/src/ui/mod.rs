@@ -2,7 +2,6 @@
 //! (`bin/butler-shell-shots`) both build it from here.
 pub(crate) mod assets;
 pub(crate) mod chat;
-pub(crate) mod cliptop;
 pub(crate) mod composer;
 pub(crate) mod dialog;
 pub(crate) mod exact_action;
@@ -31,6 +30,7 @@ pub(crate) fn init(cx: &mut App) -> anyhow::Result<()> {
     cx.set_text_rendering_mode(TextRenderingMode::Grayscale);
     cx.text_system()
         .add_fonts(assets::FONTS.iter().map(|b| Cow::Borrowed(*b)).collect())?;
+    butler_ds::ui::text::bind_keys(cx);
     cx.bind_keys(field::bindings());
     cx.bind_keys(composer::bindings());
     cx.bind_keys(shell::bindings());

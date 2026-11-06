@@ -41,6 +41,8 @@ gpui_elements.workspace = true
 gpui_platform = { workspace = true, features = ["macos-wgpu"] }
 gpui_wgpu = { workspace = true, features = ["test-support"], optional = true }
 sys-locale.workspace = true
+url = "2"
+percent-encoding = "2"
 
 [dev-dependencies]
 futures = { workspace = true, features = ["executor"] }

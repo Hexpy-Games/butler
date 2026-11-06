@@ -80,6 +80,8 @@ pub(crate) struct ChatProjection {
     pub(crate) updated_at: Option<String>,
     #[serde(default, deserialize_with = "optional")]
     pub(crate) active_turn_state: Option<String>,
+    #[serde(default, deserialize_with = "optional")]
+    pub(crate) attention_required: Option<bool>,
     #[serde(default, deserialize_with = "optional_object")]
     pub(crate) project: Option<ProjectProjection>,
     #[serde(default, deserialize_with = "optional")]
@@ -257,4 +259,14 @@ pub(crate) struct ControlLabelsProjection {
     pub(crate) access_mode: String,
     pub(crate) model: String,
     pub(crate) reasoning_effort: String,
+}
+
+/// GET /settings fields consumed by the app frame.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct FrameSettings {
+    pub(crate) desktop_notifications: DesktopNotifications,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct DesktopNotifications {
+    pub(crate) enabled: bool,
 }

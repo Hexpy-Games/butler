@@ -54,6 +54,8 @@ pub(super) fn chat_row(raw: &wire::ChatProjection) -> Result<ChatSummary, Error>
                 .timestamp_millis(),
         ),
         running: raw.active_turn_state.as_deref().is_some_and(active),
+        waiting: raw.attention_required.unwrap_or(false)
+            || raw.active_turn_state.as_deref() == Some("waiting_for_form"),
         updated_at: Timestamp(updated.timestamp_millis()),
     })
 }

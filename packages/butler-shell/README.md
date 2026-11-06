@@ -34,7 +34,10 @@ cargo run --release -p butler-shell --features shots --bin butler-shell-shots --
 For a real isolated agent, pass `<dir> --data <data-dir>` (and optionally `--dark`).
 The live harness accepts commands on stdin: `connected`, `open <chat>`, `new`,
 `compose`, `type <text>`, `key <keystroke>`, `send <text>`, `answer <text>`, `approval`, `exact <text>`, `modify`, `allow`, `deny`,
-`cancel`, `disconnected`, `shot <name>` and `quit`. Each completed command prints
+`cancel`, `disconnected`, `shot <name>` and `quit`. Frame commands are `url <url>`,
+`size <width> <height>`, `click <anchor>`, `drag <anchor> <dx>`, `wait <ms>`,
+`expect-anchor <name>`, `expect-no-anchor <name>`, `expect-scale <factor>`,
+`expect-session <id|new>` and `expect-composer-focus`. Each completed command prints
 `LIVE OK`. The main Rust workspace's `butler-e2e` example `gpui_shell` drives these
 with a local stub provider, stops/restarts its own agent, and saves both themes.
 

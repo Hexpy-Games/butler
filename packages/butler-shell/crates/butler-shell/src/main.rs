@@ -40,10 +40,8 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
         // Butler's Electron window uses the acrylic material; where the platform has none the
         // shell paints an opaque fallback.
         window.set_background_appearance(WindowBackgroundAppearance::Acrylic);
-        let acrylic = window.background_appearance() == WindowBackgroundAppearance::Acrylic;
         let options = ShellOptions {
             source: None,
-            acrylic,
             dark: None,
             code_font,
             locale,
@@ -55,7 +53,16 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
             shell
         })
     })?;
+    let navigation = ui::shell::navigation::Navigation::from_args(
+        &args
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>(),
+    );
     window.update(cx, |view, window, cx| {
+        if let Some(request) = navigation {
+            view.navigate(request, window, cx);
+        }
         window.focus(&view.focus_handle(), cx);
         cx.activate(true);
     })?;
@@ -64,13 +71,36 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
 }
 
 fn main() {
-    application()
-        .with_assets(ui::assets::Assets)
-        .run(|cx: &mut App| {
-            cx.on_action(|_: &Quit, cx| cx.quit());
-            if let Err(error) = ui::init(cx).and_then(|()| open(cx)) {
-                eprintln!("butler-shell: {error:#}");
-                cx.quit();
+    let app = application().with_assets(ui::assets::Assets);
+    let (urls, mut incoming) = futures::channel::mpsc::unbounded::<Vec<String>>();
+    app.on_open_urls(move |values| {
+        let _ = urls.unbounded_send(values);
+    });
+    app.run(move |cx: &mut App| {
+        cx.on_action(|_: &Quit, cx| cx.quit());
+        cx.spawn(async move |cx| {
+            use futures::StreamExt as _;
+            while let Some(urls) = incoming.next().await {
+                let request = urls
+                    .iter()
+                    .find_map(|url| ui::shell::navigation::Navigation::from_url(url));
+                if let Some(request) = request {
+                    cx.update(|cx| {
+                        if let Some(window) = cx
+                            .windows()
+                            .first()
+                            .and_then(gpui::AnyWindowHandle::downcast::<Shell>)
+                        {
+                            let _ = window.update(cx, |s, w, cx| s.navigate(request, w, cx));
+                        }
+                    });
+                }
             }
-        });
+        })
+        .detach();
+        if let Err(error) = ui::init(cx).and_then(|()| open(cx)) {
+            eprintln!("butler-shell: {error:#}");
+            cx.quit();
+        }
+    });
 }

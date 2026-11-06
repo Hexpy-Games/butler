@@ -58,6 +58,10 @@ pub(crate) struct Space {
 }
 
 /// One chat row.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent session flags from the wire"
+)]
 #[derive(Clone, Debug)]
 pub(crate) struct ChatSummary {
     pub(crate) chat: ChatRef,
@@ -67,6 +71,7 @@ pub(crate) struct ChatSummary {
     pub(crate) archived: bool,
     pub(crate) created_at: Timestamp,
     pub(crate) running: bool,
+    pub(crate) waiting: bool,
     /// Last activity (the row shows its age, formatted when drawn).
     pub(crate) updated_at: Timestamp,
 }
