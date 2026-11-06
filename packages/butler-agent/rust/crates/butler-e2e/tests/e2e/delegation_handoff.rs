@@ -55,6 +55,26 @@ async fn handoff_carries_verbatim_user_words_to_steward_and_worker() -> Result<(
 }
 
 #[tokio::test]
+async fn child_turns_are_not_offered_start_work() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server) = run(Mode::Verbatim).await?;
+    let requests = script.requests.lock().unwrap().clone();
+    let offered = |role: &str| {
+        requests.iter().filter(|(r, _)| r == role).any(|(_, body)| {
+            butler_e2e::e2e::chatgpt_wire::functions(body).any(|tool| tool["name"] == "start_work")
+        })
+    };
+    assert!(offered("butler"), "an unbound Butler turn may start Work");
+    assert!(
+        !offered("steward") && !offered("worker"),
+        "child turns start bound to their Work"
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
 async fn replacement_stops_old_worker_and_marks_its_late_cancellation_as_evidence()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
