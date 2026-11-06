@@ -78,6 +78,7 @@ fn span(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
 
 fn responsive(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     Grid::new("grid-responsive")
+        .page_container()
         .columns(Columns::Responsive(Responsive {
             compact: None,
             base: Preset::Fixed(1),
@@ -95,6 +96,7 @@ fn responsive(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
 fn card_columns(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let name = lang.pick("Cell", "셀");
     let mut grid = Grid::new("grid-card-columns")
+        .page_container()
         .columns(Columns::Responsive(Responsive {
             compact: Some(2),
             base: Preset::Fixed(3),
