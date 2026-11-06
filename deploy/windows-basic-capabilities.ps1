@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Force $root | Out-Null
 $before = Get-Content "$root/before.json" -Raw
 $saved = @{}
 $keys = @('HOME','BUTLER_DATA','LOCALAPPDATA','APPDATA','TEMP','TMP',
-    'BUTLER_E2E_TIER','BUTLER_E2E_PERF','BUTLER_E2E_BIN','BUTLER_E2E_WITHOUT_FIXTURES','BUTLER_SECRET_STORE',
+    'BUTLER_E2E_TIER','BUTLER_E2E_PERF','BUTLER_E2E_BIN','BUTLER_SECRET_STORE',
     'BUTLER_PLATFORM_SYSTEM_SECRETS','BUTLER_APP_DISABLE_SHELL_REGISTRATION')
 foreach ($key in $keys) { $saved[$key] = [Environment]::GetEnvironmentVariable($key) }
 try {
@@ -22,7 +22,6 @@ try {
     $env:BUTLER_E2E_TIER = 'stub'
     $env:BUTLER_E2E_PERF = '1'
     $env:BUTLER_E2E_BIN = (Resolve-Path $Agent).Path
-    $env:BUTLER_E2E_WITHOUT_FIXTURES = if ($WithoutE2eFixtures) { '1' } else { $null }
     $env:BUTLER_SECRET_STORE = 'file'
     $env:BUTLER_PLATFORM_SYSTEM_SECRETS = '0'
     $env:BUTLER_APP_DISABLE_SHELL_REGISTRATION = '1'

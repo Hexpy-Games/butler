@@ -194,12 +194,6 @@ pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode
     if args.len() == 1 && args[0] == "--private-embedding-worker" {
         return crate::host::embedding::worker::run().await;
     }
-    // Fixture builds answer this probe so the E2E harness can refuse a binary
-    // whose test hooks, the pinned App clock among them, are compiled out.
-    #[cfg(feature = "e2e-fixtures")]
-    if args.len() == 1 && args[0] == "--e2e-fixtures" {
-        return ExitCode::SUCCESS;
-    }
     if matches!(args.as_slice(), [flag] if flag == "--version" || flag == "-V") {
         return print_version();
     }
