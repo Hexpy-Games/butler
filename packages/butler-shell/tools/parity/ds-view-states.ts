@@ -17,7 +17,10 @@ const scale = Number(value("--scale", "2"));
 const locale = value("--locale", "ko")!;
 const only = value("--only")?.split(",");
 const pages = JSON.parse(readFileSync(new URL("./scenes/ds-view.json", import.meta.url), "utf8")).pages as Array<{ page: string; entry: string }>;
-const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as Array<{ page: string; name: string; state: string; target: number; wait_ms: number; clicks?: number; dx?: number; dy?: number; viewport_height?: number; top?: number }>).filter(s => !only || only.includes(s.page));
+/** One step after the opening click: hover, click or key a menu item, press a key, focus a control, or wait. */
+type Step = { hover?: [string, number]; click_item?: [string, number]; key?: string; focus?: number; click?: number; wait?: number };
+type State = { page: string; name: string; state: string; target: number; wait_ms: number; clicks?: number; dx?: number; dy?: number; viewport_height?: number; top?: number; margin?: number; at?: [number, number]; steps?: Step[]; native?: number; native_menu?: string };
+const states = (JSON.parse(readFileSync(new URL("./scenes/ds-view-states.json", import.meta.url), "utf8")).states as State[]).filter(s => !only || only.includes(s.page));
 const root = resolve(site);
 const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".txt": "text/plain" };
 const server = Bun.serve({
@@ -30,18 +33,38 @@ const server = Bun.serve({
 });
 const TALL = 7000;
 const MARGIN = 64;
+/** The open menu or list of each level, by `data-slot`. */
+const MENUS: Record<string, string> = { root: '[data-slot="dropdown-menu-content"], [data-slot="context-menu-content"], [data-slot="select-content"]', sub: '[data-slot="dropdown-menu-sub-content"]' };
+const ITEMS = '[role^="menuitem"], [role="option"]';
+/** The surfaces a shot reports the geometry of. */
+const SURFACES = ['[data-slot="popover-content"]', '[data-slot="dropdown-menu-content"]', '[data-slot="context-menu-content"]', '[data-slot="select-content"]'];
 const SELECTOR = 'button, [role="button"], [role="radio"], [role="switch"], input:not([type="hidden"]), textarea, select, [tabindex="0"]';
-async function shoot(page: import("playwright").Page, s: { page: string; name: string }, story: number, dir: string, width: number, height = TALL) {
+async function shoot(page: import("playwright").Page, s: { page: string; name: string; margin?: number }, story: number, dir: string, width: number, height = TALL) {
   // In a short viewport the crop is in viewport coordinates (the page is scrolled); in the tall one nothing scrolls.
   const scrolled = height === TALL ? "scrollX" : "0", scrolledY = height === TALL ? "scrollY" : "0";
   const canvas = await page.evaluate(`(() => { const b = document.querySelectorAll("[data-ds-fixture-canvas]")[${story}].getBoundingClientRect(); return { x: b.x + ${scrolled}, y: b.y + ${scrolledY}, w: b.width, h: b.height }; })()`) as { x: number; y: number; w: number; h: number };
-  const x0 = Math.max(0, canvas.x - MARGIN), y0 = Math.max(0, canvas.y - MARGIN);
-  const x1 = Math.min(width, canvas.x + canvas.w + MARGIN), y1 = Math.min(height, canvas.y + canvas.h + MARGIN);
+  const margin = s.margin ?? MARGIN;
+  const x0 = Math.max(0, canvas.x - margin), y0 = Math.max(0, canvas.y - margin);
+  const x1 = Math.min(width, canvas.x + canvas.w + margin), y1 = Math.min(height, canvas.y + canvas.h + margin);
   const crop = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   await page.screenshot({ path: join(dir, `${s.page}.${s.name}.png`), clip: { x: crop.x, y: crop.y, width: crop.w, height: crop.h } });
   // The open overlay's surface (a portalled popover), in logical px relative to the crop's page, when there is one.
-  const overlay = await page.evaluate(`(() => { const e = document.querySelector('[data-slot="popover-content"]'); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + ${scrolled}, y: b.y + ${scrolledY}, w: b.width, h: b.height }; })()`);
+  const overlay = await page.evaluate(`(() => { const box = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + ${scrolled}, y: b.y + ${scrolledY}, w: b.width, h: b.height }; }; const e = document.querySelector(${JSON.stringify(SURFACES.join(", "))}); const o = box(e); if (o) o.sub = box(document.querySelector(${JSON.stringify(MENUS.sub)})); return o; })()`);
   writeFileSync(join(dir, `${s.page}.${s.name}.json`), JSON.stringify({ crop, story, canvas, overlay }, null, 2));
+}
+/** An item of the open menu at `level`, in DOM order. */
+function item(page: import("playwright").Page, [level, n]: [string, number]) {
+  return page.locator(MENUS[level]).locator(ITEMS).nth(n);
+}
+async function runSteps(page: import("playwright").Page, steps: Step[]) {
+  for (const step of steps) {
+    if (step.hover) await item(page, step.hover).hover();
+    else if (step.click_item) await item(page, step.click_item).click();
+    else if (step.key) await page.keyboard.press(step.key);
+    else if (step.focus !== undefined) { await page.keyboard.press("Shift"); await (await page.evaluateHandle(`window.__targets[${step.focus}].el`)).asElement()?.focus(); }
+    else if (step.click !== undefined) await (await page.evaluateHandle(`window.__targets[${step.click}].el`)).asElement()?.click();
+    await page.waitForTimeout(step.wait ?? 250);
+  }
 }
 const browser = await chromium.launch();
 try {
@@ -68,6 +91,16 @@ try {
         await page.close();
         continue;
       }
+      if (s.state === "contextmenu") {
+        // target is the story index; `at` the point inside its canvas.
+        const box = await page.evaluate(`(() => { const b = document.querySelectorAll("[data-ds-fixture-canvas]")[${s.target}].getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY }; })()`) as { x: number; y: number };
+        await page.mouse.click(box.x + (s.at?.[0] ?? 0), box.y + (s.at?.[1] ?? 0), { button: "right" });
+        await page.waitForTimeout(s.wait_ms);
+        await runSteps(page, s.steps ?? []);
+        await shoot(page, s, s.target, dir, width);
+        await page.close();
+        continue;
+      }
       const handle = await page.evaluateHandle(`window.__targets[${s.target}].el`);
       const element = handle.asElement();
       const story = (await page.evaluate(`window.__targets[${s.target}].si`)) as number;
@@ -84,6 +117,7 @@ try {
       else if (s.state === "focus") { await page.keyboard.press("Shift"); await element.focus(); }
       else for (let n = 0; n < (s.clicks ?? 1); n++) { await element.click(); if (n + 1 < (s.clicks ?? 1)) await page.waitForTimeout(700); }
       await page.waitForTimeout(s.state === "press" || s.state === "focus" ? Math.max(150, s.wait_ms) : s.wait_ms);
+      await runSteps(page, s.steps ?? []);
       await shoot(page, s, story, dir, width, s.viewport_height ?? TALL);
       if (s.state === "press") await page.mouse.up();
       await page.close();
