@@ -164,6 +164,9 @@ async fn request(
     let mut scope = json!({"fields":run.fields,
         "step":format!("{} of {}", run.steps, run.max_steps),
         "action_log":run.log,"notes":run.notes,"view":run.view});
+    if !browser::executor_admits(owner, "browser_act") {
+        scope["page_actions"] = json!("unavailable");
+    }
     if run.notes_cut {
         scope["notes_notice"] = json!(
             "Your notes were cut at 2,000 characters. Rewrite them to retain the goal's evidence within that limit."

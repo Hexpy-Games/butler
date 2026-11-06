@@ -1,4 +1,4 @@
-//! A Worker reads pages in tabs wherever reads are allowed; acting in one stays with its Steward.
+//! A Worker reads pages and sends the browsing agent wherever reads are allowed; acting in a page stays with its Steward.
 use axum::{Json, Router, extract::State, routing::post};
 use butler_e2e::e2e::{
     HarnessError, cassette::Cassette, matching, sanitize::Placeholders, scenario::Setup,
@@ -19,6 +19,7 @@ const DATA_URL: &str = "https://example.com/?q=external-note";
 async fn ask_except_reads_worker_reads_tabs_and_never_acts() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     run("ask_except_reads", vec![
+        ("browse", json!({"goal":"Find the page heading","fields":["heading"],"url":"https://example.com/"})),
         ("browser_read", json!({"url":"https://example.com/"})),
         ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
         ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e1","commits":true}]})),
@@ -173,7 +174,7 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 .filter(|(role, _)| role == "worker")
                 .collect();
             assert!(!workers.is_empty(), "at least one worker request");
-            for (_, body) in workers {
+            for (_, body) in &workers {
                 let names: Vec<_> = body["tools"]
                     .as_array()
                     .unwrap()
@@ -182,13 +183,41 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                     .filter_map(|tool| tool["name"].as_str())
                     .collect();
                 assert!(
-                    names.contains(&"browser_open")
-                        && names.contains(&"browser_observe")
+                    names.contains(&"browse")
                         && names.contains(&"browser_read")
-                        && !names.contains(&"browser_act"),
-                    "worker browser read surface: {names:?}"
+                        && !names.contains(&"browser_act")
+                        && !names.contains(&"browser_open"),
+                    "worker browser surface: {names:?}"
                 );
             }
+            let browse: Vec<_> = requests
+                .iter()
+                .filter(|(role, _)| role == "browse")
+                .collect();
+            assert_eq!(browse.len(), 1);
+            assert!(
+                browse[0].1["input"]
+                    .to_string()
+                    .contains(r#"\"page_actions\":\"unavailable\""#)
+            );
+            assert!(
+                workers[0].1["input"]
+                    .to_string()
+                    .contains("Choose the page reader by what you need.")
+            );
+            let output = workers.last().unwrap().1["input"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|item| {
+                    item["type"] == "function_call_output" && item["call_id"] == "read-worker-2"
+                })
+                .unwrap();
+            let output: Value = serde_json::from_str(output["output"].as_str().unwrap()).unwrap();
+            let output = &output["output"];
+            assert_eq!(output["status"], "done");
+            assert_eq!(output["fields"]["heading"], "Example page");
+            assert_eq!(output["evidence"][0]["url"], "https://example.com/");
         }
         finished.unwrap();
         {
@@ -241,6 +270,26 @@ async fn reply(
         .iter()
         .filter(|k| k.as_str() == "function_call_output")
         .count();
+    if body["instructions"]
+        .as_str()
+        .unwrap_or("")
+        .starts_with("You operate one browser tab for a planner")
+    {
+        requests
+            .lock()
+            .unwrap()
+            .push(("browse".into(), body.clone()));
+        let item = json!({"type":"message","id":"browse-done","role":"assistant","status":"completed","content":[{"type":"output_text","text":r#"{"notes":"","next":{"done":{"fields":{"heading":"Example page"},"evidence":[{"field":"heading","quote":"Example page"}],"summary":"Heading found."}}}"#,"annotations":[]}]});
+        let response = crate::browser_usage::stub::response(&item);
+        return (
+            [("content-type", "text/event-stream")],
+            response
+                .chunks
+                .into_iter()
+                .map(|c| c.text)
+                .collect::<String>(),
+        );
+    }
     let worker = key.user_request.starts_with("role: worker");
     let steward = key.user_request.starts_with("role: steward")
         || body["instructions"]
