@@ -12,7 +12,7 @@ use super::context::Ds;
 use super::typo::Role;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, Pixels, Window,
+    LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
 };
 
 /// The strut of a block container: the root's body font at its line height. An inline `Typo`
@@ -34,6 +34,8 @@ pub fn container<E: gpui::Styled>(el: E, ds: &Ds) -> E {
 struct Frame {
     block: bool,
     shrink_wrap: bool,
+    /// The container is a grid whose column is sized by its items (an `auto` track).
+    auto_track: bool,
     dialog: Option<DialogFrame>,
 }
 
@@ -69,6 +71,27 @@ pub fn shrink_wrap(cx: &App) -> bool {
         .is_some_and(|frame| frame.shrink_wrap)
 }
 
+/// Whether the container being laid out is a grid whose column is sized by its items. A
+/// percentage `min-width` of an item there resolves against the column the item itself sizes
+/// (cyclic), so it adds nothing.
+pub fn auto_track(cx: &App) -> bool {
+    cx.try_global::<Scopes>()
+        .and_then(|scopes| scopes.0.last().copied())
+        .is_some_and(|frame| frame.auto_track)
+}
+
+/// An item with `width: max-content` in a container that stretches its items: a full-width row
+/// that holds `child` at its content width. gpui has no `justify-self`, which is what a grid
+/// item needs to opt out of the stretch (`align-self` is the other axis there).
+pub fn max_content(child: impl IntoElement) -> AnyElement {
+    div()
+        .flex()
+        .w_full()
+        .min_w_0()
+        .child(div().flex().flex_none().max_w_full().child(child))
+        .into_any_element()
+}
+
 /// The Dialog being laid out, when the container is inside one.
 pub fn dialog(cx: &App) -> Option<DialogFrame> {
     cx.try_global::<Scopes>()
@@ -82,6 +105,7 @@ pub fn dialog_scope(frame: DialogFrame, child: impl IntoElement) -> Scope {
         Frame {
             block: false,
             shrink_wrap: true,
+            auto_track: false,
             dialog: Some(frame),
         },
         child,
@@ -94,6 +118,20 @@ pub fn scope(block: bool, child: impl IntoElement) -> Scope {
         Frame {
             block,
             shrink_wrap: false,
+            auto_track: false,
+            dialog: None,
+        },
+        child,
+    )
+}
+
+/// `child` laid out as the item of a one-column grid with an `auto` track (a story canvas).
+pub fn grid_scope(child: impl IntoElement) -> Scope {
+    framed(
+        Frame {
+            block: false,
+            shrink_wrap: true,
+            auto_track: true,
             dialog: None,
         },
         child,
@@ -106,6 +144,7 @@ pub fn flex_scope(stretch_column: bool, child: impl IntoElement) -> Scope {
         Frame {
             block: false,
             shrink_wrap: stretch_column,
+            auto_track: false,
             dialog: None,
         },
         child,
