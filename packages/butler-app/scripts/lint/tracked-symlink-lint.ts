@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { dirname, isAbsolute, posix, resolve } from "node:path";
 
 /** A tracked symlink is accidental when it leaves the repo or points into a worktree. */
@@ -9,26 +10,19 @@ export function symlinkProblem(linkPath: string, target: string): string | null 
   return null;
 }
 
-const ROOT = resolve(import.meta.dir, "../../../..");
-
-/** Reads git's whole stdout as a stream, so no capture limit can cut it short. */
-async function git(args: string[]): Promise<string> {
-  const child = Bun.spawn(["git", ...args], { cwd: ROOT, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  if (code !== 0) throw new Error(`git ${args.join(" ")} failed (exit ${code}): ${stderr}`);
-  return stdout;
+function git(args: string[]): string {
+  // `git ls-files -s` outgrew spawnSync's ~1 MiB default buffer (ENOBUFS on Linux).
+  const result = spawnSync("git", args, { cwd: resolve(import.meta.dir, "../../../.."), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  if (result.status !== 0 || result.error) throw new Error(`git ${args.join(" ")} failed: ${result.error ?? result.stderr}`);
+  return result.stdout;
 }
 
 if (import.meta.main) {
   const problems: string[] = [];
-  for (const line of (await git(["ls-files", "-s"])).split("\n")) {
+  for (const line of git(["ls-files", "-s"]).split("\n")) {
     const match = /^120000 (\w+) \d\t(.+)$/.exec(line);
     if (!match) continue;
-    const target = await git(["cat-file", "blob", match[1]!]);
+    const target = git(["cat-file", "blob", match[1]!]);
     const problem = symlinkProblem(match[2]!, target);
     if (problem) problems.push(`${match[2]} -> ${target}: ${problem}`);
   }
