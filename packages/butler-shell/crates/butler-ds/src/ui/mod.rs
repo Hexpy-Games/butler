@@ -5,6 +5,7 @@ pub mod assets;
 pub mod button;
 pub mod card;
 pub mod clickable;
+pub mod collapsible;
 pub mod context;
 pub mod control;
 pub mod convert;
