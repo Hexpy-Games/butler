@@ -15,6 +15,10 @@ pub enum Variant {
     Underline,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent HTML attributes of one field"
+)]
 #[derive(IntoElement)]
 pub struct Textarea {
     id: ElementId,

@@ -23,16 +23,16 @@ const COMPACT_WIDTH_REM: f32 = 5.5;
 const INPUT_PAD_X: f32 = 10.;
 
 pub(super) fn build(
-    p: Parts,
-    hover: Entity<bool>,
+    p: &Parts,
+    hover: &Entity<bool>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     match (p.spec.look, p.spec.shape) {
-        (Look::Underline, Shape::Line { .. }) => underline_line(&p, &hover, cx),
-        (Look::Underline, Shape::Area { .. }) => underline_area(&p, window, cx),
-        (_, Shape::Line { compact }) => boxed_line(&p, compact, window, cx),
-        (_, Shape::Area { rows, grow }) => boxed_area(&p, rows, grow, cx),
+        (Look::Underline, Shape::Line { .. }) => underline_line(p, hover, cx),
+        (Look::Underline, Shape::Area { .. }) => underline_area(p, window, cx),
+        (_, Shape::Line { compact }) => boxed_line(p, compact, window, cx),
+        (_, Shape::Area { rows, grow }) => boxed_area(p, rows, grow, cx),
     }
 }
 
@@ -311,7 +311,10 @@ fn underline_area(p: &Parts, window: &mut Window, cx: &mut App) -> AnyElement {
         .children(fade.watch())
         .child(bottom_line(p));
     let field = fade.mask(field.into_any_element());
+    // A column, so the field's negative end margin shortens the flow.
     div()
+        .flex()
+        .flex_col()
         .w_full()
         .child(field)
         .children(p.focused.then(|| focus::publish(p.handle.clone(), room)))

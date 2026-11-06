@@ -216,7 +216,7 @@ pub(super) fn render(spec: Spec, window: &mut Window, cx: &mut App) -> AnyElemen
         .probe
         .clone()
         .map(|name| (name, parts.state.clone()));
-    let el = super::layout::build(parts, hover, window, cx);
+    let el = super::layout::build(&parts, &hover, window, cx);
     match probe {
         Some((name, state)) => div()
             .child(el)

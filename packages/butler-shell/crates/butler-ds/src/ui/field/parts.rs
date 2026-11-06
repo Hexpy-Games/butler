@@ -27,37 +27,55 @@ macro_rules! parent {
     };
 }
 
-/// `fieldset`: its fields stacked by `--space-4`.
+/// `fieldset`: its fields stacked by `--space-4`. The legend sits above the stack, outside the
+/// gap, as a browser draws it. The UA's `margin-inline: 2px` of a fieldset stays (the DS only
+/// removes its border and padding).
 #[derive(IntoElement)]
 pub struct FieldSet {
+    legend: Option<FieldLegend>,
     children: Vec<AnyElement>,
 }
 
 impl FieldSet {
     pub fn new() -> Self {
         Self {
+            legend: None,
             children: Vec::new(),
         }
+    }
+
+    pub fn legend(mut self, legend: FieldLegend) -> Self {
+        self.legend = Some(legend);
+        self
     }
 }
 
 parent!(FieldSet);
 
+/// A fieldset's UA margin-inline, and a legend's UA padding-inline (Chromium's html.css).
+const FIELDSET_MARGIN: f32 = 2.;
+const LEGEND_PADDING: f32 = 2.;
+
 impl RenderOnce for FieldSet {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
+        let stack = div()
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .gap(ds.len(Length::Space4))
+            .children(
+                self.children
+                    .into_iter()
+                    .map(|child| strut::flex_scope(true, child)),
+            );
         strut::flex_scope(
             true,
             div()
-                .flex()
-                .flex_col()
                 .min_w_0()
-                .gap(ds.len(Length::Space4))
-                .children(
-                    self.children
-                        .into_iter()
-                        .map(|child| strut::flex_scope(true, child)),
-                ),
+                .mx(px(FIELDSET_MARGIN))
+                .children(self.legend)
+                .child(stack),
         )
     }
 }
@@ -84,6 +102,7 @@ impl RenderOnce for FieldLegend {
         let ds = Ds::get(cx);
         div()
             .mb(ds.len(Length::Space1))
+            .px(px(LEGEND_PADDING))
             .font_weight(FontWeight(ds.number(Number::FontWeightMedium)))
             .children(self.children)
     }
