@@ -31,6 +31,9 @@ pub struct RollingSwap {
     id: ElementId,
     item_key: SharedString,
     motion: bool,
+    /// The track fills the viewport's width (`display: grid` in a block); it shrink-wraps its
+    /// content otherwise, as in a flex row.
+    fill: bool,
     frame: Frame,
 }
 
@@ -45,12 +48,19 @@ impl RollingSwap {
             id: id.into(),
             item_key: item_key.into(),
             motion: true,
+            fill: false,
             frame: Rc::new(frame),
         }
     }
 
     pub fn motion(mut self, motion: bool) -> Self {
         self.motion = motion;
+        self
+    }
+
+    /// The swap sits in a block and fills its width.
+    pub fn fill(mut self) -> Self {
+        self.fill = true;
         self
     }
 }
@@ -108,12 +118,12 @@ impl RenderOnce for RollingSwap {
         });
         let travel = height.get();
         let current = (self.frame)(window, cx);
-        let viewport = div()
-            .grid()
-            .grid_cols_max_content(1)
-            .grid_rows(1)
-            .min_w_0()
-            .overflow_hidden();
+        let viewport = div().grid().grid_rows(1).min_w_0().overflow_hidden();
+        let viewport = if self.fill {
+            viewport.grid_cols(1)
+        } else {
+            viewport.grid_cols_max_content(1)
+        };
         let Some((leaving, since)) = prior else {
             return viewport.child(cell(current, 0., 1., Some(height)));
         };

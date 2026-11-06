@@ -151,6 +151,11 @@ impl Clickable {
             };
             control.scale = false;
             control.ring = Ring::Outline(f32::from(ds.len(Length::SpaceXs)));
+            if self.stretch {
+                // `width: 100%`, as the row variant's stretch.
+                control.inline = false;
+                control.width = Width::Full;
+            }
             return control;
         }
         let hover = match self.selected {

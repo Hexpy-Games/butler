@@ -21,6 +21,7 @@ mod done_icon_button;
 mod drag_preview;
 mod dropdown_menu;
 mod empty_line;
+mod event_timeline;
 mod expandable_text;
 mod field;
 mod glyph_toggle;
@@ -71,10 +72,14 @@ mod textarea;
 mod tinted_glass;
 mod titlebar_shell;
 mod toast;
+mod todo_progress_panel;
 mod tooltip;
 mod typo;
 mod unread_dot;
 mod wallpaper_stage;
+mod work_activity;
+mod worker_activity_panel;
+mod worker_activity_row;
 
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::context::Ds;
@@ -213,6 +218,23 @@ fn blocks() -> Vec<Page> {
         page!("key-value-row", "KeyValueRow", key_value_row),
         page!("empty-line", "EmptyLine", empty_line),
         page!("status-capsule", "StatusCapsule", status_capsule),
+        page!("work-activity-block", "WorkActivityBlock", work_activity),
+        page!(
+            "worker-activity-row",
+            "WorkerActivityRow",
+            worker_activity_row
+        ),
+        page!(
+            "worker-activity-panel",
+            "WorkerActivityPanel",
+            worker_activity_panel
+        ),
+        page!(
+            "todo-progress-panel",
+            "TodoProgressPanel",
+            todo_progress_panel
+        ),
+        page!("event-timeline", "EventTimeline", event_timeline),
     ]
 }
 
