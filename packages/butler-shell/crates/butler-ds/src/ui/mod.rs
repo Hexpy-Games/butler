@@ -34,6 +34,7 @@ pub mod presence;
 pub mod progress_ring;
 pub mod scroll;
 pub mod segmented_control;
+pub mod select;
 pub mod select_button;
 pub mod separator;
 pub mod skeleton;
