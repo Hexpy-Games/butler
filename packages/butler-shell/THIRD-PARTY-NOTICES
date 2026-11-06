@@ -253,3 +253,18 @@ matches it. No other sonner code is copied. sonner is MIT-licensed:
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
+
+6. IBM Plex Sans KR
+-------------------
+crates/butler-ds/assets/fonts/IBMPlexSansKR-Regular.ttf and IBMPlexSansKR-SemiBold.ttf are the
+complete hinted TrueType faces of @ibm/plex-sans-kr@1.1.0 from https://github.com/IBM/plex
+(tag @ibm/plex-sans-kr@1.1.0, packages/plex-sans-kr/fonts/complete/ttf/hinted), the release
+the design system ships as complete woff2 for Hangul in code (--font-family-code follows IBM
+Plex Mono with IBM Plex Sans KR). Committed here so a cargo build needs no package manager.
+Licensed under the SIL Open Font License, Version 1.1 (LICENSE-IBMPlexSansKR.txt beside the
+fonts):
+
+    Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+
+    This Font Software is licensed under the SIL Open Font License, Version 1.1.
+    https://scripts.sil.org/OFL

@@ -2,7 +2,7 @@
 //! (`:root`/.theme-light) and dark (.theme-dark), over the native window material.
 use butler_ds::tokens::{Color, FontStack, Length, Shadow, TokenContext};
 use butler_ds::ui::convert;
-use gpui::{BoxShadow, Hsla, Rgba, SharedString};
+use gpui::{BoxShadow, Hsla, Rgba};
 
 use crate::ui::i18n::Strings;
 
@@ -38,14 +38,10 @@ pub(crate) fn over(top: Hsla, bottom: Hsla) -> Hsla {
 /// --font-body: the bundled static Pretendard family in the CSS stack.
 pub(crate) const FONT_BODY: &str = TokenContext::DEFAULT.font(FontStack::FontBody)[1];
 
-/// --font-family-code: first installed family, falling back to the body face.
-pub(crate) fn code_font(installed: &[String]) -> SharedString {
-    TokenContext::DEFAULT
-        .font(FontStack::FontFamilyCode)
-        .iter()
-        .find(|family| installed.iter().any(|name| name == *family))
-        .map_or(FONT_BODY, |family| *family)
-        .into()
+/// --font-family-code: the first installed family with the rest of the stack as per-glyph
+/// fallbacks, ending at the body face (`butler_ds::ui::fonts`).
+pub(crate) fn code_font(installed: &[String]) -> gpui::Font {
+    butler_ds::ui::fonts::code_font(&TokenContext::DEFAULT, installed, FONT_BODY)
 }
 
 /// Butler type roles (px size, px line height), from --typo-*.
@@ -125,7 +121,7 @@ impl Platform {
 pub(crate) struct Theme {
     pub(crate) dark: bool,
     pub(crate) platform: Platform,
-    pub(crate) code_font: SharedString,
+    pub(crate) code_font: gpui::Font,
     /// The UI copy in the OS's language.
     pub(crate) strings: &'static Strings,
     /// --text-primary.
@@ -228,7 +224,7 @@ impl Theme {
     pub(crate) fn new(
         dark: bool,
         platform: Platform,
-        code_font: SharedString,
+        code_font: gpui::Font,
         strings: &'static Strings,
     ) -> Self {
         let context = TokenContext {

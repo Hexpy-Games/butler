@@ -103,7 +103,7 @@ fn code_block(lang: &str, body: &str, theme: &Theme) -> Div {
         .p(px(16.))
         .flex()
         .flex_col()
-        .font_family(theme.code_font.clone())
+        .font(theme.code_font.clone())
         .text_size(px(13.))
         .line_height(px(20.));
     for line in body.lines() {

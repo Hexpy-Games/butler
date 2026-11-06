@@ -36,4 +36,7 @@ pub const FONTS: &[&[u8]] = &[
     // DS fonts.css: IBM Plex Mono 2.5.0, regular and semibold only.
     include_bytes!("../../assets/fonts/IBMPlexMono-Regular.ttf"),
     include_bytes!("../../assets/fonts/IBMPlexMono-SemiBold.ttf"),
+    // Hangul in code: IBM Plex Sans KR 1.1.0, complete files (regular and semibold).
+    include_bytes!("../../assets/fonts/IBMPlexSansKR-Regular.ttf"),
+    include_bytes!("../../assets/fonts/IBMPlexSansKR-SemiBold.ttf"),
 ];

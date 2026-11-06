@@ -17,6 +17,7 @@ pub mod done_icon_button;
 pub mod dropdown_menu;
 pub mod field;
 pub mod focus;
+pub mod fonts;
 pub mod glyph_toggle;
 pub mod icon;
 pub mod icon_button;

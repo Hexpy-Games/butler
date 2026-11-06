@@ -138,7 +138,7 @@ pub(crate) fn inline(src: &str, theme: &Theme) -> StyledText {
                     ..Default::default()
                 },
             ));
-            fonts.push((range, theme.code_font.clone()));
+            fonts.push((range, theme.code_font.family.clone()));
         }
         rest = &after[end + marker.len()..];
     }

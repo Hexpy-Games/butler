@@ -359,16 +359,18 @@ impl RenderOnce for Typo {
             let weight = self
                 .weight
                 .map_or_else(|| ds.number(role.weight), |w| w.value(ds));
-            let family = if self.role == Role::Code {
-                ds.code_font().clone()
+            let (family, fallbacks) = if self.role == Role::Code {
+                let code = ds.code_font();
+                (code.family.clone(), code.fallbacks.clone())
             } else {
-                ds.body_font().clone()
+                (ds.body_font().clone(), None)
             };
             el = el
                 .text_size(px(size))
                 .line_height(px(line_height))
                 .font_weight(FontWeight(weight))
                 .font_family(family.clone());
+            el.text_style().font_fallbacks = fallbacks;
             let spacing = ds.number(role.letter_spacing);
             if spacing != 0. {
                 el.text_style().letter_spacing = Some(px(spacing));
