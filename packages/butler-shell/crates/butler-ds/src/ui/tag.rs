@@ -16,6 +16,7 @@ use super::convert;
 use super::dropdown_menu::{DropdownMenu, DropdownMenuContent, Entry};
 use super::icon::{IconSize, icon};
 use super::overlay::place::Align;
+use super::strut;
 use crate::tokens::{Color, Length, Number};
 
 /// A categorical label tone: a colour that names a category, not a status.
@@ -275,6 +276,7 @@ impl Tag {
 
 impl RenderOnce for Tag {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let shrink = strut::shrink_wrap(cx);
         let (border, fill, ink) = palette(self.tone, Ds::get(cx));
         let edit = self.edit_button(ink, window, cx);
         let ds = Ds::get(cx);
@@ -315,7 +317,7 @@ impl RenderOnce for Tag {
         if spacing != 0. {
             label.text_style().letter_spacing = Some(px(spacing));
         }
-        div()
+        let tag = div()
             .flex()
             .flex_none()
             .items_center()
@@ -334,6 +336,12 @@ impl RenderOnce for Tag {
             .child(label)
             .children(trailing_icon.map(|glyph| icon(glyph, IconSize::Xs, ds)))
             .children(edit)
-            .children(remove)
+            .children(remove);
+        // `width: fit-content`: a column or grid that stretches its items does not stretch it.
+        if shrink {
+            strut::max_content(tag).into_any_element()
+        } else {
+            tag.into_any_element()
+        }
     }
 }
