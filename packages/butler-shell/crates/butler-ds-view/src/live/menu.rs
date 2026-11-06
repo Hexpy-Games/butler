@@ -7,11 +7,13 @@ use super::Live;
 use crate::app::DsView;
 
 /// The surfaces a shot reports the geometry of, outermost first (`debug_selector` names).
-const SURFACES: [&str; 4] = [
+const SURFACES: [&str; 6] = [
     "popover-content",
     "menu-content",
     "select-content",
     "menu-sub-content",
+    "dialog-content",
+    "toast-front",
 ];
 
 impl Live {

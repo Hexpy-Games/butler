@@ -33,6 +33,8 @@ pub enum GlassPadding {
 #[derive(Clone)]
 struct Paint {
     radius: Pixels,
+    /// The top corners are square (a sheet that hangs from the top edge).
+    square_top: bool,
     border: Hsla,
     base: Hsla,
     tint: Hsla,
@@ -46,6 +48,8 @@ struct Paint {
 pub struct TintedGlass {
     radius: GlassRadius,
     padding: GlassPadding,
+    square_top: bool,
+    height: Option<Pixels>,
     children: Vec<AnyElement>,
 }
 
@@ -54,6 +58,8 @@ impl TintedGlass {
         Self {
             radius: GlassRadius::Panel,
             padding: GlassPadding::Md,
+            square_top: false,
+            height: None,
             children: Vec::new(),
         }
     }
@@ -65,6 +71,18 @@ impl TintedGlass {
 
     pub fn padding(mut self, padding: GlassPadding) -> Self {
         self.padding = padding;
+        self
+    }
+
+    /// Only the bottom corners are rounded (`border-radius: 0 0 r r`).
+    pub fn square_top(mut self) -> Self {
+        self.square_top = true;
+        self
+    }
+
+    /// A definite height (`height: <length>`), which the content may then fill with `h_full`.
+    pub fn height(mut self, height: Pixels) -> Self {
+        self.height = Some(height);
         self
     }
 }
@@ -93,9 +111,10 @@ fn highlight(ds: &Ds) -> gpui::BoxShadow {
 }
 
 impl Paint {
-    fn new(ds: &Ds, radius: Pixels) -> Self {
+    fn new(ds: &Ds, radius: Pixels, square_top: bool) -> Self {
         Self {
             radius,
+            square_top,
             border: ds.color(Color::TintedGlassBorder),
             base: ds.color(Color::TintedGlassBg),
             tint: ds.color(Color::TintedGlassTint),
@@ -112,12 +131,22 @@ impl Paint {
         }
     }
 
+    fn corners(&self, radius: Pixels) -> Corners<Pixels> {
+        let top = if self.square_top { px(0.) } else { radius };
+        Corners {
+            top_left: top,
+            top_right: top,
+            bottom_left: radius,
+            bottom_right: radius,
+        }
+    }
+
     fn paint(&self, bounds: Bounds<Pixels>, window: &mut Window) {
         let r = self
             .radius
             .min(bounds.size.width / 2.)
             .min(bounds.size.height / 2.);
-        let radii = Corners::all(r);
+        let radii = self.corners(r);
         window.paint_drop_shadows_outside(bounds, radii, 0., &self.shadow);
         window.paint_backdrop_filter(bounds, radii, 0., &[Filter::Blur(self.blur)]);
         window.paint_quad(
@@ -144,7 +173,7 @@ impl Paint {
             bounds.origin + gpui::point(border, border),
             bounds.size - gpui::size(border * 2., border * 2.),
         );
-        let radii = Corners::all((radius - border).max(px(0.)));
+        let radii = self.corners((radius - border).max(px(0.)));
         let edge = self.edge.min(inner.size.height / 2.);
         let stop = edge / inner.size.height.max(px(1.));
         let clear = Hsla {
@@ -196,7 +225,7 @@ impl RenderOnce for TintedGlass {
             GlassPadding::Md => ds.len(Length::Space3),
             GlassPadding::Lg => ds.len(Length::Space4),
         };
-        let paint = Paint::new(ds, radius);
+        let paint = Paint::new(ds, radius, self.square_top);
         let layer = canvas(
             |_, _, _| (),
             move |bounds, (), window, _| paint.paint(bounds, window),
@@ -206,18 +235,29 @@ impl RenderOnce for TintedGlass {
         .left_0()
         .size_full();
         // The paint layer sits outside the clipping box: the drop shadow falls beyond the surface.
+        let (square_top, height) = (self.square_top, self.height);
+        let round = move |el: gpui::Div| {
+            if square_top {
+                el.rounded_b(radius)
+            } else {
+                el.rounded(radius)
+            }
+        };
+        let fill = move |el: gpui::Div| if height.is_some() { el.h_full() } else { el };
+        let outer = round(div().relative().min_w_0());
+        let outer = match height {
+            Some(height) => outer.h(height),
+            None => outer,
+        };
         strut::scope(
             true,
-            div()
-                .relative()
-                .min_w_0()
-                .rounded(radius)
+            outer
                 .text_color(ds.color(Color::TextPrimary))
                 .child(layer)
                 // The 1px border of the surface stays in layout, so the content keeps the DS geometry.
                 .child(
-                    div().min_w_0().overflow_hidden().rounded(radius).child(
-                        strut::container(div(), ds)
+                    fill(round(div().min_w_0().overflow_hidden())).child(
+                        fill(strut::container(div(), ds))
                             .p(padding + px(1.)) // DS: TintedGlass.module.css:5
                             .children(self.children),
                     ),

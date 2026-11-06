@@ -15,7 +15,8 @@ use crate::ui::motion::{Timing, Tween};
 pub struct Motion {
     pub enter: DsDuration,
     pub enter_ease: Easing,
-    pub enter_distance: Length,
+    /// How far the surface travels in from its trigger's side; none when it only scales.
+    pub enter_distance: Option<Length>,
     pub exit: DsDuration,
     pub exit_ease: Easing,
     /// How far the surface travels back toward its trigger while it exits.
@@ -27,7 +28,7 @@ impl Motion {
     pub const POPOVER: Self = Self {
         enter: DsDuration::MotionEnterOverlay,
         enter_ease: Easing::MotionEaseEnter,
-        enter_distance: Length::MotionDistanceSm,
+        enter_distance: Some(Length::MotionDistanceSm),
         exit: DsDuration::MotionExitFast,
         exit_ease: Easing::MotionEaseAccelerate,
         exit_distance: None,
@@ -35,7 +36,7 @@ impl Motion {
 
     /// `popover-sheet-enter` / `-exit`: the attached mobile sheet travels 8px in and 4px out.
     pub const POPOVER_SHEET: Self = Self {
-        enter_distance: Length::MotionDistanceMd,
+        enter_distance: Some(Length::MotionDistanceMd),
         exit_distance: Some(Length::MotionDistanceSm),
         ..Self::POPOVER
     };
@@ -44,10 +45,40 @@ impl Motion {
     pub const MENU: Self = Self {
         enter: DsDuration::MotionEnterMenu,
         enter_ease: Easing::MotionEaseEnter,
-        enter_distance: Length::MotionDistanceXs,
+        enter_distance: Some(Length::MotionDistanceXs),
         exit: DsDuration::MotionExitMenu,
         exit_ease: Easing::MotionEaseAccelerate,
         exit_distance: None,
+    };
+}
+
+impl Motion {
+    /// `dialog-enter` / `dialog-exit` (Dialog.module.css): in from 4px below the centre. `side`
+    /// is `Side::Top`, the side the surface starts away from.
+    pub const DIALOG: Self = Self {
+        enter: DsDuration::MotionBase,
+        enter_ease: Easing::MotionEaseStandard,
+        enter_distance: Some(Length::MotionDistanceSm),
+        exit: DsDuration::MotionExitFast,
+        exit_ease: Easing::MotionEaseAccelerate,
+        exit_distance: None,
+    };
+
+    /// `palette-enter` / `palette-exit`: only a scale (not drawn), so a fade.
+    pub const PALETTE: Self = Self {
+        enter: DsDuration::MotionPalette,
+        enter_distance: None,
+        ..Self::DIALOG
+    };
+
+    /// `palette-sheet-enter` / `-exit`: the phone palette drops in from `--motion-distance-lg`
+    /// above and leaves back up (`Side::Bottom`).
+    pub const PALETTE_SHEET: Self = Self {
+        enter: DsDuration::MotionSlow,
+        enter_ease: Easing::MotionEaseEmphasized,
+        enter_distance: Some(Length::MotionDistanceLg),
+        exit_distance: Some(Length::MotionDistanceLg),
+        ..Self::DIALOG
     };
 }
 
@@ -75,7 +106,8 @@ pub fn animate(
         Phase::Closed => None,
         Phase::Open { key } => {
             let timing = Timing::token(ds, motion.enter, motion.enter_ease);
-            let (dx, dy) = from_trigger(side, f32::from(ds.len(motion.enter_distance)));
+            let distance = motion.enter_distance.map_or(0., |d| f32::from(ds.len(d)));
+            let (dx, dy) = from_trigger(side, distance);
             Some(
                 Tween::new(
                     format!("{id}-in-{key}"),

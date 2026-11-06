@@ -146,10 +146,16 @@ impl Handle {
 }
 
 /// The entries from `serial` itself up the chain of layers it was opened from, and every layer
-/// opened from it: the layer's React subtree.
+/// opened from it: the layer's React subtree. Under a modal layer the page is inert, so every
+/// layer opened after it was opened from inside it (a Select in a Dialog).
 fn family(entries: &[Entry], serial: u64) -> Vec<u64> {
     let mut family = vec![serial];
+    let modal = entries.iter().any(|e| e.serial == serial && e.modal);
     for entry in entries {
+        if modal && entry.serial > serial {
+            family.push(entry.serial);
+            continue;
+        }
         let mut at = entry.parent;
         while let Some(parent) = at {
             if parent == serial {
