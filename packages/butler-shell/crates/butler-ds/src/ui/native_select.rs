@@ -1,15 +1,15 @@
 //! DS NativeSelect (shadcn/ui/native-select.tsx, NativeSelect.module.css): the Input's box
 //! showing the chosen option's label, a chevron, and the operating system's popup menu for the
 //! choice. The trigger takes keyboard focus (the ring shows for keys only; the border takes the
-//! accent on any focus). Opening calls `butler_platform::popup_menu`, which is a stub until the
-//! OS menu is wired up; no menu is drawn here.
+//! accent on any focus). Opening asks the window for the OS popup menu (`Window::popup_menu`);
+//! where the platform has none (Linux, where Chromium draws its own `<select>` popup too) the
+//! DS Select's list opens over the trigger instead.
 use std::rc::Rc;
 
-use butler_platform::popup_menu::{PopupAnchor, PopupItem};
 use gpui::{
     App, Bounds, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window, canvas,
-    div, px,
+    Pixels, PopupMenuItem, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
+    Window, canvas, div, px,
 };
 
 use super::Icon;
@@ -18,6 +18,7 @@ use super::control::next_anchor;
 use super::convert;
 use super::focus;
 use super::icon::{IconSize, icon};
+use super::select::{Select, SelectContent, SelectItem};
 use super::strut;
 use crate::tokens::{Color, Length};
 
@@ -65,6 +66,7 @@ pub struct NativeSelect {
     disabled: bool,
     entries: Vec<Entry>,
     on_change: Option<Handler>,
+    probe: Option<SharedString>,
 }
 
 impl NativeSelect {
@@ -78,6 +80,7 @@ impl NativeSelect {
             disabled: false,
             entries: Vec::new(),
             on_change: None,
+            probe: None,
         }
     }
 
@@ -144,6 +147,26 @@ impl NativeSelect {
         self
     }
 
+    /// Names a zero-size marker, `<name>:popup:os` or `<name>:popup:list`, for the menu the last
+    /// open used (the OS popup, or the DS list where the platform has none), for a harness
+    /// expectation. Only the test build draws it.
+    pub fn probe(mut self, name: impl Into<SharedString>) -> Self {
+        self.probe = Some(name.into());
+        self
+    }
+
+    /// The DS list the fallback opens: the options, with a group's heading as a label.
+    fn list(&self) -> SelectContent {
+        self.entries
+            .iter()
+            .fold(SelectContent::new(), |list, entry| match entry {
+                Entry::Option(choice) => {
+                    list.child(SelectItem::new(choice.value.clone(), choice.label.clone()))
+                }
+                Entry::Group(label) => list.child(super::select::Entry::label(label.clone())),
+            })
+    }
+
     fn choices(&self) -> impl Iterator<Item = &Choice> {
         self.entries.iter().filter_map(|entry| match entry {
             Entry::Option(choice) => Some(choice),
@@ -152,50 +175,93 @@ impl NativeSelect {
     }
 }
 
+/// Which menu the last open used.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Popup {
+    /// The OS popup menu.
+    Os,
+    /// The DS Select's list, on a platform without one.
+    List,
+}
+
 /// What opening the menu needs: where the trigger is, what it lists and what is chosen.
 struct Menu {
     trigger: Entity<Bounds<Pixels>>,
     entries: Vec<Entry>,
     selected: Option<SharedString>,
     chosen: Entity<Option<SharedString>>,
+    popup: Entity<Option<Popup>>,
+    list: Select,
     on_change: Option<Handler>,
     anchor: SharedString,
 }
 
 impl Menu {
-    fn open(&self, window: &mut Window, cx: &mut App) {
-        let bounds = *self.trigger.read(cx);
-        let origin = window.bounds().origin + bounds.origin;
-        let anchor = PopupAnchor {
-            x: origin.x.as_f32(),
-            y: origin.y.as_f32(),
-            width: bounds.size.width.as_f32(),
-            height: bounds.size.height.as_f32(),
-        };
-        let items: Vec<PopupItem> = self
-            .entries
+    /// The menu's rows as the OS lists them.
+    fn items(&self) -> Vec<PopupMenuItem> {
+        self.entries
             .iter()
             .map(|entry| match entry {
-                Entry::Option(choice) => PopupItem::Option(&choice.label),
-                Entry::Group(label) => PopupItem::Group(label),
+                Entry::Option(choice) => PopupMenuItem::Option {
+                    label: choice.label.clone(),
+                    enabled: true,
+                },
+                Entry::Group(label) => PopupMenuItem::Group {
+                    label: label.clone(),
+                },
             })
-            .collect();
+            .collect()
+    }
+
+    /// Opens the OS popup menu over the trigger and applies the pick; without one, the list.
+    fn open(self: &Rc<Self>, window: &mut Window, cx: &mut App) {
+        let anchor = *self.trigger.read(cx);
         let selected = self.entries.iter().position(|entry| {
             matches!(entry, Entry::Option(choice) if Some(&choice.value) == self.selected.as_ref())
         });
-        let Some(Entry::Option(picked)) = butler_platform::popup_menu(&items, selected, anchor)
-            .and_then(|index| self.entries.get(index))
-        else {
+        let Some(picked) = window.popup_menu(&self.items(), selected, anchor) else {
+            self.popup.update(cx, |popup, _| *popup = Some(Popup::List));
+            self.list.open(window, cx);
             return;
         };
-        let value = picked.value.clone();
-        self.chosen.update(cx, |chosen, cx| {
-            *chosen = Some(value.clone());
-            cx.notify();
-        });
-        if let Some(on_change) = &self.on_change {
-            on_change(&value, window, cx);
+        self.popup.update(cx, |popup, _| *popup = Some(Popup::Os));
+        let menu = self.clone();
+        window
+            .spawn(cx, async move |cx| {
+                let Ok(Some(index)) = picked.await else {
+                    return;
+                };
+                cx.update(|window, cx| menu.pick(index, window, cx)).ok();
+            })
+            .detach();
+    }
+
+    /// Chooses the option at `index` of the entries.
+    fn pick(&self, index: usize, window: &mut Window, cx: &mut App) {
+        if let Some(Entry::Option(choice)) = self.entries.get(index) {
+            self.choose(&choice.value, window, cx);
         }
+    }
+
+    fn choose(&self, value: &SharedString, window: &mut Window, cx: &mut App) {
+        choose(&self.chosen, self.on_change.as_ref(), value, window, cx);
+    }
+}
+
+/// Records the choice and tells the owner.
+fn choose(
+    chosen: &Entity<Option<SharedString>>,
+    on_change: Option<&Handler>,
+    value: &SharedString,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    chosen.update(cx, |chosen, cx| {
+        *chosen = Some(value.clone());
+        cx.notify();
+    });
+    if let Some(on_change) = on_change {
+        on_change(value, window, cx);
     }
 }
 
@@ -230,15 +296,32 @@ impl RenderOnce for NativeSelect {
         let focused = handle.as_ref().is_some_and(|h| h.is_focused(window));
         let ring =
             focused && focus::visible(Ds::get(cx), true, false) && !focus::ring_handed_off(cx);
+        let popup = window.use_keyed_state((self.id.clone(), "popup"), cx, |_, _| None::<Popup>);
+        let (picked, on_change) = (chosen.clone(), self.on_change.clone());
+        let list = Select::new(format!("{}-list", self.id), window, cx)
+            .value(current.clone())
+            .on_value_change(move |value, window, cx| {
+                choose(&picked, on_change.as_ref(), &value, window, cx);
+            });
+        let layer = list.content(&self.list(), window, cx);
         let menu = Rc::new(Menu {
             trigger: trigger.clone(),
             entries: self.entries.clone(),
             selected: current,
             chosen,
+            popup,
+            list,
             on_change: self.on_change.clone(),
             anchor,
         });
-        assemble(&self, label, menu, handle, (focused, ring, shrink), cx)
+        assemble(
+            &self,
+            label,
+            menu,
+            handle,
+            (focused, ring, shrink),
+            (layer, cx),
+        )
     }
 }
 
@@ -249,7 +332,7 @@ fn assemble(
     menu: Rc<Menu>,
     handle: Option<gpui::FocusHandle>,
     (focused, ring, shrink): (bool, bool, bool),
-    cx: &App,
+    (layer, cx): (gpui::AnyElement, &App),
 ) -> gpui::AnyElement {
     let ds = Ds::get(cx);
     let anchor = menu.anchor.clone();
@@ -286,7 +369,13 @@ fn assemble(
     .size_full()
     .top_0()
     .left_0();
-    let root = root.child(content).child(measure);
+    let marker = popup_marker(select, &menu, cx);
+    let root = root
+        .child(content)
+        .child(measure)
+        .child(menu.list.trigger_probe())
+        .child(layer)
+        .children(marker);
     let root = match handle {
         Some(handle) => {
             let keys = menu.clone();
@@ -311,6 +400,16 @@ fn assemble(
     } else {
         strut::max_content(root)
     }
+}
+
+/// The `probe` marker naming the menu the last open used.
+fn popup_marker(select: &NativeSelect, menu: &Menu, cx: &App) -> Option<gpui::Div> {
+    let name = select.probe.as_ref()?;
+    let label = match (*menu.popup.read(cx))? {
+        Popup::Os => format!("{name}:popup:os"),
+        Popup::List => format!("{name}:popup:list"),
+    };
+    Some(div().absolute().size_0().debug_selector(move || label))
 }
 
 /// The trigger: the Input's box with the label, the chevron over its end padding.

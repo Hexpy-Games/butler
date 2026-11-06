@@ -10,7 +10,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-butler-platform = { path = "../../../butler-agent/rust/crates/butler-platform" }
 
 anyhow.workspace = true
 gpui.workspace = true

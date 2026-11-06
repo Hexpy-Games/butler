@@ -148,6 +148,16 @@ impl Select {
         self
     }
 
+    /// Opens the list: a NativeSelect's stand-in on a platform with no OS popup menu.
+    pub(crate) fn open(&self, window: &mut Window, cx: &mut App) {
+        self.set_open(true, window, cx);
+    }
+
+    /// A zero-cost layer that measures the element it is placed in as the trigger's box.
+    pub(crate) fn trigger_probe(&self) -> gpui::Div {
+        self.parts.trigger.probe()
+    }
+
     pub fn is_open(&self, cx: &App) -> bool {
         *self.open.read(cx)
     }

@@ -1,5 +1,6 @@
-//! NativeSelect.showcase.tsx. The popup menu is an OS call that is not wired up yet
-//! (`butler_platform::popup_menu`), so these show the trigger and its keyboard focus.
+//! NativeSelect.showcase.tsx. The popup menu is the OS's (`Window::popup_menu`), which a
+//! headless window does not have: these show the trigger and its keyboard focus, and a click
+//! opens the DS list the control falls back to.
 use butler_ds::ui::field::{Field, FieldLabel};
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::native_select::{NativeSelect, Size};
@@ -72,6 +73,7 @@ pub(super) fn stories() -> Vec<Story> {
 fn source(id: &'static str, lang: Lang, size: Size, disabled: bool) -> AnyElement {
     let c = copy(lang);
     let select = NativeSelect::new(id)
+        .probe(id)
         .size(size)
         .default_value("env")
         .option("literal", c.literal)
