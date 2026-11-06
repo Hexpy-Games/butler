@@ -53,3 +53,19 @@ butler-ds-view --shots $TMPDIR/ds-parity/gpui/1280x800-light --scale 2 --size 12
 parity-diff $TMPDIR/ds-parity/react/1280x800-light $TMPDIR/ds-parity/gpui/1280x800-light \
   $TMPDIR/ds-parity/diff/1280x800-light
 ```
+
+### B2 pages, state shots and the summary
+
+`scenes/ds-view.json` lists the B1 and B2 pages. `ds-view-states.ts` captures the interactive
+states of `scenes/ds-view-states.json` (hover, press, focus, click) as `<page>.<name>.png` plus
+`<page>.<name>.json` next to the page crops (`--only page,page` limits it). A `target` is the 0-based
+index of the control in DOM order over all `[data-ds-fixture-canvas]` of the page (`button`,
+`[role=button|radio|switch]`, `input[type=range]`, `[tabindex="0"]`, deduped). Each state shot is the
+owning story canvas plus 64 logical px on every side, clipped to the window; the native live harness
+uses the same rule. `ds-view-summary.ts --react <dir> --gpui <dir> --diff <dir> --parity-diff <exe>`
+prints the per-page, per-state and per-story geometry tables for one `<size>-<theme>` pair.
+
+The native side of the state shots is `butler-ds-view --live <dir> --scale 2 --size 1280x800 --canvas-width 650
+[--dark]` (feature `shots`): commands on stdin (`page <id>`, `hover|move|press|click|focus <n>`, `release`,
+`key <keystroke>`, `wait <ms>`, `expect ...`, `shot <name>`, `quit`), each answered `LIVE OK`. `<n>` is the
+control's number in render order (DOM order of the page, as the `target` of the states scene).

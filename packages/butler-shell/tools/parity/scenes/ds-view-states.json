@@ -1,0 +1,236 @@
+{
+ "readme": "State shots. 'target' is the 0-based index of the control in DOM order over all [data-ds-fixture-canvas] of the page, counting elements matching `button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input[type=\"range\"], [tabindex=\"0\"]` (deduped, natively disabled included). The viewer also renders state-matrix stories after the showcase stories; targets refer to the showcase stories only. Output: <page>.<name>.png cropped to the owning story canvas +/- 64 logical px, clipped to the viewport, and <page>.<name>.json {crop,story}. hover=pointer over; press=mouse down held; focus=Shift key then element.focus(); click=element.click().",
+ "states": [
+  {
+   "page": "button",
+   "name": "default-hover",
+   "state": "hover",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "button",
+   "name": "outline-hover",
+   "state": "hover",
+   "target": 1,
+   "wait_ms": 100
+  },
+  {
+   "page": "button",
+   "name": "default-press",
+   "state": "press",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "button",
+   "name": "default-focus",
+   "state": "focus",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "button",
+   "name": "aria-disabled-focus",
+   "state": "focus",
+   "target": 12,
+   "wait_ms": 100
+  },
+  {
+   "page": "icon-button",
+   "name": "titlebar-hover",
+   "state": "hover",
+   "target": 12,
+   "wait_ms": 900
+  },
+  {
+   "page": "icon-button",
+   "name": "titlebar-focus",
+   "state": "focus",
+   "target": 12,
+   "wait_ms": 900
+  },
+  {
+   "page": "icon-button",
+   "name": "titlebar-press",
+   "state": "press",
+   "target": 12,
+   "wait_ms": 100
+  },
+  {
+   "page": "icon-button",
+   "name": "butler-tone-hover",
+   "state": "hover",
+   "target": 1,
+   "wait_ms": 100
+  },
+  {
+   "page": "pill-button",
+   "name": "plain-hover",
+   "state": "hover",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "pill-button",
+   "name": "plain-press",
+   "state": "press",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "pill-button",
+   "name": "plain-focus",
+   "state": "focus",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "pill-button",
+   "name": "glass-hover",
+   "state": "hover",
+   "target": 1,
+   "wait_ms": 100
+  },
+  {
+   "page": "pill-button",
+   "name": "glass-focus",
+   "state": "focus",
+   "target": 1,
+   "wait_ms": 100
+  },
+  {
+   "page": "clickable",
+   "name": "suggestion-hover",
+   "state": "hover",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "clickable",
+   "name": "suggestion-press",
+   "state": "press",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "clickable",
+   "name": "suggestion-focus",
+   "state": "focus",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "clickable",
+   "name": "toggle-hover",
+   "state": "hover",
+   "target": 5,
+   "wait_ms": 100
+  },
+  {
+   "page": "clickable",
+   "name": "toggle-focus",
+   "state": "focus",
+   "target": 5,
+   "wait_ms": 100
+  },
+  {
+   "page": "copy-button",
+   "name": "copied",
+   "state": "click",
+   "target": 0,
+   "wait_ms": 600
+  },
+  {
+   "page": "done-icon-button",
+   "name": "done",
+   "state": "click",
+   "target": 0,
+   "wait_ms": 600
+  },
+  {
+   "page": "glyph-toggle",
+   "name": "hover",
+   "state": "hover",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "glyph-toggle",
+   "name": "focus",
+   "state": "focus",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "segmented-control",
+   "name": "off-hover",
+   "state": "hover",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "segmented-control",
+   "name": "selected-focus",
+   "state": "focus",
+   "target": 1,
+   "wait_ms": 100
+  },
+  {
+   "page": "switch",
+   "name": "stacked-hover",
+   "state": "hover",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "switch",
+   "name": "stacked-focus",
+   "state": "focus",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "switch",
+   "name": "reason-hover",
+   "state": "hover",
+   "target": 7,
+   "wait_ms": 900
+  },
+  {
+   "page": "slider",
+   "name": "focus",
+   "state": "focus",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "slider",
+   "name": "press",
+   "state": "press",
+   "target": 0,
+   "wait_ms": 100
+  },
+  {
+   "page": "tooltip",
+   "name": "icon-hover",
+   "state": "hover",
+   "target": 0,
+   "wait_ms": 900
+  },
+  {
+   "page": "tooltip",
+   "name": "icon-focus",
+   "state": "focus",
+   "target": 0,
+   "wait_ms": 900
+  },
+  {
+   "page": "progress-ring",
+   "name": "advance-click",
+   "state": "click",
+   "target": 9,
+   "wait_ms": 100
+  }
+ ]
+}

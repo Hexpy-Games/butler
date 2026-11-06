@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1 and B2 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -13,6 +13,21 @@
     { "page": "kbd", "entry": "components/Kbd" },
     { "page": "label", "entry": "components/Label" },
     { "page": "tinted-glass", "entry": "components/TintedGlass" },
-    { "page": "card", "entry": "components/Card" }
+    { "page": "card", "entry": "components/Card" },
+    { "page": "tooltip", "entry": "components/Tooltip" },
+    { "page": "button", "entry": "components/Button" },
+    { "page": "icon-button", "entry": "components/IconButton" },
+    { "page": "pill-button", "entry": "components/PillButton" },
+    { "page": "clickable", "entry": "components/Clickable" },
+    { "page": "copy-button", "entry": "components/CopyButton" },
+    { "page": "done-icon-button", "entry": "components/DoneIconButton" },
+    { "page": "glyph-toggle", "entry": "components/GlyphToggle" },
+    { "page": "segmented-control", "entry": "components/SegmentedControl" },
+    { "page": "switch", "entry": "components/Switch" },
+    { "page": "slider", "entry": "components/Slider" },
+    { "page": "spinner", "entry": "components/Spinner" },
+    { "page": "skeleton", "entry": "components/Skeleton" },
+    { "page": "progress-ring", "entry": "components/ProgressRing" },
+    { "page": "success-check", "entry": "components/SuccessCheck" }
   ]
 }
