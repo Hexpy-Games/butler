@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5, P2-S1, P2-S2 and P2-S3 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5, P2-S1, P2-S2, P2-S3, P2-S4 and P2-S5 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -85,6 +85,22 @@
     { "page": "todo-progress-panel", "entry": "blocks/TodoProgressPanel" },
     { "page": "queued-message", "entry": "blocks/QueuedMessage" },
     { "page": "question-answer-card", "entry": "blocks/QuestionAnswerCard" },
-    { "page": "event-timeline", "entry": "blocks/EventTimeline" }
+    { "page": "event-timeline", "entry": "blocks/EventTimeline" },
+    { "page": "item-card", "entry": "blocks/ItemCard" },
+    { "page": "metric-card", "entry": "blocks/MetricCard" },
+    { "page": "metric-grid", "entry": "blocks/MetricGrid" },
+    { "page": "progress-meter", "entry": "blocks/ProgressMeter" },
+    { "page": "status-checklist", "entry": "blocks/StatusChecklist" },
+    { "page": "block-columns", "entry": "blocks/BlockColumns" },
+    { "page": "block-tabs", "entry": "blocks/BlockTabs" },
+    { "page": "block-action-frame", "entry": "blocks/BlockActionFrame" },
+    { "page": "notice", "entry": "blocks/Notice" },
+    { "page": "chart", "entry": "components/Chart" },
+    { "page": "attachment-list", "entry": "blocks/AttachmentList" },
+    { "page": "element-chip", "entry": "blocks/ElementChip" },
+    { "page": "artifact-list", "entry": "blocks/ArtifactList" },
+    { "page": "artifact-preview", "entry": "blocks/ArtifactPreview" },
+    { "page": "changed-line-diff", "entry": "blocks/ChangedLineDiff" },
+    { "page": "image-viewer", "entry": "blocks/ImageViewer" }
   ]
 }

@@ -3,6 +3,9 @@ mod adaptive_shell;
 mod animated_number;
 mod aspect_frame;
 mod avatar;
+mod block_action_frame;
+mod block_columns;
+mod block_tabs;
 mod bottom_sheet;
 mod boxes;
 mod butler_thinking_mark;
@@ -43,16 +46,20 @@ mod media_frame;
 mod message_avatar_block;
 mod message_row;
 mod meta_list;
+mod metric_card;
+mod metric_grid;
 mod native_select;
 mod nav_drop_target;
 mod nav_parts;
 mod nav_row;
 mod nav_section;
+mod notice;
 mod overflow_action_menu;
 mod panel_header;
 mod pill_button;
 mod popover;
 mod presence;
+mod progress_meter;
 mod progress_ring;
 mod question_answer_card;
 mod queued_message;
@@ -68,6 +75,7 @@ mod slider;
 mod spinner;
 mod stack;
 mod status_capsule;
+mod status_checklist;
 mod success_check;
 mod surface_panel;
 mod switch;
@@ -253,6 +261,14 @@ fn blocks() -> Vec<Page> {
             question_answer_card
         ),
         page!("event-timeline", "EventTimeline", event_timeline),
+        page!("metric-card", "MetricCard", metric_card),
+        page!("metric-grid", "MetricGrid", metric_grid),
+        page!("progress-meter", "ProgressMeter", progress_meter),
+        page!("status-checklist", "StatusChecklist", status_checklist),
+        page!("block-columns", "BlockColumns", block_columns),
+        page!("block-tabs", "BlockTabs", block_tabs),
+        page!("block-action-frame", "BlockActionFrame", block_action_frame),
+        page!("notice", "Notice", notice),
     ]
 }
 

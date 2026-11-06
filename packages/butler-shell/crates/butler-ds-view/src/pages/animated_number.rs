@@ -24,7 +24,7 @@ pub(super) fn stories() -> Vec<Story> {
 }
 
 /// `Intl.NumberFormat(locale, { notation: "compact" })` for the showcase values.
-fn compact(lang: Lang, value: f64) -> String {
+pub(super) fn compact(lang: Lang, value: f64) -> String {
     let tiers: [(f64, &str); 3] = match lang {
         Lang::En => [(1e9, "B"), (1e6, "M"), (1e3, "K")],
         Lang::Ko => [(1e8, "억"), (1e4, "만"), (1e3, "천")],

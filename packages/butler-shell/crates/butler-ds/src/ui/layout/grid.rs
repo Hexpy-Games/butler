@@ -30,6 +30,8 @@ pub enum Preset {
     Fixed(u8),
     AutoFit,
     AutoFill,
+    /// `repeat(auto-fill, minmax(min(<n>px, 100%), 1fr))`.
+    AutoFillMin(u16),
     MainAside,
     LabelValue,
 }
@@ -45,6 +47,11 @@ impl Columns {
     pub const AUTO_FILL: Self = Self::Preset(Preset::AutoFill);
     pub const MAIN_ASIDE: Self = Self::Preset(Preset::MainAside);
     pub const LABEL_VALUE: Self = Self::Preset(Preset::LabelValue);
+
+    /// `auto-fill` columns of at least `min` px.
+    pub const fn auto_fill_min(min: u16) -> Self {
+        Self::Preset(Preset::AutoFillMin(min))
+    }
 
     pub const fn fixed(count: u8) -> Self {
         Self::Preset(Preset::Fixed(count))
@@ -230,8 +237,12 @@ fn resolve(
     };
     let widths = match preset {
         Preset::Fixed(n) => fixed(usize::from(n), width, gap),
-        Preset::AutoFit | Preset::AutoFill => {
-            let min = AUTO_TRACK_MIN.min(width);
+        Preset::AutoFit | Preset::AutoFill | Preset::AutoFillMin(_) => {
+            let min = match preset {
+                Preset::AutoFillMin(min) => f32::from(min),
+                _ => AUTO_TRACK_MIN,
+            }
+            .min(width);
             #[expect(
                 clippy::cast_possible_truncation,
                 clippy::cast_sign_loss,
