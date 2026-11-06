@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5 and P2-S1 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5, P2-S1 and P2-S2 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -56,6 +56,14 @@
     { "page": "expandable-text", "entry": "components/ExpandableText" },
     { "page": "media-frame", "entry": "components/MediaFrame" },
     { "page": "inline-reference", "entry": "components/InlineReference" },
-    { "page": "butler-thinking-mark", "entry": "components/ButlerThinkingMark" }
+    { "page": "butler-thinking-mark", "entry": "components/ButlerThinkingMark" },
+    { "page": "adaptive-shell", "entry": "blocks/AdaptiveShell" },
+    { "page": "sidebar-shell", "entry": "blocks/SidebarShell" },
+    { "page": "titlebar-shell", "entry": "blocks/TitlebarShell" },
+    { "page": "conversation-shell", "entry": "blocks/ConversationShell" },
+    { "page": "inspector-panel", "entry": "blocks/InspectorPanel" },
+    { "page": "panel-header", "entry": "blocks/PanelHeader" },
+    { "page": "surface-panel", "entry": "blocks/SurfacePanel" },
+    { "page": "wallpaper-stage", "entry": "blocks/WallpaperStage" }
   ]
 }

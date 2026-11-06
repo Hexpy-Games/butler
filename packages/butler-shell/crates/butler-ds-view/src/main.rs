@@ -17,6 +17,8 @@ mod shots;
 mod standins;
 mod standins_nav;
 mod standins_overlay;
+mod standins_shell;
+mod standins_window;
 
 use butler_ds::ui::assets::Assets;
 use gpui::{App, AppContext as _, Bounds, WindowBounds, WindowOptions, px, size};
