@@ -1,10 +1,10 @@
 {
   "inputs": {
     "bun.lock": "9a844e55f653d9f34b56e9b3adb5e01d814382b7fd20c965631b42aafebd0a78",
-    "deploy/licenses/disclosure.py": "2b5d724e190d44967c8400d70fd77b36e10efc3d3bb667ebb1fb0984313c3ae8",
+    "deploy/licenses/disclosure.py": "992c3d7f47a0944dc1c0ab0628e11a818b88f9ae7d5f62a5c5692715a175d859",
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
-    "deploy/licenses/refresh.py": "8bc199053a20b191c078d86ca425f31dd71fb4ded5c172a25e5b9058bb8c3dba",
+    "deploy/licenses/refresh.py": "9949f1b408013b4350f973aa9b01a693b3f6815c8f1f94f9a63203d13e6aedfb",
     "packages/butler-agent/rust/Cargo.lock": "c23c3f2cbb528a962086a22a36f7fe52d41d866a0f329bdc223d6ea7eede2d72",
     "packages/butler-agent/rust/Cargo.toml": "f285ad63272b66159ce655ff34c66177287cf157785d8bf84a569929a991060c",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
@@ -35,6 +35,7 @@
     "packages/butler-app/client/ui/package.json": "8739df6bdb3dd0b3925c98fd070483d82de06619861dce3806eac6df3f15952f",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "f77a06e6ca123d65971fff38e3616fe9344efab396b6a3ebea7250a771064a90",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
+    "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-sans-kr/LICENSE.txt": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
     "third_party/notify-windows-ledger/Cargo.toml": "d3badd5e47fb7b50cb83af425266e1dd89f14cd324d6598d7cb2d6d66a01baac",
     "third_party/notify-windows-ledger/LICENSE": "29f359024dacaa3361dcddf5a9316e8458028ff062b63105a61e04a16566f968"
   },
@@ -31105,6 +31106,31 @@
       ],
       "links": [
         "https://github.com/IBM/plex/blob/2f9ba1b25957d958db71a849e85d72e3ecfb845a/LICENSE.txt"
+      ],
+      "copyright": [
+        "Copyright © 2017 IBM Corp. with Reserved Font Name \"Plex\""
+      ]
+    },
+    {
+      "id": "vendored:IBM Plex Sans KR@1.1.0",
+      "name": "IBM Plex Sans KR",
+      "version": "1.1.0",
+      "license": "OFL-1.1",
+      "source": "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-sans-kr/LICENSE.txt",
+      "artifacts": [
+        "macOS App/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d"
+      ],
+      "files": [
+        "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-sans-kr/LICENSE.txt"
+      ],
+      "links": [
+        "https://github.com/IBM/plex/blob/1da12f02587b630c07e92692d21492d722f53614/packages/plex-sans-kr/LICENSE.txt"
       ],
       "copyright": [
         "Copyright © 2017 IBM Corp. with Reserved Font Name \"Plex\""

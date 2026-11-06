@@ -7661,6 +7661,12 @@ License: https://github.com/IBM/plex/blob/2f9ba1b25957d958db71a849e85d72e3ecfb84
 Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
 
 =====
+IBM Plex Sans KR 1.1.0
+OFL-1.1
+License: https://github.com/IBM/plex/blob/1da12f02587b630c07e92692d21492d722f53614/packages/plex-sans-kr/LICENSE.txt
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+
+=====
 JavaScriptCore V8 Date.parse adaptation 2026-09-19
 BSD-2-Clause
 License: https://v8.dev/
