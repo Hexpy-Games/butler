@@ -89,6 +89,8 @@ impl Live {
             .update(|app| window.update(app, |view, _, cx| view.open(index, cx)))?;
         self.settle();
         self.page = Some(id.to_owned());
+        // A new window has no pointer on it yet.
+        self.pointer = Point::default();
         Ok(())
     }
 
