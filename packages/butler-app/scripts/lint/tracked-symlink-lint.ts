@@ -11,8 +11,9 @@ export function symlinkProblem(linkPath: string, target: string): string | null 
 }
 
 function git(args: string[]): string {
-  const result = spawnSync("git", args, { cwd: resolve(import.meta.dir, "../../../.."), encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+  // `git ls-files -s` outgrew spawnSync's ~1 MiB default buffer (ENOBUFS on Linux).
+  const result = spawnSync("git", args, { cwd: resolve(import.meta.dir, "../../../.."), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  if (result.status !== 0 || result.error) throw new Error(`git ${args.join(" ")} failed: ${result.error ?? result.stderr}`);
   return result.stdout;
 }
 
