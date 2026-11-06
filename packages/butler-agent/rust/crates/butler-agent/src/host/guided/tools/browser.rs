@@ -22,7 +22,7 @@ mod reached;
 pub(super) use reached::discover as discover_reached;
 mod act;
 mod executor;
-pub(super) use executor::{execute_executor, handoff};
+pub(super) use executor::{execute_executor, executor_admits, handoff};
 mod signin;
 mod upload;
 use super::{GuidedTools, dispatch::encoded};
