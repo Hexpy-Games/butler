@@ -266,7 +266,7 @@ impl Control {
             el.cursor_default()
         };
         if let Some(handle) = handle {
-            el = el.track_focus(handle).tab_stop(self.tab_stop);
+            el = el.track_focus(&focus::tab_stop(handle, self.tab_stop));
         }
         if live {
             let hover = state.clone();

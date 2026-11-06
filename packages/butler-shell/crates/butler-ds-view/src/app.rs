@@ -180,9 +180,24 @@ impl Render for DsView {
                             .child(crate::pages::anchored(body, "page-content")),
                     ),
             )
-            .child(Toaster::new());
+            .child(Toaster::new())
+            .on_key_down(move_focus);
         butler_ds::ui::overlay::track(focus::track_modality(butler_ds::ui::toast::track(root)))
     }
+}
+
+/// Tab and Shift+Tab move focus along the tab stops: the binding an app gives its window. gpui
+/// has no default one. Overlays that trap or prevent Tab handle the key first.
+fn move_focus(event: &gpui::KeyDownEvent, window: &mut Window, cx: &mut App) {
+    if event.keystroke.key != "tab" {
+        return;
+    }
+    if event.keystroke.modifiers.shift {
+        window.focus_prev(cx);
+    } else {
+        window.focus_next(cx);
+    }
+    cx.stop_propagation();
 }
 
 /// The story frame's background, `--conversation-bg`.

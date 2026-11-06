@@ -33,6 +33,13 @@ pub fn paint(ds: &Ds, bounds: Bounds<Pixels>, radius: Pixels, window: &mut Windo
     window.paint_drop_shadows_outside(bounds, Corners::all(radius), 0., &shadows(ds));
 }
 
+/// `handle` as a tab stop, or not. gpui reads the flag from the handle an element tracks and
+/// ignores the element's own `tab_stop`, so a control that is reached by Tab must track the
+/// handle this returns (the flag is shared by every copy of the handle).
+pub fn tab_stop(handle: &FocusHandle, on: bool) -> FocusHandle {
+    handle.clone().tab_stop(on)
+}
+
 /// Records whether the last input was the keyboard or a pointer, for [`visible`]. Add it to the
 /// window's root element once.
 pub fn track_modality(root: Div) -> Div {

@@ -203,9 +203,9 @@ impl RenderOnce for Card {
                 .hover_style(move |style| style.bg(hover));
         }
         if let (Some(focus_handle), true) = (focus_handle, self.interactive) {
-            let handle = focus_handle.read(cx).clone();
+            let handle = focus::tab_stop(focus_handle.read(cx), true);
             let ds = Ds::get(cx);
-            el = el.track_focus(&handle).tab_stop(true);
+            el = el.track_focus(&handle);
             if focus::visible(ds, handle.is_focused(window), false) {
                 el = el.shadow(focus::shadows(ds));
             }
