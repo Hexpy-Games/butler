@@ -135,3 +135,90 @@ async fn cb_11_result_turn_shows_running_task_and_names_result() -> Result<(), H
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn cb_11_later_result_turn_shows_earlier_worker_result() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server) = setup("CB-11-EARLIER-RESULT", 2).await?;
+    s.gw.say("general", "Verify batch red").await?;
+    let (_, rows) = workers(&s, "general", 2).await?;
+    started(&script, 2).await;
+    script.release("red-0");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let first = loop {
+        let found = script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(role, body)| {
+                let input = body["input"].to_string();
+                role == "steward"
+                    && input.contains("action_key: check-0")
+                    && input.contains("Delegated result")
+            })
+            .map(|(_, body)| body["input"].to_string());
+        if let Some(input) = found {
+            break input;
+        }
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert!(
+        !first.contains("Earlier Worker results in this Work"),
+        "{first}"
+    );
+    script.release("red-1");
+    for row in &rows {
+        closed(&s, row["session_id"].as_str().unwrap()).await?;
+    }
+    let (r0, r1, t0): (String, String, String) = {
+        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        let result = |row: &Value| -> Result<String, HarnessError> {
+            Ok(db.query_row(
+                "SELECT result_id FROM btcc_steward_results WHERE relation_id=?1",
+                [row["relation"]["relation_id"].as_str().unwrap()],
+                |r| r.get(0),
+            )?)
+        };
+        let t0 = db.query_row(
+            "SELECT task_id FROM btcc_work_tasks WHERE relation_id=?1",
+            [rows[0]["relation"]["relation_id"].as_str().unwrap()],
+            |r| r.get(0),
+        )?;
+        (result(&rows[0])?, result(&rows[1])?, t0)
+    };
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let second = loop {
+        let found = script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(role, body)| {
+                let input = body["input"].to_string();
+                role == "steward"
+                    && input.contains(&format!("result_id: {r1}"))
+                    && input.contains("action_key: check-1")
+            })
+            .map(|(_, body)| body["input"].to_string());
+        if let Some(input) = found {
+            break input;
+        }
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert!(
+        second.contains("Earlier Worker results in this Work (delivered to earlier turns):"),
+        "{second}"
+    );
+    assert!(
+        second.contains(&format!(
+            "- result_id: {r0} task: {t0} action_key: check-0 (done)"
+        )),
+        "{second}"
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
