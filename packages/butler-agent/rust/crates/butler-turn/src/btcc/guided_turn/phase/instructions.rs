@@ -56,6 +56,6 @@ pub(super) fn prefix(
             .join("; ");
         value = value.replace("__GUIDED_MUTATION_SCOPE__", &scope);
     }
-    value.push_str("\nProgress is not completion or permission. Full access executes; ask-first approves exact operations. Continue until the result is done, checked and delivered, or an approval or user-only question is pending; uncertainty a tool can resolve and risks that are not real are no reason to stop.\n");
+    value.push_str("\nKeep going until the result is done, checked and delivered, or until an approval or a question only the user can answer is pending; progress alone is neither completion nor permission, and uncertainty a tool can resolve or a risk that is not real is no reason to stop. Under full access you execute; under ask-first, each exact operation is approved before it runs. Make independent tool calls together in one round, and wait for any result a later call needs. Keep the names the user gave exactly as written.\n");
     Ok(value)
 }
