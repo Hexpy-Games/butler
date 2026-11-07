@@ -70,16 +70,16 @@ fn intro(lang: Lang, kind: Kind) -> &'static str {
     )
 }
 
-pub(super) fn run(lang: Lang, demo: Demo, window: &mut Window, cx: &mut App) -> AnyElement {
+pub(super) fn run(lang: Lang, demo: &Demo, window: &mut Window, cx: &mut App) -> AnyElement {
     let questions = fixtures(lang, demo.kind);
-    let session = Session::new(&demo, window, cx);
+    let session = Session::new(demo, window, cx);
     let stack = Stack::new()
         .gap(Space::Md)
         .child(Typo::body(intro(lang, demo.kind)));
     if let Some((outcome, answers)) = session.result.read(cx).clone() {
         return answered(
             lang,
-            &demo,
+            demo,
             &session,
             stack,
             &questions,
@@ -87,7 +87,7 @@ pub(super) fn run(lang: Lang, demo: Demo, window: &mut Window, cx: &mut App) -> 
             cx,
         );
     }
-    open(lang, &demo, &session, stack, questions, cx)
+    open(lang, demo, &session, stack, questions, cx)
 }
 
 /// The answered card and the reset that brings the panel back.
@@ -217,13 +217,13 @@ fn panel(
         set_collapse.update(cx, |value, cx| {
             *value = PanelState::Collapsed;
             cx.notify();
-        })
+        });
     })
     .on_expand(move |_, cx| {
         set_expand.update(cx, |value, cx| {
             *value = PanelState::Open;
             cx.notify();
-        })
+        });
     })
     .on_draft_change(move |answers, step, cx| {
         set_draft.update(cx, |value, _| *value = Some((answers.to_vec(), step)));

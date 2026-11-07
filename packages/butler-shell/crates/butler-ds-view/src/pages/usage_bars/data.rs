@@ -111,6 +111,10 @@ pub(super) fn sample_slots(hours: i64, seed: i64) -> Vec<Slot> {
     let mut start = first - first.rem_euclid(SLOT_MS);
     while start < now() {
         let hour = day_and_hour(start).1;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "fixture slot offsets are a few hundred at most"
+        )]
         let index = ((start - first) as f64 / SLOT_MS as f64).round() as i64;
         let wave = ((index * 37 + seed * 11).rem_euclid(23)) as f64 / 23.;
         if (9..=22).contains(&hour) && wave >= 0.45 {
@@ -135,7 +139,8 @@ pub(super) fn sample_split_slots(hours: i64, seed: i64) -> Vec<Slot> {
         .into_iter()
         .enumerate()
         .map(|(index, slot)| {
-            let share = [0., 0.3, 0.55, 0.7, 0.15, 0.45][(index + seed as usize) % 6];
+            let share =
+                [0., 0.3, 0.55, 0.7, 0.15, 0.45][(index + usize::try_from(seed).unwrap_or(0)) % 6];
             let [fresh, cached, output] = [slot.values[0], slot.values[1], slot.values[2]];
             let mut values = slot.values;
             values.extend([
@@ -174,7 +179,7 @@ fn bucket_label(lang: Lang, bucketing: &Bucketing, ms: i64) -> String {
             const NAMES: [&str; 12] = [
                 "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
             ];
-            let date = format!("{} {day}", NAMES[(month - 1) as usize]);
+            let date = format!("{} {day}", NAMES[usize::try_from(month - 1).unwrap_or(0)]);
             if hourly {
                 format!("{date}, {}", hour_text(lang, ms))
             } else {
@@ -249,7 +254,7 @@ pub(super) fn axis_labels(lang: Lang, bucketing: &Bucketing) -> Vec<AxisLabel> {
             let show = if bucketing.step_hours < 24 {
                 day_and_hour(bucket.start).1 == 0
             } else {
-                (buckets.len() - 1 - index) % 7 == 0
+                (buckets.len() - 1 - index).is_multiple_of(7)
             };
             show.then(|| {
                 let (month, day) = month_day(bucket.start);

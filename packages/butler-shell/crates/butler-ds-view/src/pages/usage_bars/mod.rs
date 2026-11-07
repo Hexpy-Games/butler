@@ -421,7 +421,13 @@ fn motion_slots(split: bool, hours: i64, responses: usize, subtasks: usize) -> V
             });
         }
         slots.push(Slot {
-            start: data::now() - SLOT_MS * (1 + if split { index as i64 * 4 } else { 0 }),
+            start: data::now()
+                - SLOT_MS
+                    * (1 + if split {
+                        i64::try_from(index).unwrap_or(0) * 4
+                    } else {
+                        0
+                    }),
             values,
         });
     }

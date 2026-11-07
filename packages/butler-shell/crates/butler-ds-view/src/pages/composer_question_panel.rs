@@ -224,12 +224,12 @@ fn conversation_panel(
         set_collapse.update(cx, |value, cx| {
             *value = PanelState::Collapsed;
             cx.notify();
-        })
+        });
     })
     .on_expand(move |_, cx| {
         set_expand.update(cx, |value, cx| {
             *value = PanelState::Open;
             cx.notify();
-        })
+        });
     })
 }
