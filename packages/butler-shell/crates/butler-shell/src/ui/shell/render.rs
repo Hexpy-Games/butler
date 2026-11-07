@@ -162,6 +162,7 @@ impl Render for Shell {
             .map(|b| self.render_dialog(b, window, cx))
             .unwrap_or_default();
         let rename = self.render_rename(window, cx);
+        let viewer = image_viewer::overlay(window, cx);
         let ds = Ds::get(cx);
         let root = div()
             .track_focus(&self.focus)
@@ -183,7 +184,7 @@ impl Render for Shell {
             .line_height(ds.len(Length::TypoBodyLineHeight))
             .text_color(ds.color(Color::TextPrimary))
             .child(frame)
-            .children(image_viewer::overlay(window, cx))
+            .children(viewer)
             .children(dialog)
             .child(rename)
             .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));

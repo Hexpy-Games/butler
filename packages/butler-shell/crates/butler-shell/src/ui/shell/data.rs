@@ -256,7 +256,6 @@ impl Shell {
             .as_ref()
             .is_some_and(|c| self.store.is_pending(&c.request));
         let disabled = self.disconnected();
-        let context = self.source.as_ref().map(|s| s.composer());
         self.composer.update(cx, |c, cx| {
             c.streaming = streaming;
             c.approval = approval.map(|card| (card, pending));
@@ -264,7 +263,6 @@ impl Shell {
                 c.fold();
             }
             c.disabled = disabled;
-            c.context = context;
             cx.notify();
         });
     }

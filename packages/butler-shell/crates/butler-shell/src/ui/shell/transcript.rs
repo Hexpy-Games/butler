@@ -2,7 +2,7 @@
 //! opening a session; and the open chat's view shown in it.
 use std::rc::Rc;
 
-use gpui::{App, Context};
+use gpui::{App, BorrowAppContext as _, Context};
 
 use super::{Shell, navigation::Navigation};
 use crate::ui::chat::{self, AssistantHooks, OlderRequest};
