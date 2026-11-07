@@ -7,7 +7,7 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
-use ui::source::{Decision, agent::Attachment};
+use ui::source::agent::Attachment;
 
 fn wait(
     h: &mut Harness,
@@ -49,21 +49,19 @@ fn type_text(h: &mut Harness, text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Answers the pending approval and waits until it is gone (and, on deny, the turn stopped).
+/// Whether the shown view carries an authority request.
+fn has_request(s: &ui::shell::Shell) -> bool {
+    s.store
+        .shown_view()
+        .is_some_and(|view| view.authority_requests.as_ref().is_some_and(|r| !r.is_empty()))
+}
+
+/// Clicks the allow-once or deny control and waits until the request is gone (and, on deny,
+/// the turn stopped).
 fn decide(h: &mut Harness, allow: bool) -> anyhow::Result<()> {
-    let decision = if allow {
-        Decision::AllowOnce
-    } else {
-        Decision::Deny
-    };
-    h.update(|s, _, cx| {
-        if let Some(card) = s.store.approval().cloned() {
-            s.answer(&card.request, decision, cx);
-        }
-    })?;
-    wait(h, |s, _| {
-        s.store.approval().is_none() && (allow || s.store.running().is_none())
-    })
+    let anchor = if allow { "authority-allow-always" } else { "authority-deny" };
+    super::frame::command(h, "click", anchor)?;
+    wait(h, |s, _| !has_request(s) && (allow || s.store.running().is_none()))
 }
 
 fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
@@ -126,14 +124,11 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
                 .all(|role| view.messages.iter().any(|m| &m.role == role))
             })
         }),
-        "approval" => wait(h, |s, _| s.store.approval().is_some()),
+        "approval" => wait(h, |s, _| has_request(s)),
         "exact" => exact(h, arg),
         "allow" | "deny" => decide(h, command == "allow"),
-        "modify" => h.update(|s, w, cx| {
-            if let Some(c) = s.store.approval().cloned() {
-                s.open_modify(&c, w, cx);
-            }
-        }),
+        // The card's Suggest a change button, as the owner presses it.
+        "modify" => super::frame::command(h, "click", "authority-modify"),
         "cancel" => {
             h.update(|s, _, cx| s.stop(cx))?;
             wait(h, |s, _| s.store.running().is_none())
@@ -164,7 +159,7 @@ pub(super) fn run(
             let _ = h.shot(dir, "failure");
             let state = h.cx.update(|app| h.window.read(app).map(|shell| {
                 serde_json::json!({"disconnected":shell.disconnected().is_some(),
-                    "running":shell.store.running().is_some(), "approval":shell.store.approval().is_some(),
+                    "running":shell.store.running().is_some(), "approval":shell.store.shown_view().is_some_and(|v| v.authority_requests.as_ref().is_some_and(|r| !r.is_empty())),
                     "messages":shell.store.shown_view().map(|view| view.messages.iter().map(|m| serde_json::json!({"id":m.id,"text":m.text,"status":m.status})).collect::<Vec<_>>())})
             }))?;
             std::fs::write(
@@ -224,11 +219,19 @@ fn left(h: &mut Harness, deleted: &str) -> anyhow::Result<()> {
 fn exact(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     let found = h.cx.update(|app| {
         h.window.read(app).map(|s| {
-            s.store
-                .approval()
-                .and_then(|c| c.approval.as_ref())
-                .and_then(ui::source::Approval::action)
-                .is_some_and(|text| text.as_ref() == arg)
+            let approval = s
+                .store
+                .shown_view()
+                .and_then(|view| view.authority_requests.as_ref())
+                .and_then(|requests| requests.first())
+                .map(|request| &request["approval"]);
+            approval
+                .and_then(|a| {
+                    a["operation"]["command"]
+                        .as_str()
+                        .or_else(|| a["examples"][0].as_str())
+                })
+                .is_some_and(|text| text == arg)
         })
     })?;
     if !found {

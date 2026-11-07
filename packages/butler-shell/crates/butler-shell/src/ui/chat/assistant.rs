@@ -21,6 +21,9 @@ use super::activity::{is_general_chat, message_activity};
 use super::answers::answer_blocks;
 use super::files::message_files;
 use super::message_markdown::message_markdown_in;
+use crate::ui::decisions::{
+    DecisionCtx, canon_proposal_cards, initiated_panels, plan_document_card,
+};
 use crate::ui::i18n::{AssistantStrings, assistant};
 use crate::ui::source::wire::{InitiatedOriginState, MessageRecord, MessageRecordRole};
 
@@ -255,7 +258,9 @@ fn attachments(
     cx: &mut App,
 ) -> Vec<AnyElement> {
     let copy = text(cx);
+    let decisions = DecisionCtx { view: t.view };
     let mut parts = Vec::new();
+    parts.extend(canon_proposal_cards(decisions, msg, window, cx));
     for question in msg.question_summary.iter().flatten() {
         parts.push(
             Stack::new()
@@ -264,6 +269,10 @@ fn attachments(
                 .child(Typo::body(question.title.clone()).wrap(Wrap::Anywhere))
                 .into_any_element(),
         );
+    }
+    if let Some(plan) = msg.plan_document.as_ref() {
+        let bubble = is_general_chat(msg.chat_id.as_deref());
+        parts.push(plan_document_card(plan, bubble, cx));
     }
     let incomplete = msg.incomplete == Some(true);
     if msg.status.as_deref() == Some("cancelled") || incomplete {
@@ -294,5 +303,6 @@ fn attachments(
             .into_any_element(),
         );
     }
+    parts.extend(initiated_panels(decisions, msg, window, cx));
     parts
 }

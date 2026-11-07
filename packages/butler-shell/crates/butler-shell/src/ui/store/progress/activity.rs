@@ -6,7 +6,7 @@ use butler_ds::ui::context::Lang;
 
 use super::blocks::project_shared_work_blocks;
 use super::ordinary::{compact_legacy_display_title, fallback_ordinary_activity};
-use super::read_models::{ActivityReadModel, project_activity_read_models};
+pub(crate) use super::read_models::{ActivityReadModel, project_activity_read_models};
 use super::row_ops::{is_terminal_state, merge_tool_rows};
 use super::rows::visible_progress_rows;
 use crate::ui::source::wire::{ProgressRow, WorkBlockView};

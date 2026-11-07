@@ -4,6 +4,21 @@
 pub(crate) mod composer;
 pub(crate) mod media;
 mod messages;
+pub(crate) mod authority;
+pub(crate) mod task_graph;
+pub(crate) mod artifact_viewer;
+pub(crate) mod browser_handoff;
+pub(crate) mod canon_order;
+pub(crate) mod initiated;
+pub(crate) mod new_chat;
+pub(crate) mod session_sections;
+pub(crate) mod canon_proposal;
+pub(crate) mod file_viewer;
+pub(crate) mod inspector_artifacts;
+pub(crate) mod palette;
+pub(crate) mod plan_decision;
+pub(crate) mod question;
+pub(crate) mod session_info;
 
 pub(crate) use messages::{AssistantStrings, assistant, transcript, worked_duration};
 

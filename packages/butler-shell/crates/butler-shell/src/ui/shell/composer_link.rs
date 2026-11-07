@@ -4,12 +4,16 @@ use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
 use gpui::{Context, Entity, Window};
 
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{Shell, image_viewer};
 use crate::ui::composer::queue::on_delete_queued;
-use crate::ui::composer::{Composer, ComposerEvent, Inputs, Outgoing};
+use crate::ui::decisions;
+use crate::ui::composer::{
+    Composer, ComposerEvent, Inputs, Outgoing, clear_composer_text, composer_text, focus_composer,
+};
 use crate::ui::i18n::composer::words;
 use crate::ui::source::agent::{Jobs, sent_turn, source_error};
 use crate::ui::source::{ChatRef, Fetch, SentTurn, SourceError};
@@ -109,14 +113,12 @@ impl Shell {
         &mut self,
         _: &Entity<Composer>,
         event: &ComposerEvent,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
             ComposerEvent::Send(outgoing) => self.send(outgoing.as_ref().clone(), cx),
             ComposerEvent::Stop => self.stop(cx),
-            ComposerEvent::Answer(request, decision) => self.answer(request, decision.clone(), cx),
-            ComposerEvent::Modify(card) => self.open_modify(card, window, cx),
             // Settings is not in the shell yet.
             ComposerEvent::OpenUsageSettings => {
                 toast::show(cx, Toast::message(self.theme.strings.not_yet));
@@ -128,6 +130,31 @@ impl Shell {
     /// into the composer for editing.
     pub(super) fn install_composer(cx: &mut Context<Self>) {
         image_viewer::install(cx);
+        // An answered request or question: the open view (which carries the requests) is read
+        // again.
+        let shell = cx.entity().downgrade();
+        decisions::on_authority_changed(cx, move |_, cx| {
+            let _ = shell.update(cx, Shell::refresh_open_view);
+        });
+        let shell = cx.entity().downgrade();
+        decisions::on_question_answered(cx, move |cx| {
+            let _ = shell.update(cx, Shell::refresh_open_view);
+        });
+        // The plan decision's bridge. `open_plan` does nothing until the transcript has a
+        // scroll-to helper (`onOpenPlan` scrolls to the plan document).
+        let shell = cx.entity().downgrade();
+        decisions::set_plan_bridge(
+            cx,
+            decisions::PlanBridge {
+                open_plan: Rc::new(|_, _| {}),
+                text: Rc::new(composer_text),
+                clear_text: Rc::new(clear_composer_text),
+                open_instruction: Rc::new(focus_composer),
+                decided: Rc::new(move |_, cx| {
+                    let _ = shell.update(cx, Shell::refresh_open_view);
+                }),
+            },
+        );
         on_delete_queued(cx, |id, cx| {
             let id = id.to_owned();
             let fetch = Jobs::run(cx, move |client| async move {

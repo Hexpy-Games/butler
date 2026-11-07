@@ -9,7 +9,7 @@
 //! `quota_loaded`.
 mod copy;
 mod popover;
-mod timeline;
+pub(crate) mod timeline;
 mod usage;
 
 use std::collections::HashMap;

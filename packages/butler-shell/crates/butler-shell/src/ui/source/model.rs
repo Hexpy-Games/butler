@@ -74,26 +74,6 @@ pub(crate) struct ChatPage {
     pub(crate) events: EventCursor,
 }
 
-/// What an authority request asks for.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum CardKind {
-    /// Run a command.
-    Command,
-    /// Carry out a reviewed effect (file change, schedule, browser step, ...).
-    ReviewedEffect,
-    /// Answer the agent's questions.
-    Question,
-    /// A kind this build does not know, with the agent's name for it.
-    Other(SharedString),
-}
-
-impl CardKind {
-    /// Whether this build can decide the request (allow once, deny, suggest a change).
-    pub(crate) fn decidable(&self) -> bool {
-        matches!(self, Self::Command | Self::ReviewedEffect)
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Risk {
     Low,
@@ -141,67 +121,11 @@ pub(crate) struct Approval {
     pub(crate) risk: Option<Risk>,
 }
 
-impl Approval {
-    /// The exact action text: the command as sent, else the first example, else the first
-    /// target, each unchanged.
-    pub(crate) fn action(&self) -> Option<SharedString> {
-        let exact = self
-            .wire
-            .as_ref()
-            .and_then(|v| v["operation"]["command"].as_str())
-            .map(|s| s.to_owned().into());
-        let command = exact.or_else(|| self.operation.as_ref().and_then(|o| o.command.clone()));
-        command
-            .or_else(|| self.examples.first().cloned())
-            .or_else(|| {
-                self.targets
-                    .first()
-                    .map(|t| t.label.clone().unwrap_or(t.path.clone()))
-            })
-    }
-}
-
 /// An outstanding authority request.
 #[derive(Clone, Debug)]
 pub(crate) struct AuthorityCard {
     pub(crate) request: RequestRef,
-    pub(crate) kind: CardKind,
-    /// The agent's reason, unchanged.
-    pub(crate) reason: SharedString,
     pub(crate) approval: Option<Approval>,
-}
-
-/// How far an allow reaches.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[expect(
-    dead_code,
-    reason = "UI offers allow once only; scoped allows are not exposed"
-)]
-pub(crate) enum AllowScope {
-    Conversation,
-    Site,
-}
-
-/// One answered question.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct QuestionAnswer {
-    pub(crate) id: SharedString,
-    pub(crate) selected: Vec<SharedString>,
-    pub(crate) custom: Option<String>,
-    pub(crate) skipped: bool,
-}
-
-/// A decision on an authority request (the client's allow, deny, modify and answer).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Decision {
-    AllowOnce,
-    #[expect(dead_code, reason = "UI offers allow once only")]
-    Allow(AllowScope),
-    Deny,
-    /// Suggest a different approach (exact instruction).
-    Modify(String),
-    #[expect(dead_code, reason = "question UI directs answers to the existing App")]
-    Answer(Vec<QuestionAnswer>),
 }
 
 /// A message was sent and its turn started.
@@ -234,6 +158,8 @@ pub(crate) enum LiveUpdate {
     Chat(ChatSummary),
     /// The stream lost events it cannot replay: reload what is shown.
     Resync,
+    /// An event the inspector's own readers follow (canon queue, task graphs, reconcile).
+    Inspector(Box<super::wire::AppEventEnvelope>),
 }
 
 /// A live update and its durable cursor (drafts have none).

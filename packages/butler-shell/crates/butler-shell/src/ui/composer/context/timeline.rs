@@ -45,7 +45,7 @@ fn fixed(value: f64, decimals: usize) -> String {
 }
 
 /// `compactTokens`: 12.3K / 1.2만, never Latin units for Korean.
-pub(super) fn usage_tokens(value: f64, lang: Lang) -> String {
+pub(crate) fn usage_tokens(value: f64, lang: Lang) -> String {
     let amount = value.max(0.).round();
     if amount < 1000. {
         return fixed(amount, 0);

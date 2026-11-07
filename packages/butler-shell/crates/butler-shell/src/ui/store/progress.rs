@@ -20,7 +20,7 @@ pub(crate) mod rows;
 mod snapshots;
 pub(crate) mod tasks;
 pub(crate) mod terminal;
-mod tool_titles;
+pub(crate) mod tool_titles;
 
 use serde_json::Value;
 

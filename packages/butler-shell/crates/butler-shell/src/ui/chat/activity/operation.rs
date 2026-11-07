@@ -15,6 +15,7 @@ use gpui::{
 
 use self::present::{Presentation, Section, present};
 use super::tools::copy::text;
+use crate::ui::decisions::browser_step_still;
 use crate::ui::source::agent::Jobs;
 
 /// One page of a stored operation output.
@@ -143,6 +144,16 @@ pub(super) fn output_details(
         .filter(|(complete, _)| !complete)
         .map(|(_, byte_end)| more_button(&key, &state, ids, byte_end, phase, lang));
     let mut stack = Stack::new().gap(Space::Xs);
+    if tool == Some("browser_act") && complete {
+        stack = stack.children(browser_step_still(
+            &ids.turn,
+            &ids.request,
+            &ids.result,
+            Some(&joined),
+            window,
+            cx,
+        ));
+    }
     if let Some(execution) = execution(&output, command, lang) {
         stack = stack.children(execution);
     }

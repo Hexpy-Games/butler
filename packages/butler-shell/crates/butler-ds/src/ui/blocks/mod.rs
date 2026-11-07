@@ -57,6 +57,7 @@ pub mod status_capsule;
 pub mod status_checklist;
 pub mod suggestion_list;
 pub mod surface_panel;
+pub mod step_sortable_list;
 pub mod tab_strip;
 pub mod task_graph_canvas;
 pub mod task_graph_card;

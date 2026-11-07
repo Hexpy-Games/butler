@@ -1,7 +1,7 @@
 //! Wire projections retain exact approval text; unknown wire kinds remain visible.
 use super::super::wire;
 use super::super::{
-    Approval, AuthorityCard, CardKind, ChatId, ChatRef, ChatSummary, RequestRef, Risk, SessionId,
+    Approval, AuthorityCard, ChatId, ChatRef, ChatSummary, RequestRef, Risk, SessionId,
     SourceError, Space, Timestamp,
     model::{Access, Operation, Target},
 };
@@ -66,18 +66,8 @@ pub(super) fn authority(page: AuthorityPage) -> Result<Vec<AuthorityCard>, Error
     page.requests
         .into_iter()
         .map(|card| {
-            let raw = decode::<wire::AuthorityProjection>(&card.raw)
-                .unwrap_or(wire::AuthorityProjection { category: None });
-            let kind = match raw.category.as_deref().unwrap_or_default() {
-                "command" => CardKind::Command,
-                "reviewed_effect" => CardKind::ReviewedEffect,
-                "ask_user" => CardKind::Question,
-                name => CardKind::Other(name.to_owned().into()),
-            };
             Ok(AuthorityCard {
                 request: RequestRef(card.request_ref.into()),
-                kind,
-                reason: card.reason.into(),
                 approval: if card.approval.is_null() {
                     None
                 } else {

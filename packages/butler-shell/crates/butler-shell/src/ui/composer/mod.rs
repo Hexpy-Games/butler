@@ -1,8 +1,7 @@
 //! The floating composer (blocks/ComposerCard, ComposerControl, ComposerDecisionPanel).
 mod adjunct;
-mod approval;
 mod attachments;
-mod context;
+pub(crate) mod context;
 mod controls;
 pub(crate) mod editor;
 mod files;
@@ -42,11 +41,38 @@ use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
 use crate::ui::field;
 use crate::ui::motion::Hover;
-use crate::ui::source::{AuthorityCard, Decision, RequestRef};
+use crate::ui::decisions::{
+    DecisionCtx, decision_surface, plan_instruction, set_plan_gate,
+};
+use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::HasHover;
 
 pub(crate) use inputs::Inputs;
+
+/// `fillComposerWithTemplate`: puts a suggestion into an empty composer and focuses it.
+pub(crate) fn fill_composer_with_template(text: &str, cx: &mut App) {
+    ComposerState::update(cx, |composer| {
+        if composer.text.trim().is_empty() && composer.content_parts.is_none() {
+            composer.set_text(text);
+        }
+        composer.request_focus();
+    });
+}
+/// `useComposerStore.getState().text`
+pub(crate) fn composer_text(cx: &mut App) -> String {
+    ComposerState::read(cx, |draft| draft.text.clone())
+}
+
+/// `setText("")`
+pub(crate) fn clear_composer_text(cx: &mut App) {
+    ComposerState::update(cx, |draft| draft.set_text(""));
+}
+
+/// `setEngaged(true)` and `focusComposer`: the composer takes the request on its next frame.
+pub(crate) fn focus_composer(cx: &mut App) {
+    ComposerState::update(cx, ComposerState::request_focus);
+}
 pub(crate) use send::Outgoing;
 
 actions!(composer, [Submit, SubmitWithModifier]);
@@ -67,9 +93,6 @@ pub(crate) enum ComposerEvent {
     /// A draft to send into the open chat, or into a new one.
     Send(Box<Outgoing>),
     Stop,
-    Answer(RequestRef, Decision),
-    /// The owner wants to suggest a change to this request.
-    Modify(Box<AuthorityCard>),
     /// The context popover's Details: open Settings > Usage.
     OpenUsageSettings,
 }
@@ -103,9 +126,12 @@ pub(crate) struct Composer {
     engaged: bool,
     /// The open chat's turn is running.
     pub(crate) streaming: bool,
-    /// The open chat's first outstanding authority request (shown instead of the input), and
-    /// whether an answer to it is on its way.
-    pub(crate) approval: Option<(AuthorityCard, bool)>,
+    /// The open chat's view, for the decision surfaces that take the input's place.
+    decision_view: Option<Rc<SessionView>>,
+    /// The open chat's queued follow-ups, for the plan decision's gate.
+    queue: Vec<QueuedMessageRecord>,
+    /// A decision surface took the input's place in the last frame.
+    decision_shown: bool,
     /// The new-chat composer (`large`).
     new_chat: bool,
     git_notice_dismissed: bool,
@@ -167,7 +193,9 @@ impl Composer {
             theme,
             engaged: false,
             streaming: false,
-            approval: None,
+            decision_view: None,
+            queue: Vec::new(),
+            decision_shown: false,
             new_chat: true,
             git_notice_dismissed: false,
             disabled: None,
@@ -203,6 +231,11 @@ impl Composer {
         cx.notify();
     }
 
+    /// The open chat's view, read by the decision surfaces.
+    pub(crate) fn set_decision_view(&mut self, view: Option<Rc<SessionView>>) {
+        self.decision_view = view;
+    }
+
     pub(crate) fn fold(&mut self) {
         self.engaged = false;
     }
@@ -218,9 +251,15 @@ impl Composer {
     }
 
     fn body(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        if let Some((card, pending)) = self.approval.clone() {
-            return vec![approval::panel(self, &card, pending, cx).into_any_element()];
+        let view = self.decision_view.clone();
+        let surface = view
+            .as_deref()
+            .and_then(|view| decision_surface(DecisionCtx { view }, window, cx));
+        self.decision_shown = surface.is_some();
+        if let Some(surface) = surface {
+            return vec![surface];
         }
+        let (attachment, placeholder) = self.decision_attachment(window, cx);
         let lang = butler_ds::ui::context::Ds::get(cx).lang();
         let (attached, refused) = ComposerState::read(cx, |draft| {
             (draft.attachments.clone(), draft.blocked_attachments.clone())
@@ -245,7 +284,7 @@ impl Composer {
             },
             cx,
         );
-        let input = field::field("composer-input", &self.input, self.placeholder, &self.theme)
+        let input = field::field("composer-input", &self.input, placeholder.unwrap_or(self.placeholder), &self.theme)
             .aria_label(self.theme.strings.message_composer);
         let input = crate::ui::widgets::anchor(input, "composer-field");
         let field = self.references.field.clone();
@@ -307,7 +346,11 @@ impl Composer {
                 }
             }))
             .child(input);
-        let mut body = ExpandedBody::new("composer-body").child(editor);
+        let mut body = ExpandedBody::new("composer-body");
+        if let Some(attachment) = attachment {
+            body = body.child(attachment);
+        }
+        body = body.child(editor);
         if let Some(tiles) = tiles {
             body = body.child(tiles);
         }
@@ -315,6 +358,31 @@ impl Composer {
             body.into_any_element(),
             self.toolbar(window, cx).into_any_element(),
         ]
+    }
+
+    /// `ComposerInputSurface`'s attachment above the input: the authority pill while the owner
+    /// composes over a request, else the plan instruction context with its placeholder.
+    fn decision_attachment(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (Option<AnyElement>, Option<&'static str>) {
+        let Some(view) = self.decision_view.clone() else {
+            return (None, None);
+        };
+        let ctx = DecisionCtx { view: &view };
+        match plan_instruction(ctx, cx) {
+            Some(plan) => (
+                Some(adjunct::plan_instruction_attachment(&plan.title, plan.label, cx)),
+                Some(plan.placeholder),
+            ),
+            None => (None, None),
+        }
+    }
+
+    /// The open chat's queued follow-ups.
+    pub(crate) fn set_queue(&mut self, queue: Vec<QueuedMessageRecord>) {
+        self.queue = queue;
     }
 
     /// `useComposerPresentation`'s `protectedExpanded`.
@@ -339,6 +407,8 @@ impl Render for Composer {
         self.take_focus_request(window, cx);
         self.sync_mentions(window, cx);
         self.protected = Self::popover_open(window, cx);
+        // `useComposerPlanDecision`'s inputs: plan mode and the open chat's queue.
+        set_plan_gate(cx, self.controls.shown.plan_mode, &self.queue);
         let height = self.height.clone();
         let probe = canvas(
             move |b, _, _| height.set(b.size.height.as_f32()),
@@ -371,7 +441,8 @@ impl Render for Composer {
                 .active_progress()
                 .and_then(|p| p.state.as_deref()),
         );
-        let expanded = self.engaged || self.approval.is_some() || self.protected;
+        let body = self.body(window, cx);
+        let expanded = self.engaged || self.decision_shown || self.protected;
         let mut card = ComposerCard::new("composer-card").expanded(expanded);
         if self.new_chat {
             card = card.large();
@@ -385,7 +456,7 @@ impl Render for Composer {
         if let Some(adjunct) = adjunct {
             card = card.adjunct(adjunct);
         }
-        let card = card.children(self.body(window, cx));
+        let card = card.children(body);
         let column = butler_ds::ui::blocks::scope::conversation(cx).unwrap_or_default();
         let ds = butler_ds::ui::context::Ds::get(cx);
         let dropped = cx.entity().downgrade();
@@ -406,7 +477,7 @@ impl Render for Composer {
         .child(probe)
         .child(card)
         .on_click(cx.listener(|this, _, window, cx| {
-            if !this.engaged && this.approval.is_none() {
+            if !this.engaged && !this.decision_shown {
                 this.engage(window, cx);
             }
         }))

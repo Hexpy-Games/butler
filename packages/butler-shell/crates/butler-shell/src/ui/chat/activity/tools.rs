@@ -20,6 +20,7 @@ use gpui::{
 use self::labels::{activity_icon, detail_text, nonempty, summary_label};
 use super::operation::{Ids, output_details};
 use crate::ui::chat::TranscriptCtx;
+use crate::ui::decisions::browser_step_still;
 use crate::ui::source::wire::ProgressRow;
 use crate::ui::store::progress::terminal::is_visible_tool_activity;
 
@@ -127,9 +128,11 @@ pub(super) fn tool_column(
     if shown.is_empty() {
         return None;
     }
+    // `toolchainAfter`: only the latest browser step shows its still.
+    let latest = rows.iter().rev().find(|row| is_browser_step(row));
     let items: Vec<AnyElement> = shown
         .into_iter()
-        .map(|row| tool_row(row, t, window, cx))
+        .map(|row| tool_row(row, latest.is_some_and(|l| std::ptr::eq(l, row)), t, window, cx))
         .collect();
     Some(
         div()
@@ -139,8 +142,29 @@ pub(super) fn tool_column(
     )
 }
 
-/// One tool/thinking/worker row of a turn's activity.
-fn tool_row(row: &ProgressRow, t: &TranscriptCtx, window: &mut Window, cx: &mut App) -> AnyElement {
+/// A `browser_act` row with a stored result.
+pub(super) fn is_browser_step(row: &ProgressRow) -> bool {
+    row.safe_tool_name.as_deref() == Some("browser_act")
+        && nonempty(row.tool_result_id.as_deref()).is_some()
+}
+
+/// `BrowserStepStill` of a row's step.
+fn row_still(row: &ProgressRow, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+    let turn = nonempty(row.turn_id.as_deref())?;
+    let call = nonempty(row.tool_call_id.as_deref())?;
+    let result = nonempty(row.tool_result_id.as_deref())?;
+    browser_step_still(turn, call, result, None, window, cx)
+}
+
+/// One tool/thinking/worker row of a turn's activity; `latest_browser` marks the row that
+/// shows the step's still.
+fn tool_row(
+    row: &ProgressRow,
+    latest_browser: bool,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let lang = Ds::get(cx).lang();
     let thinking = nonempty(row.thinking_title.as_deref());
     let title = thinking.map_or_else(|| summary_label(row, lang), str::to_owned);
@@ -181,7 +205,9 @@ fn tool_row(row: &ProgressRow, t: &TranscriptCtx, window: &mut Window, cx: &mut 
             disclosure.into_any_element()
         }
     };
-    match worker::capsule(row, t, lang) {
+    let after = worker::capsule(row, t, lang)
+        .or_else(|| latest_browser.then(|| row_still(row, window, cx)).flatten());
+    match after {
         Some(after) => Stack::new()
             .gap(Space::Xs)
             .child(head)

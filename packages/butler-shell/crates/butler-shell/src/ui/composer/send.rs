@@ -11,6 +11,7 @@ use super::queue::{access_wire, controls_body, effort_wire, queue_message};
 use super::state::{ComposerState, QueuePolicy, Submission, SubmitInput};
 use super::references::MentionKey;
 use super::{Composer, ComposerEvent, Submit, SubmitWithModifier};
+use crate::ui::decisions::{DecisionCtx, plan_instruction, submit_plan_instruction};
 use crate::ui::i18n::composer::words;
 use crate::ui::source::agent::Jobs;
 
@@ -84,6 +85,14 @@ impl Composer {
             return;
         }
         self.on_text_changed(window, cx);
+        // `onSubmit`: while the owner writes the plan instruction, Send decides the plan.
+        if let Some(view) = self.decision_view.clone() {
+            let ctx = DecisionCtx { view: &view };
+            if plan_instruction(ctx, cx).is_some() {
+                submit_plan_instruction(ctx, cx);
+                return;
+            }
+        }
         let Some(outgoing) = self.begin_send(cx) else {
             return;
         };

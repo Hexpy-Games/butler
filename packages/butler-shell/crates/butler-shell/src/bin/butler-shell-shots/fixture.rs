@@ -10,7 +10,7 @@ use crate::ui::source::model::{Access, Operation};
 use crate::ui::source::wire::SessionView;
 use crate::ui::source::{
     Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
-    ComposerContext, Decision, EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, Risk,
+    ComposerContext, EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, Risk,
     SentTurn, SessionId, Source, SourceError, Space, Timestamp, TurnId,
 };
 
@@ -145,22 +145,40 @@ fn view(session: &SessionId) -> Result<SessionView, SourceError> {
             "updated_at": "2026-01-01T10:00:00Z"})
     });
     let count = messages.len();
+    let requests: Vec<serde_json::Value> = (session.0.as_ref() == "s-c-approval")
+        .then(command_request)
+        .into_iter()
+        .collect();
     let view = serde_json::json!({
         "session_id": session.0.as_ref(), "kind": "chat", "status": "active",
         "active_turn": turn, "messages": messages,
         "message_window": {"next_cursor": count, "complete": true},
         "cursors": {"messages": count, "events": 1},
+        "authority_requests": requests,
         "generated_at": "2026-01-01T10:00:00Z", "updated_at": "2026-01-01T10:00:00Z"
     });
     serde_json::from_value(view).map_err(|_| SourceError::Missing)
 }
 
+const COMMAND: &str = "cargo build --release -p butler-agent --target-dir /tmp/butler-release-check --message-format short";
+const COMMAND_REASON: &str = "배포 전에 release 빌드가 깨지지 않는지 확인합니다.";
+
+/// The gateway's authority request of the approval chat (`AuthorityApprovalCard`).
+fn command_request() -> serde_json::Value {
+    serde_json::json!({"request_ref": "r-1", "category": "command", "reason": COMMAND_REASON,
+        "executable": "cargo", "command_count": 1,
+        "approval": {"action_kind": "run_command", "count": 1,
+            "examples": [COMMAND], "examples_truncated": [false],
+            "operation": {"tool": "shell", "access": "change", "command": COMMAND},
+            "risk": "medium"}})
+}
+
 fn command_card() -> AuthorityCard {
-    let command = "cargo build --release -p butler-agent --target-dir /tmp/butler-release-check --message-format short";
+    let command = COMMAND;
     AuthorityCard {
         request: RequestRef("r-1".into()),
         kind: CardKind::Command,
-        reason: "배포 전에 release 빌드가 깨지지 않는지 확인합니다.".into(),
+        reason: COMMAND_REASON.into(),
         approval: Some(Approval {
             wire: None,
             action_kind: "command".into(),
@@ -236,10 +254,6 @@ impl Source for Fixture {
     }
 
     fn cancel(&self, _: &TurnId) -> Fetch<()> {
-        ready(())
-    }
-
-    fn answer(&self, _: &SessionId, _: &RequestRef, _: Decision) -> Fetch<()> {
         ready(())
     }
 

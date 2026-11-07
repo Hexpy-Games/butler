@@ -7,7 +7,7 @@
 //! the shell's client is authorized, so a file loads by its id.
 mod changed;
 mod media;
-mod support;
+pub(crate) mod support;
 
 use std::rc::Rc;
 

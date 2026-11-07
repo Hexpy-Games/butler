@@ -4,7 +4,6 @@ pub(crate) mod assets;
 pub(crate) mod chat;
 pub(crate) mod composer;
 pub(crate) mod decisions;
-pub(crate) mod dialog;
 pub(crate) mod exact_action;
 pub(crate) mod field;
 pub(crate) mod glass;

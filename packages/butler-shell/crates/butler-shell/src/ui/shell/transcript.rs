@@ -84,6 +84,9 @@ impl Shell {
                 if this.store.selected() != Some(&chat) {
                     return;
                 }
+                let pending = queue.as_ref().map(|view| view.queued_messages.clone());
+                this.composer
+                    .update(cx, |c, _| c.set_queue(pending.unwrap_or_default()));
                 this.chat.update(cx, |c, cx| {
                     c.set_queue(queue.map(Rc::new));
                     cx.notify();
@@ -97,6 +100,12 @@ impl Shell {
     /// Shows the open chat's view (with the turns' live progress) in the transcript.
     pub(super) fn show_view(&mut self, live: bool, cx: &mut Context<Self>) {
         let view = self.store.shown_view().map(Rc::new);
+        let decision_view = view.clone();
+        self.feed_panes(view.clone(), cx);
+        self.composer.update(cx, |c, cx| {
+            c.set_decision_view(decision_view);
+            cx.notify();
+        });
         self.chat.update(cx, |c, cx| {
             c.set_view(view, live, cx);
             cx.notify();

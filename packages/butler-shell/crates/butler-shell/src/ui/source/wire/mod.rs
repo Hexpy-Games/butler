@@ -39,3 +39,5 @@ mod new_chat;
 pub(crate) use new_chat::*;
 mod session_info;
 pub(crate) use session_info::*;
+mod canon_queue;
+pub(crate) use canon_queue::*;

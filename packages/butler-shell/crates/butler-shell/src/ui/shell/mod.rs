@@ -1,13 +1,12 @@
 //! The window: AdaptiveShell frame="cards" (AdaptiveShellCards.module.css, AdaptiveShellFrame):
-//! the sidebar track, the chat card with the floating composer, the title row, and the
-//! suggest-a-change dialog when one is open.
+//! the sidebar track, the chat card with the floating composer, and the title row.
 mod composer_link;
 mod data;
 mod frame;
 pub(crate) mod image_viewer;
-mod modify;
 pub(crate) mod navigation;
 mod notifications;
+mod panes;
 mod render;
 mod session_menu;
 mod titlebar;
@@ -18,13 +17,12 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-    AppContext as _, Bounds, Context, Entity, FocusHandle, KeyBinding, Pixels, SharedString,
-    Subscription, Window, WindowAppearance, actions,
+    AppContext as _, Context, Entity, FocusHandle, KeyBinding, SharedString, Subscription, Window,
+    WindowAppearance, actions,
 };
 
 use crate::ui::chat::Chat;
 use crate::ui::composer::Composer;
-use crate::ui::dialog::Dialog;
 use crate::ui::i18n::Locale;
 use crate::ui::motion::Hover;
 use crate::ui::sidebar::SidebarState;
@@ -41,6 +39,7 @@ actions!(
         TextSizeUp,
         TextSizeDown,
         TextSizeReset,
+        TogglePalette,
         Quit
     ]
 );
@@ -53,6 +52,7 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("secondary--", TextSizeDown, None),
         KeyBinding::new("secondary-0", TextSizeReset, None),
         KeyBinding::new("secondary-q", Quit, None),
+        KeyBinding::new("secondary-k", TogglePalette, None),
     ]
 }
 
@@ -63,7 +63,6 @@ pub(crate) struct Shell {
     pub(crate) theme: Theme,
     pub(crate) chat: Entity<Chat>,
     pub(crate) composer: Entity<Composer>,
-    pub(crate) dialog: Option<Entity<Dialog>>,
     pub(crate) hover: Hover,
     pub(crate) sidebar: SidebarState,
     sidebar_open: bool,
@@ -78,7 +77,7 @@ pub(crate) struct Shell {
     theme_override: Option<bool>,
     /// The composer card's measured height (the conversation keeps room for it).
     composer_h: Rc<Cell<f32>>,
-    card_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    panes: panes::Panes,
     focus: FocusHandle,
     subscriptions: Vec<Subscription>,
     live_task: Option<gpui::Task<()>>,
@@ -140,13 +139,15 @@ impl Shell {
             }),
             cx.subscribe_in(&composer, window, Self::on_composer),
         ];
+        let (panes, palette_events) = Self::new_panes(window, cx);
+        let mut subscriptions = subscriptions;
+        subscriptions.push(palette_events);
         let composer_h = composer.read(cx).height_cell();
         cx.set_window_appearance(options.dark.map(appearance));
         let mut shell = Self {
             theme,
             chat,
             composer,
-            dialog: None,
             hover: Hover::default(),
             sidebar: SidebarState::new(),
             sidebar_open: true,
@@ -159,7 +160,7 @@ impl Shell {
             store: Store::default(),
             theme_override: options.dark,
             composer_h,
-            card_bounds: Rc::new(Cell::new(None)),
+            panes,
             focus,
             subscriptions,
             live_task: None,
@@ -223,12 +224,6 @@ impl Shell {
             c.set_theme(t.clone(), cx);
             cx.notify();
         });
-        if let Some(dialog) = &self.dialog {
-            dialog.update(cx, |d, cx| {
-                d.theme = t;
-                cx.notify();
-            });
-        }
         cx.notify();
     }
 

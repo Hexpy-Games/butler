@@ -6,7 +6,7 @@ use gpui::{Context, Window};
 
 use super::Shell;
 use crate::ui::source::agent::MonitorSignal;
-use crate::ui::source::{ChatRef, Decision, EventCursor, Fetch, RequestRef, SourceError};
+use crate::ui::source::{ChatRef, EventCursor, Fetch, SourceError};
 use crate::ui::store::{Applied, ChatsLoad};
 
 impl Shell {
@@ -111,11 +111,15 @@ impl Shell {
 
     fn apply(&mut self, epoch: u64, event: crate::ui::source::LiveEvent, cx: &mut Context<Self>) {
         let attention_changed = matches!(&event.update, crate::ui::source::LiveUpdate::Chat(_));
+        if let crate::ui::source::LiveUpdate::Inspector(envelope) = &event.update {
+            crate::ui::inspector::live_event(envelope, cx);
+        }
         match self.store.apply(epoch, event) {
             Applied::Store => {}
             Applied::Failed(error) => self.failed(&error, self.theme.strings.load_failed, cx),
             Applied::Transcript => self.show_view(true, cx),
             Applied::Resync => self.connect(cx),
+            Applied::Refresh => self.refresh_open_view(cx),
         }
         if self.store.view_stale() {
             self.refresh_open_view(cx);
@@ -144,8 +148,6 @@ impl Shell {
         if self.source.is_none() {
             return;
         }
-        // A dialog belongs to the open chat's request.
-        self.close_dialog(cx);
         let new_chat = chat.is_none();
         self.session_menu.rename = None;
         if let Some(chat) = &chat {
@@ -154,6 +156,7 @@ impl Shell {
             self.session_menu.summary = None;
         }
         self.store.open(chat);
+        self.chat.update(cx, |c, _| c.set_new_chat(new_chat));
         self.show_view(false, cx);
         self.composer.update(cx, |c, cx| {
             c.set_new_chat(new_chat, cx);
@@ -234,14 +237,9 @@ impl Shell {
     /// The composer follows the open chat: the agent, a running turn and its first request.
     pub(super) fn sync_composer(&mut self, cx: &mut Context<Self>) {
         let streaming = self.store.running().is_some();
-        let approval = self.store.approval().cloned();
-        let pending = approval
-            .as_ref()
-            .is_some_and(|c| self.store.is_pending(&c.request));
         let disabled = self.disconnected();
         self.composer.update(cx, |c, cx| {
             c.streaming = streaming;
-            c.approval = approval.map(|card| (card, pending));
             if disabled.is_some() {
                 c.fold();
             }
@@ -262,44 +260,6 @@ impl Shell {
         });
     }
 
-    /// Answers the open chat's request. The card shows the answer as pending and stays until
-    /// the agent takes it; on failure it is ready again and the list is re-read.
-    pub(crate) fn answer(
-        &mut self,
-        request: &RequestRef,
-        decision: Decision,
-        cx: &mut Context<Self>,
-    ) {
-        let (Some(chat), Some(source)) = (self.store.selected().cloned(), self.source.clone())
-        else {
-            return;
-        };
-        if !self.store.begin_answer(request) {
-            return;
-        }
-        self.sync_composer(cx);
-        let request = request.clone();
-        let fetch = source.answer(&chat.session, &request, decision);
-        Self::run(fetch, cx, move |this, result, cx| {
-            match result {
-                Ok(()) => this.store.answer_done(&chat.session, &request),
-                Err(e) => {
-                    let session = chat.session.clone();
-                    Self::run(source.authority(&session), cx, move |this, state, cx| {
-                        this.store.answer_failed(&request);
-                        match state {
-                            Ok(cards) => this.store.authority_loaded(session, cards),
-                            Err(error) => this.failed(&error, this.theme.strings.load_failed, cx),
-                        }
-                        this.failed(&e, this.theme.strings.decision_failed, cx);
-                        this.sync_composer(cx);
-                    });
-                }
-            }
-            this.sync_composer(cx);
-        });
-    }
-
     pub(super) fn chat_failed(
         &mut self,
         chat: &ChatRef,
@@ -308,7 +268,6 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         if self.store.chat_failed(chat, error) {
-            self.close_dialog(cx);
             self.show_view(false, cx);
             self.composer.update(cx, |c, cx| c.set_new_chat(true, cx));
             self.sync_composer(cx);

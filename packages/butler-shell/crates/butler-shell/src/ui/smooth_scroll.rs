@@ -100,24 +100,6 @@ impl SmoothScroll {
         .size_full()
     }
 
-    /// A wheel event caught by something over the scroller (a dialog and its scrim): notches
-    /// glide as on the scroller itself, precise (touchpad) deltas move it directly. True when
-    /// the view must repaint.
-    pub(crate) fn wheel(&self, e: &ScrollWheelEvent, _: &Window) -> bool {
-        let line = px(LIST_LINE);
-        let dy = e.delta.pixel_delta(line).y.as_f32();
-        if dy == 0. {
-            return false;
-        }
-        if let ScrollDelta::Pixels(_) = e.delta {
-            self.cancel();
-            let (top, max) = self.position();
-            self.set_top((top - dy).clamp(0., max));
-            return true;
-        }
-        self.add(-dy)
-    }
-
     /// Adds a notch's distance, clamping the target to the content; true when there is a glide.
     fn add(&self, distance: f32) -> bool {
         let (top, max) = self.position();

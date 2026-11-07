@@ -8,7 +8,7 @@ use gpui::SharedString;
 
 use super::{Applied, Store};
 use crate::ui::source::{
-    AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision, EventCursor, Fetch,
+    AuthorityCard, ChatId, ChatPage, ChatRef, ChatSummary, EventCursor, Fetch,
     LiveEvent, LiveUpdate, PageCursor, RequestRef, SessionId, Source, SourceError, Timestamp,
     TurnId,
     wire::{AppEventEnvelope, SessionView},
@@ -32,17 +32,15 @@ fn chat(n: u32) -> ChatSummary {
 }
 
 /// Two pages of chats per snapshot (snapshot `n` has event cursor `10 * n`), live events
-/// after a cursor, and an answer that fails until told otherwise.
+/// after a cursor.
 struct Fake {
     snapshot: RefCell<u64>,
-    answer_ok: RefCell<bool>,
 }
 
 impl Fake {
     fn new() -> Self {
         Self {
             snapshot: RefCell::new(0),
-            answer_ok: RefCell::new(false),
         }
     }
 }
@@ -80,8 +78,6 @@ impl Source for Fake {
     fn authority(&self, _: &SessionId) -> Fetch<Vec<AuthorityCard>> {
         let card = AuthorityCard {
             request: RequestRef("r1".into()),
-            kind: CardKind::Command,
-            reason: "".into(),
             approval: None,
         };
         ready(Ok(vec![card]))
@@ -101,13 +97,6 @@ impl Source for Fake {
     }
     fn cancel(&self, _: &TurnId) -> Fetch<()> {
         ready(Ok(()))
-    }
-    fn answer(&self, _: &SessionId, _: &RequestRef, _: Decision) -> Fetch<()> {
-        ready(if *self.answer_ok.borrow() {
-            Ok(())
-        } else {
-            Err(SourceError::Refused("busy".into()))
-        })
     }
 }
 
@@ -183,36 +172,6 @@ fn resync_supersedes_a_load_in_flight_and_keeps_the_list() {
         "the new snapshot hands its cursor to live"
     );
     assert_eq!(titles(&store), ["chat 1", "chat 2"]);
-}
-
-// test-category: pure-logic
-#[test]
-fn a_failed_answer_keeps_the_card() {
-    let (fake, mut store) = (Fake::new(), Store::default());
-    let chat = chat(1).chat;
-    store.open(Some(chat.clone()));
-    store.authority_loaded(
-        chat.session.clone(),
-        block_on(fake.authority(&chat.session)).unwrap(),
-    );
-    let request = store.approval().expect("a card").request.clone();
-    assert!(store.begin_answer(&request));
-    assert!(!store.begin_answer(&request), "one answer at a time");
-    assert!(store.is_pending(&request));
-    let result = block_on(fake.answer(&chat.session, &request, Decision::AllowOnce));
-    assert!(result.is_err());
-    store.answer_failed(&request);
-    assert!(!store.is_pending(&request));
-    assert_eq!(
-        store.approval().map(|c| c.request.clone()),
-        Some(request.clone()),
-        "the card is back"
-    );
-    *fake.answer_ok.borrow_mut() = true;
-    assert!(store.begin_answer(&request));
-    block_on(fake.answer(&chat.session, &request, Decision::Deny)).unwrap();
-    store.answer_done(&chat.session, &request);
-    assert!(store.approval().is_none());
 }
 
 // test-category: pure-logic

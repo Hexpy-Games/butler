@@ -186,11 +186,7 @@ fn connected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::
     h.shot(dir, &format!("w2-1x-{theme}-chat"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::APPROVAL, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-approval"))?;
-    h.update(|shell, window, cx| {
-        if let Some(card) = shell.store.approval().cloned() {
-            shell.open_modify(&card, window, cx);
-        }
-    })?;
+    frame::command(&mut h, "click", "authority-modify")?;
     h.shot(dir, &format!("w2-1x-{theme}-modify-dialog"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::QUESTION, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-question"))?;

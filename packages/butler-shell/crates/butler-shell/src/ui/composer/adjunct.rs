@@ -1,9 +1,12 @@
 //! `ComposerAdjunctPanels` (`WorkProgressPanel`, `WorkerComposerPanel`).
 use butler_ds::ui::blocks::todo_progress_panel::{TodoItem, TodoProgressPanel, TodoState};
 use butler_ds::ui::blocks::worker_activity::{WorkerActivityPanel, WorkerActivityRow};
-use butler_ds::ui::context::Lang;
-use butler_ds::ui::layout::{Space, Stack};
-use gpui::{AnyElement, IntoElement as _, ParentElement as _};
+use butler_ds::ui::Icon;
+use butler_ds::ui::button::{Button, Shape, Size, Variant};
+use butler_ds::ui::context::{Ds, Lang};
+use butler_ds::ui::icon::{IconSize, icon};
+use butler_ds::ui::layout::{Box as Pad, Space, Stack};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString};
 
 use crate::ui::source::wire::{
     ProgressRow, WorkerActivitySummary, WorkerActivitySummaryActivityKind,
@@ -377,4 +380,29 @@ fn strip_phase_prefix(lang: Lang, status: &str, phase: &str) -> String {
         return rest.trim().to_owned();
     }
     status.to_owned()
+}
+
+/// `ComposerPlanInstructionContext` over `ComposerDecisionAttachment`: the pill above the input
+/// that reopens the plan decision. The DS button takes one text run, so title and label share
+/// it (React sets them in two typographic tones).
+pub(super) fn plan_instruction_attachment(
+    title: &SharedString,
+    label: &str,
+    cx: &App,
+) -> AnyElement {
+    let show = Button::new("composer-plan-instruction-context")
+        .variant(Variant::Outline)
+        .size(Size::Xs)
+        .shape(Shape::Pill)
+        .icon_start(icon(Icon::FileText, IconSize::Sm, Ds::get(cx)))
+        .text(format!("{title} \u{b7} {label}"))
+        .on_click(|_, window, cx| {
+            crate::ui::decisions::show_plan_decision(cx);
+            window.refresh();
+        });
+    Pad::new()
+        .padding_x(Space::Lg)
+        .padding_y(Space::Xs)
+        .child(show)
+        .into_any_element()
 }
