@@ -41,3 +41,6 @@ mod session_info;
 pub(crate) use session_info::*;
 mod canon_queue;
 pub(crate) use canon_queue::*;
+
+mod sidebar;
+pub(crate) use sidebar::*;

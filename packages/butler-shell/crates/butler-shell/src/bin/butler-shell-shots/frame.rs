@@ -2,7 +2,8 @@
 use super::{Harness, settle, ui};
 use anyhow::{Context as _, ensure};
 use gpui::{
-    Focusable as _, MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput, point, px, size,
+    Focusable as _, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PlatformInput,
+    point, px, size,
 };
 
 pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
@@ -63,17 +64,27 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
 
 fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     settle(&mut h.cx, h.handle);
-    let (anchor, delta) = arg.split_once(' ').unwrap_or((arg, "0"));
+    let mut parts = arg.split_whitespace();
+    let anchor = parts.next().context("pointer anchor")?;
+    let dx = parts.next().unwrap_or("0").parse::<f32>()?;
+    let dy = parts.next().unwrap_or("0").parse::<f32>()?;
+    let button = match parts.next().unwrap_or("left") {
+        "left" => MouseButton::Left,
+        "right" => MouseButton::Right,
+        _ => anyhow::bail!("pointer button must be left or right"),
+    };
     let bounds =
         h.cx.debug_bounds(h.handle, anchor)?
             .context("missing pointer target")?;
-    let start = bounds.center();
-    let end = point(start.x + px(delta.parse::<f32>()?), start.y);
+    let center = bounds.center();
+    let end = point(center.x + px(dx), center.y + px(dy));
+    let start = if command == "drag" { center } else { end };
+    move_pointer(h, start, None)?;
+    settle(&mut h.cx, h.handle);
     h.cx.update_window(h.handle, |_, w, cx| {
-        w.simulate_mouse_move(start, cx);
         w.dispatch_event(
             PlatformInput::MouseDown(MouseDownEvent {
-                button: MouseButton::Left,
+                button,
                 position: start,
                 modifiers: Default::default(),
                 click_count: 1,
@@ -82,14 +93,27 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
             cx,
         );
     })?;
-    settle(&mut h.cx, h.handle);
-    h.cx.update_window(h.handle, |_, w, cx| {
-        if command == "drag" {
-            w.simulate_mouse_move(end, cx);
+    h.cx.run_until_parked();
+    if command == "drag" {
+        for step in 1..=8 {
+            let fraction = step as f32 / 8.;
+            let position = point(
+                start.x + (end.x - start.x) * fraction,
+                start.y + (end.y - start.y) * fraction,
+            );
+            move_pointer(h, position, Some(button))?;
+            h.cx.advance_clock(std::time::Duration::from_millis(16));
+            h.cx.run_until_parked();
         }
+        // A real pointer can rest in the combine zone before release (the DS's 150ms dwell).
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        h.cx.advance_clock(std::time::Duration::from_millis(200));
+        h.cx.run_until_parked();
+    }
+    h.cx.update_window(h.handle, |_, w, cx| {
         w.dispatch_event(
             PlatformInput::MouseUp(MouseUpEvent {
-                button: MouseButton::Left,
+                button,
                 position: end,
                 modifiers: Default::default(),
                 click_count: 1,
@@ -99,4 +123,21 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     })?;
     settle(&mut h.cx, h.handle);
     Ok(())
+}
+
+fn move_pointer(
+    h: &mut Harness,
+    position: gpui::Point<gpui::Pixels>,
+    pressed_button: Option<MouseButton>,
+) -> anyhow::Result<()> {
+    h.cx.update_window(h.handle, |_, w, cx| {
+        w.dispatch_event(
+            PlatformInput::MouseMove(MouseMoveEvent {
+                position,
+                modifiers: Default::default(),
+                pressed_button,
+            }),
+            cx,
+        );
+    })
 }

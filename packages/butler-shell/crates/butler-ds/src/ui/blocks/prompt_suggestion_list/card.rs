@@ -46,7 +46,9 @@ fn meta(card: &Card) -> SharedString {
 
 /// The card's width: its content's width within the track's range (`minmax(min, max)`).
 fn width(card: &Card, m: &Metrics, window: &mut Window, cx: &App) -> f32 {
-    let pad = 2. * f32::from(Ds::get(cx).len(Length::Space4));
+    let ds = Ds::get(cx);
+    // The glass's border is inside the card's box (`TintedGlass.module.css:6`).
+    let pad = 2. * f32::from(ds.len(Length::Space4) + ds.len(Length::BorderHairline));
     let measured = [
         (meta(card), Length::TypoCaptionSize),
         (card.item.title.clone(), Length::TypoH5Size),
@@ -196,6 +198,7 @@ pub(super) fn render(
         .flex_col()
         .flex_none()
         .w(px(card_width))
+        .p(ds.len(Length::BorderHairline))
         .top(px(-lift_px))
         .on_hover(move |on, _, cx| if *on { over(cx) } else { leave(cx) })
         .on_mouse_down(MouseButton::Left, move |_, _, cx| down(cx))

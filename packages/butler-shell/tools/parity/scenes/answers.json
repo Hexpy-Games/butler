@@ -1,0 +1,249 @@
+{
+  "name": "answers",
+  "reply": "다음 주 회의 안건을 카드와 표로 정리했습니다.",
+  "toolCalls": [
+    {
+      "name": "answer_blocks",
+      "arguments": {
+        "v": 2,
+        "blocks": [
+          {
+            "type": "cards",
+            "id": "candidates",
+            "title": "후보",
+            "items": [
+              {
+                "key": "pilot",
+                "label": "월요일",
+                "title": "파일럿 진행",
+                "sub": "디자인 팀",
+                "facts": [
+                  "접근성 검토",
+                  "모바일 확인"
+                ],
+                "text": "작은 그룹에서 먼저 확인합니다."
+              },
+              {
+                "key": "release",
+                "label": "금요일",
+                "title": "전체 출시",
+                "sub": "엔지니어링 팀",
+                "facts": [
+                  "일정 공유"
+                ],
+                "text": "검토가 끝나면 전체에 공개합니다."
+              }
+            ]
+          },
+          {
+            "type": "metrics",
+            "id": "numbers",
+            "title": "현황",
+            "items": [
+              {
+                "label": "완료",
+                "value": 12,
+                "unit": "건",
+                "delta": "+3",
+                "direction": "up-good"
+              },
+              {
+                "label": "남은 일",
+                "value": 5,
+                "unit": "건",
+                "delta": "-2",
+                "direction": "down-good"
+              },
+              {
+                "label": "지연",
+                "value": 1,
+                "unit": "건",
+                "direction": "neutral"
+              }
+            ]
+          },
+          {
+            "type": "columns",
+            "id": "checks",
+            "title": "점검",
+            "blocks": [
+              {
+                "type": "checklist",
+                "title": "체크리스트",
+                "items": [
+                  {
+                    "text": "키보드 탐색 확인",
+                    "done": true
+                  },
+                  {
+                    "text": "모바일 화면 검토",
+                    "done": true
+                  },
+                  {
+                    "text": "출시 일정 합의",
+                    "done": false
+                  }
+                ]
+              },
+              {
+                "type": "callout",
+                "tone": "warning",
+                "title": "주의",
+                "text": "금요일 출시 전에 접근성 검토를 마쳐야 합니다."
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "id": "plan",
+            "title": "일정",
+            "columns": [
+              "항목",
+              "담당",
+              "일정"
+            ],
+            "rows": [
+              [
+                "접근성 검토",
+                "Design",
+                "Monday"
+              ],
+              [
+                "출시 확인",
+                "Engineering",
+                "Friday"
+              ],
+              [
+                "공유",
+                "Product",
+                null
+              ]
+            ]
+          },
+          {
+            "type": "tabs",
+            "id": "details",
+            "title": "상세",
+            "tabs": [
+              {
+                "label": "진행",
+                "blocks": [
+                  {
+                    "type": "progress",
+                    "title": "진행률",
+                    "items": [
+                      {
+                        "label": "검토",
+                        "value": 60,
+                        "max": 100,
+                        "unit": "%"
+                      },
+                      {
+                        "label": "출시",
+                        "value": 25,
+                        "max": 100,
+                        "unit": "%"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "**검토**가 끝나면 바로 공유합니다."
+                  }
+                ]
+              },
+              {
+                "label": "기록",
+                "blocks": [
+                  {
+                    "type": "timeline",
+                    "items": [
+                      {
+                        "when": "월요일",
+                        "title": "파일럿 시작",
+                        "text": "디자인 팀이 확인"
+                      },
+                      {
+                        "when": "금요일",
+                        "title": "출시"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "seed": [
+    {
+      "method": "PATCH",
+      "path": "/settings",
+      "body": {
+        "language": "ko",
+        "access_mode": "full_access",
+        "reduce_motion": true
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "회의 안건 정리"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/messages",
+      "body": {
+        "chat_id": "${session}",
+        "text": "다음 주 회의 안건을 카드, 지표, 체크리스트와 표로 정리해 주세요."
+      },
+      "wait": true
+    }
+  ],
+  "open": {
+    "chat": "회의 안건 정리"
+  },
+  "anchors": [
+    {
+      "anchor": "sidebar",
+      "electron": "[data-test-class=\"app-sidebar\"]"
+    },
+    {
+      "anchor": "chat-card",
+      "electron": "[data-slot=\"adaptive-shell-split-chat\"]"
+    },
+    {
+      "anchor": "composer",
+      "electron": "[data-test-class=\"composer-card\"]"
+    },
+    {
+      "anchor": "composer-field",
+      "electron": "[contenteditable=\"true\"]"
+    },
+    {
+      "anchor": "send-button",
+      "electron": "[data-test-class=\"composer-send-button\"]"
+    },
+    {
+      "anchor": "titlebar",
+      "electron": "[data-test-class=\"custom-titlebar\"]"
+    },
+    {
+      "anchor": "sidebar-row-${session}",
+      "electron": "[data-test-class=\"tree-row\"][aria-label=\"회의 안건 정리\"]"
+    },
+    {
+      "anchor": "message-${message.0}",
+      "electron": "[data-test-class~=\"message\"][data-index=\"0\"]"
+    },
+    {
+      "anchor": "message-${message.1}",
+      "electron": "[data-test-class~=\"message\"][data-index=\"1\"]"
+    }
+  ]
+}

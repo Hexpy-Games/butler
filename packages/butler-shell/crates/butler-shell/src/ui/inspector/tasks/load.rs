@@ -18,8 +18,11 @@ fn parse<T: DeserializeOwned>(value: Result<Value, butler_shell_client::Error>) 
 
 /// `getSessionTaskGraphs` over every page; none when the list is incomplete.
 async fn read_summaries(client: &ShellClient, session: &str) -> Option<Vec<TaskGraphSummaryWire>> {
-    let first: TaskGraphsPageWire =
-        parse(client.get_session_task_graphs(session, None, None, None).await)?;
+    let first: TaskGraphsPageWire = parse(
+        client
+            .get_session_task_graphs(session, None, None, None)
+            .await,
+    )?;
     let mut graphs = first.graphs;
     let mut cursor = first.cursor;
     while let Some(next) = cursor {
@@ -42,7 +45,12 @@ async fn read_graph(client: &ShellClient, graph: &str) -> Option<TaskGraphSnapsh
     while let Some(next) = cursor {
         let page: TaskGraphSnapshotWire = parse(
             client
-                .get_plan_task_graph(graph, Some(&first.summary.graph_revision), Some(&next), None)
+                .get_plan_task_graph(
+                    graph,
+                    Some(&first.summary.graph_revision),
+                    Some(&next),
+                    None,
+                )
                 .await,
         )?;
         first.nodes.extend(page.nodes);
@@ -59,15 +67,27 @@ pub(super) async fn read_document(
     task: &str,
     revision: &str,
 ) -> Option<TaskGraphDocumentWire> {
-    parse(client.get_task_document(task, Some(revision), None, None).await)
+    parse(
+        client
+            .get_task_document(task, Some(revision), None, None)
+            .await,
+    )
 }
 
 /// `refreshGraph`: a result of a superseded read is dropped by the store.
-async fn refresh_graph(store: Entity<TaskGraphs>, session: String, graph: String, mut cx: AsyncApp) {
+async fn refresh_graph(
+    store: Entity<TaskGraphs>,
+    session: String,
+    graph: String,
+    mut cx: AsyncApp,
+) {
     let generation = store.update(&mut cx, |graphs, _| graphs.begin_refresh(&session, &graph));
     let id = graph.clone();
     let read = cx.update(|cx| {
-        Jobs::run(cx, move |client| async move { read_graph(&client, &id).await })
+        Jobs::run(
+            cx,
+            move |client| async move { read_graph(&client, &id).await },
+        )
     });
     let read = read.await.flatten();
     store.update(&mut cx, |graphs, cx| {
@@ -88,7 +108,9 @@ pub(super) fn load_task_graphs(store: &Entity<TaskGraphs>, session: &str, cx: &m
     let id = session.to_owned();
     let summaries = {
         let id = id.clone();
-        Jobs::run(cx, move |client| async move { read_summaries(&client, &id).await })
+        Jobs::run(cx, move |client| async move {
+            read_summaries(&client, &id).await
+        })
     };
     let store = store.clone();
     cx.spawn(async move |cx| {

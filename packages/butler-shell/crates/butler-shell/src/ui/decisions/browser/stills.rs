@@ -10,8 +10,8 @@ use butler_ds::ui::media_frame::{Aspect, MediaFrame};
 use butler_ds::ui::tooltip::Tooltip;
 use butler_ds::ui::typo::Typo;
 use gpui::{
-    AnyElement, App, AsyncApp, ElementId, Entity, ImageSource, IntoElement as _,
-    ParentElement as _, SharedString, WeakEntity, Window,
+    AnyElement, App, AsyncApp, ElementId, ImageSource, IntoElement as _, ParentElement as _,
+    SharedString, WeakEntity, Window,
 };
 use serde_json::Value;
 
@@ -50,7 +50,11 @@ fn find_delivery(value: &Value, depth: u32) -> Option<BrowserStillPending> {
         Value::Object(record) => record
             .get("still_pending")
             .and_then(|pending| serde_json::from_value(pending.clone()).ok())
-            .or_else(|| record.values().find_map(|item| find_delivery(item, depth + 1))),
+            .or_else(|| {
+                record
+                    .values()
+                    .find_map(|item| find_delivery(item, depth + 1))
+            }),
         Value::Array(items) => items.iter().find_map(|item| find_delivery(item, depth + 1)),
         _ => None,
     }
@@ -60,7 +64,8 @@ fn find_delivery(value: &Value, depth: u32) -> Option<BrowserStillPending> {
 fn all_stills(value: &Value) -> Vec<BrowserStill> {
     let children: Vec<BrowserStill> = match value {
         Value::String(text) => {
-            return serde_json::from_str(text).map_or_else(|_| Vec::new(), |inner| all_stills(&inner));
+            return serde_json::from_str(text)
+                .map_or_else(|_| Vec::new(), |inner| all_stills(&inner));
         }
         Value::Object(record) => record.values().flat_map(all_stills).collect(),
         Value::Array(items) => items.iter().flat_map(all_stills).collect(),
@@ -73,7 +78,8 @@ fn all_stills(value: &Value) -> Vec<BrowserStill> {
     let mut unique: Vec<BrowserStill> = Vec::new();
     for image in own.into_iter().chain(children) {
         let url = image.still_file.as_ref().map(|file| file.url.clone());
-        let same = |other: &BrowserStill| other.still_file.as_ref().map(|file| &file.url) == url.as_ref();
+        let same =
+            |other: &BrowserStill| other.still_file.as_ref().map(|file| &file.url) == url.as_ref();
         match unique.iter().position(same) {
             Some(at) => unique[at] = image,
             None => unique.push(image),
@@ -84,7 +90,11 @@ fn all_stills(value: &Value) -> Vec<BrowserStill> {
 
 /// The message file of a still whose url is a gateway message file (`valid`).
 fn file_id(item: &BrowserStill) -> Option<&str> {
-    let id = item.still_file.as_ref()?.url.strip_prefix("/message-files/")?;
+    let id = item
+        .still_file
+        .as_ref()?
+        .url
+        .strip_prefix("/message-files/")?;
     let uuid = id.strip_prefix("file-")?;
     (uuid.len() == 36 && uuid.chars().all(|c| c.is_ascii_hexdigit() || c == '-')).then_some(id)
 }
@@ -96,15 +106,16 @@ fn apply(
     images: Vec<BrowserStill>,
     cx: &mut AsyncApp,
 ) -> bool {
-    state.update(cx, |state, cx| {
-        if state.generation != generation {
-            return false;
-        }
-        state.images = images;
-        cx.notify();
-        true
-    })
-    .unwrap_or(false)
+    state
+        .update(cx, |state, cx| {
+            if state.generation != generation {
+                return false;
+            }
+            state.images = images;
+            cx.notify();
+            true
+        })
+        .unwrap_or(false)
 }
 
 /// The `read` of the effect: the output's stills, then the bounded wait on the ones saving.
@@ -114,7 +125,9 @@ async fn read(state: &WeakEntity<Stills>, generation: u64, request: &Request, cx
         .as_deref()
         .filter(|content| !content.is_empty())
         .map(|content| Value::String(content.to_owned()));
-    let marker = content.as_ref().and_then(|content| find_delivery(content, 0));
+    let marker = content
+        .as_ref()
+        .and_then(|content| find_delivery(content, 0));
     if let (Some(content), None) = (&content, &marker) {
         apply(state, generation, all_stills(content), cx);
         return;
@@ -126,7 +139,10 @@ async fn read(state: &WeakEntity<Stills>, generation: u64, request: &Request, cx
     );
     let job = cx.update(|cx| {
         Jobs::run(cx, move |client| async move {
-            client.get_operation_output(&turn, &call, &result, 0).await.ok()
+            client
+                .get_operation_output(&turn, &call, &result, 0)
+                .await
+                .ok()
         })
     });
     let Some(output) = job
@@ -137,10 +153,10 @@ async fn read(state: &WeakEntity<Stills>, generation: u64, request: &Request, cx
         return;
     };
     let output_content = Value::String(output.content);
-    let steps = output
-        .browser_stills
-        .as_ref()
-        .map_or_else(|| all_stills(&output_content), |delivery| delivery.steps.clone());
+    let steps = output.browser_stills.as_ref().map_or_else(
+        || all_stills(&output_content),
+        |delivery| delivery.steps.clone(),
+    );
     if !apply(state, generation, steps, cx) {
         return;
     }
@@ -151,7 +167,10 @@ async fn read(state: &WeakEntity<Stills>, generation: u64, request: &Request, cx
     // Bound observation of an unavailable host; a later mount reads the durable state again.
     let until = Instant::now() + Duration::from_secs(60);
     while !delivery.complete
-        && delivery.steps.iter().any(|step| step.state.as_deref() == Some("pending"))
+        && delivery
+            .steps
+            .iter()
+            .any(|step| step.state.as_deref() == Some("pending"))
         && Instant::now() < until
     {
         let (act, session) = (delivery.act_id.clone(), pending.session.clone());
@@ -231,7 +250,10 @@ fn still_column(images: &[BrowserStill], key: &SharedString, cx: &mut App) -> An
             .collect(),
     );
     let mut shot_index = 0;
-    let mut column = Stack::new().basis(Basis::Md).shrink(true).min_width(MinWidth::Zero);
+    let mut column = Stack::new()
+        .basis(Basis::Md)
+        .shrink(true)
+        .min_width(MinWidth::Zero);
     for (index, item) in images.iter().enumerate() {
         let id = ElementId::from(SharedString::from(format!("{key}:{index}")));
         let file = file_id(item);
@@ -252,7 +274,11 @@ fn still_column(images: &[BrowserStill], key: &SharedString, cx: &mut App) -> An
             frame = frame.src(ImageSource::Image(image));
         }
         if file.is_none() {
-            frame = frame.child(Typo::caption(if failed { reason } else { copy.still_pending }));
+            frame = frame.child(Typo::caption(if failed {
+                reason
+            } else {
+                copy.still_pending
+            }));
         }
         let mut open = Clickable::new((id.clone(), "open"))
             .variant(ClickVariant::Text)
@@ -273,5 +299,8 @@ fn still_column(images: &[BrowserStill], key: &SharedString, cx: &mut App) -> An
         }
         column = column.child(tip.child(open));
     }
-    Stack::row().cross(Cross::Start).child(column).into_any_element()
+    Stack::row()
+        .cross(Cross::Start)
+        .child(column)
+        .into_any_element()
 }

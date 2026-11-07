@@ -180,13 +180,13 @@ fn queued_status(item: &Item, lang: Lang, copy: &Media) -> String {
 /// `queuedText`
 fn queued_text(record: &QueuedMessageRecord, lang: Lang, copy: &Media) -> String {
     let attachments = record.attachments.as_deref().unwrap_or_default();
-    let text = if !record.text.is_empty() {
-        record.text.clone()
-    } else {
+    let text = if record.text.is_empty() {
         attachments.first().map_or_else(
             || copy.queued_message.to_owned(),
             |file| file.safe_name.clone(),
         )
+    } else {
+        record.text.clone()
     };
     if !record.text.is_empty() && !attachments.is_empty() {
         format!(
@@ -267,7 +267,7 @@ fn send_now(
     cx.spawn(async move |cx| {
         let accepted = done.await;
         if !accepted {
-            let _ = state.update(cx, |state, cx| {
+            state.update(cx, |state, cx| {
                 state.pending.remove(&key);
                 cx.notify();
             });

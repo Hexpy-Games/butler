@@ -12,12 +12,14 @@ use gpui::{ElementId, SharedString};
 use super::Actions;
 use super::present::{graph_assignee, graph_elapsed, graph_status_label, graph_task_status};
 use crate::ui::i18n::task_graph::{self as copy, Words};
-use crate::ui::source::wire::{
-    TaskGraphNodeWire, TaskGraphReasonWire, TaskGraphSnapshotWire,
-};
+use crate::ui::source::wire::{TaskGraphNodeWire, TaskGraphReasonWire, TaskGraphSnapshotWire};
 
 /// `related`: the tasks on the other end of the edges that touch `node` (before it, or after).
-fn related(graph: &TaskGraphSnapshotWire, node: &TaskGraphNodeWire, before: bool) -> Vec<RelatedTask> {
+fn related(
+    graph: &TaskGraphSnapshotWire,
+    node: &TaskGraphNodeWire,
+    before: bool,
+) -> Vec<RelatedTask> {
     graph
         .edges
         .iter()
@@ -80,13 +82,18 @@ fn facts(
         facts.push(TaskGraphDetailFact::text(
             attempt.task_id.clone(),
             copy::attempts(lang, index + 1),
-            attempt.summary.clone().unwrap_or_else(|| words.none.to_owned()),
+            attempt
+                .summary
+                .clone()
+                .unwrap_or_else(|| words.none.to_owned()),
         ));
     }
     facts.push(TaskGraphDetailFact::text(
         "model",
         words.model,
-        node.model_display_name.clone().unwrap_or_else(|| words.none.to_owned()),
+        node.model_display_name
+            .clone()
+            .unwrap_or_else(|| words.none.to_owned()),
     ));
     facts.push(TaskGraphDetailFact::text(
         "elapsed",
@@ -156,10 +163,10 @@ pub(super) fn task_node_detail(
         },
     });
     if let Some(session) = &node.session_id {
-        let (actions, session) = (actions.clone(), session.clone());
+        let session = session.clone();
         detail = detail.conversation(DetailConversation {
             label: words.conversation.into(),
-            on_open: Rc::new(move |_, cx| actions.open_session(&session, cx)),
+            on_open: Rc::new(move |_, cx| super::Actions::open_session(&session, cx)),
         });
     }
     detail

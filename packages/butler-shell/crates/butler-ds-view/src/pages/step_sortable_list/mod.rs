@@ -50,7 +50,6 @@ impl Status {
 /// A demo task's own state (the work-tab mockup's tasks).
 #[derive(Clone)]
 struct DemoTask {
-    letter: usize,
     status: Status,
     progress: Option<&'static str>,
     time: Option<&'static str>,
@@ -112,7 +111,11 @@ pub(super) fn stories() -> Vec<Story> {
 }
 
 /// "Write the talk script" over the gap before step 1, "Send the summary email" resting on step 2.
-fn preview(ids: &[&'static str], step_index: usize, kind: StepSortableTargetKind) -> StepSortableDragPreview {
+fn preview(
+    ids: &[&'static str],
+    step_index: usize,
+    kind: StepSortableTargetKind,
+) -> StepSortableDragPreview {
     StepSortableDragPreview {
         item_ids: ids.iter().map(|id| SharedString::from(*id)).collect(),
         target: StepSortableTarget {
@@ -124,7 +127,10 @@ fn preview(ids: &[&'static str], step_index: usize, kind: StepSortableTargetKind
 }
 
 /// The chains of a shape and each task's state, by item id.
-fn demo_chains(c: &Copy, shape: Shape) -> (Vec<StepSortableChain>, HashMap<SharedString, DemoTask>) {
+fn demo_chains(
+    c: &Copy,
+    shape: Shape,
+) -> (Vec<StepSortableChain>, HashMap<SharedString, DemoTask>) {
     let mut tasks = HashMap::new();
     let mut task = |code: &'static str| -> StepSortableItem {
         let marks = &code[1..];
@@ -138,7 +144,6 @@ fn demo_chains(c: &Copy, shape: Shape) -> (Vec<StepSortableChain>, HashMap<Share
         tasks.insert(
             id.clone(),
             DemoTask {
-                letter,
                 status,
                 progress: live.then(|| c.progress[letter]),
                 time: live.then(|| c.time[letter]),
@@ -170,8 +175,13 @@ fn marker(id: &str, status: Status, number: Option<usize>, cx: &App) -> AnyEleme
     let ds = Ds::get(cx);
     let side = ds.len(Length::IconSizeMd);
     match (number, status) {
-        (Some(number), _) => Typo::label(number.to_string()).tone(Tone::Tertiary).tabular().into_any_element(),
-        (None, Status::Running) => Spinner::new(format!("ssl-spin-{id}")).size(f32::from(side)).into_any_element(),
+        (Some(number), _) => Typo::label(number.to_string())
+            .tone(Tone::Tertiary)
+            .tabular()
+            .into_any_element(),
+        (None, Status::Running) => Spinner::new(format!("ssl-spin-{id}"))
+            .size(f32::from(side))
+            .into_any_element(),
         (None, Status::Done) => SuccessCheck::new(format!("ssl-check-{id}"))
             .ring()
             .size(f32::from(side))
@@ -193,7 +203,9 @@ fn state_caption(c: &Copy, task: &DemoTask, before: Option<(&DemoTask, &str)>) -
         return progress.to_owned();
     }
     match (task.status, before) {
-        (Status::Held, Some((before, _))) if before.status == Status::Held => c.paused_before.to_owned(),
+        (Status::Held, Some((before, _))) if before.status == Status::Held => {
+            c.paused_before.to_owned()
+        }
         (Status::Held, _) => c.paused_by_you.to_owned(),
         (_, Some((_, title))) => (c.after)(title),
         (_, None) => c.not_started.to_owned(),
@@ -220,7 +232,11 @@ fn row_slots(
             .find(|chain| chain.id == place.chain_id)
             .and_then(|chain| chain.steps.get(place.step_index - 1))
             .and_then(|step| step.first())
-            .and_then(|first| tasks.get(&first.id).map(|task| (task, first.label.as_ref())))
+            .and_then(|first| {
+                tasks
+                    .get(&first.id)
+                    .map(|task| (task, first.label.as_ref()))
+            })
     };
     let caption = match (place.lifted, place.outcome) {
         (true, Some(StepSortableOutcome::Join)) => c.join.to_owned(),
@@ -234,16 +250,28 @@ fn row_slots(
         None => name.to_owned(),
     };
     let trailing = (!item.running).then(|| {
-        let mut menu = OverflowActionMenu::new(format!("ssl-menu-{story}-{}", item.id), (c.menu_label)(&item.label))
-            .item(OverflowItem::new(c.menu[0]).icon(Icon::Play));
+        let mut menu = OverflowActionMenu::new(
+            format!("ssl-menu-{story}-{}", item.id),
+            (c.menu_label)(&item.label),
+        )
+        .item(OverflowItem::new(c.menu[0]).icon(Icon::Play));
         if place.count > 1 {
             menu = menu.item(OverflowItem::new(c.menu[1]).icon(Icon::Blocks));
         }
-        menu.item(OverflowItem::new(c.menu[2]).icon(Icon::Trash2).destructive())
-            .into_any_element()
+        menu.item(
+            OverflowItem::new(c.menu[2])
+                .icon(Icon::Trash2)
+                .destructive(),
+        )
+        .into_any_element()
     });
     StepSortableRowSlots {
-        marker: Some(marker(&item.id, task.status, (!head).then_some(place.step_index), cx)),
+        marker: Some(marker(
+            &item.id,
+            task.status,
+            (!head).then_some(place.step_index),
+            cx,
+        )),
         title: item.label.clone(),
         more: (place.count > 1 && !place.expanded).then(|| (c.more)(place.count - 1).into()),
         meta: Some(meta.into()),

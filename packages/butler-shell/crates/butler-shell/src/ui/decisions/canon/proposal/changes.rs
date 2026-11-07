@@ -1,7 +1,7 @@
 //! `CanonProposalChanges` and `CanonProposalFact`.
+use butler_ds::ui::blocks::markdown_content::{Density, MarkdownContent};
 use butler_ds::ui::field::{Field, FieldTitle};
 use butler_ds::ui::layout::{Space, Stack};
-use butler_ds::ui::blocks::markdown_content::{Density, MarkdownContent};
 use butler_ds::ui::typo::{Tone, Typo, Wrap};
 use gpui::{AnyElement, IntoElement as _, ParentElement as _, SharedString};
 
@@ -106,7 +106,10 @@ fn change_facts(
         add(
             "destination",
             copy.destination_plan,
-            change.destination_plan_title.clone().unwrap_or_else(backlog),
+            change
+                .destination_plan_title
+                .clone()
+                .unwrap_or_else(backlog),
         );
     }
     if let Some(status) = &change.status {
@@ -121,12 +124,21 @@ fn change_facts(
         add("assignee", copy.assignee, value);
     }
     if let Some(due_on) = &change.due_on {
-        add("due", copy.due_on, due_on.clone().unwrap_or_else(|| copy.none.to_owned()));
+        add(
+            "due",
+            copy.due_on,
+            due_on.clone().unwrap_or_else(|| copy.none.to_owned()),
+        );
     }
     if let Some(titles) = &change.order_titles {
         add("order", copy.order, titles.join(" → "));
     }
-    Some(Stack::new().gap(Space::Lg).children(facts).into_any_element())
+    Some(
+        Stack::new()
+            .gap(Space::Lg)
+            .children(facts)
+            .into_any_element(),
+    )
 }
 
 fn status_label<'a>(status: &str, copy: &'a CanonProposalCopy) -> &'a str {

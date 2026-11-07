@@ -2,9 +2,9 @@
 //! pointer drags from the grip or the card (both start the same gpui drag); the keyboard drags
 //! from the grip only. While its row is lifted the grip is a static glyph.
 use gpui::{
-    AnyElement, App, AppContext as _, Div, ElementId, FocusHandle, InteractiveElement as _, IntoElement as _,
-    MouseButton, ParentElement as _, Pixels, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, Window, div,
+    AnyElement, App, AppContext as _, Div, ElementId, FocusHandle, InteractiveElement as _,
+    IntoElement as _, MouseButton, ParentElement as _, Pixels, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, Window, div,
 };
 
 use super::lifted::Lifted;
@@ -54,7 +54,9 @@ pub(super) fn grip_handle(
     cx: &mut App,
 ) -> FocusHandle {
     window
-        .use_keyed_state((grip_id(list, drag_id), "focus"), cx, |_, cx| cx.focus_handle())
+        .use_keyed_state((grip_id(list, drag_id), "focus"), cx, |_, cx| {
+            cx.focus_handle()
+        })
         .read(cx)
         .clone()
 }
@@ -101,9 +103,14 @@ pub(super) fn grip(
         let ds = Ds::get(cx);
         (control_side(ds), ds.len(Length::IconSizeMd))
     };
-    let boxed = div().flex().flex_none().items_center().justify_center().w(side);
-    let carried = env.view.active_id.as_ref() == Some(&grip.drag_id)
-        && env.view.mode == Some(Mode::Pointer);
+    let boxed = div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .w(side);
+    let carried =
+        env.view.active_id.as_ref() == Some(&grip.drag_id) && env.view.mode == Some(Mode::Pointer);
     if lifted || carried {
         let slot = IconSlot::new()
             .size(SlotSize::Md)
@@ -116,8 +123,11 @@ pub(super) fn grip(
     }
     env.hub.borrow_mut().rendered.insert(grip.drag_id.clone());
     let focus = grip_handle(&env.id, &grip.drag_id, window, cx);
-    let button = IconButton::new(grip_id(&env.id, &grip.drag_id), (env.labels.grip)(&grip.label))
-        .glyph(Icon::GripVertical);
+    let button = IconButton::new(
+        grip_id(&env.id, &grip.drag_id),
+        (env.labels.grip)(&grip.label),
+    )
+    .glyph(Icon::GripVertical);
     let (hub, drag_id) = (env.hub.clone(), grip.drag_id.clone());
     let el = boxed
         .id(sub(&env.id, "grip-box", &grip.drag_id))

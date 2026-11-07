@@ -34,7 +34,7 @@ enum Phase {
 
 /// The pages read so far (the `pages` and `state` of OperationOutputDetails).
 pub(super) struct Pages {
-    pages: Vec<Page>,
+    read: Vec<Page>,
     phase: Phase,
     started: bool,
     task: Option<Task<()>>,
@@ -43,7 +43,7 @@ pub(super) struct Pages {
 impl Default for Pages {
     fn default() -> Self {
         Self {
-            pages: Vec::new(),
+            read: Vec::new(),
             phase: Phase::Loading,
             started: false,
             task: None,
@@ -90,7 +90,7 @@ fn load(state: &Entity<Pages>, ids: Ids, offset: u64, cx: &mut App) {
             let _ = this.update(cx, |pages, cx| {
                 match page {
                     Some((content, byte_end, complete)) => {
-                        pages.pages.push(Page {
+                        pages.read.push(Page {
                             content,
                             byte_end,
                             complete,
@@ -124,16 +124,13 @@ pub(super) fn output_details(
     let lang = Ds::get(cx).lang();
     let (joined, latest, phase, empty) = {
         let pages = state.read(cx);
-        let latest = pages
-            .pages
-            .last()
-            .map(|page| (page.complete, page.byte_end));
+        let latest = pages.read.last().map(|page| (page.complete, page.byte_end));
         let joined: String = pages
-            .pages
+            .read
             .iter()
             .map(|page| page.content.as_str())
             .collect();
-        (joined, latest, pages.phase, pages.pages.is_empty())
+        (joined, latest, pages.phase, pages.read.is_empty())
     };
     if phase == Phase::Failed && empty {
         return Typo::caption(text(lang, "d.outputLoadFailed")).into_any_element();

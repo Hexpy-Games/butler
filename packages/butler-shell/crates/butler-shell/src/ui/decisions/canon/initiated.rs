@@ -11,8 +11,7 @@ use butler_ds::ui::tag::Tag;
 use butler_ds::ui::typo::{Tone, Typo, Weight, Wrap};
 use butler_shell_client::Error;
 use gpui::{
-    AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _,
-    Window, div,
+    AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window, div,
 };
 use serde_json::{Value, json};
 
@@ -31,7 +30,10 @@ pub(super) fn initiated_panels(
     cx: &mut App,
 ) -> Vec<AnyElement> {
     match origin.and_then(|origin| origin.panel.as_ref()) {
-        Some(InitiatedOriginPanel::PatternProposal { bundle_id, candidates }) => candidates
+        Some(InitiatedOriginPanel::PatternProposal {
+            bundle_id,
+            candidates,
+        }) => candidates
             .iter()
             .map(|candidate| proposal(bundle_id, candidate, window, cx))
             .collect(),
@@ -72,12 +74,20 @@ fn decision_actions(
 ) -> ComposerDecisionPanel {
     let no = decide.clone();
     panel
-        .action(Action::new(copy.no_thanks, Variant::Secondary, move |window, cx| {
-            no(false, window, cx);
-        }))
-        .action(Action::new(copy.sounds_good, Variant::Default, move |window, cx| {
-            decide(true, window, cx);
-        }))
+        .action(Action::new(
+            copy.no_thanks,
+            Variant::Secondary,
+            move |window, cx| {
+                no(false, window, cx);
+            },
+        ))
+        .action(Action::new(
+            copy.sounds_good,
+            Variant::Default,
+            move |window, cx| {
+                decide(true, window, cx);
+            },
+        ))
 }
 
 /// `Proposal`. The start date of the action line (`initiatedAction` with a time zone and the
@@ -89,13 +99,20 @@ fn proposal(
     cx: &mut App,
 ) -> AnyElement {
     let copy = Initiated::get(cx);
-    let id = SharedString::from(format!("initiated-proposal-{bundle_id}-{}", candidate.pattern_id));
+    let id = SharedString::from(format!(
+        "initiated-proposal-{bundle_id}-{}",
+        candidate.pattern_id
+    ));
     let state = panel_state(&id, window, cx);
     let pending = candidate.state == PatternCandidateState::Pending;
     let action = initiated_action(copy, &candidate.action.title, &candidate.action.schedule);
     if !pending {
         let accepted = candidate.state == PatternCandidateState::Accepted;
-        let text = if accepted { (copy.created)(&action) } else { (copy.skipped)(&action) };
+        let text = if accepted {
+            (copy.created)(&action)
+        } else {
+            (copy.skipped)(&action)
+        };
         let automation = candidate.automation_id.clone().filter(|_| accepted);
         return settled_suggestion(&id, text, automation);
     }
@@ -107,13 +124,19 @@ fn proposal(
             Some("general".to_owned()),
             move |client| async move {
                 let view = client.list_memory_pattern_proposals().await?;
-                let revision = view.get("revision").and_then(Value::as_i64).ok_or(Error::Protocol)?;
+                let revision = view
+                    .get("revision")
+                    .and_then(Value::as_i64)
+                    .ok_or(Error::Protocol)?;
                 let body = json!({
                     "pattern_id": pattern,
                     "decision": if accept { "accepted" } else { "declined" },
                     "expected_revision": revision,
                 });
-                client.resolve_memory_pattern_proposal(&bundle, &body).await.map(|_| ())
+                client
+                    .resolve_memory_pattern_proposal(&bundle, &body)
+                    .await
+                    .map(|_| ())
             },
             |_| {},
             window,
@@ -124,9 +147,10 @@ fn proposal(
         Detail::line(candidate.title.clone()),
         Detail::line(pattern_meta(copy, &candidate.evidence)),
     ];
-    let panel = ComposerDecisionPanel::new(id, Icon::Clock3, action, |_, _, cx| open_schedule(None, cx))
-        .placement(Placement::Conversation)
-        .details(details);
+    let panel =
+        ComposerDecisionPanel::new(id, Icon::Clock3, action, |_, _, cx| open_schedule(None, cx))
+            .placement(Placement::Conversation)
+            .details(details);
     decision_actions(panel, copy, decide).into_any_element()
 }
 
@@ -144,7 +168,11 @@ fn pause(
     let action = initiated_action(copy, title, schedule);
     if !pending {
         let continued = *server == InitiatedOriginPanelSchedulePauseState::Continued;
-        let text = if continued { (copy.continuing)(&action) } else { (copy.paused)(&action) };
+        let text = if continued {
+            (copy.continuing)(&action)
+        } else {
+            (copy.paused)(&action)
+        };
         return settled_suggestion(&id, text, Some(automation_id.to_owned()));
     }
     let automation = automation_id.to_owned();
@@ -157,7 +185,10 @@ fn pause(
                 None,
                 move |client| async move {
                     let body = json!({ "decision": if accept { "continue" } else { "stop" } });
-                    client.decide_report_pause(&automation, &body).await.map(|_| ())
+                    client
+                        .decide_report_pause(&automation, &body)
+                        .await
+                        .map(|_| ())
                 },
                 |_| {},
                 window,
@@ -175,7 +206,9 @@ fn pause(
 
 /// `SettledSuggestion`
 fn settled_suggestion(id: &SharedString, text: String, automation: Option<String>) -> AnyElement {
-    let caption = Typo::caption(text).tone(Tone::Secondary).wrap(Wrap::Anywhere);
+    let caption = Typo::caption(text)
+        .tone(Tone::Secondary)
+        .wrap(Wrap::Anywhere);
     match automation {
         Some(automation) => Clickable::new(SharedString::from(format!("{id}-resolution")))
             .variant(ClickVariant::Text)
@@ -199,7 +232,9 @@ fn frequency(copy: &Initiated, schedule: &InitiatedSchedule) -> String {
                 .weekdays
                 .iter()
                 .flatten()
-                .map(|day| copy.weekdays[usize::try_from((day - 1).rem_euclid(7)).unwrap_or_default()])
+                .map(|day| {
+                    copy.weekdays[usize::try_from((day - 1).rem_euclid(7)).unwrap_or_default()]
+                })
                 .collect();
             (copy.weekly_at)(&days.join(", "), &time)
         }
@@ -246,15 +281,26 @@ pub(crate) fn initiated_approval_line(
     let approval = approval?;
     let copy = Initiated::get(cx);
     let ds = Ds::get(cx);
-    let first = origin.label.clone().filter(|label| !label.is_empty()).unwrap_or(approval.label);
-    let text = [Some(first), Some(approval.target), origin.automation_title.clone()]
-        .into_iter()
-        .flatten()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let first = origin
+        .label
+        .clone()
+        .filter(|label| !label.is_empty())
+        .unwrap_or(approval.label);
+    let text = [
+        Some(first),
+        Some(approval.target),
+        origin.automation_title.clone(),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" · ");
     let (observer, automation) = (origin.work_session_id.clone(), origin.automation_id.clone());
-    let id = SharedString::from(format!("initiated-approval-{}", origin.relation_id.as_deref().unwrap_or_default()));
+    let id = SharedString::from(format!(
+        "initiated-approval-{}",
+        origin.relation_id.as_deref().unwrap_or_default()
+    ));
     Some(
         Clickable::new(id.clone())
             .variant(ClickVariant::Text)
@@ -270,7 +316,10 @@ pub(crate) fn initiated_approval_line(
                     .flex()
                     .items_start()
                     .gap(ds.len(Length::SpaceXs))
-                    .child(div().flex_none().child(Tag::new(SharedString::from(format!("{id}-tag")), copy.needs_approval)))
+                    .child(div().flex_none().child(Tag::new(
+                        SharedString::from(format!("{id}-tag")),
+                        copy.needs_approval,
+                    )))
                     .child(div().min_w_0().child(Typo::body(text).wrap(Wrap::Anywhere))),
             )
             .into_any_element(),

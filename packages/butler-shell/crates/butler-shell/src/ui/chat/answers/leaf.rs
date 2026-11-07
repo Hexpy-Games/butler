@@ -17,7 +17,7 @@ use butler_ds::ui::pill_button::{PillButton, Surface};
 use butler_ds::ui::typo::{Tone, Typo, Weight};
 use gpui::{
     AnyElement, App, ElementId, ImageSource, InteractiveElement as _, IntoElement as _,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, div,
+    ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _, Styled as _, div,
 };
 
 use super::frame::source_line;
@@ -123,7 +123,8 @@ fn progress(
             .map_or(String::new(), |u| format!(" {u}"));
         let meter = ProgressMeter::new(
             child_id(base, "meter", index),
-            (item.value / max * 100.) as f32,
+            // `Pixels` narrows an `f64` without a lossy cast of our own; the meter clamps it.
+            f32::from(Pixels::from(item.value / max * 100.)),
         )
         .label(item.label.clone())
         .meta(format!("{} / {max}{unit}", item.value));
@@ -288,16 +289,14 @@ fn actions(base: &SharedString, items: &[AnswerBlockActionsItemsItem], cx: &mut 
     for (index, item) in items.iter().enumerate() {
         let id = child_id(base, "action", index);
         row = match item {
-            AnswerBlockActionsItemsItem::Variant1(ask) => row.child(
-                {
-                    let text = ask.ask.clone();
-                    PillButton::new(id)
-                        .surface(Surface::Glass)
-                        .icon(icon(Icon::Reply, IconSize::Sm, Ds::get(cx)))
-                        .text(ask.ask.clone())
-                        .on_click(move |_, _, cx| send_message(&text, cx))
-                },
-            ),
+            AnswerBlockActionsItemsItem::Variant1(ask) => row.child({
+                let text = ask.ask.clone();
+                PillButton::new(id)
+                    .surface(Surface::Glass)
+                    .icon(icon(Icon::Reply, IconSize::Sm, Ds::get(cx)))
+                    .text(ask.ask.clone())
+                    .on_click(move |_, _, cx| send_message(&text, cx))
+            }),
             AnswerBlockActionsItemsItem::Variant2(open) => {
                 let url = open.open.clone();
                 row.child(

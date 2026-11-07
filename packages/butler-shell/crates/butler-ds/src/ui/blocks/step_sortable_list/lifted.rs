@@ -6,13 +6,13 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Context, ElementId, IntoElement as _, ParentElement as _, Pixels, Point, Render,
-    SharedString, Styled as _, Window, div,
+    AnyElement, App, Context, ElementId, IntoElement as _, ParentElement as _, Pixels, Point,
+    Render, SharedString, Styled as _, Window, div,
 };
 
 use super::deck::{DeckArgs, deck};
 use super::grip::Grip;
-use super::model::{StepSortableTargetKind, locate_item};
+use super::model::{StepSortableTarget, StepSortableTargetKind, locate_item};
 use super::row::{RowArgs, row};
 use super::session::{Hub, Mode, step_key};
 use super::{Env, RenderItem, StepSortableOutcome, StepSortableRowContext, sub};
@@ -30,32 +30,56 @@ pub(super) struct Lifted {
     pub offset: Point<Pixels>,
 }
 
+/// What dropping on the target does: joining a step, or starting a new one.
+fn drop_outcome(target: &StepSortableTarget) -> StepSortableOutcome {
+    if target.kind == StepSortableTargetKind::Join {
+        StepSortableOutcome::Join
+    } else {
+        StepSortableOutcome::NewStep
+    }
+}
+
+/// The opaque raised surface with the drag shadow, hanging below the pointer.
+fn lifted_surface(inner: AnyElement, width: Option<Pixels>, top: Pixels, cx: &App) -> AnyElement {
+    let (gap, radius, fill, shadow) = {
+        let ds = Ds::get(cx);
+        (
+            ds.len(Length::Space3xl),
+            ds.len(Length::RadiusControl),
+            ds.color(Color::ColorSurfaceRaisedOpaque),
+            convert::box_shadows(ds.tokens().shadow(Shadow::ShadowDragLift), ds.tokens()),
+        )
+    };
+    let mut surface = div().rounded(radius).bg(fill).shadow(shadow).child(inner);
+    if let Some(width) = width {
+        surface = surface.w(width);
+    }
+    div().pt(top + gap).child(surface).into_any_element()
+}
+
 impl Render for Lifted {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let id = sub(&self.list, "lifted", &self.drag_id);
         let env = Env::from_hub(&id, &self.hub, &self.render_item);
         let view = env.view.clone();
-        let carried = view.mode == Some(Mode::Pointer)
-            && view.active_id.as_ref() == Some(&self.drag_id);
+        let carried =
+            view.mode == Some(Mode::Pointer) && view.active_id.as_ref() == Some(&self.drag_id);
         let chains = self.hub.borrow().chains.clone();
-        let at = view.item_ids.first().and_then(|first| locate_item(&chains, first));
+        let at = view
+            .item_ids
+            .first()
+            .and_then(|first| locate_item(&chains, first));
         let (Some(at), true) = (at, carried) else {
             return div().into_any_element();
         };
-        let chain = &chains[at.chain_index];
-        let step = &chain.steps[at.step_index];
-        let item = &step[at.item_index];
-        let outcome = view.target.as_ref().map(|target| {
-            if target.kind == StepSortableTargetKind::Join {
-                StepSortableOutcome::Join
-            } else {
-                StepSortableOutcome::NewStep
-            }
-        });
+        let chain = &chains[at.chain];
+        let step = &chain.steps[at.step];
+        let item = &step[at.item];
+        let outcome = view.target.as_ref().map(drop_outcome);
         let ctx = StepSortableRowContext {
             chain_id: chain.id.clone(),
-            step_index: at.step_index,
-            step_number: at.step_index + 1,
+            step_index: at.step,
+            step_number: at.step + 1,
             count: step.len(),
             expanded: false,
             lifted: true,
@@ -63,7 +87,12 @@ impl Render for Lifted {
         };
         let whole = view.item_ids.len() == step.len() && step.len() > 1;
         let inner: AnyElement = if whole {
-            let args = DeckArgs { step, expanded: false, interactive: false, base: ctx };
+            let args = DeckArgs {
+                step,
+                expanded: false,
+                interactive: false,
+                base: ctx,
+            };
             deck(&env, &args, window, cx)
         } else {
             let grip = Grip {
@@ -71,10 +100,19 @@ impl Render for Lifted {
                 label: SharedString::default(),
                 movable: true,
             };
-            let ctx = StepSortableRowContext { expanded: step.len() > 1, ..ctx };
+            let ctx = StepSortableRowContext {
+                expanded: step.len() > 1,
+                ..ctx
+            };
             let content = row(
                 &env,
-                RowArgs { item, ctx, grip: Some(grip), marker: true, dim: false },
+                RowArgs {
+                    item,
+                    ctx,
+                    grip: Some(grip),
+                    marker: true,
+                    dim: false,
+                },
                 window,
                 cx,
             );
@@ -84,20 +122,12 @@ impl Render for Lifted {
             }
             card.child(content).into_any_element()
         };
-        let width = self.hub.borrow().boxes.get(&step_key(&chain.id, at.step_index)).map(|b| b.size.width);
-        let (gap, radius, fill, shadow) = {
-            let ds = Ds::get(cx);
-            (
-                ds.len(Length::Space3xl),
-                ds.len(Length::RadiusControl),
-                ds.color(Color::ColorSurfaceRaisedOpaque),
-                convert::box_shadows(ds.tokens().shadow(Shadow::ShadowDragLift), ds.tokens()),
-            )
-        };
-        let mut surface = div().rounded(radius).bg(fill).shadow(shadow).child(inner);
-        if let Some(width) = width {
-            surface = surface.w(width);
-        }
-        div().pt(self.offset.y + gap).child(surface).into_any_element()
+        let width = self
+            .hub
+            .borrow()
+            .boxes
+            .get(&step_key(&chain.id, at.step))
+            .map(|b| b.size.width);
+        lifted_surface(inner, width, self.offset.y, cx)
     }
 }

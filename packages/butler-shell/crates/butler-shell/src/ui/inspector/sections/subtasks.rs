@@ -82,37 +82,40 @@ fn subtask_row(
     let state = state_label(&subtask.state, SessionSections::get(cx));
     let session = subtask.session_id.clone();
     let mark = subtask_mark(parent_id, subtask, window, cx);
-    Clickable::new(SharedString::from(format!("subtask-{}", subtask.session_id)))
-        .bleed(Bleed::Inline)
-        .stretch()
-        .on_click(move |_, _, cx| open_subtask(&session, cx))
-        .child(
-            Stack::row()
-                .cross(Cross::Center)
-                .gap(Space::Sm)
-                .grow()
-                .min_width(MinWidth::Zero)
-                .child(
-                    Stack::row()
-                        .cross(Cross::Baseline)
-                        .gap(Space::Xs)
-                        .grow()
-                        .min_width(MinWidth::Zero)
-                        .child(
-                            Typo::body(subtask.title.clone())
-                                .truncate()
-                                .min_width(MinWidth::Zero),
-                        )
-                        .child(
-                            Typo::caption(state)
-                                .tone(Tone::Tertiary)
-                                .wrap(Wrap::Nowrap)
-                                .shrink(false),
-                        ),
-                )
-                .children(mark),
-        )
-        .into_any_element()
+    Clickable::new(SharedString::from(format!(
+        "subtask-{}",
+        subtask.session_id
+    )))
+    .bleed(Bleed::Inline)
+    .stretch()
+    .on_click(move |_, _, cx| open_subtask(&session, cx))
+    .child(
+        Stack::row()
+            .cross(Cross::Center)
+            .gap(Space::Sm)
+            .grow()
+            .min_width(MinWidth::Zero)
+            .child(
+                Stack::row()
+                    .cross(Cross::Baseline)
+                    .gap(Space::Xs)
+                    .grow()
+                    .min_width(MinWidth::Zero)
+                    .child(
+                        Typo::body(subtask.title.clone())
+                            .truncate()
+                            .min_width(MinWidth::Zero),
+                    )
+                    .child(
+                        Typo::caption(state)
+                            .tone(Tone::Tertiary)
+                            .wrap(Wrap::Nowrap)
+                            .shrink(false),
+                    ),
+            )
+            .children(mark),
+    )
+    .into_any_element()
 }
 
 /// `SubtaskMark` at the panel's size.
@@ -234,27 +237,30 @@ fn worker_row(worker: &SubtaskWorkerView, copy: &SessionSections) -> AnyElement 
         _ => (copy.worker_executing, false),
     };
     let session = worker.session_id.clone();
-    Clickable::new(SharedString::from(format!("subtask-worker-{}", worker.session_id)))
-        .bleed(Bleed::Inline)
-        .stretch()
-        .on_click(move |_, _, cx| open_subtask(&session, cx))
-        .child(
-            Stack::row()
-                .cross(Cross::Baseline)
-                .gap(Space::Xs)
-                .grow()
-                .min_width(MinWidth::Zero)
-                .child(
-                    Typo::body(worker.title.clone())
-                        .truncate()
-                        .min_width(MinWidth::Zero),
-                )
-                .child(
-                    Typo::caption(state)
-                        .tone(if failed { Tone::Danger } else { Tone::Tertiary })
-                        .wrap(Wrap::Nowrap)
-                        .shrink(false),
-                ),
-        )
-        .into_any_element()
+    Clickable::new(SharedString::from(format!(
+        "subtask-worker-{}",
+        worker.session_id
+    )))
+    .bleed(Bleed::Inline)
+    .stretch()
+    .on_click(move |_, _, cx| open_subtask(&session, cx))
+    .child(
+        Stack::row()
+            .cross(Cross::Baseline)
+            .gap(Space::Xs)
+            .grow()
+            .min_width(MinWidth::Zero)
+            .child(
+                Typo::body(worker.title.clone())
+                    .truncate()
+                    .min_width(MinWidth::Zero),
+            )
+            .child(
+                Typo::caption(state)
+                    .tone(if failed { Tone::Danger } else { Tone::Tertiary })
+                    .wrap(Wrap::Nowrap)
+                    .shrink(false),
+            ),
+    )
+    .into_any_element()
 }

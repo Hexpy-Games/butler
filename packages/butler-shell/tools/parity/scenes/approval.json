@@ -28,7 +28,7 @@
       "wait": false
     }
   ],
-  "stubToolCalls": [
+  "toolCalls": [
     {
       "name": "run_command",
       "arguments": {

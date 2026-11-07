@@ -10,9 +10,9 @@ use gpui::{
 };
 
 use super::grip::{Grip, draggable};
+use super::model::{is_draggable, is_pinned_step};
 use super::row::{RowArgs, row};
 use super::session::{item_drag_id, set_fanned, step_drag_id};
-use super::model::{is_draggable, is_pinned_step};
 use super::{Env, StepSortableItem, StepSortableRowContext, sub};
 use crate::tokens::{Color, Length};
 use crate::ui::card::Card;
@@ -103,7 +103,10 @@ fn front(env: &Env, a: &DeckArgs<'_>, window: &mut Window, cx: &mut App) -> AnyE
         env,
         RowArgs {
             item: first,
-            ctx: StepSortableRowContext { expanded: false, ..a.base.clone() },
+            ctx: StepSortableRowContext {
+                expanded: false,
+                ..a.base.clone()
+            },
             grip: Some(grip_of(drag_id.clone(), &name, !pinned)),
             marker: true,
             dim: false,
@@ -121,12 +124,21 @@ fn front(env: &Env, a: &DeckArgs<'_>, window: &mut Window, cx: &mut App) -> AnyE
     let front = if a.base.lifted {
         front
     } else {
-        let wrap = div().id(sub(&env.id, "front", &first.id)).w_full().child(front);
+        let wrap = div()
+            .id(sub(&env.id, "front", &first.id))
+            .w_full()
+            .child(front);
         draggable(wrap, env, &drag_id, !pinned).into_any_element()
     };
     let group: SharedString = format!("deck:{}", first.id).into();
     let edges = peeks(a.step.len() - 1, live, &group, Ds::get(cx));
-    div().relative().w_full().group(group).child(edges).child(front).into_any_element()
+    div()
+        .relative()
+        .w_full()
+        .group(group)
+        .child(edges)
+        .child(front)
+        .into_any_element()
 }
 
 /// The open deck: every card at the full row width, in order; each drags out on its own.
@@ -141,7 +153,10 @@ fn column(env: &Env, a: &DeckArgs<'_>, window: &mut Window, cx: &mut App) -> Any
             env,
             RowArgs {
                 item,
-                ctx: StepSortableRowContext { expanded: true, ..a.base.clone() },
+                ctx: StepSortableRowContext {
+                    expanded: true,
+                    ..a.base.clone()
+                },
                 grip: Some(grip_of(drag_id.clone(), &item.label, is_draggable(item))),
                 marker: index == 0,
                 dim: env.view.mode.is_some() && env.view.item_ids.contains(&item.id),
@@ -152,7 +167,12 @@ fn column(env: &Env, a: &DeckArgs<'_>, window: &mut Window, cx: &mut App) -> Any
         let toggle = a.interactive.then_some(false);
         if toggle.is_some() {
             let id = (sub(&env.id, "card", &item.id), "focus");
-            handles.push(window.use_keyed_state(id, cx, |_, cx| cx.focus_handle()).read(cx).clone());
+            handles.push(
+                window
+                    .use_keyed_state(id, cx, |_, cx| cx.focus_handle())
+                    .read(cx)
+                    .clone(),
+            );
         }
         let wrap = div()
             .id(sub(&env.id, "item", &item.id))
@@ -168,7 +188,9 @@ fn column(env: &Env, a: &DeckArgs<'_>, window: &mut Window, cx: &mut App) -> Any
         .w_full()
         .on_key_down(move |event, window, cx| {
             if event.keystroke.key == "escape"
-                && handles.iter().any(|handle| handle.contains_focused(window, cx))
+                && handles
+                    .iter()
+                    .any(|handle| handle.contains_focused(window, cx))
             {
                 set_fanned(&hub, &first, false);
                 cx.stop_propagation();

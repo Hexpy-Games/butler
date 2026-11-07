@@ -5,9 +5,10 @@ use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use gpui::{App, ParentElement as _, SharedString, Window};
 
-use super::atoms::session_display_title;
 use super::Atom;
+use super::atoms::session_display_title;
 use crate::ui::i18n::Locale;
+use crate::ui::i18n::composer::mentions::project_label;
 use crate::ui::source::wire::{NavigationView, SessionSummary};
 
 /// The `@` word the caret is in: `@` at the start of the text or after whitespace, then
@@ -265,7 +266,9 @@ impl MentionMenu {
     /// Arrow keys wrap around the `rows`.
     pub(crate) fn step(&mut self, step: isize, rows: usize) {
         if rows > 0 {
-            self.active = (self.active as isize + step).rem_euclid(rows as isize) as usize;
+            let rows = isize::try_from(rows).unwrap_or(isize::MAX);
+            let active = isize::try_from(self.active).unwrap_or(isize::MAX);
+            self.active = usize::try_from((active + step).rem_euclid(rows)).unwrap_or(0);
         }
     }
 
@@ -284,21 +287,6 @@ impl MentionMenu {
         } else {
             rank_mentions(candidates, &now.query).into_iter().next()
         }
-    }
-}
-
-/// composer.mentionList, composer.mentionProject.
-pub(crate) fn mention_list_label(locale: Locale) -> &'static str {
-    match locale {
-        Locale::Ko => "대화·프로젝트 참조",
-        Locale::En => "Reference a chat or project",
-    }
-}
-
-fn mention_project_label(locale: Locale) -> &'static str {
-    match locale {
-        Locale::Ko => "프로젝트",
-        Locale::En => "Project",
     }
 }
 
@@ -331,7 +319,7 @@ pub(crate) fn mention_list(
         .query(query.to_owned())
         .active(index == active);
         let meta = match item.kind {
-            MentionKind::Project => Some(mention_project_label(locale).to_owned()),
+            MentionKind::Project => Some(project_label(locale).to_owned()),
             MentionKind::Session => item.project_name.clone(),
         };
         if let Some(meta) = meta {

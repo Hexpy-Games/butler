@@ -3,6 +3,7 @@ mod adjunct;
 mod attachments;
 pub(crate) mod context;
 mod controls;
+mod decision;
 pub(crate) mod editor;
 mod files;
 mod inputs;
@@ -12,7 +13,7 @@ pub(crate) mod queue;
 mod references;
 mod send;
 mod slots;
-mod state;
+pub(crate) mod state;
 mod sync;
 mod toolbar;
 mod wire;
@@ -24,7 +25,7 @@ use std::rc::Rc;
 use butler_ds::ui::blocks::composer_card::{ComposerCard, ExpandedBody};
 use butler_ds::ui::popover::Popover;
 use gpui::{
-    AnyElement, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    AnyElement, App, AppContext as _, Context, Div, Entity, EventEmitter, FocusHandle, Focusable,
     KeyBinding, KeyDownEvent, SharedString, Window, actions, canvas, div, prelude::*, px,
 };
 
@@ -35,18 +36,14 @@ use self::attachments::{Attachments, composer_attachments, file_drag_active, fil
 use self::context::ComposerContextControl;
 use self::controls::Controls;
 use self::editor::clipboard::Paste;
-use self::editor::drop::SessionDrag;
 use self::editor::{ComposerEditor, FocusPlacement};
 use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
+use crate::ui::decisions::{DecisionCtx, decision_surface, set_plan_gate};
 use crate::ui::field;
-use crate::ui::motion::Hover;
-use crate::ui::decisions::{
-    DecisionCtx, decision_surface, plan_instruction, question_attachment, set_plan_gate,
-};
+use crate::ui::sidebar::SpaceDragPayload;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
 use crate::ui::theme::Theme;
-use crate::ui::widgets::HasHover;
 
 pub(crate) use inputs::Inputs;
 
@@ -106,10 +103,22 @@ const POPOVERS: [&str; 4] = [
     "composer-documents-menu",
 ];
 
+/// What keeps the card unfolded.
+#[derive(Default)]
+struct Fold {
+    /// The field has been engaged and no click outside has folded it.
+    engaged: bool,
+    /// A toolbar popover is open.
+    protected: bool,
+    /// A decision surface took the input's place in the last frame.
+    decision: bool,
+}
+
 pub(crate) struct Composer {
     input: Entity<EditableTextState>,
     editor: ComposerEditor,
-    controls: Controls,
+    /// The catalog, settings and chat controls (the shot harness reads `load_state`).
+    pub(crate) controls: Controls,
     attachments: Attachments,
     context_control: Entity<ComposerContextControl>,
     /// The `@` menu and the atom chips.
@@ -118,20 +127,17 @@ pub(crate) struct Composer {
     inputs: Inputs,
     /// The draft revision the editor shows.
     synced_revision: u64,
-    /// A toolbar popover is open.
-    protected: bool,
+    /// Whether the card is unfolded.
+    fold: Fold,
     /// The field's placeholder (new chat or follow-up).
     placeholder: &'static str,
     theme: Theme,
-    engaged: bool,
     /// The open chat's turn is running.
     pub(crate) streaming: bool,
     /// The open chat's view, for the decision surfaces that take the input's place.
     decision_view: Option<Rc<SessionView>>,
     /// The open chat's queued follow-ups, for the plan decision's gate.
     queue: Vec<QueuedMessageRecord>,
-    /// A decision surface took the input's place in the last frame.
-    decision_shown: bool,
     /// The new-chat composer (`large`).
     new_chat: bool,
     git_notice_dismissed: bool,
@@ -141,17 +147,10 @@ pub(crate) struct Composer {
     pub(crate) shell_focus: Option<FocusHandle>,
     /// The card's height as last drawn.
     height: Rc<Cell<f32>>,
-    hover: Hover,
     _subscriptions: Vec<gpui::Subscription>,
 }
 
 impl EventEmitter<ComposerEvent> for Composer {}
-
-impl HasHover for Composer {
-    fn hover_state(&mut self) -> &mut Hover {
-        &mut self.hover
-    }
-}
 
 impl Composer {
     pub(crate) fn new(theme: Theme, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -164,7 +163,7 @@ impl Composer {
         let subscriptions = vec![
             cx.on_blur(&handle, window, |this: &mut Self, window, cx| {
                 this.editor.save_selection(window, cx);
-                this.engaged = false;
+                this.fold.engaged = false;
                 cx.notify();
             }),
             cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
@@ -188,20 +187,17 @@ impl Composer {
             references: References::default(),
             inputs: Inputs::default(),
             synced_revision: 0,
-            protected: false,
+            fold: Fold::default(),
             placeholder,
             theme,
-            engaged: false,
             streaming: false,
             decision_view: None,
             queue: Vec::new(),
-            decision_shown: false,
             new_chat: true,
             git_notice_dismissed: false,
             disabled: None,
             shell_focus: None,
             height: Rc::new(Cell::new(48.)),
-            hover: Hover::default(),
             _subscriptions: subscriptions,
         }
     }
@@ -226,18 +222,13 @@ impl Composer {
         if self.disabled.is_some() {
             return;
         }
-        self.engaged = true;
+        self.fold.engaged = true;
         self.editor.focus(FocusPlacement::Restore, window, cx);
         cx.notify();
     }
 
-    /// The open chat's view, read by the decision surfaces.
-    pub(crate) fn set_decision_view(&mut self, view: Option<Rc<SessionView>>) {
-        self.decision_view = view;
-    }
-
     pub(crate) fn fold(&mut self) {
-        self.engaged = false;
+        self.fold.engaged = false;
     }
 
     /// The card's measured height, shared with the conversation's composer reserve.
@@ -255,7 +246,7 @@ impl Composer {
         let surface = view
             .as_deref()
             .and_then(|view| decision_surface(DecisionCtx { view }, window, cx));
-        self.decision_shown = surface.is_some();
+        self.fold.decision = surface.is_some();
         if let Some(surface) = surface {
             return vec![surface];
         }
@@ -276,7 +267,7 @@ impl Composer {
             None,
             move |id, _, cx| {
                 let id = id.to_string();
-                let _ = open.update(cx, |this, cx| this.open_attached(&id, cx));
+                let _ = open.update(cx, |_, cx| Self::open_attached(&id, cx));
             },
             move |id, _, cx| {
                 let id = id.to_string();
@@ -284,8 +275,13 @@ impl Composer {
             },
             cx,
         );
-        let input = field::field("composer-input", &self.input, placeholder.unwrap_or(self.placeholder), &self.theme)
-            .aria_label(self.theme.strings.message_composer);
+        let input = field::field(
+            "composer-input",
+            &self.input,
+            placeholder.unwrap_or(self.placeholder),
+            &self.theme,
+        )
+        .aria_label(self.theme.strings.message_composer);
         let input = crate::ui::widgets::anchor(input, "composer-field");
         let field = self.references.field.clone();
         let probe = canvas(move |b, _, _| field.set(Some(b)), |_, (), _, _| {})
@@ -299,8 +295,25 @@ impl Composer {
             .child(probe)
             .children(chips)
             .children(menu);
-        // The editor stays mounted while folded so its focus handle and IME state survive.
-        let editor = div()
+        let editor = Self::editor_frame(cx).child(input);
+        let mut body = ExpandedBody::new("composer-body");
+        if let Some(attachment) = attachment {
+            body = body.child(attachment);
+        }
+        body = body.child(editor);
+        if let Some(tiles) = tiles {
+            body = body.child(tiles);
+        }
+        vec![
+            body.into_any_element(),
+            self.toolbar(window, cx).into_any_element(),
+        ]
+    }
+
+    /// The editor's padding and clipboard and mention-key capture; the editor stays mounted
+    /// while folded so its focus handle and IME state survive.
+    fn editor_frame(cx: &mut Context<Self>) -> Div {
+        div()
             .px(px(16.))
             .py(px(12.))
             .text_size(px(14.))
@@ -345,45 +358,6 @@ impl Composer {
                     cx.stop_propagation();
                 }
             }))
-            .child(input);
-        let mut body = ExpandedBody::new("composer-body");
-        if let Some(attachment) = attachment {
-            body = body.child(attachment);
-        }
-        body = body.child(editor);
-        if let Some(tiles) = tiles {
-            body = body.child(tiles);
-        }
-        vec![
-            body.into_any_element(),
-            self.toolbar(window, cx).into_any_element(),
-        ]
-    }
-
-    /// `ComposerInputSurface`'s attachment above the input: the authority pill while the owner
-    /// composes over a request, else the plan instruction context with its placeholder.
-    fn decision_attachment(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> (Option<AnyElement>, Option<&'static str>) {
-        let Some(view) = self.decision_view.clone() else {
-            return (None, None);
-        };
-        let ctx = DecisionCtx { view: &view };
-        let plan = plan_instruction(ctx, cx);
-        let placeholder = plan.as_ref().map(|plan| plan.placeholder);
-        let plan = plan.map(|p| adjunct::plan_instruction_attachment(&p.title, p.label, cx));
-        let parts: Vec<AnyElement> = question_attachment(ctx, window, cx).into_iter().chain(plan).collect();
-        let attachment = (!parts.is_empty())
-            .then(|| div().flex().flex_col().children(parts).into_any_element());
-        (attachment, placeholder)
-    }
-
-
-    /// The open chat's queued follow-ups.
-    pub(crate) fn set_queue(&mut self, queue: Vec<QueuedMessageRecord>) {
-        self.queue = queue;
     }
 
     /// `useComposerPresentation`'s `protectedExpanded`.
@@ -392,7 +366,9 @@ impl Composer {
             .iter()
             .any(|id| Popover::new(*id, window, cx).is_open(cx));
         // A session dragged over the composer keeps it open (`referenceDragging`).
-        popover || cx.has_active_drag() || ComposerState::read(cx, |draft| draft.context_popover_open)
+        popover
+            || cx.has_active_drag()
+            || ComposerState::read(cx, |draft| draft.context_popover_open)
     }
 }
 
@@ -402,27 +378,13 @@ impl Focusable for Composer {
     }
 }
 
-impl Render for Composer {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.pull_state(window, cx);
-        self.take_focus_request(window, cx);
-        self.sync_mentions(window, cx);
-        self.protected = Self::popover_open(window, cx);
-        // `useComposerPlanDecision`'s inputs: plan mode and the open chat's queue.
-        set_plan_gate(cx, self.controls.shown.plan_mode, &self.queue);
-        let height = self.height.clone();
-        let probe = canvas(
-            move |b, _, _| height.set(b.size.height.as_f32()),
-            |_, (), _, _| {},
-        )
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full();
+impl Composer {
+    /// The card: its notice, adjunct panels and the body rows.
+    fn card(&mut self, window: &mut Window, cx: &mut Context<Self>) -> ComposerCard {
         let lang = butler_ds::ui::context::Ds::get(cx).lang();
         let this = cx.entity();
         let notice = notice::git_dependency_notice(
-            self.inputs.git_missing,
+            self.inputs.git.missing,
             self.git_notice_dismissed,
             lang,
             move |_, cx| {
@@ -443,7 +405,7 @@ impl Render for Composer {
                 .and_then(|p| p.state.as_deref()),
         );
         let body = self.body(window, cx);
-        let expanded = self.engaged || self.decision_shown || self.protected;
+        let expanded = self.fold.engaged || self.fold.decision || self.fold.protected;
         let mut card = ComposerCard::new("composer-card").expanded(expanded);
         if self.new_chat {
             card = card.large();
@@ -457,7 +419,28 @@ impl Render for Composer {
         if let Some(adjunct) = adjunct {
             card = card.adjunct(adjunct);
         }
-        let card = card.children(body);
+        card.children(body)
+    }
+}
+
+impl Render for Composer {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.pull_state(window, cx);
+        self.take_focus_request(window, cx);
+        self.sync_mentions(window, cx);
+        self.fold.protected = Self::popover_open(window, cx);
+        // `useComposerPlanDecision`'s inputs: plan mode and the open chat's queue.
+        set_plan_gate(cx, self.controls.shown.plan_mode, &self.queue);
+        let height = self.height.clone();
+        let probe = canvas(
+            move |b, _, _| height.set(b.size.height.as_f32()),
+            |_, (), _, _| {},
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full();
+        let card = self.card(window, cx);
         let column = butler_ds::ui::blocks::scope::conversation(cx).unwrap_or_default();
         let ds = butler_ds::ui::context::Ds::get(cx);
         let dropped = cx.entity().downgrade();
@@ -472,21 +455,21 @@ impl Render for Composer {
         })
         .on_action(cx.listener(Self::submit))
         .on_action(cx.listener(Self::submit_with_modifier))
-        .on_drop(cx.listener(|this, drag: &SessionDrag, window, cx| {
+        .on_drop(cx.listener(|this, drag: &SpaceDragPayload, window, cx| {
             this.drop_session(drag, window, cx);
         }))
         .child(probe)
         .child(card)
         .on_click(cx.listener(|this, _, window, cx| {
-            if !this.engaged && !this.decision_shown {
+            if !this.fold.engaged && !this.fold.decision {
                 this.engage(window, cx);
             }
         }))
         // useComposerPresentation: a pointer-down anywhere else folds the composer, unless a
         // toolbar popover is open or the IME is composing.
         .on_mouse_down_out(cx.listener(|this, _, window, cx| {
-            if this.engaged && !this.protected && !this.composing(window, cx) {
-                this.engaged = false;
+            if this.fold.engaged && !this.fold.protected && !this.composing(window, cx) {
+                this.fold.engaged = false;
                 if let Some(f) = &this.shell_focus {
                     window.focus(f, cx);
                 }

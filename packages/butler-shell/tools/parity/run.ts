@@ -91,11 +91,16 @@ async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: 
 }
 
 async function runScene(scene: Scene) {
-  const calls = [...scene.stubToolCalls ?? []];
+  let releaseReply: (() => void) | undefined;
+  const pendingReply = new Promise<void>(done => { releaseReply = done; });
+  const toolCalls = [...(scene.toolCalls ?? [])];
   const app = await browserAgentApp(join(out, "logs", scene.name), request => {
-    if (!calls.length || !request.stream || !Array.isArray(request.body.tools) || !request.body.tools.length) return null;
-    return calls.shift()!;
-  }, process.env.BUTLER_SMOKE_RENDERER_DIST, { stubReply: request => request.stream ? answer : "{}" });
+    if (toolCalls.length && request.stream && Array.isArray(request.body.tools) && request.body.tools.length) return toolCalls.shift()!;
+    return null;
+  }, process.env.BUTLER_SMOKE_RENDERER_DIST, { stubReply: async request => {
+    if (request.stream && scene.pendingReply && JSON.stringify(request.messages).includes(scene.pendingReply)) await pendingReply;
+    return request.stream ? scene.reply ?? answer : "{}";
+  } });
   try {
     writeFileSync(join(out, "logs", `${scene.name}-agent.pid`), String(app.gateway.pid));
     writeFileSync(join(out, "logs", `${scene.name}-electron.pid`), String(await app.main<number>("process.pid")));
@@ -111,9 +116,10 @@ async function runScene(scene: Scene) {
     await app.main(`${app.win}.webContents.debugger.attach('1.3')`);
     for (const theme of themes) for (const size of sizes) {
       const name = await capture(app, scene, anchors, size, theme);
-      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined, scene.steps);
+      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined, anchors.map(item => item.anchor), scene.steps);
     }
   } finally {
+    releaseReply?.();
     await app.stop();
   }
 }

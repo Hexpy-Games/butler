@@ -4,10 +4,10 @@
 mod display;
 mod files;
 
+use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::artifact_preview::{
     ArtifactPreview, ArtifactPreviewFrame, ArtifactPreviewImage, ArtifactPreviewPre, Surface,
 };
-use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::empty_line::EmptyLine;
 use butler_ds::ui::blocks::markdown_content::MarkdownContent;
 use butler_ds::ui::button::{Button, Size, Variant};
@@ -106,8 +106,12 @@ fn file_viewer_artifact(
             on_back: None,
         })
         .child(
-            FileViewerPage::new(mode == Mode::Markdown)
-                .child(artifact_body(&artifact, Surface::Page, window, cx)),
+            FileViewerPage::new(mode == Mode::Markdown).child(artifact_body(
+                &artifact,
+                Surface::Page,
+                window,
+                cx,
+            )),
         )
         .into_any_element()
 }
@@ -158,7 +162,12 @@ fn revision_select(
                 });
                 window.refresh();
             }),
-        |select, position| select.option(position.to_string(), format!("{label} {}", count - position)),
+        |select, position| {
+            select.option(
+                position.to_string(),
+                format!("{label} {}", count - position),
+            )
+        },
     );
     Stack::row()
         .gap(Space::Sm)
@@ -200,7 +209,11 @@ fn render_preview(
     if matches!(mode, Mode::Web | Mode::Html) {
         return ArtifactPreviewFrame::new().into_any_element();
     }
-    let Some(file_id) = artifact.file_id.clone().filter(|_| mode != Mode::Unsupported) else {
+    let Some(file_id) = artifact
+        .file_id
+        .clone()
+        .filter(|_| mode != Mode::Unsupported)
+    else {
         return unsupported(artifact, surface, cx);
     };
     match mode {
@@ -223,7 +236,11 @@ fn render_preview(
 /// What an unpreviewable file offers instead: its caption, and Save in a card.
 fn unsupported(artifact: &SessionArtifactSummary, surface: Surface, cx: &App) -> AnyElement {
     let stack = Stack::new().child(Typo::caption(ArtifactViewerCopy::get(cx).unsupported));
-    let Some(file_id) = artifact.file_id.clone().filter(|_| surface == Surface::Card) else {
+    let Some(file_id) = artifact
+        .file_id
+        .clone()
+        .filter(|_| surface == Surface::Card)
+    else {
         return stack.into_any_element();
     };
     let name = file_name(artifact);
@@ -239,11 +256,7 @@ fn unsupported(artifact: &SessionArtifactSummary, surface: Surface, cx: &App) ->
 }
 
 /// `ArtifactPreviewImage` of the stored picture, at its own display size.
-fn image(
-    file_id: &str,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
+fn image(file_id: &str, window: &mut Window, cx: &mut App) -> AnyElement {
     let copy = ArtifactViewerCopy::get(cx);
     let id = PictureId::File(file_id.to_owned());
     let Some(source) = picture(&id, cx) else {

@@ -43,7 +43,8 @@ fn handoff_view(request: &Value, lang: Lang, copy: &BrowserHandoff) -> Option<Ha
     let place = copy.on_desktop.to_owned();
     match field("tool")? {
         "browser_sign_in_wait" => {
-            let step = BrowserHandoff::sign_in_step(lang, field("sign_in_step").unwrap_or("unknown_form"));
+            let step =
+                BrowserHandoff::sign_in_step(lang, field("sign_in_step").unwrap_or("unknown_form"));
             Some(HandoffView {
                 title: copy.sign_in_title.to_owned(),
                 details: vec![step_line(step), place],
@@ -51,7 +52,8 @@ fn handoff_view(request: &Value, lang: Lang, copy: &BrowserHandoff) -> Option<Ha
             })
         }
         "browser_pay_wait" => {
-            let step = BrowserHandoff::pay_step(lang, field("wait_reason").unwrap_or("unknown_form"));
+            let step =
+                BrowserHandoff::pay_step(lang, field("wait_reason").unwrap_or("unknown_form"));
             Some(HandoffView {
                 title: copy.pay_title.to_owned(),
                 details: vec![step_line(step), place],

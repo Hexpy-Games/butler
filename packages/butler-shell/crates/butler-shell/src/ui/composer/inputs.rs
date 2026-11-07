@@ -10,6 +10,15 @@ use crate::ui::source::wire::{
     WorkerActivitySummary,
 };
 
+/// The Git facts the composer reads.
+#[derive(Clone, Copy, Default, PartialEq)]
+pub(crate) struct GitInputs {
+    /// A new chat can start in a Git worktree (`selectIsGitProject`).
+    pub(crate) project: bool,
+    /// The open chat's Git dependency is missing.
+    pub(crate) missing: bool,
+}
+
 /// The open chat and the agent as the composer needs them.
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct Inputs {
@@ -20,8 +29,8 @@ pub(crate) struct Inputs {
     pub(crate) session_id: Option<String>,
     /// The open chat's project, which gates plan mode and the project documents.
     pub(crate) project_id: Option<String>,
-    /// A new chat can start in a Git worktree (`selectIsGitProject`).
-    pub(crate) git_project: bool,
+    /// Git facts of the open or new chat.
+    pub(crate) git: GitInputs,
     /// The chat summary's `turn_state` and `latest_turn_cancellable`.
     pub(crate) turn_state: Option<String>,
     pub(crate) latest_turn_cancellable: Option<bool>,
@@ -29,7 +38,6 @@ pub(crate) struct Inputs {
     pub(crate) workers: Vec<WorkerActivitySummary>,
     /// The summary's latest turn progress.
     pub(crate) progress: Option<TurnProgressSnapshot>,
-    pub(crate) git_missing: bool,
     /// `liveConnectionLost`.
     pub(crate) reconnecting: bool,
 }
@@ -45,7 +53,10 @@ impl Inputs {
                 .and_then(|s| s.worker_activity.clone())
                 .unwrap_or_default(),
             progress: summary.and_then(|s| s.latest_progress.clone()),
-            git_missing: git_missing(summary),
+            git: GitInputs {
+                project: false,
+                missing: git_missing(summary),
+            },
             ..Self::default()
         }
     }

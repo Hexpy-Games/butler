@@ -28,7 +28,7 @@
       "wait": true
     }
   ],
-  "stubToolCalls": [
+  "toolCalls": [
     {
       "name": "write_file",
       "arguments": {

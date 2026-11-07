@@ -21,12 +21,20 @@ use gpui::{
 };
 
 pub(crate) use model::{
-    ModelChoice, ModelFooter, ReasoningFooterOption, model_display_name, model_options,
+    ModelChoice, ModelFooter, Pick, ReasoningFooterOption, model_display_name, model_options,
     model_options_filter, reasoning_budget_summary, reasoning_option_label,
 };
 
 use super::state::{ComposerModelState, WorkspaceMode};
+use crate::ui::i18n::composer::access::{AccessText, copy as access_copy};
 use crate::ui::source::wire::{AccessMode, ReasoningEffort};
+
+/// Called with the chosen access mode.
+pub(crate) type AccessHandler = Rc<dyn Fn(&AccessMode, &mut Window, &mut App)>;
+/// Called with the chosen workspace mode.
+type WorkspaceHandler = Rc<dyn Fn(WorkspaceMode, &mut Window, &mut App)>;
+/// Called with the chosen reasoning effort.
+pub(crate) type ReasoningHandler = Rc<dyn Fn(&ReasoningEffort, &mut Window, &mut App)>;
 
 /// `ACCESS_MODES`: the order the access menus list them, the recommended mode first.
 pub(crate) const ACCESS_MODES: [AccessMode; 5] = [
@@ -41,47 +49,30 @@ pub(crate) const ACCESS_MODES: [AccessMode; 5] = [
 struct AccessMeta {
     tone: PermissionTone,
     glyph: Icon,
-    label: (&'static str, &'static str),
-    description: (&'static str, &'static str),
 }
 
 fn access_meta(mode: &AccessMode) -> AccessMeta {
-    match mode {
-        AccessMode::ReadOnly => AccessMeta {
-            tone: PermissionTone::Read,
-            glyph: Icon::Eye,
-            label: ("Read only", "읽기 전용"),
-            description: ("Can only read files", "파일 읽기만 가능"),
-        },
-        AccessMode::AskFirst => AccessMeta {
-            tone: PermissionTone::Ask,
-            glyph: Icon::CheckList,
-            label: ("Ask every time", "모두 확인"),
-            description: ("Ask before every action", "모든 작업 전에 확인"),
-        },
-        AccessMode::AskExceptReads | AccessMode::Unknown => AccessMeta {
-            tone: PermissionTone::Ask,
-            glyph: Icon::ShieldQuestion,
-            label: ("Ask first", "먼저 확인"),
-            description: ("Ask before changes and commands", "변경·명령 전에 확인"),
-        },
-        AccessMode::Auto => AccessMeta {
-            tone: PermissionTone::Ask,
-            glyph: Icon::ShieldEnergy,
-            label: ("Auto", "알아서 진행"),
-            description: ("Ask only for risky actions", "위험한 작업만 확인"),
-        },
-        AccessMode::FullAccess => AccessMeta {
-            tone: PermissionTone::Full,
-            glyph: Icon::ShieldCheck,
-            label: ("Full access", "전체 권한"),
-            description: ("Never ask", "확인 없이 진행"),
-        },
-    }
+    let (tone, glyph) = match mode {
+        AccessMode::ReadOnly => (PermissionTone::Read, Icon::Eye),
+        AccessMode::AskFirst => (PermissionTone::Ask, Icon::CheckList),
+        AccessMode::AskExceptReads | AccessMode::Unknown => {
+            (PermissionTone::Ask, Icon::ShieldQuestion)
+        }
+        AccessMode::Auto => (PermissionTone::Ask, Icon::ShieldEnergy),
+        AccessMode::FullAccess => (PermissionTone::Full, Icon::ShieldCheck),
+    };
+    AccessMeta { tone, glyph }
 }
 
-fn pick(lang: Lang, pair: (&'static str, &'static str)) -> &'static str {
-    if lang == Lang::Ko { pair.1 } else { pair.0 }
+fn access_text(mode: &AccessMode, lang: Lang) -> &'static AccessText {
+    let copy = access_copy(lang);
+    match mode {
+        AccessMode::ReadOnly => &copy.read_only,
+        AccessMode::AskFirst => &copy.ask_every_time,
+        AccessMode::AskExceptReads | AccessMode::Unknown => &copy.ask_first,
+        AccessMode::Auto => &copy.auto,
+        AccessMode::FullAccess => &copy.full_access,
+    }
 }
 
 /// `accessPermissionTone`.
@@ -96,16 +87,16 @@ pub(crate) fn access_mode_icon(mode: &AccessMode, size: IconSize, ds: &Ds) -> An
 
 /// `accessLabel`.
 pub(crate) fn access_label(mode: &AccessMode, lang: Lang) -> &'static str {
-    pick(lang, access_meta(mode).label)
+    access_text(mode, lang).label
 }
 
 /// `accessDescription`.
 pub(crate) fn access_description(mode: &AccessMode, lang: Lang) -> &'static str {
-    pick(lang, access_meta(mode).description)
+    access_text(mode, lang).description
 }
 
 fn permission_title(lang: Lang) -> &'static str {
-    pick(lang, ("Permission", "권한"))
+    access_copy(lang).permission
 }
 
 /// `AccessModeOptions`: the access-mode choices with their labels, descriptions and icons.
@@ -113,14 +104,13 @@ fn permission_title(lang: Lang) -> &'static str {
 pub(crate) fn access_mode_options(
     id: &'static str,
     value: &AccessMode,
-    on_select: Rc<dyn Fn(&AccessMode, &mut Window, &mut App)>,
+    on_select: &AccessHandler,
     cx: &App,
 ) -> AnyElement {
     let ds = Ds::get(cx);
     let lang = ds.lang();
     let mut menu = OptionMenu::new(permission_title(lang));
     for mode in ACCESS_MODES {
-        let meta = access_meta(&mode);
         let select = on_select.clone();
         let chosen = mode.clone();
         let mut item = OptionMenuItem::new(
@@ -129,8 +119,8 @@ pub(crate) fn access_mode_options(
         )
         .description(access_description(&mode, lang))
         .block_description()
-        .icon(icon(meta.glyph, IconSize::Md, ds))
-        .permission_tone(meta.tone)
+        .icon(access_mode_icon(&mode, IconSize::Md, ds))
+        .permission_tone(access_permission_tone(&mode))
         .on_click(move |_, window, cx| select(&chosen, window, cx));
         if mode == *value {
             item = item.selected();
@@ -144,33 +134,28 @@ pub(crate) fn access_mode_options(
 /// `on_change` (`handleAccessModeChange`) and closes the menu.
 pub(crate) fn access_mode_menu(
     access_mode: &AccessMode,
-    on_change: Rc<dyn Fn(&AccessMode, &mut Window, &mut App)>,
+    on_change: AccessHandler,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let popover = Popover::new("composer-access-menu", window, cx);
     let ds = Ds::get(cx);
     let label = access_label(access_mode, ds.lang());
-    let meta = access_meta(access_mode);
-    let glyph = icon(meta.glyph, IconSize::Md, ds);
+    let glyph = access_mode_icon(access_mode, IconSize::Md, ds);
     let trigger = popover.trigger(|toggle| {
         ComposerControl::new("access-button", label)
             .icon(glyph)
             .compact(Compact::Icon)
-            .permission_tone(meta.tone)
+            .permission_tone(access_permission_tone(access_mode))
             .on_click(toggle.on_click())
             .into_any_element()
     });
     let closing = popover.clone();
-    let options = access_mode_options(
-        "composer-access-option",
-        access_mode,
-        Rc::new(move |mode, window, cx| {
-            on_change(mode, window, cx);
-            closing.set_open(false, window, cx);
-        }),
-        cx,
-    );
+    let select: AccessHandler = Rc::new(move |mode, window, cx| {
+        on_change(mode, window, cx);
+        closing.set_open(false, window, cx);
+    });
+    let options = access_mode_options("composer-access-option", access_mode, &select, cx);
     let content = popover.content(
         PopoverContent::new()
             .align(Align::Start)
@@ -195,8 +180,8 @@ pub(crate) fn plan_mode_badge(
         return None;
     }
     let lang = Ds::get(cx).lang();
-    let plan = pick(lang, ("Plan", "계획"));
-    let cancel = pick(lang, ("Cancel", "취소"));
+    let plan = access_copy(lang).plan;
+    let cancel = access_copy(lang).cancel;
     Some(
         Tag::new("composer-plan-mode-badge", plan)
             .icon(Icon::ListChecks)
@@ -213,7 +198,7 @@ pub(crate) fn workspace_select(
     git_project: bool,
     mode: WorkspaceMode,
     sending: bool,
-    on_change: Rc<dyn Fn(WorkspaceMode, &mut Window, &mut App)>,
+    on_change: WorkspaceHandler,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -231,8 +216,8 @@ pub(crate) fn workspace_select(
         select = select.disabled();
     }
     let ds = Ds::get(cx);
-    let local = pick(ds.lang(), ("Local", "로컬"));
-    let worktree = pick(ds.lang(), ("Worktree", "워크트리"));
+    let local = access_copy(ds.lang()).local;
+    let worktree = access_copy(ds.lang()).worktree;
     let select = select.on_value_change(move |value, window, cx| {
         let next = if value.as_ref() == "worktree" {
             WorkspaceMode::Worktree
@@ -271,30 +256,20 @@ pub(crate) fn model_status_button(
 ) -> AnyElement {
     let lang = Ds::get(cx).lang();
     if model.is_none() && state != ComposerModelState::Unavailable {
-        return ComposerControl::new(
-            "model-button",
-            pick(lang, ("Checking model", "모델 확인 중")),
-        )
-        .disabled()
-        .into_any_element();
+        return ComposerControl::new("model-button", access_copy(lang).checking_model)
+            .disabled()
+            .into_any_element();
     }
     let label: SharedString = match model {
         Some(model) => model_display_name(model),
-        None => pick(lang, ("No model", "모델 없음")).into(),
+        None => access_copy(lang).no_model.into(),
     };
     let hint = match model {
-        Some(model) if model.availability.as_deref() == Some("not_in_plan") => pick(
-            lang,
-            ("Not in your ChatGPT plan", "ChatGPT 플랜에 없는 모델"),
-        ),
-        Some(_) => pick(
-            lang,
-            ("Sign in to ChatGPT again", "ChatGPT에 다시 로그인하세요"),
-        ),
-        None => pick(
-            lang,
-            ("Add a model in Settings.", "설정에서 모델을 추가해 주세요."),
-        ),
+        Some(model) if model.availability.as_deref() == Some("not_in_plan") => {
+            access_copy(lang).not_in_plan
+        }
+        Some(_) => access_copy(lang).sign_in_again,
+        None => access_copy(lang).add_model,
     };
     Tooltip::new("model-button-hint")
         .label(hint)
@@ -314,9 +289,9 @@ pub(crate) struct ModelMenuProps {
     pub(crate) reasoning: ReasoningEffort,
     pub(crate) available_reasoning: Vec<ReasoningEffort>,
     /// `handleModelChoice`.
-    pub(crate) on_model: Rc<dyn Fn(&ModelChoice, &mut Window, &mut App)>,
+    pub(crate) on_model: Pick,
     /// `handleReasoningChange`.
-    pub(crate) on_reasoning: Rc<dyn Fn(&ReasoningEffort, &mut Window, &mut App)>,
+    pub(crate) on_reasoning: ReasoningHandler,
 }
 
 /// `ModelMenu`: the model control and the popover of the models and reasoning choices.
@@ -366,7 +341,7 @@ pub(crate) fn model_menu(props: ModelMenuProps, window: &mut Window, cx: &mut Ap
         "composer-model-options",
         &models,
         &model,
-        on_model,
+        &on_model,
         Some(ModelFooter { options }),
         &filter,
         cx,

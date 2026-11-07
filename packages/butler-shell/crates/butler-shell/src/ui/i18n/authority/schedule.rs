@@ -6,7 +6,10 @@ use super::Authority;
 impl Authority {
     /// interfaceTemplates.approvalRequest.schedule{Unavailable, Mode, Signin, Payment}
     pub(crate) fn schedule_unavailable(self) -> &'static str {
-        self.pick("Schedule details unavailable.", "예약 작업 정보를 확인할 수 없어요.")
+        self.pick(
+            "Schedule details unavailable.",
+            "예약 작업 정보를 확인할 수 없어요.",
+        )
     }
 
     pub(crate) fn schedule_mode(self, mode: &str) -> String {

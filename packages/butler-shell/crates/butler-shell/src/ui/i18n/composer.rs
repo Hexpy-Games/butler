@@ -2,6 +2,14 @@
 //! feedback. Each field names its `packages/butler-i18n` key.
 use butler_ds::ui::context::Lang;
 
+pub(crate) mod access;
+pub(crate) mod adjunct;
+pub(crate) mod attachments;
+pub(crate) mod labels;
+pub(crate) mod mentions;
+pub(crate) mod menus;
+pub(crate) mod usage;
+
 pub(crate) struct Words {
     /// feedback.reconnectingShort
     pub(crate) reconnecting: &'static str,

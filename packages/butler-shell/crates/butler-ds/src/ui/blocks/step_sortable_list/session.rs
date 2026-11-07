@@ -127,7 +127,7 @@ fn payload_of(
 ) -> Option<Payload> {
     let (kind, id) = drag_id.split_once(':')?;
     let at = locate_item(chains, id)?;
-    let step = &chains[at.chain_index].steps[at.step_index];
+    let step = &chains[at.chain].steps[at.step];
     if kind == "step" {
         return Some(Payload {
             at,
@@ -136,7 +136,7 @@ fn payload_of(
             movable: !is_pinned_step(step),
         });
     }
-    let item = &step[at.item_index];
+    let item = &step[at.item];
     Some(Payload {
         at,
         item_ids: vec![item.id.clone()],
@@ -154,7 +154,11 @@ impl Session {
     }
 
     /// The edit for `target`, or `None` when the drop changes nothing or is refused.
-    fn edit(&self, item_ids: &[SharedString], target: &StepSortableTarget) -> Option<StepSortableEdit> {
+    fn edit(
+        &self,
+        item_ids: &[SharedString],
+        target: &StepSortableTarget,
+    ) -> Option<StepSortableEdit> {
         edit_for(&self.chains, item_ids, target)
             .filter(|edit| self.cfg.can_drop.as_ref().is_none_or(|can| can(edit)))
     }
@@ -269,8 +273,8 @@ pub(super) fn begin(
         }
         session.freeze(&payload.item_ids);
         session.focus_request = None;
-        let chain = &session.chains[payload.at.chain_index];
-        let text = (session.cfg.labels.lifted)(&payload.label, &chain.label, payload.at.step_index + 1);
+        let chain = &session.chains[payload.at.chain];
+        let text = (session.cfg.labels.lifted)(&payload.label, &chain.label, payload.at.step + 1);
         session.view = DragView {
             active_id: Some(drag_id.clone()),
             item_ids: payload.item_ids,
@@ -329,7 +333,11 @@ fn scroll_pane(handle: &ScrollHandle, y: f32) {
     let offset = handle.offset();
     let scrolled = -offset.y.as_f32();
     let max = handle.max_offset().y.as_f32();
-    let room = if step < 0. { scrolled > 0. } else { scrolled < max };
+    let room = if step < 0. {
+        scrolled > 0.
+    } else {
+        scrolled < max
+    };
     if step != 0. && room {
         let next = (scrolled + step).clamp(0., max);
         handle.set_offset(point(offset.x, px(-next)));
@@ -350,7 +358,11 @@ pub(super) fn finish(hub: &Hub, drop: bool, window: &mut Window, cx: &mut App) {
         };
         let labels = session.cfg.labels.clone();
         let change = drop
-            .then(|| view.target.as_ref().and_then(|target| session.edit(&view.item_ids, target)))
+            .then(|| {
+                view.target
+                    .as_ref()
+                    .and_then(|target| session.edit(&view.item_ids, target))
+            })
             .flatten();
         let text = match &change {
             _ if !drop => Some((labels.cancelled)(&payload.label)),
@@ -383,8 +395,8 @@ fn keyboard_step(session: &mut Session, direction: isize) -> Option<String> {
     let payload = payload_of(&session.chains, &active, &session.cfg.labels)?;
     let all = keyboard_targets(&session.chains);
     let own = StepSortableTarget {
-        chain_id: session.chains[payload.at.chain_index].id.clone(),
-        step_index: payload.at.step_index,
+        chain_id: session.chains[payload.at.chain].id.clone(),
+        step_index: payload.at.step,
         kind: StepSortableTargetKind::Join,
     };
     let here = session.view.target.clone().unwrap_or(own);
@@ -397,7 +409,8 @@ fn keyboard_step(session: &mut Session, direction: isize) -> Option<String> {
         index += direction;
         let candidate = all.get(usize::try_from(index).ok()?)?;
         // Open 묶음 take gaps only, as with the pointer.
-        let visits = candidate.kind == StepSortableTargetKind::Gap || !session.is_fanned_step(candidate);
+        let visits =
+            candidate.kind == StepSortableTargetKind::Gap || !session.is_fanned_step(candidate);
         let change = if visits {
             session.edit(&session.view.item_ids, candidate)
         } else {

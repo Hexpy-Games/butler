@@ -10,9 +10,9 @@ use gpui::{
 };
 use serde_json::json;
 
-use super::text;
 use super::hooks::hooks;
 use super::remote;
+use super::text;
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::chat::message_markdown::message_markdown;
 

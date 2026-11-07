@@ -57,9 +57,12 @@ pub(crate) struct TranscriptCtx<'a> {
     pub(crate) message_id: Option<&'a str>,
 }
 
+/// Sends a text as a message.
+type SendHandler = Rc<dyn Fn(&str, &mut App)>;
+
 #[derive(Default)]
 struct Actions {
-    send: Option<Rc<dyn Fn(&str, &mut App)>>,
+    send: Option<SendHandler>,
 }
 
 impl Global for Actions {}
@@ -112,7 +115,7 @@ pub(crate) struct Chat {
     /// The open transcript's smooth scroll, for wheel events caught over a dialog.
     wheel: Rc<RefCell<Option<SmoothScroll>>>,
     /// No chat is open: the new-chat screen shows (`showEmptyState`).
-    new_chat: bool,
+    unsent: bool,
 }
 
 /// The id a queued record's row carries.
@@ -129,13 +132,13 @@ impl Chat {
             queued: HashSet::new(),
             footer_meta: Rc::default(),
             wheel: Rc::default(),
-            new_chat: true,
+            unsent: true,
         }
     }
 
     /// A new chat (no session yet) shows the new-chat screen while it has no view.
     pub(crate) fn set_new_chat(&mut self, new_chat: bool) {
-        self.new_chat = new_chat;
+        self.unsent = new_chat;
     }
 
     /// Shows `view` (`None`: a new chat, or nothing open). `live` marks the messages it adds
@@ -192,7 +195,7 @@ impl Chat {
 impl Render for Chat {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(shared) = self.view.clone() else {
-            if self.new_chat {
+            if self.unsent {
                 return empty::empty_state(empty::EmptyCtx::default(), window, cx);
             }
             return div().id("chat-list").size_full().into_any_element();
@@ -200,7 +203,11 @@ impl Render for Chat {
         if shared.messages.is_empty() && shared.active_turn.is_none() {
             let ctx = empty::EmptyCtx {
                 project_id: shared.project_id.as_deref(),
-                epic_id: shared.epic_ids.as_ref().and_then(|ids| ids.first()).map(String::as_str),
+                epic_id: shared
+                    .epic_ids
+                    .as_ref()
+                    .and_then(|ids| ids.first())
+                    .map(String::as_str),
             };
             return empty::empty_state(ctx, window, cx);
         }

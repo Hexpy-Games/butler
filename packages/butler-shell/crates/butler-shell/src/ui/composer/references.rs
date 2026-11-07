@@ -6,16 +6,18 @@ use std::rc::Rc;
 
 use butler_ds::ui::popover::{Density, Popover, PopoverContent};
 use butler_ds::ui::tooltip::{Align, Side};
-use gpui::{AnyElement, Bounds, Context, Focusable as _, Pixels, SharedString, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, Bounds, Context, Focusable as _, Pixels, SharedString, Window, div, prelude::*, px,
+};
 
 use super::Composer;
 use super::editor::atoms::atom_chip;
-use super::editor::drop::SessionDrag;
 use super::editor::mentions::{
     MentionCandidate, MentionMenu, mention_candidates, mention_list, rank_mentions,
 };
 use super::editor::{Atom, is_atom_char};
 use super::state::ComposerState;
+use crate::ui::sidebar::SpaceDragPayload;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::NavigationView;
 
@@ -42,7 +44,7 @@ pub(super) struct References {
     /// The field's bounds as last drawn, in window coordinates.
     pub(super) field: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// Where the chips were last placed; a change draws once more with the settled layout.
-    marks: Vec<(i32, i32)>,
+    marks: Vec<(Pixels, Pixels)>,
 }
 
 impl References {
@@ -60,7 +62,7 @@ impl Composer {
             self.rebuild_candidates();
         }
         let focused = self.focus_handle(cx).is_focused(window);
-        let token = if focused && self.engaged {
+        let token = if focused && self.fold.engaged {
             self.editor.active_mention(window, cx)
         } else {
             None
@@ -71,7 +73,7 @@ impl Composer {
             .map(|token| rank_mentions(&self.references.candidates, &token.query))
             .unwrap_or_default();
         if opened {
-            self.load_navigation(cx);
+            Self::load_navigation(cx);
         }
     }
 
@@ -87,7 +89,7 @@ impl Composer {
     }
 
     /// The navigation the candidates and chips read; read again when the menu opens.
-    pub(super) fn load_navigation(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn load_navigation(cx: &mut Context<Self>) {
         let fetch = Jobs::run(cx, |client| async move { client.list_navigation().await });
         cx.spawn(async move |this, cx| {
             let Some(Ok(raw)) = fetch.await else {
@@ -229,7 +231,7 @@ impl Composer {
                 bounds.origin.x - field.origin.x,
                 bounds.origin.y - field.origin.y,
             );
-            marks.push((left.as_f32().round() as i32, top.as_f32().round() as i32));
+            marks.push((left.round(), top.round()));
             let chip = atom_chip(
                 SharedString::from(format!("composer-atom-{at}")),
                 &atom,
@@ -258,18 +260,21 @@ impl Composer {
     /// character under the pointer, or at the caret when the pointer is outside the field.
     pub(super) fn drop_session(
         &mut self,
-        drag: &SessionDrag,
+        drag: &SpaceDragPayload,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let (Some(id), Some(title)) = (drag.session_id(), drag.title()) else {
+            return;
+        };
         let pointer = window.mouse_position();
         let inside = (self.references.field.get()).is_some_and(|field| field.contains(&pointer));
         if inside && let Some(offset) = self.editor.offset_at(pointer, window, cx) {
             self.editor.place_caret(offset, cx);
         }
         let atom = Atom::Session {
-            id: drag.id.clone(),
-            label: drag.title.clone(),
+            id: id.to_owned(),
+            label: title.clone(),
         };
         self.editor.insert_atom_at_caret(&atom, window, cx);
         self.engage(window, cx);

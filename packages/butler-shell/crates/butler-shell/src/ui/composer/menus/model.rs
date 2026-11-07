@@ -1,5 +1,7 @@
 //! `ModelOptions`, `useModelOptionsFilter`, `useModelChoice` and the model labels of `app/utils.ts`
 //! (`modelDisplayName`, `tokenWindowLabel`, `reasoningOptionLabel`, `reasoningBudgetSummary`).
+use crate::ui::i18n::composer::labels::reasoning_label;
+use crate::ui::i18n::composer::menus::{Copy, copy};
 use std::rc::Rc;
 
 use butler_ds::ui::blocks::filtered_select_popover::{
@@ -60,60 +62,6 @@ pub(crate) fn model_options_filter(
     cx: &mut App,
 ) -> Entity<ModelOptionsFilter> {
     window.use_keyed_state(key, cx, |_, _| ModelOptionsFilter::default())
-}
-
-/// `appCopy.composer` strings of the model chooser.
-pub(super) struct Copy {
-    pub(super) model: &'static str,
-    pub(super) search: &'static str,
-    pub(super) all_providers: &'static str,
-    pub(super) no_models: &'static str,
-    pub(super) reasoning: &'static str,
-    pub(super) context_unknown: &'static str,
-    pub(super) model_fallback: &'static str,
-}
-
-const EN: Copy = Copy {
-    model: "Model",
-    search: "Search models...",
-    all_providers: "All",
-    no_models: "No models found",
-    reasoning: "Reasoning",
-    context_unknown: "context unknown",
-    model_fallback: "Model",
-};
-
-const KO: Copy = Copy {
-    model: "모델",
-    search: "모델 검색...",
-    all_providers: "전체",
-    no_models: "모델을 찾을 수 없습니다",
-    reasoning: "추론",
-    context_unknown: "컨텍스트 미확인",
-    model_fallback: "모델",
-};
-
-pub(super) fn copy(lang: Lang) -> &'static Copy {
-    if lang == Lang::Ko { &KO } else { &EN }
-}
-
-/// `reasoningEffortLabel` (butler-i18n/src/reasoning-effort.ts).
-pub(crate) fn reasoning_label(value: &ReasoningEffort, lang: Lang) -> &'static str {
-    let ko = lang == Lang::Ko;
-    match value {
-        ReasoningEffort::None if ko => "없음",
-        ReasoningEffort::None => "None",
-        ReasoningEffort::Low if ko => "낮음",
-        ReasoningEffort::Low => "Low",
-        ReasoningEffort::Medium | ReasoningEffort::Unknown if ko => "보통",
-        ReasoningEffort::Medium | ReasoningEffort::Unknown => "Medium",
-        ReasoningEffort::High if ko => "높음",
-        ReasoningEffort::High => "High",
-        ReasoningEffort::Xhigh if ko => "매우 높음",
-        ReasoningEffort::Xhigh => "Very high",
-        ReasoningEffort::Max if ko => "최대",
-        ReasoningEffort::Max => "Max",
-    }
 }
 
 /// `modelDisplayName`.
@@ -219,11 +167,14 @@ pub(crate) fn model_choice(
     (next.model_ref.clone(), reasoning)
 }
 
+/// Called when a footer option is picked.
+pub(crate) type Choice = Rc<dyn Fn(&mut Window, &mut App)>;
+
 /// One reasoning choice below the model list.
 pub(crate) struct ReasoningFooterOption {
     pub(crate) label: SharedString,
     pub(crate) selected: bool,
-    pub(crate) on_select: Rc<dyn Fn(&mut Window, &mut App)>,
+    pub(crate) on_select: Choice,
 }
 
 /// `ModelOptions`'s `footer`.
@@ -231,7 +182,7 @@ pub(crate) struct ModelFooter {
     pub(crate) options: Vec<ReasoningFooterOption>,
 }
 
-type Pick = Rc<dyn Fn(&ModelChoice, &mut Window, &mut App)>;
+pub(crate) type Pick = Rc<dyn Fn(&ModelChoice, &mut Window, &mut App)>;
 
 /// `ModelOptions`: the model choices with search and provider filters. `filter` is the state
 /// from [`model_options_filter`], so the search and filter survive reopening.
@@ -239,7 +190,7 @@ pub(crate) fn model_options(
     id: &'static str,
     models: &[ModelChoice],
     value: &str,
-    on_select: Pick,
+    on_select: &Pick,
     footer: Option<ModelFooter>,
     filter: &Entity<ModelOptionsFilter>,
     cx: &mut App,
@@ -256,36 +207,7 @@ pub(crate) fn model_options(
             providers.push((model.provider_id.clone(), model.provider_label.clone()));
         }
     }
-    let query = current.search.trim().to_lowercase();
-    let groups = providers
-        .iter()
-        .map(|(provider, label)| {
-            let items = models
-                .iter()
-                .filter(|item| current.provider == "all" || item.provider_id == current.provider)
-                .filter(|item| item.provider_id == *provider)
-                .filter(|item| {
-                    query.is_empty()
-                        || [
-                            model_display_name(item).to_string(),
-                            item.model_id.to_string(),
-                            item.provider_label.to_string(),
-                        ]
-                        .iter()
-                        .any(|field| field.to_lowercase().contains(&query))
-                })
-                .map(|item| {
-                    let pick = on_select.clone();
-                    let chosen = item.clone();
-                    Item::new(item.model_ref.clone(), model_display_name(item))
-                        .description(token_window_label(item.context_window_tokens, text))
-                        .selected(item.model_ref.as_ref() == value)
-                        .on_select(move |window, cx| pick(&chosen, window, cx))
-                })
-                .collect();
-            Group::new(provider.clone(), label.clone(), items)
-        })
-        .collect();
+    let groups = model_groups(models, &providers, &current, value, on_select, text);
     let mut filters = vec![filter_chip(filter, "all", text.all_providers.into())];
     filters.extend(
         providers
@@ -317,6 +239,47 @@ pub(crate) fn model_options(
         popover = popover.footer(Some(text.reasoning.into()), options);
     }
     popover.into_any_element()
+}
+
+/// One group per provider, holding the models the search and provider filter let through.
+fn model_groups(
+    models: &[ModelChoice],
+    providers: &[(SharedString, SharedString)],
+    current: &ModelOptionsFilter,
+    value: &str,
+    on_select: &Pick,
+    text: &Copy,
+) -> Vec<Group> {
+    let query = current.search.trim().to_lowercase();
+    providers
+        .iter()
+        .map(|(provider, label)| {
+            let items = models
+                .iter()
+                .filter(|item| current.provider == "all" || item.provider_id == current.provider)
+                .filter(|item| item.provider_id == *provider)
+                .filter(|item| {
+                    query.is_empty()
+                        || [
+                            model_display_name(item).to_string(),
+                            item.model_id.to_string(),
+                            item.provider_label.to_string(),
+                        ]
+                        .iter()
+                        .any(|field| field.to_lowercase().contains(&query))
+                })
+                .map(|item| {
+                    let pick = on_select.clone();
+                    let chosen = item.clone();
+                    Item::new(item.model_ref.clone(), model_display_name(item))
+                        .description(token_window_label(item.context_window_tokens, text))
+                        .selected(item.model_ref.as_ref() == value)
+                        .on_select(move |window, cx| pick(&chosen, window, cx))
+                })
+                .collect();
+            Group::new(provider.clone(), label.clone(), items)
+        })
+        .collect()
 }
 
 fn filter_chip(

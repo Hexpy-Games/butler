@@ -6,7 +6,7 @@ use crate::ui::i18n::palette::{
     Every, SETTINGS_SECTIONS, Words, clock, daily_at, every, weekday, weekly_at, words,
 };
 use crate::ui::source::wire::{
-    CalendarSchedule, CalendarScheduleKind, CommandPaletteResultKind, CommandPaletteResult,
+    CalendarSchedule, CalendarScheduleKind, CommandPaletteResult, CommandPaletteResultKind,
 };
 
 /// `LOG_TRACE_COMMAND_ID`
@@ -45,7 +45,11 @@ pub(super) fn result_subtitle(result: &CommandPaletteResult, lang: Lang) -> Stri
     {
         return schedule_frequency(result, lang);
     }
-    let subtitle = result.subtitle.as_deref().map(str::trim).unwrap_or_default();
+    let subtitle = result
+        .subtitle
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or_default();
     if subtitle.is_empty() || Some(subtitle) == server_kind_subtitle(&result.kind) {
         return kind_label(&result.kind, words).to_owned();
     }
@@ -95,7 +99,11 @@ fn rule_frequency(rule: &CalendarSchedule, lang: Lang) -> String {
     if rule.weekdays == [1, 2, 3, 4, 5] {
         return daily_at(lang, true, &time);
     }
-    let days: Vec<&str> = rule.weekdays.iter().map(|day| weekday(lang, *day)).collect();
+    let days: Vec<&str> = rule
+        .weekdays
+        .iter()
+        .map(|day| weekday(lang, *day))
+        .collect();
     weekly_at(lang, &days.join(", "), &time)
 }
 

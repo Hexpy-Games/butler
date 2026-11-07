@@ -232,18 +232,18 @@ pub(super) fn slot(place: &Place, scope: &Scope, ds: &Ds) -> AnyElement {
         .relative()
         .flex()
         .on_hover(hover_listener(scope.hover.clone(), key.clone()));
+    // `.slot[data-active]`: the selected tab stops shrinking earlier, fitted or not.
+    let floor = if active {
+        min + ds.len(Length::Space2xl)
+    } else {
+        min
+    };
     slot = match scope.fit.filter(|_| place.pill) {
-        Some(fit) => slot.flex_none().w(px(fit)).min_w(min),
-        None => {
-            let floor = if active {
-                min + ds.len(Length::Space2xl)
-            } else {
-                min
-            };
-            slot.flex_shrink(1.)
-                .w(ds.len(Length::TabStripTabMaxWidth))
-                .min_w(floor)
-        }
+        Some(fit) => slot.flex_none().w(px(fit)).min_w(floor),
+        None => slot
+            .flex_shrink(1.)
+            .w(ds.len(Length::TabStripTabMaxWidth))
+            .min_w(floor),
     };
     if tab.closable {
         let (close, target) = (scope.on_close.clone(), tab.id.clone());
@@ -259,7 +259,7 @@ pub(super) fn slot(place: &Place, scope: &Scope, ds: &Ds) -> AnyElement {
         .as_ref()
         .is_some_and(|prev| !(lit || scope.lit(prev)));
     slot.child(control(place, scope, narrow, ds))
-        .children(show_close.then(|| close_button(place, scope, lit, ds)))
+        .children(show_close.then(|| close_button(place, scope, scope.reveals_close(&key), ds)))
         .children(divided.then(|| divider(ds)))
         .children(scope.recorder(&measure))
         .children(active.then(|| reveal_probe(&scope.reveal, tab.id.clone())))

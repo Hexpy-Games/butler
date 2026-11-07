@@ -13,6 +13,19 @@ impl ShellClient {
         )
         .await
     }
+    /// GET /project-folders?path&after (api.ts `listProjectFolders`)
+    pub async fn list_project_folders(
+        &self,
+        path: &str,
+        after: Option<&str>,
+    ) -> Result<Value, Error> {
+        let mut query = vec![("path", path.to_string())];
+        if let Some(value) = after {
+            query.push(("after", value.to_string()));
+        }
+        self.json(Method::GET, &["project-folders"], &query, None)
+            .await
+    }
     /// POST /projects
     pub async fn create_project(&self, body: &Value) -> Result<Value, Error> {
         self.json(Method::POST, &["projects"], &[], Some(body))

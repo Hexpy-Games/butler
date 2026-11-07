@@ -1,13 +1,13 @@
 //! `BrowserSection`, `ContextCompact` and `SessionInfoActions`.
 use butler_ds::tokens::Color;
+use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::key_value_row::{Detail, KeyValueRow, SwatchPattern, ValueSize};
 use butler_ds::ui::button::{self, Button, Size as ButtonSize, Variant};
 use butler_ds::ui::collapsible::Collapsible;
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon_button::{IconButton, Pane, Tone as IconTone};
-use butler_ds::ui::presence::{Presence, PresenceMotion};
-use butler_ds::ui::Icon;
 use butler_ds::ui::layout::{Box as DsBox, Cross, Justify, Space, Stack};
+use butler_ds::ui::presence::{Presence, PresenceMotion};
 use butler_ds::ui::tooltip::{Side, Tooltip};
 use butler_ds::ui::typo::{Tone, Typo};
 use std::rc::Rc;
@@ -71,8 +71,14 @@ fn group_context(context: &ContextDetailsView) -> Vec<Group<'_>> {
 
 /// `buildContextChart` over the groups (reserve excluded): the largest group first takes the
 /// occupied tokens, each with the next chart colour; the rest of the budget is free.
-fn chart_segments(context: &ContextDetailsView, groups: &[Group<'_>]) -> Vec<(Option<&'static str>, f64)> {
-    let mut sorted: Vec<&Group<'_>> = groups.iter().filter(|group| group.id != "reserve").collect();
+fn chart_segments(
+    context: &ContextDetailsView,
+    groups: &[Group<'_>],
+) -> Vec<(Option<&'static str>, f64)> {
+    let mut sorted: Vec<&Group<'_>> = groups
+        .iter()
+        .filter(|group| group.id != "reserve")
+        .collect();
     sorted.sort_by_key(|group| std::cmp::Reverse(group.tokens));
     let budget = context.budget_tokens.max(0);
     let mut remaining = budget.min(context.used_tokens.max(0));
@@ -108,7 +114,13 @@ fn context_bar(
     let segments = chart_segments(context, groups);
     let total: f64 = segments.iter().map(|(_, value)| value).sum();
     let mut colors = Vec::new();
-    let mut bar = div().flex().flex_row().w_full().h(px(12.)).rounded(px(6.)).overflow_hidden();
+    let mut bar = div()
+        .flex()
+        .flex_row()
+        .w_full()
+        .h(px(12.))
+        .rounded(px(6.))
+        .overflow_hidden();
     for (index, (group, value)) in segments.iter().enumerate() {
         if *value <= 0. || total <= 0. {
             continue;
@@ -121,7 +133,17 @@ fn context_bar(
             }
             None => ds.color(Color::ContextChartFree),
         };
-        bar = bar.child(div().h_full().w(relative((*value / total).to_string().parse::<f32>().unwrap_or_default())).bg(color));
+        bar = bar.child(
+            div()
+                .h_full()
+                .w(relative(
+                    (*value / total)
+                        .to_string()
+                        .parse::<f32>()
+                        .unwrap_or_default(),
+                ))
+                .bg(color),
+        );
     }
     let frame = div().flex().items_center().w_full().h(px(20.)).child(bar);
     (frame.into_any_element(), colors)
@@ -135,13 +157,10 @@ fn compact_tokens(value: i64, lang: Lang) -> String {
 fn group_items(group: &Group<'_>, lang: Lang, copy: &SessionInfo) -> AnyElement {
     let mut stack = Stack::new().gap(Space::Xs);
     for item in &group.items {
-        let (label, description) = copy
-            .items
-            .iter()
-            .find(|(id, _, _)| *id == item.id)
-            .map_or((item.label.as_str(), item.safe_description.as_str()), |(_, label, description)| {
-                (*label, *description)
-            });
+        let (label, description) = copy.items.iter().find(|(id, _, _)| *id == item.id).map_or(
+            (item.label.as_str(), item.safe_description.as_str()),
+            |(_, label, description)| (*label, *description),
+        );
         stack = stack.child(
             KeyValueRow::new(label.to_owned(), compact_tokens(item.used_tokens, lang))
                 .description(description.to_owned())
@@ -149,7 +168,10 @@ fn group_items(group: &Group<'_>, lang: Lang, copy: &SessionInfo) -> AnyElement 
                 .value_size(ValueSize::Caption),
         );
     }
-    DsBox::new().padding_start(Space::Lg).child(stack).into_any_element()
+    DsBox::new()
+        .padding_start(Space::Lg)
+        .child(stack)
+        .into_any_element()
 }
 
 /// One group's row, hint tooltip and items.
@@ -161,24 +183,38 @@ fn group_row(
     copy: &SessionInfo,
     ds: &Ds,
 ) -> AnyElement {
-    let (_, label, hint) = copy.groups.iter().find(|(id, _, _)| *id == group.id).copied().unwrap_or(("", "", ""));
-    let mut row = KeyValueRow::new(label, compact_tokens(group.tokens, lang)).value_size(ValueSize::Caption);
+    let (_, label, hint) = copy
+        .groups
+        .iter()
+        .find(|(id, _, _)| *id == group.id)
+        .copied()
+        .unwrap_or(("", "", ""));
+    let mut row =
+        KeyValueRow::new(label, compact_tokens(group.tokens, lang)).value_size(ValueSize::Caption);
     if group.id == "reserve" {
-        row = row.swatch_color(ds.color(Color::ContextChartFree)).swatch_pattern(SwatchPattern::Hatched);
+        row = row
+            .swatch_color(ds.color(Color::ContextChartFree))
+            .swatch_pattern(SwatchPattern::Hatched);
     } else if let Some((_, color)) = colors.iter().find(|(id, _)| *id == group.id) {
         row = row.swatch_color(*color);
     }
     Stack::new()
         .gap(Space::Xs)
         .child(
-            Tooltip::new(SharedString::from(format!("context-group-hint-{}", group.id)))
-                .label(hint)
-                .side(Side::Left)
-                .child(div().child(row)),
+            Tooltip::new(SharedString::from(format!(
+                "context-group-hint-{}",
+                group.id
+            )))
+            .label(hint)
+            .side(Side::Left)
+            .child(div().child(row)),
         )
         .child(
-            Collapsible::new(SharedString::from(format!("context-group-items-{}", group.id)), open)
-                .child(group_items(group, lang, copy)),
+            Collapsible::new(
+                SharedString::from(format!("context-group-items-{}", group.id)),
+                open,
+            )
+            .child(group_items(group, lang, copy)),
         )
         .into_any_element()
 }
@@ -205,19 +241,27 @@ pub(crate) fn context_compact(
     for group in &groups {
         rows = rows.child(group_row(group, &colors, open, lang, copy, ds));
     }
-    let compact_at = context
-        .auto_compact_at_tokens
-        .map(|tokens| copy.context_compact_at.replace("{value}", &compact_tokens(tokens, lang)));
-    let toggle = Button::new(SharedString::from(format!("context-compact-toggle-{}", ctx.view.session_id)))
-        .variant(Variant::Link)
-        .size(ButtonSize::Xs)
-        .text(if open { copy.context_less } else { copy.context_more })
-        .on_click(move |_, _, cx| {
-            state.update(cx, |open, cx| {
-                *open = !*open;
-                cx.notify();
-            });
+    let compact_at = context.auto_compact_at_tokens.map(|tokens| {
+        copy.context_compact_at
+            .replace("{value}", &compact_tokens(tokens, lang))
+    });
+    let toggle = Button::new(SharedString::from(format!(
+        "context-compact-toggle-{}",
+        ctx.view.session_id
+    )))
+    .variant(Variant::Link)
+    .size(ButtonSize::Xs)
+    .text(if open {
+        copy.context_less
+    } else {
+        copy.context_more
+    })
+    .on_click(move |_, _, cx| {
+        state.update(cx, |open, cx| {
+            *open = !*open;
+            cx.notify();
         });
+    });
     let footer = Stack::row()
         .justify(Justify::Between)
         .cross(Cross::Center)
@@ -227,7 +271,14 @@ pub(crate) fn context_compact(
             None => div().into_any_element(),
         })
         .child(toggle);
-    Some(Stack::new().gap(Space::Sm).child(bar).child(rows).child(footer).into_any_element())
+    Some(
+        Stack::new()
+            .gap(Space::Sm)
+            .child(bar)
+            .child(rows)
+            .child(footer)
+            .into_any_element(),
+    )
 }
 
 pub(crate) type SessionActionHandler = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -264,7 +315,11 @@ pub(crate) fn session_info_actions(
         .glyph(Icon::AppleReminder)
         .pane(Pane::Aside)
         .pressed(props.open)
-        .tone(if props.open { IconTone::Butler } else { IconTone::Default })
+        .tone(if props.open {
+            IconTone::Butler
+        } else {
+            IconTone::Default
+        })
         .on_click(move |_, window, cx| on_toggle(window, cx));
     if props.indicator {
         toggle = toggle.indicator();

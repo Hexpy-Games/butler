@@ -17,13 +17,20 @@ pub(super) struct Face {
     pub letter_spacing: f32,
 }
 
-/// `text` in `face`: a block whose glyphs sit with the capitals centred on the line.
+/// `text` in `face`: a block whose glyphs sit with the capitals centred on the line. A line
+/// box never gets shorter than the font's ascent plus descent here, where CSS lets a tighter
+/// `line-height` win; the block gives the excess back (a one-line block is then the line height)
+/// and the glyphs move up by half of it, as CSS's half-leading puts them.
 pub(super) fn run(face: &Face, text: impl Into<SharedString>, ds: &Ds, cx: &App) -> Div {
     let text: SharedString = text.into();
     let size = f32::from(ds.len(face.size));
+    let line = f32::from(ds.len(face.line_height));
     let family = ds.body_font().clone();
-    let offset = Typo::trim_offset(&family, size, cx, face.weight);
+    let (ascent, descent) = Typo::extent(&family, size, face.weight, cx);
+    let excess = (ascent + descent - line).max(0.);
+    let offset = Typo::trim_offset(&family, size, cx, face.weight) - excess / 2.;
     let mut el = div()
+        .mb(px(-excess))
         .text_size(px(size))
         .line_height(ds.len(face.line_height))
         .font_weight(FontWeight(face.weight))

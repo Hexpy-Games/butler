@@ -28,7 +28,7 @@ impl Shell {
         });
         let queue = shell.clone();
         chat::on_queue_changed(cx, move |cx| {
-            let _ = queue.update(cx, |this, cx| this.reload_queue(cx));
+            let _ = queue.update(cx, super::Shell::reload_queue);
         });
         let open = shell;
         cx.set_global(AssistantHooks {
@@ -45,7 +45,7 @@ impl Shell {
     }
 
     /// The settings the transcript reads: the chats intro flag and developer mode.
-    pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn load_settings(cx: &mut Context<Self>) {
         let request = Jobs::run(cx, |client| async move { client.get_settings().await });
         cx.spawn(async move |this, cx| {
             let Some(Ok(raw)) = request.await else {
@@ -98,7 +98,7 @@ impl Shell {
     }
 
     /// Shows the open chat's view (with the turns' live progress) in the transcript.
-    pub(super) fn show_view(&mut self, live: bool, cx: &mut Context<Self>) {
+    pub(crate) fn show_view(&mut self, live: bool, cx: &mut Context<Self>) {
         let view = self.store.shown_view().map(Rc::new);
         let decision_view = view.clone();
         self.feed_panes(view.clone(), cx);
@@ -114,22 +114,23 @@ impl Shell {
 
     /// Reads the open chat's latest window again and merges it into the shown view.
     pub(super) fn refresh_open_view(&mut self, cx: &mut Context<Self>) {
-        if self.refreshing {
-            self.refresh_again = true;
+        if self.refresh != super::Refresh::Idle {
+            self.refresh = super::Refresh::Again;
             return;
         }
         let (Some(chat), Some(source)) = (self.store.selected().cloned(), self.source.clone())
         else {
             return;
         };
-        self.refreshing = true;
+        self.refresh = super::Refresh::Running;
         let shown = chat.clone();
         Self::run(
             source.session_view(&chat.session, None),
             cx,
             move |this, result, cx| {
-                this.refreshing = false;
-                if std::mem::take(&mut this.refresh_again) {
+                let again = this.refresh == super::Refresh::Again;
+                this.refresh = super::Refresh::Idle;
+                if again {
                     this.refresh_open_view(cx);
                 }
                 match result {

@@ -99,7 +99,7 @@ fn artifact_item(
         item = item.action(
             ArtifactAction::new(Media::get(cx).save)
                 .icon(Icon::Save)
-                .on_click(move |_, _, cx| save_file(file_id.clone(), name.clone(), cx)),
+                .on_click(move |_, _, cx| save_file(file_id.clone(), &name, cx)),
         );
     }
     let (opened, session) = (artifact.clone(), session.to_owned());
@@ -112,8 +112,16 @@ fn section_header(title: &'static str, count: usize) -> AnyElement {
         .justify(Justify::Between)
         .cross(Cross::Center)
         .gap(Space::Sm)
-        .child(Typo::caption(title).tone(Tone::Secondary).weight(Weight::Medium))
-        .child(Typo::caption(count.to_string()).tone(Tone::Secondary).tabular())
+        .child(
+            Typo::caption(title)
+                .tone(Tone::Secondary)
+                .weight(Weight::Medium),
+        )
+        .child(
+            Typo::caption(count.to_string())
+                .tone(Tone::Secondary)
+                .tabular(),
+        )
         .into_any_element()
 }
 

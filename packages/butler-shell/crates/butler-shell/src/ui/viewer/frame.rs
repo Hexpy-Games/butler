@@ -94,26 +94,26 @@ impl RenderOnce for FileViewerHeader {
             .child(text)
             .children(self.leading)
             .child(buttons);
-        crate::ui::widgets::anchor(div().id("file-viewer-header").relative(), "file-viewer-header")
-            .child(recorder)
-            .child(
-                Box::new()
-                    .padding_x(Space::Xxl)
-                    .padding_y(Space::Md)
-                    .child(row),
-            )
-            .child(Separator::new().space(Space::None))
+        crate::ui::widgets::anchor(
+            div().id("file-viewer-header").relative(),
+            "file-viewer-header",
+        )
+        .child(recorder)
+        .child(
+            Box::new()
+                .padding_x(Space::Xxl)
+                .padding_y(Space::Md)
+                .child(row),
+        )
+        .child(Separator::new().space(Space::None))
     }
 }
 
 /// `FileViewerBackButton`: back to the chat, at the start of the title row.
 pub(crate) fn file_viewer_back_button(on_back: Run, cx: &App) -> IconButton {
-    IconButton::new(
-        "file-viewer-back",
-        FileViewerStrings::get(cx).back_to_chat,
-    )
-    .glyph(Icon::ArrowLeft)
-    .on_click(move |_, window, cx| on_back(window, cx))
+    IconButton::new("file-viewer-back", FileViewerStrings::get(cx).back_to_chat)
+        .glyph(Icon::ArrowLeft)
+        .on_click(move |_, window, cx| on_back(window, cx))
 }
 
 /// `FileViewerCloseButton`: closes the open file, at the end of its title row.

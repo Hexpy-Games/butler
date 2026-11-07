@@ -2,8 +2,8 @@
 //! the live events, and the edit that claims it. Every call runs through `Jobs::run`.
 use std::collections::HashMap;
 
-use butler_shell_client::Error;
 use butler_ds::ui::toast::{self, Toast};
+use butler_shell_client::Error;
 use gpui::{App, Global, SharedString, Window};
 use serde_json::Value;
 
@@ -145,7 +145,13 @@ fn refresh(cx: &mut App, session_id: &str) {
     .detach();
 }
 
-fn settled(cx: &mut App, session_id: &str, token: u64, revision: u64, view: Option<CanonQueueView>) {
+fn settled(
+    cx: &mut App,
+    session_id: &str,
+    token: u64,
+    revision: u64,
+    view: Option<CanonQueueView>,
+) {
     let Some(reader) = readers(cx).by_session.get_mut(session_id) else {
         return;
     };
@@ -157,7 +163,14 @@ fn settled(cx: &mut App, session_id: &str, token: u64, revision: u64, view: Opti
     if reader.revision == revision
         && let Some(view) = view.filter(|view| view.session_id == session_id)
     {
-        publish(cx, session_id, CanonQueueSnapshot { view: Some(view), busy: false });
+        publish(
+            cx,
+            session_id,
+            CanonQueueSnapshot {
+                view: Some(view),
+                busy: false,
+            },
+        );
     }
     if again {
         refresh(cx, session_id);
@@ -184,7 +197,9 @@ pub(crate) fn on_event(cx: &mut App, event_type: &str, payload: &Value) {
                     view.is_some_and(|view| {
                         view.chains.iter().any(|chain| {
                             chain.steps.iter().any(|step| {
-                                step.items.iter().any(|item| Some(item.epic_id.as_str()) == epic)
+                                step.items
+                                    .iter()
+                                    .any(|item| Some(item.epic_id.as_str()) == epic)
                             })
                         })
                     })
@@ -240,7 +255,14 @@ pub(crate) fn edit(
     reader.revision += 1;
     let token = reader.token;
     let shown = optimistic.unwrap_or_else(|| before.clone());
-    publish(cx, session_id, CanonQueueSnapshot { view: Some(shown), busy: true });
+    publish(
+        cx,
+        session_id,
+        CanonQueueSnapshot {
+            view: Some(shown),
+            busy: true,
+        },
+    );
     let id = session_id.to_owned();
     let Ok(body) = serde_json::to_value(input) else {
         return finish(cx, &id, token, before);
@@ -279,7 +301,14 @@ fn finish(cx: &mut App, session_id: &str, token: u64, next: CanonQueueView) {
         return;
     }
     let dirty = reader.dirty;
-    publish(cx, session_id, CanonQueueSnapshot { view: Some(next), busy: false });
+    publish(
+        cx,
+        session_id,
+        CanonQueueSnapshot {
+            view: Some(next),
+            busy: false,
+        },
+    );
     if dirty {
         refresh(cx, session_id);
     }

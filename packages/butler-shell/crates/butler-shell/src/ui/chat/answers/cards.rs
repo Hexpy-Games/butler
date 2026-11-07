@@ -59,8 +59,8 @@ fn viewer_entries(items: &[CardItem]) -> Vec<ViewerEntry> {
             let mut entry =
                 ViewerEntry::new(PictureId::Asset(item.img.clone()?), item.title.clone());
             entry.caption = Some(item.title.clone());
-            entry.source = item.source.clone();
-            entry.checked = item.checked.clone();
+            entry.source.clone_from(&item.source);
+            entry.checked.clone_from(&item.checked);
             Some(entry)
         })
         .collect()
@@ -243,7 +243,7 @@ impl AnswerCards {
             card = card.on_media_open(move |_, _, cx| image_viewer::open(entries.clone(), at, cx));
         }
         Some(
-            card.action(self.save_action(&id, item, lang, cx)).action(
+            card.action(Self::save_action(&id, item, lang, cx)).action(
                 CopyButton::new((id, "copy"), copy.copy, copy.answer_copied)
                     .text(card_copy(item, lang)),
             ),
@@ -262,7 +262,7 @@ impl AnswerCards {
     }
 
     /// The footer's "save to library" button.
-    fn save_action(&self, id: &ElementId, item: &CardItem, lang: Lang, cx: &App) -> DoneIconButton {
+    fn save_action(id: &ElementId, item: &CardItem, lang: Lang, cx: &App) -> DoneIconButton {
         let copy = Media::of(lang);
         let item = item.clone();
         DoneIconButton::new(

@@ -5,7 +5,7 @@
     { "method": "POST", "path": "/sessions", "body": { "kind": "chat", "title": "출력 형식 확인" } },
     { "method": "POST", "path": "/messages", "body": { "chat_id": "${session}", "text": "출력 형식을 먼저 물어보고 진행해 주세요." }, "wait": false }
   ],
-  "stubToolCalls": [
+  "toolCalls": [
     {
       "name": "ask_user",
       "arguments": {

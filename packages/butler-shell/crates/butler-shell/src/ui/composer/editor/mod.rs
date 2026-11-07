@@ -6,7 +6,6 @@
 //! (`atoms.rs`). The characters survive typing, selection, undo and redo like any other text.
 pub(crate) mod atoms;
 pub(crate) mod clipboard;
-pub(crate) mod drop;
 pub(crate) mod mentions;
 pub(crate) mod serialize;
 
@@ -91,27 +90,10 @@ impl ComposerEditor {
         &self.parts
     }
 
-    /// Appends `atom` to the content. Call `settle` to put it into the field.
-    pub(crate) fn insert_atom(&mut self, atom: Atom) {
-        append_part(&mut self.parts, ComposerPart::Atom(atom));
-        self.hold_current();
-    }
-
-    /// Empties the content. Call `settle` to empty the field.
-    pub(crate) fn clear(&mut self) {
-        self.parts.clear();
-        self.hold_current();
-    }
-
     fn hold_current(&mut self) {
         if self.input.is_some() {
             self.held = Some(self.parts.clone());
         }
-    }
-
-    /// `hasHeldWrites`: a write waits for the IME and is newer than the field.
-    pub(crate) fn has_held_writes(&self) -> bool {
-        self.held.is_some()
     }
 
     /// `isComposerComposing`: the IME has marked text in the field.
@@ -341,14 +323,6 @@ impl ComposerEditor {
         };
         self.replace(Some(range), &format!("{c}{trailing}"), window, cx);
         true
-    }
-
-    /// `appendDraftText`: `text` at the end, then focus.
-    pub(crate) fn append_text(&mut self, text: &str, window: &mut Window, cx: &mut App) {
-        let clean: String = text.chars().filter(|c| !is_atom_char(*c)).collect();
-        let end = self.text(cx).len();
-        self.replace(Some(end..end), &clean, window, cx);
-        self.focus(FocusPlacement::End, window, cx);
     }
 
     /// The selection's caret as a UTF-8 offset in the field's text.

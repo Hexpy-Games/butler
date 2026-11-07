@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { spawnTrackedProcess } from "../../../../tests/support/native-app-server.ts";
 import type { Scene } from "./scene.ts";
 
-export async function shots(binary: string, out: string, name: string, data: string, scale: number, size: string, dark: boolean, chat?: string, steps: Scene["steps"] = []) {
+export async function shots(binary: string, out: string, name: string, data: string, scale: number, size: string, dark: boolean, chat?: string, anchors: string[] = [], steps: Scene["steps"] = []) {
   const log = join(out, "logs", `${name}-shots.log`);
   const writer = openSync(log, "w"), reader = openSync(log, "r");
   const lines: string[] = [];
@@ -40,9 +40,10 @@ export async function shots(binary: string, out: string, name: string, data: str
   }
   try {
     await expect("LIVE READY");
-    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable",
+    const showDrawer = Number(size.split("x")[0]) <= 640 ? ["click sidebar-toggle"] : [];
+    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable", ...showDrawer, "drag sidebar-toggle -10000",
       ...steps.map(step => "click" in step ? `click ${step.click}` : `expect-anchor ${step.expect}`),
-      `shot ${name}`, `layout ${name}`]) {
+      `shot ${name}`, `layout ${name} ${anchors.join(" ")}`]) {
       process.child.stdin!.write(`${command}\n`);
       await expect("LIVE OK");
     }

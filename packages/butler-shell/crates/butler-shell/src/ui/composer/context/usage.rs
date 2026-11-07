@@ -7,7 +7,7 @@ use butler_ds::ui::context::Lang;
 use butler_shell_client::ShellClient;
 use serde::Deserialize;
 
-use super::copy::{UsageCopy, copy};
+use crate::ui::i18n::composer::usage::{UsageCopy, copy};
 use crate::ui::source::wire::ContextDetailsView;
 
 /// How the conversation's model is billed, which picks the popover's usage section.

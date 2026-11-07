@@ -22,10 +22,11 @@ use super::DecisionCtx;
 use crate::ui::i18n::initiated::Initiated;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{
-    InitiatedOriginPanel, InitiatedOriginPanelCanonHoldState, MessageRecord, InitiatedOriginPanelCanonTakeHereState,
+    InitiatedOriginPanel, InitiatedOriginPanelCanonHoldState,
+    InitiatedOriginPanelCanonTakeHereState, MessageRecord,
 };
 
-pub(crate) use initiated::turn_decision_row;
+pub(crate) use initiated::{ApprovalLineText, initiated_approval_line, turn_decision_row};
 
 type Open = Rc<dyn Fn(&str, &mut App)>;
 type OpenSettings = Rc<dyn Fn(&mut App)>;
@@ -50,7 +51,9 @@ pub(crate) struct InitiatedHooks {
 impl Global for InitiatedHooks {}
 
 fn hooks(cx: &App) -> InitiatedHooks {
-    cx.try_global::<InitiatedHooks>().cloned().unwrap_or_default()
+    cx.try_global::<InitiatedHooks>()
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn call(pick: fn(&InitiatedHooks) -> &Option<Open>, id: &str, cx: &mut App) {
@@ -117,7 +120,11 @@ pub(super) fn run_decision<F, Fut>(
             {
                 refresh(&session, cx);
             }
-            let text = if conflict { copy.already_handled } else { copy.failed };
+            let text = if conflict {
+                copy.already_handled
+            } else {
+                copy.failed
+            };
             toast::show(cx, Toast::error(text));
         });
     })
@@ -186,7 +193,11 @@ fn canon_hold(
             let (call_session, call_epic) = (session.clone(), epic.clone());
             let (state_key, settled) = (
                 key.clone(),
-                if proceed { Settled::Continued } else { Settled::Deleted },
+                if proceed {
+                    Settled::Continued
+                } else {
+                    Settled::Deleted
+                },
             );
             run_decision(
                 &state,
@@ -194,7 +205,11 @@ fn canon_hold(
                 move |client| async move {
                     let decision = if proceed { "continue" } else { "delete" };
                     client
-                        .decide_canon_hold(&call_session, &call_epic, &json!({ "decision": decision }))
+                        .decide_canon_hold(
+                            &call_session,
+                            &call_epic,
+                            &json!({ "decision": decision }),
+                        )
                         .await
                         .map(|_| ())
                 },
@@ -205,9 +220,14 @@ fn canon_hold(
         }
     };
     let session = session_id.to_owned();
-    ComposerDecisionPanel::new(id, Icon::CircleAlert, epic_title.to_owned(), move |_, _, cx| {
-        call(|hooks| &hooks.open_session, &session, cx);
-    })
+    ComposerDecisionPanel::new(
+        id,
+        Icon::CircleAlert,
+        epic_title.to_owned(),
+        move |_, _, cx| {
+            call(|hooks| &hooks.open_session, &session, cx);
+        },
+    )
     .placement(Placement::Conversation)
     .action(Action::new(copy.remove, Variant::Secondary, decide(false)))
     .action(Action::new(copy.proceed, Variant::Default, decide(true)))
@@ -260,13 +280,22 @@ fn canon_take_here(
         }
     };
     let (open_title, open_action) = (other_session_id.to_owned(), other_session_id.to_owned());
-    ComposerDecisionPanel::new(id, Icon::CircleAlert, epic_title.to_owned(), move |_, _, cx| {
-        call(|hooks| &hooks.open_session, &open_title, cx);
-    })
+    ComposerDecisionPanel::new(
+        id,
+        Icon::CircleAlert,
+        epic_title.to_owned(),
+        move |_, _, cx| {
+            call(|hooks| &hooks.open_session, &open_title, cx);
+        },
+    )
     .placement(Placement::Conversation)
-    .action(Action::new(copy.open_other, Variant::Secondary, move |_, cx| {
-        call(|hooks| &hooks.open_session, &open_action, cx);
-    }))
+    .action(Action::new(
+        copy.open_other,
+        Variant::Secondary,
+        move |_, cx| {
+            call(|hooks| &hooks.open_session, &open_action, cx);
+        },
+    ))
     .action(Action::new(copy.take, Variant::Default, take))
     .into_any_element()
 }
@@ -278,9 +307,14 @@ pub(super) fn canon_panel(
     cx: &mut App,
 ) -> Option<AnyElement> {
     match panel {
-        InitiatedOriginPanel::CanonHold { session_id, epic_id, epic_title, state } => {
-            Some(canon_hold(session_id, epic_id, epic_title, state, window, cx))
-        }
+        InitiatedOriginPanel::CanonHold {
+            session_id,
+            epic_id,
+            epic_title,
+            state,
+        } => Some(canon_hold(
+            session_id, epic_id, epic_title, state, window, cx,
+        )),
         InitiatedOriginPanel::CanonTakeHere {
             session_id,
             epic_id,
@@ -315,7 +349,10 @@ pub(crate) fn canon_proposal_cards(
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    let anchors = message.canon_proposals.as_deref().filter(|anchors| !anchors.is_empty())?;
+    let anchors = message
+        .canon_proposals
+        .as_deref()
+        .filter(|anchors| !anchors.is_empty())?;
     let cards: Vec<AnyElement> = anchors
         .iter()
         .map(|anchor| proposal::canon_proposal_card(ctx, anchor, window, cx))

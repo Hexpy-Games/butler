@@ -10,7 +10,9 @@ use butler_ds::ui::blocks::conversation_shell::AsideLayout;
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::dialog::{Dialog, DialogContent, DialogHeader, DialogTitle, Layout, Size};
 use butler_ds::ui::toast::{self, Toast};
-use gpui::{AnyElement, AppContext as _, Context, Entity, IntoElement, Subscription, Window, prelude::*};
+use gpui::{
+    AnyElement, AppContext as _, Context, Entity, IntoElement, Subscription, Window, prelude::*,
+};
 
 use super::navigation::Navigation;
 use super::{Shell, TogglePalette};
@@ -81,12 +83,18 @@ impl Shell {
             PaletteEvent::OpenSession(id) => {
                 self.navigate(Navigation::Session(id.clone()), window, cx);
             }
-            // Project chats, schedules, settings, the log trace and space reveal land with the
-            // screens that own them (P3); until then the palette says so.
-            PaletteEvent::OpenProjectChat(_)
-            | PaletteEvent::OpenSchedule(_)
-            | PaletteEvent::OpenSettings(_)
-            | PaletteEvent::RevealGroup(_)
+            PaletteEvent::OpenProjectChat(project) => {
+                let target = crate::ui::source::sidebar::DraftTarget::Project(project.clone());
+                self.open_sidebar_draft(Some(target), cx);
+            }
+            PaletteEvent::RevealGroup(group) => {
+                self.reveal_node(&format!("g:{group}"), true);
+                cx.notify();
+            }
+            // Schedules, settings and the log trace land with the screens that own them (P3);
+            // until then the palette says so.
+            PaletteEvent::OpenSchedule
+            | PaletteEvent::OpenSettings
             | PaletteEvent::OpenLogTrace => {
                 toast::show(cx, Toast::message(self.theme.strings.not_yet));
             }
@@ -127,11 +135,12 @@ impl Shell {
         let view = self.panes.view.clone()?;
         let ctx = InspectorCtx {
             view: &view,
-            shared: view.clone(),
             layout: AsideLayout::Docked,
         };
         let model = Rc::new(session_sections_model(&ctx, window, cx));
-        self.panes.inspector.update(cx, |pane, _| pane.set_model(model.clone()));
+        self.panes
+            .inspector
+            .update(cx, |pane, _| pane.set_model(model.clone()));
         if !model.has_ids && !self.panes.task_graph_enabled {
             return None;
         }
@@ -145,14 +154,16 @@ impl Shell {
                     cx.notify();
                 });
             }),
-            on_open_task_graph: self.panes.task_graph_enabled.then(move || -> SessionActionHandler {
-                Rc::new(move |_, cx| {
-                    let _ = graph.update(cx, |s, cx| {
-                        s.panes.graph_open = true;
-                        cx.notify();
-                    });
-                })
-            }),
+            on_open_task_graph: self.panes.task_graph_enabled.then(
+                move || -> SessionActionHandler {
+                    Rc::new(move |_, cx| {
+                        let _ = graph.update(cx, |s, cx| {
+                            s.panes.graph_open = true;
+                            cx.notify();
+                        });
+                    })
+                },
+            ),
             indicator: model.indicator,
             has_ids: model.has_ids,
         };
@@ -183,18 +194,13 @@ impl Shell {
                     cx.notify();
                 });
             });
-        let body = self
-            .panes
-            .view
-            .clone()
-            .map(|view| {
-                let ctx = InspectorCtx {
-                    view: &view,
-                    shared: view.clone(),
-                    layout: AsideLayout::Docked,
-                };
-                tasks_panel_in_dialog(&ctx, window, cx)
-            });
+        let body = self.panes.view.clone().map(|view| {
+            let ctx = InspectorCtx {
+                view: &view,
+                layout: AsideLayout::Docked,
+            };
+            tasks_panel_in_dialog(&ctx, window, cx)
+        });
         let title = crate::ui::i18n::task_graph::words(Ds::get(cx).lang()).title;
         let content = DialogContent::new()
             .size(Size::Full)

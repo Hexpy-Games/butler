@@ -30,12 +30,13 @@ use gpui::{
 use grip::{StepDrag, grip_handle};
 pub use labels::StepSortableLabels;
 pub use model::{
-    StepSortableChain, StepSortableEdit, StepSortableEditKind, StepSortableItem,
-    StepSortablePlace, StepSortablePlacement, StepSortableTarget, StepSortableTargetKind,
-    apply_step_sortable_edit,
+    StepSortableChain, StepSortableEdit, StepSortableEditKind, StepSortableItem, StepSortablePlace,
+    StepSortablePlacement, StepSortableTarget, StepSortableTargetKind, apply_step_sortable_edit,
 };
 pub use session::STEP_SORTABLE_JOIN_DWELL;
-use session::{Config, DragView, Hub, Mode, finish, item_drag_id, pointer_update, step_drag_id, tick};
+use session::{
+    Config, DragView, Hub, Mode, finish, item_drag_id, pointer_update, step_drag_id, tick,
+};
 
 use crate::tokens::Length;
 use crate::ui::context::Ds;
@@ -95,7 +96,12 @@ pub struct StepSortableDragPreview {
 /// Row content for an item (`renderItem`); the block draws the card, the grip and the deck. The
 /// product looks its own data up by the item's id.
 pub type RenderItem = Rc<
-    dyn Fn(&StepSortableItem, &StepSortableRowContext, &mut Window, &mut App) -> StepSortableRowSlots,
+    dyn Fn(
+        &StepSortableItem,
+        &StepSortableRowContext,
+        &mut Window,
+        &mut App,
+    ) -> StepSortableRowSlots,
 >;
 
 /// What one frame of the list is built from.
@@ -147,7 +153,12 @@ impl StepSortableList {
     pub fn new(
         id: impl Into<ElementId>,
         chains: Vec<StepSortableChain>,
-        render_item: impl Fn(&StepSortableItem, &StepSortableRowContext, &mut Window, &mut App) -> StepSortableRowSlots
+        render_item: impl Fn(
+            &StepSortableItem,
+            &StepSortableRowContext,
+            &mut Window,
+            &mut App,
+        ) -> StepSortableRowSlots
         + 'static,
     ) -> Self {
         Self {
@@ -215,10 +226,10 @@ fn settle(hub: &Hub, id: &ElementId, window: &mut Window, cx: &mut App) {
     match (mode, active) {
         (Some(Mode::Pointer), _) if !cx.has_active_drag() => finish(hub, false, window, cx),
         (Some(Mode::Pointer), _) => tick(hub, window),
-        (Some(Mode::Keyboard), Some(drag_id)) => {
-            if !grip_handle(id, &drag_id, window, cx).is_focused(window) {
-                finish(hub, false, window, cx);
-            }
+        (Some(Mode::Keyboard), Some(drag_id))
+            if !grip_handle(id, &drag_id, window, cx).is_focused(window) =>
+        {
+            finish(hub, false, window, cx);
         }
         _ => {}
     }
@@ -238,7 +249,7 @@ fn restore_focus(hub: &Hub, id: &ElementId, window: &mut Window, cx: &mut App) {
         let Some(at) = model::locate_item(&session.chains, &item_id) else {
             return;
         };
-        let first = session.chains[at.chain_index].steps[at.step_index][0].id.clone();
+        let first = session.chains[at.chain].steps[at.step][0].id.clone();
         let (item, whole) = (item_drag_id(&item_id), step_drag_id(&first));
         if session.rendered.contains(&item) {
             grip::grip_id(id, &item)
@@ -256,7 +267,12 @@ fn restore_focus(hub: &Hub, id: &ElementId, window: &mut Window, cx: &mut App) {
     window.defer(cx, move |window, cx| handle.focus(window, cx));
 }
 
-fn chain_view(env: &Env, chain: &StepSortableChain, window: &mut Window, cx: &mut App) -> AnyElement {
+fn chain_view(
+    env: &Env,
+    chain: &StepSortableChain,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let gap_at = |index: usize, cx: &App| {
         let on = env.view.target.as_ref().is_some_and(|target| {
             target.kind == StepSortableTargetKind::Gap
@@ -311,7 +327,10 @@ impl RenderOnce for StepSortableList {
         let mut env = Env::from_hub(&self.id, &hub, &self.render_item);
         if let Some(preview) = self.preview {
             env.view = DragView {
-                active_id: preview.item_ids.first().map(|id| format!("preview:{id}").into()),
+                active_id: preview
+                    .item_ids
+                    .first()
+                    .map(|id| format!("preview:{id}").into()),
                 item_ids: preview.item_ids,
                 mode: Some(Mode::Preview),
                 target: Some(preview.target),

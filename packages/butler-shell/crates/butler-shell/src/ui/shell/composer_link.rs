@@ -8,15 +8,15 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::navigation::Navigation;
 use super::{Shell, image_viewer};
 use crate::ui::composer::queue::on_delete_queued;
-use crate::ui::decisions;
-use crate::ui::inspector;
-use super::navigation::Navigation;
 use crate::ui::composer::{
     Composer, ComposerEvent, Inputs, Outgoing, clear_composer_text, composer_text, focus_composer,
 };
+use crate::ui::decisions;
 use crate::ui::i18n::composer::words;
+use crate::ui::inspector;
 use crate::ui::source::agent::{Jobs, sent_turn, source_error};
 use crate::ui::source::{ChatRef, Fetch, SentTurn, SourceError};
 
@@ -30,25 +30,31 @@ fn client_message_id() -> String {
     format!("shell-{nanos:x}-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
+/// A navigation hook the decision panels and the task graph call with a session id.
+type OpenHook = Rc<dyn Fn(&str, &mut App)>;
+
 impl Shell {
     /// `sendMessage`: the draft goes into the open chat, or into a new one created first.
-    pub(super) fn send(&mut self, outgoing: impl Into<Outgoing>, cx: &mut Context<Self>) {
+    pub(crate) fn send(&mut self, outgoing: impl Into<Outgoing>, cx: &mut Context<Self>) {
         let outgoing = outgoing.into();
         let Some(source) = self.source.clone() else {
             return;
         };
         if let Some(chat) = self.store.selected().cloned() {
-            return self.send_to(chat, outgoing, false, cx);
+            return Self::send_to(chat, &outgoing, false, cx);
         }
         Self::run(
-            source.create_chat(),
+            self.sidebar.new_chat_parent.as_ref().map_or_else(
+                || source.create_chat(),
+                |target| source.create_sidebar_chat(target.body()),
+            ),
             cx,
             move |this, result, cx| match result {
                 Ok(chat) => {
                     this.store.open(Some(chat.clone()));
                     this.show_view(false, cx);
                     this.reload_open_chat(cx);
-                    this.send_to(chat, outgoing, true, cx);
+                    Self::send_to(chat, &outgoing, true, cx);
                 }
                 Err(e) => this.failed(&e, this.theme.strings.send_failed, cx),
             },
@@ -56,13 +62,7 @@ impl Shell {
     }
 
     /// Posts the whole message; a new chat first takes the controls the owner chose.
-    fn send_to(
-        &mut self,
-        chat: ChatRef,
-        outgoing: Outgoing,
-        new_chat: bool,
-        cx: &mut Context<Self>,
-    ) {
+    fn send_to(chat: ChatRef, outgoing: &Outgoing, new_chat: bool, cx: &mut Context<Self>) {
         let body = outgoing.body(&chat.chat.0, &client_message_id());
         let controls = outgoing.session_controls().filter(|_| new_chat);
         let session = chat.session.0.to_string();
@@ -187,7 +187,7 @@ impl Shell {
     /// through the shell's pending navigation (taken on the next frame, which has the window).
     /// Schedules and memory settings are P3 screens; until then they say so.
     fn install_navigation_hooks(cx: &mut Context<Self>) {
-        let open = |cx: &mut Context<Self>| -> Rc<dyn Fn(&str, &mut App)> {
+        let open = |cx: &mut Context<Self>| -> OpenHook {
             let shell = cx.entity().downgrade();
             Rc::new(move |id: &str, cx: &mut App| {
                 let id = id.to_owned();

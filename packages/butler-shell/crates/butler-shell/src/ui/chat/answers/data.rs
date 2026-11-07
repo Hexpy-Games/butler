@@ -214,8 +214,8 @@ fn gallery(
         .map(|item| {
             let name = item.caption.clone().unwrap_or_default();
             let mut entry = ViewerEntry::new(PictureId::Asset(item.img.clone()), name);
-            entry.caption = item.caption.clone();
-            entry.source = item.source.clone();
+            entry.caption.clone_from(&item.caption);
+            entry.source.clone_from(&item.source);
             entry
         })
         .collect();

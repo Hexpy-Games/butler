@@ -66,6 +66,17 @@ struct Harness {
     handle: AnyWindowHandle,
 }
 
+impl Drop for Harness {
+    /// `window.activate()` makes the headless platform keep the window (its `active_window`)
+    /// past `HeadlessAppContext`'s shutdown, and the window's platform input handler holds a
+    /// strong `Entity<EditableTextState>` while a field is focused. Leak detection would report
+    /// that handle as leaked. A drawn frame without a focused field replaces the handler.
+    fn drop(&mut self) {
+        let _ = self.update(|shell, window, cx| window.focus(&shell.focus_handle(), cx));
+        settle(&mut self.cx, self.handle);
+    }
+}
+
 impl Harness {
     fn open(source: Option<Rc<dyn Source>>, dark: bool, options: &Options) -> anyhow::Result<Self> {
         let mut cx = context(options.scale)?;
@@ -83,6 +94,7 @@ impl Harness {
             })?;
         cx.update(|cx| {
             window.update(cx, |shell, window, cx| {
+                window.activate();
                 window.focus(&shell.focus_handle(), cx);
             })
         })?;
@@ -99,6 +111,8 @@ impl Harness {
     }
 
     fn layout(&mut self, dir: &Path, name: &str) -> anyhow::Result<()> {
+        let mut arguments = name.split_whitespace();
+        let name = arguments.next().context("layout <name> [anchors…]")?;
         settle(&mut self.cx, self.handle);
         let mut anchors = self.cx.update(|app| {
             self.window.read(app).map(|s| {
@@ -137,6 +151,7 @@ impl Harness {
                 names
             })
         })?;
+        anchors.extend(arguments.map(str::to_owned));
         anchors.sort();
         anchors.dedup();
         let mut layout = Vec::new();

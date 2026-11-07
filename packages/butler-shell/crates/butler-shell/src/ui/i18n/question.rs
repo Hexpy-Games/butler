@@ -63,8 +63,20 @@ impl QuestionCopy {
 
     /// `appCopy.interfaceDetails.questionPanel`.
     pub(crate) fn labels(&self) -> Labels {
-        let [review, send, next, back, skip, skipped, later, pending, other, recommended, working, select] =
-            self.labels.map(gpui::SharedString::new_static);
+        let [
+            review,
+            send,
+            next,
+            back,
+            skip,
+            skipped,
+            later,
+            pending,
+            other,
+            recommended,
+            working,
+            select,
+        ] = self.labels.map(gpui::SharedString::new_static);
         Labels {
             review,
             send,

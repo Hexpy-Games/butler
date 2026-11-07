@@ -8,6 +8,7 @@ mod view;
 use std::rc::Rc;
 use std::time::Duration;
 
+use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::empty_line::EmptyLine;
 use butler_ds::ui::blocks::inspector_panel::InspectorInset;
 use butler_ds::ui::blocks::task_graph_section::TaskGraphPanel;
@@ -16,7 +17,6 @@ use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::toast::{self, Toast};
-use butler_ds::ui::Icon;
 use gpui::{
     AnyElement, App, ElementId, Entity, Global, IntoElement as _, ParentElement as _, Window,
 };
@@ -86,7 +86,7 @@ impl Actions {
     }
 
     /// `onOpenSession`
-    fn open_session(&self, session: &str, cx: &mut App) {
+    fn open_session(session: &str, cx: &mut App) {
         if let Some(open) = cx.try_global::<OpenObserver>().and_then(|o| o.0.clone()) {
             open(session, cx);
         }
@@ -162,7 +162,9 @@ fn session_tasks_panel(
     cx: &mut App,
 ) -> AnyElement {
     let store = window.use_keyed_state("task-graphs", cx, |_, _| TaskGraphs::default());
-    let document = window.use_keyed_state("task-graphs-document", cx, |_, _| None::<TaskGraphDocumentWire>);
+    let document = window.use_keyed_state("task-graphs-document", cx, |_, _| {
+        None::<TaskGraphDocumentWire>
+    });
     if cx.try_global::<Host>().is_none_or(|host| host.0 != store) {
         cx.set_global(Host(store.clone()));
     }
@@ -183,7 +185,11 @@ fn session_tasks_panel(
         .graphs
         .iter()
         .map(|graph| {
-            let open = state.open.get(&graph.summary.graph_id).copied().unwrap_or(false);
+            let open = state
+                .open
+                .get(&graph.summary.graph_id)
+                .copied()
+                .unwrap_or(false);
             let selected = state.selected.as_deref();
             view::task_graph_view(graph, selected, open, single, &actions, window, cx)
         })
@@ -193,7 +199,10 @@ fn session_tasks_panel(
             .child(EmptyLine::new(empty_label(&state, words)))
             .into_any_element()
     } else if hide_heading {
-        Stack::new().gap(Space::Xs).children(sections).into_any_element()
+        Stack::new()
+            .gap(Space::Xs)
+            .children(sections)
+            .into_any_element()
     } else {
         graph_panel(&state, words, lang, sections, cx)
     };

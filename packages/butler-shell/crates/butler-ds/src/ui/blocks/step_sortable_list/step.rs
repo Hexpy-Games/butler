@@ -21,10 +21,14 @@ use crate::ui::context::Ds;
 pub(super) fn gap(follow: bool, cx: &App) -> AnyElement {
     use crate::ui::layout::Space;
     use crate::ui::separator::{Separator, SeparatorTone};
-    let line = Separator::new().tone(SeparatorTone::Accent).space(Space::None);
+    let line = Separator::new()
+        .tone(SeparatorTone::Accent)
+        .space(Space::None);
     let el = div().w_full().min_w_0();
     if follow {
-        el.pl(Ds::get(cx).len(Length::SpaceMd)).child(line).into_any_element()
+        el.pl(Ds::get(cx).len(Length::SpaceMd))
+            .child(line)
+            .into_any_element()
     } else {
         el.child(line).into_any_element()
     }
@@ -58,7 +62,13 @@ fn single(
     };
     let content = row(
         env,
-        RowArgs { item, ctx, grip: Some(grip), marker: true, dim: false },
+        RowArgs {
+            item,
+            ctx,
+            grip: Some(grip),
+            marker: true,
+            dim: false,
+        },
         window,
         cx,
     );
@@ -66,7 +76,10 @@ fn single(
     if item.running {
         card = card.running();
     }
-    let wrap = div().id(sub(&env.id, "single", &item.id)).w_full().child(card.child(content));
+    let wrap = div()
+        .id(sub(&env.id, "single", &item.id))
+        .w_full()
+        .child(card.child(content));
     draggable(wrap, env, &drag_id, is_draggable(item)).into_any_element()
 }
 

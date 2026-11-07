@@ -1,0 +1,129 @@
+{
+  "name": "activity",
+  "pendingReply": "이어서 검토 결과를 요약해 주세요. 시간이 걸려도 괜찮습니다.",
+  "reply": "자료를 확인하고 파일 목록을 점검했습니다. 요약은 다음 단계에서 작성합니다.",
+  "toolCalls": [
+    {
+      "name": "update_todo_list",
+      "arguments": {
+        "title": "검토 작업",
+        "todos": [
+          {
+            "id": "read",
+            "content": "자료 확인",
+            "active_form": "자료를 확인하는 중",
+            "status": "completed"
+          },
+          {
+            "id": "check",
+            "content": "파일 목록 점검",
+            "active_form": "파일 목록을 점검하는 중",
+            "status": "completed"
+          },
+          {
+            "id": "write",
+            "content": "요약 작성",
+            "active_form": "요약을 작성하는 중",
+            "status": "in_progress"
+          }
+        ]
+      }
+    },
+    {
+      "name": "run_command",
+      "arguments": {
+        "command": "printf '검토 자료 확인 완료\\n'",
+        "state_effect": "read_only",
+        "summary": "확인: 검토 자료"
+      }
+    },
+    {
+      "name": "list_files",
+      "arguments": {
+        "max_results": 5
+      }
+    }
+  ],
+  "seed": [
+    {
+      "method": "PATCH",
+      "path": "/settings",
+      "body": {
+        "language": "ko",
+        "access_mode": "full_access",
+        "reduce_motion": true
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "작업 진행 확인"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/messages",
+      "body": {
+        "chat_id": "${session}",
+        "text": "검토 자료를 확인하고 파일 목록을 점검해 주세요."
+      },
+      "wait": true
+    },
+    {
+      "method": "POST",
+      "path": "/messages",
+      "body": {
+        "chat_id": "${session}",
+        "text": "이어서 검토 결과를 요약해 주세요. 시간이 걸려도 괜찮습니다."
+      },
+      "wait": false
+    }
+  ],
+  "open": {
+    "chat": "작업 진행 확인"
+  },
+  "anchors": [
+    {
+      "anchor": "sidebar",
+      "electron": "[data-test-class=\"app-sidebar\"]"
+    },
+    {
+      "anchor": "chat-card",
+      "electron": "[data-slot=\"adaptive-shell-split-chat\"]"
+    },
+    {
+      "anchor": "composer",
+      "electron": "[data-test-class=\"composer-card\"]"
+    },
+    {
+      "anchor": "composer-field",
+      "electron": "[contenteditable=\"true\"]"
+    },
+    {
+      "anchor": "send-button",
+      "electron": "[data-test-class=\"composer-send-button\"]"
+    },
+    {
+      "anchor": "titlebar",
+      "electron": "[data-test-class=\"custom-titlebar\"]"
+    },
+    {
+      "anchor": "sidebar-row-${session}",
+      "electron": "[data-test-class=\"tree-row\"][aria-label=\"작업 진행 확인\"]"
+    },
+    {
+      "anchor": "message-${message.0}",
+      "electron": "[data-test-class~=\"message\"][data-index=\"0\"]"
+    },
+    {
+      "anchor": "message-${message.1}",
+      "electron": "[data-test-class~=\"message\"][data-index=\"1\"]"
+    },
+    {
+      "anchor": "message-${message.2}",
+      "electron": "[data-test-class~=\"message\"][data-index=\"2\"]"
+    }
+  ]
+}

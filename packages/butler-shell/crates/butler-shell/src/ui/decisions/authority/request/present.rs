@@ -1,7 +1,9 @@
 //! The card's content in the app language (`approvalRequestView`, `browserHandoffView`).
+use serde_json::Value;
+
 use super::{
-    ActionKind, Approval, Authority, Card, DETAIL_TARGET_KINDS, Line, MAX_EXAMPLES, Operation, Risk,
-    View, has_outside, tool_titles, workspace_label,
+    ActionKind, Approval, Authority, Card, DETAIL_TARGET_KINDS, Line, MAX_EXAMPLES, Operation,
+    Risk, View, has_outside, tool_titles, workspace_label,
 };
 
 /// `approvalRequestView`: a sentence per action kind; the generic sentence for an unknown kind;
@@ -63,7 +65,12 @@ pub(crate) fn view(card: &Card, copy: Authority) -> View {
     }
 }
 
-fn sentence(kind: ActionKind, approval: &Approval, workspace: Option<&str>, copy: Authority) -> String {
+fn sentence(
+    kind: ActionKind,
+    approval: &Approval,
+    workspace: Option<&str>,
+    copy: Authority,
+) -> String {
     let outside = has_outside(approval);
     match kind {
         ActionKind::GenerateImage => tool_label(copy, "generate_image"),
@@ -89,7 +96,9 @@ fn sentence(kind: ActionKind, approval: &Approval, workspace: Option<&str>, copy
                 None => copy.use_connector((!path.is_empty()).then_some(path), None),
             }
         }
-        ActionKind::ManageSchedule => copy.manage_schedule(schedule_operation(approval)).to_owned(),
+        ActionKind::ManageSchedule => copy
+            .manage_schedule(schedule_operation(approval))
+            .to_owned(),
         ActionKind::UpdateProject => copy.update_project().to_owned(),
         ActionKind::StartConversation => copy.start_conversation().to_owned(),
         ActionKind::RestartService => copy.restart_service().to_owned(),
@@ -97,6 +106,44 @@ fn sentence(kind: ActionKind, approval: &Approval, workspace: Option<&str>, copy
         ActionKind::SwitchFolder => copy.switch_folder().to_owned(),
         ActionKind::Other => copy.generic().to_owned(),
     }
+}
+
+/// `approvalActionView`: the label and the masked target of an approval notice. `None` when the
+/// approval does not normalize.
+pub(crate) fn action_view(raw: &Value, copy: Authority) -> Option<(String, String)> {
+    let approval = super::approval(raw)?;
+    let kind = ActionKind::parse(&approval.action_kind);
+    let named = approval
+        .operation
+        .as_ref()
+        .and_then(|op| tool_titles::tool(copy.lang(), &op.tool))
+        .filter(|label| !label.is_empty())
+        .or_else(|| tool_titles::tool(copy.lang(), &approval.action_kind))
+        .filter(|label| !label.is_empty());
+    let label = named.map_or_else(
+        || tool_titles::tool_fallback(copy.lang()).to_owned(),
+        str::to_owned,
+    );
+    // The notice is not the decision card: no command appears in it.
+    let has_command = approval
+        .operation
+        .as_ref()
+        .is_some_and(|op| op.command.is_some());
+    let target = if kind.is_command_kind() || has_command {
+        String::new()
+    } else {
+        let card = Card {
+            request_ref: String::new(),
+            reason: String::new(),
+            scope: None,
+            approval: None,
+        };
+        let lines = action_details(&approval, kind, &card, copy);
+        lines
+            .first()
+            .map_or_else(String::new, |l| l.text().to_owned())
+    };
+    Some((label, target))
 }
 
 fn tool_label(copy: Authority, name: &str) -> String {
@@ -121,11 +168,18 @@ fn schedule_operation(approval: &Approval) -> &'static str {
 }
 
 /// The action's details, separate from permission notices and card explanations.
-fn action_details(approval: &Approval, kind: ActionKind, card: &Card, copy: Authority) -> Vec<Line> {
+fn action_details(
+    approval: &Approval,
+    kind: ActionKind,
+    card: &Card,
+    copy: Authority,
+) -> Vec<Line> {
     if let Some(schedule) = &approval.schedule {
         let mut lines = vec![schedule.title.clone()];
         if schedule.kind != "update" {
-            lines.push(crate::ui::decisions::authority::schedule::timing(schedule, copy));
+            lines.push(crate::ui::decisions::authority::schedule::timing(
+                schedule, copy,
+            ));
         } else if schedule.access_mode.is_none()
             && schedule.browser_signin.is_none()
             && schedule.browser_payment.is_none()
@@ -138,7 +192,11 @@ fn action_details(approval: &Approval, kind: ActionKind, card: &Card, copy: Auth
         lines.extend(schedule.browser_signin.map(|on| copy.schedule_signin(on)));
         lines.extend(schedule.browser_payment.map(|on| copy.schedule_payment(on)));
         lines.extend(approval.examples.iter().cloned());
-        return lines.into_iter().filter(|l| !l.is_empty()).map(Line::Text).collect();
+        return lines
+            .into_iter()
+            .filter(|l| !l.is_empty())
+            .map(Line::Text)
+            .collect();
     }
     if kind == ActionKind::ManageSchedule {
         return vec![Line::Text(copy.schedule_unavailable().to_owned())];
@@ -175,11 +233,16 @@ fn action_details(approval: &Approval, kind: ActionKind, card: &Card, copy: Auth
 fn operation_details(operation: &Operation, copy: Authority) -> Vec<Line> {
     if let Some(image) = &operation.image {
         let [model, size, quality_label, prompt, default] = copy.image_labels();
-        let size_text = if image.size == "auto" { default } else { image.size.as_str() };
+        let size_text = if image.size == "auto" {
+            default
+        } else {
+            image.size.as_str()
+        };
         let quality = if image.quality == "auto" {
             default
         } else {
-            copy.image_quality(&image.quality).unwrap_or(image.quality.as_str())
+            copy.image_quality(&image.quality)
+                .unwrap_or(image.quality.as_str())
         };
         return vec![
             Line::Text(format!("{model}: {}", image.model)),
@@ -221,8 +284,15 @@ fn shown_examples(approval: &Approval) -> Vec<String> {
         .take(MAX_EXAMPLES)
         .enumerate()
         .map(|(index, example)| {
-            let cut = approval.examples_truncated.as_ref().is_some_and(|t| t[index]);
-            if cut { format!("{example}…") } else { example.clone() }
+            let cut = approval
+                .examples_truncated
+                .as_ref()
+                .is_some_and(|t| t[index]);
+            if cut {
+                format!("{example}…")
+            } else {
+                example.clone()
+            }
         })
         .collect()
 }
@@ -230,9 +300,17 @@ fn shown_examples(approval: &Approval) -> Vec<String> {
 fn details(approval: &Approval, kind: ActionKind, card: &Card, copy: Authority) -> Vec<Line> {
     let shown = shown_examples(approval);
     if !shown.is_empty() {
-        let outside = approval.targets.iter().filter(|t| t.kind == "outside").map(|t| t.path.clone());
+        let outside = approval
+            .targets
+            .iter()
+            .filter(|t| t.kind == "outside")
+            .map(|t| t.path.clone());
         let additional: Vec<String> = outside.filter(|path| !shown.contains(path)).collect();
-        let extra = if kind == ActionKind::EditFiles { i64::try_from(additional.len()).unwrap_or(i64::MAX) } else { 0 };
+        let extra = if kind == ActionKind::EditFiles {
+            i64::try_from(additional.len()).unwrap_or(i64::MAX)
+        } else {
+            0
+        };
         let rest = approval.count - i64::try_from(shown.len()).unwrap_or(i64::MAX) - extra;
         let mut lines = Vec::new();
         if approval.unisolated_read_only {
@@ -240,7 +318,11 @@ fn details(approval: &Approval, kind: ActionKind, card: &Card, copy: Authority) 
         }
         lines.extend(additional.into_iter().map(Line::Text));
         lines.extend(shown.into_iter().map(|example| {
-            if kind.is_command_kind() { Line::Code(example) } else { Line::Text(example) }
+            if kind.is_command_kind() {
+                Line::Code(example)
+            } else {
+                Line::Text(example)
+            }
         }));
         if rest > 0 {
             lines.push(Line::Text(copy.more(rest)));
@@ -259,8 +341,16 @@ fn details(approval: &Approval, kind: ActionKind, card: &Card, copy: Authority) 
     if !lines.is_empty() || kind != ActionKind::Other {
         return lines;
     }
-    let fallback = card.scope.as_ref().map_or(card.reason.as_str(), |(_, d)| d.as_str()).trim();
-    if fallback.is_empty() { Vec::new() } else { vec![Line::Text(fallback.to_owned())] }
+    let fallback = card
+        .scope
+        .as_ref()
+        .map_or(card.reason.as_str(), |(_, d)| d.as_str())
+        .trim();
+    if fallback.is_empty() {
+        Vec::new()
+    } else {
+        vec![Line::Text(fallback.to_owned())]
+    }
 }
 
 /// Whether the request is a hand-off to the browser surface.

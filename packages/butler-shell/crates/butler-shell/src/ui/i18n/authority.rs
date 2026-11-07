@@ -11,10 +11,6 @@ mod schedule;
 pub(crate) struct Authority(Lang);
 
 impl Authority {
-    pub(crate) fn of(lang: Lang) -> Self {
-        Self(lang)
-    }
-
     pub(crate) fn get(cx: &App) -> Self {
         Self(Ds::get(cx).lang())
     }
@@ -66,10 +62,7 @@ impl Authority {
 
     /// interfaceDetails.allowConversation, allowDescription
     pub(crate) fn allow_conversation(self) -> &'static str {
-        self.pick(
-            "Always allow in this conversation",
-            "이 대화에서 계속 허용",
-        )
+        self.pick("Always allow in this conversation", "이 대화에서 계속 허용")
     }
 
     pub(crate) fn allow_description(self) -> &'static str {
@@ -110,17 +103,6 @@ impl Authority {
         self.pick("Cancel", "취소")
     }
 
-    /// interfaceTemplates.pendingApprovals
-    pub(crate) fn pending_approvals(self, count: usize) -> String {
-        match self.0 {
-            Lang::En => format!(
-                "{count} pending {}",
-                if count == 1 { "approval" } else { "approvals" }
-            ),
-            Lang::Ko => format!("허용 대기 {count}개"),
-        }
-    }
-
     /// interfaceTemplates.approvalRequest.risk.{low, medium, high}
     pub(crate) fn risk(self, risk: crate::ui::source::Risk) -> &'static str {
         use crate::ui::source::Risk;
@@ -151,17 +133,6 @@ impl Authority {
         }
     }
 
-    /// interfaceTemplates.approvalRequest.waitHandoff
-    pub(crate) fn wait_handoff(self, reason: &str) -> &'static str {
-        match reason {
-            "sign_in" => self.pick("Sign-in needed", "로그인 필요"),
-            "secure_field" => self.pick("Your input needed", "직접 입력 필요"),
-            "secure_keypad" => self.pick("Security keypad needs you", "보안 키패드 입력 필요"),
-            "captcha" => self.pick("CAPTCHA needs you", "보안 문자 입력 필요"),
-            _ => self.pick("Needs you in the tab", "직접 확인 필요"),
-        }
-    }
-
     /// interfaceTemplates.approvalRequest.payStep
     pub(crate) fn pay_step(self, reason: &str) -> &'static str {
         match reason {
@@ -174,29 +145,15 @@ impl Authority {
         }
     }
 
-    /// interfaceTemplates.approvalRequest.payHandoff, signInHandoff.{title, inTab, onDesktop}
-    pub(crate) fn pay_handoff(self) -> &'static str {
-        self.pick("Payment needs you", "결제 확인 필요")
-    }
-
-    pub(crate) fn sign_in_handoff_title(self) -> &'static str {
-        self.pick("Sign-in needs you", "로그인 확인 필요")
-    }
-
-    pub(crate) fn handoff_in_tab(self) -> &'static str {
-        self.pick(
-            "Finish in the tab, then give it back to Butler",
-            "탭에서 마친 뒤 버틀러에게 돌려주세요",
-        )
-    }
-
-    pub(crate) fn handoff_on_desktop(self) -> &'static str {
-        self.pick("Finish this on your computer", "PC의 버틀러에서 확인해 주세요")
-    }
-
     /// interfaceTemplates.approvalRequest.browserStep
     pub(crate) fn browser_step(self, action: &str, role: &str, name: &str, frame: &str) -> String {
-        let join = |parts: Vec<String>| parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" ");
+        let join = |parts: Vec<String>| {
+            parts
+                .into_iter()
+                .filter(|p| !p.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
         let text = match self.0 {
             Lang::En => {
                 let verb = match action {
@@ -244,18 +201,32 @@ impl Authority {
                     "wait" => "",
                     other => other,
                 };
-                let name = if name.is_empty() { String::new() } else { format!("‘{name}’") };
+                let name = if name.is_empty() {
+                    String::new()
+                } else {
+                    format!("‘{name}’")
+                };
                 join(vec![name, role.to_owned(), verb.to_owned()])
             }
         };
-        if frame.is_empty() { text } else { format!("{text} · {frame}") }
+        if frame.is_empty() {
+            text
+        } else {
+            format!("{text} · {frame}")
+        }
     }
 
     /// interfaceTemplates.approvalRequest.operation
     pub(crate) fn operation(self, tool: &str, read_only: bool) -> String {
         match self.0 {
-            Lang::En => format!("{tool} · {}?", if read_only { "Read only" } else { "Change" }),
-            Lang::Ko => format!("{tool} · {} 허용할까요?", if read_only { "읽기 전용" } else { "변경" }),
+            Lang::En => format!(
+                "{tool} · {}?",
+                if read_only { "Read only" } else { "Change" }
+            ),
+            Lang::Ko => format!(
+                "{tool} · {} 허용할까요?",
+                if read_only { "읽기 전용" } else { "변경" }
+            ),
         }
     }
 
@@ -272,13 +243,20 @@ impl Authority {
     pub(crate) fn edit_files(self, count: i64, workspace: Option<&str>) -> String {
         match self.0 {
             Lang::En => format!("Edit {} {}?", en_files(count), self.in_workspace(workspace)),
-            Lang::Ko => format!("{}의 {} 수정할까요?", self.in_workspace(workspace), ko_files(count)),
+            Lang::Ko => format!(
+                "{}의 {} 수정할까요?",
+                self.in_workspace(workspace),
+                ko_files(count)
+            ),
         }
     }
 
     pub(crate) fn edit_files_outside(self, count: i64) -> String {
         match self.0 {
-            Lang::En => format!("Edit {}, including outside the project folder?", en_files(count)),
+            Lang::En => format!(
+                "Edit {}, including outside the project folder?",
+                en_files(count)
+            ),
             Lang::Ko => format!("작업 폴더 밖을 포함한 {} 수정할까요?", ko_files(count)),
         }
     }
@@ -299,8 +277,14 @@ impl Authority {
 
     pub(crate) fn network_command(self, workspace: Option<&str>) -> String {
         match self.0 {
-            Lang::En => format!("Run a command that uses the internet {}?", self.in_workspace(workspace)),
-            Lang::Ko => format!("{}에서 인터넷을 쓰는 명령을 실행할까요?", self.in_workspace(workspace)),
+            Lang::En => format!(
+                "Run a command that uses the internet {}?",
+                self.in_workspace(workspace)
+            ),
+            Lang::Ko => format!(
+                "{}에서 인터넷을 쓰는 명령을 실행할까요?",
+                self.in_workspace(workspace)
+            ),
         }
     }
 
@@ -337,7 +321,10 @@ impl Authority {
     }
 
     pub(crate) fn read_only_unisolated(self) -> &'static str {
-        self.pick("Read-only request · No isolation", "읽기 전용 요청 · 격리 없음")
+        self.pick(
+            "Read-only request · No isolation",
+            "읽기 전용 요청 · 격리 없음",
+        )
     }
 
     /// interfaceTemplates.approvalRequest.useConnector
@@ -363,7 +350,10 @@ impl Authority {
     }
 
     pub(crate) fn update_project(self) -> &'static str {
-        self.pick("Update the project records?", "프로젝트 기록을 업데이트할까요?")
+        self.pick(
+            "Update the project records?",
+            "프로젝트 기록을 업데이트할까요?",
+        )
     }
 
     pub(crate) fn start_conversation(self) -> &'static str {
@@ -425,5 +415,9 @@ fn en_files(count: i64) -> String {
 }
 
 fn ko_files(count: i64) -> String {
-    if count > 0 { format!("파일 {count}개를") } else { "파일을".to_owned() }
+    if count > 0 {
+        format!("파일 {count}개를")
+    } else {
+        "파일을".to_owned()
+    }
 }

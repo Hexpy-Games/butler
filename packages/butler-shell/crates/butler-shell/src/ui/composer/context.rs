@@ -7,7 +7,8 @@
 //! [`ComposerContextEvent::LoadUsage`] and [`ComposerContextEvent::LoadQuota`], and the owner
 //! runs [`load_usage`] / [`load_quota`] and hands the results to `usage_loaded` /
 //! `quota_loaded`.
-mod copy;
+
+mod account;
 mod popover;
 pub(crate) mod timeline;
 mod usage;
@@ -17,12 +18,12 @@ use std::rc::Rc;
 
 use butler_ds::ui::blocks::context_donut_button::ContextDonutButton;
 use butler_ds::ui::blocks::usage_bars::Emphasis;
-use butler_ds::ui::context::Ds;
+use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::overlay::place::Side;
 use butler_ds::ui::popover::{Popover, PopoverContent, Width};
 use gpui::{
-    App, ClickEvent, Context, EventEmitter, InteractiveElement as _, IntoElement as _,
-    ParentElement as _, Render, StatefulInteractiveElement as _, Window, div,
+    AnyElement, App, ClickEvent, Context, Entity, EventEmitter, InteractiveElement as _,
+    IntoElement as _, ParentElement as _, Render, StatefulInteractiveElement as _, Window, div,
 };
 
 use self::popover::{Props, usage_popover};
@@ -123,11 +124,6 @@ impl ComposerContextControl {
         self.active_chat_id = active_chat_id;
         self.sync_loads(cx);
         cx.notify();
-    }
-
-    /// `contextPopoverOpen`.
-    pub(crate) fn is_open(&self) -> bool {
-        self.open
     }
 
     pub(crate) fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
@@ -264,6 +260,72 @@ impl ComposerContextControl {
     }
 }
 
+impl ComposerContextControl {
+    /// The popover that opens on click and closes through [`Self::close`].
+    fn popover(&self, this: &Entity<Self>, window: &mut Window, cx: &mut Context<Self>) -> Popover {
+        let this = this.clone();
+        Popover::new("composer-context", window, cx)
+            .open(self.open)
+            .on_open_change(move |next, _, cx| {
+                this.update(cx, |control, cx| {
+                    if next {
+                        control.set_open(true, cx);
+                    } else {
+                        control.close(cx);
+                    }
+                });
+            })
+    }
+
+    /// The usage popover's body, wired back to this control.
+    fn usage_body(
+        &self,
+        context: &ContextDetailsView,
+        mode: UsageAuthMode,
+        this: Entity<Self>,
+        lang: Lang,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        usage_popover(
+            &Props {
+                context,
+                mode,
+                usage: self.conversation_usage(context, mode),
+                selected: self.selected,
+                emphasis: self.emphasis,
+                lang,
+                on_select: {
+                    let this = this.clone();
+                    Rc::new(move |index: Option<usize>, _: &mut Window, cx: &mut App| {
+                        this.update(cx, |c, cx| {
+                            c.selected = index;
+                            cx.notify();
+                        });
+                    })
+                },
+                on_emphasis: {
+                    let this = this.clone();
+                    Rc::new(
+                        move |emphasis: Option<Emphasis>, _: &mut Window, cx: &mut App| {
+                            this.update(cx, |c, cx| {
+                                c.emphasis = emphasis;
+                                cx.notify();
+                            });
+                        },
+                    )
+                },
+                on_details: Rc::new(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+                    this.update(cx, |c, cx| {
+                        c.close(cx);
+                        cx.emit(ComposerContextEvent::OpenUsageSettings);
+                    });
+                }),
+            },
+            cx,
+        )
+    }
+}
+
 impl Render for ComposerContextControl {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let Some(context) = self.context.clone() else {
@@ -275,20 +337,7 @@ impl Render for ComposerContextControl {
             context_model(&self.models, &context, self.active_model.as_ref()),
             &context,
         );
-        let popover = {
-            let this = this.clone();
-            Popover::new("composer-context", window, cx)
-                .open(self.open)
-                .on_open_change(move |next, _, cx| {
-                    this.update(cx, |control, cx| {
-                        if next {
-                            control.set_open(true, cx);
-                        } else {
-                            control.close(cx);
-                        }
-                    });
-                })
-        };
+        let popover = self.popover(&this, window, cx);
         let open = self.open;
         #[expect(
             clippy::cast_possible_truncation,
@@ -300,7 +349,7 @@ impl Render for ComposerContextControl {
             popover.trigger(move |_| {
                 let donut = ContextDonutButton::new("context-donut", ratio)
                     .expanded(open)
-                    .on_click(move |_, _, cx| click.update(cx, |c, cx| c.toggle_pin(cx)));
+                    .on_click(move |_, _, cx| click.update(cx, ComposerContextControl::toggle_pin));
                 div()
                     .id("context-donut-hover")
                     .on_hover(move |hovered, _, cx| {
@@ -310,43 +359,7 @@ impl Render for ComposerContextControl {
                     .into_any_element()
             })
         };
-        let body = usage_popover(
-            &Props {
-                context: &context,
-                mode,
-                usage: self.conversation_usage(&context, mode),
-                selected: self.selected,
-                emphasis: self.emphasis,
-                lang,
-                on_select: {
-                    let this = this.clone();
-                    Rc::new(move |index: Option<usize>, _: &mut Window, cx: &mut App| {
-                        this.update(cx, |c, cx| {
-                            c.selected = index;
-                            cx.notify();
-                        })
-                    })
-                },
-                on_emphasis: {
-                    let this = this.clone();
-                    Rc::new(
-                        move |emphasis: Option<Emphasis>, _: &mut Window, cx: &mut App| {
-                            this.update(cx, |c, cx| {
-                                c.emphasis = emphasis;
-                                cx.notify();
-                            })
-                        },
-                    )
-                },
-                on_details: Rc::new(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-                    this.update(cx, |c, cx| {
-                        c.close(cx);
-                        cx.emit(ComposerContextEvent::OpenUsageSettings);
-                    })
-                }),
-            },
-            cx,
-        );
+        let body = self.usage_body(&context, mode, this, lang, cx);
         let content = popover.content(
             PopoverContent::new()
                 .side(Side::Top)

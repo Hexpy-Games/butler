@@ -81,13 +81,11 @@ pub(crate) fn runtime_models(catalog: &ModelCatalog) -> Vec<&ModelChoice> {
     }
 }
 
-/// The model the composer shows. A model that no longer exists falls back to the Settings
-/// default, then to the first available model; a failed controls read uses the Settings
-/// controls. Only a catalog with no model at all leaves the composer without one.
-pub(crate) fn resolve_composer_model_truth(input: &ModelTruthInput) -> ComposerModelResolution {
-    let controls = input
-        .controls
-        .filter(|_| input.controls_state == ControlsLoadState::Ready);
+/// The resolution before a model is chosen: the owner's reasoning, access and plan choices.
+fn loading_resolution(
+    input: &ModelTruthInput,
+    controls: Option<&SessionControlsView>,
+) -> ComposerModelResolution {
     let reasoning = controls.map_or_else(
         || input.settings.reasoning_effort.clone(),
         |view| view.controls.reasoning_effort.clone(),
@@ -102,7 +100,7 @@ pub(crate) fn resolve_composer_model_truth(input: &ModelTruthInput) -> ComposerM
         });
     let generation_mismatch =
         controls.is_some_and(|view| view.catalog_generation != input.catalog.generation);
-    let base = ComposerModelResolution {
+    ComposerModelResolution {
         state: ComposerModelState::Loading,
         model: String::new(),
         metadata: None,
@@ -110,7 +108,17 @@ pub(crate) fn resolve_composer_model_truth(input: &ModelTruthInput) -> ComposerM
         access_mode,
         plan_mode,
         generation_mismatch,
-    };
+    }
+}
+
+/// The model the composer shows. A model that no longer exists falls back to the Settings
+/// default, then to the first available model; a failed controls read uses the Settings
+/// controls. Only a catalog with no model at all leaves the composer without one.
+pub(crate) fn resolve_composer_model_truth(input: &ModelTruthInput) -> ComposerModelResolution {
+    let controls = input
+        .controls
+        .filter(|_| input.controls_state == ControlsLoadState::Ready);
+    let base = loading_resolution(input, controls);
     let selected = controls.map_or(input.settings.model.as_str(), |view| {
         view.controls.model.as_str()
     });

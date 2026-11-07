@@ -287,7 +287,7 @@ impl Typo {
     }
 
     /// A face's ascent and descent at `size`.
-    fn extent(family: &SharedString, size: f32, weight: f32, cx: &App) -> (f32, f32) {
+    pub(crate) fn extent(family: &SharedString, size: f32, weight: f32, cx: &App) -> (f32, f32) {
         let system = cx.text_system();
         let mut face = font(family.clone());
         face.weight = FontWeight(weight);

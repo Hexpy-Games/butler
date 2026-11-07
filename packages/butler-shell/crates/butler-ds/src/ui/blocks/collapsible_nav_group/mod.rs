@@ -98,7 +98,8 @@ impl CollapsibleNavGroup {
         self
     }
 
-    /// `--nav-sticky-surface`: the sticky header's opaque fill (default `--color-surface-base`).
+    /// `--nav-sticky-surface`: the sticky header's opaque fill (default `--color-surface-base`,
+    /// `transparent` inside a SidebarShell).
     pub fn sticky_surface(mut self, surface: Hsla) -> Self {
         if let Some(pin) = self.pin.as_mut() {
             pin.surface = Some(surface);
@@ -163,9 +164,15 @@ impl RenderOnce for CollapsibleNavGroup {
         };
         let row = metrics(ds, density_of(ds, None, cx)).height;
         let offset = pin.offset(*span.read(cx), row, cx);
-        let surface = pin
-            .surface
-            .unwrap_or_else(|| ds.color(Color::ColorSurfaceBase));
+        // `--nav-sticky-surface`: a SidebarShell makes it `transparent` (SidebarShell.module.css:18),
+        // else `--color-surface-base`.
+        let surface = pin.surface.unwrap_or_else(|| {
+            if scope::in_density(cx) {
+                gpui::transparent_black()
+            } else {
+                ds.color(Color::ColorSurfaceBase)
+            }
+        });
         // The header paints over the rows it passes, so they clip at its bottom edge.
         let pinned = div()
             .w_full()

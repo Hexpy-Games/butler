@@ -57,7 +57,11 @@ fn origin_copy(copy: &CanonOrder, origin: CanonQueueOrigin) -> &'static str {
 }
 
 /// The start now / unstack / remove call of a row menu: reads the view at click time.
-fn act(session_id: &str, kind: OrderActionKind, epic_id: &str) -> impl Fn(&mut Window, &mut App) + 'static {
+fn act(
+    session_id: &str,
+    kind: OrderActionKind,
+    epic_id: &str,
+) -> impl Fn(&mut Window, &mut App) + 'static {
     let (session_id, epic_id) = (session_id.to_owned(), epic_id.to_owned());
     move |_, cx| {
         if let Some(view) = queue::snapshot(cx, &session_id).view {
@@ -82,16 +86,20 @@ pub(crate) fn step_order_section(
         .chains
         .iter()
         .filter(|chain| {
-            chain
-                .steps
-                .iter()
-                .any(|step| step.items.iter().any(|item| item.state != CanonQueueItemState::Done))
+            chain.steps.iter().any(|step| {
+                step.items
+                    .iter()
+                    .any(|item| item.state != CanonQueueItemState::Done)
+            })
         })
         .collect();
     let chains: Vec<StepSortableChain> = order_chains(&view)
         .into_iter()
         .filter_map(|mut chain| {
-            let origin = live.iter().find(|item| item.chain_id == chain.id.as_ref())?.origin;
+            let origin = live
+                .iter()
+                .find(|item| item.chain_id == chain.id.as_ref())?
+                .origin;
             let label = SharedString::from(origin_copy(copy, origin));
             chain.title = (live.len() > 1).then(|| label.clone());
             chain.label = label;
@@ -105,11 +113,9 @@ pub(crate) fn step_order_section(
         view,
     });
     let (editing, accepting, rendering) = (rows.clone(), rows.clone(), rows.clone());
-    let list = StepSortableList::new(
-        "order-steps",
-        chains,
-        move |item, place, window, cx| render_item(&rendering, item, place, window, cx),
-    )
+    let list = StepSortableList::new("order-steps", chains, move |item, place, window, cx| {
+        render_item(&rendering, item, place, window, cx)
+    })
     .can_drop(move |edit| accepts_order_edit(&accepting.view, edit))
     .on_edit(move |edit, _, cx| {
         let Some(view) = queue::snapshot(cx, &editing.session_id).view else {
@@ -123,6 +129,41 @@ pub(crate) fn step_order_section(
     .labels(CanonOrder::drag(lang))
     .disabled(rows.busy);
     Some(list.into_any_element())
+}
+
+/// The status a row shows for its epic.
+fn status_of(epic: &CanonQueueItem) -> Status {
+    match epic.state {
+        CanonQueueItemState::Running if epic.hold_reason.is_some() => Status::Failed,
+        CanonQueueItemState::Running => Status::Running,
+        CanonQueueItemState::Held => Status::Held,
+        CanonQueueItemState::Done => Status::Done,
+        CanonQueueItemState::Waiting | CanonQueueItemState::Unknown => Status::Waiting,
+    }
+}
+
+/// The caption of an epic's own state: its active action, its progress count, or what holds it.
+fn progress_state(
+    epic: &CanonQueueItem,
+    lang: butler_ds::ui::context::Lang,
+    copy: &CanonOrder,
+) -> Option<String> {
+    let progress = &epic.progress;
+    progress
+        .actions
+        .iter()
+        .find(|action| action.status == "active")
+        .map(|action| action.description.clone())
+        .filter(|description| !description.is_empty())
+        .or_else(|| {
+            (progress.counts.total > 0)
+                .then(|| CanonOrder::done(lang, progress.counts.completed, progress.counts.total))
+        })
+        .or_else(|| {
+            epic.held_by_epic_id
+                .as_ref()
+                .map(|_| copy.held_by.to_owned())
+        })
 }
 
 /// `renderItem`
@@ -145,13 +186,7 @@ fn render_item(
     else {
         return StepSortableRowSlots::default();
     };
-    let status = match epic.state {
-        CanonQueueItemState::Running if epic.hold_reason.is_some() => Status::Failed,
-        CanonQueueItemState::Running => Status::Running,
-        CanonQueueItemState::Held => Status::Held,
-        CanonQueueItemState::Done => Status::Done,
-        CanonQueueItemState::Waiting | CanonQueueItemState::Unknown => Status::Waiting,
-    };
+    let status = status_of(epic);
     let previous = place
         .step_index
         .checked_sub(1)
@@ -166,18 +201,7 @@ fn render_item(
         1 => CanonOrder::after(lang, &step[0].label),
         count => CanonOrder::after_stack(lang, &step[0].label, count - 1),
     });
-    let progress = &epic.progress;
-    let state = progress
-        .actions
-        .iter()
-        .find(|action| action.status == "active")
-        .map(|action| action.description.clone())
-        .filter(|description| !description.is_empty())
-        .or_else(|| {
-            (progress.counts.total > 0)
-                .then(|| CanonOrder::done(lang, progress.counts.completed, progress.counts.total))
-        })
-        .or_else(|| epic.held_by_epic_id.as_ref().map(|_| copy.held_by.to_owned()));
+    let state = progress_state(epic, lang, copy);
     let caption = match (place.lifted, place.outcome) {
         (true, Some(StepSortableOutcome::Join)) => Some(copy.join.to_owned()),
         (true, Some(StepSortableOutcome::NewStep)) => Some(copy.new_step.to_owned()),
@@ -193,7 +217,13 @@ fn render_item(
         Status::Done => Some(copy.status_done),
     };
     StepSortableRowSlots {
-        marker: Some(order_marker(status, place.step_number, &item.id, window, cx)),
+        marker: Some(order_marker(
+            status,
+            place.step_number,
+            &item.id,
+            window,
+            cx,
+        )),
         title: item.label.clone(),
         more: (place.count > 1 && !place.expanded)
             .then(|| CanonOrder::more(lang, place.count - 1).into()),
@@ -256,7 +286,9 @@ fn order_marker(
                 saw.update(cx, |saw, _| *saw = true);
             }
             if loading {
-                Spinner::new(format!("order-spinner-{id}")).size(side).into_any_element()
+                Spinner::new(format!("order-spinner-{id}"))
+                    .size(side)
+                    .into_any_element()
             } else {
                 SuccessCheck::new(format!("order-check-{id}"))
                     .ring()

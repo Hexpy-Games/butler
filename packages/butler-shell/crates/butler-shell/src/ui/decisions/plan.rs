@@ -127,7 +127,8 @@ fn bridge(cx: &App) -> Option<PlanBridge> {
 }
 
 fn pending(cx: &App) -> bool {
-    cx.try_global::<PlanState>().is_some_and(|state| state.pending)
+    cx.try_global::<PlanState>()
+        .is_some_and(|state| state.pending)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -159,7 +160,10 @@ fn decide(decision: Decision, session_id: String, plan_id: &str, cx: &mut App) {
     }
     let (session, plan) = (session_id.clone(), plan_id.to_owned());
     let done = Jobs::run(cx, move |client| async move {
-        let value = client.decide_session_plan(&session, &plan, &body).await.ok()?;
+        let value = client
+            .decide_session_plan(&session, &plan, &body)
+            .await
+            .ok()?;
         serde_json::from_value::<PlanDecisionResultView>(value).ok()
     });
     cx.spawn(async move |cx| {

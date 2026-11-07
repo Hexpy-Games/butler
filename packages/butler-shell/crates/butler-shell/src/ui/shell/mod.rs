@@ -14,7 +14,6 @@ mod transcript;
 
 use std::cell::Cell;
 use std::rc::Rc;
-use std::time::Duration;
 
 use gpui::{
     AppContext as _, Context, Entity, FocusHandle, KeyBinding, SharedString, Subscription, Window,
@@ -24,12 +23,10 @@ use gpui::{
 use crate::ui::chat::Chat;
 use crate::ui::composer::Composer;
 use crate::ui::i18n::Locale;
-use crate::ui::motion::Hover;
 use crate::ui::sidebar::SidebarState;
 use crate::ui::source::Source;
 use crate::ui::store::Store;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::HasHover;
 
 actions!(
     shell,
@@ -56,22 +53,18 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
-/// How often relative ages ("12분") are redrawn.
-const AGE_TICK: Duration = Duration::from_secs(30);
-
 pub(crate) struct Shell {
     pub(crate) theme: Theme,
     pub(crate) chat: Entity<Chat>,
     pub(crate) composer: Entity<Composer>,
-    pub(crate) hover: Hover,
     pub(crate) sidebar: SidebarState,
-    sidebar_open: bool,
+    pub(super) sidebar_open: bool,
     frame: frame::FrameState,
     pending_navigation: Option<navigation::Navigation>,
     attention: notifications::Attention,
     session_menu: session_menu::SessionMenu,
     /// The agent, while one is attached; `None` shows the disconnected state.
-    source: Option<Rc<dyn Source>>,
+    pub(crate) source: Option<Rc<dyn Source>>,
     incompatible: bool,
     pub(crate) store: Store,
     theme_override: Option<bool>,
@@ -79,20 +72,20 @@ pub(crate) struct Shell {
     composer_h: Rc<Cell<f32>>,
     panes: panes::Panes,
     focus: FocusHandle,
-    subscriptions: Vec<Subscription>,
+    _subscriptions: Vec<Subscription>,
     live_task: Option<gpui::Task<()>>,
     connection_task: Option<gpui::Task<()>>,
     rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
-    /// The open chat's latest window is being read again.
-    refreshing: bool,
-    /// A refresh was asked for while one was in flight: run it once more when that one ends.
-    refresh_again: bool,
+    /// Whether the open chat's latest window is being read again.
+    refresh: Refresh,
 }
 
-impl HasHover for Shell {
-    fn hover_state(&mut self) -> &mut Hover {
-        &mut self.hover
-    }
+/// The open chat's refresh: idle, running, or running with another asked for meanwhile.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Refresh {
+    Idle,
+    Running,
+    Again,
 }
 
 fn appearance(dark: bool) -> WindowAppearance {
@@ -134,7 +127,15 @@ impl Shell {
         let composer = cx.new(|cx| Composer::new(theme.clone(), window, cx));
         let focus = cx.focus_handle();
         let subscriptions = vec![
-            cx.observe_window_activation(window, |_, window, cx| {
+            cx.observe_window_activation(window, |this, window, cx| {
+                this.sidebar.attended = window.is_window_active();
+                this.sync_minute_clock(cx);
+                if this.sidebar.attended
+                    && let Some(id) = this.store.selected().map(|c| c.session.0.to_string())
+                {
+                    this.mark_sidebar_read(&id, cx);
+                }
+                cx.notify();
                 if !window.is_window_active() {
                     butler_ds::ui::blocks::adaptive_shell::peek::window_blurred(window, cx);
                 }
@@ -150,7 +151,6 @@ impl Shell {
             theme,
             chat,
             composer,
-            hover: Hover::default(),
             sidebar: SidebarState::new(),
             sidebar_open: true,
             frame: frame::FrameState::default(),
@@ -164,19 +164,17 @@ impl Shell {
             composer_h,
             panes,
             focus,
-            subscriptions,
+            _subscriptions: subscriptions,
             live_task: None,
             connection_task: None,
             rediscover: None,
-            refreshing: false,
-            refresh_again: false,
+            refresh: Refresh::Idle,
         };
         Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);
         Self::install_composer(cx);
         shell.sync_composer(cx);
         shell.connect(cx);
-        Self::tick_ages(cx);
         shell
     }
 
@@ -192,24 +190,6 @@ impl Shell {
         self.source
             .is_none()
             .then(|| self.theme.strings.not_running.into())
-    }
-
-    /// Redraws relative ages while chats are listed.
-    fn tick_ages(cx: &mut Context<Self>) {
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(AGE_TICK).await;
-                let alive = this.update(cx, |this, cx| {
-                    if !this.store.chats.is_empty() {
-                        cx.notify();
-                    }
-                });
-                if alive.is_err() {
-                    return;
-                }
-            }
-        })
-        .detach();
     }
 
     fn set_dark(&mut self, dark: bool, cx: &mut Context<Self>) {

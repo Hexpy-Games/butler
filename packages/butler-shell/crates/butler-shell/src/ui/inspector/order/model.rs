@@ -26,7 +26,11 @@ fn done_prefix(chain: &CanonQueueChain) -> usize {
     chain
         .steps
         .iter()
-        .position(|step| step.items.iter().any(|item| item.state != CanonQueueItemState::Done))
+        .position(|step| {
+            step.items
+                .iter()
+                .any(|item| item.state != CanonQueueItemState::Done)
+        })
         .unwrap_or(chain.steps.len())
 }
 
@@ -97,7 +101,10 @@ pub(super) fn order_edit_to_api(
     view: &CanonQueueView,
     edit: &StepSortableEdit,
 ) -> Option<CanonQueueEdit> {
-    let chain = view.chains.iter().find(|chain| chain.chain_id.as_str() == &*edit.to.chain_id)?;
+    let chain = view
+        .chains
+        .iter()
+        .find(|chain| chain.chain_id.as_str() == &*edit.to.chain_id)?;
     let offset = done_prefix(chain);
     let (from, to) = (edit.from.step_index, edit.to.step_index);
     let target = chain
@@ -221,11 +228,19 @@ pub(super) fn accepts_order_edit(view: &CanonQueueView, edit: &StepSortableEdit)
         ids
     };
     view.chains.iter().all(|chain| {
-        let Some(target) = next.chains.iter().find(|next| next.chain_id == chain.chain_id) else {
+        let Some(target) = next
+            .chains
+            .iter()
+            .find(|next| next.chain_id == chain.chain_id)
+        else {
             return false;
         };
         chain.steps.iter().enumerate().all(|(index, step)| {
-            let running = || step.items.iter().filter(|item| item.state == CanonQueueItemState::Running);
+            let running = || {
+                step.items
+                    .iter()
+                    .filter(|item| item.state == CanonQueueItemState::Running)
+            };
             if running().next().is_none() {
                 return true;
             }

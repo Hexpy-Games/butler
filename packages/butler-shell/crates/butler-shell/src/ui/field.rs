@@ -1,10 +1,7 @@
 //! The shell's text field (the composer and the suggest-a-change dialog): gpui-ce's
 //! EditableText in Pretendard 14/20 and the theme's text colours, wrapping, growing to
 //! eight lines and scrolling past them.
-use gpui::{
-    Action as _, App, Entity, EntityInputHandler as _, FontWeight, KeyBinding, Unbind, Window,
-    prelude::*, px,
-};
+use gpui::{Action as _, Entity, FontWeight, KeyBinding, Unbind, prelude::*, px};
 use gpui_elements::editable_text::actions::{self, DEFAULT_INPUT_CONTEXT};
 use gpui_elements::editable_text::{EditableTextElement, EditableTextState, text_area};
 
@@ -28,24 +25,6 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("end", actions::NavLineEnd, c),
     ]);
     keys
-}
-
-/// Cut does nothing without a selection, as in native text fields (EditableText alone
-/// cuts the whole line). Register it on an element that contains the field.
-pub(crate) fn no_empty_cut(
-    state: &Entity<EditableTextState>,
-) -> impl Fn(&actions::Cut, &mut Window, &mut App) + 'static {
-    let state = state.downgrade();
-    move |_, window, cx| {
-        let empty = state
-            .update(cx, |s, cx| s.selected_text_range(false, window, cx))
-            .ok()
-            .flatten()
-            .is_none_or(|selection| selection.range.is_empty());
-        if empty {
-            cx.stop_propagation();
-        }
-    }
 }
 
 /// The field for `state`, styled from the theme.

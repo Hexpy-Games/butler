@@ -54,7 +54,11 @@ fn label_tone(color: &str) -> LabelTone {
 fn strip_attachment_links(text: &str) -> String {
     let (mut out, mut rest) = (String::new(), text);
     while let Some(start) = rest.find('[') {
-        let from = if rest[..start].ends_with('!') { start - 1 } else { start };
+        let from = if rest[..start].ends_with('!') {
+            start - 1
+        } else {
+            start
+        };
         if let Some(len) = attachment_link_len(&rest[start..]) {
             out.push_str(&rest[..from]);
             rest = &rest[start + len..];

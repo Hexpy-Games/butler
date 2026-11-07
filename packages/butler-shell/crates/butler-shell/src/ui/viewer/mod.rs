@@ -10,7 +10,10 @@ use butler_ds::ui::blocks::tab_strip::{Group, GroupKind, Tab, TabStrip, TabStrip
 use butler_ds::ui::icon_button::{IconButton, Pane, Tone};
 use butler_ds::ui::layout::{Box, Space, Stack};
 use butler_ds::ui::presence::{Presence, PresenceMotion};
-use gpui::{AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _, Window, div};
+use gpui::{
+    AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _,
+    Window, div,
+};
 
 pub(crate) use state::{
     FileViewerEntry, RightSlotPane, activate, close, open, right_slot_pane, session_files,
@@ -46,7 +49,11 @@ pub(crate) fn file_viewer_pane(
         let (activate_session, close_session) = (session.to_owned(), session.to_owned());
         let strip = TabStrip::new(
             "file-viewer-tabs",
-            vec![Group::new("files", GroupKind::Mine).label(c.files).tabs(tabs)],
+            vec![
+                Group::new("files", GroupKind::Mine)
+                    .label(c.files)
+                    .tabs(tabs),
+            ],
         )
         .active(Some(active.id().to_owned().into()))
         .labels(TabStripLabels {
@@ -87,7 +94,9 @@ fn entry_title(entry: &FileViewerEntry) -> String {
 
 fn entry_icon(entry: &FileViewerEntry) -> Icon {
     match entry {
-        FileViewerEntry::Artifact { artifact, .. } if artifact::is_image_artifact(artifact) => Icon::ImageIcon,
+        FileViewerEntry::Artifact { artifact, .. } if artifact::is_image_artifact(artifact) => {
+            Icon::ImageIcon
+        }
         _ => Icon::FileText,
     }
 }
@@ -107,12 +116,15 @@ pub(crate) fn file_viewer_toggle(
     let shown = right_slot_pane(browser, &files) == Some(RightSlotPane::Viewer);
     let session = session.to_owned();
     Some(
-        IconButton::new("titlebar-file-viewer-toggle", FileViewerStrings::get(cx).title)
-            .glyph(Icon::FileText)
-            .pane(Pane::Viewer)
-            .pressed(shown)
-            .tone(if shown { Tone::Butler } else { Tone::Default })
-            .on_click(move |_, _, cx| set_shown(cx, &session, !shown))
-            .into_any_element(),
+        IconButton::new(
+            "titlebar-file-viewer-toggle",
+            FileViewerStrings::get(cx).title,
+        )
+        .glyph(Icon::FileText)
+        .pane(Pane::Viewer)
+        .pressed(shown)
+        .tone(if shown { Tone::Butler } else { Tone::Default })
+        .on_click(move |_, _, cx| set_shown(cx, &session, !shown))
+        .into_any_element(),
     )
 }

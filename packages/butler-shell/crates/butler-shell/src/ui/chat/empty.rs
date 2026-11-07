@@ -181,7 +181,11 @@ fn prompt_list(
     let mark = mark(Ds::get(cx).dark());
     let mut list = PromptSuggestionList::new("new-chat", title.to_owned(), items.collect())
         .moment(moment)
-        .title_icon(move |_| img(ImageSource::Image(mark.clone())).size_full().into_any_element());
+        .title_icon(move |_| {
+            img(ImageSource::Image(mark.clone()))
+                .size_full()
+                .into_any_element()
+        });
     if let Some(description) = briefing.and_then(|briefing| briefing.description.clone()) {
         list = list.description(description);
     }

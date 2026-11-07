@@ -109,7 +109,7 @@ impl Shell {
         .on_click(cx.listener(|s, _, w, cx| s.toggle_sidebar(&ToggleSidebar, w, cx)));
         let dismiss = cx.entity().downgrade();
         let width = self.sidebar_width(cx);
-        let sidebar = self.render_sidebar(cx);
+        let sidebar = self.render_sidebar(window, cx);
         let title = self.render_titlebar(open, window, cx);
         let mut shell = AdaptiveShell::new("app-frame", input)
             .frame(ShellFrame::Cards)
@@ -163,6 +163,7 @@ impl Render for Shell {
         let frame = self.adaptive_frame(window, cx);
         let rename = self.render_rename(window, cx);
         let task_graph = self.render_task_graph(window, cx);
+        let sidebar_dialog = self.space_dialogs(window, cx);
         let viewer = image_viewer::overlay(window, cx);
         let ds = Ds::get(cx);
         let root = div()
@@ -190,6 +191,7 @@ impl Render for Shell {
             .child(rename)
             .children(task_graph)
             .child(self.palette())
+            .child(sidebar_dialog)
             .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));
         overlay::track(toast::track(focus::track_modality(div())))
             .id("shell-root")

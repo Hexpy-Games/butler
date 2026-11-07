@@ -56,7 +56,7 @@ impl Composer {
         let requested =
             ComposerState::update(cx, |draft| std::mem::take(&mut draft.focus_requested));
         if requested && self.disabled.is_none() {
-            self.engaged = true;
+            self.fold.engaged = true;
             self.editor.focus(FocusPlacement::End, window, cx);
         }
     }
@@ -94,7 +94,7 @@ impl Composer {
                 let control = self.context_control.clone();
                 cx.spawn(async move |_, cx| {
                     let view = fetch.await.flatten();
-                    let _ = control.update(cx, |control, cx| {
+                    control.update(cx, |control, cx| {
                         control.usage_loaded(&session, &revision, view, cx);
                     });
                 })
@@ -109,7 +109,7 @@ impl Composer {
                 let control = self.context_control.clone();
                 cx.spawn(async move |_, cx| {
                     let quota = fetch.await.flatten();
-                    let _ = control.update(cx, |control, cx| {
+                    control.update(cx, |control, cx| {
                         control.quota_loaded(&provider, quota, cx);
                     });
                 })

@@ -113,9 +113,9 @@ pub struct StepSortableEdit {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Location {
-    pub chain_index: usize,
-    pub step_index: usize,
-    pub item_index: usize,
+    pub chain: usize,
+    pub step: usize,
+    pub item: usize,
 }
 
 pub(super) fn locate_item(chains: &[StepSortableChain], item_id: &str) -> Option<Location> {
@@ -127,9 +127,9 @@ pub(super) fn locate_item(chains: &[StepSortableChain], item_id: &str) -> Option
             .find_map(|(step_index, step)| {
                 let item_index = step.iter().position(|item| &*item.id == item_id)?;
                 Some(Location {
-                    chain_index,
-                    step_index,
-                    item_index,
+                    chain: chain_index,
+                    step: step_index,
+                    item: item_index,
                 })
             })
     })
@@ -153,8 +153,8 @@ pub(super) fn edit_for(
 ) -> Option<StepSortableEdit> {
     let at = locate_item(chains, item_ids.first()?)?;
     let chain = chains.iter().find(|chain| chain.id == target.chain_id)?;
-    let source = &chains[at.chain_index];
-    let step = &source.steps[at.step_index];
+    let source = &chains[at.chain];
+    let step = &source.steps[at.step];
     if !item_ids
         .iter()
         .all(|id| step.iter().any(|item| &item.id == id))
@@ -175,7 +175,10 @@ pub(super) fn edit_for(
     }
     if !join
         && target.step_index == 0
-        && chain.steps.first().is_some_and(|first| is_pinned_step(first))
+        && chain
+            .steps
+            .first()
+            .is_some_and(|first| is_pinned_step(first))
     {
         return None;
     }
@@ -184,7 +187,7 @@ pub(super) fn edit_for(
         item_ids: item_ids.to_vec(),
         from: StepSortablePlace {
             chain_id: source.id.clone(),
-            step_index: at.step_index,
+            step_index: at.step,
         },
         to: StepSortablePlace {
             chain_id: chain.id.clone(),
@@ -201,13 +204,12 @@ pub(super) fn edit_for(
         return Some(edit(StepSortableEditKind::MoveBetween, Some(placement)));
     }
     if join {
-        return (target.step_index != at.step_index)
-            .then(|| edit(StepSortableEditKind::JoinStack, None));
+        return (target.step_index != at.step).then(|| edit(StepSortableEditKind::JoinStack, None));
     }
     if item_ids.len() < step.len() {
         return Some(edit(StepSortableEditKind::SplitStack, None));
     }
-    let stays = target.step_index == at.step_index || target.step_index == at.step_index + 1;
+    let stays = target.step_index == at.step || target.step_index == at.step + 1;
     (!stays).then(|| edit(StepSortableEditKind::MoveToNewStep, None))
 }
 
@@ -290,5 +292,5 @@ pub(super) fn result_place(
 ) -> Option<(SharedString, usize)> {
     let next = apply_step_sortable_edit(chains, edit);
     let at = locate_item(&next, edit.item_ids.first()?)?;
-    Some((next[at.chain_index].label.clone(), at.step_index + 1))
+    Some((next[at.chain].label.clone(), at.step + 1))
 }

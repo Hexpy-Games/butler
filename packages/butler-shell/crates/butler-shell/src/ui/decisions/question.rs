@@ -14,9 +14,8 @@ use super::DecisionCtx;
 use crate::ui::i18n::question::QuestionCopy;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{
-    PendingUserQuestionsQuestionState, QuestionAnswerBody, QuestionAnswerReply,
-    QuestionAnswerWire, UserQuestion, UserQuestionKind, UserQuestionOptionsItem,
-    UserQuestionOptionsItemKind,
+    PendingUserQuestionsQuestionState, QuestionAnswerBody, QuestionAnswerReply, QuestionAnswerWire,
+    UserQuestion, UserQuestionKind, UserQuestionOptionsItem, UserQuestionOptionsItemKind,
 };
 
 /// The hook's `useState` / `useRef` values.

@@ -33,7 +33,13 @@ const EN: InspectorArtifacts = InspectorArtifacts {
 };
 
 const KO_DAYS: [&str; 7] = [
-    "일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일",
+    "일요일",
+    "월요일",
+    "화요일",
+    "수요일",
+    "목요일",
+    "금요일",
+    "토요일",
 ];
 const EN_DAYS: [&str; 7] = [
     "Sunday",
@@ -55,14 +61,6 @@ impl InspectorArtifacts {
 
     pub(crate) fn get(cx: &App) -> &'static Self {
         Self::of(Ds::get(cx).lang())
-    }
-
-    /// automations.inspector.empty
-    pub(crate) fn automations_empty(lang: Lang) -> &'static str {
-        match lang {
-            Lang::Ko => "이 대화의 예약 작업이 없습니다",
-            Lang::En => "No schedules for this chat",
-        }
     }
 
     /// `scheduleFrequency`: how often a schedule runs.

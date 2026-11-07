@@ -132,7 +132,15 @@ pub(super) fn tool_column(
     let latest = rows.iter().rev().find(|row| is_browser_step(row));
     let items: Vec<AnyElement> = shown
         .into_iter()
-        .map(|row| tool_row(row, latest.is_some_and(|l| std::ptr::eq(l, row)), t, window, cx))
+        .map(|row| {
+            tool_row(
+                row,
+                latest.is_some_and(|l| std::ptr::eq(l, row)),
+                t,
+                window,
+                cx,
+            )
+        })
         .collect();
     Some(
         div()

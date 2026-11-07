@@ -1,6 +1,7 @@
 //! ComposerAuthorityDecisionSurface, `useComposerAuthorityDecision` and
 //! ComposerDecisionAttachment: the authority card in the composer slot, and the pill that
 //! reopens it while the owner composes a message instead.
+mod mask;
 mod modify;
 mod request;
 mod schedule;
@@ -10,31 +11,28 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use butler_ds::tokens::Length;
-use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::composer_decision_panel::{ComposerDecisionPanel, Detail};
 use butler_ds::ui::blocks::split_button::{SplitButton, SplitItem, SplitSize};
-use butler_ds::ui::button::{Button, Shape, Size, Variant};
+use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::icon::{IconSize, icon};
-use butler_ds::ui::layout::{Box as Pad, Space};
 use butler_ds::ui::overlay::place::Side;
 use butler_ds::ui::tag::{Tag, Tone as TagTone};
 use butler_ds::ui::typo::Typo;
 use butler_shell_client::{AuthorityDecision, ShellClient};
 use gpui::{
-    AnyElement, App, Entity, Global, InteractiveElement as _, IntoElement as _,
-    ParentElement as _, SharedString, Styled as _, Window, div,
+    AnyElement, App, Entity, Global, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    SharedString, Styled as _, Window, div,
 };
 use serde_json::Value;
 
 use super::DecisionCtx;
+use super::canon::ApprovalLineText;
 use crate::ui::i18n::authority::Authority;
 use crate::ui::source::Risk;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{AuthorityDecisionTransportView, SessionView};
 use request::{AllowSite, Line};
 use visible::{approval_line, visible_code};
-
 
 /// Registered once by the shell: refreshes the session view after a decision was accepted. The
 /// handler gets the session id.
@@ -50,9 +48,22 @@ pub(crate) fn on_authority_changed(cx: &mut App, handler: impl Fn(&str, &mut App
 }
 
 fn authority_changed(session: &str, cx: &mut App) {
-    if let Some(handler) = cx.try_global::<AuthorityChanged>().and_then(|g| g.0.clone()) {
+    if let Some(handler) = cx
+        .try_global::<AuthorityChanged>()
+        .and_then(|g| g.0.clone())
+    {
         handler(session, cx);
     }
+}
+
+/// `InitiatedApprovalLine`'s text: the label and masked target of an initiated approval; `None`
+/// when `origin.approval` does not normalize.
+pub(crate) fn initiated_approval(raw: &Value, cx: &App) -> Option<ApprovalLineText> {
+    let (label, target) = request::action_view(raw, Authority::get(cx))?;
+    Some(ApprovalLineText {
+        label,
+        target: mask::mask_action_secrets(&target),
+    })
 }
 
 /// What a button decides.
@@ -74,11 +85,19 @@ pub(super) struct Handles {
 
 async fn send(client: ShellClient, session: String, request_ref: String, verdict: Verdict) -> bool {
     let (decision, expected) = match verdict {
-        Verdict::Allow(scope) => (AuthorityDecision::Allow { scope: scope.into() }, "allowed"),
+        Verdict::Allow(scope) => (
+            AuthorityDecision::Allow {
+                scope: scope.into(),
+            },
+            "allowed",
+        ),
         Verdict::Deny => (AuthorityDecision::Deny, "denied"),
         Verdict::Modify(instruction) => (AuthorityDecision::Modify { instruction }, "modified"),
     };
-    let Ok(raw) = client.answer_authority(&session, &request_ref, decision).await else {
+    let Ok(raw) = client
+        .answer_authority(&session, &request_ref, decision)
+        .await
+    else {
         return false;
     };
     // `isAcceptedAuthorityDecisionResponse`
@@ -106,7 +125,9 @@ impl Handles {
             cx.notify();
         });
         let (session, request_ref) = (self.session.clone(), self.request_ref.clone());
-        let done = Jobs::run(cx, move |client| send(client, session, request_ref, verdict));
+        let done = Jobs::run(cx, move |client| {
+            send(client, session, request_ref, verdict)
+        });
         let this = self.clone();
         cx.spawn(async move |cx| {
             let applied = done.await.unwrap_or(false);
@@ -147,9 +168,11 @@ struct Progress {
 }
 
 fn view_is_handoff(view: &SessionView) -> bool {
-    view.authority_requests
-        .as_deref()
-        .is_some_and(|requests| request::cards(requests).first().is_some_and(request::is_handoff))
+    view.authority_requests.as_deref().is_some_and(|requests| {
+        request::cards(requests)
+            .first()
+            .is_some_and(request::is_handoff)
+    })
 }
 
 /// The requests the card accepts (`normalizeAuthorityApprovals`), as the wire records.
@@ -164,7 +187,11 @@ fn state<T: 'static>(
     window: &mut Window,
     cx: &mut App,
 ) -> Entity<T> {
-    window.use_keyed_state(SharedString::from(format!("{name}-{session}")), cx, move |_, _| init)
+    window.use_keyed_state(
+        SharedString::from(format!("{name}-{session}")),
+        cx,
+        move |_, _| init,
+    )
 }
 
 fn decision(view: &SessionView, window: &mut Window, cx: &mut App) -> Option<Decision> {
@@ -248,7 +275,11 @@ fn aside(d: &Decision, cx: &App) -> AnyElement {
 fn allow(d: &Decision) -> SplitButton {
     let copy = d.copy;
     let once = d.handles.clone();
-    let text = if d.allow_site.is_some() { copy.allow_in_chat() } else { copy.allow_once() };
+    let text = if d.allow_site.is_some() {
+        copy.allow_in_chat()
+    } else {
+        copy.allow_once()
+    };
     let mut split = SplitButton::new("authority-allow-once", text, move |_, _, cx| {
         once.decide(Verdict::Allow("once"), cx);
     })
@@ -260,7 +291,11 @@ fn allow(d: &Decision) -> SplitButton {
     let handles = d.handles.clone();
     match d.allow_site {
         Some(site) => {
-            let label = if site == AllowSite::Payment { copy.allow_payment_site() } else { copy.allow_site() };
+            let label = if site == AllowSite::Payment {
+                copy.allow_payment_site()
+            } else {
+                copy.allow_site()
+            };
             let mut item = SplitItem::new(label, move |_, cx| {
                 handles.decide(Verdict::Allow("site"), cx);
             });

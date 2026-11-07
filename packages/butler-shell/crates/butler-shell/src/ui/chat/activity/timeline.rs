@@ -8,8 +8,8 @@ use butler_ds::ui::icon::icon_px;
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::rolling_swap::RollingSwap;
 use gpui::{
-    AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window, div,
-    px,
+    AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    Window, div, px,
 };
 
 use super::blocks::{content_x, locale, locale_of, work_blocks};
@@ -47,15 +47,7 @@ pub(super) fn timeline(
     let current = phase_label(lang, state.as_deref().or(latest.phase.as_deref()));
     let strings = locale(cx).strings();
     let header_label = strings.activity_history(live, current, activities.len());
-    let set = |value: Option<bool>| {
-        let open = open.clone();
-        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
-            open.update(cx, |open, cx| {
-                *open = value.unwrap_or(!*open);
-                cx.notify();
-            });
-        }
-    };
+    let set = |value: Option<bool>| toggle_open(open.clone(), value);
     let chevron = if expanded {
         Icon::ChevronDown
     } else {
@@ -87,27 +79,8 @@ pub(super) fn timeline(
                     .on_click(set(Some(false))),
             ),
         );
-    } else {
-        // The current step folds away with its spacing when the turn settles; the header stays.
-        let item_key: SharedString = latest.id.clone().into();
-        let tools = activity_tools(&latest, t, window, cx);
-        let step = RollingSwap::new(format!("{key}-swap"), item_key, move |_, cx| {
-            activity_block(&latest, false, false, Ds::get(cx).lang()).into_any_element()
-        })
-        .motion(live);
-        let still = browser_timeline_still(&activities, turn_id, live).and_then(
-            |(turn, call, result)| browser_step_still(&turn, &call, &result, None, window, cx),
-        );
-        let gap = still
-            .is_some()
-            .then(|| div().h(Space::Sm.px(Ds::get(cx))));
-        let step = Stack::new().gap(Space::Xs).child(step).children(tools);
-        let step = Stack::new().gap(Space::None).children(gap).child(step);
-        body = body.child(
-            Stack::new().gap(Space::None).children(still).child(
-                Collapsible::new(format!("{key}-step"), live).child(step),
-            ),
-        );
+    } else if let Some(step) = collapsed_step(&activities, &key, turn_id, live, t, window, cx) {
+        body = body.child(step);
     }
     Some(
         Stack::new()
@@ -115,6 +88,52 @@ pub(super) fn timeline(
             .child(header)
             .child(body)
             .into_any_element(),
+    )
+}
+
+/// Sets or flips the timeline's expanded state.
+fn toggle_open(
+    open: Entity<bool>,
+    value: Option<bool>,
+) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut App) {
+    move |_, _, cx| {
+        open.update(cx, |open, cx| {
+            *open = value.unwrap_or(!*open);
+            cx.notify();
+        });
+    }
+}
+
+/// The collapsed timeline: the latest browser page, then the current step.
+fn collapsed_step(
+    activities: &[PhaseActivity],
+    key: &str,
+    turn_id: Option<&str>,
+    live: bool,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<Stack> {
+    let latest = activities.last()?.clone();
+    // The current step folds away with its spacing when the turn settles; the header stays.
+    let item_key: SharedString = latest.id.clone().into();
+    let tools = activity_tools(&latest, t, window, cx);
+    let step = RollingSwap::new(format!("{key}-swap"), item_key, move |_, cx| {
+        activity_block(&latest, false, false, Ds::get(cx).lang()).into_any_element()
+    })
+    .motion(live);
+    let still =
+        browser_timeline_still(activities, turn_id, live).and_then(|(turn, call, result)| {
+            browser_step_still(&turn, &call, &result, None, window, cx)
+        });
+    let gap = still.is_some().then(|| div().h(Space::Sm.px(Ds::get(cx))));
+    let step = Stack::new().gap(Space::Xs).child(step).children(tools);
+    let step = Stack::new().gap(Space::None).children(gap).child(step);
+    Some(
+        Stack::new()
+            .gap(Space::None)
+            .children(still)
+            .child(Collapsible::new(format!("{key}-step"), live).child(step)),
     )
 }
 
@@ -141,7 +160,10 @@ fn browser_timeline_still(
     // A later capture is the turn's picture and the reply shows it.
     let captured = activity.operations[at + 1..].iter().any(|item| {
         item.safe_tool_name.as_deref() == Some("browser_screenshot")
-            && item.tool_result_id.as_deref().is_some_and(|id| !id.is_empty())
+            && item
+                .tool_result_id
+                .as_deref()
+                .is_some_and(|id| !id.is_empty())
     });
     (!captured).then(|| (turn.to_owned(), call.to_owned(), result.to_owned()))
 }

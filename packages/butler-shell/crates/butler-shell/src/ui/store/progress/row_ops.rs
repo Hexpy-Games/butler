@@ -167,8 +167,8 @@ pub(crate) fn merge_tool_row(current: &ProgressRow, incoming: &ProgressRow) -> P
     merged
 }
 
-fn truthy(value: &Option<String>) -> Option<&str> {
-    value.as_deref().filter(|text| !text.is_empty())
+fn truthy(value: Option<&str>) -> Option<&str> {
+    value.filter(|text| !text.is_empty())
 }
 
 /// `mergeToolRows`: lifecycle events folded by durable call identity.
@@ -176,7 +176,7 @@ pub(crate) fn merge_tool_rows(rows: &[ProgressRow]) -> Vec<ProgressRow> {
     let mut positions: HashMap<&str, usize> = HashMap::new();
     let mut result: Vec<ProgressRow> = Vec::new();
     for row in rows {
-        let key = truthy(&row.tool_call_id);
+        let key = truthy(row.tool_call_id.as_deref());
         match key.and_then(|key| positions.get(key).copied()) {
             Some(at) => result[at] = merge_tool_row(&result[at], row),
             None => {
@@ -193,8 +193,8 @@ pub(crate) fn merge_tool_rows(rows: &[ProgressRow]) -> Vec<ProgressRow> {
 /// `isLegacyDecisionCarrier`.
 pub(crate) fn is_legacy_decision_carrier(row: &ProgressRow) -> bool {
     row.kind.as_deref() == Some("message")
-        && truthy(&row.work_block_id).is_some()
-        && truthy(&row.work_block_label).is_some()
+        && truthy(row.work_block_id.as_deref()).is_some()
+        && truthy(row.work_block_label.as_deref()).is_some()
 }
 
 /// `isToolActivityRow`.
@@ -213,11 +213,11 @@ pub(crate) fn is_tool_activity_row(row: &ProgressRow) -> bool {
     {
         return false;
     }
-    if kind == "dispatch" && truthy(&row.tool_call_id).is_none() {
+    if kind == "dispatch" && truthy(row.tool_call_id.as_deref()).is_none() {
         return false;
     }
-    truthy(&row.tool_call_id).is_some()
-        || truthy(&row.safe_input_label).is_some()
+    truthy(row.tool_call_id.as_deref()).is_some()
+        || truthy(row.safe_input_label.as_deref()).is_some()
         || row
             .safe_detail_rows
             .as_ref()

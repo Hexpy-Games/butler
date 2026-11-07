@@ -1,15 +1,10 @@
 //! Butler DS tokens (packages/butler-app/client/ui/src/libs/design-system/tokens.css), light
 //! (`:root`/.theme-light) and dark (.theme-dark), over the native window material.
-use butler_ds::tokens::{Color, FontStack, Length, Shadow, TokenContext};
+use butler_ds::tokens::{Color, FontStack, TokenContext};
 use butler_ds::ui::convert;
-use gpui::{BoxShadow, Hsla, Rgba};
+use gpui::Hsla;
 
 use crate::ui::i18n::Strings;
-
-pub(crate) fn rgba(red: u8, green: u8, blue: u8, opacity: f32) -> Hsla {
-    let unit = |v: u8| f32::from(v) / 255.;
-    gpui::rgb_to_hsla(Rgba::new(unit(red), unit(green), unit(blue), opacity))
-}
 
 pub(crate) fn alpha(c: Hsla, a: f32) -> Hsla {
     Hsla {
@@ -27,20 +22,6 @@ pub(crate) fn code_font(installed: &[String]) -> gpui::Font {
     butler_ds::ui::fonts::code_font(&TokenContext::DEFAULT, installed, FONT_BODY)
 }
 
-/// Butler type roles (px size, px line height), from --typo-*.
-pub(crate) mod typo {
-    use super::{Length, TokenContext};
-    const T: TokenContext = TokenContext::DEFAULT;
-    pub(crate) const LABEL: (f32, f32) = (
-        T.len(Length::TypoLabelSize),
-        T.len(Length::TypoLabelLineHeight),
-    );
-    pub(crate) const CAPTION: (f32, f32) = (
-        T.len(Length::TypoCaptionSize),
-        T.len(Length::TypoCaptionLineHeight),
-    );
-}
-
 #[derive(Clone, Copy)]
 pub(crate) enum Platform {
     Mac,
@@ -56,36 +37,6 @@ impl Platform {
             _ => Self::Linux,
         }
     }
-
-    fn sidebar(self) -> (Color, Color, Color, Color, Color) {
-        // AdaptiveShellCards.module.css:11 uses the platform-mapped sidebar-bg.
-        match self {
-            // AdaptiveShell.module.css:52: macOS material, row fills and sidebar text.
-            Self::Mac => (
-                Color::MacSidebarBg,
-                Color::MacSidebarTextSecondary,
-                Color::MacSidebarTextTertiary,
-                Color::MacSidebarHoverBg,
-                Color::MacSidebarSelectedBg,
-            ),
-            // AdaptiveShell.module.css:66: Windows material, row fills and sidebar text.
-            Self::Windows => (
-                Color::WindowsSidebarBg,
-                Color::WindowsSidebarTextSecondary,
-                Color::WindowsSidebarTextTertiary,
-                Color::WindowsSidebarHoverBg,
-                Color::WindowsSidebarSelectedBg,
-            ),
-            // AdaptiveShell.module.css:32: Linux keeps the base sidebar tokens.
-            Self::Linux => (
-                Color::SidebarBg,
-                Color::SidebarTextSecondary,
-                Color::SidebarTextTertiary,
-                Color::SidebarHoverBg,
-                Color::SidebarSelectedBg,
-            ),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -97,30 +48,8 @@ pub(crate) struct Theme {
     pub(crate) strings: &'static Strings,
     /// --text-primary.
     pub(crate) text: Hsla,
-    /// --text-secondary (workspace).
-    pub(crate) text2: Hsla,
-    /// --sidebar-text-secondary, mapped by platform.
-    pub(crate) sidebar_text2: Hsla,
-    /// --sidebar-text-tertiary, mapped by platform.
-    pub(crate) sidebar_text3: Hsla,
     /// --placeholder.
     pub(crate) placeholder: Hsla,
-    /// --color-text-disabled: disabled controls change colour, not opacity.
-    pub(crate) text_disabled: Hsla,
-    /// --selection.
-    pub(crate) selection: Hsla,
-    /// Platform --sidebar-hover-bg, falling back to --selection at 60%.
-    pub(crate) nav_hover: Hsla,
-    /// Platform --sidebar-selected-bg, falling back to --selection at 75%.
-    pub(crate) nav_active: Hsla,
-    /// --line.
-    pub(crate) line: Hsla,
-    /// --surface.
-    pub(crate) surface: Hsla,
-    /// --surface-raised.
-    pub(crate) surface_raised: Hsla,
-    /// --composer-glass-shadow.
-    pub(crate) glass_shadow: BoxShadow,
     /// --accent.
     pub(crate) accent: Hsla,
 }
@@ -129,20 +58,7 @@ fn color(context: &TokenContext, token: Color) -> Hsla {
     convert::hsla(context.color(token))
 }
 
-fn shadow(context: &TokenContext) -> BoxShadow {
-    convert::box_shadows(context.shadow(Shadow::ComposerGlassShadow), context).remove(0)
-}
-
 impl Theme {
-    /// AdaptiveShell.module.css:120 and AdaptiveShellCards.module.css:89:
-    /// inherited text aliases also reach shared controls in the shell scope.
-    pub(crate) fn sidebar_scope(&self) -> Self {
-        Self {
-            text2: self.sidebar_text2,
-            ..self.clone()
-        }
-    }
-
     pub(crate) fn new(
         dark: bool,
         platform: Platform,
@@ -154,28 +70,13 @@ impl Theme {
             ..TokenContext::DEFAULT
         };
         let c = |token| color(&context, token);
-        let (_, secondary, tertiary, hover, selected) = platform.sidebar();
-        let selection = c(Color::Selection);
-        // AdaptiveShell.module.css:116-131: sidebar text aliases and optional row fills.
-        let row_fill = |token, fallback| context.try_color(token).map_or(fallback, |_| c(token));
         Self {
             dark,
             platform,
             code_font,
             strings,
             text: c(Color::TextPrimary),
-            text2: c(Color::TextSecondary),
-            sidebar_text2: c(secondary),
-            sidebar_text3: c(tertiary),
             placeholder: c(Color::Placeholder),
-            text_disabled: c(Color::ColorTextDisabled),
-            selection,
-            nav_hover: row_fill(hover, alpha(selection, 0.60)),
-            nav_active: row_fill(selected, alpha(selection, 0.75)),
-            line: c(Color::Line),
-            surface: c(Color::Surface),
-            surface_raised: c(Color::SurfaceRaised),
-            glass_shadow: shadow(&context),
             accent: c(Color::Accent),
         }
     }

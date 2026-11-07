@@ -108,7 +108,8 @@ fn patch_task_graph(
 ) -> Option<TaskGraphSnapshotWire> {
     if change.removed
         || change.refetch
-        || change.previous_graph_revision.as_deref() != Some(current.summary.graph_revision.as_str())
+        || change.previous_graph_revision.as_deref()
+            != Some(current.summary.graph_revision.as_str())
     {
         return None;
     }
@@ -239,8 +240,9 @@ impl TaskGraphs {
             self.bump(key(session, id));
         }
         let view = self.view_mut(session);
-        view.graphs
-            .retain(|g| !start.known.contains(&g.summary.graph_id) || present.contains(&g.summary.graph_id));
+        view.graphs.retain(|g| {
+            !start.known.contains(&g.summary.graph_id) || present.contains(&g.summary.graph_id)
+        });
         let stale = summaries
             .iter()
             .filter(|summary| {
@@ -362,7 +364,12 @@ impl TaskGraphs {
     /// `receiveTaskGraphEvent`
     pub(crate) fn receive_event(&mut self, kind: &str, payload: &Value) -> Vec<TaskGraphAction> {
         if kind == "stream.reconcile_required" {
-            return self.viewers.keys().cloned().map(TaskGraphAction::Load).collect();
+            return self
+                .viewers
+                .keys()
+                .cloned()
+                .map(TaskGraphAction::Load)
+                .collect();
         }
         if kind != "work_model.changed" {
             return Vec::new();
@@ -382,11 +389,11 @@ impl TaskGraphs {
             self.remove_graph(&session, &change.plan_id);
             return Vec::new();
         }
-        let Some(current) = self
-            .views
-            .get(&session)
-            .and_then(|view| view.graphs.iter().find(|g| g.summary.graph_id == change.plan_id))
-        else {
+        let Some(current) = self.views.get(&session).and_then(|view| {
+            view.graphs
+                .iter()
+                .find(|g| g.summary.graph_id == change.plan_id)
+        }) else {
             return self.load_after_pending(&session);
         };
         if current.summary.graph_revision == change.graph_revision {

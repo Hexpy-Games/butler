@@ -6,8 +6,8 @@ use butler_ds::ui::dialog::{Dialog, DialogContent, DialogFooter, DialogHeader, D
 use butler_ds::ui::text::{self, Textarea};
 use butler_ds::ui::typo::{Tone, Typo, Wrap};
 use gpui::{
-    AnyElement, App, Entity, IntoElement as _, ParentElement as _,
-    SharedString, Styled as _, Window, div,
+    AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    Window, div,
 };
 
 use super::request::Line;
@@ -44,7 +44,11 @@ fn action(title: &str, details: &[Line]) -> AnyElement {
         .flex()
         .flex_col()
         .min_w_0()
-        .child(Typo::label(approval_line(title)).wrap(Wrap::Anywhere).literal())
+        .child(
+            Typo::label(approval_line(title))
+                .wrap(Wrap::Anywhere)
+                .literal(),
+        )
         .children(lines)
         .into_any_element()
 }

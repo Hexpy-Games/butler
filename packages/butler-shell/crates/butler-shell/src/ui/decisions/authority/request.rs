@@ -27,7 +27,7 @@ pub(super) enum ActionKind {
 }
 
 impl ActionKind {
-    fn parse(kind: &str) -> Self {
+    pub(super) fn parse(kind: &str) -> Self {
         match kind {
             "generate_image" => Self::GenerateImage,
             "edit_image" => Self::EditImage,
@@ -51,7 +51,7 @@ impl ActionKind {
         matches!(kind, "run_command" | "network_command")
     }
 
-    fn is_command_kind(self) -> bool {
+    pub(super) fn is_command_kind(self) -> bool {
         matches!(self, Self::RunCommand | Self::NetworkCommand)
     }
 }
@@ -155,8 +155,10 @@ pub(super) struct View {
     pub(super) action_kind: ActionKind,
 }
 
+mod paths;
 mod present;
-pub(super) use present::{is_handoff, view};
+use paths::{is_absolute_path, targets};
+pub(super) use present::{action_view, is_handoff, view};
 
 const MAX_EXAMPLES: usize = 3;
 const DETAIL_TARGET_KINDS: [&str; 5] = ["connector", "schedule", "other", "outside", "file"];
@@ -206,7 +208,7 @@ fn text(value: &Value, key: &str) -> Option<String> {
 
 /// `normalizeApprovalSummary`: malformed targets and examples are dropped; a missing kind or an
 /// invalid count drops the whole summary.
-fn approval(value: &Value) -> Option<Approval> {
+pub(super) fn approval(value: &Value) -> Option<Approval> {
     if !value.is_object() {
         return None;
     }
@@ -329,7 +331,11 @@ fn browser_steps(value: Option<&Value>) -> Option<Vec<BrowserStep>> {
                     name: string(step, "name")?,
                     frame: string(step, "frame")?,
                     value_preview: string(step, "value_preview"),
-                    addons: addons.iter().filter_map(Value::as_str).map(str::to_owned).collect(),
+                    addons: addons
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect(),
                 })
             })
             .collect(),
@@ -339,8 +345,12 @@ fn browser_steps(value: Option<&Value>) -> Option<Vec<BrowserStep>> {
 fn schedule(value: Option<&Value>) -> Option<Schedule> {
     let value = value.filter(|v| v.is_object())?;
     let title = string(value, "title")?;
-    let schedule_type = string(value, "schedule_type")
-        .filter(|t| matches!(t.as_str(), "once" | "interval" | "daily" | "weekdays" | "update"))?;
+    let schedule_type = string(value, "schedule_type").filter(|t| {
+        matches!(
+            t.as_str(),
+            "once" | "interval" | "daily" | "weekdays" | "update"
+        )
+    })?;
     let flag = |key: &str| {
         value
             .get(key)
@@ -354,101 +364,20 @@ fn schedule(value: Option<&Value>) -> Option<Schedule> {
         time: text(value, "time"),
         run_at: text(value, "run_at"),
         start_at: text(value, "start_at"),
-        interval_seconds: value
-            .get("interval_seconds")
-            .and_then(|n| n.as_i64().or_else(|| n.as_f64().and_then(|f| format!("{}", f.trunc()).parse().ok()))),
+        interval_seconds: value.get("interval_seconds").and_then(|n| {
+            n.as_i64().or_else(|| {
+                n.as_f64()
+                    .and_then(|f| format!("{}", f.trunc()).parse().ok())
+            })
+        }),
         access_mode: string(value, "access_mode").filter(|m| {
-            matches!(m.as_str(), "auto" | "read_only" | "ask_first" | "ask_except_reads" | "full_access")
+            matches!(
+                m.as_str(),
+                "auto" | "read_only" | "ask_first" | "ask_except_reads" | "full_access"
+            )
         }),
         kind: schedule_type,
     })
-}
-
-fn is_absolute_path(path: &str) -> bool {
-    let path = path.trim();
-    let bytes = path.as_bytes();
-    let separator = |b: u8| b == b'/' || b == b'\\';
-    path.starts_with('/')
-        || path.starts_with("\\\\")
-        || (bytes.first() == Some(&b'~') && bytes.get(1).is_none_or(|b| separator(*b)))
-        || (bytes.len() >= 3
-            && bytes[0].is_ascii_alphabetic()
-            && bytes[1] == b':'
-            && separator(bytes[2]))
-}
-
-/// Trailing separators dropped, keeping at least one character.
-fn without_trailing_separators(path: &str) -> String {
-    let trimmed = path.trim_end_matches(['/', '\\']);
-    if trimmed.is_empty() {
-        path.chars().take(1).collect()
-    } else {
-        trimmed.to_owned()
-    }
-}
-
-/// `path` inside `root`, relative to it; `None` when it lies elsewhere.
-fn within(path: &str, root: Option<&str>) -> Option<String> {
-    let root = root.filter(|r| !r.is_empty())?;
-    let rest = path.strip_prefix(root)?;
-    if !rest.is_empty() && !rest.starts_with(['/', '\\']) {
-        return None;
-    }
-    if rest.split(['/', '\\']).any(|part| part == "..") {
-        return None;
-    }
-    Some(rest.trim_start_matches(['/', '\\']).to_owned())
-}
-
-/// `approvalTargetsFromTransport`: project-relative paths inside the root, exact paths elsewhere.
-fn targets(value: Option<&Value>) -> (Vec<Target>, impl Fn(&str) -> String + use<>) {
-    let raw: Vec<(String, String)> = value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|target| {
-            Some((
-                target.get("kind")?.as_str()?.to_owned(),
-                target.get("path")?.as_str()?.trim().to_owned(),
-            ))
-        })
-        .collect();
-    let root = raw
-        .iter()
-        .find(|(kind, path)| kind == "folder" && is_absolute_path(path))
-        .map(|(_, path)| without_trailing_separators(path));
-    let relative = move |path: &str| {
-        let trimmed = path.trim();
-        if !is_absolute_path(trimmed) {
-            return if trimmed == "." {
-                String::new()
-            } else {
-                trimmed
-                    .strip_prefix("./")
-                    .or_else(|| trimmed.strip_prefix(".\\"))
-                    .unwrap_or(trimmed)
-                    .to_owned()
-            };
-        }
-        within(&without_trailing_separators(trimmed), root.as_deref())
-            .unwrap_or_else(|| trimmed.to_owned())
-    };
-    let targets = raw
-        .iter()
-        .map(|(kind, path)| {
-            if kind != "folder" {
-                return Target { kind: kind.clone(), path: relative(path), label: None };
-            }
-            let label = without_trailing_separators(path);
-            let label = if label == "." { String::new() } else { label };
-            Target {
-                kind: kind.clone(),
-                path: String::new(),
-                label: (!label.is_empty()).then_some(label),
-            }
-        })
-        .collect();
-    (targets, relative)
 }
 
 /// The workspace's label: the folder's first, else another target's.

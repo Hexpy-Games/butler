@@ -15,15 +15,15 @@ use gpui::{App, Context, IntoElement, Render, Window, div};
 use crate::ui::source::wire::{AppEventEnvelope, SessionView};
 
 pub(crate) use sections::{SessionSectionsModel, session_sections_model};
-pub(crate) use session_misc::{SessionActionHandler, SessionInfoActionsProps, session_info_actions};
+pub(crate) use session_misc::{
+    SessionActionHandler, SessionInfoActionsProps, session_info_actions,
+};
 pub(crate) use tasks::{on_open_session_observer, tasks_panel_in_dialog};
 
 /// What every inspector unit reads while one session renders.
 #[derive(Clone)]
 pub(crate) struct InspectorCtx<'a> {
     pub(crate) view: &'a SessionView,
-    /// The same view as a shared handle, for state kept between frames.
-    pub(crate) shared: Rc<SessionView>,
     /// Docked on the margin or floating on glass (the aside decides by width).
     pub(crate) layout: AsideLayout,
 }
@@ -67,7 +67,6 @@ impl Render for InspectorPane {
         };
         let ctx = InspectorCtx {
             view: &view,
-            shared: view.clone(),
             layout: self.layout.get(),
         };
         sections::session_sections(&ctx, &model, window, cx)

@@ -22,7 +22,8 @@ use super::answers::answer_blocks;
 use super::files::message_files;
 use super::message_markdown::message_markdown_in;
 use crate::ui::decisions::{
-    DecisionCtx, canon_proposal_cards, initiated_panels, plan_document_card,
+    DecisionCtx, canon_proposal_cards, initiated_approval, initiated_approval_line,
+    initiated_panels, plan_document_card,
 };
 use crate::ui::i18n::{AssistantStrings, assistant};
 use crate::ui::source::wire::{InitiatedOriginState, MessageRecord, MessageRecordRole};
@@ -162,7 +163,18 @@ fn bubble_body(
     window: &mut Window,
     cx: &mut App,
 ) {
-    if failure {
+    if let Some(origin) = msg
+        .initiated
+        .as_ref()
+        .filter(|origin| origin.kind == "approval_needed")
+    {
+        let text = origin
+            .approval
+            .as_ref()
+            .and_then(|raw| initiated_approval(raw, cx));
+        let line = initiated_approval_line(origin, text, cx);
+        parts.extend(line.map(|line| MessageBubble::new().child(line).into_any_element()));
+    } else if failure {
         parts.push(failure::failure_notice(msg, t, cx));
     } else if !msg.text.trim().is_empty() || initiated_kind(msg) == Some("work_failed") {
         parts.push(

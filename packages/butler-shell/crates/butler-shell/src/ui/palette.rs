@@ -15,9 +15,7 @@ use gpui::{
     Task, WeakEntity, Window,
 };
 
-use self::labels::{
-    LOG_TRACE_COMMAND_ID, kind_key, local_results, result_subtitle, result_title,
-};
+use self::labels::{LOG_TRACE_COMMAND_ID, kind_key, local_results, result_subtitle, result_title};
 use crate::ui::chat::AssistantHooks;
 use crate::ui::i18n::palette::words;
 use crate::ui::source::agent::Jobs;
@@ -37,10 +35,10 @@ pub(crate) enum PaletteEvent {
     OpenSession(String),
     /// `project:<id>` -> `openNewProjectChat`.
     OpenProjectChat(String),
-    /// `automation:<id>` -> the schedule's detail view.
-    OpenSchedule(String),
-    /// `settings:<section>` -> `openSettings`.
-    OpenSettings(String),
+    /// `automation:<id>` -> the schedule's detail view (P3 carries the id).
+    OpenSchedule,
+    /// `settings:<section>` -> `openSettings` (P3 carries the section).
+    OpenSettings,
     /// A space result: `useOrganization.reveal("g:<id>")`.
     RevealGroup(String),
     /// `openLatestLogTrace`: the open conversation's latest turn, else the log list.
@@ -216,8 +214,8 @@ fn navigation(route: &str) -> Option<PaletteEvent> {
     match prefix {
         "session" => Some(PaletteEvent::OpenSession(rest)),
         "project" => Some(PaletteEvent::OpenProjectChat(rest)),
-        "automation" => Some(PaletteEvent::OpenSchedule(rest)),
-        "settings" => Some(PaletteEvent::OpenSettings(rest)),
+        "automation" => Some(PaletteEvent::OpenSchedule),
+        "settings" => Some(PaletteEvent::OpenSettings),
         _ => None,
     }
 }

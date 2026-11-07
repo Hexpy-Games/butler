@@ -51,17 +51,25 @@ fn type_text(h: &mut Harness, text: &str) -> anyhow::Result<()> {
 
 /// Whether the shown view carries an authority request.
 fn has_request(s: &ui::shell::Shell) -> bool {
-    s.store
-        .shown_view()
-        .is_some_and(|view| view.authority_requests.as_ref().is_some_and(|r| !r.is_empty()))
+    s.store.shown_view().is_some_and(|view| {
+        view.authority_requests
+            .as_ref()
+            .is_some_and(|r| !r.is_empty())
+    })
 }
 
 /// Clicks the allow-once or deny control and waits until the request is gone (and, on deny,
 /// the turn stopped).
 fn decide(h: &mut Harness, allow: bool) -> anyhow::Result<()> {
-    let anchor = if allow { "authority-allow-always" } else { "authority-deny" };
+    let anchor = if allow {
+        "authority-allow-always"
+    } else {
+        "authority-deny"
+    };
     super::frame::command(h, "click", anchor)?;
-    wait(h, |s, _| !has_request(s) && (allow || s.store.running().is_none()))
+    wait(h, |s, _| {
+        !has_request(s) && (allow || s.store.running().is_none())
+    })
 }
 
 fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
@@ -85,13 +93,9 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "stable" => stable(h),
         "attached" => attached(h),
         "controls" => wait(h, |s, app| {
-            s.composer
-                .read(app)
-                .context
-                .as_ref()
-                .is_some_and(|context| {
-                    (context.state == ui::source::model::Controls::Loaded) == (arg == "loaded")
-                })
+            (s.composer.read(app).controls.load_state
+                == ui::composer::state::ControlsLoadState::Ready)
+                == (arg == "loaded")
         }),
         "cursor" => {
             let cursor: u64 = arg.parse()?;
@@ -222,10 +226,10 @@ fn exact(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             let approval = s
                 .store
                 .shown_view()
-                .and_then(|view| view.authority_requests.as_ref())
-                .and_then(|requests| requests.first())
-                .map(|request| &request["approval"]);
+                .and_then(|view| view.authority_requests?.into_iter().next())
+                .map(|request| request["approval"].clone());
             approval
+                .as_ref()
                 .and_then(|a| {
                     a["operation"]["command"]
                         .as_str()

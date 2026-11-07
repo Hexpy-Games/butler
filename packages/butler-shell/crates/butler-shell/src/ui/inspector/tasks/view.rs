@@ -8,7 +8,9 @@ use butler_ds::ui::blocks::task_graph_canvas::{
 use butler_ds::ui::blocks::task_graph_card::{TaskGraphCard, TaskGraphStatus};
 use butler_ds::ui::blocks::task_graph_section::TaskGraphSection;
 use butler_ds::ui::context::Lang;
-use gpui::{AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window};
+use gpui::{
+    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window,
+};
 
 use super::detail::task_node_detail;
 use super::present::{
@@ -41,7 +43,10 @@ fn build_cards(graph: &TaskGraphSnapshotWire, lang: Lang, now: i64) -> Cards {
             .nodes
             .iter()
             .map(|n| {
-                let meta = [Some(graph_assignee(lang, words, n)), n.model_display_name.clone()];
+                let meta = [
+                    Some(graph_assignee(lang, words, n)),
+                    n.model_display_name.clone(),
+                ];
                 let card = Card {
                     title: n.title.clone().into(),
                     status: graph_task_status(n),
@@ -106,8 +111,16 @@ pub(super) fn task_graph_view(
     let lang = actions.lang;
     let words = copy::words(lang);
     let graph_id = SharedString::from(graph.summary.graph_id.clone());
-    let running = graph.nodes.iter().any(|n| n.status == TaskGraphStatusWire::Running);
-    let now = task_graph_clock(ElementId::from(format!("{graph_id}-clock")), running, window, cx);
+    let running = graph
+        .nodes
+        .iter()
+        .any(|n| n.status == TaskGraphStatusWire::Running);
+    let now = task_graph_clock(
+        ElementId::from(format!("{graph_id}-clock")),
+        running,
+        window,
+        cx,
+    );
     let nodes: Vec<TaskGraphNode> = graph
         .nodes
         .iter()
@@ -125,7 +138,7 @@ pub(super) fn task_graph_view(
         Rc::new(move |id: &SharedString, _: &mut Window, cx: &mut App| {
             actions.select(id, cx);
             if let Some(session) = cards.get(id).and_then(|card| card.session.as_deref()) {
-                actions.open_session(session, cx);
+                super::Actions::open_session(session, cx);
             }
         })
     };
@@ -151,12 +164,16 @@ pub(super) fn task_graph_view(
         let (actions, id) = (actions.clone(), graph.summary.graph_id.clone());
         move |_: &mut Window, cx: &mut App| actions.toggle(&id, cx)
     };
-    TaskGraphSection::new(graph_id, graph.summary.title.clone(), graph_section_status(graph))
-        .meta(graph_meta(lang, words, graph))
-        .collapsible(!single)
-        .open(open)
-        .on_toggle(toggle)
-        .child(canvas)
-        .children(detail)
-        .into_any_element()
+    TaskGraphSection::new(
+        graph_id,
+        graph.summary.title.clone(),
+        graph_section_status(graph),
+    )
+    .meta(graph_meta(lang, words, graph))
+    .collapsible(!single)
+    .open(open)
+    .on_toggle(toggle)
+    .child(canvas)
+    .children(detail)
+    .into_any_element()
 }

@@ -5,12 +5,13 @@ mod jobs;
 mod live;
 mod refresh;
 mod session_view;
+mod sidebar;
 mod watch;
 
 use super::wire;
 use super::{
-    AuthorityCard, ChatPage, ChatRef, EventCursor, Fetch, LiveEvent, PageCursor, SentTurn,
-    SessionId, Source, SourceError, TurnId,
+    AuthorityCard, ChatPage, ChatRef, EventCursor, Fetch, LiveEvent, SentTurn, SessionId, Source,
+    SourceError, TurnId,
 };
 use butler_shell_client::{PageRequest, ShellClient};
 use futures::{
@@ -122,6 +123,46 @@ impl Agent {
 }
 
 impl Source for Agent {
+    fn canon_overview(&self, project: &str) -> Fetch<wire::CanonOverview> {
+        let (client, project) = (self.client.clone(), project.to_owned());
+        self.fetch(async move { convert::decode(&client.get_canon(&project).await?) })
+    }
+    fn canon_plan(&self, id: &str) -> Fetch<wire::CanonPlan> {
+        let (client, id) = (self.client.clone(), id.to_owned());
+        self.fetch(async move { convert::decode(&client.get_canon_plan(&id).await?) })
+    }
+
+    fn sidebar_updates(&self) -> Fetch<wire::SidebarUpdateStatus> {
+        let client = self.client.clone();
+        self.fetch(async move { convert::decode(&client.get_updates().await?) })
+    }
+
+    fn canon_sidebar(&self, project: &str) -> Fetch<wire::CanonSidebar> {
+        let (client, project) = (self.client.clone(), project.to_owned());
+        self.fetch(async move { convert::decode(&client.get_canon_sidebar(&project).await?) })
+    }
+    fn create_sidebar_chat(&self, body: serde_json::Value) -> Fetch<ChatRef> {
+        let client = self.client.clone();
+        self.fetch(async move {
+            let raw = client.create_session_with(&body).await?;
+            let raw = convert::decode::<wire::CreatedSessionProjection>(&raw)?;
+            convert::identity(&raw.session)
+        })
+    }
+
+    fn navigation(&self) -> Fetch<wire::NavigationView> {
+        self.sidebar_navigation()
+    }
+    fn work_status(&self) -> Fetch<wire::WorkStatusView> {
+        self.sidebar_work_status()
+    }
+    fn sidebar_mutation(
+        &self,
+        command: super::sidebar::Mutation,
+    ) -> Fetch<wire::SidebarMutationResult> {
+        self.sidebar_mutate(command)
+    }
+
     fn summary(&self, session: &SessionId) -> Fetch<wire::SessionSummaryView> {
         self.frame_summary(session)
     }
@@ -131,19 +172,16 @@ impl Source for Agent {
     fn session_action(&self, session: &SessionId, action: super::SessionAction) -> Fetch<()> {
         self.frame_action(session, action)
     }
-    fn chats(&self, cursor: Option<PageCursor>) -> Fetch<ChatPage> {
+    fn chats(&self) -> Fetch<ChatPage> {
         let client = self.client.clone();
         self.fetch(async move {
-            let page = client
-                .list_sessions(PageRequest::new(100, cursor.map(|c| c.0))?)
-                .await?;
+            let page = client.list_sessions(PageRequest::new(100, None)?).await?;
             Ok(ChatPage {
                 chats: page
                     .items
                     .iter()
                     .map(convert::chat)
                     .collect::<Result<_, _>>()?,
-                next: page.next_cursor.map(PageCursor),
                 events: EventCursor(page.event_cursor),
             })
         })
@@ -163,7 +201,11 @@ impl Source for Agent {
 
     fn authority(&self, session: &SessionId) -> Fetch<Vec<AuthorityCard>> {
         let (client, session) = (self.client.clone(), session.0.to_string());
-        self.fetch(async move { Ok(convert::authority(client.authority_requests(&session).await?)) })
+        self.fetch(async move {
+            Ok(convert::authority(
+                client.authority_requests(&session).await?,
+            ))
+        })
     }
     fn live(&self, after: EventCursor) -> futures::stream::LocalBoxStream<'static, LiveEvent> {
         live::subscribe(self, after)
@@ -184,8 +226,8 @@ impl Source for Agent {
 
 /// The turn a `POST /messages` response started.
 pub(crate) fn sent_turn(raw: &serde_json::Value) -> Result<SentTurn, SourceError> {
-    let raw = convert::decode::<wire::SentTurnProjection>(raw)
-        .map_err(|error| convert::error(&error))?;
+    let raw =
+        convert::decode::<wire::SentTurnProjection>(raw).map_err(|error| convert::error(&error))?;
     let id = raw
         .turn_id
         .or_else(|| raw.turn.as_ref().and_then(|t| t.turn_id.clone()))

@@ -6,17 +6,15 @@ use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
 use butler_ds::ui::toast::{self, Toast};
 use butler_ds::ui::tooltip::Tooltip;
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{
-    AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Window,
-};
+use gpui::{AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Window};
 use serde_json::{Value, json};
 
 use crate::ui::decisions::DecisionCtx;
 use crate::ui::i18n::canon_proposal::CanonProposalCopy;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{
-    CanonProposalAnchor, CanonProposalNavigation, CanonProposalProject,
-    CanonProposalProjectOption, CanonProposalResolved, CanonProposalState, CanonProposalView,
+    CanonProposalAnchor, CanonProposalNavigation, CanonProposalProject, CanonProposalProjectOption,
+    CanonProposalResolved, CanonProposalState, CanonProposalView,
 };
 
 mod changes;
@@ -111,7 +109,10 @@ fn refresh(state: &Entity<ProposalState>, id: &str, cx: &mut App) {
 
 /// `navigation.projects` of the store: the projects the card can target.
 fn load_projects(state: &Entity<ProposalState>, cx: &mut App) {
-    let fetch = Jobs::run(cx, |client| async move { client.list_navigation().await.ok() });
+    let fetch = Jobs::run(
+        cx,
+        |client| async move { client.list_navigation().await.ok() },
+    );
     let state = state.clone();
     cx.spawn(async move |cx| {
         let Some(navigation) = fetch
@@ -152,12 +153,20 @@ fn proposal_card(
         (CanonProposalProject::Existing { id: Some(id), .. }, Some(open)) if id == open
     );
     let lang = Ds::get(cx).lang();
-    let epics = p.epics.iter().enumerate().map(|(i, epic)| epic_block(&p.proposal_id, i, epic));
+    let epics = p
+        .epics
+        .iter()
+        .enumerate()
+        .map(|(i, epic)| epic_block(&p.proposal_id, i, epic));
     let head = Stack::new()
         .gap(Space::Md)
         .child(
-            Typo::caption(if creates && !deletes { copy.draft } else { copy.changes })
-                .tone(Tone::Tertiary),
+            Typo::caption(if creates && !deletes {
+                copy.draft
+            } else {
+                copy.changes
+            })
+            .tone(Tone::Tertiary),
         )
         .child(Typo::caption(if creates {
             CanonProposalCopy::target(
@@ -185,10 +194,19 @@ fn proposal_card(
         state,
         copy,
     );
-    Card::new(SharedString::from(format!("canon-proposal-{}", p.proposal_id)))
-        .radius(CardRadius::Lg)
-        .child(Stack::new().gap(Space::Lg).child(head).child(project).child(actions))
-        .into_any_element()
+    Card::new(SharedString::from(format!(
+        "canon-proposal-{}",
+        p.proposal_id
+    )))
+    .radius(CardRadius::Lg)
+    .child(
+        Stack::new()
+            .gap(Space::Lg)
+            .child(head)
+            .child(project)
+            .child(actions),
+    )
+    .into_any_element()
 }
 
 /// The name shown for the fixed project: the chosen one, else the proposal's own.
@@ -221,7 +239,11 @@ fn resolved_card(
 ) -> AnyElement {
     let text = match p.state {
         CanonProposalState::Applied if deletes => {
-            if mixed_delete { copy.changed } else { copy.deleted }
+            if mixed_delete {
+                copy.changed
+            } else {
+                copy.deleted
+            }
         }
         CanonProposalState::Applied => match p.resolved_by.as_deref() {
             None => copy.record,
@@ -232,16 +254,19 @@ fn resolved_card(
         CanonProposalState::Superseded => copy.superseded,
         _ => copy.stale,
     };
-    Card::new(SharedString::from(format!("canon-proposal-{}", p.proposal_id)))
-        .padding(CardPadding::Sm)
-        .child(
-            Stack::row()
-                .cross(Cross::Center)
-                .justify(Justify::Between)
-                .gap(Space::Sm)
-                .child(Typo::caption(text)),
-        )
-        .into_any_element()
+    Card::new(SharedString::from(format!(
+        "canon-proposal-{}",
+        p.proposal_id
+    )))
+    .padding(CardPadding::Sm)
+    .child(
+        Stack::row()
+            .cross(Cross::Center)
+            .justify(Justify::Between)
+            .gap(Space::Sm)
+            .child(Typo::caption(text)),
+    )
+    .into_any_element()
 }
 
 /// Cancel and the confirming button, whose label names what the proposal does.
@@ -274,7 +299,11 @@ fn actions_row(
         .on_click(on("declined"));
     let mut confirm = Button::new(SharedString::from(format!("{key}-confirm")))
         .size(Size::Sm)
-        .variant(if deletes { Variant::Destructive } else { Variant::Default })
+        .variant(if deletes {
+            Variant::Destructive
+        } else {
+            Variant::Default
+        })
         .text(label)
         .on_click(on("accepted"));
     if busy {

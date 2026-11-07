@@ -128,7 +128,10 @@ impl CanonOrder {
             Rc::new(if ko { ko_text } else { en_text }) as Rc<dyn Fn(&str) -> String>
         };
         StepSortableLabels {
-            grip: named(|item| format!("‘{item}’ 옮기기"), |item| format!("Move {item}")),
+            grip: named(
+                |item| format!("‘{item}’ 옮기기"),
+                |item| format!("Move {item}"),
+            ),
             stack: Rc::new(move |front: &str, count: usize| {
                 if ko {
                     format!("{front} 외 {}건", count - 1)

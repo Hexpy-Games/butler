@@ -10,9 +10,7 @@ mod subtasks;
 
 use std::collections::HashSet;
 
-use butler_ds::ui::blocks::attachment_list::{
-    AttachmentItem, AttachmentList, TileLayout, Variant,
-};
+use butler_ds::ui::blocks::attachment_list::{AttachmentItem, AttachmentList, TileLayout, Variant};
 use butler_ds::ui::blocks::conversation_shell::AsideLayout;
 use butler_ds::ui::blocks::disclosure_row::{DisclosureRow, Surface};
 use butler_ds::ui::blocks::key_value_row::{KeyValueRow, ValueSize};
@@ -24,7 +22,9 @@ use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, 
 
 use super::InspectorCtx;
 use crate::ui::i18n::session_sections::SessionSections;
-use crate::ui::source::wire::{CanonQueueItemState, MessageRecordRole, SessionPendingAsks, SessionView, SubtaskState};
+use crate::ui::source::wire::{
+    CanonQueueItemState, MessageRecordRole, SessionPendingAsks, SessionView, SubtaskState,
+};
 
 /// What `useSessionSectionsModel` reads besides the view: the pending asks and the number of
 /// queue items not done (`notDone`). Data only; no section is built here.
@@ -36,7 +36,12 @@ struct Data {
 fn data(ctx: &InspectorCtx<'_>, window: &mut Window, cx: &mut App) -> Data {
     let view = ctx.view;
     let queue = super::order::queue::use_canon_queue(&view.session_id, window, cx);
-    let not_done = queue.view.iter().flat_map(|v| &v.chains).flat_map(|c| &c.steps).flat_map(|s| &s.items)
+    let not_done = queue
+        .view
+        .iter()
+        .flat_map(|v| &v.chains)
+        .flat_map(|c| &c.steps)
+        .flat_map(|s| &s.items)
         .filter(|item| item.state != CanonQueueItemState::Done)
         .count();
     Data {
@@ -65,16 +70,24 @@ pub(crate) fn session_sections_model(
     let data = data(ctx, window, cx);
     let view = ctx.view;
     let has_ids = data.asks.is_some()
-            || view.subtasks.as_ref().is_some_and(|s| !s.is_empty())
-            || data.not_done > 0
-            || environment_values(view).is_some()
-            || view.context.is_some()
-            || has_artifacts(view)
-            || has_attachments(view)
-            || !view.automations.is_empty();
+        || view.subtasks.as_ref().is_some_and(|s| !s.is_empty())
+        || data.not_done > 0
+        || environment_values(view).is_some()
+        || view.context.is_some()
+        || has_artifacts(view)
+        || has_attachments(view)
+        || !view.automations.is_empty();
     let indicator = data.asks.is_some()
-        || view.subtasks.iter().flatten().any(|s| s.state == SubtaskState::NeedsApproval);
-    SessionSectionsModel { data, has_ids, indicator }
+        || view
+            .subtasks
+            .iter()
+            .flatten()
+            .any(|s| s.state == SubtaskState::NeedsApproval);
+    SessionSectionsModel {
+        data,
+        has_ids,
+        indicator,
+    }
 }
 
 /// The session sections of the inspector.
@@ -92,7 +105,13 @@ pub(crate) fn session_sections(
 
     if let Some(page) = data.asks.as_ref() {
         let rows = asks::pending_ask_rows(&page.asks, cx);
-        sections.push(section("asks", layout, Some(copy.asks), Some(page.open_count), rows));
+        sections.push(section(
+            "asks",
+            layout,
+            Some(copy.asks),
+            Some(page.open_count),
+            rows,
+        ));
     }
     let subtasks = view.subtasks.as_deref().unwrap_or_default();
     if !subtasks.is_empty() {
@@ -108,7 +127,13 @@ pub(crate) fn session_sections(
     if data.not_done > 0
         && let Some(order) = super::order::step_order_section(ctx, window, cx)
     {
-        sections.push(section("order", layout, Some(copy.order), Some(data.not_done), vec![order]));
+        sections.push(section(
+            "order",
+            layout,
+            Some(copy.order),
+            Some(data.not_done),
+            vec![order],
+        ));
     }
     // The browser section wraps itself.
     sections.extend(super::session_misc::browser_section(ctx, window, cx));
@@ -129,7 +154,13 @@ pub(crate) fn session_sections(
     if !attachments.is_empty() {
         let count = i64::try_from(attachments.len()).ok();
         let tiles = attachment_tiles(&view.session_id, attachments);
-        sections.push(section("attachments", layout, Some(copy.attachments), count, vec![tiles]));
+        sections.push(section(
+            "attachments",
+            layout,
+            Some(copy.attachments),
+            count,
+            vec![tiles],
+        ));
     }
     if !view.automations.is_empty()
         && let Some(schedules) = super::artifacts::automation_targets_panel(ctx, true, window, cx)
@@ -148,7 +179,10 @@ fn section_list(layout: AsideLayout, sections: Vec<AnyElement>) -> AnyElement {
         }
         items.push(section);
     }
-    Stack::new().gap(Space::Md).children(items).into_any_element()
+    Stack::new()
+        .gap(Space::Md)
+        .children(items)
+        .into_any_element()
 }
 
 /// `SessionSection`: a card in the docked margin, a flat block on floating glass. Rows reach
@@ -178,7 +212,10 @@ fn section(
             .child(content)
             .into_any_element()
     } else {
-        Stack::new().gap(Space::Sm).child(content).into_any_element()
+        Stack::new()
+            .gap(Space::Sm)
+            .child(content)
+            .into_any_element()
     }
 }
 
@@ -193,9 +230,11 @@ fn section_header(title: &'static str, count: Option<i64>) -> AnyElement {
                 .tone(Tone::Secondary)
                 .weight(Weight::Medium),
         )
-        .children(
-            count.map(|count| Typo::caption(count.to_string()).tone(Tone::Secondary).tabular()),
-        )
+        .children(count.map(|count| {
+            Typo::caption(count.to_string())
+                .tone(Tone::Secondary)
+                .tabular()
+        }))
         .into_any_element()
 }
 
@@ -203,13 +242,18 @@ fn section_header(title: &'static str, count: Option<i64>) -> AnyElement {
 fn environment_values(view: &SessionView) -> Option<(Option<String>, Option<String>)> {
     let branch = view.branch.as_ref();
     let named = |text: &Option<String>| text.clone().filter(|text| !text.is_empty());
-    let folder = branch.and_then(|b| named(&b.workspace_path).or_else(|| named(&b.workspace_label)));
+    let folder =
+        branch.and_then(|b| named(&b.workspace_path).or_else(|| named(&b.workspace_label)));
     let name = branch.and_then(|b| named(&b.branch_name));
     (folder.is_some() || name.is_some()).then_some((folder, name))
 }
 
 /// The environment section: the working folder and the branch.
-fn environment(view: &SessionView, copy: &SessionSections, layout: AsideLayout) -> Option<AnyElement> {
+fn environment(
+    view: &SessionView,
+    copy: &SessionSections,
+    layout: AsideLayout,
+) -> Option<AnyElement> {
     let (folder, name) = environment_values(view)?;
     let rows = [(copy.folder, folder), (copy.branch, name)]
         .into_iter()
@@ -221,7 +265,13 @@ fn environment(view: &SessionView, copy: &SessionSections, layout: AsideLayout) 
             })
         })
         .collect();
-    Some(section("environment", layout, Some(copy.environment), None, rows))
+    Some(section(
+        "environment",
+        layout,
+        Some(copy.environment),
+        None,
+        rows,
+    ))
 }
 
 /// The context section: a plain disclosure row with the used share, opening the compact usage.
@@ -251,7 +301,10 @@ fn context_section(
 
 /// `hasArtifacts`: `sessionArtifacts` is empty unless some artifact was delivered.
 fn has_artifacts(view: &SessionView) -> bool {
-    let from_messages = view.messages.iter().flat_map(|m| m.artifacts.iter().flatten());
+    let from_messages = view
+        .messages
+        .iter()
+        .flat_map(|m| m.artifacts.iter().flatten());
     view.artifacts
         .iter()
         .chain(from_messages)
@@ -285,8 +338,11 @@ fn attachment_tiles(session_id: &str, files: Vec<(String, String)>) -> AnyElemen
         .into_iter()
         .map(|(id, name)| AttachmentItem::new(id, name))
         .collect();
-    AttachmentList::new(SharedString::from(format!("session-attachments-{session_id}")), items)
-        .variant(Variant::Tiles)
-        .tile_layout(TileLayout::Wrap)
-        .into_any_element()
+    AttachmentList::new(
+        SharedString::from(format!("session-attachments-{session_id}")),
+        items,
+    )
+    .variant(Variant::Tiles)
+    .tile_layout(TileLayout::Wrap)
+    .into_any_element()
 }

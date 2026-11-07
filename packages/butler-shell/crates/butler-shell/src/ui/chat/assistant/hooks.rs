@@ -27,12 +27,17 @@ pub(crate) fn trace_target(message: &MessageRecord) -> Option<TraceTarget> {
     })
 }
 
+/// A callback that takes an id.
+pub(crate) type OpenSession = Rc<dyn Fn(&str, &mut App)>;
+/// A callback that takes a trace target.
+pub(crate) type OpenTrace = Rc<dyn Fn(&TraceTarget, &mut App)>;
+
 #[derive(Clone, Default)]
 pub(crate) struct AssistantHooks {
     pub(crate) developer_mode: bool,
     /// Opens a session by id (after a branch is created, or for the branch source).
-    pub(crate) open_session: Option<Rc<dyn Fn(&str, &mut App)>>,
-    pub(crate) open_trace: Option<Rc<dyn Fn(&TraceTarget, &mut App)>>,
+    pub(crate) open_session: Option<OpenSession>,
+    pub(crate) open_trace: Option<OpenTrace>,
 }
 
 impl Global for AssistantHooks {}

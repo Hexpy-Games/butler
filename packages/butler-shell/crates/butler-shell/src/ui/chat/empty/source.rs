@@ -98,14 +98,7 @@ pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
     let project_name = project
         .as_ref()
         .and_then(|project| project.get("display_name")?.as_str().map(str::to_owned))
-        .or_else(|| {
-            briefing
-                .as_ref()?
-                .source
-                .as_ref()?
-                .project_name
-                .clone()
-        });
+        .or_else(|| briefing.as_ref()?.source.as_ref()?.project_name.clone());
     let own = project
         .as_ref()
         .and_then(|project| parse_source(project.get("wallpaper")?));
@@ -181,7 +174,12 @@ fn legacy_source(settings: &Value) -> WallpaperSource {
     let live = |module: &str| WallpaperSource::Live {
         module: module.to_owned().into(),
     };
-    let text = |key: &str| settings.get(key).and_then(Value::as_str).unwrap_or_default();
+    let text = |key: &str| {
+        settings
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+    };
     match (text("main_screen_theme"), text("main_screen_theme_preset")) {
         ("none", _) => WallpaperSource::None,
         ("silk" | "curtain", _) => live("butler.silk"),

@@ -1,28 +1,26 @@
 //! UI copy in Korean and English. Strings that exist in packages/butler-i18n (TypeScript, so
 //! not readable at build time) use the same key, named on each field with its catalog path
 //! and the same text; `shell.*` fields are new to this app. Product terms follow AGENTS.md.
-pub(crate) mod composer;
-pub(crate) mod media;
-mod messages;
-pub(crate) mod authority;
-pub(crate) mod task_graph;
 pub(crate) mod artifact_viewer;
+pub(crate) mod authority;
 pub(crate) mod browser_handoff;
 pub(crate) mod canon_order;
-pub(crate) mod initiated;
-pub(crate) mod new_chat;
-pub(crate) mod session_sections;
 pub(crate) mod canon_proposal;
+pub(crate) mod composer;
 pub(crate) mod file_viewer;
+pub(crate) mod initiated;
 pub(crate) mod inspector_artifacts;
+pub(crate) mod media;
+mod messages;
+pub(crate) mod new_chat;
 pub(crate) mod palette;
 pub(crate) mod plan_decision;
 pub(crate) mod question;
 pub(crate) mod session_info;
+pub(crate) mod session_sections;
+pub(crate) mod task_graph;
 
 pub(crate) use messages::{AssistantStrings, assistant, transcript, worked_duration};
-
-use crate::ui::source::Risk;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Locale {
@@ -72,42 +70,25 @@ pub(crate) struct Strings {
     pub(crate) general: &'static str,
     /// sidebar.settings
     pub(crate) settings: &'static str,
-    /// conversation.messageActions.showMore
+    /// common.more
     pub(crate) show_more: &'static str,
     /// composer.placeholder, composer.placeholderFollowUp
     pub(crate) placeholder: &'static str,
     pub(crate) placeholder_follow_up: &'static str,
     /// composer.messageComposer
     pub(crate) message_composer: &'static str,
-    /// composer.approval.categoryCommand, composer.approval.categoryEffect
-    pub(crate) category_command: &'static str,
-    pub(crate) category_effect: &'static str,
-    /// composer.approval.allowOnce, composer.approval.deny
-    pub(crate) allow_once: &'static str,
-    pub(crate) deny: &'static str,
-    /// composer.approval.modify, modifyPlaceholder, submitModify, decisionFailed
-    pub(crate) modify: &'static str,
-    pub(crate) modify_placeholder: &'static str,
-    pub(crate) submit_modify: &'static str,
-    pub(crate) decision_failed: &'static str,
     /// composer.sendNowFailed
     pub(crate) send_failed: &'static str,
     /// cancel
     pub(crate) cancel: &'static str,
-    /// interfaceTemplates.approvalRequest.risk.{low, medium, high}
-    risk: [&'static str; 3],
     /// shell.notRunning: the agent is not attached.
     pub(crate) update_required: &'static str,
     pub(crate) not_running: &'static str,
     /// shell.notYet: a control this build does not support yet.
     pub(crate) not_yet: &'static str,
-    /// shell.answerInApp: an authority request this build cannot decide.
-    pub(crate) answer_in_app: &'static str,
     /// shell.loadFailed, shell.stopFailed
     pub(crate) load_failed: &'static str,
     pub(crate) stop_failed: &'static str,
-    /// shell.question: a question card's kind label.
-    pub(crate) question: &'static str,
 }
 
 static KO: Strings = Strings {
@@ -128,24 +109,13 @@ static KO: Strings = Strings {
     placeholder: "버틀러에게 무엇이든 물어보세요",
     placeholder_follow_up: "후속 변경사항 요청",
     message_composer: "메시지 입력",
-    category_command: "명령",
-    category_effect: "작업 승인",
-    allow_once: "이번만 허용",
-    deny: "거부",
-    modify: "수정 또는 다른 방법 제안",
-    modify_placeholder: "대신 수행할 방법을 입력하세요",
-    submit_modify: "제안 제출",
-    decision_failed: "승인 상태를 확인하지 못했습니다",
     send_failed: "보내지 못했습니다",
     cancel: "취소",
-    risk: ["위험 낮음", "위험 보통", "위험 높음"],
     update_required: "버틀러 업데이트 필요",
     not_running: "버틀러가 실행 중이 아닙니다",
     not_yet: "준비 중",
-    answer_in_app: "버틀러 앱에서 답하세요",
     load_failed: "불러오지 못했습니다",
     stop_failed: "중지하지 못했습니다",
-    question: "질문",
 };
 
 static EN: Strings = Strings {
@@ -162,62 +132,20 @@ static EN: Strings = Strings {
     space: "Space",
     general: "Chats",
     settings: "Settings",
-    show_more: "Show more",
+    show_more: "More",
     placeholder: "Ask Butler anything",
     placeholder_follow_up: "Ask for follow-up changes",
     message_composer: "Message composer",
-    category_command: "Command",
-    category_effect: "Operation approval",
-    allow_once: "Allow once",
-    deny: "Deny",
-    modify: "Modify or suggest another approach",
-    modify_placeholder: "Describe the approach Butler should take instead",
-    submit_modify: "Submit suggestion",
-    decision_failed: "Couldn't confirm approval",
     send_failed: "Couldn't send",
     cancel: "Cancel",
-    risk: ["Low risk", "Medium risk", "High risk"],
     update_required: "Update Butler",
     not_running: "Butler isn't running",
     not_yet: "Coming soon",
-    answer_in_app: "Answer in the Butler app",
     load_failed: "Couldn't load",
     stop_failed: "Couldn't stop",
-    question: "Question",
 };
 
 impl Strings {
-    /// shell.controlLabel: effective controls from the agent, in the current locale.
-    pub(crate) fn control_label(&self, value: &str) -> gpui::SharedString {
-        let pair = match value {
-            "ask_first" => ("모두 확인", "Ask every time"), // permissions.askAlways
-            "ask_except_reads" => ("먼저 확인", "Ask first"), // permissions.askFirst
-            "full_access" => ("전체 권한", "Full access"),  // permissions.fullAccess
-            "auto" => ("알아서 진행", "Auto"),              // permissions.auto
-            "read_only" => ("읽기 전용", "Read only"),      // permissions.readOnly
-            "none" => ("없음", "None"),
-            "low" => ("낮음", "Low"),
-            "medium" => ("보통", "Medium"),
-            "high" => ("높음", "High"),
-            "xhigh" => ("매우 높음", "Extra high"),
-            "max" => ("최대", "Max"),
-            _ => ("—", "—"),
-        };
-        match self.locale {
-            Locale::Ko => pair.0,
-            Locale::En => pair.1,
-        }
-        .into()
-    }
-
-    pub(crate) fn risk(&self, risk: Risk) -> &'static str {
-        match risk {
-            Risk::Low => self.risk[0],
-            Risk::Medium => self.risk[1],
-            Risk::High => self.risk[2],
-        }
-    }
-
     /// interfaceTemplates.activityHistory
     pub(crate) fn activity_history(&self, live: bool, label: &str, count: usize) -> String {
         match self.locale {

@@ -1,86 +1,19 @@
 //! `ComposerAdjunctPanels` (`WorkProgressPanel`, `WorkerComposerPanel`).
+use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::todo_progress_panel::{TodoItem, TodoProgressPanel, TodoState};
 use butler_ds::ui::blocks::worker_activity::{WorkerActivityPanel, WorkerActivityRow};
-use butler_ds::ui::Icon;
 use butler_ds::ui::button::{Button, Shape, Size, Variant};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Box as Pad, Space, Stack};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString};
 
+use crate::ui::i18n::composer::adjunct::{more, words};
 use crate::ui::source::wire::{
     ProgressRow, WorkerActivitySummary, WorkerActivitySummaryActivityKind,
 };
 use crate::ui::store::progress::copy::interface_text;
 use crate::ui::store::progress::tasks::{ComposerTaskState, project_composer_tasks};
-
-/// The `conversation.work`, `inspector.tabs`, `interfaceFeedback` and `interfaceTemplates`
-/// strings these panels read.
-struct Words {
-    todo_title: &'static str,
-    pending: &'static str,
-    running: &'static str,
-    completed: &'static str,
-    reviewing: &'static str,
-    correction: &'static str,
-    blocked: &'static str,
-    skipped: &'static str,
-    stopped: &'static str,
-    workers: &'static str,
-    /// `interfaceFeedback`: thinking, planning, inspecting, executing, verifying, committing,
-    /// consolidating, reporting, complete, recoverable.
-    phases: [&'static str; 10],
-}
-
-const KO: Words = Words {
-    todo_title: "진행 단계",
-    pending: "대기",
-    running: "진행 중",
-    completed: "완료",
-    reviewing: "검토 중",
-    correction: "수정 필요",
-    blocked: "막힘",
-    skipped: "건너뜀",
-    stopped: "중지됨",
-    workers: "작업자",
-    phases: [
-        "생각 중",
-        "계획 중",
-        "확인 중",
-        "실행 중",
-        "검증 중",
-        "커밋 중",
-        "정리 중",
-        "보고 중",
-        "완료",
-        "재개 가능",
-    ],
-};
-
-const EN: Words = Words {
-    todo_title: "Steps",
-    pending: "Pending",
-    running: "In progress",
-    completed: "Done",
-    reviewing: "Reviewing",
-    correction: "Correction required",
-    blocked: "Blocked",
-    skipped: "Skipped",
-    stopped: "Stopped",
-    workers: "Workers",
-    phases: [
-        "Thinking",
-        "Planning",
-        "Inspecting",
-        "Executing",
-        "Verifying",
-        "Committing",
-        "Consolidating",
-        "Reporting",
-        "Complete",
-        "Recoverable",
-    ],
-};
 
 const PHASES: [&str; 10] = [
     "orienting",
@@ -94,13 +27,6 @@ const PHASES: [&str; 10] = [
     "complete",
     "recoverable",
 ];
-
-fn words(lang: Lang) -> &'static Words {
-    match lang {
-        Lang::Ko => &KO,
-        Lang::En => &EN,
-    }
-}
 
 /// `composerHasAdjunct`: queued follow-ups live in the conversation, not here.
 pub(super) fn has_adjunct(worker_count: usize, task_count: usize) -> bool {
@@ -193,14 +119,6 @@ fn worker_composer_panel(lang: Lang, workers: &[WorkerActivitySummary]) -> AnyEl
         });
     }
     panel.into_any_element()
-}
-
-/// `interfaceTemplates.more`.
-fn more(lang: Lang, title: &str, count: usize) -> String {
-    match lang {
-        Lang::Ko => format!("{title} 외 {count}개"),
-        Lang::En => format!("{title} and {count} more"),
-    }
 }
 
 /// `activityRow`.

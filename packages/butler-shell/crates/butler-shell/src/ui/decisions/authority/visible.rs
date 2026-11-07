@@ -76,7 +76,11 @@ pub(super) fn approval_line(text: &str) -> String {
         .map(|(i, c)| {
             let edge = i == 0 || i + 1 == chars.len();
             let next_space = chars.get(i + 1) == Some(&' ');
-            if *c == ' ' && (edge || next_space) { '\u{A0}' } else { *c }
+            if *c == ' ' && (edge || next_space) {
+                '\u{A0}'
+            } else {
+                *c
+            }
         })
         .collect()
 }

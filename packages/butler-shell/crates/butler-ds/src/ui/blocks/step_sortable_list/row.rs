@@ -50,16 +50,75 @@ fn title_line(slots: &mut StepSortableRowSlots, done: bool, gap: gpui::Pixels) -
         let more = Typo::body(more).tone(Tone::Tertiary).wrap(Wrap::Nowrap);
         block = block.child(div().flex_none().child(more));
     }
-    let mut line = div().flex().flex_wrap().items_center().min_w_0().gap_x(gap).child(block);
+    let mut line = div()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .min_w_0()
+        .gap_x(gap)
+        .child(block);
     if let Some(meta) = slots.meta.take() {
-        let meta = Typo::caption(meta).tone(Tone::Tertiary).tabular().wrap(Wrap::Nowrap);
+        let meta = Typo::caption(meta)
+            .tone(Tone::Tertiary)
+            .tabular()
+            .wrap(Wrap::Nowrap);
         line = line.child(div().flex_none().ml_auto().child(meta));
     }
     line.into_any_element()
 }
 
+/// The title line, then the caption under it.
+fn text_column(
+    slots: &mut StepSortableRowSlots,
+    done: bool,
+    gap: gpui::Pixels,
+    line_gap: gpui::Pixels,
+) -> gpui::Div {
+    let mut text = div()
+        .flex()
+        .flex_col()
+        .flex_auto()
+        .min_w_0()
+        .gap(gap)
+        .child(title_line(slots, done, line_gap));
+    if let Some(caption) = slots.caption.take() {
+        let tone = if done {
+            Tone::Tertiary
+        } else {
+            Tone::Secondary
+        };
+        text = text.child(Typo::caption(caption).tone(tone).truncate());
+    }
+    text
+}
+
+/// The trailing control, or its room (statuses line up down the list).
+fn trailing_control(
+    control: Option<AnyElement>,
+    lifted: bool,
+    narrow: bool,
+    side: gpui::Pixels,
+) -> AnyElement {
+    match control.filter(|_| !lifted) {
+        Some(control) => div()
+            .flex()
+            .items_center()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(control)
+            .into_any_element(),
+        None if narrow => div().into_any_element(),
+        None => div().w(side).into_any_element(),
+    }
+}
+
 pub(super) fn row(env: &Env, args: RowArgs<'_>, window: &mut Window, cx: &mut App) -> AnyElement {
-    let RowArgs { item, ctx, grip: grip_args, marker, dim } = args;
+    let RowArgs {
+        item,
+        ctx,
+        grip: grip_args,
+        marker,
+        dim,
+    } = args;
     let (side, line, xs, sm) = {
         let ds = Ds::get(cx);
         (
@@ -75,7 +134,11 @@ pub(super) fn row(env: &Env, args: RowArgs<'_>, window: &mut Window, cx: &mut Ap
     // A cell of the row; a dimmed row fades everything but its grip.
     let cell = |grow: bool| {
         let cell = div().flex();
-        let cell = if grow { cell.flex_auto().min_w_0() } else { cell.flex_none() };
+        let cell = if grow {
+            cell.flex_auto().min_w_0()
+        } else {
+            cell.flex_none()
+        };
         if dim { cell.opacity(DIMMED) } else { cell }
     };
 
@@ -96,23 +159,8 @@ pub(super) fn row(env: &Env, args: RowArgs<'_>, window: &mut Window, cx: &mut Ap
         .tone(SlotTone::Tertiary)
         .children(marker.then(|| slots.marker.take()).flatten());
 
-    let mut text = div().flex().flex_col().flex_auto().min_w_0().gap(xs).child(title_line(&mut slots, item.done, sm));
-    if let Some(caption) = slots.caption.take() {
-        let tone = if item.done { Tone::Tertiary } else { Tone::Secondary };
-        text = text.child(Typo::caption(caption).tone(tone).truncate());
-    }
-
-    // The trailing control, or its room (statuses line up down the list).
-    let trailing = match slots.trailing.take().filter(|_| !ctx.lifted) {
-        Some(control) => div()
-            .flex()
-            .items_center()
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(control)
-            .into_any_element(),
-        None if narrow => div().into_any_element(),
-        None => div().w(side).into_any_element(),
-    };
+    let text = text_column(&mut slots, item.done, xs, sm);
+    let trailing = trailing_control(slots.trailing.take(), ctx.lifted, narrow, side);
 
     div()
         .relative()

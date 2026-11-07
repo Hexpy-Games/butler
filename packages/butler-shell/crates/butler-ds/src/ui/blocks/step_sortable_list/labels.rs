@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 type Name = Rc<dyn Fn(&str) -> String>;
 type Placed = Rc<dyn Fn(&str, &str, usize) -> String>;
+type Stack = Rc<dyn Fn(&str, usize) -> String>;
 
 #[derive(Clone)]
 pub struct StepSortableLabels {
@@ -13,7 +14,7 @@ pub struct StepSortableLabels {
     /// 묶음's name (`stack`).
     pub grip: Name,
     /// Name of a whole 묶음 dragged as one step: its front item and how many it holds.
-    pub stack: Rc<dyn Fn(&str, usize) -> String>,
+    pub stack: Stack,
     pub lifted: Placed,
     /// The keyboard moved the item over a gap: it would become its own step.
     pub new_step: Placed,
@@ -37,9 +38,7 @@ impl Default for StepSortableLabels {
             join: placed(|item, chain, step| {
                 format!("{item}: together with step {step} in {chain}.")
             }),
-            dropped: placed(|item, chain, step| {
-                format!("Dropped {item} in {chain}, step {step}.")
-            }),
+            dropped: placed(|item, chain, step| format!("Dropped {item} in {chain}, step {step}.")),
             cancelled: Rc::new(|item: &str| format!("Move of {item} cancelled.")),
             unchanged: Rc::new(|item: &str| format!("{item} stays where it was.")),
         }

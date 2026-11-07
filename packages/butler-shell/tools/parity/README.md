@@ -29,9 +29,10 @@ created session. `${message.N}` refers to the zero-based message in its final
 session view. `wait: true` waits for delivery before proceeding. Anchor names
 match gpui debug selectors; `electron` supplies the corresponding CSS selector.
 Missing or virtualized anchors are reported, without substituting other elements.
+A scene may set `reply` (the stub model's text) and `toolCalls` (stub tool calls, one per streamed round, in order);
+`answers` uses an `answer_blocks` call, `activity` a todo list, a command and a file listing.
 
-Optional scene fields: `stubToolCalls` (tool calls the stub model emits, one per streaming
-request that offers tools), `ready` (`authority_requests`, `pending_questions` or `artifacts`:
+A scene may also set `ready` (`authority_requests`, `pending_questions` or `artifacts`:
 what `/session-view` must show before capture) and `steps` (`{click: anchor}` / `{expect: anchor}`,
 run in order before each screenshot on both sides; Electron uses the anchor's `electron` selector).
 

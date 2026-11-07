@@ -8,9 +8,8 @@ use futures::stream::LocalBoxStream;
 
 use crate::ui::source::wire::SessionView;
 use crate::ui::source::{
-    AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
-    ComposerContext, EventCursor, Fetch, LiveEvent, PageCursor, RequestRef,
-    SentTurn, SessionId, Source, SourceError, Space, Timestamp, TurnId,
+    AuthorityCard, ChatId, ChatPage, ChatRef, ChatSummary, EventCursor, Fetch, LiveEvent,
+    RequestRef, SessionId, Source, SourceError, Space, Timestamp, TurnId,
 };
 
 pub(super) const LONG: &str = "c-long";
@@ -107,7 +106,12 @@ fn long_chat() -> Vec<serde_json::Value> {
     let mut out = Vec::new();
     for i in 0..12 {
         out.push(message(&format!("m{i}u"), "user", USER_LINES[i % 3], 2 * i));
-        out.push(message(&format!("m{i}a"), "assistant", REPLIES[i % 3], 2 * i + 1));
+        out.push(message(
+            &format!("m{i}a"),
+            "assistant",
+            REPLIES[i % 3],
+            2 * i + 1,
+        ));
     }
     out
 }
@@ -175,8 +179,6 @@ fn command_request() -> serde_json::Value {
 fn command_card() -> AuthorityCard {
     AuthorityCard {
         request: RequestRef("r-1".into()),
-        kind: CardKind::Command,
-        reason: COMMAND_REASON.into(),
         tool: Some("shell".into()),
     }
 }
@@ -184,8 +186,6 @@ fn command_card() -> AuthorityCard {
 fn question_card() -> AuthorityCard {
     AuthorityCard {
         request: RequestRef("r-2".into()),
-        kind: CardKind::Question,
-        reason: "릴리스 노트를 어느 브랜치 기준으로 쓸까요?".into(),
         tool: None,
     }
 }
@@ -198,10 +198,9 @@ fn ready<T: 'static>(value: T) -> Fetch<T> {
 }
 
 impl Source for Fixture {
-    fn chats(&self, _: Option<PageCursor>) -> Fetch<ChatPage> {
+    fn chats(&self) -> Fetch<ChatPage> {
         ready(ChatPage {
             chats: chats(),
-            next: None,
             events: EventCursor(1),
         })
     }
@@ -231,22 +230,7 @@ impl Source for Fixture {
         ready(chat_ref("c-new"))
     }
 
-    fn send(&self, _: &ChatId, _: ClientMessageId, _: String) -> Fetch<SentTurn> {
-        ready(SentTurn {
-            turn: TurnId("t-new".into()),
-        })
-    }
-
     fn cancel(&self, _: &TurnId) -> Fetch<()> {
         ready(())
-    }
-
-    fn composer(&self) -> ComposerContext {
-        ComposerContext {
-            state: crate::ui::source::model::Controls::Loaded,
-            permission: "먼저 확인".into(),
-            model: "Luna".into(),
-            effort: "중간".into(),
-        }
     }
 }

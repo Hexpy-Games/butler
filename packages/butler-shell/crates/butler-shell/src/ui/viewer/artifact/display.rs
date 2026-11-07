@@ -98,11 +98,14 @@ pub(super) fn meta_line(artifact: &SessionArtifactSummary, cx: &App) -> String {
     let age = chrono::DateTime::parse_from_rfc3339(&artifact.created_at)
         .map(|at| strings.relative_age((chrono::Utc::now() - at.to_utc()).num_seconds().max(0)))
         .unwrap_or_default();
-    [artifact.size_bytes.map(format_size).unwrap_or_default(), age]
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ")
+    [
+        artifact.size_bytes.map(format_size).unwrap_or_default(),
+        age,
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" · ")
 }
 
 /// `revisionArtifact`: the artifact as one of its Library versions (newest first); index 0 is
