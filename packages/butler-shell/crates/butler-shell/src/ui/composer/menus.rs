@@ -3,7 +3,7 @@
 //!
 //! Each menu is a function over plain props and callbacks: the composer state (unit `state.rs`)
 //! owns the values and hears the changes.
-mod model;
+pub(crate) mod model;
 
 use std::rc::Rc;
 
@@ -21,9 +21,8 @@ use gpui::{
 };
 
 pub(crate) use model::{
-    ModelChoice, ModelFooter, ModelOptionsFilter, ReasoningFooterOption, model_choice,
-    model_display_name, model_options, model_options_filter, reasoning_budget_summary,
-    reasoning_label, reasoning_option_label,
+    ModelChoice, ModelFooter, ReasoningFooterOption, model_display_name, model_options,
+    model_options_filter, reasoning_budget_summary, reasoning_option_label,
 };
 
 use crate::ui::source::wire::{AccessMode, ReasoningEffort};
