@@ -5,7 +5,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src";
-import { initiatedMessage, installInitiatedGateway } from "../support/initiated-fixtures";
+import { initiatedMessage, installInitiatedGateway, session } from "../support/initiated-fixtures";
+import { HARNESS_SS03_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { proposalDecisions, pauseDecisions } from "../support/initiated-decisions";
 import { probeFocusRingFrames } from "../support/focus-ring-clipping";
@@ -70,6 +71,8 @@ try {
     assert.equal(await page.locator('[data-test-class="assistant-terminal-status-row"]').count(), 0);
     assert.equal(await page.locator('[data-test-class~="assistant-footer"] time').count(), 1);
     await capture(page, page.locator('[data-test-class~="message"][data-test-class~="assistant"]'), "schedule-report", "예약 작업 보고와 첨부 문서", language, theme, width);
+    await delegatedReport(page, gateway);
+    await capture(page, page.locator('[data-test-class~="message"][data-test-class~="assistant"]'), "schedule-delegated", "Steward에게 맡긴 예약 작업 실행 중", language, theme, width);
     await gateway.show(initiatedMessage("pause"));
     const pause = page.locator('[data-test-class="initiated-pause"]');
     await pause.waitFor();
@@ -92,6 +95,18 @@ try {
   if (output) writeFileSync(join(output, "captions.txt"), captions.join("\n") + "\n");
   console.log(JSON.stringify({ result: "PASS", cells, captures: captions.filter(line => !line.startsWith("##")).length, modelCalls: 0, conditions: "Headless Chromium; 2x scale; stub gateway; no Mac display dependency" }));
 } finally { await browser.close(); }
+
+async function delegatedReport(page: Page, gateway: Awaited<ReturnType<typeof installInitiatedGateway>>) {
+  // A delegated schedule run: its request stays off 대화, so the Steward card is the turn's only body.
+  const child = structuredClone(HARNESS_SS03_SUMMARY.steward_children![0]!);
+  child.relation = { ...child.relation, parent_session_id: "general", parent_turn_id: "schedule-turn", anchor_message_id: "schedule-request" };
+  const report = { ...initiatedMessage("report"), id: "delegated-report", text: "", artifacts: [], turn_id: "schedule-turn" };
+  await gateway.showView({ ...session([report]), steward_children: [child] });
+  const card = page.locator('[data-test-class~="steward-parent-progress-card"]');
+  await card.waitFor();
+  assert.equal(await card.count(), 1);
+  assert.equal(await page.locator('[data-test-class~="message"][data-test-class~="user"]').count(), 0);
+}
 
 async function composing(page: Page, requests: { path: string; at: number }[]) {
   const editor = page.locator('[contenteditable="true"]').first();

@@ -21,7 +21,7 @@ function ReadingPage() {
   // The viewer's ScrollArea scrolls the page; PageContainer's gutter plus the Box padding give 48px insets.
   return (
     <ScrollArea fill>
-      <PageContainer width="narrow" gutter="2xl">
+      <PageContainer width="full" gutter="2xl">
         <Box paddingY="2xl">
           <Box padding="2xl">
             <ArtifactPreview surface="page">
@@ -40,6 +40,7 @@ export const guidance: ShowcaseGuidance = {
   whenToUse: [
     "Preview an artifact in the artifact viewer or a document dialog",
     "Show a file as a reading page in a docked viewer (surface=\"page\")",
+    "Fill a docked viewer with a page, HTML file or PDF (surface=\"page\" fill)",
   ],
   whenNotToUse: [
     { when: "Rendered markdown documents", use: "MarkdownContent" },
@@ -63,6 +64,7 @@ export const guidance: ShowcaseGuidance = {
     "Loading and failure captions name the artifact state, not technical errors.",
     "A frame whose content has its own size (a scrap's clipped part) passes intrinsicSize; larger content scrolls inside the preview.",
     "surface=\"card\" (default) is a bordered box with its own scroll inside a panel or dialog. surface=\"page\" is for a host that is itself the reading surface, such as a file viewer in AdaptiveShellSplit's right slot; images there sit frameless with their own corner radius.",
+    "fill (with surface=\"page\") makes a frame take the docked viewer's whole pane: the host gives it a flex column with no ScrollArea, and the frame scrolls itself.",
   ],
   accessibility: ["Images need alt text (the title); frames need a title."],
   tokens: ["--surface", "--radius-panel", "--typo-code-size"],

@@ -20,6 +20,11 @@ it is larger.
   image sits frameless with its own corner radius. Use it when the host is
   itself the reading surface, such as a file viewer docked in
   `AdaptiveShellSplit`'s right slot.
+- `fill` (with `surface="page"`): the preview takes the host's full height. A
+  frame (a page Butler made, an HTML file, a PDF) fills it edge to edge with
+  square corners and scrolls itself, so the host gives it a flex column and no
+  ScrollArea. Anything else, such as a loading line, keeps the 48px reading
+  inset.
 
 The host gives the reading width and insets. A docked viewer composes it as:
 
@@ -28,7 +33,7 @@ The host gives the reading width and insets. A docked viewer composes it as:
   <Stack fill gap="none">
     {/* file header, then <Separator space="none" /> */}
     <ScrollArea fill>
-      <PageContainer width="narrow" gutter="2xl">
+      <PageContainer width="full" gutter="2xl">
         <Box paddingY="2xl">
           <Box padding="2xl">
             <ArtifactPreview surface="page">{/* MarkdownContent, ArtifactPreviewPre or ArtifactPreviewImage */}</ArtifactPreview>
@@ -40,7 +45,7 @@ The host gives the reading width and insets. A docked viewer composes it as:
 </AdaptiveShellCard>
 ```
 
-`PageContainer width="narrow"` caps the page at the 760px reading width; its
+The page fills the viewer at any width (`PageContainer width="full"`); its
 `2xl` gutter plus the inner `Box padding="2xl"` put the text 48px in from the
 viewer's sides, and the two `2xl` paddings put it 48px under the header line
 and above the page end.

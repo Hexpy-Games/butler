@@ -18,7 +18,7 @@ function ReadingPage() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "Caps a page's width (narrow, default, document, full) with the adaptive gutter and optional start alignment.",
+  purpose: "Caps a page's width (narrow, default, full) with the adaptive gutter and optional start alignment.",
   whenToUse: ["The outer frame of a settings, dashboard or document page"],
   whenNotToUse: [
     { when: "Spacing inside a page", use: "Stack" },
@@ -33,5 +33,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["No copy of its own."],
   accessibility: ["as=\"main\" for the primary page region (once per screen)."],
-  tokens: ["--page-max-width-reading", "--page-max-width-wide", "--page-max-width-document", "--page-container-gutter"],
+  tokens: ["--page-max-width-reading", "--page-max-width-wide", "--page-container-gutter"],
 };

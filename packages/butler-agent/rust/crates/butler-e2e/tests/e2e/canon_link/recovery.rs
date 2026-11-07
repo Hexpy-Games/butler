@@ -174,3 +174,63 @@ async fn unreadable_project_work_keeps_canon_reads_and_other_epic_events_availab
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn pre_ledger_project_work_shows_its_own_steps() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, id, chat) = setup("CB-PRE-LEDGER", false, false).await?;
+    let turn = s.gw.say(&chat, "Process the release epic").await?;
+    script.wait_held().await;
+    script.release();
+    s.gw.wait_terminal(
+        &chat,
+        &s.gw.accepted_turn(&turn).await?,
+        Duration::from_secs(60),
+    )
+    .await?;
+    wait_label(&s, &id, "in_review").await?;
+    let before = progress(&s, &id).await?;
+    assert_eq!(before["counts"], json!({"completed":1,"total":1}));
+    let keys: Vec<Value> = before["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["actionKey"].clone())
+        .collect();
+    let plan: Vec<Value> = before["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| json!({"actionKey":a["actionKey"],"description":a["description"],"dependencyKeys":[]}))
+        .collect();
+    let states: Vec<Value> = keys
+        .iter()
+        .map(|k| json!({"actionKey":k,"status":"done"}))
+        .collect();
+    let db = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let (work, origin, created): (String, String, String) = db.query_row("SELECT w.work_id,w.origin_turn_id,w.created_at FROM btcc_guided_works w JOIN canon_epic_work_links l ON l.btcc_work_id=w.work_id WHERE l.epic_id=?1",[&id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+    db.execute("UPDATE btcc_guided_works SET ledger_project_id=NULL, canonical_head_sha256=NULL WHERE work_id=?1", [&work])?;
+    db.execute("INSERT INTO btcc_guided_work_plan_revisions(plan_revision_id,work_id,revision,objective,governing_refs_json,execution_mode,actions_json,checks_json,origin_turn_id,created_at) VALUES('pre-ledger-plan',?1,1,'[]','[]','direct',?2,'[]',?3,?4)", rusqlite::params![work, serde_json::to_string(&plan)?, origin, created])?;
+    db.execute("INSERT INTO btcc_guided_work_checkpoint_revisions(checkpoint_revision_id,work_id,revision,plan_revision_id,stage,public_summary,next_step,action_states_json,result_sequence,origin_turn_id,created_at) VALUES('pre-ledger-checkpoint',?1,1,'pre-ledger-plan','reporting','','',?2,0,?3,?4)", rusqlite::params![work, serde_json::to_string(&states)?, origin, created])?;
+    let after = progress(&s, &id).await?;
+    let n = keys.len();
+    assert_eq!(after["counts"], json!({"completed":n,"total":n}));
+    let after_keys: Vec<Value> = after["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["actionKey"].clone())
+        .collect();
+    assert_eq!(after_keys, keys);
+    let log = std::fs::read_to_string(s.sandbox.logs.join("agent-1.log"))?;
+    assert!(
+        !log.lines()
+            .any(|line| line.contains("Canon project Work read failed") && line.contains(&work)),
+        "pre-Ledger Work reads from its BTCC rows"
+    );
+    data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);
+    drop(db);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

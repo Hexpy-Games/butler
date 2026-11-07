@@ -17,6 +17,7 @@ pub(super) fn prefix(
     let prefixes = PREFIXES.get_or_init(|| {
         serde_json::from_str(include_str!("instruction-prefixes.json")).unwrap_or_default()
     });
+    let kind = if policy.chat_session { "chat|" } else { "" };
     let key = if policy.subsession.is_some() && policy.role == PolicyRole::Steward {
         let submode = policy
             .subsession
@@ -31,12 +32,12 @@ pub(super) fn prefix(
         format!("delegated|worker|{}", policy.access_mode.as_str())
     } else if mode == SurfaceMode::Legacy {
         format!(
-            "legacy|butler|{}|{}",
+            "legacy|butler|{kind}{}|{}",
             policy.access_mode.as_str(),
             policy.tracking_mode
         )
     } else {
-        format!("phase_minimal|butler|{}", phase.as_str())
+        format!("phase_minimal|butler|{kind}{}", phase.as_str())
     };
     let mut value = prefixes
         .get(&key)

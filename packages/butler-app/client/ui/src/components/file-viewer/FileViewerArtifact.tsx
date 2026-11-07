@@ -4,19 +4,25 @@ import { appCopy } from "@/app/copy";
 import { refreshSessionFileUrls } from "@/app/messageFileRefresh";
 import { useButlerStore } from "@/app/store";
 import type { SessionArtifactSummary } from "@/app/types";
-import { FolderOpen, Library, Popup, Save } from "@/butler-ds";
+import { ArtifactPreview, FolderOpen, Globe2, Library, Popup, RefreshCcw, Save } from "@/butler-ds";
 import { ArtifactBody, revisionArtifact } from "../artifacts/ArtifactBody";
 import { ArtifactRevisionSelect } from "../artifacts/ArtifactViewer";
 import { artifactCardActions, canOpenInApp, openInApp } from "../artifacts/artifactActions";
-import { artifactDescription, artifactMeta, artifactPreviewMode } from "../artifacts/artifactDisplay";
+import { artifactDescription, artifactMeta, artifactPreviewMode, previewIsFrame } from "../artifacts/artifactDisplay";
+import { OutputFrameView, OutputRevisionSelect, useOutputView } from "../artifacts/OutputFrame";
+import { openBrowser, openLink, useBrowserState } from "../browser/browserBridge";
 import { clearFilters, setFilters } from "../library/libraryFilters";
 import { openLibrary } from "../library/libraryNav";
 import { FileViewerHeader, FileViewerPage, type FileViewerAction } from "./FileViewerFrame";
 
-/** A stored file in the viewer: its header (version, 서랍, save, close) and its content as a reading page. */
-export function FileViewerArtifact({ sessionId, artifact: latest, onClose, onBack }: {
-  sessionId: string; artifact: SessionArtifactSummary; onClose: () => void; onBack?: () => void;
-}) {
+interface FileViewerArtifactProps { sessionId: string; artifact: SessionArtifactSummary; onClose: () => void; onBack?: () => void }
+
+/** A stored file in the viewer: its header (version, 서랍, save, close) and its content, filling the pane. */
+export function FileViewerArtifact(props: FileViewerArtifactProps) {
+  return artifactPreviewMode(props.artifact) === "web" ? <FileViewerOutput {...props} /> : <FileViewerFile {...props} />;
+}
+
+function FileViewerFile({ sessionId, artifact: latest, onClose, onBack }: FileViewerArtifactProps) {
   const [index, setIndex] = useState(0);
   const artifact = useMemo(() => revisionArtifact(latest, index), [latest, index]);
   const cursor = useButlerStore((state) => state.messages.find((message) => message.id === latest.message_id)?.cursor);
@@ -26,7 +32,35 @@ export function FileViewerArtifact({ sessionId, artifact: latest, onClose, onBac
   return <>
     <FileViewerHeader title={artifact.title} meta={meta} onClose={onClose} onBack={onBack} actions={fileActions(latest, artifact, sessionId !== LIBRARY_VIEWER)}
       leading={<ArtifactRevisionSelect artifact={latest} index={index} onChange={setIndex} />} />
-    <FileViewerPage fill={artifactPreviewMode(artifact) === "markdown"}><ArtifactBody artifact={artifact} refreshFileUrls={refreshFileUrls} surface="page" /></FileViewerPage>
+    <FileViewerPage frame={previewIsFrame(artifactPreviewMode(artifact))}><ArtifactBody artifact={artifact} refreshFileUrls={refreshFileUrls} surface="page" /></FileViewerPage>
+  </>;
+}
+
+/** A page Butler made: the header carries its one version select, 브라우저에서 열기 and 새로고침; the page fills the pane. */
+function FileViewerOutput({ sessionId, artifact, onClose, onBack }: FileViewerArtifactProps) {
+  const preview = artifact.url?.startsWith("/previews/") ?? false;
+  const output = useOutputView(artifact.id, preview);
+  const { view } = output;
+  const browserEnabled = useBrowserState((state) => state.enabled);
+  const activeSession = useButlerStore((state) => state.activeChatId);
+  const inBrowser = Boolean(window.butlerBrowser);
+  const meta = [artifactDescription(artifact), artifactMeta(artifact)].filter(Boolean).join(" · ");
+  const actions: FileViewerAction[] = [...fileActions(artifact, artifact, sessionId !== LIBRARY_VIEWER), {
+    id: "open-in-browser", label: appCopy.browser.openOutput, icon: <Globe2 size="sm" />, labelIcon: true,
+    disabled: !view || (inBrowser && !browserEnabled), disabledReason: inBrowser && !browserEnabled ? appCopy.browser.updateRequired : output.failure,
+    // The in-app browser opens it as the source conversation's tab; a client without one opens a browser window.
+    run: () => {
+      if (!view) return;
+      if (inBrowser) void openBrowser({ url: view.url, sessionId: artifact.session_id || activeSession, previewId: preview ? artifact.id : undefined });
+      else void openLink(view.url);
+    },
+  }, { id: "reload", label: appCopy.artifacts.reload, icon: <RefreshCcw size="sm" />, iconOnly: true, run: output.reload }];
+  return <>
+    <FileViewerHeader title={artifact.title} meta={meta} onClose={onClose} onBack={onBack} actions={actions}
+      leading={view && !preview && view.revisions.length > 1 ? <OutputRevisionSelect view={view} onChange={output.selectRevision} /> : undefined} />
+    <FileViewerPage frame>
+      <ArtifactPreview surface="page" fill data-test-class="artifact-viewer" data-preview-mode="web"><OutputFrameView output={output} title={artifact.title} /></ArtifactPreview>
+    </FileViewerPage>
   </>;
 }
 

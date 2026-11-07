@@ -24,3 +24,8 @@ test("ArtifactPreviewFrame with intrinsicSize takes exactly that CSS size and ke
   expect(markup).toContain('sandbox=""');
   expect(markup).toContain('title="Clipped card"');
 });
+
+test("fill applies only to a page surface", () => {
+  expect(renderToStaticMarkup(<ArtifactPreview surface="page" fill>x</ArtifactPreview>)).toContain('data-fill=""');
+  expect(renderToStaticMarkup(<ArtifactPreview fill>x</ArtifactPreview>)).not.toContain("data-fill");
+});
