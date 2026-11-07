@@ -24,20 +24,18 @@ use gpui::{
 };
 
 use self::changed::changed_files;
-use self::media::{Artifact, ViewerSet, format_size, inline_image_files, is_legacy};
-use self::support::{open_viewer, picture, save_file, tr};
+use self::media::{Artifact, ViewerSet, format_size, is_legacy};
+use self::support::{file_picture, save_file};
 use super::TranscriptCtx;
-use super::message_markdown::message_markdown;
+use super::message_markdown::{inline_image_files, message_markdown};
+use crate::ui::i18n::media::Media;
+use crate::ui::shell::image_viewer;
 use crate::ui::source::wire::{MessageFileKind, MessageRecord, MessageRecordRole};
 
 /// A message's artifacts, attachments and changed files; `None` when it has none.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) fn message_files(
     msg: &MessageRecord,
-    t: &TranscriptCtx,
+    _t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -45,14 +43,14 @@ pub(crate) fn message_files(
     let parts: Vec<AnyElement> = if msg.role == MessageRecordRole::Assistant {
         let bubble = msg.chat_id.as_deref() == Some("general");
         [
-            artifacts(msg, t, &set, bubble, cx),
-            changed_files(msg, t, &set, bubble, window, cx),
+            artifacts(msg, &set, bubble, cx),
+            changed_files(msg, &set, bubble, window, cx),
         ]
         .into_iter()
         .flatten()
         .collect()
     } else {
-        attachments(msg, t, &set, cx).into_iter().collect()
+        attachments(msg, &set, cx).into_iter().collect()
     };
     if parts.is_empty() {
         return None;
@@ -63,7 +61,6 @@ pub(crate) fn message_files(
 /// `MessageArtifacts`: the delivered files, pictures inline and the rest in a list.
 fn artifacts(
     msg: &MessageRecord,
-    t: &TranscriptCtx,
     set: &Rc<ViewerSet>,
     bubble: bool,
     cx: &mut App,
@@ -105,7 +102,7 @@ fn artifacts(
         let mut list =
             ArtifactList::new(SharedString::from(format!("message-artifacts-{}", msg.id)));
         for artifact in &files {
-            list = list.item(artifact_item(artifact, t, cx));
+            list = list.item(artifact_item(artifact, cx));
         }
         if let Some(item) = work_link {
             list = list.item(item);
@@ -132,13 +129,13 @@ fn work_link_row(msg: &MessageRecord, cx: &App) -> Option<ArtifactItem> {
     origin.work_session_id.as_ref()?;
     Some(
         ArtifactItem::new(origin.work_title.clone().unwrap_or_default())
-            .description(tr(cx, "View work", "작업 보기"))
+            .description(Media::get(cx).view_work)
             .icon(Icon::Eye),
     )
 }
 
 /// One file of the list: its name and size over a Save action.
-fn artifact_item(artifact: &Artifact, t: &TranscriptCtx, cx: &App) -> ArtifactItem {
+fn artifact_item(artifact: &Artifact, cx: &App) -> ArtifactItem {
     let mut item = ArtifactItem::new(artifact.title.clone()).icon(Icon::FileText);
     if let Some(bytes) = artifact.size_bytes {
         item = item.description(format_size(bytes, false));
@@ -146,11 +143,11 @@ fn artifact_item(artifact: &Artifact, t: &TranscriptCtx, cx: &App) -> ArtifactIt
     let Some(file_id) = artifact.file_id.clone() else {
         return item;
     };
-    let (name, client) = (artifact.file_name(), t.client.clone());
+    let name = artifact.file_name();
     item.action(
-        ArtifactAction::new(tr(cx, "Save", "저장하기"))
+        ArtifactAction::new(Media::get(cx).save)
             .icon(Icon::Save)
-            .on_click(move |_, _, cx| save_file(file_id.clone(), name.clone(), client.clone(), cx)),
+            .on_click(move |_, _, cx| save_file(file_id.clone(), name.clone(), cx)),
     )
 }
 
@@ -176,7 +173,7 @@ fn artifact_image(
         .cursor_pointer()
         .on_click(move |_, _, cx| {
             if let Some(index) = set.index_of(&key) {
-                open_viewer(set.images.clone(), index, cx);
+                image_viewer::open(set.images.clone(), index, cx);
             }
         })
         .child(markdown)
@@ -192,14 +189,13 @@ fn attachment_extension(name: &str, cx: &App) -> SharedString {
         {
             ext.to_uppercase().into()
         }
-        _ => tr(cx, "File", "파일").into(),
+        _ => Media::get(cx).file.into(),
     }
 }
 
 /// `MessageAttachments`: a message's files as tiles; pictures open the image viewer.
 fn attachments(
     msg: &MessageRecord,
-    t: &TranscriptCtx,
     set: &Rc<ViewerSet>,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -217,7 +213,7 @@ fn attachments(
             .meta(format_size(file.size_bytes, true))
             .extension(attachment_extension(&file.safe_name, cx));
         if file.kind == MessageFileKind::Image
-            && let Some(source) = picture(&file.file_id, t.client.as_ref(), cx)
+            && let Some(source) = file_picture(&file.file_id, cx)
         {
             let capture =
                 metadata.is_some_and(|m| m.get(&file.file_id).is_some_and(|v| !v.is_null()));
@@ -250,7 +246,7 @@ fn attachments(
             return;
         };
         if let Some(index) = set.index_of(url) {
-            open_viewer(set.images.clone(), index, cx);
+            image_viewer::open(set.images.clone(), index, cx);
         }
     });
     Some(list.into_any_element())

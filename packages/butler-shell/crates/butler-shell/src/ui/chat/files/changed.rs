@@ -7,7 +7,7 @@ use butler_ds::ui::blocks::changed_line_diff::{ChangedLineDiff, DiffLine, LineTy
 use butler_ds::ui::blocks::disclosure_row::{DisclosureRow, Surface};
 use butler_ds::ui::blocks::list_row::ListRow;
 use butler_ds::ui::button::{Button, Size, Variant};
-use butler_ds::ui::context::{Ds, Lang};
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::dropdown_menu::{DropdownMenu, DropdownMenuContent, Item};
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::icon_button::IconButton;
@@ -18,10 +18,12 @@ use gpui::{
     AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window, div,
 };
 
-use super::media::{ViewerSet, WorkingRow, format_size, inline_image_files, working_file_rows};
-use super::support::{add_to_library, open_viewer, save_file, tr};
-use crate::ui::chat::TranscriptCtx;
-use crate::ui::shell::image_viewer::ViewerImage;
+use super::media::{ViewerSet, WorkingRow, format_size, working_file_rows};
+use super::support::{add_to_library, save_file};
+use crate::ui::chat::message_markdown::inline_image_files;
+use crate::ui::i18n::media::Media;
+use crate::ui::shell::image_viewer::{self, ViewerEntry};
+use crate::ui::shell::image_viewer::loader::PictureId;
 use crate::ui::source::wire::{
     ChangedFileDetail, ChangedFileLine, ChangedFileLineType, MessageFileKind, MessageFileRef,
     MessageRecord,
@@ -32,7 +34,6 @@ const INITIAL_VISIBLE_FILES: usize = 5;
 /// `MessageChangedFiles`: the changed-files block of an assistant message.
 pub(super) fn changed_files(
     msg: &MessageRecord,
-    t: &TranscriptCtx,
     set: &Rc<ViewerSet>,
     bubble: bool,
     window: &mut Window,
@@ -54,12 +55,8 @@ pub(super) fn changed_files(
     let open = *expanded.read(cx);
     let additions: i64 = files.iter().map(|file| file.additions).sum();
     let deletions: i64 = files.iter().map(|file| file.deletions).sum();
-    let korean = Ds::get(cx).lang() == Lang::Ko;
-    let title = if korean {
-        format!("파일 변경 {}개 · +{additions} −{deletions}", rows.len())
-    } else {
-        format!("File changes {} · +{additions} −{deletions}", rows.len())
-    };
+    let lang = Ds::get(cx).lang();
+    let title = Media::file_changes(lang, rows.len(), additions, deletions);
     let shown = if open {
         rows.len()
     } else {
@@ -67,16 +64,11 @@ pub(super) fn changed_files(
     };
     let mut column = Stack::new().gap(Space::Xs).child(Typo::label(title));
     for row in rows.iter().take(shown) {
-        column = column.child(file_row(row, msg, t, set, window, cx));
+        column = column.child(file_row(row, msg, set, window, cx));
     }
     if rows.len() > INITIAL_VISIBLE_FILES {
         let remaining = rows.len() - INITIAL_VISIBLE_FILES;
-        let label = match (open, korean) {
-            (true, true) => "접기".to_owned(),
-            (true, false) => "Show less".to_owned(),
-            (false, true) => format!("더보기 ({remaining}개)"),
-            (false, false) => format!("Show more ({remaining})"),
-        };
+        let label = Media::files_toggle(lang, open, remaining);
         column = column.child(
             Button::new(SharedString::from(format!(
                 "toggle-changed-files-{}",
@@ -107,14 +99,13 @@ pub(super) fn changed_files(
 fn file_row(
     row: &WorkingRow,
     msg: &MessageRecord,
-    t: &TranscriptCtx,
     set: &Rc<ViewerSet>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     match (row.change, row.file) {
-        (Some(change), stored) => change_row(change, stored, msg, t, set, window, cx),
-        (None, Some(file)) => generated_row(file, msg, t, set, window, cx),
+        (Some(change), stored) => change_row(change, stored, msg, set, window, cx),
+        (None, Some(file)) => generated_row(file, msg, set, window, cx),
         (None, None) => div().into_any_element(),
     }
 }
@@ -145,7 +136,6 @@ fn change_row(
     change: &ChangedFileDetail,
     stored: Option<&MessageFileRef>,
     msg: &MessageRecord,
-    t: &TranscriptCtx,
     set: &Rc<ViewerSet>,
     window: &mut Window,
     cx: &mut App,
@@ -154,7 +144,7 @@ fn change_row(
     let meta: SharedString = if has_lines {
         format!("+{} −{}", change.additions, change.deletions).into()
     } else {
-        tr(cx, "No line details", "라인 상세 없음").into()
+        Media::get(cx).no_line_details.into()
     };
     let key = format!("{}-{}", msg.id, change.path);
     let state = window.use_keyed_state(
@@ -192,7 +182,7 @@ fn change_row(
             .into_any_element()
     };
     let Some(file) = stored else { return body };
-    let menu = working_file_menu(file, &change.path, &msg.id, t, set, window, cx);
+    let menu = working_file_menu(file, &change.path, &msg.id, set, window, cx);
     Inline::new()
         .wrap(false)
         .gap(Space::Xs)
@@ -215,7 +205,6 @@ fn change_row(
 fn generated_row(
     file: &MessageFileRef,
     msg: &MessageRecord,
-    t: &TranscriptCtx,
     set: &Rc<ViewerSet>,
     window: &mut Window,
     cx: &mut App,
@@ -225,14 +214,10 @@ fn generated_row(
         .clone()
         .unwrap_or_else(|| file.safe_name.clone());
     let size = format_size(file.size_bytes, false);
-    let meta = if Ds::get(cx).lang() == Lang::Ko {
-        format!("새 파일 · {size}")
-    } else {
-        format!("New file · {size}")
-    };
+    let meta = Media::new_file(Ds::get(cx).lang(), &size);
     let glyph = icon(Icon::FileText, IconSize::Lg, Ds::get(cx));
     let row = ListRow::new(title.clone()).icon(glyph).meta(meta);
-    let menu = working_file_menu(file, &title, &msg.id, t, set, window, cx);
+    let menu = working_file_menu(file, &title, &msg.id, set, window, cx);
     Inline::new()
         .wrap(false)
         .gap(Space::Xs)
@@ -246,12 +231,12 @@ fn working_file_menu(
     file: &MessageFileRef,
     title: &str,
     msg_id: &str,
-    t: &TranscriptCtx,
     set: &Rc<ViewerSet>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let key = format!("{msg_id}-{}", file.file_id);
+    let copy = Media::get(cx);
     let menu = DropdownMenu::new(
         SharedString::from(format!("working-file-menu-{key}")),
         window,
@@ -260,36 +245,29 @@ fn working_file_menu(
     let mut content = DropdownMenuContent::new().align(Align::End);
     if file.kind == MessageFileKind::Image {
         let (set, url) = (set.clone(), file.url.clone());
-        let alone = ViewerImage {
-            file_id: file.file_id.clone(),
-            name: file.safe_name.clone(),
-        };
+        let alone = ViewerEntry::new(PictureId::File(file.file_id.clone()), file.safe_name.clone());
         content = content.child(
-            Item::new(tr(cx, "Open", "열기"))
+            Item::new(copy.open)
                 .icon(Icon::Popup)
                 .on_select(move |_, cx| match set.index_of(&url) {
-                    Some(index) => open_viewer(set.images.clone(), index, cx),
-                    None => open_viewer(vec![alone.clone()], 0, cx),
+                    Some(index) => image_viewer::open(set.images.clone(), index, cx),
+                    None => image_viewer::open(vec![alone.clone()], 0, cx),
                 }),
         );
     }
-    let (id, name, client) = (
-        file.file_id.clone(),
-        file.safe_name.clone(),
-        t.client.clone(),
-    );
+    let (id, name) = (file.file_id.clone(), file.safe_name.clone());
     content = content.child(
-        Item::new(tr(cx, "Save", "저장하기"))
+        Item::new(copy.save)
             .icon(Icon::Save)
-            .on_select(move |_, cx| save_file(id.clone(), name.clone(), client.clone(), cx)),
+            .on_select(move |_, cx| save_file(id.clone(), name.clone(), cx)),
     );
-    let (id, client) = (file.file_id.clone(), t.client.clone());
+    let id = file.file_id.clone();
     content = content.child(
-        Item::new(tr(cx, "Save to library", "서랍에 저장"))
+        Item::new(copy.save_to_library)
             .icon(Icon::Library)
-            .on_select(move |_, cx| add_to_library(id.clone(), client.clone(), cx)),
+            .on_select(move |_, cx| add_to_library(id.clone(), cx)),
     );
-    let label = format!("{}: {title}", tr(cx, "More", "더보기"));
+    let label = format!("{}: {title}", copy.more);
     let trigger_id = SharedString::from(format!("working-file-trigger-{key}"));
     let trigger = menu.trigger(|toggle| {
         IconButton::new(trigger_id, label)

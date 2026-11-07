@@ -1,104 +1,18 @@
-//! `messageMedia`, `messageImages`, `inlineImageFiles` and `workingFiles`: which message file
-//! a Markdown image names, the pictures the viewer steps through, and the file shapes the rows
-//! share.
+//! `messageImages` and `workingFiles`: the pictures the viewer steps through and the file
+//! shapes the rows share. Which message file a Markdown image names is `message_markdown`'s.
 use std::collections::BTreeSet;
 
-use butler_ds::ui::markdown::{Block, Inline, parse};
-
-use super::support::MESSAGE_FILE_DIR;
-use crate::ui::shell::image_viewer::ViewerImage;
+use crate::ui::chat::message_markdown::{file_id_of, markdown_image_file, markdown_images};
+use crate::ui::shell::image_viewer::ViewerEntry;
+use crate::ui::shell::image_viewer::loader::PictureId;
 use crate::ui::source::wire::{
     ChangedFileDetail, MessageFileKind, MessageFileRef, MessageRecord, SessionArtifactSummary,
 };
 
-/// `messageFilePath`: `/message-files/file-` and a 36-character id.
-pub(super) fn message_file_path(url: &str) -> Option<&str> {
-    let id = url.strip_prefix("/message-files/file-")?;
-    (id.len() == 36 && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')).then_some(url)
-}
-
-/// The id of a message file's path (what `download_message_file` takes).
-pub(super) fn file_id_of(path: &str) -> Option<&str> {
-    message_file_path(path)?.strip_prefix(MESSAGE_FILE_DIR)
-}
-
-fn normalized_file_name(value: &str) -> String {
-    let without_query = value.split(['?', '#']).next().unwrap_or_default();
-    let name = without_query.rsplit(['/', '\\']).next().unwrap_or_default();
-    percent_encoding::percent_decode_str(name)
-        .decode_utf8()
-        .map_or_else(|_| name.to_lowercase(), |decoded| decoded.to_lowercase())
-}
-
-/// `markdownImageFile`: the url of the message file a Markdown image names: its
-/// `/message-files/<id>` path, or the image attachment of that file name.
-fn markdown_image_file(source: &str, attachments: &[MessageFileRef]) -> Option<String> {
-    if let Some(path) = message_file_path(source) {
-        return Some(path.to_owned());
-    }
-    let name = normalized_file_name(source);
-    if name.is_empty() {
-        return None;
-    }
-    attachments
-        .iter()
-        .find(|file| {
-            file.kind == MessageFileKind::Image && normalized_file_name(&file.safe_name) == name
-        })
-        .map(|file| file.url.clone())
-}
-
-/// The images (`src`, alt) a message's Markdown shows, outside code.
-fn markdown_images(text: &str) -> Vec<(String, String)> {
-    let mut images = Vec::new();
-    blocks_images(&parse(text), &mut images);
-    images
-}
-
-fn blocks_images(blocks: &[Block], images: &mut Vec<(String, String)>) {
-    for block in blocks {
-        match block {
-            Block::Paragraph(nodes) | Block::Heading { content: nodes, .. } => {
-                inlines_images(nodes, images);
-            }
-            Block::List { items, .. } => {
-                for item in items {
-                    blocks_images(&item.blocks, images);
-                }
-            }
-            Block::Quote(inner) => blocks_images(inner, images),
-            Block::Table(table) => {
-                for cell in table.head.iter().chain(table.rows.iter().flatten()) {
-                    inlines_images(cell, images);
-                }
-            }
-            Block::Code { .. } | Block::Rule => {}
-        }
-    }
-}
-
-fn inlines_images(nodes: &[Inline], images: &mut Vec<(String, String)>) {
-    for node in nodes {
-        match node {
-            Inline::Image { src, alt } => images.push((src.clone(), alt.clone())),
-            Inline::Link { children, .. } => inlines_images(children, images),
-            _ => {}
-        }
-    }
-}
-
-/// `inlineImageFiles`: the urls of the message files the text shows as images.
-pub(super) fn inline_image_files(text: &str, attachments: &[MessageFileRef]) -> BTreeSet<String> {
-    markdown_images(text)
-        .iter()
-        .filter_map(|(src, _)| markdown_image_file(src, attachments))
-        .collect()
-}
-
 /// The pictures of one message in reading order, with the key each opens by.
 pub(super) struct ViewerSet {
     pub(super) keys: Vec<String>,
-    pub(super) images: Vec<ViewerImage>,
+    pub(super) images: Vec<ViewerEntry>,
 }
 
 impl ViewerSet {
@@ -138,10 +52,8 @@ impl ViewerSet {
             return;
         }
         self.keys.push(url.to_owned());
-        self.images.push(ViewerImage {
-            file_id: file_id.to_owned(),
-            name,
-        });
+        self.images
+            .push(ViewerEntry::new(PictureId::File(file_id.to_owned()), name));
     }
 
     pub(super) fn index_of(&self, url: &str) -> Option<usize> {
