@@ -1,4 +1,6 @@
-//! No startup scan, hit writes, negative entries or index. Eviction only accompanies insertion.
+//! No startup scan, hit writes or index. Eviction only accompanies insertion.
+//! A site's no-icon answer is an empty `.miss` file, kept for a day so restarts
+//! don't ask the site again; an unreachable site is never written.
 use super::{Icon, fetch::ICON_LIMIT};
 use sha2::{Digest, Sha256};
 use std::{
@@ -8,24 +10,30 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const EXTENSIONS: [&str; 5] = ["png", "ico", "gif", "jpg", "webp"];
+const MISS: &str = "miss";
+const EXTENSIONS: [&str; 6] = ["png", "ico", "gif", "jpg", "webp", MISS];
 
 fn key(host: &str) -> String {
     format!("{:x}", Sha256::digest(host.as_bytes()))
 }
 
-pub(super) fn load(root: &Path, host: &str) -> Option<Icon> {
+/// `Some(None)` is a remembered no-icon answer.
+pub(super) fn load(root: &Path, host: &str) -> Option<Option<Icon>> {
     let key = key(host);
     for ext in EXTENSIONS {
         let path = root.join(format!("{key}.{ext}"));
         let Ok(meta) = fs::metadata(&path) else {
             continue;
         };
+        let lifetime = Duration::from_hours(if ext == MISS { 24 } else { 720 });
         if !meta.is_file()
             || meta.len() > ICON_LIMIT as u64
-            || meta.modified().ok()?.elapsed().ok()? > Duration::from_hours(720)
+            || meta.modified().ok()?.elapsed().ok()? > lifetime
         {
             continue;
+        }
+        if ext == MISS {
+            return Some(None);
         }
         let mut bytes = Vec::new();
         fs::File::open(path)
@@ -33,20 +41,22 @@ pub(super) fn load(root: &Path, host: &str) -> Option<Icon> {
             .take((ICON_LIMIT + 1) as u64)
             .read_to_end(&mut bytes)
             .ok()?;
-        return Icon::new(bytes);
+        return Icon::new(bytes).map(Some);
     }
     None
 }
 
-pub(super) fn store(root: &Path, host: &str, icon: &Icon) -> std::io::Result<()> {
-    if load(root, host).is_some() {
+/// Stores an icon, or a no-icon answer when `icon` is `None`.
+pub(super) fn store(root: &Path, host: &str, icon: Option<&Icon>) -> std::io::Result<()> {
+    if matches!(load(root, host), Some(Some(_))) {
         return Ok(());
     }
+    let (bytes, ext) = icon.map_or((&[][..], MISS), |icon| (&icon.bytes[..], icon.ext));
     fs::create_dir_all(root)?;
     let key = key(host);
-    // Remove stale formats for this host; successful first fetch is the only writer.
-    for ext in EXTENSIONS {
-        let path = root.join(format!("{key}.{ext}"));
+    // Remove stale formats and answers for this host; a fetch is the only writer.
+    for stale in EXTENSIONS {
+        let path = root.join(format!("{key}.{stale}"));
         if path.exists() {
             fs::remove_file(path)?;
         }
@@ -56,7 +66,7 @@ pub(super) fn store(root: &Path, host: &str, icon: &Icon) -> std::io::Result<()>
     let mut size: u64 = entries.iter().map(|(_, size, _)| size).sum();
     let mut count = entries.len();
     for (path, len, _) in entries {
-        if count < 500 && size + icon.bytes.len() as u64 <= 5 * 1024 * 1024 {
+        if count < 500 && size + bytes.len() as u64 <= 5 * 1024 * 1024 {
             break;
         }
         fs::remove_file(path)?;
@@ -64,9 +74,8 @@ pub(super) fn store(root: &Path, host: &str, icon: &Icon) -> std::io::Result<()>
         count -= 1;
     }
     let temporary = root.join(format!(".{key}-{}", uuid::Uuid::new_v4()));
-    let destination = root.join(format!("{key}.{}", icon.ext));
-    let result =
-        fs::write(&temporary, &icon.bytes).and_then(|()| fs::rename(&temporary, destination));
+    let destination = root.join(format!("{key}.{ext}"));
+    let result = fs::write(&temporary, bytes).and_then(|()| fs::rename(&temporary, destination));
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
